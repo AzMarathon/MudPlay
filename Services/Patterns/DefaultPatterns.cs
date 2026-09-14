@@ -129,8 +129,19 @@ public static class DefaultPatterns
         // ----- Combat ----------------------------------------------------
         yield return new RegexPattern(KnownPatterns.CombatStatus,
             @"^\*Combat (?<status>Engaged|Off)\*");
+        // Target's character class includes an apostrophe — a spell-cast attack
+        // phrase ("summon god's wrath upon <target>") sits inside this same
+        // capture (Megamind's regex only splits source/verb/target/damage, not
+        // spell-name-vs-monster-name), and without it "You summon god's wrath
+        // upon whale shark for 121 damage!" (the gwra alt-attack spell) never
+        // matched at all — silently invisible to every UserHits subscriber
+        // (round/monster-observation stats, the idle-stall watchdog's activity
+        // clock, attack-cast confirmation) for the whole fight. Report
+        // paradigm-20260914-055853: that blind spot, stacked with a round whose
+        // monster line also went unrecognized (see MobAttacksYou below), read as
+        // 6s of total silence and force-cleared a live combat gate.
         yield return new RegexPattern(KnownPatterns.UserHits,
-            @"^(?<source>[\w]+) (?:critically )?(?:\w+) (?<target>[\w- ]+) for (?<damage>\d+) damage!");
+            @"^(?<source>[\w]+) (?:critically )?(?:\w+) (?<target>[\w'\- ]+) for (?<damage>\d+) damage!");
         // Trailing punctuation varies per realm — real output uses ".", "!",
         // ",", and ";" depending on whether the miss line continues with a
         // dodge / parry / "but misses!" follow-up. Use a word boundary after
@@ -144,6 +155,16 @@ public static class DefaultPatterns
         // (or no) tail, so a fight whose swings are armour-deflected or carry no
         // damage number still registers as combat activity for the idle-stall
         // watchdog. Not used for stats; deliberately broader than MobHits/MobMisses.
+        // Keep "The " REQUIRED here — dropping it (tried in the PR for
+        // paradigm-20260914-055853) makes this match ordinary non-combat "<name>
+        // <verb> you" lines too (party gives/tells/follows/thanks, and even the
+        // player's own "A shimmering golden mist descends over you!" self-buff
+        // line — all confirmed matches against real session logs), which
+        // OnAnyCombatLine takes as proof combat is live: it force-sets InCombat
+        // (blocking rest) and keeps the idle-stall watchdog's clock fed
+        // indefinitely off unrelated chat, defeating the watchdog entirely.
+        // KnownPatterns.UserDodges below is the correctly-scoped fix for the
+        // no-article, blank-verb dodge shape that motivated this.
         yield return new RegexPattern(KnownPatterns.MobAttacksYou,
             @"^The [\w -]+ \w+ you\b");
         yield return new RegexPattern(KnownPatterns.UserGainExperience,
@@ -166,8 +187,17 @@ public static class DefaultPatterns
         // satisfies MobMisses, so CombatSessionTracker de-dupes by skipping
         // a MobMisses line that carries "dodge". Keyed on the "you dodge"
         // phrase, which is unique to a successful dodge.
+        // "The " is optional: Paradigm's full-dodge wording drops the article
+        // AND blanks the attack-verb slot entirely — "whale shark  at you, but
+        // you dodge out of the way!" (confirmed on the wire across a couple
+        // dozen distinct monster names, report paradigm-20260914-055853) — so
+        // the source group alone has to carry the match. The mandatory "you
+        // dodge" substring keeps this narrowly scoped to real dodges; unlike
+        // KnownPatterns.MobAttacksYou (which stays "The "-required — see its
+        // comment), dropping the article here doesn't open it up to ordinary
+        // chat, since "you dodge" isn't something a tell/gossip/gives line says.
         yield return new RegexPattern(KnownPatterns.UserDodges,
-            @"^The (?<source>[\w -]+?) .*\byou dodge\b");
+            @"^(?:The )?(?<source>[\w -]+?) .*\byou dodge\b");
 
         // Third-party physical attacks — see KnownPatterns.OtherAttacksWithWeapon for
         // why these exist and why they stay narrow.

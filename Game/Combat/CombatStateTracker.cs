@@ -69,6 +69,7 @@ public sealed class CombatStateTracker : IDisposable
     private readonly IDisposable _mobHitsSub;
     private readonly IDisposable _mobMissesSub;
     private readonly IDisposable _mobAttacksSub;
+    private readonly IDisposable _userDodgesSub;
     private readonly IDisposable _combatStatusSub;
 
     private bool _gateAsserted;
@@ -247,6 +248,14 @@ public sealed class CombatStateTracker : IDisposable
         // you", so an active fight keeps refreshing the idle-stall stamp instead
         // of tripping the watchdog (report stock-20260730-190736).
         _mobAttacksSub    = router.Subscribe(KnownPatterns.MobAttacksYou, OnAnyCombatLine);
+        // A realm whose full-dodge wording drops both the article and the attack
+        // verb (Paradigm: "whale shark  at you, but you dodge out of the way!")
+        // fails MobMisses/MobAttacksYou outright — UserDodges is the only pattern
+        // narrow-but-flexible enough to still catch it (report
+        // paradigm-20260914-055853: that gap, stacked with a missed gwra hit line
+        // in the same round, read as total silence and force-cleared a live
+        // combat gate).
+        _userDodgesSub    = router.Subscribe(KnownPatterns.UserDodges,    OnAnyCombatLine);
         _combatStatusSub  = router.Subscribe(KnownPatterns.CombatStatus,  OnCombatStatus);
     }
 
@@ -842,6 +851,7 @@ public sealed class CombatStateTracker : IDisposable
         _mobHitsSub.Dispose();
         _mobMissesSub.Dispose();
         _mobAttacksSub.Dispose();
+        _userDodgesSub.Dispose();
         _combatStatusSub.Dispose();
     }
 }

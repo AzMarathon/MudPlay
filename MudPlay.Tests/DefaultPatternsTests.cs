@@ -117,6 +117,65 @@ public sealed class DefaultPatternsTests
     }
 
     [Fact]
+    public void UserHitsRegex_MatchesApostropheInSpellName()
+    {
+        // "You summon god's wrath upon <target> for N damage!" (the gwra
+        // alt-attack spell) went completely unmatched — the apostrophe in
+        // "god's" broke the target capture's character class, so no
+        // UserHits subscriber (round/monster-observation stats, the
+        // idle-stall watchdog's activity clock, attack-cast confirmation)
+        // ever saw a gwra hit land. Report paradigm-20260914-055853.
+        IMessagePattern p = PatternById(KnownPatterns.UserHits);
+
+        Assert.True(p.TryMatch(
+            Line("You summon god's wrath upon whale shark for 121 damage!"), out MatchResult r));
+        Assert.Equal("You",                          r.Groups[0]);
+        Assert.Equal("god's wrath upon whale shark",  r.Groups[1]);
+        Assert.Equal("121",                           r.Groups[2]);
+    }
+
+    [Fact]
+    public void MobAttacksYouRegex_RequiresTheArticle()
+    {
+        // MUST stay article-required: dropping it (tried once, reverted) makes
+        // this match ordinary non-combat "<name> <verb> you" lines too — party
+        // gives/tells, and even the player's own self-buff visual line — which
+        // OnAnyCombatLine (its sole subscriber) takes as proof of live combat,
+        // wrongly blocking rest and permanently feeding the idle-stall watchdog's
+        // clock off unrelated chat. Confirmed false-positive-free against real
+        // session logs only once "The " stayed required. See UserDodges for the
+        // correctly-scoped fix for the dodge shape that motivated the attempt.
+        IMessagePattern p = PatternById(KnownPatterns.MobAttacksYou);
+
+        Assert.False(p.TryMatch(Line("Bob gives you a longsword."), out _));
+        Assert.False(p.TryMatch(Line("A shimmering golden mist descends over you!"), out _));
+        Assert.True(p.TryMatch(Line("The whale shark lunges at you!"), out _));
+    }
+
+    [Fact]
+    public void UserDodgesRegex_MatchesArticlelessBlankVerbDodge()
+    {
+        // Paradigm's full-dodge wording drops both the leading "The" and the
+        // attack verb ("whale shark  at you, but you dodge out of the way!",
+        // confirmed on the wire across two dozen distinct monster names) — now
+        // wired into CombatStateTracker's activity clock (it wasn't before), so
+        // this shape counts as combat activity without widening MobAttacksYou's
+        // much larger blast radius. Report paradigm-20260914-055853.
+        IMessagePattern p = PatternById(KnownPatterns.UserDodges);
+
+        Assert.True(p.TryMatch(
+            Line("whale shark  at you, but you dodge out of the way!"), out _));
+        // A second, differently-shaped dodge line seen in the same logs — no
+        // article either, but with its own verb ("reaches"), confirming the
+        // fix isn't narrowly tied to the blank-verb case specifically.
+        Assert.True(p.TryMatch(
+            Line("Reaches for you with a tentacle, but you dodge!"), out _));
+        // The normal, article-led wording must still match.
+        Assert.True(p.TryMatch(
+            Line("The kobold thief lunges at you, but you dodge!"), out _));
+    }
+
+    [Fact]
     public void StatusLineRegex_ParsesHpManaTypeAndState()
     {
         IMessagePattern p = PatternById(KnownPatterns.StatusLine);
