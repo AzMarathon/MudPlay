@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.80.0**
-> - New Multi-attack 2 slot on the Combat tab: a second room spell that takes over once Multi-attack 1 hits its cast cap or falls under its mana floor
-> - Lets an expensive room nuke open for a cast or two and a cheap one finish the pack, for far less mana over the fight
-> - Off by default; shares Multi-attack 1's Min enemies, keeps its own Max casts and Min mana, and resets per room
-> - The existing Multi-attack row is now labelled Multi-attack 1
-> - Combat profiles carry both room slots, and a drain now yields to whichever of the two is carrying the round
+> **Version 3.80.1**
+> - A move typed while the prompt still showed "(Resting)"/"(Meditating)" no longer strands the walker in an identically-named room — its echo was being split off with the tag still attached, so the echo gate never recognized it and only a manual `rm` (or the 10s stall watchdog) got it moving again
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

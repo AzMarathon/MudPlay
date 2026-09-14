@@ -1,5 +1,10 @@
 # Version history
 
+## 3.80.1
+
+- A move typed while the prompt still showed "(Resting)"/"(Meditating)" no longer strands the walker in an identically-named room — its echo was being split off with the tag still attached, so the echo gate never recognized it and only a manual `rm` (or the 10s stall watchdog) got it moving again
+- bug reports addressed: paradigm-20260913-210626
+
 ## 3.80.0
 
 - New Multi-attack 2 slot on the Combat tab: a second room spell that takes over once Multi-attack 1 hits its cast cap or falls under its mana floor

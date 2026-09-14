@@ -186,6 +186,48 @@ public sealed class LineExtractorTests
         return lines;
     }
 
+    // ----- Prompt/content split (PromptPrefix) -------------------------------
+
+    // A "(Meditating)"/"(Resting)" tag on the prompt row sits AFTER "]:", not
+    // inside the brackets (DefaultPatterns.StatusLine's stateb group) — the split
+    // must consume it as part of the prompt half too, or a move typed while it's
+    // showing splits as content " (Meditating) n" instead of "n" and
+    // InboundMoveEchoScanner can't parse the echo, leaving RoomTracker stuck
+    // treating the move's own landing as an ambiguous re-look (report
+    // paradigm-20260913-210626: held Pending in an identically-named room until
+    // a manual `rm`).
+    [Fact]
+    public void PromptSplit_TrailingMeditatingTag_ExcludedFromContent()
+    {
+        List<string> emitted = FeedThroughEmulator("[HP=100/MA=50]: (Meditating) n\r\n");
+
+        string content = Assert.Single(emitted);
+        Assert.Equal("n", content.Trim());
+    }
+
+    // A resting prompt with nothing typed after it must be a bare prompt row, not
+    // a prompt plus a "(Resting)" content line. That stray content reaches
+    // RoomTracker.NoteInboundMoveEcho, which latches _everReceivedEcho on ANY echo
+    // — so a player who merely rests loses the timing fallback the re-look guard
+    // depends on when the statline isn't actually echo-readable.
+    [Fact]
+    public void PromptSplit_BareRestingPrompt_EmitsNoContentLine()
+    {
+        Assert.Empty(FeedThroughEmulator("[HP=100/MA=50]: (Resting)\r\n"));
+    }
+
+    // The other shape the game prints the tag in — inside the brackets, before
+    // "]:". Already covered by the prompt regex's [^\]]* body; pinned so tightening
+    // that character class can't silently start leaking "(Resting) " into content.
+    [Fact]
+    public void PromptSplit_InBracketRestingTag_ExcludedFromContent()
+    {
+        List<string> emitted = FeedThroughEmulator("[HP=44/KAI=2 (Meditating) ]: n\r\n");
+
+        string content = Assert.Single(emitted);
+        Assert.Equal("n", content.Trim());
+    }
+
     /// <summary>
     /// Helper: build a row whose first <paramref name="text"/>.Length cells
     /// hold <paramref name="text"/> at default attributes, then pad blanks
