@@ -1,3 +1,4 @@
+using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using Xunit;
 
@@ -97,6 +98,79 @@ public sealed class UtilitySkillCalculatorTests
         var lo = new StatBlock(30, Strength: 40, Intellect: 80, Willpower: 20, Agility: 70, Health: 20, Charm: 60);
         var hi = lo with { Strength = 120, Willpower = 120, Health = 120 };
         Assert.Equal(StatEffects.Thievery(lo), StatEffects.Thievery(hi));
+    }
+
+    // ----- projected backstab accuracy ---------------------------------------
+
+    private static LevelProjection Project(RealmType realm, EquipmentStatSummary? gear,
+                                           bool classStealth, bool raceStealth, int level = 30)
+        => LevelProjectionCalculator.ProjectLevel(
+            level, chart: 1, strength: 80, intellect: 70, willpower: 50,
+            agility: 90, health: 60, charm: 60,
+            minHitsPerLevel: 4, maxHitsPerLevel: 4, raceHpPerLevel: 0,
+            mageryType: 0, mageryLevel: 0, realm: realm, gear: gear,
+            hasClassStealth: classStealth, hasRaceStealth: raceStealth);
+
+    [Fact]
+    public void BsAccuracy_IsNullWithoutAStealthSource()
+    {
+        // No stealth source = can't backstab at all, so the column shows "—"
+        // rather than a number the character could never use.
+        Assert.Null(Project(RealmType.Stock, null, classStealth: false, raceStealth: false).BsAccuracy);
+        Assert.NotNull(Project(RealmType.Stock, null, classStealth: true, raceStealth: false).BsAccuracy);
+        // A race-only stealth source still qualifies.
+        Assert.NotNull(Project(RealmType.Stock, null, classStealth: false, raceStealth: true).BsAccuracy);
+    }
+
+    [Fact]
+    public void BsAccuracy_MatchesTheCombatCalculator()
+    {
+        LevelProjection p = Project(RealmType.Stock, null, classStealth: true, raceStealth: false);
+        int expected = CombatCalculator.CalcBackstabAccuracy(
+            p.Stealth, agility: 90, level: 30, strength: 80, weaponStrReq: 0,
+            plusBSAccuracy: 0, plusNormalAccuracy: 0, hasClassStealth: true, realmType: RealmType.Stock);
+        Assert.Equal(expected, p.BsAccuracy);
+    }
+
+    [Fact]
+    public void BsAccuracy_SplitsByRealm()
+    {
+        // The two realms use genuinely different formulas, not a shared one with a
+        // tweak — Stock is (stealth+AGI)/2, Paradigm is stealth/3 + (AGI-50+lvl)/2.
+        int? stock = Project(RealmType.Stock, null, classStealth: true, raceStealth: false).BsAccuracy;
+        int? para = Project(RealmType.ParaMud, null, classStealth: true, raceStealth: false).BsAccuracy;
+        Assert.NotEqual(stock, para);
+    }
+
+    [Fact]
+    public void BsAccuracy_FoldsGearAndQuestBonuses()
+    {
+        // Gear and completed quests land in the same EquipmentStatSummary, so a
+        // +BS-accuracy bonus from either must move the projected number. Stock
+        // halves the bonus, which is why this asserts the calculator's own result
+        // rather than a hand-rolled delta.
+        var gear = new EquipmentStatSummary { PlusBSAccuracy = 20, PlusStealth = 10 };
+        LevelProjection bare = Project(RealmType.Stock, null, classStealth: true, raceStealth: false);
+        LevelProjection kitted = Project(RealmType.Stock, gear, classStealth: true, raceStealth: false);
+        Assert.True(kitted.BsAccuracy > bare.BsAccuracy);
+
+        // Paradigm additionally applies the worn-accuracy term and the
+        // STR-under-requirement penalty, so both must reach the formula.
+        var heavy = new EquipmentStatSummary { WeaponStrReq = 200, TotalWornAccy = 0 };
+        var light = new EquipmentStatSummary { WeaponStrReq = 0, TotalWornAccy = 0 };
+        Assert.Equal(
+            Project(RealmType.ParaMud, light, true, false).BsAccuracy - 15,
+            Project(RealmType.ParaMud, heavy, true, false).BsAccuracy);
+    }
+
+    [Fact]
+    public void BsAccuracy_RisesWithLevel()
+    {
+        // Stealth grows with level, and Paradigm carries an explicit level term —
+        // so a projection that never moved would mean the level never reached it.
+        int? low = Project(RealmType.Stock, null, true, false, level: 10).BsAccuracy;
+        int? high = Project(RealmType.Stock, null, true, false, level: 40).BsAccuracy;
+        Assert.True(high > low);
     }
 
     // ----- StatEffects delegation --------------------------------------------

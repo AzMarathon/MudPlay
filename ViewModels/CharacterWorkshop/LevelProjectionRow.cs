@@ -49,6 +49,8 @@ public sealed class LevelProjectionRow
     // Spellcasting skill; "—" for non-casters and Mystics (Kai has no skill).
     public string Spellcasting { get; }
     public string Tracking { get; }
+    // Backstab accuracy; "—" for a class/race with no stealth source.
+    public string BsAccuracy { get; }
 
     // True when this row is the live character's current level.
     public bool IsCurrentLevel { get; }
@@ -89,6 +91,7 @@ public sealed class LevelProjectionRow
         Spellcasting = p.Spellcasting > 0
             ? p.Spellcasting.ToString(CultureInfo.InvariantCulture)
             : "—";
+        BsAccuracy = p.BsAccuracy is { } bs ? bs.ToString(CultureInfo.InvariantCulture) : "—";
 
         IsCurrentLevel = isCurrentLevel;
     }

@@ -559,6 +559,8 @@ These figures reflect **your current character**: the base attributes carry your
 
 **Columns ▾** opens a checklist of every column the table can show, and **your choice is saved per character** — each build keeps the columns it actually plans around. **Lvl** is always on (it's what labels the row); **Reset to defaults** forgets your choice and goes back to the built-in set, including any columns added in a later release.
 
+**BS Accy** projects your **backstab accuracy** per level. It reads `—` for a class and race with no stealth source, since that character can't backstab at all. Unlike the plain **Accy** column, this one folds in *everything* the game feeds it — level, stats, your gear and your completed quests — so it's a real number for your current loadout rather than a stat-only partial. The trade-off: future levels assume **today's weapon**, so re-check it after a weapon swap. The two realms use genuinely different formulas (see *The exact formulas* below), and the client picks the right one from your active game-data set automatically.
+
 Six columns are **off by default**, because they only matter to some builds:
 
 - **Spellcast** — your spellcasting skill (`—` for non-casters and Mystics).
@@ -604,6 +606,12 @@ For the curious, here are the actual equations behind the numbers above, with ev
 - **Stock**, every attack: `(STR−50)/3 + (AGI−50)/6`
 - **Paradigm**, normal attack: `(AGI−50)/3 + (INT−50)/6 + (CHM−50)/10`
 - **Paradigm**, bash / smash: `(STR−50)/3 + (AGI−50)/6`
+
+**Backstab accuracy** splits hard by realm — these are two different equations, not one with a tweak:
+- **Stock**: `(Stealth + AGI)/2 + gear+BSAccy/2`, then **+5** if your *class* grants stealth, or **−15** if only your race does.
+- **Paradigm**: `Stealth/3 + (AGI − 50 + Level)/2 + 15 + gear+BSAccy + wornAccuracy`, then **−15** if your STR is below your weapon's requirement. Worn accuracy counts even when the STR check fails.
+
+Encumbrance isn't applied on top — the Stealth value already carries it.
 
 **Crit rating** = `clamp( Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30, 1, 75 )`. *(AGI term unverified on Paradigm.)*
 

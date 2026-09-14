@@ -323,6 +323,12 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         int raceHpPerLevel = GetInt(raceRow, "HPPerLVL");
         bool isCaster = mageryType != 0;
 
+        // Backstab is gated on a stealth source, and the Stock formula further
+        // splits on whether it's the CLASS granting it (+5) or only the race (−15),
+        // so both flags travel rather than a single "can backstab".
+        bool hasClassStealth = ClassCapabilities.ClassHasStealth(classRow);
+        bool hasRaceStealth = ClassCapabilities.RaceHasStealth(raceRow);
+
         // Trainer cost per row: the cheapest trainer that serves each level/class.
         // Enumerate once; the resolver picks min markup and the price formula
         // turns (level, markup) into copper.
@@ -370,7 +376,8 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
 
             LevelProjection p = LevelProjectionCalculator.ProjectLevel(
                 lvl, chart, str, intel, wil, agi, hea, chm,
-                minHits, maxHits, raceHpPerLevel, mageryType, mageryLevel, realm, bonuses);
+                minHits, maxHits, raceHpPerLevel, mageryType, mageryLevel, realm, bonuses,
+                hasClassStealth, hasRaceStealth);
             int? markup = TrainerCatalog.CheapestMarkup(trainers, lvl, classNumber);
             long? trainCost = markup is { } m ? (long)ShopPriceCalculator.TrainCopper(lvl - 1, m) : null;
             Rows.Add(new LevelProjectionRow(p, currentExp, lvl == currentLevel, isCaster, trainCost));

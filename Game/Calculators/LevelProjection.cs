@@ -39,4 +39,9 @@ public readonly record struct LevelProjection(
     int Traps = 0,
     int Picklocks = 0,
     int Tracking = 0,
-    int Spellcasting = 0);
+    int Spellcasting = 0,
+    // Backstab accuracy, realm-split. null when the class/race has no stealth
+    // source — that character can't backstab at all, so a number would be noise.
+    // Unlike the Accuracy column this DOES carry the weapon-dependent terms, so
+    // it projects the current loadout forward (see LevelProjectionCalculator).
+    int? BsAccuracy = null);
