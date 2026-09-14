@@ -42,6 +42,17 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     // The rendered, filtered spell rows.
     public ObservableCollection<SpellBookRowViewModel> Rows { get; } = new();
 
+    // The five category tabs, in display order — bound as the tab strip's
+    // ItemsSource so the view never hand-lists them.
+    public IReadOnlyList<SpellBookCategory> Categories { get; } =
+        Enum.GetValues<SpellBookCategory>();
+
+    // Which tab is active. All (the default) shows the unfiltered list; the
+    // other four re-filter the same Rows via SpellBookCategoryClassifier — a
+    // spell can satisfy more than one, so switching tabs doesn't move spells
+    // between fixed buckets, it just re-tests the same list.
+    [ObservableProperty] private SpellBookCategory _selectedCategory = SpellBookCategory.All;
+
     // The Items.Number of the item that TEACHES this spell, or 0 when none does
     // (trainer-taught spells — see TeachingNpcNumberFor). The window's double-click
     // opens that item's record. Pure — the view owns the actual open so this VM
@@ -116,6 +127,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     partial void OnSearchTextChanged(string value) => Rebuild();
     partial void OnShowObtainedOnlyChanged(bool value) => Rebuild();
     partial void OnShowAllSpellsChanged(bool value) => Rebuild();
+    partial void OnSelectedCategoryChanged(SpellBookCategory value) => Rebuild();
 
     private void OnBookChanged()
     {
@@ -168,6 +180,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
             // Skipped when the level is unknown (0) so a fresh book isn't empty.
             if (!ShowAllSpells && _book.Level > 0 && effectiveLevel > _book.Level) continue;
             if (filter.Length > 0 && !Matches(spell, filter)) continue;
+            if (!SpellBookCategoryClassifier.Matches(SelectedCategory, spell, _book.Level, ResolveChain)) continue;
             Rows.Add(new SpellBookRowViewModel(
                 spell, obtained, _book.Level, ResolveChain, _book.ResolveSpellName,
                 ResolveTextblockCasts, teachLevel, spellcasting));

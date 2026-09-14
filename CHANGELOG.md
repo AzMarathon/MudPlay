@@ -1,5 +1,10 @@
 # Version history
 
+## 3.85.0
+
+- Spell Book: All / Heals / Buffs / Attacks / Party+AoE tabs across the top narrow the grid to what a spell actually does
+- A spell can land in more than one tab (a whole-party buff shows under both Buffs and Party+AoE) — switching tabs re-filters the same list rather than sorting each spell into one bucket
+
 ## 3.84.0
 
 - New map overlay: **Level gates** marks every room holding a level gate with an amber corner wedge, so a doorway that won't let you through reads as shut before you walk to it

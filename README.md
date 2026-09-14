@@ -2,11 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.84.0**
-> - New map overlay: **Level gates** marks every room holding a level gate with an amber corner wedge, so a doorway that won't let you through reads as shut before you walk to it
-> - Covers gated exits, level-gated room teleports, and level-restricted boat sailings
-> - Describes the map rather than your character, so it works unconnected and never goes blank waiting for a level to be read; on by default, saved per character
-> - Room-command tooltips now show a command's level requirement alongside its cost, on both stock and Paradigm — a captain's passage reads "costs 200 Platinum, Level 50+" instead of hiding the floor
-> - A room command gated only by level now appears in the tooltip at all, where before it was dropped for having no price
+> - Spell Book: All / Heals / Buffs / Attacks / Party+AoE tabs across the top narrow the grid to what a spell actually does
+> - A spell can land in more than one tab (a whole-party buff shows under both Buffs and Party+AoE) — switching tabs re-filters the same list rather than sorting each spell into one bucket
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
