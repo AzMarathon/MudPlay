@@ -1,5 +1,9 @@
 # Version history
 
+## 3.83.9
+
+- Newhaven's Arena is recognised as level 1-3 only on stock, so a higher-level character is routed around the entrance instead of walking down and being refused
+
 ## 3.83.8
 
 - The `gwra` (god's wrath) alt-attack spell's hit line never matched at all — the apostrophe in "god's wrath" broke the attack-line pattern's target capture, so every round/monster-observation stat, the idle-stall watchdog's activity clock, and attack-cast confirmation stayed blind to every gwra hit for the whole session

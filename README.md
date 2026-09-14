@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.83.8**
-> - The `gwra` (god's wrath) alt-attack spell's hit line never matched at all — the apostrophe in "god's wrath" broke the attack-line pattern's target capture, so every round/monster-observation stat, the idle-stall watchdog's activity clock, and attack-cast confirmation stayed blind to every gwra hit for the whole session
-> - A full-dodge outcome that drops the leading "The" and its verb ("whale shark  at you, but you dodge out of the way!") is now counted as combat activity too, via the already-narrow UserDodges pattern — stacked with the gwra blind spot above, a round using both read as total silence and force-cleared a live combat gate, sending the walker off before the mob was dead
+> **Version 3.83.9**
+> - Newhaven's Arena is recognised as level 1-3 only on stock, so a higher-level character is routed around the entrance instead of walking down and being refused
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

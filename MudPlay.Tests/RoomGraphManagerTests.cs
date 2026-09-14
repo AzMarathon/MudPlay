@@ -1189,6 +1189,86 @@ public sealed class RoomGraphManagerTests : IDisposable
     // BFS can plan through it. Distinct from PromoteCmdTeleportExits, which
     // re-hints an EXISTING Door/KeyLocked cardinal the teleport shadows.
 
+    // ----- Newhaven Arena entry block ---------------------------------
+
+    // 1/2146 is the Narrow Road above the Arena: W carries an ordinary exported
+    // gate to the Healer, D drops into the Arena (1/2150) with nothing on it —
+    // the real shape of the stock 1.11p data.
+    private const string ArenaRoomsJson = """
+        [
+          { "Map Number": 1, "Room Number": 2146, "Name": "Newhaven, Narrow Road",
+            "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2190 (Level: 1 to 3)",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "1/2150" },
+          { "Map Number": 1, "Room Number": 2150, "Name": "Newhaven, Arena",
+            "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "1/2146", "D": "0" },
+          { "Map Number": 1, "Room Number": 2190, "Name": "Newhaven, Healer",
+            "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2146", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private RoomGraphManager ArenaGraph(string roomsJson, int? legit)
+    {
+        SeedRooms("alpha", roomsJson);
+        if (legit is { } code) SeedTable("alpha", "Info", $"[ {{ \"Legit\": {code} }} ]");
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        return graph;
+    }
+
+    private static RoomExit ArenaDown(RoomGraphManager graph)
+    {
+        Room? road = graph.GetRoom(new RoomKey(1, 2146));
+        Assert.NotNull(road);
+        Assert.True(road!.Exits.TryGetValue(Direction.D, out RoomExit down));
+        return down;
+    }
+
+    // Stock with a blank D (the real 1.11p data): the Arena's engine-side level
+    // block is surfaced as the window the MDB would have exported, so the router
+    // reads it exactly like the Healer gate on the same room's W exit.
+    [Fact]
+    public void ArenaEntryBlock_StockWithNoExportedGate_SurfacesLevel1To3()
+    {
+        RoomGraphManager graph = ArenaGraph(ArenaRoomsJson, legit: null);
+
+        RoomExit down = ArenaDown(graph);
+        Assert.True(down.HasLevelGate);
+        Assert.Equal(1, down.MinLevel);
+        Assert.Equal(3, down.MaxLevel);
+        Assert.Equal(new RoomKey(1, 2150), down.Target);
+    }
+
+    // An edited stock realm that DOES export a window on the down exit keeps its
+    // own values — the hardcoded block only fills a blank.
+    [Fact]
+    public void ArenaEntryBlock_StockWithExportedGate_KeepsTheImportedWindow()
+    {
+        RoomGraphManager graph = ArenaGraph(
+            ArenaRoomsJson.Replace("\"D\": \"1/2150\"", "\"D\": \"1/2150 (Level: 2 to 7)\""),
+            legit: null);
+
+        RoomExit down = ArenaDown(graph);
+        Assert.Equal(2, down.MinLevel);
+        Assert.Equal(7, down.MaxLevel);
+    }
+
+    // Paradigm edits this exit itself, so the stock-only block must not fire there.
+    [Fact]
+    public void ArenaEntryBlock_ParaMud_IsNotApplied()
+    {
+        RoomGraphManager graph = ArenaGraph(ArenaRoomsJson, legit: 2);
+
+        RoomExit down = ArenaDown(graph);
+        Assert.False(down.HasLevelGate);
+    }
+
     private void SeedTable(string setName, string table, string json)
     {
         string dir = Path.Combine(_root, setName);
