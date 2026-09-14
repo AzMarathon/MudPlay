@@ -67,7 +67,20 @@ public static class LevelProjectionCalculator
         int maxEnc = StatEffects.MaxEncumbrance(stats) + (gear?.PlusEncumbrance ?? 0);
         int magicRes = StatEffects.MagicResistance(stats) + (gear?.PlusMagicResist ?? 0);
 
+        // Utility skills take the same treatment: stat-and-level base plus the
+        // aggregate's flat +skill abilities. Whether the character can actually USE
+        // the thief four is a class/race grant the caller gates the columns on —
+        // the numbers themselves are computed the same way regardless.
+        int perception = StatEffects.Perception(stats) + (gear?.PlusPerception ?? 0);
+        int thievery = StatEffects.Thievery(stats) + (gear?.PlusThievery ?? 0);
+        int traps = StatEffects.Traps(stats) + (gear?.PlusTraps ?? 0);
+        int picklocks = StatEffects.Picklocks(stats) + (gear?.PlusPicklocks ?? 0);
+        int tracking = StatEffects.Tracking(stats) + (gear?.PlusTracking ?? 0);
+        int spellcasting = CharacterCalculator.CalcSpellcasting(
+            level, intellect, willpower, charm, mageryType, mageryLevel, gear?.PlusSpellcasting ?? 0);
+
         return new LevelProjection(level, total, hpMin, hpMax, hpRegen, mana, mpRegen,
-            accuracy, crit, dodge, stealth, minDmg, maxDmg, maxEnc, magicRes, hpRegenRest);
+            accuracy, crit, dodge, stealth, minDmg, maxDmg, maxEnc, magicRes, hpRegenRest,
+            perception, thievery, traps, picklocks, tracking, spellcasting);
     }
 }

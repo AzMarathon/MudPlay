@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -10,6 +11,7 @@ using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.GameData;
 using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Tables;
 using MudPlay.Views.CharacterWorkshop;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
@@ -55,6 +57,17 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
     public ObservableCollection<string> RaceOptions { get; } = new();
     public ObservableCollection<string> ClassOptions { get; } = new();
 
+    // The picker's checkbox list, and the columns the view should currently build.
+    // The view rebuilds its DataGrid columns on ColumnsChanged; the grid rows
+    // themselves are untouched by a toggle, so nothing re-projects.
+    public ObservableCollection<TableColumnChoice> ColumnChoices { get; } = new();
+    public IReadOnlyList<LevelProjectionColumn> VisibleColumns { get; private set; } =
+        LevelProjectionColumn.Resolve(null);
+    public event Action? ColumnsChanged;
+
+    // Guards the bulk re-check in ResetColumns so N toggles persist once.
+    private bool _bulkColumnUpdate;
+
     [ObservableProperty] private int _fromLevel = 1;
     [ObservableProperty] private int _toLevel = 15;
     [ObservableProperty] private string? _selectedRace;
@@ -76,6 +89,7 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         _inventory = inventory;
         _questBonuses = questBonuses;
 
+        LoadColumns();
         SeedFromCurrent();
         _stats.PropertyChanged += OnStatsChanged;
         _gameData.ActiveSetChanged += OnActiveSetChanged;
@@ -83,6 +97,73 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         // Equipment / completed-quest changes shift the folded direct bonuses.
         _inventory.Changed += OnInventoryOrQuestsChanged;
         _questBonuses.Changed += OnInventoryOrQuestsChanged;
+        // Column choices are per-character, so a profile swap re-hydrates them.
+        if (AppServices.Current?.Profile is { } profileService)
+            profileService.ProfileLoaded += OnProfileLoadedReloadColumns;
+    }
+
+    // ----- column picker ---------------------------------------------------
+
+    private void OnProfileLoadedReloadColumns(Models.Profile.CharacterProfile profile)
+    {
+        LoadColumns();
+        ColumnsChanged?.Invoke();
+    }
+
+    // Rebuild the checkbox list + VisibleColumns from the live profile's saved
+    // hidden set (null until the picker is first used → built-in defaults).
+    private void LoadColumns()
+    {
+        List<string>? hidden = AppServices.Current?.Profile.Current?.LevelProjectionHiddenColumns;
+        VisibleColumns = LevelProjectionColumn.Resolve(hidden);
+
+        var shown = new HashSet<string>(VisibleColumns.Select(c => c.Key), StringComparer.OrdinalIgnoreCase);
+        ColumnChoices.Clear();
+        foreach (LevelProjectionColumn col in LevelProjectionColumn.All)
+        {
+            bool pinned = col.Key == LevelProjectionColumn.PinnedKey;
+            ColumnChoices.Add(new TableColumnChoice(
+                col.Key, col.Header, pinned, shown.Contains(col.Key), OnColumnToggled));
+        }
+    }
+
+    // A checkbox flipped: re-resolve, persist the new hidden set, and let the view
+    // rebuild its columns.
+    private void OnColumnToggled()
+    {
+        if (_bulkColumnUpdate) return;
+        PersistColumns();
+        VisibleColumns = LevelProjectionColumn.Resolve(
+            AppServices.Current?.Profile.Current?.LevelProjectionHiddenColumns);
+        ColumnsChanged?.Invoke();
+    }
+
+    // Restore the built-in default set — forget the saved choice entirely rather
+    // than writing today's defaults as an explicit hidden list, so the character
+    // keeps tracking the defaults as later releases change them.
+    [RelayCommand]
+    private void ResetColumns()
+    {
+        if (AppServices.Current?.Profile is { Current: { } profile } profileService)
+        {
+            profile.LevelProjectionHiddenColumns = null;
+            profileService.Save();
+        }
+
+        _bulkColumnUpdate = true;
+        try { LoadColumns(); }
+        finally { _bulkColumnUpdate = false; }
+        ColumnsChanged?.Invoke();
+    }
+
+    private void PersistColumns()
+    {
+        if (AppServices.Current?.Profile is not { Current: { } profile } profileService) return;
+        profile.LevelProjectionHiddenColumns = ColumnChoices
+            .Where(c => !c.IsVisible)
+            .Select(c => c.Key)
+            .ToList();
+        profileService.Save();
     }
 
     private void OnInventoryOrQuestsChanged() => Rebuild();
@@ -305,6 +386,8 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         _planState.Changed -= OnPlanChanged;
         _inventory.Changed -= OnInventoryOrQuestsChanged;
         _questBonuses.Changed -= OnInventoryOrQuestsChanged;
+        if (AppServices.Current?.Profile is { } profileService)
+            profileService.ProfileLoaded -= OnProfileLoadedReloadColumns;
     }
 
     // The live character's DIRECT equipment + completed-quest bonuses, aggregated

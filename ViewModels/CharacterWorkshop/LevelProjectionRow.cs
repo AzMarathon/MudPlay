@@ -39,6 +39,17 @@ public sealed class LevelProjectionRow
     public string MaxEnc { get; }
     public string MagicRes { get; }
 
+    // Stat-and-level utility skills, off by default in the column picker. The
+    // thief four are computed for any class — whether the character can USE them
+    // is a class/race grant, so the picker (not the grid) decides who sees them.
+    public string Perception { get; }
+    public string Thievery { get; }
+    public string Traps { get; }
+    public string Picklocks { get; }
+    // Spellcasting skill; "—" for non-casters and Mystics (Kai has no skill).
+    public string Spellcasting { get; }
+    public string Tracking { get; }
+
     // True when this row is the live character's current level.
     public bool IsCurrentLevel { get; }
 
@@ -67,6 +78,17 @@ public sealed class LevelProjectionRow
         MeleeDmg = string.Create(CultureInfo.InvariantCulture, $"+{p.MinDmg}/+{p.MaxDmg}");
         MaxEnc = p.MaxEnc.ToString("N0", CultureInfo.InvariantCulture);
         MagicRes = p.MagicRes.ToString(CultureInfo.InvariantCulture);
+
+        Perception = p.Perception.ToString(CultureInfo.InvariantCulture);
+        Thievery = p.Thievery.ToString(CultureInfo.InvariantCulture);
+        Traps = p.Traps.ToString(CultureInfo.InvariantCulture);
+        Picklocks = p.Picklocks.ToString(CultureInfo.InvariantCulture);
+        Tracking = p.Tracking.ToString(CultureInfo.InvariantCulture);
+        // CalcSpellcasting returns 0 for non-casters and Mystics alike — show the
+        // same "—" the Mana column uses rather than a misleading 0.
+        Spellcasting = p.Spellcasting > 0
+            ? p.Spellcasting.ToString(CultureInfo.InvariantCulture)
+            : "—";
 
         IsCurrentLevel = isCurrentLevel;
     }

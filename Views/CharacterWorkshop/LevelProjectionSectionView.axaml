@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
+             xmlns:tables="using:MudPlay.ViewModels.GameData.Tables"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="560"
@@ -33,14 +34,44 @@
                 <TextBlock Classes="FieldLabel" Text="Class"/>
                 <ComboBox ItemsSource="{Binding ClassOptions}" SelectedItem="{Binding SelectedClass}" MinWidth="118"/>
             </StackPanel>
-            <Button Content="Reset to current" Margin="0,0,0,6"
+            <Button Content="Reset to current" Margin="0,0,12,6"
                     Command="{Binding ResetToCurrentCommand}"
                     ToolTip.Tip="Re-seed Race / Class / Realm and the level range from the live character."/>
+
+            <!-- Column picker. Choices persist per character, so each build can
+                 surface the stats it actually plans around. -->
+            <Button Content="Columns ▾" Margin="0,0,0,6"
+                    ToolTip.Tip="Choose which columns this projection shows. Saved per character.">
+                <Button.Flyout>
+                    <Flyout Placement="BottomEdgeAlignedRight">
+                        <StackPanel Spacing="6" MinWidth="200" MaxWidth="320">
+                            <TextBlock Text="Show columns" FontWeight="SemiBold"/>
+                            <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding ColumnChoices}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="tables:TableColumnChoice">
+                                            <CheckBox Margin="0,1"
+                                                      IsChecked="{Binding IsVisible}"
+                                                      IsEnabled="{Binding !Pinned}"
+                                                      Content="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                            <Button Content="Reset to defaults"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding ResetColumnsCommand}"/>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
         </WrapPanel>
 
         <!-- Projection grid. The live character's current level row is tinted
-             by the code-behind LoadingRow handler. -->
+             by the code-behind LoadingRow handler, and the columns are built
+             there too — which ones show is a per-character choice. -->
         <DataGrid Grid.Row="1"
+                  x:Name="ProjectionGrid"
                   ItemsSource="{Binding Rows}"
                   LoadingRow="OnLoadingRow"
                   Background="{StaticResource ChromeBgSunkenBrush}"
@@ -52,59 +83,7 @@
                   CanUserResizeColumns="True"
                   CanUserReorderColumns="True"
                   HorizontalScrollBarVisibility="Auto"
-                  VerticalScrollBarVisibility="Auto">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Lvl" Binding="{ReflectionBinding Level}"
-                                    Width="60" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="Exp to level" Binding="{ReflectionBinding ExpToLevel}"
-                                    Width="150" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="Total XP" Binding="{ReflectionBinding TotalXp}"
-                                    Width="150" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="Train (copper)" Binding="{ReflectionBinding Cost}"
-                                    Width="130" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="HP" Binding="{ReflectionBinding HpRange}"
-                                    Width="120" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="HP/tick (idle/rest)" Binding="{ReflectionBinding HpRegen}"
-                                    Width="130" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="Mana / Kai" Binding="{ReflectionBinding Mana}"
-                                    Width="100" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="MP / tick" Binding="{ReflectionBinding MpRegen}"
-                                    Width="90" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <!-- Derived combat / utility stats — the gear-free stat-and-level
-                     portion, so a CP plan's stat increases surface here the way
-                     HP/Mana already do. Accuracy is the normal-attack stat part;
-                     Melee dmg is STR's bonus onto the weapon's own range. -->
-                <DataGridTextColumn Header="Accy" Binding="{ReflectionBinding Accuracy}"
-                                    Width="70" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="Crit" Binding="{ReflectionBinding Crit}"
-                                    Width="70" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="Dodge" Binding="{ReflectionBinding Dodge}"
-                                    Width="70" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="Stealth" Binding="{ReflectionBinding Stealth}"
-                                    Width="80" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="Melee dmg" Binding="{ReflectionBinding MeleeDmg}"
-                                    Width="100" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="Max enc" Binding="{ReflectionBinding MaxEnc}"
-                                    Width="90" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="Magic res" Binding="{ReflectionBinding MagicRes}"
-                                    Width="90" FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
-            </DataGrid.Columns>
-        </DataGrid>
+                  VerticalScrollBarVisibility="Auto"/>
 
         <!-- Empty-state: no class/race resolved (no game data / no `stat` yet). -->
         <TextBlock Grid.Row="1"

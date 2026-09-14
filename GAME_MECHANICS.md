@@ -331,6 +331,36 @@ blended `manaStat` differs from the mana-regen stat above: type 1 = (3*Int+Wil)/
 the CP tooltip shows it under the casting stat(s) with the exact next breakpoint. Non-casters / Mystics
 have no standard spellcasting skill. (`CharacterCalculator.CalcSpellcasting`.)
 
+**Utility skills — Perception + the thief four** *([CONFIRMED] stock — RE'd DLL
+`calculate_secondary_stats` @ `0x41a424`, offsets `0x5f8` / `0x5fe` / `0x606` / `0x60a` / `0x60c`;
+Paradigm unverified)*. All five are pure integer divisions of stats plus a shared level term, so
+points that don't complete a division buy nothing:
+
+| Skill | Formula | Per-point |
+|---|---|---|
+| Perception (`0x5f8`) | `(INT*5 + WIL*2 + CHM)/8` | INT ~1.6/pt, WIL ~0.6, CHM ~0.3 — **no level term** |
+| Thievery (`0x5fe`) | `(AGL + INT + CHM + lvlTerm*24)/6` | AGL / INT / CHM ~6/pt each |
+| Traps (`0x606`) | `(INT + AGL + CHM*2 + lvlTerm*28)/7` | CHM ~4/pt (weighted **double**), INT / AGL ~7/pt |
+| Picklocks (`0x60a`) | `((AGL + INT + lvlTerm*10)*2)/7` | AGL / INT ~4/pt (÷3.5 effective) |
+| Tracking (`0x60c`) | `(INT*2 + WIL + CHM + lvlTerm*40)/8` | INT ~4/pt, WIL / CHM ~8/pt |
+
+`lvlTerm = level<16 ? level : 15 + (level-15)/2` — the **level slope halves at 16** for all four
+thief skills (Stealth halves at the same level via its own `stealthLvl`). So they grow fast to 16 and
+half as fast after; past the knee the CP case for INT / AGL / CHM on these is what carries them.
+Perception is the only one every class carries; the other four exist only for a class or race that
+was granted the skill (ability codes 39 Thievery, 40/41 Traps, 37/180 Picklocks, 38 Tracking, plus the
+custom/ParaMUD `1001`–`1004` `Grant*` variants). The `+skill` gear abilities stack on top of these
+bases. (`CharacterCalculator.CalcPerception` / `…Thievery` / `…Traps` / `…Picklocks` / `…Tracking`.)
+
+**Formulas we deliberately did NOT adopt** *(2026-09-13, user decision)*. A second reverse-engineering
+write-up of `wccmmud.dll` v1.11p corroborated stealth, magic resist, crit, max HP, mana, carry
+capacity and the five skills above exactly, but disagreed on three points. All three were reviewed and
+**left as shipped** — don't re-open them without a live capture:
+- **Min melee damage.** That write-up reads `((STR-100)/10)*2` (citing `ADD EAX,EAX` @ `0x42AD4D`);
+  we ship `(STR-100)/10`, matching the community chart and GreaterMUD.
+- **Dodge.** It gives `(AGL-50)/3 + (CHM-50)/5` with no level term; we keep `level/5` as well.
+- **Spellcasting.** It reads a trailing `+= mageryLevel` (so `mageryLevel*6`); we keep `mageryLevel*5`.
+
 **Realm-difference note** *([CONFIRMED] 2026-09-10 — inspected syntax53/MMUD-Explorer `modMMudFunc.bas`)*:
 MMUD-Explorer **reads** crit / encumbrance / magic-resist / spellcasting / mana-regen / HP straight from
 the pasted character (`tCharStats.nCrit`, `.nEncumMax`, `.nMagicRes`, `.nSpellcasting`, …) — it does NOT

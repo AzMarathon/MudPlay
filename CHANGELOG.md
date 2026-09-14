@@ -1,5 +1,13 @@
 # Version history
 
+## 3.82.0
+
+- Level Projection: pick which columns the grid shows, saved per character
+- Six new projection columns — Spellcast, Perception, Thievery, Traps, Picklocks, Tracking — off by default
+- Perception and the four thief skills now project per level, gear and quest +skill bonuses folded in
+- CP tooltips list the utility skills each stat feeds, and only name a thief skill your class or race grants
+- Item and quest +Tracking bonuses are counted at last
+
 ## 3.80.1
 
 - A move typed while the prompt still showed "(Resting)"/"(Meditating)" no longer strands the walker in an identically-named room — its echo was being split off with the tag still attached, so the echo gate never recognized it and only a manual `rm` (or the 10s stall watchdog) got it moving again

@@ -410,13 +410,17 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     }
 
     // Resolve the class hit-dice + magery and race per-level HP the HP / mana-regen
-    // tooltip effects need, from the live character's class/race game-data rows.
+    // tooltip effects need, plus which thief skills the class/race grants (those
+    // tooltip lines only show for a character that actually has the skill), from
+    // the live character's class/race game-data rows.
     private StatContext ResolveStatContext()
     {
         int minHits = 0, maxHits = 0, mageryType = 0, mageryLevel = 0, raceHp = 0;
+        System.Text.Json.JsonElement? classRow = null, raceRow = null;
         if (_gameData.FindRowByName("Classes", _stats.Class) is System.Text.Json.JsonElement cls
             && cls.ValueKind == System.Text.Json.JsonValueKind.Object)
         {
+            classRow = cls;
             minHits = TipInt(cls, "MinHits");
             maxHits = TipInt(cls, "MaxHits");
             mageryType = TipInt(cls, "MageryType");
@@ -424,8 +428,15 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         }
         if (_gameData.FindRowByName("Races", _stats.Race) is System.Text.Json.JsonElement race
             && race.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            raceRow = race;
             raceHp = TipInt(race, "HPPerLVL");
-        return new StatContext(_realm, minHits, maxHits, raceHp, mageryType, mageryLevel);
+        }
+
+        (bool thievery, bool traps, bool picklocks, bool tracking) =
+            Game.GameData.AbilityNames.GetThiefSkillGrants(classRow, raceRow);
+        return new StatContext(_realm, minHits, maxHits, raceHp, mageryType, mageryLevel,
+            thievery, traps, picklocks, tracking);
     }
 
     private static int TipInt(System.Text.Json.JsonElement row, string property) =>
