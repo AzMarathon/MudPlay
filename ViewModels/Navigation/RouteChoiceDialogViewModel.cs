@@ -575,11 +575,22 @@ public sealed partial class RouteChoiceDialogViewModel
             if (r.Carried) return $"{carriedItems} (you have it)";
 
             // A resolved hazard counter names the SPECIFIC item the run will obtain +
-            // how ("log raft (buy at Pier)"), instead of the whole any-of set — the
-            // picker already chose the cheapest reachable one.
+            // how ("log raft (buy at Pier)") — the picker already chose the cheapest
+            // reachable one — and then the rest of the any-of set, so it's plain that
+            // a canoe already in the pack would do as well.
             if (r.Kind is RouteRequirementKind.HazardProtection
                 && resolvedHazardCounter?.Invoke(r) is { } rc)
-                return $"{itemName(rc.ItemId) ?? $"item #{rc.ItemId}"} ({rc.Source})";
+            {
+                string chosen = $"{itemName(rc.ItemId) ?? $"item #{rc.ItemId}"} ({rc.Source})";
+                string[] others = r.ItemIds.Where(id => id != rc.ItemId)
+                    .Select(id => itemName(id) ?? $"item #{id}").ToArray();
+                return others.Length switch
+                {
+                    0 => chosen,
+                    1 => $"{chosen}, or {others[0]}",
+                    _ => $"{chosen}, or {string.Join(", ", others[..^1])} or {others[^1]}",
+                };
+            }
 
             string items = string.Join(" or ", r.ItemIds.Select(id => itemName(id) ?? $"item #{id}"));
             bool autoSourced = r.Kind is RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket

@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.83.6**
-> - ParaMUD exp needed follows the 1.9 curve (growth tapers from level 34), so auto-train, level-up announcements, the level projection and TNL no longer overstate exp past level 35
+> **Version 3.83.7**
+> - A hazard crossing accepts any counter the game does: a carried wooden skiff, silverbark canoe or river punt covers a river the route would buy a log raft for (Crystal Lake still takes only a raft or skiff)
+> - Party provisioning asks about every boat that works and hands over whichever a member actually has, instead of buying rafts for members who already carry a canoe
+> - A boat picked up or handed over on the way to the shop cancels the planned purchase
+> - The route card lists the alternatives after the counter it would obtain
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

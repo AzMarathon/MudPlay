@@ -381,7 +381,18 @@ public sealed class PathItemShopRouter : IDisposable
         // party still lacks, so the leader leaves with enough to hand out. The
         // walk resumes only once the target count lands (or the buy window
         // elapses), so movement never interrupts the run of buys.
-        int toBuy = Math.Max(1, _targetCount - _carriedCount(_itemId));
+        //
+        // Re-check on arrival: the count can already be met by the time we reach
+        // the shop — a substitute summoned or handed over on the way (a canoe
+        // covers a raft need on the river) — and buying one anyway is a
+        // duplicate nobody needs.
+        int toBuy = _targetCount - _carriedCount(_itemId);
+        if (toBuy <= 0)
+        {
+            _log?.Info(LogCategory, $"at shop {_shopRoom} — '{name}' already covered, nothing to buy");
+            ResumeToPath();
+            return;
+        }
         _log?.Info(LogCategory, $"at shop {_shopRoom} — buying '{name}' x{toBuy}");
         for (int i = 0; i < toBuy; i++) _wire.Send($"buy {name}");
         ArmBuyTimer();

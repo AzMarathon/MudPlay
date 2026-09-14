@@ -354,8 +354,13 @@ public static class RouteChoicePrompt
                     if (r.ShopRoom is { } shopRoom)
                     {
                         buys.Add((r.ItemId, shopRoom));
-                        if (services.ItemNames.GetName(r.ItemId) is { Length: > 0 } bn)
-                            neededItems.Add((r.ItemId, bn));
+                        // Ask the party about every item that would do on this route,
+                        // not just the one the run would buy: a member with a spare
+                        // canoe can hand it over for the raft the picker chose.
+                        foreach (int alt in RouteSubstitutes(choice.Requirements, r.ItemId))
+                            if (!neededItems.Any(n => n.ItemId == alt)
+                                && services.ItemNames.GetName(alt) is { Length: > 0 } bn)
+                                neededItems.Add((alt, bn));
                     }
                 }
             }
@@ -665,6 +670,25 @@ public static class RouteChoicePrompt
             avoidTraps: avoidTraps,
             ignoreAvoids: ignoreAvoids,
             preferTeleportFree: preferTeleportFree);
+    }
+
+    // The items that protect as well as itemId on this route: the intersection of
+    // every hazard requirement's any-of set that contains it (a canoe crosses the
+    // river but not Crystal Lake, so a route through both only accepts a raft or
+    // skiff). itemId first; just itemId when no hazard requirement names it.
+    internal static IReadOnlyList<int> RouteSubstitutes(IReadOnlyList<RouteRequirement> reqs, int itemId)
+    {
+        HashSet<int>? subs = null;
+        foreach (RouteRequirement req in reqs)
+        {
+            if (req.Kind != RouteRequirementKind.HazardProtection || !req.ItemIds.Contains(itemId)) continue;
+            if (subs is null) subs = new HashSet<int>(req.ItemIds);
+            else subs.IntersectWith(req.ItemIds);
+        }
+        if (subs is null) return new[] { itemId };
+        var ordered = new List<int> { itemId };
+        ordered.AddRange(subs.Where(id => id != itemId).OrderBy(id => id));
+        return ordered;
     }
 
     private static string DestinationLabel(AppServices services, RoomKey destination) =>
