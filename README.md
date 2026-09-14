@@ -1,13 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.82.0**
-> - Level Projection: pick which columns the grid shows, saved per character
-> - Seven new opt-in columns, all off by default — BS Accy, Spellcast, Perception, Thievery, Traps, Picklocks, Tracking
-> - BS Accy projects backstab accuracy per level, realm-split, with gear and quests folded in
-> - Perception and the four thief skills now project per level, gear and quest +skill bonuses folded in
-> - CP tooltips list the utility skills each stat feeds, and only name a thief skill your class or race grants
-> - Item and quest +Tracking bonuses are counted at last
+> **Version 3.83.0**
+> - Auto-train now checks it can afford the training before walking anywhere, and collects the difference from your stash rooms and bank when it can't
+> - Banked levels spanning two trainers no longer strand at the first one's ceiling — the run walks on to the trainer that covers the next level
+> - A stash that's been emptied by another player is written off on arrival and the run re-prices from where it stands instead of giving up
+> - When nothing reachable covers the bill, auto-train stays armed and logs how far short you are and roughly how many laps will close it
+> - New Auto-Trainer setting: train once this many levels are stacked, so one detour trains several levels
+> - Auto-train is solo-only — training disbands a party server-side
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

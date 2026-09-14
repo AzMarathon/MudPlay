@@ -55,6 +55,10 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     // Independent toggle — apply the CP plan via `train stats` after each train.
     [ObservableProperty] private bool _autoTrainStats;
 
+    // Trainable levels that must stack up before a trip is worth making
+    // (0 / 1 = go as soon as one is available).
+    [ObservableProperty] private int _fireAtBankedLevels;
+
     // Trainable levels to always keep banked (0 = train everything).
     [ObservableProperty] private int _levelsToKeep;
 
@@ -93,6 +97,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         Title, "Auto-train", "Auto-train stats", "trainer", "train", "guild", "level up",
         "announce level-ups", "announce channel", "levels to keep", "keep banked", "buffer",
         "do not train above", "level ceiling", "max level", "stop at level",
+        "levels stacked", "train once stacked", "fire at banked levels", "batch training",
     };
 
     public AutoTrainerSectionViewModel()
@@ -137,6 +142,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         {
             AutoTrain = AutoTrain,
             AutoTrainStats = AutoTrainStats,   // independent of AutoTrain (decoupled) — still gated on a saved CP plan
+            FireAtBankedLevels = Math.Max(0, FireAtBankedLevels),
             LevelsToKeep = Math.Max(0, LevelsToKeep),
             DoNotTrainAbove = Math.Max(0, DoNotTrainAbove),
             AnnounceLevelUps = AnnounceLevelUps,
@@ -176,6 +182,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         AutoTrainerSettings dto = ReadOrDefault();
         AutoTrain = dto.AutoTrain;
         AutoTrainStats = dto.AutoTrainStats;
+        FireAtBankedLevels = Math.Max(0, dto.FireAtBankedLevels);
         LevelsToKeep = Math.Max(0, dto.LevelsToKeep);
         DoNotTrainAbove = Math.Max(0, dto.DoNotTrainAbove);
         AnnounceLevelUps = dto.AnnounceLevelUps;
@@ -296,6 +303,12 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     partial void OnDoNotTrainAboveChanged(int value)
     {
         if (value < 0) { DoNotTrainAbove = 0; return; }   // re-enters with 0, marks dirty there
+        MarkDirty();
+    }
+
+    partial void OnFireAtBankedLevelsChanged(int value)
+    {
+        if (value < 0) { FireAtBankedLevels = 0; return; }   // re-enters with 0, marks dirty there
         MarkDirty();
     }
 

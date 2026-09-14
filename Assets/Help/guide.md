@@ -2130,6 +2130,18 @@ Settings → Auto-Trainer. Automates leveling up and (separately) spending banke
 
 **Default:** Off
 **What it does:** The master auto-leveling switch. When on, and you're running a Loop or Auto-Lair, the moment your banked experience makes a new level trainable, MudPlay automatically pauses, detours to an allowed trainer, trains every level you can, then resumes what it was doing.
+**Solo only:** training briefly drops you out of and back into the realm, which disbands a party server-side — so an armed Auto-train never fires while you're grouped. Train between groups, or with "Train Now."
+**It checks it can pay first.** Before walking anywhere, MudPlay prices the whole run — including the second trainer when your banked levels span two level bands, since each charges its own markup — and compares it to the coin you're carrying. If you're short it collects the difference first: your stash rooms, then your bank, or a combination, picking the bank branch nearest the trainer rather than nearest you. Pick up enough coin along the way and it abandons the errand and heads straight for the trainer. If everything you can reach still falls short, nothing is walked: it logs how far short you are and roughly how many laps of your loop will close the gap, and stays armed.
+**About stashed coin.** MudPlay tracks what it has hidden in each stash room, but any player who searches that room can take it — so a stash is only ever a good guess. The run confirms by searching when it arrives, and if the room has been emptied it simply re-prices from where it's standing and carries on to the bank.
+**Auto-Get Cash is borrowed, not changed.** A collection trip needs cash pickup on to work, so MudPlay switches it on for the duration and puts it back exactly as it found it. Your saved setting is never modified. Auto-stashing is suppressed for the same window, so the trip can't hide the coin it just came to collect.
+**Banking on the way home.** If Auto-deposit is on, a run that trained something offers the purse to it once the loop is running again — so a withdraw-and-train trip banks the leftovers on the way back rather than carrying them round the circuit.
+
+### Train once this many levels are stacked
+
+**Default:** `0` (go as soon as one level is available)
+**What it does:** Makes Auto-train wait until this many levels are trainable before making a trip, so one detour trains them all instead of one trip per level.
+**When you might change it:** Set it to 3–5 when your trainer is a long walk from your grind spot — you trade a little delay for far fewer interruptions.
+**Important notes:** Works alongside *Levels to keep banked*, which decides how many stay banked once the trip happens. A threshold at or below that reserve could never train anything, so MudPlay treats it as one above the reserve.
 
 ### Auto-train stats
 

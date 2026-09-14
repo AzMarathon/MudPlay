@@ -39,6 +39,17 @@
                        Text="{Binding AutoTrainStatsWarning}"
                        Foreground="{StaticResource AccentAmberBrush}"/>
 
+            <!-- Fire threshold: stack this many trainable levels before making the
+                 trip, so one detour trains several levels instead of one each. -->
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Train once this many levels are stacked" VerticalAlignment="Center"/>
+                <NumericUpDown MinWidth="110" VerticalAlignment="Center"
+                               Minimum="0" Maximum="60" Increment="1"
+                               FormatString="0"
+                               Value="{Binding FireAtBankedLevels, Mode=TwoWay}"
+                               ToolTip.Tip="Wait until this many levels are trainable before auto-train makes a trip, so one detour trains them all instead of one trip per level. 0 or 1 goes as soon as a single level is available. Works with 'Levels to keep banked', which decides how many stay banked once the trip happens — a threshold at or below that reserve behaves as if it were one above it."/>
+            </StackPanel>
+
             <!-- Levels to keep banked: auto-train (and Train Now) stops once this
                  many trainable levels are still reachable, so a reserve is kept. -->
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" VerticalAlignment="Center">

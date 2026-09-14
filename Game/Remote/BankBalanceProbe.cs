@@ -73,6 +73,31 @@ public sealed partial class BankBalanceProbe : IDisposable
     public long? Balance(string bankName) =>
         _balances.TryGetValue(bankName, out long v) ? v : null;
 
+    // Apply a confirmed deposit to the cached balance for one bank, so a plan made
+    // after banking doesn't work off a figure from the last `bank` query. A balance
+    // only ever moves by a deposit or a withdrawal and the game echoes both, so the
+    // cache can track it without re-asking.
+    //
+    // A bank we've never seen in a listing has an UNKNOWN balance, not a zero one —
+    // all we learn from a deposit is that it now holds at least this much. Seeding
+    // the floor is safe because it under-states: a plan that under-draws just makes
+    // a second stop, while over-stating would send a withdraw that silently no-ops.
+    public void NoteDeposit(string bankName, long copper)
+    {
+        if (_disposed || copper <= 0 || string.IsNullOrWhiteSpace(bankName)) return;
+        _balances[bankName] = _balances.TryGetValue(bankName, out long known) ? known + copper : copper;
+    }
+
+    // Apply a confirmed withdrawal. Unlike a deposit this can't seed an unknown
+    // bank — "took 500 out" says nothing about what's left — so an unseen bank
+    // stays unseen and the next `bank` query resolves it.
+    public void NoteWithdrawal(string bankName, long copper)
+    {
+        if (_disposed || copper <= 0 || string.IsNullOrWhiteSpace(bankName)) return;
+        if (_balances.TryGetValue(bankName, out long known))
+            _balances[bankName] = Math.Max(0, known - copper);
+    }
+
     public void AttachLineExtractor(LineExtractor lines)
     {
         ArgumentNullException.ThrowIfNull(lines);

@@ -1,5 +1,16 @@
 # Version history
 
+## 3.83.0
+
+- Auto-train now checks it can afford the training before walking anywhere, and collects the difference from your stash rooms and bank when it can't
+- Banked levels spanning two trainers no longer strand at the first one's ceiling — the run walks on to the trainer that covers the next level
+- A stash that's been emptied by another player is written off on arrival and the run re-prices from where it stands instead of giving up
+- When nothing reachable covers the bill, auto-train stays armed and logs how far short you are and roughly how many laps will close it
+- Auto-Get Cash is borrowed for a collection trip and restored afterwards; auto-stashing is suppressed so the trip can't re-hide what it collected
+- New Auto-Trainer setting: train once this many levels are stacked, so one detour trains several levels
+- Auto-train is solo-only — training disbands a party server-side
+- A run that trained something offers its purse to auto-deposit once the loop is back up
+
 ## 3.82.0
 
 - Level Projection: pick which columns the grid shows, saved per character

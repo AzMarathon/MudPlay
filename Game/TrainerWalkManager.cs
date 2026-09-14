@@ -42,7 +42,7 @@ namespace MudPlay.Game;
 // allocates CP without a fresh level-up.
 public sealed class TrainerWalkManager : IDisposable
 {
-    private enum Phase { Idle, Walking, Training, RefreshingStats, ApplyingCp }
+    private enum Phase { Idle, Funding, Walking, Training, RefreshingStats, ApplyingCp }
     private enum ResumeKind { None, Loop, Lair }
 
     // Why a (looping) train run stopped — shapes the @train reply.
@@ -142,6 +142,34 @@ public sealed class TrainerWalkManager : IDisposable
         _autoTrain.StateChanged += OnAutoTrainStateChanged;
         _autoTrain.PlanCommitted += OnCpPlanCommitted;
     }
+
+    // Collects the money before a run commits to a trainer. Optional: with none
+    // wired the manager behaves exactly as it always did — walk, train, and learn
+    // it can't pay from the server's rejection. Set from AppServices.
+    private Game.Train.TrainFundingRouter? _funding;
+
+    public void SetFundingRouter(Game.Train.TrainFundingRouter router)
+    {
+        ArgumentNullException.ThrowIfNull(router);
+        _funding = router;
+        _funding.Finished += OnFundingFinished;
+    }
+
+    // Renders "you're short N, here's when that stops being true" from the live
+    // session earn rate. A delegate because the rate and the lap time live in the
+    // session/loop trackers, which this manager has no business reaching into.
+    public Func<long, string>? DescribeShortfall { get; set; }
+
+    // Invoked once a run that actually trained something has finished and the loop /
+    // auto-lair is running again. Bound to the auto-deposit check, so a purse left
+    // heavy by a withdraw-and-train trip gets banked on the way back rather than
+    // carried around the circuit.
+    public Action? AfterTrainRun { get; set; }
+
+    // True when training is allowed to start at all. Solo-only for now: training is a
+    // realm excursion that disbands a party server-side, so an armed auto-train in a
+    // group would break the group. Null = no restriction.
+    public Func<bool>? CanStartRun { get; set; }
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
@@ -265,8 +293,20 @@ public sealed class TrainerWalkManager : IDisposable
         _resume = SnapshotEngine();
         StopEngine();   // free the wire for the detour (no-op when nothing's running)
 
+        // Price the whole run and make sure we can pay BEFORE walking. Without this
+        // the run walks to the trainer and discovers it's broke from the server's
+        // rejection line, having spent the trip to find out.
+        if (BeginFunding(cur.Key, t)) return;
+
+        WalkToTrainer(t, cur.Key);
+    }
+
+    // Walk to (or train at) the selected trainer. Split out of Begin so the funding
+    // errand can re-enter it once the purse is settled.
+    private void WalkToTrainer(TrainerShop t, RoomKey from)
+    {
         var room = new RoomKey(t.Map, t.Room);
-        if (cur.Key == room)
+        if (from == room)
         {
             SendTrain();
         }
@@ -286,6 +326,94 @@ public sealed class TrainerWalkManager : IDisposable
                 ? $"Route to trainer {t.Name} ({t.Map}/{t.Room}) blocked by your avoid in room {blocked.Map}/{blocked.Room} — skipping."
                 : $"No path to trainer {t.Name} ({t.Map}/{t.Room}).");
         }
+    }
+
+    // Ask the funding errand whether this run can be paid for. Returns true when it
+    // has taken over — either an errand is collecting (we resume on its Finished) or
+    // the run has already been settled as unaffordable.
+    //
+    // The bill is the WHOLE itinerary, not the first trainer's fee: trainers serve a
+    // contiguous level band, so a banked run can span several, each charging its own
+    // markup. Budgeting only the first leg would fund a trip that strands halfway.
+    private bool BeginFunding(RoomKey from, TrainerShop first)
+    {
+        if (_funding is null || _cpOnlyRun) return false;
+
+        int levels = LevelsThisRun();
+        if (levels <= 0) return false;
+
+        IReadOnlyList<Game.Train.TrainSegment> itinerary = Game.Train.TrainItineraryPlanner.Build(
+            TrainerCatalog.Enumerate(_gameData), _stats.Level, levels, ResolveClassNumber(),
+            ReadDisabledTrainers(), from, (a, b) => _bfs.DistanceBetween(a, b));
+        long cost = Game.Train.TrainItineraryPlanner.TotalCost(itinerary);
+        if (cost <= 0) return false;
+
+        var trainerRoom = new RoomKey(first.Map, first.Room);
+        switch (_funding.Begin(cost, trainerRoom))
+        {
+            case Game.Train.TrainFundingStart.Funded:
+                return false;                       // purse covers it — carry on
+
+            case Game.Train.TrainFundingStart.Collecting:
+                _phase = Phase.Funding;
+                _log?.Info("AutoTrain",
+                    $"Training {levels} level(s) across {itinerary.Count} trainer(s) costs {cost:N0} copper — "
+                    + "collecting the difference first.");
+                StateChanged?.Invoke();
+                return true;
+
+            default:
+                // Nothing reachable covers it. Stay armed and say when that changes,
+                // rather than walking somewhere pointless or disarming. The router
+                // reports the exact gap on its Finished event, which has already
+                // fired synchronously inside Begin by the time we get here.
+                _log?.Info("AutoTrain",
+                    DescribeShortfall?.Invoke(_lastFundingShortfall)
+                    ?? $"Can't afford training — short {_lastFundingShortfall:N0} copper.");
+                Finish("Not enough money to train — staying armed.");
+                return true;
+        }
+    }
+
+    // Recorded on every result, acted on only while we're waiting. Begin's Short
+    // branch fires this synchronously before _phase is Funding, so the gap has to be
+    // captured unconditionally or that branch has nothing to report.
+    private long _lastFundingShortfall;
+
+    private void OnFundingFinished(Game.Train.TrainFundingResult result)
+    {
+        _lastFundingShortfall = result.ShortfallCopper;
+        if (_phase != Phase.Funding) return;
+
+        if (!result.Funded)
+        {
+            _log?.Info("AutoTrain",
+                DescribeShortfall?.Invoke(result.ShortfallCopper)
+                ?? $"Funding errand ended short — {result.Detail}.");
+            Finish($"Couldn't fund the train ({result.Detail}) — staying armed.");
+            return;
+        }
+
+        if (_target is not { } t || _tracker.State.CurrentRoom is not { } cur)
+        {
+            Finish("Funded, but position is unknown — aborting.");
+            return;
+        }
+
+        // Re-select from where the errand left us: the bank we withdrew at may sit
+        // nearer a different branch of the same trainer.
+        _target = SelectNearest(cur.Key) ?? t;
+        WalkToTrainer(_target.Value, cur.Key);
+    }
+
+    // Banked levels this run will actually train, after the reserve and the ceiling.
+    private int LevelsThisRun()
+    {
+        AutoTrainerSettings s = ReadSettings();
+        int levels = Math.Max(0, CountBankableAbove(_stats.Level) - Math.Max(0, _keepLevels));
+        int ceiling = Math.Max(0, s.DoNotTrainAbove);
+        if (ceiling > 0) levels = Math.Min(levels, Math.Max(0, ceiling - _stats.Level));
+        return levels;
     }
 
     // CP reconcile: walk to a trainer and apply the current level's CP plan without
@@ -446,7 +574,46 @@ public sealed class TrainerWalkManager : IDisposable
 
     // A trainer rejected the train: out-levelled here, or can't pay. Stop the loop
     // and settle with the appropriate reason (drives the @train reply).
-    private void OnProgressedTooFar(MatchResult m) => StopLoop(StopReason.ProgressedTooFar);
+    // "Progressed too far" means we've out-levelled THIS trainer's band, not that the
+    // run is over. Trainers serve one contiguous band, so a character at the top of a
+    // 1-10 trainer with levels still banked just needs the 11+ trainer — walking on
+    // is the fix for the strand where the run stopped here with exp to spare.
+    private void OnProgressedTooFar(MatchResult m)
+    {
+        if (TryChainToNextTrainer()) return;
+        StopLoop(StopReason.ProgressedTooFar);
+    }
+
+    private bool TryChainToNextTrainer()
+    {
+        if (_phase != Phase.Training || !_loopTrain || _cpOnlyRun) return false;
+        if (_trainSteps >= MaxTrainLoopSteps) return false;
+
+        // Mid-run, PlayerStats.Level lags (we don't re-poll between loop steps), so
+        // the band question rides the level we last confirmed attaining.
+        int level = _attainedLevel > 0 ? _attainedLevel : _stats.Level;
+        if (CountBankableAbove(level) <= _keepLevels) return false;
+        if (!TrainBudgetCalculator.WithinCeiling(level, Math.Max(0, ReadSettings().DoNotTrainAbove)))
+            return false;
+        if (_tracker.State.CurrentRoom is not { } cur) return false;
+
+        if (SelectNearest(cur.Key, level) is not { } next) return false;
+
+        // The trainer that just refused us can't be the answer to its own refusal —
+        // walking "on" to the room we're standing in would spin the run.
+        var room = new RoomKey(next.Map, next.Room);
+        if (cur.Key == room) return false;
+
+        if (!_walker.WalkTo(room, planThroughAcquirableGates: true)) return false;
+
+        _target = next;
+        _phase = Phase.Walking;
+        _log?.Info("AutoTrain",
+            $"Out-levelled this trainer at {level} — walking to {next.Name} ({next.Map}/{next.Room}) to continue.");
+        StateChanged?.Invoke();
+        return true;
+    }
+
     private void OnNoMoney(MatchResult m) => StopLoop(StopReason.NoMoney);
 
     private void StopLoop(StopReason reason)
@@ -575,7 +742,8 @@ public sealed class TrainerWalkManager : IDisposable
         AutoTrainerSettings s = ReadSettings();
         int keep = Math.Max(0, s.LevelsToKeep);
         if (!IsBusy && EngineActive && s.AutoTrain
-            && CountBankableAbove(_stats.Level) > keep
+            && CanStartRun?.Invoke() != false
+            && TrainBudgetCalculator.ShouldFire(CountBankableAbove(_stats.Level), keep, s.FireAtBankedLevels)
             && TrainBudgetCalculator.WithinCeiling(_stats.Level, Math.Max(0, s.DoNotTrainAbove)))
             // Armed auto-train: detour + loop-train down to the reserve, applying
             // CP per the Auto-train-stats toggle. Suppressed once the level ceiling
@@ -601,6 +769,7 @@ public sealed class TrainerWalkManager : IDisposable
     private void Finish(string? reason)
     {
         if (reason is not null) _log?.Info("AutoTrain", reason);
+        bool trained = _levelsTrained > 0;
         ResumeTarget resume = _resume;
         _phase = Phase.Idle;
         _target = null;
@@ -619,6 +788,13 @@ public sealed class TrainerWalkManager : IDisposable
         _stopReason = StopReason.None;
         StateChanged?.Invoke();
         ResumeEngine(resume);
+
+        // Offer the purse to auto-deposit AFTER the engine is back up, not before:
+        // the deposit reroute snapshots whatever engine is running so it can restore
+        // it, and firing while ours was still stopped would have it capture nothing
+        // and strand the loop at the bank. Running it second means the bank visit
+        // happens on the way back into the circuit, exactly as a mid-loop one does.
+        if (trained) AfterTrainRun?.Invoke();
     }
 
     // Compose the one-line status line (the @train reply, or the Train Now / armed
@@ -696,9 +872,14 @@ public sealed class TrainerWalkManager : IDisposable
 
     // ----- resolution / detection ----------------------------------------
 
-    private TrainerShop? SelectNearest(RoomKey from) =>
+    private TrainerShop? SelectNearest(RoomKey from) => SelectNearest(from, _stats.Level);
+
+    // Level is explicit for the chain re-target: mid-run PlayerStats.Level lags the
+    // level we've actually attained, and picking the next trainer against a stale
+    // level would re-select the one that just refused us.
+    private TrainerShop? SelectNearest(RoomKey from, int level) =>
         TrainerCatalog.SelectNearest(
-            TrainerCatalog.Enumerate(_gameData), _stats.Level, ResolveClassNumber(), ReadDisabledTrainers(),
+            TrainerCatalog.Enumerate(_gameData), level, ResolveClassNumber(), ReadDisabledTrainers(),
             t => _bfs.DistanceBetween(from, new RoomKey(t.Map, t.Room)));
 
     // True when banked exp can reach a level past the reserve — i.e. Train Now would

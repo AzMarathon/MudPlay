@@ -126,6 +126,12 @@ public sealed partial class InventoryManager : IDisposable
     // announces the full confirmed amount for the ledger.)
     public event Action<long>? BankDeposited;
 
+    // Fired with the withdrawn copper value each time a `You withdrew …` echo is
+    // parsed. The mirror of BankDeposited, and the other half of what keeps a
+    // cached bank balance honest between `bank` queries: a balance only ever moves
+    // by a deposit or a withdrawal, and both announce themselves.
+    public event Action<long>? BankWithdrew;
+
     // Fired with an item's display-name each time a `You hid <item>.` echo names a
     // non-currency item — a stash-room / manual item hide. Coin-shaped hides are
     // excluded here (CashManager's coin path logs those), so the ledger doesn't
@@ -515,6 +521,7 @@ public sealed partial class InventoryManager : IDisposable
             long amount = ParsePriceToCopper(withdraw.Groups[1].Value);
             lock (_lock) ApplyTransaction(amount);
             Changed?.Invoke();
+            if (amount > 0) BankWithdrew?.Invoke(amount);
             return;
         }
 
