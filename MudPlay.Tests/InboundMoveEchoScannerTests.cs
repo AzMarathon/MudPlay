@@ -114,6 +114,80 @@ public sealed class InboundMoveEchoScannerTests : IDisposable
         Assert.Null(tracker.LastInboundMoveEcho);
     }
 
+    // The echo can be knocked off the prompt onto its own row — a BBS broadcast
+    // rendering between the two (report stock-20260914-000155), or a command the
+    // client sent in the same breath taking the prompt slot and pushing the move's
+    // type-ahead echo down a line (auto-sneak's "sn", report -000112). Paths A and B
+    // see nothing; the detached line is still the echo and must confirm the landing,
+    // or the move sits Pending forever in an identically-named grid.
+    [Fact]
+    public void DetachedEcho_OnOwnLine_ConfirmsMove()
+    {
+        (RoomTracker tracker, InboundMoveEchoScanner scanner) = NewScanner();
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        tracker.SetLocated(new RoomKey(1, 1), t0);
+        tracker.NoteRoomObserved(Hall(), t0);
+        tracker.NoteMoveSent(Direction.N, t0.AddSeconds(1));  // predicted 1/2 (identical {N,S})
+
+        // Bare prompt, a broadcast line, then the echo stranded on its own row.
+        DateTimeOffset at = t0.AddSeconds(2);
+        scanner.FeedTestLine(Line("[HP=100/MA=50]:", at, prompt: true));
+        scanner.FeedTestLine(Line("[Kitti] logs ON - Hi there!", at.AddMilliseconds(10), prompt: false));
+        scanner.FeedTestLine(Line("n", at.AddMilliseconds(20), prompt: false));
+
+        tracker.NoteRoomObserved(Hall(), at.AddMilliseconds(120));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    // The detached path is scoped to the exact token of the move in flight, so
+    // ordinary one-word content on its own row is never mistaken for an echo.
+    [Fact]
+    public void DetachedLine_NotTheInFlightToken_IsNotAnEcho()
+    {
+        (RoomTracker tracker, InboundMoveEchoScanner scanner) = NewScanner();
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        tracker.SetLocated(new RoomKey(1, 1), t0);
+        tracker.NoteRoomObserved(Hall(), t0);
+        tracker.NoteMoveSent(Direction.N, t0.AddSeconds(1));
+
+        // "Hall" and "s" are both single bare tokens; neither names the in-flight N.
+        scanner.FeedTestLine(Line("Hall", t0.AddSeconds(2), prompt: false));
+        scanner.FeedTestLine(Line("s", t0.AddSeconds(2).AddMilliseconds(10), prompt: false));
+
+        Assert.Null(tracker.LastInboundMoveEcho);
+    }
+
+    // A detached echo must NOT latch the tracker's "this statline is echo-readable"
+    // gate. It only appears when something displaced the echo, so it proves nothing
+    // about the ordinary prompt-glued case. Latching it for a user whose statline the
+    // scanner can't split would switch the arrival gate to demanding echoes it can
+    // only occasionally see — freezing every un-echoed move as a re-look. Here the
+    // second move gets no echo at all and must still confirm on the timing fallback.
+    [Fact]
+    public void DetachedEcho_DoesNotLatchStatlineReadable()
+    {
+        (RoomTracker tracker, InboundMoveEchoScanner scanner) = NewScanner();
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        tracker.SetLocated(new RoomKey(1, 1), t0);
+        tracker.NoteRoomObserved(Hall(), t0);
+
+        // Move one lands via a detached echo.
+        tracker.NoteMoveSent(Direction.N, t0.AddSeconds(1));
+        scanner.FeedTestLine(Line("n", t0.AddSeconds(2), prompt: false));
+        tracker.NoteRoomObserved(Hall(), t0.AddSeconds(2).AddMilliseconds(100));
+        Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
+
+        // Move two gets NO echo. Past the 400ms ambiguity floor the timing fallback
+        // must still confirm it — proof the detached echo didn't flip the latch.
+        tracker.NoteMoveSent(Direction.N, t0.AddSeconds(5));
+        tracker.NoteRoomObserved(Hall(), t0.AddSeconds(6));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 3), tracker.State.CurrentRoom!.Key);
+    }
+
     // A CUSTOM statline LineExtractor's built-in "[HP=..]:" split doesn't recognise:
     // the whole prompt + typed command arrive as ONE non-prompt line. Given the
     // user's configured statline matcher, the scanner still lifts the trailing

@@ -868,6 +868,18 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // legitimately slow settle isn't cut short.
     private static readonly TimeSpan DeferredWalkTimeout = TimeSpan.FromSeconds(6);
 
+    // Bounds the wait on a step that went out but never confirmed. Without it the
+    // walker sits in Walking with _stepInFlight set forever: the tracker holds the
+    // move Pending, nothing re-drives the step, and only a hand-typed move breaks
+    // it (reports stock-20260914-000112 / -000155, where a displaced move echo left
+    // the landing unrecognised in an identically-named grid). LoopRunner has carried
+    // the same watchdog since its own in-flight hang; this is the walker's copy.
+    private IDisposable? _stallWatchdog;
+
+    // Long enough that a slow-but-normal confirm is never cut short, short enough
+    // that a wedged walk self-heals instead of stranding the character.
+    private static readonly TimeSpan StallWatchdogInterval = TimeSpan.FromSeconds(10);
+
     // The active walk's planning flags, captured when a route is committed in
     // WalkToImmediate and reset in Reset(). A mid-walk replan (TryReplanOrFail)
     // must re-issue WalkTo with these, or a no-teleport (or gate-planned) walk
@@ -1698,6 +1710,42 @@ public sealed class AutoWalkManager : IRecoverableEngine
         SendNextStep();
     }
 
+    private void ArmStallWatchdog(string why)
+    {
+        _stallWatchdog?.Dispose();
+        _stallWatchdog = _scheduleDelay?.Invoke(StallWatchdogInterval, OnStallWatchdogElapsed);
+        _log?.Debug("Walker",
+            $"stall watchdog armed ({StallWatchdogInterval.TotalSeconds:F0}s): {why}");
+    }
+
+    private void DisarmStallWatchdog()
+    {
+        _stallWatchdog?.Dispose();
+        _stallWatchdog = null;
+    }
+
+    private void OnStallWatchdogElapsed()
+    {
+        _stallWatchdog?.Dispose();
+        _stallWatchdog = null;
+        // Only act if we're genuinely still wedged. A step that confirmed normally
+        // already advanced us and re-armed for its successor; a pause or a reset left
+        // nothing in flight. Escalate as STALLED rather than as a mismatch: tier 2
+        // watches for a 1-of-1 over the engine's next few steps, and a wedged walker
+        // has none — reporting a mismatch would park us there with nothing left to
+        // re-arm the watchdog. The recovery gate resyncs (rm on Paradigm, footprint
+        // backtrack on stock) and then advances or reroutes from ground truth.
+        if (State != WalkState.Walking || !_stepInFlight) return;
+        if (_tracker.State.Confidence != RoomConfidence.Pending) return;
+        _log?.Warn("Walker",
+            $"step {_index + 1} in-flight stall: move Pending, unconfirmed for {StallWatchdogInterval.TotalSeconds:F0}s — escalating to recovery");
+        _recovery?.NoteEngineStalled(
+            $"walk step {_index + 1} in-flight stall (move interrupted, never confirmed)");
+    }
+
+    // Test seam — pretend the in-flight stall watchdog just elapsed.
+    internal void FireStallWatchdogForTests() => OnStallWatchdogElapsed();
+
     private void SendMoveStep(MoveStep step)
     {
         // Predict the expected landing so we can validate via tracker.
@@ -1712,6 +1760,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
         _expectedAfterCurrentMove = exit.Target;
         _stepInFlight = true;
+        ArmStallWatchdog($"step {_index + 1} sent ({step.Direction})");
 
         // Predictive room provisioning: light a carried light if the room we're
         // stepping into reads dark, and raise a checkspell hazard buff if it needs
@@ -2902,6 +2951,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
             {
                 _log?.Info("Walker",
                     $"resume: step {_index + 1} still in flight (tracker Pending); awaiting confirmation, not re-sending");
+                // Bound the wait: if whatever interrupted us swallowed the move, this
+                // confirmation never arrives and the walk would hang indefinitely.
+                ArmStallWatchdog($"resume with step {_index + 1} still in flight (Pending)");
                 return;
             }
 
@@ -3037,6 +3089,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _sysGotoTimer = null;
         _awaitingSysGotoArrival = false;
         ClearGreetTeleportWait();
+        DisarmStallWatchdog();
         _deferredWalkTimer?.Dispose();
         _deferredWalkTimer = null;
         _deferredWalkTarget = null;

@@ -924,7 +924,8 @@ public sealed class RoomTracker
     // that move's SentAt (see HeadMoveEchoed). Only works when the user's statline
     // is one the scanner can split; the re-look guard falls back to timing when no
     // echo is ever seen (see _everReceivedEcho and the guard in ReconcileFromPending).
-    public void NoteInboundMoveEcho(string echoedCommand, DateTimeOffset? whenUtc = null)
+    public void NoteInboundMoveEcho(string echoedCommand, DateTimeOffset? whenUtc = null,
+        bool provesStatlineReadable = true)
     {
         if (string.IsNullOrWhiteSpace(echoedCommand)) return;
         string command = echoedCommand.Trim();
@@ -934,7 +935,15 @@ public sealed class RoomTracker
         // here, so the latch stays false and the timing fallback keeps the walker from
         // freezing. Set before the head-match gate: even a non-move command echo (stat,
         // inventory) is proof the scanner is working.
-        _everReceivedEcho = true;
+        //
+        // A detached echo (one the scanner recovered off its own line rather than the
+        // prompt) must NOT latch this: it only lands when something displaced the echo
+        // from the prompt, so it proves nothing about whether the ordinary prompt-glued
+        // echo is readable. Latching on it would strand a user whose statline the
+        // scanner can't split — the gate would switch to demanding echoes it can only
+        // occasionally see, and hold every un-echoed move as a re-look forever.
+        if (provesStatlineReadable)
+            _everReceivedEcho = true;
         // Record only an echo that names the move currently in flight. A non-move
         // command echoed mid-move (stat, inventory), or the echo of an already-
         // confirmed move, must not overwrite the head move's echo and leave its
@@ -1669,6 +1678,17 @@ public sealed class RoomTracker
         _lastInboundEcho is { } echo
         && echo.At >= head.SentAt
         && EchoMatchesHead(echo.Command, head);
+
+    // Does this line name the move currently in flight? Lets the echo scanner
+    // recognise an echo that arrived detached from the prompt without having to
+    // forward every bare line as a candidate: only the exact token of the move
+    // we're waiting on qualifies, so ordinary content (a room name, a chat line)
+    // can never be mistaken for an echo.
+    public bool MatchesPendingHeadMove(string command)
+    {
+        if (string.IsNullOrWhiteSpace(command)) return false;
+        return _pending.TryPeek(out PendingMove head) && EchoMatchesHead(command.Trim(), head);
+    }
 
     // Does an echoed command string name the head pending move? A cardinal move
     // echoes its wire token ("e", "ne", "u"); a text-exit move ("go path") echoes
