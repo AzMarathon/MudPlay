@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using MudPlay.Game.Calculators;
 using MudPlay.Game.GameData;
 using MudPlay.Services;
 
@@ -99,6 +100,20 @@ public sealed class KnownSpellCatalog
         if (ResolveClassNumber(className) is not { } number) return null;
         return ResolveClassMagery(number, out _) != MageryNone;
     }
+
+    // Query/IsUsable's charAlign encoding: 0 = unknown (skip alignment
+    // filtering entirely — see IsUsable), 1 = Good, 2 = Neutral, 3 = Evil. Not
+    // a straight cast of AlignmentBucket (Good=0/Neutral=1/Evil=2 there, since
+    // 0 there is a real band, not "unknown") — this is the adapter between the
+    // equip-filter's live AlignmentBucket? (ItemEquipFilter.BucketForWord) and
+    // this catalog's own int scheme.
+    public static int CharAlignFor(AlignmentBucket? bucket) => bucket switch
+    {
+        AlignmentBucket.Good => 1,
+        AlignmentBucket.Neutral => 2,
+        AlignmentBucket.Evil => 3,
+        _ => 0,
+    };
 
     // Every spell classNumber can learn, gated to level (pass 0 for the full
     // list ignoring the level requirement). Sorted by ReqLevel then Name. Empty

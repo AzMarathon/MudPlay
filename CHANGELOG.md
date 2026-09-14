@@ -4,6 +4,7 @@
 
 - Spell Book: All / Heals / Buffs / Attacks / Party+AoE tabs across the top narrow the grid to what a spell actually does
 - A spell can land in more than one tab (a whole-party buff shows under both Buffs and Party+AoE) — switching tabs re-filters the same list rather than sorting each spell into one bucket
+- The class spell list (the Spell Book and the Settings → Spells pickers alike) now respects alignment — a Good/Evil/Neutral-only spell your character couldn't actually learn is left out. The filtering rule already existed in KnownSpellCatalog but was never fed a real alignment, so every alignment-gated spell showed for everyone regardless of character; it now reads the same `who`-observed alignment the Equipment Manager's own Good/Evil gear filtering already uses
 
 ## 3.84.0
 
