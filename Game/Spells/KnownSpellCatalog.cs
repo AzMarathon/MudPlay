@@ -132,12 +132,17 @@ public sealed class KnownSpellCatalog
             results.Add(ToKnownSpell(row));
         }
 
-        results.Sort(static (a, b) =>
-        {
-            int byLevel = a.ReqLevel.CompareTo(b.ReqLevel);
-            return byLevel != 0 ? byLevel : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-        });
+        results.Sort(CompareByReqLevelThenName);
         return results;
+    }
+
+    // Query's own ordering — ReqLevel then Name — extracted so SpellbookState can
+    // re-sort after unioning an alignment-excluded, already-obtained spell back in
+    // (RebuildAvailable) without duplicating the comparator.
+    public static int CompareByReqLevelThenName(KnownSpell a, KnownSpell b)
+    {
+        int byLevel = a.ReqLevel.CompareTo(b.ReqLevel);
+        return byLevel != 0 ? byLevel : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
     }
 
     // Every code-145 mana-regen ROLL spell in the active set (nature tap / mana
