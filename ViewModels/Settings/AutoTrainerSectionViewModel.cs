@@ -13,12 +13,17 @@ using MudPlay.Views.Settings;
 
 namespace MudPlay.ViewModels.Settings;
 
-// Settings → Auto-Trainer tab. Holds the master AutoTrain + cascading
-// AutoTrainStats toggles, and a table of every training shop discovered in the
-// active game-data set (via TrainerCatalog) — name, host map/room, served level
-// range, and a per-trainer Allow toggle deciding whether auto-train may route to
-// it. Trainers with the 999 MaxLVL sentinel (unreachable placeholders) are never
+// Settings → Auto-Trainer tab. Holds how auto-train behaves once it runs — the
+// stack threshold, the banked-level reserve, the level ceiling, the level-up
+// announce — plus a table of every training shop discovered in the active
+// game-data set (via TrainerCatalog): name, host map/room, served level range,
+// and a per-trainer Allow toggle deciding whether auto-train may route to it.
+// Trainers with the 999 MaxLVL sentinel (unreachable placeholders) are never
 // listed. Persists to AutoTrainerSettings.
+//
+// The Auto-train / Auto-train stats switches themselves live on the Player
+// Workshop's CP Allocation tab, next to the plan they act on, and are NOT edited
+// here — Apply carries their persisted values forward untouched.
 public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewModel
 {
     private const string TabKey = "AutoTrainer";
@@ -32,8 +37,6 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
-    // Guards the re-entrant revert when Auto-train stats is forced off (no plan).
-    private bool _forcingStatsOff;
 
     public override string Id => "autotrainer";
     public override string Title => "Auto-Trainer";
@@ -46,14 +49,6 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
 
     // False when the active set yields no trainers at all — drives the empty-state.
     public bool HasTrainers => _allRows.Count > 0;
-
-    // True when the loaded profile has a saved CP allocation plan (needed for Auto-train stats).
-    private bool HasCpPlan => _profile.Current?.CharacterPlan is { Count: > 0 };
-
-    // Master auto-train toggle (level-up at the trainer during loop/auto-lair).
-    [ObservableProperty] private bool _autoTrain;
-    // Independent toggle — apply the CP plan via `train stats` after each train.
-    [ObservableProperty] private bool _autoTrainStats;
 
     // Trainable levels that must stack up before a trip is worth making
     // (0 / 1 = go as soon as one is available).
@@ -80,21 +75,12 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     // only trainers whose level range serves the character's current level.
     [ObservableProperty] private bool _onlyUsableLevel;
 
-    // Set when the user tries to enable Auto-train stats with no saved CP plan —
-    // the checkbox reverts and this explains why. Null = hidden.
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasAutoTrainStatsWarning))]
-    private string? _autoTrainStatsWarning;
-
-    // Drives the Auto-train-stats warning's visibility.
-    public bool HasAutoTrainStatsWarning => !string.IsNullOrEmpty(AutoTrainStatsWarning);
-
     // Discovered trainers in the active set, ascending by level range.
     public ObservableCollection<AutoTrainerRowViewModel> Trainers { get; } = new();
 
     public override IEnumerable<string> SearchableLabels => new[]
     {
-        Title, "Auto-train", "Auto-train stats", "trainer", "train", "guild", "level up",
+        Title, "trainer", "train", "guild", "level up",
         "announce level-ups", "announce channel", "levels to keep", "keep banked", "buffer",
         "do not train above", "level ceiling", "max level", "stop at level",
         "levels stacked", "train once stacked", "fire at banked levels", "batch training",
@@ -138,10 +124,17 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
             .OrderBy(k => k, StringComparer.Ordinal)
             .ToList();
 
+        // Auto-train / Auto-train stats are owned by the CP Allocation tab and are
+        // NOT edited here. This tab still writes the whole DTO, so their persisted
+        // values have to be carried forward from disk rather than from anything this
+        // view-model holds — otherwise an Apply here would silently revert a toggle
+        // the user had just flipped over there.
+        AutoTrainerSettings persisted = ReadOrDefault();
+
         AutoTrainerSettings dto = new()
         {
-            AutoTrain = AutoTrain,
-            AutoTrainStats = AutoTrainStats,   // independent of AutoTrain (decoupled) — still gated on a saved CP plan
+            AutoTrain = persisted.AutoTrain,
+            AutoTrainStats = persisted.AutoTrainStats,
             FireAtBankedLevels = Math.Max(0, FireAtBankedLevels),
             LevelsToKeep = Math.Max(0, LevelsToKeep),
             DoNotTrainAbove = Math.Max(0, DoNotTrainAbove),
@@ -180,8 +173,6 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     private void LoadFromProfile()
     {
         AutoTrainerSettings dto = ReadOrDefault();
-        AutoTrain = dto.AutoTrain;
-        AutoTrainStats = dto.AutoTrainStats;
         FireAtBankedLevels = Math.Max(0, dto.FireAtBankedLevels);
         LevelsToKeep = Math.Max(0, dto.LevelsToKeep);
         DoNotTrainAbove = Math.Max(0, dto.DoNotTrainAbove);
@@ -262,31 +253,6 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         {
             return new AutoTrainerSettings();
         }
-    }
-
-    // Auto-train (auto-level at a trainer) and Auto-train stats (auto-apply the CP
-    // plan) are independent toggles — turning the master off no longer force-clears
-    // stats. Stats still requires a saved CP plan (see OnAutoTrainStatsChanged).
-    partial void OnAutoTrainChanged(bool value) => MarkDirty();
-
-    partial void OnAutoTrainStatsChanged(bool value)
-    {
-        if (_forcingStatsOff) return;   // re-entry from the revert below
-
-        // Auto-train stats needs a saved CP plan to apply — without one, revert
-        // the box and tell the user where to set the plan up.
-        if (value && !HasCpPlan)
-        {
-            AutoTrainStatsWarning =
-                "Set up and save a CP allocation plan in the Player Workshop (CP Allocation tab) before enabling Auto-train stats.";
-            _forcingStatsOff = true;
-            try { AutoTrainStats = false; }
-            finally { _forcingStatsOff = false; }
-            return;
-        }
-
-        AutoTrainStatsWarning = null;
-        MarkDirty();
     }
 
     partial void OnAnnounceLevelUpsChanged(bool value) => MarkDirty();

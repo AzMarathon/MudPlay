@@ -56,6 +56,24 @@ public sealed class DefaultPatternsTests
     private static IMessagePattern PatternById(string id)
         => DefaultPatterns.BuildDefaultPatterns().Single(p => p.Id == id);
 
+    [Theory]
+    // The live stock reply to `open <dir>` on a door someone else already opened is
+    // PAST tense. Matching only the present form left it unrecognised, so the door
+    // FSM sat in WaitingOpen until it timed out and failed the loop step with "door
+    // open failed" — on a door that was standing open (report stock-20260913-232235).
+    [InlineData("The door was already open.")]
+    [InlineData("The door is already open.")]
+    [InlineData("The gate was already open.")]
+    [InlineData("The gate is already open.")]
+    public void DoorAlreadyOpenRegex_MatchesBothTenses(string line)
+        => Assert.True(PatternById(KnownPatterns.DoorAlreadyOpen).TryMatch(Line(line), out _));
+
+    [Theory]
+    [InlineData("The door was already locked.")]
+    [InlineData("The chest was already open.")]
+    public void DoorAlreadyOpenRegex_DoesNotOverreach(string line)
+        => Assert.False(PatternById(KnownPatterns.DoorAlreadyOpen).TryMatch(Line(line), out _));
+
     [Fact]
     public void GossipRegex_CapturesPlayerAndMessage()
     {

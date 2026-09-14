@@ -8,6 +8,8 @@
 > - When nothing reachable covers the bill, auto-train stays armed and logs how far short you are and roughly how many laps will close it
 > - New Auto-Trainer setting: train once this many levels are stacked, so one detour trains several levels
 > - Auto-train is solo-only — training disbands a party server-side
+> - Auto-train / Auto-train stats now live only on the CP Allocation tab — the duplicate pair on Settings → Auto-Trainer is gone
+> - A loop no longer fails with "door open failed" on a door that was already open
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

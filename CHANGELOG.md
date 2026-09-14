@@ -10,6 +10,9 @@
 - New Auto-Trainer setting: train once this many levels are stacked, so one detour trains several levels
 - Auto-train is solo-only — training disbands a party server-side
 - A run that trained something offers its purse to auto-deposit once the loop is back up
+- Auto-train / Auto-train stats now live only on the CP Allocation tab — the duplicate pair on Settings → Auto-Trainer is gone, and an Apply there can no longer undo a toggle set on the CP tab
+- A loop no longer fails with "door open failed" on a door that was already open: the server's past-tense "The door was already open." reply went unrecognised, so the door step waited for a confirmation it had already been given and timed out
+- bug reports addressed: stock-20260913-232235
 
 ## 3.82.0
 

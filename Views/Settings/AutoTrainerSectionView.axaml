@@ -18,26 +18,18 @@
 
     <Grid Margin="22" RowDefinitions="Auto,Auto,*" IsVisible="{Binding HasProfile}">
 
-        <!-- Two independent toggles on one row: Auto-train (auto-level) and
-             Auto-train stats (auto-apply the CP plan). Decoupled — either can run
-             without the other, so neither gates the other's enabled state. -->
+        <!-- How auto-train behaves once it runs: when to make the trip, what to hold
+             back, where to stop, and whether to announce. -->
         <StackPanel Grid.Row="0" Spacing="4">
             <TextBlock Classes="SettingsSectionBanner first" Text="Character profile settings"/>
             <TextBlock Classes="SettingsSectionSub"
                        Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
             <Border Classes="SettingsSectionRule" Margin="0,6,0,4"/>
-            <StackPanel Orientation="Horizontal" Spacing="24">
-                <CheckBox Content="Auto-train"
-                          IsChecked="{Binding AutoTrain, Mode=TwoWay}"
-                          ToolTip.Tip="When running a loop / auto-lair and a level-up is available, detour to an allowed trainer and train."/>
-                <CheckBox Content="Auto-train stats"
-                          IsChecked="{Binding AutoTrainStats, Mode=TwoWay}"
-                          ToolTip.Tip="After training a level, apply the CP plan's row for the new level via the train-stats screen."/>
-            </StackPanel>
-            <TextBlock Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="540"
-                       IsVisible="{Binding HasAutoTrainStatsWarning}"
-                       Text="{Binding AutoTrainStatsWarning}"
-                       Foreground="{StaticResource AccentAmberBrush}"/>
+            <!-- The Auto-train / Auto-train stats toggles deliberately live ONLY on
+                 the Player Workshop's CP Allocation tab, next to the plan they act
+                 on. They used to appear here as well, which was both a duplicate and
+                 a hazard: this tab writes the whole AutoTrainerSettings DTO on Apply,
+                 so an Apply here would overwrite whatever the CP tab had just set. -->
 
             <!-- Fire threshold: stack this many trainable levels before making the
                  trip, so one detour trains several levels instead of one each. -->

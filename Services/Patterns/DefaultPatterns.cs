@@ -763,8 +763,14 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.DoorOpenedNow,
             @"\byou open the (?:door|gate)\b|\b(?:door|gate) is now open\b",
             options: RegexOptions.IgnoreCase);
+        // Both tenses. `open <dir>` on a door someone already opened answers "The
+        // door WAS already open." — past tense — and matching only "is already open"
+        // left that reply unrecognised, so the FSM sat in WaitingOpen until it timed
+        // out and failed the step with "door open failed" on a door that was plainly
+        // open (report stock-20260913-232235).
         yield return new RegexPattern(KnownPatterns.DoorAlreadyOpen,
-            @"\b(?:door|gate) is already open\b");
+            @"\b(?:door|gate) (?:is|was) already open\b",
+            options: RegexOptions.IgnoreCase);
         yield return new RegexPattern(KnownPatterns.DoorIsLocked,
             @"\b(?:door|gate) is locked\b");
         // "You successfully unlocked the door/gate" — after `use <key> <dir>`.
