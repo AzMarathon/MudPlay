@@ -155,13 +155,18 @@ public static class DefaultPatterns
         // (or no) tail, so a fight whose swings are armour-deflected or carry no
         // damage number still registers as combat activity for the idle-stall
         // watchdog. Not used for stats; deliberately broader than MobHits/MobMisses.
-        // "The " is optional: a full-dodge outcome on Paradigm renders with no
-        // leading article and its verb slot blank ("whale shark  at you, but you
-        // dodge out of the way!" — confirmed on the wire, report
-        // paradigm-20260914-055853), which this pattern must still count as
-        // activity or the idle-stall watchdog can starve out from under a live fight.
+        // Keep "The " REQUIRED here — dropping it (tried in the PR for
+        // paradigm-20260914-055853) makes this match ordinary non-combat "<name>
+        // <verb> you" lines too (party gives/tells/follows/thanks, and even the
+        // player's own "A shimmering golden mist descends over you!" self-buff
+        // line — all confirmed matches against real session logs), which
+        // OnAnyCombatLine takes as proof combat is live: it force-sets InCombat
+        // (blocking rest) and keeps the idle-stall watchdog's clock fed
+        // indefinitely off unrelated chat, defeating the watchdog entirely.
+        // KnownPatterns.UserDodges below is the correctly-scoped fix for the
+        // no-article, blank-verb dodge shape that motivated this.
         yield return new RegexPattern(KnownPatterns.MobAttacksYou,
-            @"^(?:The )?[\w -]+ \w+ you\b");
+            @"^The [\w -]+ \w+ you\b");
         yield return new RegexPattern(KnownPatterns.UserGainExperience,
             @"^You gain (?<exp>\d+) experience\.");
         // The local player's own swing missing. On the live realm a whiff
@@ -182,8 +187,17 @@ public static class DefaultPatterns
         // satisfies MobMisses, so CombatSessionTracker de-dupes by skipping
         // a MobMisses line that carries "dodge". Keyed on the "you dodge"
         // phrase, which is unique to a successful dodge.
+        // "The " is optional: Paradigm's full-dodge wording drops the article
+        // AND blanks the attack-verb slot entirely — "whale shark  at you, but
+        // you dodge out of the way!" (confirmed on the wire across a couple
+        // dozen distinct monster names, report paradigm-20260914-055853) — so
+        // the source group alone has to carry the match. The mandatory "you
+        // dodge" substring keeps this narrowly scoped to real dodges; unlike
+        // KnownPatterns.MobAttacksYou (which stays "The "-required — see its
+        // comment), dropping the article here doesn't open it up to ordinary
+        // chat, since "you dodge" isn't something a tell/gossip/gives line says.
         yield return new RegexPattern(KnownPatterns.UserDodges,
-            @"^The (?<source>[\w -]+?) .*\byou dodge\b");
+            @"^(?:The )?(?<source>[\w -]+?) .*\byou dodge\b");
 
         // Third-party physical attacks — see KnownPatterns.OtherAttacksWithWeapon for
         // why these exist and why they stay narrow.

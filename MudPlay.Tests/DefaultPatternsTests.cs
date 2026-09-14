@@ -135,20 +135,44 @@ public sealed class DefaultPatternsTests
     }
 
     [Fact]
-    public void MobAttacksYouRegex_MatchesArticlelessBlankVerbDodge()
+    public void MobAttacksYouRegex_RequiresTheArticle()
+    {
+        // MUST stay article-required: dropping it (tried once, reverted) makes
+        // this match ordinary non-combat "<name> <verb> you" lines too — party
+        // gives/tells, and even the player's own self-buff visual line — which
+        // OnAnyCombatLine (its sole subscriber) takes as proof of live combat,
+        // wrongly blocking rest and permanently feeding the idle-stall watchdog's
+        // clock off unrelated chat. Confirmed false-positive-free against real
+        // session logs only once "The " stayed required. See UserDodges for the
+        // correctly-scoped fix for the dodge shape that motivated the attempt.
+        IMessagePattern p = PatternById(KnownPatterns.MobAttacksYou);
+
+        Assert.False(p.TryMatch(Line("Bob gives you a longsword."), out _));
+        Assert.False(p.TryMatch(Line("A shimmering golden mist descends over you!"), out _));
+        Assert.True(p.TryMatch(Line("The whale shark lunges at you!"), out _));
+    }
+
+    [Fact]
+    public void UserDodgesRegex_MatchesArticlelessBlankVerbDodge()
     {
         // Paradigm's full-dodge wording drops both the leading "The" and the
         // attack verb ("whale shark  at you, but you dodge out of the way!",
-        // confirmed on the wire) — this pattern is the idle-stall watchdog's
-        // sole activity signal for a round the monster's own swing carries no
-        // damage number, so missing this shape reads as total silence and can
-        // force-clear a live combat gate mid-fight. Report paradigm-20260914-055853.
-        IMessagePattern p = PatternById(KnownPatterns.MobAttacksYou);
+        // confirmed on the wire across two dozen distinct monster names) — now
+        // wired into CombatStateTracker's activity clock (it wasn't before), so
+        // this shape counts as combat activity without widening MobAttacksYou's
+        // much larger blast radius. Report paradigm-20260914-055853.
+        IMessagePattern p = PatternById(KnownPatterns.UserDodges);
 
         Assert.True(p.TryMatch(
             Line("whale shark  at you, but you dodge out of the way!"), out _));
+        // A second, differently-shaped dodge line seen in the same logs — no
+        // article either, but with its own verb ("reaches"), confirming the
+        // fix isn't narrowly tied to the blank-verb case specifically.
+        Assert.True(p.TryMatch(
+            Line("Reaches for you with a tentacle, but you dodge!"), out _));
         // The normal, article-led wording must still match.
-        Assert.True(p.TryMatch(Line("The whale shark lunges at you!"), out _));
+        Assert.True(p.TryMatch(
+            Line("The kobold thief lunges at you, but you dodge!"), out _));
     }
 
     [Fact]
