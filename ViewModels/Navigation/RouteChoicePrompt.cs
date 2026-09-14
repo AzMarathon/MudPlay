@@ -443,6 +443,7 @@ public static class RouteChoicePrompt
                 RouteChoiceResult.GatedNoAcquire => choice.GatedPath,
                 RouteChoiceResult.SearchEnRoute => choice.GatedPath,
                 RouteChoiceResult.AvoidOverrideAlt => choice.AvoidAlternativePath,
+                RouteChoiceResult.Shortcut => choice.ShortcutPath,
                 _ => null,
             });
             // A pre-selected route (trap-avoid defaults to the trap-free line) draws
@@ -461,6 +462,7 @@ public static class RouteChoicePrompt
             {
                 RouteChoiceResult.Free => choice.FreePath,
                 RouteChoiceResult.AvoidOverrideAlt when choice.AvoidAlternativePath is { } ap => ap,
+                RouteChoiceResult.Shortcut when choice.ShortcutPath is { } sp => sp,
                 _ => choice.GatedPath,
             });
 
@@ -609,6 +611,19 @@ public static class RouteChoicePrompt
                 // list for this one walk (needs no counter). Avoids stay set; only this
                 // walk crosses them, same as the avoid-override fork's commit.
                 CommitWalk(services, destination, gated: false, ignoreAvoids: true);
+                break;
+            case RouteChoiceResult.Shortcut when choice.ShortcutItems is { Count: > 0 } sci:
+                // The optional shortcut route. Already holding the item → walk it (a
+                // live-filter walk takes the shortcut since its gate is open). Not
+                // holding it → hand to the shortcut-source coordinator: walk to the
+                // item's source, try to obtain it, then take the shortcut if it turned
+                // up or the long route if it didn't. The coordinator declines when the
+                // item has no reachable source, so we just walk the long route.
+                int shortcutItem = sci[0];
+                if (services.IsItemCarried(shortcutItem))
+                    CommitWalk(services, destination, gated: false);
+                else if (!services.ShortcutSource.TryBegin(shortcutItem, destination))
+                    CommitWalk(services, destination, gated: false);
                 break;
             // null → cancelled: walk nothing (and leave any manual pause intact —
             // the user backed out, so nothing changed).
