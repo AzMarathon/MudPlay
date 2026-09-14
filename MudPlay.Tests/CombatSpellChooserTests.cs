@@ -677,6 +677,166 @@ public sealed class CombatSpellChooserTests
         Assert.Equal(CombatSpellAction.NormalAttackSpell, r2.Action);
     }
 
+    // ----- 3a. Attack phase: room spell 2 as slot 1's successor ---------
+
+    [Fact]
+    public void Choose_MultiAttack2_TakesOverWhenSlot1CapReached()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttackSpell = Slot("blad", minEnemies: 2, maxCasts: 2),
+            MultiAttack2Enabled = true,
+            MultiAttack2Spell = Slot("star"),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        CombatSpellDecision r1 = sut.Choose(settings, Ctx(enemies: 5));
+        Assert.Equal(CombatSpellAction.MultiAttack, r1.Action);
+        sut.MarkCast(r1, "a rat");
+
+        CombatSpellDecision r2 = sut.Choose(settings, Ctx(enemies: 5));
+        Assert.Equal(CombatSpellAction.MultiAttack, r2.Action);
+        sut.MarkCast(r2, "a rat");
+
+        // Slot 1's cap (2) is spent — slot 2 finishes the room instead of the
+        // single-target cascade picking it up.
+        CombatSpellDecision r3 = sut.Choose(settings, Ctx(enemies: 5));
+        Assert.Equal(CombatSpellAction.MultiAttack2, r3.Action);
+        Assert.Equal("star", r3.Spell);
+    }
+
+    [Fact]
+    public void Choose_MultiAttack2_TakesOverWhenSlot1ManaFloorUnmet()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            SpellManaThresholdMode = ThresholdMode.Absolute,
+            MultiAttackSpell = Slot("blad", minEnemies: 2, minMana: 30),
+            MultiAttack2Enabled = true,
+            MultiAttack2Spell = Slot("star", minMana: 10),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        Assert.Equal(CombatSpellAction.MultiAttack,
+            sut.Choose(settings, Ctx(enemies: 5, mana: 50, maxMana: 200)).Action);
+
+        // Under slot 1's floor but over slot 2's — the cheap room spell carries on.
+        Assert.Equal(CombatSpellAction.MultiAttack2,
+            sut.Choose(settings, Ctx(enemies: 5, mana: 20, maxMana: 200)).Action);
+
+        // Under both floors — now the single-target cascade takes the round.
+        Assert.Equal(CombatSpellAction.NormalAttackSpell,
+            sut.Choose(settings, Ctx(enemies: 5, mana: 5, maxMana: 200)).Action);
+    }
+
+    [Fact]
+    public void Choose_MultiAttack2_Disabled_FallsToNormalInstead()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttackSpell = Slot("blad", minEnemies: 2, maxCasts: 1),
+            MultiAttack2Enabled = false,          // the default, made explicit
+            MultiAttack2Spell = Slot("star"),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        CombatSpellDecision r1 = sut.Choose(settings, Ctx(enemies: 5));
+        Assert.Equal(CombatSpellAction.MultiAttack, r1.Action);
+        sut.MarkCast(r1, "a rat");
+
+        Assert.Equal(CombatSpellAction.NormalAttackSpell,
+            sut.Choose(settings, Ctx(enemies: 5)).Action);
+    }
+
+    // Min enemies is slot 1's alone. A room too small to trigger slot 1 must not be
+    // roomed by slot 2 instead — the handoff is "slot 1 is spent", never "slot 1
+    // doesn't apply here".
+    [Fact]
+    public void Choose_MultiAttack2_NotReachedBelowSlot1MinEnemies()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttackSpell = Slot("blad", minEnemies: 4),
+            MultiAttack2Enabled = true,
+            MultiAttack2Spell = Slot("star"),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        Assert.Equal(CombatSpellAction.NormalAttackSpell,
+            sut.Choose(settings, Ctx(enemies: 2)).Action);
+    }
+
+    // Slot 2 rides on slot 1 being configured — it's a successor, not a standalone
+    // room slot, and with slot 1 empty there's no MinEnemies trigger to share.
+    [Fact]
+    public void Choose_MultiAttack2_NotReachedWhenSlot1Unconfigured()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttack2Enabled = true,
+            MultiAttack2Spell = Slot("star"),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        Assert.Equal(CombatSpellAction.NormalAttackSpell,
+            sut.Choose(settings, Ctx(enemies: 5)).Action);
+    }
+
+    [Fact]
+    public void Choose_MultiAttack2_HonoursItsOwnCastCap()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttackSpell = Slot("blad", minEnemies: 2, maxCasts: 1),
+            MultiAttack2Enabled = true,
+            MultiAttack2Spell = Slot("star", maxCasts: 1),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        CombatSpellDecision r1 = sut.Choose(settings, Ctx(enemies: 5));
+        Assert.Equal(CombatSpellAction.MultiAttack, r1.Action);
+        sut.MarkCast(r1, "a rat");
+
+        CombatSpellDecision r2 = sut.Choose(settings, Ctx(enemies: 5));
+        Assert.Equal(CombatSpellAction.MultiAttack2, r2.Action);
+        sut.MarkCast(r2, "a rat");
+
+        // Both room slots spent → the single-target cascade.
+        Assert.Equal(CombatSpellAction.NormalAttackSpell,
+            sut.Choose(settings, Ctx(enemies: 5)).Action);
+    }
+
+    // Both room tallies are per-ROOM, so a new room re-arms slot 1 and the pair
+    // starts over from the opener rather than staying on the cheap finisher.
+    [Fact]
+    public void Choose_MultiAttack2_BothTalliesResetPerRoom()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttackSpell = Slot("blad", minEnemies: 2, maxCasts: 1),
+            MultiAttack2Enabled = true,
+            MultiAttack2Spell = Slot("star", maxCasts: 1),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        sut.MarkCast(sut.Choose(settings, Ctx(enemies: 5)), "a rat");
+        sut.MarkCast(sut.Choose(settings, Ctx(enemies: 5)), "a rat");
+        Assert.Equal(CombatSpellAction.NormalAttackSpell,
+            sut.Choose(settings, Ctx(enemies: 5)).Action);
+
+        sut.ResetForNewRoom();
+
+        Assert.Equal(CombatSpellAction.MultiAttack,
+            sut.Choose(settings, Ctx(enemies: 5)).Action);
+    }
+
     // ----- 3b. Attack phase: normal → alternate → weapon ----------------
 
     [Fact]
@@ -1814,6 +1974,27 @@ public sealed class CombatSpellChooserTests
 
         Assert.Equal(CombatSpellAction.MultiAttack, d.Action);
         Assert.Equal("blad", d.Spell);
+    }
+
+    // The drain yields to whichever room slot is actually rooming this round — once
+    // slot 1 is capped, slot 2 is the AoE the drain must not steal the round from.
+    [Fact]
+    public void Drain_YieldsToMultiAttack2_OnceSlot1Capped()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttackSpell = Slot("blad", minEnemies: 3, maxCasts: 1),
+            MultiAttack2Enabled = true,
+            MultiAttack2Spell = Slot("star"),
+            DrainSpell = Slot("vamp"),
+        };
+
+        sut.MarkCast(sut.Choose(settings, DrainCtx(enemies: 4)), "a rat");
+
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(enemies: 4));
+        Assert.Equal(CombatSpellAction.MultiAttack2, d.Action);
+        Assert.Equal("star", d.Spell);
     }
 
     [Fact]

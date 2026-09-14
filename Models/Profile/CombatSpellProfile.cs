@@ -3,7 +3,7 @@ using System;
 namespace MudPlay.Models.Profile;
 
 // One named "combat profile" — a quick-swap snapshot of a whole combat posture,
-// not just spells. It captures the Combat tab's six CombatSpellSlots + their
+// not just spells. It captures the Combat tab's seven CombatSpellSlots + their
 // mana-mode / drain knobs, the physical attack verbs, the room-skip / flee
 // thresholds, the primary/alternate WEAPONS (+ off-hands), and the entire Health
 // tab (rest / heal / flee thresholds, meditate/shadow, pre-/post-rest commands).
@@ -25,6 +25,8 @@ public sealed class CombatSpellProfile
 
     // The captured spell slots (own copies, never shared with live settings).
     public CombatSpellSlot MultiAttackSpell { get; set; } = new();
+    public bool MultiAttack2Enabled { get; set; }
+    public CombatSpellSlot MultiAttack2Spell { get; set; } = new();
     public CombatSpellSlot AreaDebuffSpell { get; set; } = new();
     public CombatSpellSlot SingleTargetDebuffSpell { get; set; } = new();
     public CombatSpellSlot NormalAttackSpell { get; set; } = new();
@@ -77,6 +79,8 @@ public sealed class CombatSpellProfile
         {
             Name = name ?? string.Empty,
             MultiAttackSpell = src.MultiAttackSpell.Clone(),
+            MultiAttack2Enabled = src.MultiAttack2Enabled,
+            MultiAttack2Spell = src.MultiAttack2Spell.Clone(),
             AreaDebuffSpell = src.AreaDebuffSpell.Clone(),
             SingleTargetDebuffSpell = src.SingleTargetDebuffSpell.Clone(),
             NormalAttackSpell = src.NormalAttackSpell.Clone(),
@@ -102,6 +106,8 @@ public sealed class CombatSpellProfile
     {
         ArgumentNullException.ThrowIfNull(dst);
         dst.MultiAttackSpell = MultiAttackSpell.Clone();
+        dst.MultiAttack2Enabled = MultiAttack2Enabled;
+        dst.MultiAttack2Spell = MultiAttack2Spell.Clone();
         dst.AreaDebuffSpell = AreaDebuffSpell.Clone();
         dst.SingleTargetDebuffSpell = SingleTargetDebuffSpell.Clone();
         dst.NormalAttackSpell = NormalAttackSpell.Clone();
@@ -126,6 +132,8 @@ public sealed class CombatSpellProfile
     {
         ArgumentNullException.ThrowIfNull(src);
         MultiAttackSpell = src.MultiAttackSpell.Clone();
+        MultiAttack2Enabled = src.MultiAttack2Enabled;
+        MultiAttack2Spell = src.MultiAttack2Spell.Clone();
         AreaDebuffSpell = src.AreaDebuffSpell.Clone();
         SingleTargetDebuffSpell = src.SingleTargetDebuffSpell.Clone();
         NormalAttackSpell = src.NormalAttackSpell.Clone();
@@ -148,6 +156,8 @@ public sealed class CombatSpellProfile
         Id = newIdentity ? Guid.NewGuid().ToString("N") : Id,
         Name = Name,
         MultiAttackSpell = MultiAttackSpell.Clone(),
+        MultiAttack2Enabled = MultiAttack2Enabled,
+        MultiAttack2Spell = MultiAttack2Spell.Clone(),
         AreaDebuffSpell = AreaDebuffSpell.Clone(),
         SingleTargetDebuffSpell = SingleTargetDebuffSpell.Clone(),
         NormalAttackSpell = NormalAttackSpell.Clone(),

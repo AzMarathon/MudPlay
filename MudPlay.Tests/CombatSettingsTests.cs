@@ -191,6 +191,13 @@ public sealed class CombatSettingsTests
                 MaxCastsPerRoom = 4,
                 MinManaPerCast  = 25,
             },
+            MultiAttack2Enabled = true,
+            MultiAttack2Spell = new CombatSpellSlot
+            {
+                SpellName       = "blad",
+                MaxCastsPerRoom = 2,
+                MinManaPerCast  = 10,
+            },
             NormalAttackSpell = new CombatSpellSlot
             {
                 SpellName       = "fireball",
@@ -206,6 +213,11 @@ public sealed class CombatSettingsTests
         Assert.Equal(3,        round.MultiAttackSpell.MinEnemies);
         Assert.Equal(4,        round.MultiAttackSpell.MaxCastsPerRoom);
         Assert.Equal(25,       round.MultiAttackSpell.MinManaPerCast);
+
+        Assert.True(round.MultiAttack2Enabled);
+        Assert.Equal("blad",   round.MultiAttack2Spell.SpellName);
+        Assert.Equal(2,        round.MultiAttack2Spell.MaxCastsPerRoom);
+        Assert.Equal(10,       round.MultiAttack2Spell.MinManaPerCast);
 
         Assert.Equal("fireball", round.NormalAttackSpell.SpellName);
         Assert.Equal(0,          round.NormalAttackSpell.MinEnemies);   // default

@@ -19,6 +19,7 @@ public static class CombatSpellProfileReport
 
         var parts = new List<string>();
         Add(parts, "multi", profile.MultiAttackSpell);
+        if (profile.MultiAttack2Enabled) Add(parts, "multi2", profile.MultiAttack2Spell);
         Add(parts, "AoE-debuff", profile.AreaDebuffSpell);
         Add(parts, "debuff", profile.SingleTargetDebuffSpell);
         Add(parts, "normal", profile.NormalAttackSpell);
@@ -52,6 +53,11 @@ public static class CombatSpellProfileReport
         string slots = string.Join(" · ", new[]
         {
             SlotDetail("multi", profile.MultiAttackSpell, roomWide: true),
+            // Slot 2 shares slot 1's MinEnemies, so roomWide:false keeps its own
+            // (never-read) count out of the line. Disabled shows as "multi2 off".
+            profile.MultiAttack2Enabled
+                ? SlotDetail("multi2", profile.MultiAttack2Spell, roomWide: false)
+                : "multi2 off",
             SlotDetail("AoE-debuff", profile.AreaDebuffSpell, roomWide: true),
             SlotDetail("debuff", profile.SingleTargetDebuffSpell, roomWide: false),
             SlotDetail("normal", profile.NormalAttackSpell, roomWide: false),

@@ -444,7 +444,8 @@ public sealed partial class CombatManager
                 // and MUST be cast bare — `blad`, never `blad <mob>` (the server treats
                 // the targeted form as an unknown command). Single-target attack/debuff
                 // spells keep their mob; _castingSpellTarget still tracks the round's mob.
-                string? castTarget = decision.Action == CombatSpellAction.MultiAttack
+                string? castTarget = decision.Action is CombatSpellAction.MultiAttack
+                                                      or CombatSpellAction.MultiAttack2
                     ? null : picked.RawName;
                 // AttacksBlocked short-circuits the cast: an AttackPrevented condition
                 // makes the server reject an attack spell exactly like a weapon swing, so
@@ -1820,6 +1821,8 @@ public sealed partial class CombatManager
         if (AttackSpellCanLand(normalEff, immu)) return null;
         if (AttackSpellCanLand(altEff, immu)) return null;
         if (AttackSpellCanLand(NullIfBlank(settings.MultiAttackSpell.SpellName), immu)) return null;
+        if (settings.MultiAttack2Enabled
+            && AttackSpellCanLand(NullIfBlank(settings.MultiAttack2Spell.SpellName), immu)) return null;
 
         return $"weapons HitMagic<{magical} (normal={normalHit} alt={altHit}) " +
                $"and no eligible attack spell (SpellImmu={immu})";
