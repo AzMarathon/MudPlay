@@ -574,8 +574,15 @@ there** — treat as close-but-unconfirmed until a Paradigm source or capture pi
   arriving (report `stock-20260914-003246`). `CombatStateTracker` therefore reads InCombat **OR**
   the engine's live target, and the engine keeps two: `CombatManager.CurrentTarget` (weapon mode)
   and `CastingSpellTarget` (spell mode). Only one is live at a time, so both must be consulted.
-- **[UNVERIFIED]** What the game emits (if anything) for a `break` sent while *not* engaged is not
-  pinned down — which is why the client never sends one speculatively.
+- **A `break` with no effect differs by realm** *([CONFIRMED] 2026-09-14, user)*:
+  - **Stock** — emits **nothing at all**. Silently ignored.
+  - **Paradigm** — emits **`Your command had no effect.`**
+- **Why that matters:** on Paradigm the wasted break is not merely wasted, it puts a parsed line
+  on the wire. `KnownPatterns.CommandNoEffect` is live, and `DarkRoomCombatWatcher` reads that
+  line as "our attack target isn't in the room" and **retracts the target** from the classifier.
+  That handler is gated on `RoomTracker.IsInDarkRoom` and a non-empty `CurrentTarget`, so the
+  collision needs Paradigm + a dark room + a stale target — but it is the reason a speculative
+  `break` is worse than a no-op there. Send one only when an attack actually went out.
 
 ### Attack-prevented states *([CONFIRMED] 2026-09-03, user)*
 
