@@ -23,8 +23,14 @@ public sealed class UpdateService : IDisposable
         "https://raw.githubusercontent.com/Tehshortbus/MudPlay";
     private const string ChecksumAssetName = "SHA256SUMS.txt";
 
+    // How often the auto-check timer wakes to ask "have we crossed a slot yet?".
+    // Coarse on purpose — the work per tick is one DateTime compare.
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(5);
+
     private readonly HttpClient _http;
     private readonly LogService? _log;
+    private Timer? _autoCheckTimer;
+    private DateTime _nextAutoCheck;
     private bool _disposed;
 
     // The most recent check's verdict — null until the first check runs.
@@ -151,10 +157,53 @@ public sealed class UpdateService : IDisposable
         return r;
     }
 
+    // ----- Automatic re-check ---------------------------------------------------
+
+    // Start the twice-a-day re-check. Without it the startup verdict is all a client
+    // ever has: one left running for a week keeps reporting whatever was true when it
+    // launched, because nothing re-queries on its own.
+    //
+    // The poll is coarse (PollInterval) and compares wall-clock against the next due
+    // slot rather than counting elapsed ticks, so a laptop that suspends across a slot
+    // notices on the first tick after it wakes instead of silently skipping the day.
+    // `isEnabled` is re-read every tick, so toggling the setting takes effect without
+    // restarting anything.
+    public void StartAutoChecks(Func<bool> isEnabled)
+    {
+        ArgumentNullException.ThrowIfNull(isEnabled);
+        if (_disposed || _autoCheckTimer is not null) return;
+
+        // First slot is the next one AFTER launch — the startup check already covers
+        // right now, so an app opened at 08:59 doesn't check twice in a minute.
+        _nextAutoCheck = UpdateSchedule.NextSlotAfter(DateTime.Now);
+        _log?.Info("Update", $"Automatic re-check armed — next at {_nextAutoCheck:yyyy-MM-dd HH:mm}.");
+
+        _autoCheckTimer = new Timer(_ => AutoCheckTick(isEnabled), null, PollInterval, PollInterval);
+    }
+
+    // The next scheduled automatic check, or null when none is armed. Read by the bug
+    // report so "why didn't it notice the new build" is answerable from a capture.
+    public DateTime? NextAutoCheck => _autoCheckTimer is null ? null : _nextAutoCheck;
+
+    private void AutoCheckTick(Func<bool> isEnabled)
+    {
+        if (_disposed) return;
+
+        // Slot still rolls forward while the setting is off, so switching it back on
+        // resumes the normal cadence instead of firing for every slot that elapsed.
+        if (DateTime.Now < _nextAutoCheck) return;
+        _nextAutoCheck = UpdateSchedule.NextSlotAfter(DateTime.Now);
+
+        if (!isEnabled()) return;
+        _log?.Info("Update", $"Scheduled update check — next at {_nextAutoCheck:yyyy-MM-dd HH:mm}.");
+        _ = CheckAsync();
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        _autoCheckTimer?.Dispose();
         _http.Dispose();
     }
 }
