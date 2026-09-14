@@ -485,6 +485,7 @@ public sealed class RoomGraphManager
         BuildGreetTeleportEdges(greeters);
         BuildItemUseTeleportEdges();
         BuildBoatEdges();
+        ApplyStockArenaEntryBlock();
         BuildSecondaryIndexes();
 
         // Free the raw JSON; the typed graph is the source of truth now.
@@ -496,6 +497,42 @@ public sealed class RoomGraphManager
 
         GraphReloaded?.Invoke();
     }
+
+    // Newhaven's Arena (1/2150) admits only levels 1-3. That block lives on the
+    // ROOM and is tested when you try to ENTER it — an early-engine construct the
+    // MDB has no field for, so the down exit that leads there reads as ungated
+    // while the same room's west exit to the Healer carries an ordinary
+    // "(Level: 1 to 3)" modifier. Left alone, the router plans an over-level
+    // character straight in and the server refuses the move, with nothing in the
+    // graph to route around next time.
+    //
+    // Surface it as the level window the MDB would have used, so the router, the
+    // route picker and the room tooltip all read this exit exactly like the west
+    // one. Stock only — Paradigm's dats already edit this exit to carry its own
+    // (different) window. Skipped when a gate is already present, so an edited
+    // stock realm that expresses the block itself keeps its own values.
+    private void ApplyStockArenaEntryBlock()
+    {
+        if (_cache.ActiveRealm != RealmType.Stock) return;
+        if (!_rooms.TryGetValue(ArenaApproach, out Room? approach)) return;
+        if (!approach.Exits.TryGetValue(Direction.D, out RoomExit down)) return;
+        if (down.Target != Arena || down.HasLevelGate) return;
+
+        Dictionary<Direction, RoomExit> exits = new(approach.Exits)
+        {
+            [Direction.D] = down with { MinLevel = 1, MaxLevel = 3 },
+        };
+        _rooms[ArenaApproach] = approach with { Exits = exits };
+
+        _log?.Log(LogSeverity.Info, "RoomGraph",
+            $"Room {ArenaApproach} D → {Arena}: applied the Arena's level-1-3 entry block "
+            + "(engine-side room gate, absent from stock Rooms.json).");
+    }
+
+    // The Arena and the Narrow Road above it. Named so the block above reads as
+    // intent rather than two bare map/room pairs.
+    private static readonly RoomKey Arena = new(1, 2150);
+    private static readonly RoomKey ArenaApproach = new(1, 2146);
 
     private void Clear()
     {

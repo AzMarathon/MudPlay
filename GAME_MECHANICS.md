@@ -3244,6 +3244,41 @@ out). Internally the aggregate `PlusAC` still carries the nominal blur value for
 formulas — the split is a **display** distinction — and the finder shows the nominal (max) value, not
 an encumbrance-adjusted one, since it's a planning aid without a fixed load assumption.
 
+### Room-level entry blocks — an early-engine mechanism with no MDB representation *([CONFIRMED] 2026-09-14, user + other devs + data check)*
+
+**Rare — the first room of this kind encountered, and probably a leftover of early MajorMUD engine
+design.** Do not expect the pattern to be common; treat it as a known one-off until another turns up.
+
+- **The block is a property of the room being ENTERED, not of any exit.** `1/2150` ("Newhaven,
+  Arena") carries an engine-side level range of **1 to 3**. The engine does not test it while
+  traversing an exit — it tests when you attempt to **enter the room**, so every way in is blocked
+  by the same rule.
+- **Neither the room's range nor the block appears anywhere in the MDB.** This is not an exporter
+  dropping a field: the MDB has **no field for a room-level gate at all**. The mechanism predates
+  the table format.
+- **Do not confuse it with an ordinary exit-level gate**, which is a real and fully-supported MDB
+  feature. Both exist in the same room on stock `1.11p`:
+
+  | from `1/2146` | destination | in the MDB |
+  |---|---|---|
+  | `W` | `1/2190` Newhaven, Healer | `(Level: 1 to 3)` — a genuine **exit** gate |
+  | `D` | `1/2150` Newhaven, Arena | nothing — the **room** block, unrepresentable |
+
+  The two produce a similar player-facing effect and are unrelated in origin.
+- `1/2150` has **three** inbound exits on stock — `1/2146 D`, `1/2152 S` (Dungeon, Entrance) and
+  `1/2155 U` (internal to the Arena) — and the room block applies to all of them, which is why no
+  single exit modifier could express it.
+- **Paradigm's dats edited this exit** so the gate does surface there as an exit modifier
+  (`D -> 1/2150 (Level: 0 to 5)`, a different window from stock's room range).
+- **Client consequence:** `MovementFilter.IsLevelGateBlocked` short-circuits on
+  `if (!exit.HasLevelGate) return false;`, so on stock an over-level character is routed into the
+  Arena and refused by the server. The refusal is handled (it reads as a failed move, not a stall),
+  but nothing stops the router re-planning the same way — the graph has no gate to route around.
+- **There is no room/exit overlay tier** — overlays cover Items and Monsters only — so this cannot
+  be corrected with a per-tier game-data override.
+- **General lesson: absence of a gate in the data is not proof the game has no gate.** Treat a
+  refusal on an exit the graph believes is open as possible evidence of a room-level block.
+
 ## Currency & cash
 
 - **[CONFIRMED]** Five denominations, each with its own full coin name:
