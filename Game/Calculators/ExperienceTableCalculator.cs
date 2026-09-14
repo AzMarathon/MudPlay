@@ -65,23 +65,25 @@ public static class ExperienceTableCalculator
         {
             double scaleMul, scaleDiv;
 
+            int levelTarget = i + 1;
+
             if (i < 26)
             {
-                (scaleMul, scaleDiv) = GetExpModifiers_ParaMud(i + 1);
+                (scaleMul, scaleDiv) = GetExpModifiers_ParaMud(levelTarget);
             }
-            else if (i < 54)
+            else if (levelTarget < 34)
             {
                 scaleMul = 115.0;
                 scaleDiv = 100.0;
             }
-            else if (i < 57)
-            {
-                scaleMul = 109.0;
-                scaleDiv = 100.0;
-            }
             else
             {
-                scaleMul = 108.0;
+                // ParaMUD 1.9 tapers the growth from level 34: one point off the
+                // 115% every 5 levels, floored at 108%. The flat 115/109/108
+                // brackets (115% through level 55) are the pre-1.9 curve, and
+                // they overstate the exp for every level past 35 — up to ~22%
+                // around level 60.
+                scaleMul = System.Math.Max(108.0, 115.0 - ((levelTarget - 34) / 5));
                 scaleDiv = 100.0;
             }
 
