@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MudPlay.Models.Settings;
 
@@ -24,12 +25,17 @@ public sealed class GlobalSettings
     // picks / builds a profile, the historical behaviour.
     public bool AutoLoadLastProfile { get; set; }
 
-    // When true (the default), the app checks GitHub Releases for a newer build on
-    // startup and, if one exists, flags it (red banners on the splash + a menu
-    // entry) — it never downloads or installs on its own; the user triggers the
+    // When true (the default), the app checks GitHub Releases for a newer build — on
+    // startup, and again twice a day so a long-running client doesn't sit on a stale
+    // verdict. If one exists it flags it (red banner on the splash, a crawl across the
+    // title bar) — it never downloads or installs on its own; the user triggers the
     // update from Help / Tools → Update the Client. App-wide (Global tier); only meaningful
     // for a published self-contained install, a no-op for a `dotnet run` dev build.
-    public bool CheckForUpdatesOnStartup { get; set; } = true;
+    //
+    // The on-disk key keeps the original startup-only name: the setting shipped in
+    // 3.78.0 and renaming the key would silently reset it for everyone who has one.
+    [JsonPropertyName("CheckForUpdatesOnStartup")]
+    public bool AutoCheckForUpdates { get; set; } = true;
 
     // The profile to auto-load at startup, or null to open the blank draft: the
     // last-used profile when AutoLoadLastProfile is on, else null. Stays null on

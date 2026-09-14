@@ -169,9 +169,9 @@ public sealed class AppServices
     public LogService Log { get; }
 
     // Self-update against GitHub Releases (check + user-triggered download/replace).
-    // A startup check (gated on GlobalSettings.CheckForUpdatesOnStartup) sets its
-    // availability flag; the splash banner + Help menu read it. It never installs on
-    // its own.
+    // A startup check plus a twice-daily re-check (both gated on
+    // GlobalSettings.AutoCheckForUpdates) set its availability flag; the splash banner
+    // and the main window's title-bar crawl read it. It never installs on its own.
     public Services.Update.UpdateService Update { get; }
 
     // Tees Log to a rolling on-disk file (Data/Logs/{ts}-program.log) so a
@@ -6573,10 +6573,16 @@ public sealed class AppServices
         ApplyLocalApiFromGlobalSettings();
 
         // Startup update check — fire-and-forget off the UI thread, gated on the
-        // Global "Check for updates on startup" toggle. It only sets the availability
-        // flag (splash banner + Help menu read it); nothing installs on its own.
-        if (Settings.Current.CheckForUpdatesOnStartup)
+        // Global "Check for updates automatically" toggle. It only sets the
+        // availability flag (splash banner + title-bar crawl read it); nothing
+        // installs on its own.
+        if (Settings.Current.AutoCheckForUpdates)
             _ = Update.CheckAsync();
+
+        // ...and again twice a day, so a client left running for days doesn't keep
+        // reporting whatever was true at launch. Armed unconditionally and gated per
+        // tick, so toggling the setting takes effect without a restart.
+        Update.StartAutoChecks(() => Settings.Current.AutoCheckForUpdates);
     }
 
     private void ApplyToolbarFromActiveProfile()

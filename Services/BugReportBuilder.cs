@@ -169,10 +169,13 @@ public static class BugReportBuilder
         Kv(sb, "Auto-load last profile", svc.Settings.Current.AutoLoadLastProfile ? "on" : "off");
         Kv(sb, "Last-used profile", svc.Settings.Current.LastUsedProfile is { } lp
             ? $"{lp.Name} on {lp.Bbs}" : "(none)");
-        // Update check — the startup toggle plus the last verdict, so a "no update
-        // notice showed" report can tell whether the check ran and what it found.
-        Kv(sb, "Update check on startup", svc.Settings.Current.CheckForUpdatesOnStartup ? "on" : "off");
+        // Update check — the toggle, the last verdict, and when the next automatic
+        // check is due, so a "no update notice showed" report can tell whether the
+        // check ran, what it found, and whether one was even scheduled.
+        Kv(sb, "Automatic update check", svc.Settings.Current.AutoCheckForUpdates ? "on" : "off");
         Kv(sb, "Last update check", DescribeUpdate(svc));
+        Kv(sb, "Next update check", svc.Update.NextAutoCheck is { } due
+            ? due.ToString("yyyy-MM-dd HH:mm") : "(not scheduled)");
         // Quest-flag completion sync — the opt-in toggle + the last run's result, so a
         // "my quest didn't auto-complete" report shows whether the sync ran and what it found.
         Kv(sb, "Quest flag sync on login", svc.QuestFlagSync.EnabledForCurrentProfile ? "on" : "off");

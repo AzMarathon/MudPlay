@@ -1,5 +1,11 @@
 # Version history
 
+## 3.79.12
+
+- An available update now scrolls **UPDATE AVAILABLE!!!** across the title bar, highway-sign style, until you take it — character and BBS stay pinned on the end so alts remain tellable apart
+- Updates are re-checked at 9am and 9pm, so a client left running for days no longer sits on its launch-time answer
+- Settings → General "Check for updates on startup" is now "Check for updates automatically" and governs both (existing preference is kept)
+
 ## 3.79.10
 
 - Updating while connected now closes the connection cleanly instead of letting the socket die with the process

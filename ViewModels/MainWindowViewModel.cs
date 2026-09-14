@@ -208,14 +208,57 @@ public partial class MainWindowViewModel : ObservableObject
     // the running build's AppInfo.Version. When no profile is loaded the
     // placeholder {default} stands in; when no BBS is selected {No BBS} stands
     // in. Both slots always render so the title bar shape stays consistent.
+    //
+    // While an update is waiting, the scrolling banner replaces the version slot
+    // rather than the whole title: the version is the stale part anyway, and the
+    // character + BBS have to survive so someone running several clients can still
+    // tell their taskbar buttons apart.
     public string WindowTitle
     {
         get
         {
             string profile = AppServices.Current.Profile.CurrentProfileName ?? "{default}";
             string bbs     = ActiveBbsName ?? "{No BBS}";
-            return $"MudPlay v{AppInfo.Version} — {profile} — {bbs}";
+            string lead    = _marqueeTimer is null
+                ? $"MudPlay v{AppInfo.Version}"
+                : UpdateTitleMarquee.Frame(_marqueeFrame);
+            return $"{lead} — {profile} — {bbs}";
         }
+    }
+
+    // Slow enough to read, fast enough to look like it's moving. Each tick is a
+    // substring plus one property-changed, so the cost is noise.
+    private static readonly TimeSpan MarqueeInterval = TimeSpan.FromMilliseconds(220);
+
+    // Drives the title-bar crawl. Null whenever no update is available — its
+    // nullness IS the "banner showing?" flag WindowTitle reads.
+    private DispatcherTimer? _marqueeTimer;
+    private int _marqueeFrame;
+
+    // Start/stop the crawl to match the update service's verdict. Called once at
+    // construction (the startup check may still be in flight) and again on every
+    // availability flip.
+    private void SyncUpdateMarquee()
+    {
+        bool wanted = AppServices.Current.Update.UpdateAvailable;
+        if (wanted == (_marqueeTimer is not null)) return;
+
+        if (!wanted)
+        {
+            _marqueeTimer!.Stop();
+            _marqueeTimer = null;
+        }
+        else
+        {
+            _marqueeFrame = 0;
+            _marqueeTimer = new DispatcherTimer(MarqueeInterval, DispatcherPriority.Background, (_, _) =>
+            {
+                _marqueeFrame = (_marqueeFrame + 1) % UpdateTitleMarquee.Period;
+                OnPropertyChanged(nameof(WindowTitle));
+            });
+            _marqueeTimer.Start();
+        }
+        OnPropertyChanged(nameof(WindowTitle));
     }
 
     // True when the connect button has somewhere to dial.
@@ -1419,6 +1462,13 @@ public partial class MainWindowViewModel : ObservableObject
         // profile with Auto-connect on. Posted so it lands after the window shows.
         if (AppServices.Current.Profile.Current is { } startupProfile)
             Avalonia.Threading.Dispatcher.UIThread.Post(() => OnProfileLoadedForConnect(startupProfile));
+
+        // Title-bar update banner. Seeded now because the startup check may have
+        // already landed, and followed after that — AvailabilityChanged fires from
+        // wherever the HTTP await resumed, so the handler marshals.
+        SyncUpdateMarquee();
+        AppServices.Current.Update.AvailabilityChanged += () =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(SyncUpdateMarquee);
     }
 
     // Enabler for view-handled toolbar buttons (no CommandName) — a command-less

@@ -41,6 +41,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         "Terminal font", "Font", "Font family", "Font size",
         "Navigation tooltip font", "Navigation tooltip", "Map tooltip font",
         "Scale terminal to window",
+        "Check for updates automatically", "Check for updates", "Updates",
         "Tab-complete inventory item names", "Tab autocomplete", "Inventory autocomplete",
         "Manual-Mode Defaults", "Auto-Mode Defaults",
         "Auto-Engines enabled on start",
@@ -103,10 +104,11 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _showStartupMudAnimation = true;
     // Install-global (GlobalSettings.SnapWindows), read live by WindowSnapManager.
     [ObservableProperty] private bool _snapWindows = true;
-    // Install-global (GlobalSettings.CheckForUpdatesOnStartup): a background check
-    // against GitHub Releases on launch that flags a newer build (splash banners +
-    // Help / Tools → Update the Client). Never installs on its own.
-    [ObservableProperty] private bool _checkForUpdatesOnStartup = true;
+    // Install-global (GlobalSettings.AutoCheckForUpdates): a background check against
+    // GitHub Releases on launch and twice a day after, flagging a newer build (splash
+    // banner, title-bar crawl, Help / Tools → Update the Client). Never installs on
+    // its own.
+    [ObservableProperty] private bool _autoCheckForUpdates = true;
 
     // Install-global (GlobalSettings.LocalApiEnabled / LocalApiPort). Opens a
     // loopback HTTP endpoint exposing live state + the program log for
@@ -480,7 +482,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // the same GlobalSettings, so this is all the wiring the toggle needs.
         _globalSettings.Current.SnapWindows = SnapWindows;
         // Startup update check is install-global; AppServices reads it once at launch.
-        _globalSettings.Current.CheckForUpdatesOnStartup = CheckForUpdatesOnStartup;
+        _globalSettings.Current.AutoCheckForUpdates = AutoCheckForUpdates;
         // The API server subscribes to GlobalSettingsChanged, so Save() below is
         // what opens or closes the socket — no extra call needed here.
         _globalSettings.Current.LocalApiEnabled = LocalApiEnabled;
@@ -559,7 +561,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
 
         // Window snapping is Global-tier — reflect the live GlobalSettings value.
         SnapWindows = _globalSettings.Current.SnapWindows;
-        CheckForUpdatesOnStartup = _globalSettings.Current.CheckForUpdatesOnStartup;
+        AutoCheckForUpdates = _globalSettings.Current.AutoCheckForUpdates;
         LocalApiEnabled = _globalSettings.Current.LocalApiEnabled;
         LocalApiPort = _globalSettings.Current.LocalApiPort;
         LocalApiAllowDestructive = _globalSettings.Current.LocalApiAllowDestructive;
@@ -708,7 +710,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnInventoryTabCompleteEnabledChanged(bool value) => Dirty();
     partial void OnShowStartupMudAnimationChanged(bool value)        => Dirty();
     partial void OnSnapWindowsChanged(bool value)                    => Dirty();
-    partial void OnCheckForUpdatesOnStartupChanged(bool value)       => Dirty();
+    partial void OnAutoCheckForUpdatesChanged(bool value)       => Dirty();
     partial void OnLocalApiEnabledChanged(bool value)                => Dirty();
     partial void OnLocalApiPortChanged(int value)                    => Dirty();
     partial void OnLocalApiAllowDestructiveChanged(bool value)       => Dirty();

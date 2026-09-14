@@ -402,9 +402,9 @@
                           ToolTip.Tip="When checked (default), MudPlay's panel windows — Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats — snap flush to each other's edges as you drag them near, and dragging the main window carries the whole snapped cluster with it. Grab any other panel to pull it off freely. When unchecked, every window floats independently. Install-wide preference; applies on Apply."/>
 
                 <CheckBox Margin="0,2,0,0"
-                          IsChecked="{Binding CheckForUpdatesOnStartup, Mode=TwoWay}"
-                          Content="Check for updates on startup"
-                          ToolTip.Tip="When checked (default), MudPlay asks GitHub whether a newer build has been published each time it launches. It only NOTIFIES — a red 'UPDATE AVAILABLE!!!' banner flanks the title on the startup splash, and Help / Tools → Update the Client shows what's new. Nothing is ever downloaded or installed without you choosing Download &amp; Restart there. When unchecked, no check runs and you can still check manually any time from the Help or Tools menu. Install-wide preference; applies on Apply."/>
+                          IsChecked="{Binding AutoCheckForUpdates, Mode=TwoWay}"
+                          Content="Check for updates automatically"
+                          ToolTip.Tip="When checked (default), MudPlay asks GitHub whether a newer build has been published — each time it launches, and again at 9am and 9pm so a client left running for days doesn't sit on a stale answer. It only NOTIFIES — a red 'UPDATE AVAILABLE!!!' banner flanks the title on the startup splash, the same message scrolls across the window's title bar for as long as the update is waiting, and Help / Tools → Update the Client shows what's new. Nothing is ever downloaded or installed without you choosing Download &amp; Restart there. When unchecked, no check runs on its own and you can still check manually any time from the Help or Tools menu. Install-wide preference; applies on Apply."/>
 
                 <CheckBox Margin="0,10,0,0"
                           IsChecked="{Binding LocalApiEnabled, Mode=TwoWay}"

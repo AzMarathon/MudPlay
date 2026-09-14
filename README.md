@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.79.10**
-> - Updating while connected now closes the connection cleanly instead of letting the socket die with the process
-> - The update restart reopens the same character, and reconnects on its own when you were connected before it ran
-> - The profile is reliably saved on the way out of an update (with "Confirm exit" on it could be skipped, and a prompt nobody could answer appeared mid-update)
-> - File → Quit's "Confirm exit" prompt actually holds the exit now — cancelling it no longer quits anyway
+> **Version 3.79.12**
+> - An available update now scrolls **UPDATE AVAILABLE!!!** across the title bar, highway-sign style, until you take it — character and BBS stay pinned on the end so alts remain tellable apart
+> - Updates are re-checked at 9am and 9pm, so a client left running for days no longer sits on its launch-time answer
+> - Settings → General "Check for updates on startup" is now "Check for updates automatically" and governs both (existing preference is kept)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
