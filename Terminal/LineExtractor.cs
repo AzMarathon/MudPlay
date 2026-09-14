@@ -128,8 +128,14 @@ public sealed partial class LineExtractor
 
     // Leading status-line prompt — covers [HP=…]: in all the MajorMUD shapes
     // (with or without the MA/KAI suffix, with or without the parenthesised
-    // status). Anchored at line start.
-    [GeneratedRegex(@"^\[HP=[^\]]*\]:", RegexOptions.CultureInvariant)]
+    // status). Anchored at line start. The trailing "(Resting)"/"(Meditating)"
+    // tag (DefaultPatterns.StatusLine's stateb group) sits AFTER "]:", not
+    // inside the brackets — without consuming it here too, a move typed while
+    // that tag is showing splits as content " (Meditating) e" instead of "e",
+    // so InboundMoveEchoScanner forwards an unparseable echo and RoomTracker
+    // never sees the move as echoed (report paradigm-20260913-210626: the
+    // walker held Pending in an identically-named room until a manual `rm`).
+    [GeneratedRegex(@"^\[HP=[^\]]*\]:(?:\s\((?:Resting|Meditating)\))?", RegexOptions.CultureInvariant)]
     private static partial Regex PromptPrefix();
 
     // Public for testability: converts a raw cell row into the EmittedLine the

@@ -186,6 +186,25 @@ public sealed class LineExtractorTests
         return lines;
     }
 
+    // ----- Prompt/content split (PromptPrefix) -------------------------------
+
+    // A "(Meditating)"/"(Resting)" tag on the prompt row sits AFTER "]:", not
+    // inside the brackets (DefaultPatterns.StatusLine's stateb group) — the split
+    // must consume it as part of the prompt half too, or a move typed while it's
+    // showing splits as content " (Meditating) n" instead of "n" and
+    // InboundMoveEchoScanner can't parse the echo, leaving RoomTracker stuck
+    // treating the move's own landing as an ambiguous re-look (report
+    // paradigm-20260913-210626: held Pending in an identically-named room until
+    // a manual `rm`).
+    [Fact]
+    public void PromptSplit_TrailingMeditatingTag_ExcludedFromContent()
+    {
+        List<string> emitted = FeedThroughEmulator("[HP=100/MA=50]: (Meditating) n\r\n");
+
+        string content = Assert.Single(emitted);
+        Assert.Equal("n", content.Trim());
+    }
+
     /// <summary>
     /// Helper: build a row whose first <paramref name="text"/>.Length cells
     /// hold <paramref name="text"/> at default attributes, then pad blanks
