@@ -559,6 +559,31 @@ there** — treat as close-but-unconfirmed until a Paradigm source or capture pi
 
 ## Combat & backstab
 
+### `break` — stopping an announced attack *([CONFIRMED] 2026-09-14, user)*
+
+- **`break` stops your announced attack.** Its practical value is **before you move**: leaving a
+  room with an attack still announced raises the chance the monster **chases you**, so breaking
+  first lowers that chance. This is what the client's *Break combat before running*
+  (`CombatSettings.BreakBeforeFleeing`) is for.
+- **The trigger is "did we send an attack command", physical OR spell** — either kind counts. If
+  an attack went out and a movement command is about to follow, send `break` first.
+- **With no attack sent and no `*Combat Engaged*` seen, a `break` is a wasted command** — don't
+  send one speculatively.
+- **Client note:** `PlayerState.InCombat` only flips once `*Combat Engaged*` has been parsed, so it
+  is *not* sufficient on its own — a toggle can land between our attack going out and that reply
+  arriving (report `stock-20260914-003246`). `CombatStateTracker` therefore reads InCombat **OR**
+  the engine's live target, and the engine keeps two: `CombatManager.CurrentTarget` (weapon mode)
+  and `CastingSpellTarget` (spell mode). Only one is live at a time, so both must be consulted.
+- **A `break` with no effect differs by realm** *([CONFIRMED] 2026-09-14, user)*:
+  - **Stock** — emits **nothing at all**. Silently ignored.
+  - **Paradigm** — emits **`Your command had no effect.`**
+- **Why that matters:** on Paradigm the wasted break is not merely wasted, it puts a parsed line
+  on the wire. `KnownPatterns.CommandNoEffect` is live, and `DarkRoomCombatWatcher` reads that
+  line as "our attack target isn't in the room" and **retracts the target** from the classifier.
+  That handler is gated on `RoomTracker.IsInDarkRoom` and a non-empty `CurrentTarget`, so the
+  collision needs Paradigm + a dark room + a stale target — but it is the reason a speculative
+  `break` is worse than a no-op there. Send one only when an attack actually went out.
+
 ### Attack-prevented states *([CONFIRMED] 2026-09-03, user)*
 
 - Some status effects — a **stun**, **petrification/petrify**, a leg/body **bind** — leave the

@@ -4327,6 +4327,12 @@ public sealed class AppServices
         // CombatSettings.BreakBeforeFleeing on, mirroring the flee path's disengage.
         CombatTracker.SetBreakBeforeRunGate(
             () => ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat").BreakBeforeFleeing);
+        // A toggle can land before the server's *Combat Engaged* comes back, so the
+        // engine's own target answers "have we swung here?" when InCombat can't yet.
+        // Both modes count: a weapon attack sets CurrentTarget, a combat spell sets
+        // CastingSpellTarget, and only one is live at a time.
+        CombatTracker.SetAttackInFlightGate(
+            () => Combat.CurrentTarget is not null || Combat.CastingSpellTarget is not null);
         RoomTracker.StateChanged += t =>
         {
             if (t.PreviousRoom is null || t.NewRoom is null) return;

@@ -12,7 +12,8 @@ namespace MudPlay.Game.Map;
 // landing from a stray re-look in an identically-named grid (issue #478) without
 // relying on the fragile round-trip timing heuristic.
 //
-// Two ways the echoed command reaches us, because the prompt is user-configurable:
+// Three ways the echoed command reaches us — two because the prompt is
+// user-configurable, one because the echo can be knocked off the prompt entirely:
 //
 //  A) DEFAULT-shaped statline ("[HP=..]:"). LineExtractor recognises this shape
 //     and splits a prompt row carrying trailing text ("[HP=..]:e") into two
@@ -26,6 +27,11 @@ namespace MudPlay.Game.Map;
 //     the injected provider — the exact matcher the reconciler forces onto the
 //     wire) at the row start and take the trailing text as the echoed command. So
 //     the gate works for whatever prompt the player set, not just the default.
+//
+//  C) DETACHED echo — the command echoed on a row of its own because something
+//     displaced it from the prompt (a command the client sent in the same breath,
+//     a BBS broadcast rendering between the two). Recognised only when the line is
+//     exactly the token of the move in flight, so it cannot swallow ordinary text.
 //
 // RoomTracker.NoteInboundMoveEcho is the final authority — it keeps only an echo
 // that names the move in flight — so forwarding a non-move echo here is harmless.
@@ -82,14 +88,32 @@ public sealed class InboundMoveEchoScanner : IDisposable
         {
             Match m = rx.Match(line.Text);
             if (m.Success && m.Index == 0 && m.Length < line.Text.Length)
+            {
                 Forward(line.Text[m.Length..], line.Timestamp);
+                return;
+            }
         }
+
+        // Path C — the echo arrived DETACHED from the prompt, on a line of its own.
+        // Two live causes, both in reports stock-20260914-000112 / -000155: a command
+        // the client sent in the same breath (auto-sneak's "sn") takes the prompt slot
+        // and pushes the move's type-ahead echo onto its own row, and a BBS broadcast
+        // ("►►► [name] logs ON") renders between the prompt and the echo. Either way
+        // paths A and B see nothing, the move's real landing then looks un-echoed, and
+        // in a same-named grid the arrival gate holds it as a re-look forever.
+        //
+        // Scoped to the exact token of the move in flight — never a general "short bare
+        // line is an echo" rule, which would let a room name or a one-word chat line
+        // confirm a move. Flagged as not-statline-proof so it can't latch the tracker's
+        // echo-readable gate off a signal that only appears when something goes wrong.
+        if (_tracker.MatchesPendingHeadMove(line.Text))
+            Forward(line.Text, line.Timestamp, provesStatlineReadable: false);
     }
 
-    private void Forward(string commandText, DateTimeOffset at)
+    private void Forward(string commandText, DateTimeOffset at, bool provesStatlineReadable = true)
     {
         string command = commandText.Trim();
         if (command.Length == 0) return;
-        _tracker.NoteInboundMoveEcho(command, at);
+        _tracker.NoteInboundMoveEcho(command, at, provesStatlineReadable);
     }
 }

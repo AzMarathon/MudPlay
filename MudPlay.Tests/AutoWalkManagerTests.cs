@@ -266,6 +266,56 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Started);
     }
 
+    // Reports stock-20260914-000112 / -000155: a step went out, its echo was displaced
+    // off the prompt, and the tracker held the landing Pending as an ambiguous re-look
+    // in an identically-named grid. The walker had no bound on that wait — it sat in
+    // Walking with the step in flight until the player hand-typed a move. The watchdog
+    // escalates to the recovery gate so the walk resyncs from ground truth instead.
+    [Fact]
+    public void StallWatchdog_StepInFlightStillPending_EscalatesToRecovery()
+    {
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        string? resyncReason = null;
+        h.Gate!.TryResync = reason => { resyncReason = reason; return true; };
+
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Single(h.Sent);
+
+        // No confirming observation ever arrives — the move's landing went unrecognised.
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+        h.Walker.FireStallWatchdogForTests();
+
+        Assert.NotNull(resyncReason);
+    }
+
+    // Each send re-arms the watchdog, so a timer that survives the walk is stale by
+    // definition. It must no-op rather than escalate — an arrived walker is not a
+    // wedged one, and resyncing it would yank a finished journey back into recovery.
+    [Fact]
+    public void StallWatchdog_WalkFinished_DoesNotEscalate()
+    {
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        bool resynced = false;
+        h.Gate!.TryResync = _ => { resynced = true; return true; };
+
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        // Both steps confirm; the walk reaches its destination and goes Idle.
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Tracker.NoteRoomObserved(new RoomObservation("C",
+            new HashSet<Direction> { Direction.S }));
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+
+        h.Walker.FireStallWatchdogForTests();
+
+        Assert.False(resynced);
+    }
+
     [Fact]
     public void Walker_AdvancesThroughPath_OnConfirmedSteps()
     {
@@ -1035,10 +1085,12 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Single(h.Sent);                   // nothing sent while deferred
         Assert.Contains(h.Events,
             e => e.Kind == WalkEventKind.Started && e.Detail.Contains("deferred"));
-        Assert.Single(scheduled);                // the watchdog was armed
+        // Two timers are armed by now: step 1's in-flight stall watchdog, then the
+        // deferral's own deadline. This test is about the latter.
+        Assert.Equal(2, scheduled.Count);
 
-        // The Confirmed transition never arrives — fire the watchdog.
-        scheduled[0]();
+        // The Confirmed transition never arrives — fire the deferral's watchdog.
+        scheduled[^1]();
 
         // Force-planned from the last-known room 1/1 (the refused move never
         // moved us): BFS 1/1 -> 1/2 = [N], so a fresh step goes out instead of

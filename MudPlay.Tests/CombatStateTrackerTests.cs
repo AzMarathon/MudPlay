@@ -86,10 +86,14 @@ public sealed class CombatStateTrackerTests
                 SentRaw.Add(System.Text.Encoding.Latin1.GetString(bytes));
             });
 
+        // Stands in for CombatManager.CurrentTarget — non-null once we've swung.
+        public bool AttackInFlight { get; set; }
+
         public void WireBreakBeforeRun()
         {
             WireSender();
             Tracker.SetBreakBeforeRunGate(() => BreakBeforeRunning);
+            Tracker.SetAttackInFlightGate(() => AttackInFlight);
         }
 
         public Harness()
@@ -617,6 +621,73 @@ public sealed class CombatStateTrackerTests
 
         Assert.DoesNotContain("break", h.Sent);
         Assert.False(h.CombatGateHeld);
+    }
+
+    // Report stock-20260914-003246: the user toggled auto-combat off in the window
+    // between the engine's attack going out and the server's *Combat Engaged* coming
+    // back. InCombat was still false, so the break was skipped and the walker ran off
+    // still engaged. The engine's own target answers the same question immediately.
+    [Fact]
+    public void OnAutoAttackChanged_Off_AttackInFlightBeforeEngagedReply_SendsBreak()
+    {
+        using Harness h = new();
+        h.WireBreakBeforeRun();
+        h.BreakBeforeRunning = true;
+        h.AddMonster(1, "giant rat", killable: true);
+
+        h.Feed("Also here: giant rat.");    // gate asserted on the hostile
+        Assert.True(h.CombatGateHeld);
+        h.AttackInFlight = true;            // we swung...
+        Assert.False(h.State.InCombat);     // ...but *Combat Engaged* hasn't landed
+
+        h.AutoAttackEnabled = false;
+        h.Tracker.OnAutoAttackChanged();
+
+        Assert.Contains("break", h.Sent);
+        Assert.False(h.CombatGateHeld);
+    }
+
+    // The break trigger is "did we send an attack", physical OR spell. A combat spell
+    // sets CombatManager.CastingSpellTarget rather than CurrentTarget (separate modes,
+    // only one live at a time), so a spell attack must break exactly like a swing —
+    // the harness gate stands in for "either target is set".
+    [Fact]
+    public void OnAutoAttackChanged_Off_SpellAttackInFlight_SendsBreak()
+    {
+        using Harness h = new();
+        h.WireBreakBeforeRun();
+        h.BreakBeforeRunning = true;
+        h.AddMonster(1, "giant rat", killable: true);
+
+        h.Feed("Also here: giant rat.");
+        Assert.True(h.CombatGateHeld);
+        h.AttackInFlight = true;            // spell announced, no *Combat Engaged* yet
+        Assert.False(h.State.InCombat);
+
+        h.AutoAttackEnabled = false;
+        h.Tracker.OnAutoAttackChanged();
+
+        Assert.Contains("break", h.Sent);
+    }
+
+    // The attack-in-flight signal must not manufacture a fight on its own: with no
+    // gate asserted there is no hostile being held for, so a stale target can't
+    // produce a stray break into an empty room.
+    [Fact]
+    public void OnAutoAttackChanged_Off_AttackInFlightButNoGate_NoBreak()
+    {
+        using Harness h = new();
+        h.WireBreakBeforeRun();
+        h.BreakBeforeRunning = true;
+        h.AttackInFlight = true;
+
+        h.Feed("Also here: Bob.");          // player only — no gate, no combat
+        Assert.False(h.CombatGateHeld);
+
+        h.AutoAttackEnabled = false;
+        h.Tracker.OnAutoAttackChanged();
+
+        Assert.DoesNotContain("break", h.Sent);
     }
 
     [Fact]

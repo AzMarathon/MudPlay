@@ -1,5 +1,12 @@
 # Version history
 
+## 3.83.3
+
+- A move echo pushed off the prompt line — by auto-sneak firing in the same breath, or a BBS broadcast landing mid-render — is recognised again, so the walker no longer mistakes a real arrival for a re-look
+- A walk step that goes out and never confirms now escalates to recovery after 10s instead of parking the walker until you type a move yourself
+- Turning auto-combat off the instant after an attack — swing or spell — now still sends the break, instead of running off engaged because the game hadn't said "Combat Engaged" yet
+- bug reports addressed: stock-20260914-000112, stock-20260914-000155, stock-20260914-003246
+
 ## 3.83.0
 
 - Auto-train now checks it can afford the training before walking anywhere, and collects the difference from your stash rooms and bank when it can't

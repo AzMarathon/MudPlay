@@ -1,17 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.83.0**
-> - Auto-train now checks it can afford the training before walking anywhere, and collects the difference from your stash rooms and bank when it can't
-> - Banked levels spanning two trainers no longer strand at the first one's ceiling — the run walks on to the trainer that covers the next level
-> - A stash that's been emptied by another player is written off on arrival and the run re-prices from where it stands instead of giving up
-> - When nothing reachable covers the bill, auto-train stays armed and logs how far short you are and roughly how many laps will close it
-> - New Auto-Trainer setting: train once this many levels are stacked, so one detour trains several levels
-> - Auto-train is solo-only — training disbands a party server-side
-> - Auto-train / Auto-train stats now live only on the CP Allocation tab — the duplicate pair on Settings → Auto-Trainer is gone
-> - A loop no longer fails with "door open failed" on a door that was already open
-> - Auto-train sends a bare return on leaving the train-stats screen, so realms that don't redisplay the room no longer leave the client idle
-> - A move refused by a level cap or permission check is recognised as a failed move instead of stalling the walker
+> **Version 3.83.3**
+> - A move echo pushed off the prompt line — by auto-sneak firing in the same breath, or a BBS broadcast landing mid-render — is recognised again, so the walker no longer mistakes a real arrival for a re-look
+> - A walk step that goes out and never confirms now escalates to recovery after 10s instead of parking the walker until you type a move yourself
+> - Turning auto-combat off the instant after an attack — swing or spell — now still sends the break, instead of running off engaged because the game hadn't said "Combat Engaged" yet
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
