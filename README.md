@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.83.5**
-> - A gear swap no longer makes a loop send the same move twice and walk into a wall, which had been desyncing the circuit into a lap that re-blocked every time
+> **Version 3.83.6**
+> - ParaMUD exp needed follows the 1.9 curve (growth tapers from level 34), so auto-train, level-up announcements, the level projection and TNL no longer overstate exp past level 35
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

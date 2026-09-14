@@ -1192,6 +1192,20 @@ directly for exp/hr estimation of a loop (how fast a lair refills vs how fast yo
   how many rooms it can appear in) — `1,200,000 ÷ 15 = 80,000/hr`, not `1.2M` per lap in every room.
   The regular (non-boss) lair mobs still fire per-room on the room delay.
 
+### ParaMUD exp-needed curve *([CONFIRMED] 2026-09-14, user)*
+
+- **The realm runs ParaMUD 1.9.1 and will never run an older version again**, so the client
+  targets the 1.9 curve only — there is no legacy table to preserve or version-gate.
+- **Per-level growth tapers from level 34**: the 115% multiplier drops by one point every five
+  levels, floored at 108%. Counting starts at 34, so the first drop lands at 39 and the floor is
+  reached at 69 (115% for 34-38, 114% for 39-43, ... 108% from 69 up).
+- Levels up to 26 use the per-level modifier table; 27-33 stay flat at 115%.
+- **The pre-1.9 curve** (flat 115% through level 55, then 109%, then 108%) **overstates** exp
+  needed for every level past 35 — up to roughly 22% around level 60 — which fed auto-train,
+  level-up announcements, the Level Projection columns and TNL.
+- Implemented in `ExperienceTableCalculator.CalcExpNeeded_ParaMud`; Stock has its own progression
+  and is unaffected.
+
 ### Death-summon cascades — a monster that summons more on death *([CONFIRMED] 2026-08-03, user + game-data trace, Paradigm 1.9.1)*
 
 Some monsters spawn **more monsters when they die**, and those can summon in turn — the Zombie Pen

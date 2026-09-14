@@ -48,6 +48,23 @@ public sealed class ExperienceTableCalculatorTests
         }
     }
 
+    [Theory]
+    [InlineData(30, 37_970_158L)]
+    [InlineData(35, 76_371_547L)]              // taper begins: 115% until level 34
+    [InlineData(40, 152_274_714L)]
+    [InlineData(50, 530_710_194L)]
+    [InlineData(60, 1_547_879_322L)]
+    [InlineData(75, 5_533_282_720L)]
+    [InlineData(100, 37_894_549_431L)]         // floored at 108% from level 69
+    [InlineData(120, 176_624_870_861L)]
+    public void CalcExpNeeded_ParaMudFollowsTheLevel34Taper(int level, long expected)
+    {
+        // ParaMUD 1.9 drops the 115% growth by a point every 5 levels from
+        // level 34, floored at 108%. Chart 230 pins the curve on both sides of
+        // the taper start and the floor.
+        Assert.Equal(expected, ExperienceTableCalculator.CalcExpNeeded(level, 230, RealmType.ParaMud));
+    }
+
     [Fact]
     public void CalcExpNeeded_RealmProgressionsDiverge()
     {
