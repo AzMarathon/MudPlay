@@ -101,6 +101,7 @@ public sealed class CombatStateTracker : IDisposable
 
     private Action<byte[]>? _wireSender;
     private Func<bool>? _breakBeforeRunning;
+    private Func<bool>? _attackInFlight;
 
     // CombatSettings.MinMonstersInRoom / MaxMonstersInRoom reader — see
     // SetMonsterCountWindow. Null (unwired) fails open: the gate asserts for any
@@ -362,6 +363,19 @@ public sealed class CombatStateTracker : IDisposable
         _breakBeforeRunning = breakBeforeRunning;
     }
 
+    // Wire the "we have already swung at something here" reader (CombatManager's
+    // CurrentTarget). PlayerState.InCombat only flips once the server's
+    // *Combat Engaged* is parsed, so an auto-attack toggle landing between our
+    // attack going out and that reply arriving sees InCombat false and skips the
+    // break (report stock-20260914-003246). The engine's own target is the
+    // client-side truth for the same question and is available immediately.
+    // Until set, the break path reads InCombat alone (behaviour unchanged).
+    public void SetAttackInFlightGate(Func<bool> attackInFlight)
+    {
+        ArgumentNullException.ThrowIfNull(attackInFlight);
+        _attackInFlight = attackInFlight;
+    }
+
     // Re-evaluate the gate + InCombat the instant the auto-attack master toggle
     // flips, rather than waiting for the next room observation. Toggling
     // auto-attack OFF mid-round otherwise left the walker gate asserted (walker
@@ -377,12 +391,22 @@ public sealed class CombatStateTracker : IDisposable
         // wants a clean disengage first (CombatSettings.BreakBeforeFleeing), send
         // `break` before that release so it lands ahead of the walker's next move.
         // Gate on _gateAsserted so this only fires when we were actually holding
-        // the walker for a fight, and on InCombat so a routine walk never breaks.
-        // Fires once — this handler runs only on the toggle transition, not on
-        // every room observation.
+        // the walker for a fight, and on being in a fight so a routine walk never
+        // breaks. Fires once — this handler runs only on the toggle transition,
+        // not on every room observation.
+        //
+        // "In a fight" is InCombat OR a live engine target, because those answer the
+        // same question at different times. InCombat waits on the server's
+        // *Combat Engaged*; a toggle landing between our attack going out and that
+        // reply arriving saw it false and skipped the break, letting the walker run
+        // still engaged (report stock-20260914-003246). CurrentTarget is set the
+        // moment we swing, so it covers that window. Deferring the break until
+        // *Combat Engaged* instead would be useless — the gate releases and the
+        // walker's next move is already on the wire by the time it lands.
+        bool inAFight = _state.InCombat || (_attackInFlight?.Invoke() ?? false);
         if (!_isAutoAttackEnabled()
             && _gateAsserted
-            && _state.InCombat
+            && inAFight
             && (_breakBeforeRunning?.Invoke() ?? false))
         {
             _log?.Info(LogCategory,
