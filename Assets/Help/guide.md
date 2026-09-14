@@ -547,24 +547,41 @@ The **Target weight** dropdown next to it caps what Find Best is willing to add:
 
 Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you. Two checkboxes mirror Settings → Auto-Trainer: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan).
 
-**Hover a stat's column header** to see everything that stat drives, one effect per line: the derived stat's **current value for your character**, its marginal rate (e.g. *~6 AGL → +1*, *+3 per 4*), and — where it's a discrete breakpoint — **the very next value of that stat where it ticks up** (`next at N`). That's the point of it: spend to a real breakpoint instead of guessing that every 5th or 10th point is a good stopping place. The lists are complete and class-aware: **Health** shows max HP (with the gain per point at your level) and HP regen (idle / resting); **carry weight** shows your current capacity and the per-point rate (steeper past 100 STR); **casters** show **mana regen** and **spellcasting** under their actual casting stat (INT for Mages, WIL for Priests, both for Druids, CHM for Bards — max mana itself is level × magery, not a stat, so it isn't listed); accuracy follows the Stock vs Paradigm weighting. Values are the stat-and-level portion — your gear and quest bonuses stack on top in-game. See **What your stats do** below for the full picture; the projected numbers per level live in the **Level Projection** tab.
+**Hover a stat's column header** to see everything that stat drives, one effect per line: the derived stat's **current value for your character**, its marginal rate (e.g. *~6 AGL → +1*, *+3 per 4*), and — where it's a discrete breakpoint — **the very next value of that stat where it ticks up** (`next at N`). That's the point of it: spend to a real breakpoint instead of guessing that every 5th or 10th point is a good stopping place. The lists are complete and class-aware: **Health** shows max HP (with the gain per point at your level) and HP regen (idle / resting); **carry weight** shows your current capacity and the per-point rate (steeper past 100 STR); **casters** show **mana regen** and **spellcasting** under their actual casting stat (INT for Mages, WIL for Priests, both for Druids, CHM for Bards — max mana itself is level × magery, not a stat, so it isn't listed); accuracy follows the Stock vs Paradigm weighting; and the **utility skills** each stat feeds are listed too — **Perception** always (every class has it), and **Thievery / Traps / Picklocks / Tracking** only when your class or race actually grants that skill, so you're never shown a breakpoint you can't use. Values are the stat-and-level portion — your gear and quest bonuses stack on top in-game. See **What your stats do** below for the full picture; the projected numbers per level live in the **Level Projection** tab.
 
 ## Level Projection
 
 A read-only what-if table: pick a level **from–to** range (and optionally any **Race / Class**) to see the exp, training cost, HP, and mana at each level — reflecting your CP Allocation plan. Alongside HP and mana it also projects the **derived combat/utility stats** your CP plan grows: **Accuracy** (the normal-attack stat contribution), **Crit**, **Dodge**, **Stealth**, **Melee dmg** (STR's bonus onto your weapon's own damage range, shown as `+min/+max`), **Max enc** (carry weight), and **Magic res** — so you can watch a planned stat raise turn into real combat numbers, level by level, the same way HP and mana already do. The **HP/tick** column shows both rates as `idle / resting` (resting regen is 3× idle).
 
-These figures reflect **your current character**: the base attributes carry your equipment's and completed quests' stat bonuses (the `stat` screen is already gear-inclusive), and the table folds your gear's and completed quests' **direct** bonuses on top too — extra max HP / max mana, HP- and MP-regen %, and flat +dodge / +crit / +stealth / +magic-resist / +damage / +carry from items. (Accuracy stays the stat-and-level contribution — a weapon's own accuracy is situational and can't be projected to future levels.) Mark a quest **Complete** on the Quest Status tab and its bonuses flow in here automatically. **Reset to current** re-seeds it from your live character.
+These figures reflect **your current character**: the base attributes carry your equipment's and completed quests' stat bonuses (the `stat` screen is already gear-inclusive), and the table folds your gear's and completed quests' **direct** bonuses on top too — extra max HP / max mana, HP- and MP-regen %, and flat +dodge / +crit / +stealth / +magic-resist / +damage / +carry / **+skill** from items. (Accuracy stays the stat-and-level contribution — a weapon's own accuracy is situational and can't be projected to future levels.) Mark a quest **Complete** on the Quest Status tab and its bonuses flow in here automatically. **Reset to current** re-seeds it from your live character.
+
+### Choosing which columns to show
+
+**Columns ▾** opens a checklist of every column the table can show, and **your choice is saved per character** — each build keeps the columns it actually plans around. **Lvl** is always on (it's what labels the row); **Reset to defaults** forgets your choice and goes back to the built-in set, including any columns added in a later release.
+
+Seven columns are **off by default**, because they only matter to some builds:
+
+- **BS Accy** — backstab accuracy (see below).
+- **Spellcast** — your spellcasting skill (`—` for non-casters and Mystics).
+- **Percep** — Perception. Every class has it, and it's INT's biggest non-caster payoff.
+- **Thievery**, **Traps**, **Picklocks**, **Tracking** — the four thief skills.
+
+**BS Accy** projects your **backstab accuracy** per level. It reads `—` for a class and race with no stealth source, since that character can't backstab at all. Unlike the plain **Accy** column, this one folds in *everything* the game feeds it — level, stats, your gear and your completed quests — so it's a real number for your current loadout rather than a stat-only partial. The trade-off: future levels assume **today's weapon**, so re-check it after a weapon swap. The two realms use genuinely different formulas (see *The exact formulas* below), and the client picks the right one from your active game-data set automatically.
+
+The thief four are computed for whatever Race / Class the dropdowns are set to, so they're useful for previewing a rogue build — but a class that was never granted a skill has no score for it in-game. If they don't apply to you, leave them unchecked. (The CP Allocation tooltips are stricter: they only list a thief skill when **your** class or race actually grants it.)
+
+A caution worth knowing: all four thief skills grow on a level term whose **slope halves at level 16**, so they climb quickly early and half as fast afterwards. Past that knee, stat points are what move them.
 
 ## What your stats do
 
 Each of the six base stats feeds several derived numbers. The ratios below are the marginal rate (how many points buy one more of the derived stat); the exact breakpoints for *your* character are on the CP Allocation column tooltips.
 
 - **Strength (STR)** — melee **damage** (adds to your weapon's own range: roughly +1 min damage per 10 STR above 100, +1 max per 10 above 50) and **carry weight** (+48 per point, steeper past 100). STR also feeds **accuracy** (~3/pt): on **Stock** for **all** attacks, on **Paradigm** for **bash / smash only** (normal Paradigm attacks get no STR accuracy).
-- **Intellect (INT)** — **crit** rating (~10/pt), **stealth** (~8/pt), **magic resistance** (+1 per 4 INT), and, for **Mages and Druids**, **mana regen + spellcasting**. On **Paradigm**, INT also feeds normal-attack **accuracy** (~6/pt); on **Stock** it does not.
-- **Willpower (WIL)** — **magic resistance** (the heaviest term — resistance is `(INT + 3×WIL) / 4`, so +3 per 4 WIL) and, for **Priests and Druids**, **mana regen + spellcasting**. WIL does **not** raise your *maximum* mana (that's level × magery level); it scales how fast mana comes back.
-- **Agility (AGI)** — normal-attack **accuracy** (~6/pt on Stock, ~3/pt on Paradigm), **dodge** (~3/pt), **crit** (~20/pt), and **stealth** (~4/pt). Generally the most broadly useful combat stat.
-- **Health (HEA)** — **max HP** (rises nearly every point, more per point the higher your level) and **HP regeneration** (idle, tripled while resting). Both scale with level.
-- **Charm (CHM)** — **dodge** (~5/pt), **crit** (~30/pt), **stealth** (~6/pt), and, for **Bards**, **mana regen**. On **Paradigm** it also feeds normal-attack **accuracy** (~10/pt).
+- **Intellect (INT)** — **crit** rating (~10/pt), **stealth** (~8/pt), **magic resistance** (+1 per 4 INT), **perception** (+5 per 8 INT — the heaviest term in it), **all four thief skills**, and, for **Mages and Druids**, **mana regen + spellcasting**. On **Paradigm**, INT also feeds normal-attack **accuracy** (~6/pt); on **Stock** it does not. INT is the widest-reaching stat in the game — it's the only one that touches every utility skill as well as magic resistance, crit and mana.
+- **Willpower (WIL)** — **magic resistance** (the heaviest term — resistance is `(INT + 3×WIL) / 4`, so +3 per 4 WIL), **perception** (+2 per 8 WIL), **tracking** (~8/pt), and, for **Priests and Druids**, **mana regen + spellcasting**. WIL does **not** raise your *maximum* mana (that's level × magery level); it scales how fast mana comes back. It feeds **no combat term at all** — not accuracy, damage, dodge or HP — so for a non-caster it buys only resistance, perception and tracking.
+- **Agility (AGI)** — normal-attack **accuracy** (~6/pt on Stock, ~3/pt on Paradigm), **dodge** (~3/pt), **crit** (~20/pt), **stealth** (~4/pt), and **thievery / traps / picklocks**. Generally the most broadly useful combat stat.
+- **Health (HEA)** — **max HP** (rises nearly every point, more per point the higher your level) and **HP regeneration** (idle, tripled while resting). Both scale with level. It feeds nothing else — no skill and no combat term.
+- **Charm (CHM)** — **dodge** (~5/pt), **crit** (~30/pt), **stealth** (~6/pt), **perception** (+1 per 8), **traps** (~4/pt — CHM is weighted double there, the skill it moves fastest), **thievery** (~6/pt), **tracking** (~8/pt), and, for **Bards**, **mana regen**. On **Paradigm** it also feeds normal-attack **accuracy** (~10/pt).
 
 **Mana regen scales off one stat per class.** Mage = INT, Priest = WIL, Druid = the average of INT and WIL, Bard = CHM (Mystics use a fixed Kai rate). Maximum mana is level × magery level regardless of stats.
 
@@ -591,6 +608,12 @@ For the curious, here are the actual equations behind the numbers above, with ev
 - **Paradigm**, normal attack: `(AGI−50)/3 + (INT−50)/6 + (CHM−50)/10`
 - **Paradigm**, bash / smash: `(STR−50)/3 + (AGI−50)/6`
 
+**Backstab accuracy** splits hard by realm — these are two different equations, not one with a tweak:
+- **Stock**: `(Stealth + AGI)/2 + gear+BSAccy/2`, then **+5** if your *class* grants stealth, or **−15** if only your race does.
+- **Paradigm**: `Stealth/3 + (AGI − 50 + Level)/2 + 15 + gear+BSAccy + wornAccuracy`, then **−15** if your STR is below your weapon's requirement. Worn accuracy counts even when the STR check fails.
+
+Encumbrance isn't applied on top — the Stealth value already carries it.
+
 **Crit rating** = `clamp( Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30, 1, 75 )`. *(AGI term unverified on Paradigm.)*
 
 **Dodge** (raw value, before the vs-accuracy % conversion) = `Level/5 + (CHM−50)/5 + (AGI−50)/3` (+ gear `+Dodge`, + a bonus while under 33% encumbrance).
@@ -604,6 +627,14 @@ For the curious, here are the actual equations behind the numbers above, with ev
 **Magic resistance** = `(INT + 3×WIL) / 4`. *(Unverified on Paradigm.)*
 
 **Melee damage bonus** (STR added onto the weapon's own min/max) = min `(STR−100)/10`, max `(STR−50)/10`, neither below 0.
+
+**Perception** = `(INT×5 + WIL×2 + CHM) / 8` (+ gear `+Perception`). The only utility skill with **no level term** — it's pure stats, and every class has it. *(Unverified on Paradigm.)*
+
+**The four thief skills** all share one level term, `LevelTerm = Level` below 16, else `15 + (Level−15)/2` — so **the level slope halves at 16**, and past that point stats are what move them. Each is a grant: a class or race that was never given the skill has no score for it. *(All unverified on Paradigm.)*
+- **Thievery** = `(AGI + INT + CHM + LevelTerm×24) / 6`
+- **Traps** = `(INT + AGI + CHM×2 + LevelTerm×28) / 7` — CHM counts double here
+- **Picklocks** = `((AGI + INT + LevelTerm×10) × 2) / 7` — the doubling happens *before* the divide, so the effective divisor is 3.5
+- **Tracking** = `(INT×2 + WIL + CHM + LevelTerm×40) / 8` — the heaviest level term of the four, so it grows mostly by levelling
 
 ## Quests, Bosses, and Deaths
 

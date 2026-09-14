@@ -218,15 +218,7 @@ public static class AbilityNames
     // element is the source Classes / Races object; slots is the number of Abil-N
     // slots to scan (defaults to 10).
     public static bool HasTrapAbility(System.Text.Json.JsonElement element, int slots = 10)
-    {
-        for (int i = 0; i < slots; i++)
-        {
-            if (!element.TryGetProperty($"Abil-{i}", out System.Text.Json.JsonElement codeEl)) continue;
-            if (codeEl.ValueKind != System.Text.Json.JsonValueKind.Number) continue;
-            if (codeEl.TryGetInt32(out int code) && TrapGrantCodes.Contains(code)) return true;
-        }
-        return false;
-    }
+        => HasAnyAbility(element, TrapGrantCodes, slots);
 
     // True when the named class OR race grants the Traps skill in the active
     // game-data set. Class is the main gate; race is secondary and consulted only
@@ -249,6 +241,44 @@ public static class AbilityNames
             && gameData.FindRowByName("Races", race!) is { } raceRow
             && HasTrapAbility(raceRow))
             return true;
+        return false;
+    }
+
+    // Ability codes that grant each thief skill on a Classes / Races record.
+    // Stock data grants a skill with the same code that adds to it (39 Thievery,
+    // 37 Picklocks, 38 Tracking); the 100x codes cover custom / ParaMUD sets that
+    // encode the grant separately. Traps reuses TrapGrantCodes so "can disarm" and
+    // "has a Traps score" can never disagree.
+    private static readonly System.Collections.Generic.HashSet<int> ThieveryGrantCodes = new() { 39, 1001 };
+    private static readonly System.Collections.Generic.HashSet<int> PicklockGrantCodes = new() { 37, 180, 1003 };
+    private static readonly System.Collections.Generic.HashSet<int> TrackingGrantCodes = new() { 38, 1004 };
+
+    // Which of the four thief skills a character's class or race grants — the gate
+    // on the CP-tooltip skill lines, so a Warrior is never told what its INT buys
+    // in Picklocks. Either row granting the skill is enough (races grant a few).
+    // A null row (unknown class / race, or no game data) contributes nothing.
+    // Perception is deliberately absent: every class carries it, so it needs no gate.
+    public static (bool Thievery, bool Traps, bool Picklocks, bool Tracking) GetThiefSkillGrants(
+        System.Text.Json.JsonElement? classRow, System.Text.Json.JsonElement? raceRow)
+        => (Grants(classRow, raceRow, ThieveryGrantCodes),
+            Grants(classRow, raceRow, TrapGrantCodes),
+            Grants(classRow, raceRow, PicklockGrantCodes),
+            Grants(classRow, raceRow, TrackingGrantCodes));
+
+    private static bool Grants(System.Text.Json.JsonElement? classRow, System.Text.Json.JsonElement? raceRow,
+                               System.Collections.Generic.IReadOnlySet<int> codes)
+        => (classRow is { } c && HasAnyAbility(c, codes)) || (raceRow is { } r && HasAnyAbility(r, codes));
+
+    // True when the row carries any of the given ability codes in its Abil-N slots.
+    private static bool HasAnyAbility(System.Text.Json.JsonElement element,
+                                      System.Collections.Generic.IReadOnlySet<int> codes, int slots = 10)
+    {
+        for (int i = 0; i < slots; i++)
+        {
+            if (!element.TryGetProperty($"Abil-{i}", out System.Text.Json.JsonElement codeEl)) continue;
+            if (codeEl.ValueKind != System.Text.Json.JsonValueKind.Number) continue;
+            if (codeEl.TryGetInt32(out int code) && codes.Contains(code)) return true;
+        }
         return false;
     }
 

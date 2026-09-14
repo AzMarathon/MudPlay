@@ -38,10 +38,18 @@ public enum BaseStat { Strength, Intellect, Willpower, Agility, Health, Charm }
 // and the magery type/level (for mana-regen scaling). MageryType maps the casting
 // stat: 1=INT (Mage), 2=WIL (Priest), 3=(INT+WIL)/2 (Druid), 4=CHM (Bard), 5=Kai
 // (Mystic, fixed-rate), 0=non-caster.
+// The four Has* flags gate the thief-skill tooltip lines: the formulas are
+// universal, but a class that was never granted a skill has no score for it, so
+// telling a Warrior what its INT buys in Picklocks would be a lie. Resolved from
+// the class / race grant abilities via AbilityNames.GetThiefSkillGrants; they
+// default false so a caller that only wants HP / mana breakpoints can omit them.
+// Perception takes no flag — every class carries it.
 public readonly record struct StatContext(
     RealmType Realm,
     int MinHits, int MaxHits, int RaceHpPerLevel,
-    int MageryType, int MageryLevel);
+    int MageryType, int MageryLevel,
+    bool HasThievery = false, bool HasTraps = false,
+    bool HasPicklocks = false, bool HasTracking = false);
 
 // The stat-derived secondary numbers a combat profile / CP plan cares about — the
 // gear-independent, stat-and-level portion. All sourced from the existing verified
@@ -89,6 +97,15 @@ public static class StatEffects
 
     public static int MaxEncumbrance(StatBlock s) => CharacterCalculator.CalcMaxEncumbrance(s.Strength);
     public static int MagicResistance(StatBlock s) => CharacterCalculator.CalcMagicResistance(s.Intellect, s.Willpower);
+
+    // The five stat-and-level utility skills. Perception is universal; the other
+    // four are the thief family, whose level slope halves at 16 — so their growth
+    // is front-loaded and the CP case for INT / AGL / CHM is strongest early.
+    public static int Perception(StatBlock s) => CharacterCalculator.CalcPerception(s.Intellect, s.Willpower, s.Charm);
+    public static int Thievery(StatBlock s) => CharacterCalculator.CalcThievery(s.Level, s.Intellect, s.Agility, s.Charm);
+    public static int Traps(StatBlock s) => CharacterCalculator.CalcTraps(s.Level, s.Intellect, s.Agility, s.Charm);
+    public static int Picklocks(StatBlock s) => CharacterCalculator.CalcPicklocks(s.Level, s.Intellect, s.Agility);
+    public static int Tracking(StatBlock s) => CharacterCalculator.CalcTracking(s.Level, s.Intellect, s.Willpower, s.Charm);
 
     // ----- per-stat effect lines (tooltips) --------------------------------
 
@@ -172,6 +189,9 @@ public static class StatEffects
                 Line("Dodge", $"{DodgeValue(current)}", $"~3 {ab} → +1", DodgeValue);
                 Line("Crit", $"{CritRating(current)}%", $"~20 {ab} → +1", CritRating);
                 Line("Stealth", $"{stealth(current)}", $"~4 {ab} → +1", stealth);
+                if (ctx.HasThievery) Line("Thievery", $"{Thievery(current)}", $"~6 {ab} → +1", Thievery);
+                if (ctx.HasTraps) Line("Traps", $"{Traps(current)}", $"~7 {ab} → +1", Traps);
+                if (ctx.HasPicklocks) Line("Picklocks", $"{Picklocks(current)}", $"~4 {ab} → +1", Picklocks);
                 break;
 
             case BaseStat.Intellect:
@@ -181,6 +201,13 @@ public static class StatEffects
                 Line("Crit", $"{CritRating(current)}%", $"~10 {ab} → +1", CritRating);
                 Line("Stealth", $"{stealth(current)}", $"~8 {ab} → +1", stealth);
                 Line("Magic resist", $"{MagicResistance(current)}", $"+1 per 4 {ab}", MagicResistance);
+                // INT is the widest-reaching stat — the only one that feeds every
+                // utility skill as well as magic resist, crit and mana.
+                Line("Perception", $"{Perception(current)}", $"+5 per 8 {ab}", Perception);
+                if (ctx.HasThievery) Line("Thievery", $"{Thievery(current)}", $"~6 {ab} → +1", Thievery);
+                if (ctx.HasTraps) Line("Traps", $"{Traps(current)}", $"~7 {ab} → +1", Traps);
+                if (ctx.HasPicklocks) Line("Picklocks", $"{Picklocks(current)}", $"~4 {ab} → +1", Picklocks);
+                if (ctx.HasTracking) Line("Tracking", $"{Tracking(current)}", $"~4 {ab} → +1", Tracking);
                 if (manaFromInt) Line("Mana regen", $"{manaRegen(current)}/tick", "", manaRegen);
                 if (manaFromInt) Line("Spellcasting", $"{spellcast(current)}", "", spellcast);
                 break;
@@ -189,6 +216,8 @@ public static class StatEffects
                 // WIL is the heaviest magic-res term (+3 per 4). It scales mana REGEN
                 // and spellcasting for Priests/Druids — NOT max mana (level × magery).
                 Line("Magic resist", $"{MagicResistance(current)}", $"+3 per 4 {ab}", MagicResistance);
+                Line("Perception", $"{Perception(current)}", $"+2 per 8 {ab}", Perception);
+                if (ctx.HasTracking) Line("Tracking", $"{Tracking(current)}", $"~8 {ab} → +1", Tracking);
                 if (manaFromWil) Line("Mana regen", $"{manaRegen(current)}/tick", "", manaRegen);
                 if (manaFromWil) Line("Spellcasting", $"{spellcast(current)}", "", spellcast);
                 break;
@@ -199,6 +228,11 @@ public static class StatEffects
                 Line("Dodge", $"{DodgeValue(current)}", $"~5 {ab} → +1", DodgeValue);
                 Line("Crit", $"{CritRating(current)}%", $"~30 {ab} → +1", CritRating);
                 Line("Stealth", $"{stealth(current)}", $"~6 {ab} → +1", stealth);
+                Line("Perception", $"{Perception(current)}", $"+1 per 8 {ab}", Perception);
+                // Traps weights CHM double — it's the skill CHM moves fastest.
+                if (ctx.HasTraps) Line("Traps", $"{Traps(current)}", $"~4 {ab} → +1", Traps);
+                if (ctx.HasThievery) Line("Thievery", $"{Thievery(current)}", $"~6 {ab} → +1", Thievery);
+                if (ctx.HasTracking) Line("Tracking", $"{Tracking(current)}", $"~8 {ab} → +1", Tracking);
                 if (manaFromChm) Line("Mana regen", $"{manaRegen(current)}/tick", "", manaRegen);
                 if (manaFromChm) Line("Spellcasting", $"{spellcast(current)}", "", spellcast);
                 break;

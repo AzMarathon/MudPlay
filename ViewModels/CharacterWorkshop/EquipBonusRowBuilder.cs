@@ -52,6 +52,7 @@ public static class EquipBonusRowBuilder
         AddInt(rows, b, "Illuminate", t.PlusIlluminate);
         AddInt(rows, b, "Quickness", t.PlusQuickness);
         AddInt(rows, b, "Thievery", t.PlusThievery);
+        AddInt(rows, b, "Tracking", t.PlusTracking);
         AddInt(rows, b, "Cold Resist", t.PlusColdResist);
         AddInt(rows, b, "Fire Resist", t.PlusFireResist);
         AddInt(rows, b, "Stone Resist", t.PlusStoneResist);

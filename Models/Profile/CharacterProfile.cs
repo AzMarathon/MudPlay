@@ -213,6 +213,13 @@ public sealed class CharacterProfile
     // shared table view-model's column picker; null = every table at its defaults.
     public Dictionary<string, List<string>>? TableColumnLayouts { get; set; }
 
+    // Column keys the character has switched OFF in the Workshop's Level Projection
+    // grid (LevelProjectionColumn.All keys). Stored as the exceptions rather than
+    // the selection so a column added in a later release shows up for an existing
+    // character instead of staying hidden because its key predates the save.
+    // null = the picker was never touched, so the built-in default set applies.
+    public List<string>? LevelProjectionHiddenColumns { get; set; }
+
     // Last room the character was known to be standing in. Hydrated from
     // Game.Map.RoomTracker on a successful manual or auto locate; saved with the
     // rest of the profile and used as the initial Navigation map origin on the

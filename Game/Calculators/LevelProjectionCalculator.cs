@@ -26,7 +26,8 @@ public static class LevelProjectionCalculator
         int strength, int intellect, int willpower, int agility, int health, int charm,
         int minHitsPerLevel, int maxHitsPerLevel, int raceHpPerLevel,
         int mageryType, int mageryLevel,
-        RealmType realm, EquipmentStatSummary? gear = null)
+        RealmType realm, EquipmentStatSummary? gear = null,
+        bool hasClassStealth = false, bool hasRaceStealth = false)
     {
         // Cumulative exp threshold to reach this level. The grid derives the
         // "exp remaining" from this minus the character's current exp.
@@ -67,7 +68,39 @@ public static class LevelProjectionCalculator
         int maxEnc = StatEffects.MaxEncumbrance(stats) + (gear?.PlusEncumbrance ?? 0);
         int magicRes = StatEffects.MagicResistance(stats) + (gear?.PlusMagicResist ?? 0);
 
+        // Utility skills take the same treatment: stat-and-level base plus the
+        // aggregate's flat +skill abilities. Whether the character can actually USE
+        // the thief four is a class/race grant the caller gates the columns on —
+        // the numbers themselves are computed the same way regardless.
+        int perception = StatEffects.Perception(stats) + (gear?.PlusPerception ?? 0);
+        int thievery = StatEffects.Thievery(stats) + (gear?.PlusThievery ?? 0);
+        int traps = StatEffects.Traps(stats) + (gear?.PlusTraps ?? 0);
+        int picklocks = StatEffects.Picklocks(stats) + (gear?.PlusPicklocks ?? 0);
+        int tracking = StatEffects.Tracking(stats) + (gear?.PlusTracking ?? 0);
+        int spellcasting = CharacterCalculator.CalcSpellcasting(
+            level, intellect, willpower, charm, mageryType, mageryLevel, gear?.PlusSpellcasting ?? 0);
+
+        // Backstab accuracy, for a class/race with a stealth source. This is the one
+        // projected column that DOES fold the weapon-dependent terms: the Stock
+        // branch has none, and the Paradigm branch's worn-accuracy and STR-vs-StrReq
+        // penalty are meaningless without them — a bare stat-and-level backstab
+        // number would be wrong rather than merely partial. The cost is that future
+        // levels assume today's weapon, which the guide states. Mirrors the call in
+        // CharacterInfoSectionViewModel so the two surfaces can't disagree.
+        int? bsAccuracy = null;
+        if (hasClassStealth || hasRaceStealth)
+        {
+            int effectiveAbil22 = realm == RealmType.ParaMud
+                ? gear?.PlusAccuracy ?? 0
+                : gear?.MaxSingleAbil22 ?? 0;
+            bsAccuracy = CombatCalculator.CalcBackstabAccuracy(
+                stealth, agility, level, strength, gear?.WeaponStrReq ?? 0,
+                gear?.PlusBSAccuracy ?? 0, (gear?.TotalWornAccy ?? 0) + effectiveAbil22,
+                hasClassStealth, realm);
+        }
+
         return new LevelProjection(level, total, hpMin, hpMax, hpRegen, mana, mpRegen,
-            accuracy, crit, dodge, stealth, minDmg, maxDmg, maxEnc, magicRes, hpRegenRest);
+            accuracy, crit, dodge, stealth, minDmg, maxDmg, maxEnc, magicRes, hpRegenRest,
+            perception, thievery, traps, picklocks, tracking, spellcasting, bsAccuracy);
     }
 }

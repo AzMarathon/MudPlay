@@ -231,6 +231,46 @@ public static class CharacterCalculator
     public static int CalcMagicResistance(int intellect, int willpower)
         => (intellect + 3 * willpower) / 4;
 
+    // ----- utility / thief skills ------------------------------------------
+    // The five stat-and-level skills the score screen shows beside Stealth.
+    // Ground truth is the RE'd stock DLL (calculate_secondary_stats @ 0x41a424);
+    // each is an integer division, so points that don't complete a division buy
+    // nothing — the CP tooltips surface the next value that ticks each one up.
+    // Paradigm is unverified for all five, same caveat as Crit / Encumbrance /
+    // Magic Resistance above. The +skill abilities (Perception 77, Thievery 39,
+    // Traps 40/179, Picklocks 37/180, Tracking 38) are gear / innate grants and
+    // stack on top of these bases.
+
+    // Shared level term for the four thief skills (0x5fe / 0x606 / 0x60a / 0x60c):
+    // the level slope HALVES at 16, so levelling past it grows them half as fast.
+    // Stealth has its own half-slope at the same level (see CalcStealthBase).
+    public static int CalcThiefSkillLevelTerm(int level)
+        => level < 16 ? level : 15 + (level - 15) / 2;
+
+    // Perception (0x5f8): (Int*5 + Wil*2 + Chm)/8. The one skill here every class
+    // carries — INT dominates it 5:2:1.
+    public static int CalcPerception(int intellect, int willpower, int charm)
+        => (intellect * 5 + willpower * 2 + charm) / 8;
+
+    // Thievery (0x5fe): (Agl + Int + Chm + lvlTerm*24)/6.
+    public static int CalcThievery(int level, int intellect, int agility, int charm)
+        => (agility + intellect + charm + CalcThiefSkillLevelTerm(level) * 24) / 6;
+
+    // Traps (0x606): (Int + Agl + Chm*2 + lvlTerm*28)/7 — the single skill
+    // governing both finding and disarming. CHM is weighted double here.
+    public static int CalcTraps(int level, int intellect, int agility, int charm)
+        => (intellect + agility + charm * 2 + CalcThiefSkillLevelTerm(level) * 28) / 7;
+
+    // Picklocks (0x60a): ((Agl + Int + lvlTerm*10)*2)/7. The doubling happens
+    // BEFORE the divide, so the effective divisor is 3.5 — keep the order.
+    public static int CalcPicklocks(int level, int intellect, int agility)
+        => (agility + intellect + CalcThiefSkillLevelTerm(level) * 10) * 2 / 7;
+
+    // Tracking (0x60c): (Int*2 + Wil + Chm + lvlTerm*40)/8 — the heaviest level
+    // term of the four, so it grows mostly by levelling rather than by CP.
+    public static int CalcTracking(int level, int intellect, int willpower, int charm)
+        => (intellect * 2 + willpower + charm + CalcThiefSkillLevelTerm(level) * 40) / 8;
+
     // Spellcasting skill (spellLvl, 0x604): Level*2 + manaStat + mageryLevel*5 +
     // the +spellcasting ability (0x46 = 70, gear/innate). manaStat blends the caster
     // stat by class type — 1=(3*Int+Wil)/6 (Mage), 2=(3*Wil+Int)/6 (Priest),
@@ -646,6 +686,7 @@ public static class CharacterCalculator
             case 13: case 14: totals.PlusIlluminate += abilVal; statKey = "Illuminate"; break;
             case 67: totals.PlusQuickness += abilVal; statKey = "Quickness"; break;
             case 39: totals.PlusThievery += abilVal; statKey = "Thievery"; break;
+            case 38: totals.PlusTracking += abilVal; statKey = "Tracking"; break;
 
             case 3: totals.PlusColdResist += abilVal; statKey = "Cold Resist"; break;
             case 5: totals.PlusFireResist += abilVal; statKey = "Fire Resist"; break;

@@ -30,4 +30,18 @@ public readonly record struct LevelProjection(
     int MaxEnc = 0,
     int MagicRes = 0,
     // HP regen per tick while RESTING (3× idle), shown alongside idle regen.
-    int HpRegenResting = 0);
+    int HpRegenResting = 0,
+    // The stat-and-level utility skills. Thievery … Tracking are the thief family,
+    // whose level slope halves at 16; Spellcasting is 0 for non-casters and Mystics.
+    // The grid only shows the thief four for a class/race that was granted them.
+    int Perception = 0,
+    int Thievery = 0,
+    int Traps = 0,
+    int Picklocks = 0,
+    int Tracking = 0,
+    int Spellcasting = 0,
+    // Backstab accuracy, realm-split. null when the class/race has no stealth
+    // source — that character can't backstab at all, so a number would be noise.
+    // Unlike the Accuracy column this DOES carry the weapon-dependent terms, so
+    // it projects the current loadout forward (see LevelProjectionCalculator).
+    int? BsAccuracy = null);
