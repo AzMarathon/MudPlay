@@ -47,6 +47,12 @@
             <Setter Property="BorderBrush" Value="#6428A0"/>
             <Setter Property="Foreground" Value="#FFFFFF"/>
         </Style>
+        <!-- Level-gate: amber wedge (MapControl.LevelGateFill) -->
+        <Style Selector="Button.ToggleChip.LevelGateFill">
+            <Setter Property="Background" Value="#E0A020"/>
+            <Setter Property="BorderBrush" Value="#7A4E00"/>
+            <Setter Property="Foreground" Value="#0E0E0E"/>
+        </Style>
         <!-- Legend: neutral amber (no map equivalent) -->
         <Style Selector="Button.ToggleChip.LegendFill">
             <Setter Property="Background" Value="{StaticResource AccentAmberBrush}"/>
@@ -535,6 +541,11 @@
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                             ToolTip.Tip="Room-spell highlight: click to cycle one flat colour → colour each room by its spell (hover a room to see the spell name) → off. Your choice is saved per character."
                                             Classes.SpellFill="{Binding HighlightSpells}"/>
+                                    <Button Classes="ToggleChip" Content="Level gates"
+                                            Command="{Binding ToggleLevelGatesCommand}"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                            ToolTip.Tip="Mark rooms holding a level gate, with an amber corner wedge — a room you can still walk into whose way onward is shut unless you are inside the gate's level window. Covers gated exits, level-gated room teleports, and level-restricted boat sailings. On by default; your choice is saved per character."
+                                            Classes.LevelGateFill="{Binding ShowLevelGates}"/>
                                     <Button Classes="ToggleChip" Content="Legend"
                                             Command="{Binding ToggleLegendCommand}"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
@@ -670,6 +681,7 @@
                                  LoopBuilderWaypoints="{Binding LoopBuilderWaypoints}"
                                  LoopApproachPreviewPath="{Binding LoopApproachPreviewPath}"
                                  AvoidedRooms="{Binding AvoidedRooms}"
+                                 LevelGatedRooms="{Binding LevelGatedRooms}"
                                  StashRooms="{Binding StashRooms}"
                                  GhRooms="{Binding GhRooms}"
                                  GhFullRooms="{Binding GhFullRooms}"
@@ -915,6 +927,18 @@
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Border Width="14" Height="14" Background="#4A7791"/>
                         <TextBlock Text="Shop / banks" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <!-- Level gate = the amber wedge MapControl draws in the room
+                         node's TOP-LEFT corner (LevelGateFill + its dark rim). The
+                         room is still enterable; the way onward is not. Same
+                         swatch shape as the U/D corner marks below, so the three
+                         corner badges read as one family. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Grid Width="14" Height="14">
+                            <Border Background="#3A3A3A"/>
+                            <Polygon Points="7,0 0,0 0,7" Fill="#E0A020" Stroke="#7A4E00" StrokeThickness="1"/>
+                        </Grid>
+                        <TextBlock Text="Holds a level gate" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Border Width="14" Height="14" Background="#6428A0"/>

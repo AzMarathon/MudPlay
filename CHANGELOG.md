@@ -1,5 +1,13 @@
 # Version history
 
+## 3.84.0
+
+- New map overlay: **Level gates** marks every room holding a level gate with an amber corner wedge, so a doorway that won't let you through reads as shut before you walk to it
+- Covers gated exits, level-gated room teleports, and level-restricted boat sailings
+- Describes the map rather than your character, so it works unconnected and never goes blank waiting for a level to be read; on by default, saved per character
+- Room-command tooltips now show a command's level requirement alongside its cost, on both stock and Paradigm — a captain's passage reads "costs 200 Platinum, Level 50+" instead of hiding the floor
+- A room command gated only by level now appears in the tooltip at all, where before it was dropped for having no price
+
 ## 3.83.9
 
 - Newhaven's Arena is recognised as level 1-3 only on stock, so a higher-level character is routed around the entrance instead of walking down and being refused

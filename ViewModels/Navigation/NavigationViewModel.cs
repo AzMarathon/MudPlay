@@ -53,6 +53,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         {
             _lairMode = lairProfile.NavLairMode;
             _spellMode = lairProfile.NavSpellMode;
+            _showLevelGates = lairProfile.NavShowLevelGates;
         }
 
         // 1 s tick — keeps the CURRENT NAV lair countdowns + the
@@ -99,6 +100,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.GhSweep.PhaseChanged += RefreshGhFullRooms;
         RefreshGhRooms();
         RefreshTrainerRooms();   // trainers come from game data; refreshed on set swap via OnGraphReloaded
+        RefreshLevelGatedRooms();
         _services.AutoLair.MarkedChanged += OnAutoLairMarkedChanged;
         _services.AutoLair.ActiveChanged += OnAutoLairActiveChanged;
         _services.AutoLair.PhaseChanged  += OnAutoLairPhaseChanged;
@@ -738,6 +740,28 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Profile.Save();
     }
 
+    // Rooms holding a level gate. A property of the map rather than of the
+    // character, so the only things that can change the answer are the toggle
+    // and a game-data set swap — not our level, and not where we're standing.
+    [ObservableProperty] private IReadOnlySet<RoomKey>? _levelGatedRooms;
+
+    [ObservableProperty] private bool _showLevelGates = true;
+
+    partial void OnShowLevelGatesChanged(bool value)
+    {
+        RefreshLevelGatedRooms();
+        if (_services.Profile.Current is not { } profile) return;
+        if (profile.NavShowLevelGates == value) return;
+        profile.NavShowLevelGates = value;
+        _services.Profile.Save();
+    }
+
+    private void RefreshLevelGatedRooms()
+    {
+        if (!ShowLevelGates) { LevelGatedRooms = null; return; }
+        LevelGatedRooms = Game.Map.LevelGatedRooms.Compute(_services.RoomGraph);
+    }
+
     [ObservableProperty] private bool _legendVisible;
 
     // Per-room lair respawn times (seconds) for the visible layout, keyed by
@@ -772,6 +796,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         SpellDisplayMode.ByName => SpellDisplayMode.Off,
         _                       => SpellDisplayMode.Mono,
     };
+    [RelayCommand] private void ToggleLevelGates() => ShowLevelGates = !ShowLevelGates;
     [RelayCommand] private void ToggleLegend() => LegendVisible   = !LegendVisible;
 
     // ----- Map binding ----------------------------------------------
@@ -3381,6 +3406,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshLayout();
         RefreshTeleportRooms();
         RefreshTrainerRooms();   // trainer set is per game-data set
+        RefreshLevelGatedRooms();   // gates are per game-data set too
     }
 
     // Walk every room with a non-zero Cmd and ask TBInfo whether the CMD's

@@ -110,6 +110,12 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<IReadOnlySet<RoomKey>?> AvoidedRoomsProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(AvoidedRooms));
 
+    // Rooms holding a level gate — the doorway itself, which is still walkable
+    // into. A map property, not a per-character one: it marks where the gates
+    // are, not which refuse this character. Null/empty while the overlay is off.
+    public static readonly StyledProperty<IReadOnlySet<RoomKey>?> LevelGatedRoomsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(LevelGatedRooms));
+
     // Rooms the user has marked as stash drops. Rendered with a gold outline so
     // the user can spot them at a glance. Game.Cash.StashRoomManager reads the
     // same set from Models.Profile.CharacterProfile.StashRooms and dispatches
@@ -310,6 +316,12 @@ public sealed class MapControl : Control
     {
         get => GetValue(AvoidedRoomsProperty);
         set => SetValue(AvoidedRoomsProperty, value);
+    }
+
+    public IReadOnlySet<RoomKey>? LevelGatedRooms
+    {
+        get => GetValue(LevelGatedRoomsProperty);
+        set => SetValue(LevelGatedRoomsProperty, value);
     }
 
     public IReadOnlySet<RoomKey>? StashRooms
@@ -770,6 +782,16 @@ public sealed class MapControl : Control
     // Cleared by the VM's ~12s timer.
     private static readonly IBrush WhereTargetFill = new SolidColorBrush(Color.Parse("#8833DD66"));
     private static readonly IPen   WhereTargetPen  = new Pen(new SolidColorBrush(Color.Parse("#FF33DD66")), 2.5);
+
+    // Level-gate marker — a filled amber wedge in the room node's top-left
+    // corner, for a room you can walk into whose way onward is shut to anyone
+    // outside the gate's level window. Deliberately NOT a coloured exit stub:
+    // stubs mean traps, and
+    // reusing that vocabulary for a level gate reads as danger rather than a
+    // locked door. A corner badge is a property OF the room, which is what a
+    // gate is here; it shares the U/D badges' dark rim and takes the free
+    // top-left corner so position alone separates the three.
+    private static readonly IBrush LevelGateFill = new SolidColorBrush(Color.Parse("#FFE0A020"));
     // Death-marker skull — bone-white silhouette with dark hollows, drawn on
     // rooms that still hold an un-recovered deathpile. The dark eye / nose / tooth
     // features carry the contrast so the glyph reads on both light and dark room
@@ -830,7 +852,7 @@ public sealed class MapControl : Control
             HighlightShopsProperty, SpellModeProperty,
             WalkPathProperty, LoopPathProperty, LoopBuilderPathProperty, LoopBuilderWaypointsProperty,
             AutoLairWaypointsProperty, AutoLairApproachPathProperty,
-            LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, GhRoomsProperty, GhFullRoomsProperty, LoopSequenceNumbersProperty,
+            LoopApproachPreviewPathProperty, AvoidedRoomsProperty, LevelGatedRoomsProperty, StashRoomsProperty, GhRoomsProperty, GhFullRoomsProperty, LoopSequenceNumbersProperty,
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
             PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty,
             BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty,
@@ -1258,6 +1280,9 @@ public sealed class MapControl : Control
             if (!cell.Intersects(viewport)) continue;
 
             DrawRoomNode(context, cell, kvp.Value);
+
+            if (LevelGatedRooms is { } gated && gated.Contains(kvp.Value))
+                DrawLevelGateMarker(context, cell);
 
             // @where target — a transient green flash the VM clears after ~12s.
             // Drawn right on the node so it reads as a marked square.
@@ -1720,6 +1745,29 @@ public sealed class MapControl : Control
         Point bottomRight = new(cell.Right - inset, cell.Bottom - inset);
         ctx.DrawLine(pen, topLeft, bottomRight);
         ctx.DrawLine(pen, topRight, bottomLeft);
+    }
+
+    // Amber wedge in the room node's TOP-LEFT corner — the third member of the
+    // corner-badge family, opposite the U/D badges on the right so position
+    // alone tells them apart. Sized to the drawn room NODE (DrawRoomNode's
+    // cell.Width * 0.45 square), not the whole tile, so it sits inside the
+    // visible room square instead of spilling across the gap between tiles.
+    private static void DrawLevelGateMarker(DrawingContext ctx, Rect cell)
+    {
+        double nodeSize = Math.Max(cell.Width * 0.45, 3.0);
+        double nx = cell.X + (cell.Width  - nodeSize) / 2;
+        double ny = cell.Y + (cell.Height - nodeSize) / 2;
+        double size = Math.Max(nodeSize * 0.50, 7.0);
+
+        StreamGeometry wedge = new();
+        using (StreamGeometryContext g = wedge.Open())
+        {
+            g.BeginFigure(new Point(nx + size, ny), isFilled: true);
+            g.LineTo(new Point(nx, ny));
+            g.LineTo(new Point(nx, ny + size));
+            g.EndFigure(isClosed: true);
+        }
+        ctx.DrawGeometry(LevelGateFill, VerticalBadgeEdgePen, wedge);
     }
 
     // Green flash for the room an @where reply located — a translucent fill + ring
