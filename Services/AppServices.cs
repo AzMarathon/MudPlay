@@ -1795,6 +1795,12 @@ public sealed class AppServices
     // MapControl (layout).
     public Game.Map.BfsMapper Bfs { get; private set; } = null!;
 
+    // The destination of the most recent walk-to the user requested, remembered
+    // past the walk's end so the bug report can re-plan and explain a route that
+    // failed or was declined at the picker. Set by RouteChoicePrompt.WalkAsync;
+    // null until the first walk-to this session.
+    public Game.Map.RoomKey? LastRequestedWalkTo { get; set; }
+
     // Per-character avoided + stash room set. Implements
     // Game.Map.IRoomFilter so pathing layers can plug
     // it into Bfs without further wiring.
@@ -3412,8 +3418,12 @@ public sealed class AppServices
         // died (awarded exp)"; the room comes from the live tracker (the event
         // carries neither). Fallback deaths (no candidate identity) are attributed
         // through the engaged name, so they're covered too.
+        // CurrentTarget is live during a normal death, but an exp-inferred kill
+        // nulls it before this fires — fall back to the retained just-killed name
+        // so "we attacked the boss, then gained exp" still attributes the death.
         MonsterDeath.MonsterDied += evt =>
-            BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key, Combat.CurrentTarget);
+            BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key,
+                Combat.CurrentTarget ?? Combat.RecentInferredKillName);
         // Grab-All: the moment a tracked boss with GrabAll set dies, blindly `get`
         // every item in its game-data drop table — no room re-parse. BossKilled fires
         // for any matched boss; we gate on the flag here, where the catalog + item
@@ -3663,6 +3673,12 @@ public sealed class AppServices
         // watchdog's resync CR re-displayed now blocks the rest, an empty room lets
         // it through. Pairs with CombatForceCleared → NoteCombatForceCleared below.
         RoomClassifier.EntitiesObserved += _ => Health.NoteRoomEntitiesReconfirmed();
+
+        // Boss-timer fallback: a tracked boss that was in the room roster and then
+        // vanishes from a same-room re-parse (with no departure line) is a kill we
+        // never engaged — start its timer. The room comes from the live tracker.
+        RoomClassifier.EntitiesObserved += obs =>
+            BossTimers.OnRoomEntitiesObserved(obs, RoomTracker.State.CurrentRoom?.Key);
 
         // Leader-rest nudge: a standing-idle follower's own PlayerState may
         // not change between the 5s par polls that flip the leader's
@@ -5828,6 +5844,16 @@ public sealed class AppServices
         // (position / combat) for the pre-rest and default trigger moments.
         // App-lifetime subscriber to app-lifetime singletons, so it isn't
         // disposed/re-created on profile swap.
+        // One-shot UI-thread timer; the returned handle cancels it (a flicker's
+        // *Combat Off* disposes it before it fires).
+        static IDisposable ScheduleOnce(TimeSpan delay, Action callback)
+        {
+            Avalonia.Threading.DispatcherTimer timer = new() { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+            return new DispatcherTimerHandle(timer);
+        }
+
         AutoEquip = new Game.Inventory.AutoEquipCoordinator(
             PlayerState,
             readEquipment: () => Profile.Current?.Equipment ?? new Models.Profile.EquipmentSettings(),
@@ -5848,7 +5874,11 @@ public sealed class AppServices
             // run-state (Running = an engine is travelling, not held by combat/rest).
             isBossRoom: IsBossRoomLive,
             isLair: k => RoomGraph.GetRoom(k)?.HasLair == true,
-            isMoving: () => MovementControl.State == Game.Map.MovementEngineState.Running);
+            isMoving: () => MovementControl.State == Game.Map.MovementEngineState.Running,
+            // Settle the travelling→Default combat swap so Paradigm's rapid
+            // *Combat Off* / *Combat Engaged* flicker doesn't thrash movement / Default
+            // gear on every brief engage; a fight that outlasts the window still gears up.
+            scheduleCombatGearSwap: cb => ScheduleOnce(TimeSpan.FromSeconds(1.5), cb));
 
         // Per-game-data-set loop catalogue. Loops live
         // under the active set's Loops/ folder, so the catalogue reloads

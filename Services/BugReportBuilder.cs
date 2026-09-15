@@ -1161,6 +1161,57 @@ public static class BugReportBuilder
     // stuck / took a wrong route / stalled on a door" report needs the walk's
     // live target + progress + last stop reason and which obstacle handler is
     // mid-request — the exact internals the log only hints at.
+    // Re-plan the last walk-to the user requested — from where they are NOW to
+    // where they aimed — so a "blocked" / generic route card in the report can be
+    // diagnosed after the fact: what the picker computed, which exit it stopped
+    // at, and the raw gate fields on that exit (so a generic reason reveals its
+    // real gate kind). Nothing is sent to the game; this is pure re-planning.
+    private static void AppendLastRoutePlan(StringBuilder sb, AppServices svc)
+    {
+        if (svc.LastRequestedWalkTo is not { } target) return;
+        if (svc.RoomTracker.State.CurrentRoom?.Key is not { } here) return;
+
+        sb.Append("\n**Route plan (last walk-to)**\n\n");
+        string Label(Game.Map.RoomKey k) =>
+            svc.RoomGraph.GetRoom(k)?.Name is { Length: > 0 } n ? $"{k.Map}/{k.Room} ({n})" : $"{k.Map}/{k.Room}";
+        Kv(sb, "From (current)", Label(here));
+        Kv(sb, "To (requested)", Label(target));
+
+        Game.Map.BfsMapper bfs = svc.Bfs;
+        MovementFilter filter = svc.Movement;
+        Game.Map.RoomGraphManager graph = svc.RoomGraph;
+
+        bool direct = bfs.FindPath(here, target, filter) is { Count: > 0 };
+        Kv(sb, "Direct route (gates honoured)", direct ? "reachable" : "none — blocked");
+        if (direct) return;
+
+        IReadOnlyList<Game.Map.Direction>? physical =
+            bfs.FindPath(here, target, filter, ignoreExitGates: true);
+        Kv(sb, "Physical route (all gates ignored)",
+            physical is { Count: > 0 } ? $"{physical.Count} step(s)" : "none — graph-disconnected");
+
+        if (RouteChoicePlanner.PlanBlocked(bfs, filter, graph, here, target) is { } b)
+        {
+            string reason = Game.Map.BlockedExitDescriber.Describe(
+                b.StopRoom, b.BlockDir, b.BlockExit,
+                k => graph.GetRoom(k)?.Name, svc.ItemNames.GetName);
+            Kv(sb, "Blocked at", $"{b.StopRoom.Map}/{b.StopRoom.Room} heading {b.BlockDir}");
+            Kv(sb, "Picker reason", reason);
+            Game.Map.RoomExit e = b.BlockExit;
+            Kv(sb, "Block exit fields",
+                $"hint={e.Hint} level={e.MinLevel}-{e.MaxLevel} stat={e.StatRequirement} "
+                + $"toll={e.TollGold} class={e.ClassGate} keyItem={e.KeyItemId} "
+                + $"align={e.HasAlignmentGate} filterReasons={filter.DescribeExitBlock(in e)}");
+        }
+        else
+        {
+            Kv(sb, "Blocked plan", physical is { Count: > 0 }
+                ? "none — reachable only past a gate not on the walked route (e.g. a level-gated "
+                  + "teleport or boat), so the picker can't point at a run-to-block exit"
+                : "none — destination is graph-disconnected from here");
+        }
+    }
+
     private static string BuildNavigationEngines(AppServices svc)
     {
         StringBuilder sb = new();
@@ -1187,6 +1238,8 @@ public static class BugReportBuilder
             walker.LastEvent is { } ev
                 ? $"{ev.Kind}: {ev.Detail}" + (ev.Destination is { } d ? $" → {d.Map}/{d.Room}" : string.Empty)
                 : "(none yet)");
+
+        AppendLastRoutePlan(sb, svc);
 
         sb.Append("\n**Obstacle handlers (door / hidden exit / trap)**\n\n");
         Game.Map.DoorOpenManager door = svc.Door;
