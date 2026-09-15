@@ -87,6 +87,7 @@ public partial class GameDataTableSectionView : UserControl
             {
                 if (item is GameDataRow row) vm.SelectedRows.Add(row);
             }
+            RefreshBatchEditButton();
         };
 
         // Deferred so the read runs AFTER the DataGrid has applied the
@@ -228,6 +229,13 @@ public partial class GameDataTableSectionView : UserControl
             ExportButton.IsVisible = true;
         }
 
+        if (editable.BatchEditCommand is { } batch)
+        {
+            BatchEditButton.Command   = batch;
+            BatchEditButton.IsVisible = true;
+            RefreshBatchEditButton();
+        }
+
         // Unhook any prior section's PropertyChanged before (re)wiring — the View
         // can be re-DataContext'd onto a different section.
         if (_simulateVisibilityTarget is { } prevSim)
@@ -247,6 +255,17 @@ public partial class GameDataTableSectionView : UserControl
                 _simulateVisibilityTarget = vm;
             }
         }
+    }
+
+    // Batch edit needs a 2+ selection to be meaningful; grey it out otherwise and
+    // surface the live count in the label so the button reads "Batch edit (15)".
+    private void RefreshBatchEditButton()
+    {
+        if (!BatchEditButton.IsVisible) return;
+        string label = (DataContext as IEditableTableSectionViewModel)?.BatchEditLabel ?? "Batch edit";
+        int count = (DataContext as GameDataTableSectionViewModel)?.SelectedRows.Count ?? 0;
+        BatchEditButton.IsEnabled = count >= 2;
+        BatchEditButton.Content = count >= 2 ? $"{label} ({count})" : label;
     }
 
     private void OnSimulateVisibilityChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

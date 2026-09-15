@@ -97,6 +97,11 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
+                <!-- Batch edit: applies chosen fields to every selected row. Sits just
+                     left of the Columns picker (between the filter box and column
+                     selector); shown + wired in code-behind, enabled on a 2+ selection. -->
+                <Button x:Name="BatchEditButton" DockPanel.Dock="Right" Margin="0,0,6,0"
+                        Content="Batch edit" IsVisible="False" IsEnabled="False"/>
                 <Button x:Name="ExportButton" DockPanel.Dock="Right" IsVisible="False"/>
                 <!-- Test-only "Simulate entry" (Unrecognized Lines tab); visibility
                      follows the section's live ShowSimulate flag, wired in code-behind. -->

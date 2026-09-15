@@ -1141,6 +1141,16 @@ Every numeric filter is a **min / max range** — either box can be blank for no
 - **Shops** — double-click opens the room-detail popup for the shop's room directly, showing the stock table with its live **Charm** picker. A shop that spans several rooms opens on the first and lists the others as clickable links in brackets next to the popup's title — click one to hop the popup to that room.
 - The rest (Lairs, Races, Classes, and so on) are read-only reference.
 
+### Batch edit (Monsters, Items, Players)
+
+Select several rows (click-drag, or Ctrl / Shift-click) on the **Monsters**, **Items**, or **Players** table and a **Batch edit** button appears in the toolbar, between the **Filter…** box and the **Columns ▾** picker — it shows the count and lights up once **two or more** rows are selected. It opens a dialog that applies your chosen fields to **every** selected record at once.
+
+- **Opt-in per field** — a field is only touched when you set it. Enum / text / number fields (Relationship, priority, Min-to-keep, …) have a **Change** checkbox; flags and permissions are a tri-state **Leave / On / Off** (for a player permission, On = grant, Off = revoke). Anything left **Leave** / unticked keeps whatever each record already has, so batching one field never clobbers a record's other overrides.
+- **Monsters** — Relationship, attack priority, don't-backstab, kill-on-sight, the physical-attack command, and the three spell-override rungs (cast-code + Max + Mana floor).
+- **Items** — the auto flags (collect / discard / open / buy / sell / stash), cannot-be-taken, must-have-minimum, loyal, auto-obtain-for-path, and Min-to-keep / Max-to-get.
+- **Players** — the party behaviours (invite-if-seen, join-if-invited, don't-auto-delete) and all 15 remote-control permissions, with a **Set all permissions** master to grant or revoke the lot in one move.
+- **Tier** — Monsters and Items write to the tier you pick in the dialog's **Use** dropdown (only-this-character / only-this-BBS / for-all-characters), the same as the single editor; picking **Installed defaults** instead **resets** every selected record (after one confirm). Player permissions save to the character, no tier picker.
+
 ### The item / monster override editor
 
 Items and Monsters open an editable pane on the left with the read-only **Other Info (from MDB)** on the right.

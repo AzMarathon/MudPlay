@@ -5,7 +5,9 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
 using MudPlay.Game.GameData;
 using MudPlay.Models.GameData;
+using MudPlay.Models.Settings;
 using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Batch;
 using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels.GameData.Tables;
@@ -84,6 +86,10 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
     public IAsyncRelayCommand<GameDataRow?> OpenEditAsyncCommand { get; }
     ICommand IEditableTableSectionViewModel.OpenEditCommand => OpenEditAsyncCommand;
 
+    public IRelayCommand BatchEditAsyncCommand { get; }
+    ICommand? IEditableTableSectionViewModel.BatchEditCommand => BatchEditAsyncCommand;
+    string? IEditableTableSectionViewModel.BatchEditLabel => "Batch edit";
+
     public ItemsSectionViewModel(
         GameDataCache cache,
         SettingsResolver? resolver = null,
@@ -105,6 +111,51 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
         // silently dropped instead of swapping the open item menu.
         OpenEditAsyncCommand = new AsyncRelayCommand<GameDataRow?>(
             OpenEditAsync, AsyncRelayCommandOptions.AllowConcurrentExecutions);
+        BatchEditAsyncCommand = new AsyncRelayCommand(BatchEditAsync);
+    }
+
+    // Batch edit every selected item: fold the chosen flags / carry policy onto each
+    // record's existing overlay at the chosen tier, or reset them all at Defaults.
+    private async Task BatchEditAsync()
+    {
+        if (_dialogs is null || _resolverRef is not { } resolver) return;
+        List<GameDataRow> rows = SelectedRows
+            .Where(r => !string.IsNullOrEmpty(r.Get("Number")))
+            .ToList();
+        if (rows.Count < 2) return;
+
+        ItemBatchEditDialogViewModel vm = new(rows.Count, resolver.WritableTiers());
+        ItemBatchResult? result = await _dialogs.OpenWindowAsync<ItemBatchEditDialogViewModel, ItemBatchResult>(vm);
+        if (result is null) return;
+
+        if (result.Tier == SettingsTier.Defaults)
+        {
+            bool ok = await AppServices.Current.Confirm.ConfirmAsync(
+                "Reset to installed defaults",
+                $"Clear every override on {rows.Count} selected items and restore the installed defaults?");
+            if (!ok) return;
+            foreach (GameDataRow row in rows)
+                resolver.ResetGameDataRecord("Items", row.Get("Number")!);
+            Reload();
+            return;
+        }
+
+        if (!result.Changes.AnyFieldChosen) return;
+
+        foreach (GameDataRow row in rows)
+        {
+            string wcc = row.Get("Number")!;
+            ItemOverlay seedDefaults =
+                (_overlaySeed is not null && int.TryParse(wcc, out int seedNum))
+                    ? _overlaySeed.GetOverlay(seedNum)
+                    : new ItemOverlay();
+            ItemOverlay existing = resolver.ResolveGameData<ItemOverlay>("Items", wcc, seedDefaults);
+            ItemOverlay updated = result.Changes.ApplyTo(existing);
+            await GameDataOverrideApplier.ApplyAsync(
+                resolver, AppServices.Current.Confirm, "Items", wcc,
+                result.Tier, updated, updated.Equals(seedDefaults));
+        }
+        Reload();
     }
 
     // Recognized flag keywords → the ItemOverlay flag they filter on. Typing one of

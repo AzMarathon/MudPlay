@@ -1,0 +1,118 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.GameData.Batch"
+        xmlns:conv="using:MudPlay.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="620"
+        x:Class="MudPlay.Views.GameData.Batch.MonsterBatchEditDialog"
+        x:DataType="vm:MonsterBatchEditDialogViewModel"
+        Title="Batch edit monsters"
+        Width="520" Height="640"
+        MinWidth="440" MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="MinWidth" Value="120"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+        <TextBlock Grid.Row="0" Text="{Binding Heading}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <TextBlock Grid.Row="1"
+                   Text="Tick a field to set it on every selected monster; untouched fields are left as they are on each record. Pick 'Installed defaults' to reset the selected monsters instead."
+                   Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="10">
+                <!-- Tier -->
+                <Grid ColumnDefinitions="120,*" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Use"/>
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding AvailableTiers}"
+                              SelectedItem="{Binding UseTier, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Converter={x:Static conv:SettingsTierLabelConverter.Instance}}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+
+                <!-- Field editors hide when resetting to installed defaults. -->
+                <StackPanel Spacing="10" IsVisible="{Binding !IsResetTier}">
+                    <Grid ColumnDefinitions="24,120,*" ColumnSpacing="8">
+                        <CheckBox Grid.Column="0" IsChecked="{Binding ChangeRelationship, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Relationship"/>
+                        <ComboBox Grid.Column="2" HorizontalAlignment="Stretch"
+                                  IsEnabled="{Binding ChangeRelationship}"
+                                  ItemsSource="{Binding AvailableRelationships}"
+                                  SelectedItem="{Binding Relationship, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="24,120,*" ColumnSpacing="8">
+                        <CheckBox Grid.Column="0" IsChecked="{Binding ChangePriority, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Attack priority"/>
+                        <ComboBox Grid.Column="2" HorizontalAlignment="Stretch"
+                                  IsEnabled="{Binding ChangePriority}"
+                                  ItemsSource="{Binding AvailablePriorities}"
+                                  SelectedItem="{Binding Priority, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="144,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Don't backstab"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding ToggleOptions}"
+                                  SelectedItem="{Binding DontBackstab, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="144,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Kill on sight (neutral)"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding ToggleOptions}"
+                                  SelectedItem="{Binding KillOnSight, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="24,120,*" ColumnSpacing="8">
+                        <CheckBox Grid.Column="0" IsChecked="{Binding ChangePhysicalCommand, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Physical attack"/>
+                        <TextBox Grid.Column="2" IsEnabled="{Binding ChangePhysicalCommand}"
+                                 Text="{Binding PhysicalCommand, Mode=TwoWay}"
+                                 PlaceholderText="e.g. bash"/>
+                    </Grid>
+
+                    <TextBlock Text="Spell overrides — cast-code, per-room Max, and Mana floor. Blank cast-code clears the rung."
+                               Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                    <Grid ColumnDefinitions="24,110,*,60,60" ColumnSpacing="6">
+                        <CheckBox Grid.Column="0" IsChecked="{Binding ChangePreAttack, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Debuff spell"/>
+                        <TextBox Grid.Column="2" IsEnabled="{Binding ChangePreAttack}" Text="{Binding PreAttackSpell, Mode=TwoWay}" PlaceholderText="cast-code"/>
+                        <TextBox Grid.Column="3" IsEnabled="{Binding ChangePreAttack}" Text="{Binding PreAttackCount, Mode=TwoWay}" PlaceholderText="Max"/>
+                        <TextBox Grid.Column="4" IsEnabled="{Binding ChangePreAttack}" Text="{Binding PreAttackMinMana, Mode=TwoWay}" PlaceholderText="Mana"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="24,110,*,60,60" ColumnSpacing="6">
+                        <CheckBox Grid.Column="0" IsChecked="{Binding ChangeNormalAttack, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Normal spell"/>
+                        <TextBox Grid.Column="2" IsEnabled="{Binding ChangeNormalAttack}" Text="{Binding NormalSpell, Mode=TwoWay}" PlaceholderText="cast-code"/>
+                        <TextBox Grid.Column="3" IsEnabled="{Binding ChangeNormalAttack}" Text="{Binding NormalCount, Mode=TwoWay}" PlaceholderText="Max"/>
+                        <TextBox Grid.Column="4" IsEnabled="{Binding ChangeNormalAttack}" Text="{Binding NormalMinMana, Mode=TwoWay}" PlaceholderText="Mana"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="24,110,*,60,60" ColumnSpacing="6">
+                        <CheckBox Grid.Column="0" IsChecked="{Binding ChangeAltAttack, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Alternate spell"/>
+                        <TextBox Grid.Column="2" IsEnabled="{Binding ChangeAltAttack}" Text="{Binding AltSpell, Mode=TwoWay}" PlaceholderText="cast-code"/>
+                        <TextBox Grid.Column="3" IsEnabled="{Binding ChangeAltAttack}" Text="{Binding AltCount, Mode=TwoWay}" PlaceholderText="Max"/>
+                        <TextBox Grid.Column="4" IsEnabled="{Binding ChangeAltAttack}" Text="{Binding AltMinMana, Mode=TwoWay}" PlaceholderText="Mana"/>
+                    </Grid>
+                </StackPanel>
+
+                <TextBlock IsVisible="{Binding IsResetTier}"
+                           Text="Applying will clear every override on the selected monsters, restoring the installed defaults."
+                           Foreground="{StaticResource AccentAmberBrush}" FontSize="11" TextWrapping="Wrap"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,14,0,0">
+            <Button Content="Cancel" Command="{Binding CancelCommand}" IsCancel="True" MinWidth="80"/>
+            <Button Content="Apply" Command="{Binding ApplyCommand}" IsDefault="True" MinWidth="80"/>
+        </StackPanel>
+    </Grid>
+</Window>
