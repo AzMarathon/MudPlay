@@ -950,11 +950,19 @@ Recovery matches your realm: on **Paradigm** it recovers your `corpse` in one co
 
 With **Auto-Equip on recovery** on, MudPlay re-wears everything you had on when you died — and if a hostile is in the room when the pile comes back, it does this **combat-aware**: grabbing the pile doesn't interrupt the fight, but wearing gear does, so it puts a few pieces on between combat rounds (weapon first, then armour heaviest-first) and keeps swinging in between, then equips whatever's left the moment the room clears.
 
-On **Stock**, items that spilled into neighbouring rooms are chased down too: a *deliberate* recovery — **Recover Now**, or an Auto-Recover walk-to that **ends** in the death room — looks through each exit, then walks to the rooms holding your items (disarming any traps in the way, and skipping a direction whose trap it can't get through), grabs your gear, and returns. An Auto-Recover walk that simply passes through a death room grabs your overflow from the rooms right before and after it in passing. Just *manually* stepping into one of your death rooms grabs whatever's on that floor but never fires the adjacent-room sweep. Finally, if the only thing left un-recovered is **currency**, the death counts as fully recovered: coins are picked up as cash automatically (never `get`-ed), so they never leave a pile stuck at "partly recovered".
+On **Stock**, items that spilled into neighbouring rooms are chased down too:
+
+- A *deliberate* recovery — **Recover Now**, or an Auto-Recover walk-to that **ends** in the death room — looks through each exit, then walks to the rooms holding your items (disarming any traps in the way, and skipping a direction whose trap it can't get through), grabs your gear, and returns.
+- An Auto-Recover walk that simply **passes through** a death room grabs your overflow from the rooms right before and after it in passing.
+- Just *manually* stepping into one of your death rooms grabs whatever's on that floor but never fires the adjacent-room sweep.
+
+Finally, if the only thing left un-recovered is **currency**, the death counts as fully recovered: coins are picked up as cash automatically (never `get`-ed), so they never leave a pile stuck at "partly recovered".
 
 ## Character Info and Calculators
 
-**Character Info** is your read-only character sheet — stats, skills, the attack table (per attack type: accuracy, damage range, and swings per round, computed from your stats and equipped weapon), and folded-in quest bonuses. It also lists your worn, carried, and key-ring inventory, each a clickable link to its Game Data record (an item whose dumped name didn't resolve stays plain text). Below the wealth block it shows an **AC / DR breakdown** in two lines: one for what your worn gear grants, and one for what your **configured self-buffs** add on top (assuming they're up) — the same buff figure the Equipment Manager and Monster Intel use.
+**Character Info** is your read-only character sheet — stats, skills, the attack table (per attack type: accuracy, damage range, and swings per round, computed from your stats and equipped weapon), and folded-in quest bonuses. It also lists your worn, carried, and key-ring inventory, each a clickable link to its Game Data record (an item whose dumped name didn't resolve stays plain text).
+
+Below the wealth block it shows an **AC / DR breakdown** in two lines: one for what your worn gear grants, and one for what your **configured self-buffs** add on top (assuming they're up) — the same buff figure the Equipment Manager and Monster Intel use.
 
 **Calculators** holds what-if tools: the Hit Calculator, Swing and Backstab calculators, Movement Speed, Mana Regen, Realm Rankings, and Monster Aggro. The **Hit Calculator** projects your hit% and damage against a monster with your current weapon; for the reverse — how often a monster hits *you*, and whether it's safe to fight — see **Monster Intel**.
 
@@ -962,7 +970,13 @@ On **Stock**, items that spilled into neighbouring rooms are chased down too: a 
 
 **Monster Aggro** predicts which member of your party a monster will attack — the same target-selection the game engine runs. It shows the model for the **loaded game-data set's realm** automatically (the Paradigm version on a Paradigm / GreaterMUD set, the Stock version on a Stock set — the two engines are completely different). Configure up to **six** party members with **＋ Add member** / **✕ remove**.
 
-**On Paradigm** each member is scored: 150 base, adjusted by **Charm** (higher charm lowers your score, so mobs notice you less), **party position**, and **recent aggro** (tick *Last hit* on whoever swung at the mob most recently — a big bonus that scales with party size; everyone else takes a small penalty). Position is set for you where it isn't a choice: the first member is your point man — **Solo** when they're the only one (a lone player is as exposed as a frontliner), **Frontrank** once there's a party — and every added member defaults to **Midrank**, which you can change. The monster rolls a **weighted lottery** over the scores, so each member's **Odds** is their share of being picked — bigger score, bigger slice, but never a guarantee. No monster is needed; the odds are the same for any mob.
+**On Paradigm** each member is scored from a **150 base**, adjusted by:
+
+- **Charm** — higher charm lowers your score, so mobs notice you less;
+- **party position** — set for you where it isn't a choice: the first member is your point man (**Solo** when they're the only one — a lone player is as exposed as a frontliner — **Frontrank** once there's a party), and every added member defaults to **Midrank**, which you can change;
+- **recent aggro** — tick *Last hit* on whoever swung at the mob most recently: a big bonus that scales with party size, while everyone else takes a small penalty.
+
+The monster rolls a **weighted lottery** over the scores, so each member's **Odds** is their share of being picked — bigger score, bigger slice, but never a guarantee. No monster is needed; the odds are the same for any mob.
 
 **On Stock** it's a different engine, so you pick the **monster**: type its record **number or name** (best match) and it fills in the matched **#/name**, its **Align** (shown as a label — it comes from the record), **Follow%**, and whether it's a **guard** (Follow% and guard stay editable). Each member sets their **alignment title**, whether they've **provoked** the mob (hit it first — forces it to aggro them), whether they **hit it last**, and how many **hits** they're already taking this beat. Per member the result shows:
 
@@ -984,7 +998,9 @@ MudPlay's automation is a set of independent engines you switch on and off — c
 
 ## The auto-engines
 
-Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is an independent on/off switch. Your primary surface for them during play is the **Action menu** in the menu bar (the toolbar can also carry each as a button — add them in Settings → Toolbar + Shortcuts). An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates the combat/spell tuning. But **Auto-Bless stands alone** — self and party buffing is controlled by the Auto-Bless toggle and nothing else, so turning off Auto-Combat or Auto-Rest/Heal never stops your blessing.
+Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is an independent on/off switch. Your primary surface for them during play is the **Action menu** in the menu bar (the toolbar can also carry each as a button — add them in Settings → Toolbar + Shortcuts).
+
+An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates the combat/spell tuning. But **Auto-Bless stands alone** — self and party buffing is controlled by the Auto-Bless toggle and nothing else, so turning off Auto-Combat or Auto-Rest/Heal never stops your blessing.
 
 **Sneak-aware casting.** Casting a spell breaks Sneak (and Hide), so when **Auto-Sneak is on** MudPlay times its maintenance casts around your stealth:
 
@@ -1013,7 +1029,9 @@ The **All auto-responses** toggle at the top of the Action menu (and the `@auto-
 
 ## Macros, aliases, and triggers
 
-Beyond the engines, you can script your own automation. All three editors live in the **Game Data Browser** — press **F3** (or use View → **Macros** / **Triggers** / **Aliases** to jump straight to one) and pick **Macros**, **Triggers**, or **Aliases** from the *Tables + editors* list on the left. Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove** button, and a grid of what you've already made. **Double-click a row to edit it.** There's no separate save step — each editor's **Save** button writes to disk immediately, and the list's **Enabled** column shows a ✓ for the ones that are live.
+Beyond the engines, you can script your own automation. All three editors live in the **Game Data Browser** — press **F3** (or use View → **Macros** / **Triggers** / **Aliases** to jump straight to one) and pick **Macros**, **Triggers**, or **Aliases** from the *Tables + editors* list on the left.
+
+Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove** button, and a grid of what you've already made. **Double-click a row to edit it.** There's no separate save step — each editor's **Save** button writes to disk immediately, and the list's **Enabled** column shows a ✓ for the ones that are live.
 
 - **Macros** bind a **key chord to a command.** Click **Add**, press **Capture** and hit the key combo (release the main key to lock it in, or Esc to cancel), then type the **Command** to send. Split it into several lines with `^M` or `;` — each fragment fires as its own command. Macros work while you're typing in the terminal; new profiles start with the numpad pre-wired to compass movement.
 - **Aliases** expand a **typed word into a longer command.** Give the alias a **Name** (matched on the first word you type, case-insensitive) and an **Expansion**, where `{0}` is the whole rest of the line and `{1}`, `{2}`, … are the individual words — so an alias `cast` → `c '{1}' {2}` turns `cast heal bob` into `c 'heal' bob`. Aliases only expand when you press **Enter in the Conversation window's input box**; typing in the main terminal bypasses them.
@@ -1077,7 +1095,12 @@ The window is a sidebar plus a content pane:
 - **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Incomplete Messages, Unrecognized Lines, Flavor Prefixes**. (The macro/alias/trigger editors are covered in the **Macros, aliases, and triggers** section; Flavor Prefixes has its own note below.)
 - **Imported tables** (bottom group) holds the game data: **Monsters, Items, Spells, Rooms, Lairs, Shops, Races, Classes, TextBlocks, Info, Unobtainable, Quest Flags.**
 
-Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The Filter… box matches the **visible cell text** across every column — including the friendly labels, so on the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name. On the **Spells** tab it also understands ailment keywords: type `poison`, `confuse`, `blind`, or `hold` to list every spell that *applies* that effect (read from the spell's own ability codes, following the EndCast chain), not just spells with the word in their name. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
+Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The Filter… box matches the **visible cell text** across every column, including the friendly labels:
+
+- On the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name.
+- On the **Spells** tab it also understands ailment keywords: type `poison`, `confuse`, `blind`, or `hold` to list every spell that *applies* that effect (read from the spell's own ability codes, following the EndCast chain), not just spells with the word in their name.
+
+The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
 
 The **Monsters** table carries a full column set for browsing and filtering monster stats:
 
@@ -1124,14 +1147,21 @@ A **Message** section shows the item's on-use / proc message — but where that 
 
 A complete message claimed by a spell or item in this set is **hidden from the Incomplete Messages tab** (an orphaned link — the spell/item isn't in this set — keeps the record listed there).
 
-The item's right-hand info pane is also interactive: a **Charm** picker (default 50) re-prices the **Bought / sold** buy/sell figures live so you can compare, say, a higher-charm party member selling; each shop links to its room record and offers **Queue Walking here →** (arms a walk to that shop, like typing it in the nav search box); **Dropped by** lists the monsters that drop it as links to their records; and **Placed in** lists the rooms whose floor holds it, each a link to the room record with its own **Queue Walking here →** (so a room-only item like a quest box shows exactly where to find it).
+The item's right-hand info pane is also interactive:
+
+- a **Charm** picker (default 50) re-prices the **Bought / sold** buy/sell figures live, so you can compare, say, a higher-charm party member selling;
+- each shop links to its room record and offers **Queue Walking here →** (arms a walk to that shop, like typing it in the nav search box);
+- **Dropped by** lists the monsters that drop it as links to their records;
+- **Placed in** lists the rooms whose floor holds it, each a link to the room record with its own **Queue Walking here →** (so a room-only item like a quest box shows exactly where to find it).
 
 **For a monster** you can set its **Relationship** and **Priority** and pin its whole **single-target combat chain** for that species, rung-for-rung with the Settings → Combat spell grid:
 
 - **Debuff (single target)**, **Normal attack spell**, and **Alternate attack spell** — each a spell **picker** (type-ahead over your castable spells, same as the Combat slots; commits the cast-code) with a per-room **Max** cast cap and a **Mana** floor.
 - **Physical attack** — a command box (the spell boxes are spell-only; a raw attack verb goes here).
 
-Each configured spell rung **substitutes** its spell for this monster and runs the *same* gated cascade the global slot does: its Max cap, its Mana floor (read as % or absolute per the Combat tab's mana mode — below it the rung holds and the flow moves on), **and** the effectiveness gates — a target immune to that spell, or whose level or element fully resists it, skips it down the cascade exactly as a configured spell would. So an override is no longer a blanket bypass; pick a spell that can actually land. The **Physical attack** box replaces the weapon command **only on a round the engine already chose physical** — it does not force physical or suppress the spell rungs, and carries no mana/cap gating.
+Each configured spell rung **substitutes** its spell for this monster and runs the *same* gated cascade the global slot does: its Max cap, its Mana floor (read as % or absolute per the Combat tab's mana mode — below it the rung holds and the flow moves on), **and** the effectiveness gates — a target immune to that spell, or whose level or element fully resists it, skips it down the cascade exactly as a configured spell would. So an override is no longer a blanket bypass; pick a spell that can actually land.
+
+The **Physical attack** box replaces the weapon command **only on a round the engine already chose physical** — it does not force physical or suppress the spell rungs, and carries no mana/cap gating.
 
 The read-only pane's **Spawns In** list shows each room's lair size (e.g. `1/2122 (lair: 2)`). Every spell a monster references — its **spell-attacks, per-hit, create, death, and between-rounds** spells — links to that spell's record and shows the spell's number (`[#N]`), and each entry in the **Summons** list links to the summoned monster's record.
 
