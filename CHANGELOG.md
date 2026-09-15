@@ -1,5 +1,11 @@
 # Version history
 
+## 3.89.0
+
+- The client now tracks the daily charges of your Paradigm **transport tokens** — on login it `look`s each held token to read its "Uses remaining" count, and re-reads after any `use` (so a use blocked by an NPC in the room, too little gold, or too low a level never mis-counts)
+- New **`@token`** remote command — bare, it lists every held token's remaining charges; with a name, it reports just that one
+- (Foundation for token-aware routing and party token coordination — those land in follow-up PRs)
+
 ## 3.88.32
 
 - **Critical**: an emergency heal could lose its round to an unrelated attack and never fire — a fresh-engage attack and a between-round cast (heal/buff/cure) were sharing one "last cast" clock even though they're independent slots server-side; an attack landing an instant before an emergency heal was due silently blocked the heal for the same reason the attack itself is allowed to bypass that clock. The two are now paced on separate clocks so neither can ever block the other, in either direction.

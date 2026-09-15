@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.32**
-> - **Critical**: an emergency heal could lose its round to an unrelated attack and never fire — attack-slot and between-round (heal/buff/cure) casts now pace on independent clocks so one can never block the other
+> **Version 3.89.0**
+> - The client now tracks the daily charges of your Paradigm **transport tokens** — on login it `look`s each held token to read its "Uses remaining" count, and re-reads after any `use`
+> - New **`@token`** remote command — bare, it lists every held token's remaining charges; with a name, just that one
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
