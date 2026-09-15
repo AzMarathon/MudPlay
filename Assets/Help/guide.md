@@ -344,7 +344,13 @@ The **Legend** keys every room-cell marker the map draws: the amber-ringed **cur
 
 **Route lines** are colour-coded — walk-to **blue**, a running loop **green**, a loop you're previewing **red**, an Auto-Lair approach **orange** (these four are recolourable under Settings → General, so they're described here rather than pinned in the Legend).
 
-**Exit stubs** carry their own colours (shown in the Legend): **red** for a trapped exit, **magenta** "Action required" for an exit you can't just walk — one that needs a command or in-room action to cross (a `go path`-style named exit, a lever, or an ask-a-guard door), and **cyan** for a hidden exit revealed with `sea`. Traps are **directional**, so a connecting line is only red on the trapped side: a line red for its **whole** length is trapped **both** ways, while one red for **half** its length (the half against the room whose exit is trapped) is a **one-way** trap — safe to walk back the other direction.
+**Exit stubs** carry their own colours (shown in the Legend):
+
+- **red** — a trapped exit;
+- **magenta** "Action required" — an exit you can't just walk, one that needs a command or in-room action to cross (a `go path`-style named exit, a lever, or an ask-a-guard door);
+- **cyan** — a hidden exit revealed with `sea`.
+
+Traps are **directional**, so a connecting line is only red on the trapped side: a line red for its **whole** length is trapped **both** ways, while one red for **half** its length (the half against the room whose exit is trapped) is a **one-way** trap — safe to walk back the other direction.
 
 **Level gates** (on by default) marks every room that **holds a level gate** with a small **amber wedge in the top-left corner** — a room you can walk into and stand in, whose way onward is shut unless you're inside the gate's level window. It covers gated exits, **level-gated room teleports** (a vortex that won't take you until level 20), and **level-restricted boat sailings** (a captain who won't board you until level 50). That's deliberately a different mark from the **red exit stubs**, which mean a trap: a level gate is a locked door, not a hazard.
 
@@ -426,7 +432,9 @@ The requirement line names everything you'll need — and for a counter it can s
 
 Both cards show their trap count. Click either route to preview its line on the map, then **Go**. When no route crosses fewer traps than the shortest, there's nothing to weigh, so the walk just proceeds and disarms en route as before.
 
-**Walk it or teleport.** When the shortest route somewhere takes a **teleport** (a cast, an item-use portal, a CMD jump) and a plain **walking** route also exists, the picker asks which you want — **"Walk it"** (the safe overland route) or **"Teleport"** (the shortcut). A teleport can drop you somewhere lethal, so the client won't make that call for you. And once you're walking, a walk that **didn't** start on a teleport won't quietly switch to one: if the route has to re-plan mid-trip — say a counter you were searching for turns up and the destination is recomputed — it **keeps to the walking route** and only falls back to a teleport if walking has become genuinely impossible. So picking "Walk it" (or any ordinary walk-to) means you stay on foot the whole way, never surprised onto a vortex you didn't choose.
+**Walk it or teleport.** When the shortest route somewhere takes a **teleport** (a cast, an item-use portal, a CMD jump) and a plain **walking** route also exists, the picker asks which you want — **"Walk it"** (the safe overland route) or **"Teleport"** (the shortcut). A teleport can drop you somewhere lethal, so the client won't make that call for you.
+
+And once you're walking, a walk that **didn't** start on a teleport won't quietly switch to one: if the route has to re-plan mid-trip — say a counter you were searching for turns up and the destination is recomputed — it **keeps to the walking route** and only falls back to a teleport if walking has become genuinely impossible. So picking "Walk it" (or any ordinary walk-to) means you stay on foot the whole way, never surprised onto a vortex you didn't choose.
 
 **Routing through a room you marked "Avoid".** Rooms you flag **Avoid** (nav-map right-click → *Toggle: Avoid this room*, or the Avoid/Stash editor) are normally treated as walls — the walker never routes into them. When a destination is reachable **only** by passing through one, the route picker surfaces a choice rather than just failing:
 
@@ -757,13 +765,19 @@ It's a **reference tool**: double-click a row to see the item's full data record
 
 **Effective AC vs Evil** is a separate criterion from plain **Armour Class**: Prot-Evil is a confirmed 1 AC per point against evil monsters (most of what you'll fight), so an item with modest raw AC but a big Prot-Evil bonus can be the better pick even though plain AC sorting would rank it low — this criterion scores `AC + Prot-Evil` so that item shows up where it belongs.
 
-Need more than one stat at once — "best VileWard, then AC, then Spellcasting"? Pick a criterion and click **+ Add to search order** to build a priority list (shown as "Search order: A → B → C" below the buttons); **Find Best** then resolves it highest-priority-first, filling each slot with whichever criterion earliest finds something for it — lower-priority criteria only get a turn at whatever's left over. This is the same as manually **Hold**-ing a slot and re-running Find Best with a different criterion, automated into one click. **Clear order** empties the list, dropping back to searching by the single dropdown criterion.
+Need more than one stat at once — "best VileWard, then AC, then Spellcasting"? Pick a criterion and click **+ Add to search order** to build a priority list (shown as "Search order: A → B → C" below the buttons); **Find Best** then resolves it highest-priority-first, filling each slot with whichever criterion earliest finds something for it — lower-priority criteria only get a turn at whatever's left over.
 
-The **Target weight** dropdown next to it caps what Find Best is willing to add: pick **None / Light / Medium / Heavy** and it stops picking items for a slot once the projected Gear Finder loadout's encumbrance would push past that band, using your character's live carry capacity — so "best AC" can mean "best AC that keeps me Light" instead of the raw-highest scorer regardless of what it weighs. **(Any)**, the default, is uncapped — the original behavior. It only takes effect once your inventory has been read at least once this session (so the client knows your max carry weight); Hold locks, a search order, and the current filter/criterion still apply on top of it the same as always.
+This is the same as manually **Hold**-ing a slot and re-running Find Best with a different criterion, automated into one click. **Clear order** empties the list, dropping back to searching by the single dropdown criterion.
+
+The **Target weight** dropdown next to it caps what Find Best is willing to add: pick **None / Light / Medium / Heavy** and it stops picking items for a slot once the projected Gear Finder loadout's encumbrance would push past that band, using your character's live carry capacity — so "best AC" can mean "best AC that keeps me Light" instead of the raw-highest scorer regardless of what it weighs. **(Any)**, the default, is uncapped — the original behavior.
+
+It only takes effect once your inventory has been read at least once this session (so the client knows your max carry weight); Hold locks, a search order, and the current filter/criterion still apply on top of it the same as always.
 
 ## CP Allocation
 
-Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you. Two checkboxes here are the ONLY place the automation switches live: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan). They sit next to the plan they act on; Settings → Auto-Trainer holds the behaviour knobs (when to make the trip, what to keep banked, where to stop).
+Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you.
+
+Two checkboxes here are the ONLY place the automation switches live: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan). They sit next to the plan they act on; Settings → Auto-Trainer holds the behaviour knobs (when to make the trip, what to keep banked, where to stop).
 
 **Hover a stat's column header** to see everything that stat drives, one effect per line: the derived stat's **current value for your character**, its marginal rate (e.g. *~6 AGL → +1*, *+3 per 4*), and — where it's a discrete breakpoint — **the very next value of that stat where it ticks up** (`next at N`). That's the point of it: spend to a real breakpoint instead of guessing that every 5th or 10th point is a good stopping place.
 
@@ -779,9 +793,19 @@ Values are the stat-and-level portion — your gear and quest bonuses stack on t
 
 ## Level Projection
 
-A read-only what-if table: pick a level **from–to** range (and optionally any **Race / Class**) to see the exp, training cost, HP, and mana at each level — reflecting your CP Allocation plan. Alongside HP and mana it also projects the **derived combat/utility stats** your CP plan grows: **Accuracy** (the normal-attack stat contribution), **Crit**, **Dodge**, **Stealth**, **Melee dmg** (STR's bonus onto your weapon's own damage range, shown as `+min/+max`), **Max enc** (carry weight), and **Magic res** — so you can watch a planned stat raise turn into real combat numbers, level by level, the same way HP and mana already do. The **HP/tick** column shows both rates as `idle / resting` (resting regen is 3× idle).
+A read-only what-if table: pick a level **from–to** range (and optionally any **Race / Class**) to see the exp, training cost, HP, and mana at each level — reflecting your CP Allocation plan.
 
-These figures reflect **your current character**: the base attributes carry your equipment's and completed quests' stat bonuses (the `stat` screen is already gear-inclusive), and the table folds your gear's and completed quests' **direct** bonuses on top too — extra max HP / max mana, HP- and MP-regen %, and flat +dodge / +crit / +stealth / +magic-resist / +damage / +carry / **+skill** from items. (Accuracy stays the stat-and-level contribution — a weapon's own accuracy is situational and can't be projected to future levels.) Mark a quest **Complete** on the Quest Status tab and its bonuses flow in here automatically. **Reset to current** re-seeds it from your live character.
+Alongside HP and mana it also projects the **derived combat/utility stats** your CP plan grows — so you can watch a planned stat raise turn into real combat numbers, level by level:
+
+- **Accuracy** (the normal-attack stat contribution), **Crit**, **Dodge**, **Stealth**;
+- **Melee dmg** (STR's bonus onto your weapon's own damage range, shown as `+min/+max`);
+- **Max enc** (carry weight), and **Magic res**.
+
+The **HP/tick** column shows both rates as `idle / resting` (resting regen is 3× idle).
+
+These figures reflect **your current character**: the base attributes carry your equipment's and completed quests' stat bonuses (the `stat` screen is already gear-inclusive), and the table folds your gear's and completed quests' **direct** bonuses on top too — extra max HP / max mana, HP- and MP-regen %, and flat +dodge / +crit / +stealth / +magic-resist / +damage / +carry / **+skill** from items. (Accuracy stays the stat-and-level contribution — a weapon's own accuracy is situational and can't be projected to future levels.)
+
+Mark a quest **Complete** on the Quest Status tab and its bonuses flow in here automatically. **Reset to current** re-seeds it from your live character.
 
 ### Choosing which columns to show
 
@@ -794,7 +818,9 @@ Seven columns are **off by default**, because they only matter to some builds:
 - **Percep** — Perception. Every class has it, and it's INT's biggest non-caster payoff.
 - **Thievery**, **Traps**, **Picklocks**, **Tracking** — the four thief skills.
 
-**BS Accy** projects your **backstab accuracy** per level. It reads `—` for a class and race with no stealth source, since that character can't backstab at all. Unlike the plain **Accy** column, this one folds in *everything* the game feeds it — level, stats, your gear and your completed quests — so it's a real number for your current loadout rather than a stat-only partial. The trade-off: future levels assume **today's weapon**, so re-check it after a weapon swap. The two realms use genuinely different formulas (see *The exact formulas* below), and the client picks the right one from your active game-data set automatically.
+**BS Accy** projects your **backstab accuracy** per level. It reads `—` for a class and race with no stealth source, since that character can't backstab at all. Unlike the plain **Accy** column, this one folds in *everything* the game feeds it — level, stats, your gear and your completed quests — so it's a real number for your current loadout rather than a stat-only partial.
+
+The trade-off: future levels assume **today's weapon**, so re-check it after a weapon swap. The two realms use genuinely different formulas (see *The exact formulas* below), and the client picks the right one from your active game-data set automatically.
 
 The thief four are computed for whatever Race / Class the dropdowns are set to, so they're useful for previewing a rogue build — but a class that was never granted a skill has no score for it in-game. If they don't apply to you, leave them unchecked. (The CP Allocation tooltips are stricter: they only list a thief skill when **your** class or race actually grants it.)
 
