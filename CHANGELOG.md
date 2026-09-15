@@ -8,6 +8,7 @@
 - Items batch: all auto flags, cannot-be-taken, must-have-minimum, loyal, auto-obtain-for-path, Min-to-keep / Max-to-get
 - Players batch: party behaviours + all 15 remote-control permissions, with a Set-all-permissions master
 - Monsters/Items batch honours the tier picker (character / BBS / global), and 'Installed defaults' batch-resets the selected records
+- Players table gains a **Gang** column showing each player's last-seen gang from the `who` parse
 
 ## 3.87.0
 

@@ -26,7 +26,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Given Name", "Family Name", "@'s", "Last Seen",
+        "Given Name", "Family Name", "Gang", "@'s", "Last Seen",
     };
 
     public override string SearchKeyColumn => "Given Name";
@@ -140,6 +140,9 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
             {
                 ["Given Name"]  = p.GivenName,
                 ["Family Name"] = p.FamilyName,
+                // Last-seen gang from the `who` parse (preserved across sightings that
+                // don't re-report it); blank when never seen in a gang.
+                ["Gang"]        = p.Gang ?? string.Empty,
                 ["@'s"]         = RemoteControlsLabel(p.RemoteControls),
                 ["Last Seen"]   = p.LastSeenUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
             };

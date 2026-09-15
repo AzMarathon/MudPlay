@@ -12,6 +12,12 @@
         MinWidth="440" MinHeight="420"
         WindowStartupLocation="CenterOwner">
 
+    <Window.DataTemplates>
+        <DataTemplate DataType="vm:BatchToggle">
+            <TextBlock Text="{Binding Converter={x:Static vm:BatchToggleLabelConverter.Instance}}"/>
+        </DataTemplate>
+    </Window.DataTemplates>
+
     <Window.Styles>
         <Style Selector="TextBlock.FieldLabel">
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -26,7 +32,7 @@
                    Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="10">
+            <StackPanel Spacing="10" Margin="0,0,14,0">
                 <!-- Tier -->
                 <Grid ColumnDefinitions="120,*" ColumnSpacing="8">
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Use"/>

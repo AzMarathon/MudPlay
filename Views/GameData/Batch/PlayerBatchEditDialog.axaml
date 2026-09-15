@@ -11,6 +11,12 @@
         MinWidth="400" MinHeight="420"
         WindowStartupLocation="CenterOwner">
 
+    <Window.DataTemplates>
+        <DataTemplate DataType="vm:BatchToggle">
+            <TextBlock Text="{Binding Converter={x:Static vm:BatchToggleLabelConverter.Instance}}"/>
+        </DataTemplate>
+    </Window.DataTemplates>
+
     <Window.Styles>
         <Style Selector="TextBlock.FieldLabel">
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -25,7 +31,7 @@
                    Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="6">
+            <StackPanel Spacing="6" Margin="0,0,14,0">
                 <TextBlock Text="Behaviour" FontWeight="SemiBold" Margin="0,0,0,2"/>
                 <Grid ColumnDefinitions="200,*" ColumnSpacing="8">
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Invite to party if seen"/>
