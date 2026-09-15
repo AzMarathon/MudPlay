@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.9**
-> - Chest contents now surface in the Item override editor for chests whose open spell stores its loot table in `MinBase` (most Paradigm chests) — the reader only read the ability-slot value before, so those chests showed no drop list
+> **Version 3.88.10**
+> - CURRENT NAV now shows a running loop as green, live-editable rooms (matching the builder's list) — click a room to change its command, delay, do-not-rest, or do-not-attack, or toggle the whole loop's "only attack in lair rooms", all without stopping or restarting the loop; the current room is highlighted
+> - Rooms can't be added, removed, or reordered while running; flag and delay edits apply at once, and adding/removing a command takes effect on the next lap
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

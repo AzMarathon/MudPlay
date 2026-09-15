@@ -1982,7 +1982,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // "paused with edits".
         _loopBuilderOpenedByPause = false;
         OnPropertyChanged(nameof(LoopBuilder));
-        OnPropertyChanged(nameof(IsLoopBuilding));
+        RaiseLoopRailNotifications();
 
         // Paint the red preview + numbered markers immediately,
         // same belt-and-braces as OpenBuilderForRunningLoop —
@@ -2740,7 +2740,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         LoopBuilderPath = null;
         LoopBuilderWaypoints = null;
         OnPropertyChanged(nameof(LoopBuilder));
-        OnPropertyChanged(nameof(IsLoopBuilding));
+        RaiseLoopRailNotifications();
     }
 
     // Mirror the estimator session's preview onto the map's loop-preview bindings
@@ -2825,7 +2825,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             RefreshLoopOverlays();
         }
         OnPropertyChanged(nameof(LoopBuilder));
-        OnPropertyChanged(nameof(IsLoopBuilding));
+        RaiseLoopRailNotifications();
         OnPropertyChanged(nameof(CanClearBuilder));
     }
 
@@ -3991,6 +3991,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsWalkUserPaused));
         OnPropertyChanged(nameof(WalkPauseLabel));
         OnPropertyChanged(nameof(EngineActionIsLooping));
+        OnPropertyChanged(nameof(IsRunningLoopEditable));
+        OnPropertyChanged(nameof(ShowCurrentNavList));
         OnPropertyChanged(nameof(EngineActionIsLair));
         OnPropertyChanged(nameof(LoopModeButtonLabel));
         OnPropertyChanged(nameof(LoopModeButtonIsStop));
@@ -4187,7 +4189,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         CurrentMode = NavigationMode.LoopBuild;
         _loopBuilderOpenedByPause = true;
         OnPropertyChanged(nameof(LoopBuilder));
-        OnPropertyChanged(nameof(IsLoopBuilding));
+        RaiseLoopRailNotifications();
 
         // Belt-and-braces: even with the sender-fallback in
         // OnLoopBuilderPropertyChanged the path/waypoint observables
@@ -4223,7 +4225,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             LoopBuilderWaypoints = null;
             CurrentMode = NavigationMode.Idle;
             OnPropertyChanged(nameof(LoopBuilder));
-            OnPropertyChanged(nameof(IsLoopBuilding));
+            RaiseLoopRailNotifications();
         }
         // Exit AutoLair mode and wipe its markers. Stop is the "clear the board"
         // action, so leaving lair marks on the map — over a freshly drawn loop,
@@ -4243,6 +4245,35 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Rows shown under CURRENT NAV — steps when walking/looping, marked
     // lairs when auto-lairing.
     public ObservableCollection<CurrentNavRowViewModel> CurrentNavRows { get; } = new();
+
+    // Rooms of the running loop, rendered green and live-editable (delay / command /
+    // do-not-rest / do-not-attack per room). Rebuilt from the runner's CurrentLoop each
+    // RebuildCurrentNavRows while the circle is running.
+    public ObservableCollection<RunningLoopRow> RunningLoopRows { get; } = new();
+
+    // Green live-editable running-loop rail shows only while the loop is actually
+    // running the circle — not building, and not still approaching the entry waypoint.
+    // During the approach walk (including a pause taken mid-approach, IsApproachInFlight)
+    // the read-only itinerary stays up; the green list takes over once the circle runs,
+    // and stays up if the loop pauses mid-circuit so the user can keep tuning.
+    public bool IsRunningLoopEditable =>
+        !IsLoopBuilding
+        && _services.LoopRunner.CurrentLoop is not null
+        && _services.LoopRunner.State != Game.Map.LoopState.Idle
+        && !_services.LoopRunner.IsApproachInFlight;
+
+    // The read-only CURRENT NAV list covers everything the green editable list doesn't:
+    // walking, a loop's approach phase, auto-lair, idle.
+    public bool ShowCurrentNavList => !IsLoopBuilding && !IsRunningLoopEditable;
+
+    // Raised together whenever build mode toggles or the loop's run state changes, so
+    // the three CURRENT NAV lists (red builder / green running / read-only) swap cleanly.
+    private void RaiseLoopRailNotifications()
+    {
+        RaiseLoopRailNotifications();
+        OnPropertyChanged(nameof(IsRunningLoopEditable));
+        OnPropertyChanged(nameof(ShowCurrentNavList));
+    }
 
     // Backs the "Entire Loop Settings" rail flyout's "Only attack in lair
     // rooms" toggle. Hydrated from the running loop in RebuildCurrentNavRows
@@ -4370,6 +4401,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void RebuildCurrentNavRows()
     {
         CurrentNavRows.Clear();
+        RunningLoopRows.Clear();
 
         // Build mode for Auto-Lair populates the rows BEFORE the
         // scheduler starts so the user sees what they've marked +
@@ -4408,27 +4440,26 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 Game.Map.LoopRunner runner = _services.LoopRunner;
                 if (runner.CurrentLoop is not { } loop) break;
 
-                // Synthetic first entry — the loop-wide settings home. Present
-                // only while a loop is running; its flyout hosts "Only attack in
-                // lair rooms" (and future loop-wide toggles). Hydrate the bound
-                // toggle from the loop without triggering a write-back.
+                // Hydrate the bound "only attack in lair rooms" toggle from the loop
+                // without triggering a write-back — it backs both the approach view's
+                // synthetic settings row and the running green list's ⚙ button.
                 _suppressLoopSettingWrite = true;
                 LoopOnlyAttackInLairRooms = loop.OnlyAttackInLairRooms;
                 _suppressLoopSettingWrite = false;
-                CurrentNavRows.Add(new CurrentNavRowViewModel(
-                    index: 0, label: "Entire Loop Settings",
-                    status: CurrentNavRowStatus.Upcoming, isLoopSettingsEntry: true));
 
-                // Approach phase: show the walker's approach steps FIRST,
-                // then the loop's own circle steps appended below (all
-                // Upcoming — the loop hasn't begun). The runner expands its
-                // circle up front, so ExpandedSteps is already the rotated
-                // cycle we'll run on arrival. Numbering continues across both
-                // so the user reads one itinerary: walk to the entry, then
-                // loop. Once the approach finishes the view drops to the
-                // loop-only branch below.
-                if (runner.State == Game.Map.LoopState.Approaching)
+                // Approach phase (incl. a pause taken mid-approach — IsApproachInFlight):
+                // read-only itinerary — the loop-wide settings row, the walker's approach
+                // steps, then the loop's own circle steps (all Upcoming, the loop hasn't
+                // begun). The runner expands its circle up front, so ExpandedSteps is the
+                // rotated cycle we'll run on arrival; numbering continues across both so
+                // the user reads one itinerary. Once the circle starts the green
+                // live-editable list takes over (below).
+                if (runner.IsApproachInFlight)
                 {
+                    CurrentNavRows.Add(new CurrentNavRowViewModel(
+                        index: 0, label: "Entire Loop Settings",
+                        status: CurrentNavRowStatus.Upcoming, isLoopSettingsEntry: true));
+
                     int idx = _services.Walker.CurrentStepIndex;
                     IReadOnlyList<WalkStep> steps = _services.Walker.Steps;
                     for (int i = 0; i < steps.Count; i++)
@@ -4450,20 +4481,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                     break;
                 }
 
-                // Running circle: render the runner's expanded step
-                // sequence (BFS-filled moves + per-waypoint commands)
-                // with the same Completed/Current/Upcoming shape the
-                // walker uses.
-                int loopIdx = runner.CurrentIndex;
-                IReadOnlyList<LoopStep> expanded = runner.ExpandedSteps;
-                for (int i = 0; i < expanded.Count; i++)
-                {
-                    CurrentNavRowStatus status = i < loopIdx
-                        ? CurrentNavRowStatus.Completed
-                        : (i == loopIdx ? CurrentNavRowStatus.Current : CurrentNavRowStatus.Upcoming);
-                    CurrentNavRows.Add(new CurrentNavRowViewModel(
-                        index: i + 1, label: expanded[i].Display, status: status));
-                }
+                // Running the circle → the green live-editable waypoint list. The
+                // read-only CurrentNavList is hidden (ShowCurrentNavList false), so
+                // leave CurrentNavRows empty and populate RunningLoopRows instead.
+                RebuildRunningLoopRows(loop);
                 break;
             }
         }
@@ -4502,6 +4523,76 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
         if (result is null) return;
         LoopBuilder.SetClickAction(row.Index - 1, result.Command, result.DelayMs, result.DoNotRest, result.DoNotAttack);
+    }
+
+    // Build the green running-loop rail from the loop's (rotated) waypoints, marking
+    // the room the player is currently in so the rail can highlight it. Called from the
+    // Looping branch of RebuildCurrentNavRows while the circle runs.
+    private void RebuildRunningLoopRows(Loop loop)
+    {
+        RoomKey? here = _services.RoomTracker.State.CurrentRoom?.Key;
+        IReadOnlyList<LoopWaypoint> wps = loop.Waypoints;
+        for (int i = 0; i < wps.Count; i++)
+        {
+            LoopWaypoint wp = wps[i];
+            string name = _services.RoomGraph.GetRoom(wp.Key)?.DisplayName ?? wp.Key.ToString();
+            RunningLoopRows.Add(new RunningLoopRow(
+                Index: i + 1, Key: wp.Key, Name: name,
+                Command: wp.Command, DelayMs: wp.DelayMs,
+                DoNotRest: wp.DoNotRest, DoNotAttack: wp.DoNotAttack,
+                IsCurrentRoom: here is { } h && h.Equals(wp.Key)));
+        }
+    }
+
+    // Click a running-loop rail row → open the same per-waypoint action editor the
+    // builder uses, and apply the result LIVE to the running loop — no stop/restart.
+    // Add / remove / reorder of rooms isn't offered here (see the green rail template),
+    // so only command / delay / do-not-rest / do-not-attack change. do-not-rest /
+    // do-not-attack take effect on the next decision (read live off the loop); command /
+    // delay are reconciled into the runner's expanded steps (ReconcileExpandedSteps —
+    // instant unless a command was added or removed, which applies on the next lap).
+    // Persisted only when the loop is catalogued, matching the lair-toggle rule (a
+    // transient "Run this loop" instance stays in-memory).
+    [RelayCommand]
+    private async Task EditRunningWaypointAction(RunningLoopRow? row)
+    {
+        if (row is null) return;
+        if (_services.LoopRunner.CurrentLoop is not { } loop) return;
+
+        WaypointActionEditDialogViewModel vm = new(
+            waypointLabel: $"{row.Index}. {row.Name}",
+            command: row.Command,
+            delayMs: row.DelayMs,
+            doNotRest: row.DoNotRest,
+            doNotAttack: row.DoNotAttack);
+        WaypointActionEditResult? result = await AppServices.Current.Dialogs
+            .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
+        if (result is null) return;
+
+        // Rows are built from the loop's (rotated) waypoint list in order, so the row
+        // index maps straight in; verify by Key and fall back to a key match in case a
+        // recovery reroute rotated the loop since the row was built.
+        IReadOnlyList<LoopWaypoint> wps = loop.Waypoints;
+        int i = row.Index - 1;
+        LoopWaypoint? wp = i >= 0 && i < wps.Count && wps[i].Key.Equals(row.Key)
+            ? wps[i]
+            : wps.FirstOrDefault(w => w.Key.Equals(row.Key));
+        if (wp is null) return;
+
+        wp.Command     = result.Command;
+        wp.DelayMs     = result.DelayMs;
+        wp.DoNotRest   = result.DoNotRest;
+        wp.DoNotAttack = result.DoNotAttack;
+
+        _services.LoopRunner.ReconcileExpandedSteps();
+        if (_services.Loops.Get(loop.Name) is not null)
+            _services.Loops.Save(loop);
+
+        _services.Log?.Info("Navigation",
+            $"loop live-edit: waypoint {row.Index} {row.Name} → cmd='{result.Command ?? "(none)"}' " +
+            $"delay={result.DelayMs}ms rest={(result.DoNotRest ? "no" : "ok")} attack={(result.DoNotAttack ? "no" : "ok")}");
+
+        RebuildCurrentNavRows();
     }
 
     // Building Loop drag-reorder — move the row at fromOneBased to

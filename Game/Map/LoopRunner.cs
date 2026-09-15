@@ -96,6 +96,14 @@ public sealed class LoopRunner : IRecoverableEngine
     // by NotifyAvoidedChanged when the filter changes. Always non-null while a loop
     // is active.
     private List<LoopStep> _expandedSteps = new();
+
+    // Set by ReconcileExpandedSteps when a live per-room edit on the running-loop
+    // rail adds or removes a command (changing the expanded step count): the runner
+    // can't safely swap the step list mid-flight, so it re-expands at the next lap
+    // wrap, where _index is 0 and the player is back at the entry room. Delay /
+    // command-text edits that keep the step count are applied in place at once and
+    // don't set this.
+    private bool _reExpandAtLapEnd;
     private bool _stepInFlight;
     private bool _awaitingPromptForCommand;
     private RoomKey? _expectedMoveTarget;
@@ -708,6 +716,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _approachTarget = null;
         _circleStartRoom = null;
         _expandedSteps = new List<LoopStep>();
+        _reExpandAtLapEnd = false;
         if (!isRecovery)
         {
             _firstWaypointReached = false;
@@ -873,6 +882,48 @@ public sealed class LoopRunner : IRecoverableEngine
         {
             foreach ((RoomKey from, RoomKey to) in unreachable)
                 _log?.Warn("LoopRunner", $"expand unreachable: {from} → {to} (BFS found no path)");
+        }
+    }
+
+    // Reconcile the live per-room edits the running-loop rail allows (command / delay)
+    // into the already-expanded runtime steps WITHOUT restarting the loop or moving
+    // _index. The rail forbids add / remove / reorder of rooms, so the waypoint path is
+    // unchanged and the command-bearing waypoints map 1:1, in order, onto the
+    // CommandLoopSteps in _expandedSteps (LoopExpander emits one per command-bearing
+    // waypoint):
+    //   - same command count → swap each changed CommandLoopStep in place; the next run
+    //     of that step uses the new command / delay (effectively instant).
+    //   - count changed (a command was added or removed → the step count shifts) → defer
+    //     a full re-expand to the next lap wrap, the only safe point to swap the list
+    //     (see _reExpandAtLapEnd in SendNextStep).
+    // Do-not-rest / do-not-attack and the lair toggle need no reconcile — they're read
+    // live off _loop each decision. Runs on the UI thread, same as the step pump.
+    public void ReconcileExpandedSteps()
+    {
+        if (_loop is null) return;
+
+        var cmdStepIdx = new List<int>();
+        for (int i = 0; i < _expandedSteps.Count; i++)
+            if (_expandedSteps[i] is CommandLoopStep) cmdStepIdx.Add(i);
+
+        var cmdWaypoints = new List<LoopWaypoint>();
+        foreach (LoopWaypoint w in _loop.Waypoints)
+            if (!string.IsNullOrEmpty(w.Command)) cmdWaypoints.Add(w);
+
+        if (cmdWaypoints.Count != cmdStepIdx.Count)
+        {
+            _reExpandAtLapEnd = true;
+            _log?.Info("LoopRunner",
+                $"live-edit changed the command set of loop '{_loop.Name}'; re-expanding at the next lap");
+            return;
+        }
+
+        for (int k = 0; k < cmdWaypoints.Count; k++)
+        {
+            var cmd = (CommandLoopStep)_expandedSteps[cmdStepIdx[k]];
+            LoopWaypoint wp = cmdWaypoints[k];
+            if (cmd.Command != wp.Command || cmd.DelayMs != wp.DelayMs)
+                _expandedSteps[cmdStepIdx[k]] = cmd with { Command = wp.Command!, DelayMs = wp.DelayMs };
         }
     }
 
@@ -1071,6 +1122,16 @@ public sealed class LoopRunner : IRecoverableEngine
             _completedLaps++;
             _lapStartedAt = now;
             _index = 0;
+
+            // A live per-room edit that added or removed a command deferred its
+            // re-expansion to here — the one safe point to swap the step list, with
+            // _index at 0 and the player back at the entry room after the closing leg.
+            if (_reExpandAtLapEnd)
+            {
+                _reExpandAtLapEnd = false;
+                ExpandSteps();
+            }
+
             Raise(new LoopEvent(LoopEventKind.RepeatStarted, _loop.Name));
 
             // A RepeatStarted subscriber can react synchronously — e.g. a
@@ -2115,6 +2176,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _loop = null;
         _index = 0;
         _expandedSteps = new List<LoopStep>();
+        _reExpandAtLapEnd = false;
         _stepInFlight = false;
         _awaitingPromptForCommand = false;
         _expectedMoveTarget = null;
