@@ -1,5 +1,10 @@
 # Version history
 
+## 3.88.3
+
+- Emergency heal no longer loses to Major self heal when a profile's priority ranks collide on the same slot (a profile ranked from before Emergency heal existed can still have Major sitting on slot 1, the same default slot Emergency claims) — the equal-priority tiebreak now resolves to Emergency, matching its "leads every between-round cast" contract, instead of silently falling through to Major every round no matter how low HP drops
+- bug reports addressed: paradigm-20260915-093211
+
 ## 3.88.2
 
 - Fixed the Conversation window (and the persisted talk log) permanently pairing outgoing telepath replies to the wrong question after any one reply's own confirmation went unrecognized — the stale, still-queued reply used to sit there until some later, unrelated confirmation wrongly claimed it (a @roomba answer from hours earlier surfacing under a brand-new, unrelated query). A queued send now expires after 15s of no confirmation instead of waiting forever, so a later confirmation pairs with the real, fresh send

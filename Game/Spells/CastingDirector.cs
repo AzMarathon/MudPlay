@@ -2298,21 +2298,27 @@ public readonly record struct CastCandidate(
     int RecastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec);
 
 // Spell-decision categories. Order matches the user-facing Spells settings tab;
-// numeric position is just for deterministic tiebreak when two priority slots share
-// the same int.
+// numeric position is the deterministic tiebreak when two priority slots share
+// the same int (PrioritisedCategories sorts by priority, then by this value) —
+// so a category's declaration position here IS its tie-break rank. Emergency
+// leads (a stale profile from before this category existed can still have its
+// old MajorSelfHeal rank sitting on slot 1, colliding with Emergency's new
+// default there; the tiebreak — not just the default — must resolve that in
+// Emergency's favor), then DownedAllyHeal (a dead caster rescues nobody), then
+// the rest in tab order.
 public enum SpellCategory
 {
-    MinorPartyHeal = 0,
-    MajorPartyHeal = 1,
-    MinorSelfHeal  = 2,
-    MajorSelfHeal  = 3,
-    Curing         = 4,
-    Buffing        = 5,
-    Debuffing      = 6,
-    // A downed-ally rescue. Reorderable via SpellsSettings.PriorityDownedAllyHeal
-    // (defaults to slot 4). The enum value is only the equal-priority tiebreak.
-    DownedAllyHeal = 7,
     // Last-resort self-save. Reorderable via SpellsSettings.PriorityEmergencyHeal
     // (defaults to slot 1, so it leads). See CastingDirector.PickEmergencySelfHeal.
-    EmergencyHeal  = 8,
+    EmergencyHeal  = 0,
+    // A downed-ally rescue. Reorderable via SpellsSettings.PriorityDownedAllyHeal
+    // (defaults to slot 4).
+    DownedAllyHeal = 1,
+    MinorPartyHeal = 2,
+    MajorPartyHeal = 3,
+    MinorSelfHeal  = 4,
+    MajorSelfHeal  = 5,
+    Curing         = 6,
+    Buffing        = 7,
+    Debuffing      = 8,
 }
