@@ -1550,6 +1550,12 @@ public sealed class AppServices
     // live-filter walk to the destination that self-selects shortcut vs long route.
     public Game.Map.ShortcutSourceCoordinator ShortcutSource { get; private set; } = null!;
 
+    // Executes a picked Paradigm token route (solo): use the transport token, then
+    // resume the walk from its landing to the destination — deferring the use to the
+    // first monster-free room when the current one isn't clear. Begun only by the
+    // route picker's explicit token pick; declines in a party (regroup is a later stage).
+    public Game.Tokens.TokenRouteCoordinator TokenRoute { get; private set; } = null!;
+
     // On-demand party-inventory probe — broadcasts @have and aggregates
     // the party's replies into per-member counts. Feeds
     // PartyPathItemGate's give-from-surplus decision.
@@ -4640,7 +4646,9 @@ public sealed class AppServices
             onParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             log: Log);
         Profile.ProfileLoaded += _ => Tokens.Clear();
-        GameData.ActiveSetChanged += _ => Tokens.Clear();
+        // A set swap changes which tokens exist and where they teleport — clear the
+        // charge tracker AND drop the cached teleport map so it re-reads the new set.
+        GameData.ActiveSetChanged += _ => { Tokens.Clear(); _tokenTeleports = null; };
         // @token <name> — read-only remaining-charges report off the tracker.
         TokenQuery = new Game.Remote.TokenQueryHandler(RemoteCommands, Tokens);
 
@@ -6633,6 +6641,31 @@ public sealed class AppServices
         Inventory.Changed += ShortcutSource.OnInventoryChanged;
         RoomTracker.StateChanged += _ => ShortcutSource.OnCombatStateChanged();
 
+        // Solo token-route execution: on a picked token card, use the token then walk
+        // from its landing to the destination — walking overland to the first clear
+        // room first when the current room has NPCs. The resume walk goes straight to
+        // Walker.WalkTo (never back through the picker) so it can't re-offer a token.
+        TokenRoute = new Game.Tokens.TokenRouteCoordinator(
+            inParty: () => PartyState.IsInParty,
+            roomHasNpc: () => CombatTracker.HasRoomNpc,
+            walkToDest: dest => Walker.WalkTo(dest, supersedeSilently: true, preferTeleportFree: true),
+            stopWalker: () => Walker.Stop("token route: using token in a clear room"),
+            send: cmd => SendGameCommand(cmd),
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
+        Tokens.TokenUsed += TokenRoute.OnTokenUsed;
+        Walker.Event += TokenRoute.OnWalkEvent;
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed)
+                TokenRoute.OnRoomChanged(t.NewRoom?.Key);
+        };
+
         // Follower-side @comeback. Watches for a movement-failure
         // line (prevents-movement flag / over-encumbered) immediately
         // before "You are no longer following X." — the signature of being
@@ -8514,6 +8547,83 @@ public sealed class AppServices
     // consolidated purse in copper farthings (the same wealth figure the
     // auto-deposit engine weighs). Backs the withdraw-before-buy decision.
     private long PathItemCashOnHand() => Inventory.Snapshot.Currency.TotalCopperValue;
+
+    // The active set's token teleports, keyed by normalized place — read once and
+    // cached, dropped on a set swap (see the ActiveSetChanged handler). Null until
+    // first use.
+    private System.Collections.Generic.IReadOnlyDictionary<string, Game.Tokens.TokenTeleportInfo>? _tokenTeleports;
+
+    private System.Collections.Generic.IReadOnlyDictionary<string, Game.Tokens.TokenTeleportInfo> TokenTeleportMap()
+        => _tokenTeleports ??= Game.Tokens.TokenTeleportReader.ReadAll(GameData);
+
+    // Plan a token route for a user walk-to (Paradigm only): if a held transport token
+    // reaches the destination enough rooms sooner than walking, return a Token
+    // RouteChoice the picker surfaces as the blue card alongside the overland walk.
+    // Null when disabled, off Paradigm, no held token qualifies, or none beats the
+    // room-savings threshold. Only offers a token the character can actually use — the
+    // level and gold gates are checked here so the card never proposes a doomed use.
+    // Reads the graph / inventory / stats like the other planners; called from
+    // RouteChoicePrompt.PlanRouteChoice (which owns the off-thread-race handling).
+    public RouteChoice? TryPlanTokenRoute(Game.Map.RoomKey src, Game.Map.RoomKey destination)
+    {
+        if (GameData.ActiveRealm != Game.RealmType.ParaMud) return null;
+        if (!Settings.Current.EnableTokenRoutes) return null;
+        if (!Inventory.IsLoaded) return null;
+
+        System.Collections.Generic.IReadOnlyDictionary<string, Game.Tokens.TokenTeleportInfo> map = TokenTeleportMap();
+        if (map.Count == 0) return null;
+
+        long cash = PathItemCashOnHand();
+        int? level = Stats.HasParsed ? PlayerStats.Level : null;
+
+        // Held tokens the character can actually use (level + gold gates), paired with
+        // their live daily-charge counts (null = not looked yet — still offered).
+        var usable = new System.Collections.Generic.List<(Game.Tokens.TokenTeleportInfo Info, int? Charges)>();
+        foreach ((string _, string place) in Game.Tokens.TokenCatalog.HeldTokens(Inventory.Snapshot.CarriedItems))
+        {
+            if (!map.TryGetValue(Game.Tokens.TokenCatalog.NormalizePlace(place), out Game.Tokens.TokenTeleportInfo info))
+                continue;
+            if (level is { } lvl && lvl < info.MinLevel) continue;   // can't use it yet
+            if (cash < info.CostCopper) continue;                    // can't afford it
+            usable.Add((info, Tokens.ChargesFor(place)));
+        }
+        if (usable.Count == 0) return null;
+
+        // The overland walk this token route competes against.
+        System.Collections.Generic.IReadOnlyList<Game.Map.Direction>? overland = Bfs.FindPath(src, destination, Movement);
+        if (overland is null || overland.Count == 0) return null;
+
+        Game.Tokens.TokenRouteCandidate? best = Game.Tokens.TokenRouteEvaluator.Best(
+            overland.Count, usable,
+            landing => Bfs.FindPath(landing, destination, Movement)?.Count,
+            System.Math.Max(1, Settings.Current.TokenRouteMinRoomsShorter));
+        if (best is not { } b) return null;
+
+        // The onward walk from the landing (for the card's preview / ETA / details).
+        System.Collections.Generic.IReadOnlyList<Game.Map.Direction>? fromLanding =
+            Bfs.FindPath(b.Landing, destination, Movement);
+        if (fromLanding is null) return null;
+
+        return new RouteChoice(
+            FreeStepCount: overland.Count,
+            GatedStepCount: b.TokenWalkSteps,
+            Requirements: System.Array.Empty<RouteRequirement>(),
+            FreePath: RouteChoicePlanner.BuildKeyPath(RoomGraph, src, overland),
+            GatedPath: RouteChoicePlanner.BuildKeyPath(RoomGraph, b.Landing, fromLanding),
+            Kind: RouteChoiceKind.Token,
+            TeleportLanding: TokenLandingLabel(b.Landing),
+            TokenPlace: b.Place,
+            TokenLanding: b.Landing,
+            TokenCostCopper: b.CostCopper,
+            TokenMinLevel: b.MinLevel,
+            TokenCharges: b.Charges);
+    }
+
+    // "Silvermere (1/1813)" — the token landing's display label for the picker.
+    private string TokenLandingLabel(Game.Map.RoomKey landing)
+        => RoomGraph.GetRoom(landing)?.Name is { Length: > 0 } name
+            ? $"{name} ({landing})"
+            : landing.ToString();
 
     // Configured bank room for the shop router's withdraw leg, or null when
     // unset / unparseable. Reuses the Cash section's BankRoomKey (the

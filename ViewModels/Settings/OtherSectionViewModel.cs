@@ -63,6 +63,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Great Pyramid climb";
             yield return "Asylum solver";
             yield return "Maze solver";
+            yield return "Paradigm transport tokens";
+            yield return "Token routes";
+            yield return "Enable token routing";
+            yield return "Minimum rooms saved";
             foreach (StubGroup g in StubGroups)
             foreach (StubField f in g.Fields)
                 yield return f.Label;
@@ -174,6 +178,18 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _pyramidSolverEnabled = true;
     [ObservableProperty] private bool _asylumSolverEnabled = true;
 
+    // Paradigm transport-token routing (Global tier). Both read live at route-plan
+    // time via GlobalSettings — no push needed. The whole subsection only shows on a
+    // Paradigm realm (IsParadigmRealm), since tokens are a Paradigm-only item.
+    [ObservableProperty] private bool _enableTokenRoutes = true;
+    // Only surface a token route when it saves at least this many rooms over walking.
+    [ObservableProperty] private int _tokenRouteMinRoomsShorter = 3;
+
+    // True on a Paradigm realm — gates the visibility of the token-routing rows (the
+    // feature is meaningless off Paradigm). Refreshed on game-data set changes.
+    public bool IsParadigmRealm =>
+        AppServices.Current.GameData.ActiveRealm == MudPlay.Game.RealmType.ParaMud;
+
     // ----- Inline stub catalog (un-wired fields) -----
 
     // The remaining un-wired Other-tab fields, rendered inline below the wired
@@ -205,10 +221,16 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         _globalSettings = globalSettings;
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedExternally;
+        // The token-routing rows are Paradigm-only; refresh their visibility when the
+        // active game-data set (and thus the realm) changes while the tab is open.
+        GameDataCache gameData = AppServices.Current.GameData;
+        void OnActiveSetChanged(string? _) => OnPropertyChanged(nameof(IsParadigmRealm));
+        gameData.ActiveSetChanged += OnActiveSetChanged;
         OnDispose(() =>
         {
             _profile.ProfileLoaded -= OnProfileChanged;
             _profile.ProfileClosed -= OnProfileClosedExternally;
+            gameData.ActiveSetChanged -= OnActiveSetChanged;
         });
         _suppressDirty = true;
         LoadFromProfile();
@@ -245,14 +267,19 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         // setting per install). Persist alongside the char-tier write so the
         // user's single Apply commits everything.
         int sanitized = Math.Clamp(PlayerCleanupDays, 0, 3650);
+        int tokenMin = Math.Clamp(TokenRouteMinRoomsShorter, 1, 50);
         GlobalSettings g = _globalSettings.Current;
         if (g.PlayerCleanupDays != sanitized
             || g.PyramidSolverEnabled != PyramidSolverEnabled
-            || g.AsylumSolverEnabled != AsylumSolverEnabled)
+            || g.AsylumSolverEnabled != AsylumSolverEnabled
+            || g.EnableTokenRoutes != EnableTokenRoutes
+            || g.TokenRouteMinRoomsShorter != tokenMin)
         {
             g.PlayerCleanupDays = sanitized;
             g.PyramidSolverEnabled = PyramidSolverEnabled;
             g.AsylumSolverEnabled = AsylumSolverEnabled;
+            g.EnableTokenRoutes = EnableTokenRoutes;
+            g.TokenRouteMinRoomsShorter = tokenMin;
             _globalSettings.Save();
         }
 
@@ -296,6 +323,8 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         PlayerCleanupDays = _globalSettings?.Current.PlayerCleanupDays ?? 90;
         PyramidSolverEnabled = _globalSettings?.Current.PyramidSolverEnabled ?? true;
         AsylumSolverEnabled = _globalSettings?.Current.AsylumSolverEnabled ?? true;
+        EnableTokenRoutes = _globalSettings?.Current.EnableTokenRoutes ?? true;
+        TokenRouteMinRoomsShorter = _globalSettings?.Current.TokenRouteMinRoomsShorter ?? 3;
         ApplyToServices(dto);
     }
 
@@ -356,6 +385,8 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnShowMonsterHpLookupChanged(bool value) => MarkDirty();
     partial void OnPyramidSolverEnabledChanged(bool value) => MarkDirty();
     partial void OnAsylumSolverEnabledChanged(bool value) => MarkDirty();
+    partial void OnEnableTokenRoutesChanged(bool value) => MarkDirty();
+    partial void OnTokenRouteMinRoomsShorterChanged(int value) => MarkDirty();
 
     private void MarkDirty()
     {

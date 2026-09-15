@@ -1,5 +1,11 @@
 # Version history
 
+## 3.90.0
+
+- Paradigm route picker now offers a blue **token card** alongside the normal walk when a held transport token reaches your destination faster — never auto-taken, always your pick
+- Picking it uses the token and resumes the walk from where it drops you; if the room isn't monster-free it walks overland and uses the token at the first clear room (solo only for now — party regroup is still to come)
+- New **Settings → Other** knobs (Paradigm only): turn token routing off, and set how many rooms a token must save before the card appears
+
 ## 3.89.0
 
 - The client now tracks the daily charges of your Paradigm **transport tokens** — on login it `look`s each held token to read its "Uses remaining" count, and re-reads after any `use` (so a use blocked by an NPC in the room, too little gold, or too low a level never mis-counts)

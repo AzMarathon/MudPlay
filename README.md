@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.89.0**
-> - The client now tracks the daily charges of your Paradigm **transport tokens** — on login it `look`s each held token to read its "Uses remaining" count, and re-reads after any `use`
-> - New **`@token`** remote command — bare, it lists every held token's remaining charges; with a name, just that one
+> **Version 3.90.0**
+> - Paradigm route picker now offers a blue **token card** alongside the normal walk when a held transport token reaches your destination faster — never auto-taken, always your pick
+> - Picking it uses the token and resumes the walk from where it drops you; if the room isn't monster-free it walks overland and uses the token at the first clear room (solo only for now)
+> - New **Settings → Other** knobs (Paradigm only): turn token routing off, and set how many rooms a token must save before the card appears
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

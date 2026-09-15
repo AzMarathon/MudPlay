@@ -20,6 +20,18 @@
             <Setter Property="Background" Value="{StaticResource AccentRedSoftBrush}"/>
         </Style>
 
+        <!-- The Paradigm token card reads as a soft cyan-blue — deliberately distinct
+             from the red danger tint and the plain/amber cards, so a token route can't
+             be mistaken for a normal or a risky one. Defined BEFORE the selected style
+             so a picked token card still shows the amber selection over the blue. -->
+        <Style Selector="Button.route.token">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="Background" Value="{StaticResource AccentCyanSoftBrush}"/>
+        </Style>
+        <Style Selector="Button.route.token:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentCyanSoftBrush}"/>
+        </Style>
+
         <!-- A selected route card reads as the amber brand accent: an amber
              border over a soft-amber fill, so the previewed route stands out
              from the unselected one. -->
@@ -68,6 +80,29 @@
                                FontSize="12"
                                TextWrapping="Wrap"
                                Foreground="{StaticResource ChromeFgBrush}"/>
+                </Button>
+
+                <!-- Paradigm token card (blue): shown alongside the plain walk when a
+                     held transport token reaches the destination faster. Never
+                     pre-selected — using a token costs gold + a charge + wipes buffs. -->
+                <Button Classes="route token"
+                        Classes.selected="{Binding IsTokenSelected}"
+                        Command="{Binding SelectTokenCommand}"
+                        IsVisible="{Binding ShowTokenCard}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        BorderThickness="1"
+                        Padding="12,10">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding TokenSummary}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <TextBlock Text="{Binding TokenDetail}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
                 </Button>
 
                 <Button Classes="route"

@@ -440,6 +440,8 @@ Both cards show their trap count. Click either route to preview its line on the 
 
 And once you're walking, a walk that **didn't** start on a teleport won't quietly switch to one: if the route has to re-plan mid-trip — say a counter you were searching for turns up and the destination is recomputed — it **keeps to the walking route** and only falls back to a teleport if walking has become genuinely impossible. So picking "Walk it" (or any ordinary walk-to) means you stay on foot the whole way, never surprised onto a vortex you didn't choose.
 
+**Use a transport token (Paradigm).** If you're carrying a Paradigm **transport token** whose town reaches your destination meaningfully faster than walking, the picker adds a **blue token card** beside the plain overland walk — **"Use token of X — saves N rooms"**. It's never taken for you: using a token spends gold, one of its daily charges, and **wipes your buffs** (it casts negate magic), so it's always your click. Pick it and MudPlay uses the token and resumes the walk from where it drops you. If the room you're in isn't clear (a token can't be used with monsters present), it walks the overland route toward the destination and uses the token at the first monster-free room instead — a genuinely-shorter token route always reaches one before you arrive. Two toggles under **Settings → Other** (Paradigm only) control this: turn token routing off entirely, or set how many rooms a token must save before the card appears. (Token routing runs solo for now; party regroup after a token is a work in progress.)
+
 **Routing through a room you marked "Avoid".** Rooms you flag **Avoid** (nav-map right-click → *Toggle: Avoid this room*, or the Avoid/Stash editor) are normally treated as walls — the walker never routes into them. When a destination is reachable **only** by passing through one, the route picker surfaces a choice rather than just failing:
 
 - **"Route through N avoided room(s)"** — walk it this once, or cancel.
@@ -2976,6 +2978,12 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **What it does:** Two Global-tier toggles for automated navigation through two of MajorMUD's notoriously tricky areas — the Great Pyramid's climbing puzzle and the Warped Asylum's random-teleport maze. On means walking to a destination inside either area drives the puzzle-solving automatically; off means a walk there just fails like any other unreachable spot, and you navigate manually.
 **Important notes:** These apply to every character on the install, not just the current one.
 
+### Paradigm transport tokens (route offering + rooms-saved threshold)
+
+**Default:** On, threshold 3 (Paradigm realms only — the rows are hidden otherwise)
+**What it does:** When on, a walk-to whose destination a held transport token reaches faster surfaces a blue **"use token"** card in the route picker (see *Use a transport token* under navigation). The threshold sets how many rooms a token must save over walking before the card appears — a one- or two-room saving isn't worth a token's gold, daily charge, and buff-wipe. Turn the offering off entirely if you never want token routes suggested.
+**Important notes:** Global-tier — applies to every character on the install. A token is only ever used when you pick its card; it's never taken automatically.
+
 ### Cleanup Player Database after N days
 
 **Default:** `90`
@@ -3385,6 +3393,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
 | @comeback backtrack rooms / auto-request | 10 / true | 1–50 / bool | `MaxComebackBacktrackRooms` / `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |
 | Pyramid / Asylum solver enabled | true / true | bool (Global) | `GlobalSettings.PyramidSolverEnabled` / `AsylumSolverEnabled` | Models/Settings/GlobalSettings.cs |
+| Token routes: offer / min rooms saved | true / 3 | bool + 1–50 (Global, Paradigm) | `GlobalSettings.EnableTokenRoutes` / `TokenRouteMinRoomsShorter` | Models/Settings/GlobalSettings.cs |
 | Cleanup Player DB after N days | `90` | 0–3650 (Global) | `GlobalSettings.PlayerCleanupDays` | Models/Settings/GlobalSettings.cs |
 | Disable all events | `false` | bool | `CharacterProfile.EventsGloballyDisabled` | Models/Profile/CharacterProfile.cs |
 | Event (Name/Disabled/Trigger/Action fields) | see above | see above | `ScheduledEvent.*` | Models/GameData/ScheduledEvent.cs |

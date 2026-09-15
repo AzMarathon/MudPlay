@@ -22,6 +22,10 @@ public enum RouteChoiceResult
     Shortcut,         // the optional shortcut route: a shorter way unlocked by a
                       // shortcut item. If held, take it; if not, walk to the item's
                       // source and try to obtain it, else fall back to the long route.
+    Token,            // (Paradigm) use a held transport token: teleport to its town
+                      // (costs gold + a charge + wipes buffs), then walk from there to
+                      // the destination. Shown alongside the plain overland walk; never
+                      // auto-taken.
 }
 
 // Route picker, shown when RouteChoicePlanner found a fork worth a user decision.
@@ -122,6 +126,20 @@ public sealed partial class RouteChoiceDialogViewModel
     // pre-selected so respecting the user's own avoid is the default.
     public bool IsAvoidOverrideChoice { get; private set; }
 
+    // True when this is the Paradigm token fork: a held transport token reaches the
+    // destination faster than walking. A plain two-way choice — walk it (Free) vs use
+    // the token (the blue token card) — no acquire / send-it / search split. Never
+    // pre-selected: using a token spends gold + a charge + wipes buffs, so it's always
+    // a deliberate click.
+    public bool IsTokenChoice { get; private set; }
+
+    // The blue token card and its two lines. Summary = "Token to <place> — saves N
+    // rooms…"; Detail = the caveat (cost, charge, buff-wipe, landing + walk-from).
+    public bool ShowTokenCard => IsTokenChoice;
+    public string TokenSummary { get; private set; } = "";
+    public string TokenDetail { get; private set; } = "";
+    public bool IsTokenSelected => SelectedRoute == RouteChoiceResult.Token;
+
     // False when there's no gate-free route — the direct (hazard-crossing) route
     // is the only way there. The Free card renders as a disabled "why you can't
     // just walk it" note; only the direct route is selectable.
@@ -139,7 +157,7 @@ public sealed partial class RouteChoiceDialogViewModel
     // A teleport / trap-avoid choice has no send-it split.
     public bool ShowSendItCard =>
         (HasFreeRoute || _crossesSurvivableHazard)
-        && !IsTeleportChoice && !IsTrapAvoidChoice && !IsAvoidOverrideChoice;
+        && !IsTeleportChoice && !IsTrapAvoidChoice && !IsAvoidOverrideChoice && !IsTokenChoice;
 
     // The primary route / "obtain then cross" / "walk to the hazard and stop" card.
     // Hidden only in the one case where it would duplicate the cross-unprotected
@@ -148,7 +166,7 @@ public sealed partial class RouteChoiceDialogViewModel
     // keeps it (obtain-then-cross, or walk to the hazard's edge and stop); so does an
     // item / key gate, a grave hazard, the item-gate fork, teleport, trap-avoid, and
     // blocked.
-    public bool ShowGatedCard => !_crossesSurvivableHazard || _mixedHazard || HazardObtain;
+    public bool ShowGatedCard => !IsTokenChoice && (!_crossesSurvivableHazard || _mixedHazard || HazardObtain);
 
     // True when the caller resolved an obtainable counter for the hazard: Go fetches
     // it then crosses (vs. "cross unprotected"). Drives the obtain wording + the
@@ -170,7 +188,7 @@ public sealed partial class RouteChoiceDialogViewModel
     // whenever a hazard counter is needed — a way to source it free instead of (or
     // before) buying. Not on a teleport / trap-avoid / avoid-override / blocked fork.
     public bool ShowSearchCard =>
-        _hazardCounterNeeded && !IsTeleportChoice && !IsTrapAvoidChoice && !IsAvoidOverrideChoice;
+        _hazardCounterNeeded && !IsTeleportChoice && !IsTrapAvoidChoice && !IsAvoidOverrideChoice && !IsTokenChoice;
 
     public string SearchSummary { get; private set; } = "";
     // Auto-search is the driver of the en-route `sea`: with it on, each room is
@@ -244,6 +262,7 @@ public sealed partial class RouteChoiceDialogViewModel
     [NotifyPropertyChangedFor(nameof(IsSearchSelected))]
     [NotifyPropertyChangedFor(nameof(IsAvoidAltSelected))]
     [NotifyPropertyChangedFor(nameof(IsShortcutSelected))]
+    [NotifyPropertyChangedFor(nameof(IsTokenSelected))]
     [NotifyCanExecuteChangedFor(nameof(GoCommand))]
     [NotifyCanExecuteChangedFor(nameof(ShowDetailsCommand))]
     private RouteChoiceResult? _selectedRoute;
@@ -325,6 +344,7 @@ public sealed partial class RouteChoiceDialogViewModel
         IsTeleportChoice = choice.Kind == RouteChoiceKind.Teleport;
         IsTrapAvoidChoice = choice.Kind == RouteChoiceKind.TrapAvoid;
         IsAvoidOverrideChoice = choice.Kind == RouteChoiceKind.AvoidOverride;
+        IsTokenChoice = choice.Kind == RouteChoiceKind.Token;
         IsBlockedChoice = choice.Kind == RouteChoiceKind.Blocked;
         HasFreeRoute = choice.HasFreeRoute;
 
@@ -449,6 +469,25 @@ public sealed partial class RouteChoiceDialogViewModel
             TeleportCaveat = string.Empty;
             TrapCaveat = string.Empty;
         }
+        else if (IsTokenChoice)
+        {
+            int savedRooms = Math.Max(0, choice.FreeStepCount - choice.GatedStepCount);
+            string place = choice.TokenPlace ?? "the token's town";
+            FreeSummary = $"Walk it — {StepsEta(choice.FreeStepCount, freeEta)}, no token";
+            TokenSummary = $"Use token of {place} — saves {savedRooms} room{(savedRooms == 1 ? "" : "s")} — "
+                + $"{StepsEta(choice.GatedStepCount, gatedEta)} after landing";
+            string chargesNote = choice.TokenCharges is { } c
+                ? $"{c} charge{(c == 1 ? "" : "s")} left"
+                : "charges not yet read";
+            TokenDetail = $"Teleports to {choice.TeleportLanding ?? place}, then walks "
+                + $"{choice.GatedStepCount} room{(choice.GatedStepCount == 1 ? "" : "s")} on. "
+                + $"Spends {FormatGold(choice.TokenCostCopper)} and one token charge ({chargesNote}), and "
+                + "wipes your buffs (negate magic). Never used on its own — this is your call.";
+            RequirementSummary = string.Empty;
+            TeleportCaveat = string.Empty;
+            TrapCaveat = string.Empty;
+            AvoidCaveat = string.Empty;
+        }
         else
         {
             // A sole route (no gate-free detour) reaching the picker is either a
@@ -559,6 +598,11 @@ public sealed partial class RouteChoiceDialogViewModel
     // "1 trap" / "3 traps" — the trap count on a route, for the trap-avoid cards.
     private static string TrapWord(int n) => n == 1 ? "1 trap" : $"{n} traps";
 
+    // Token cost display: the TBInfo price is in copper, and Paradigm shows 100 copper
+    // as 1 gold crown (a 1,000,000-copper token looks as "10,000 gold crowns"), so
+    // render the gold figure the player recognises.
+    private static string FormatGold(long copper) => $"{copper / 100:N0} gold";
+
     // "a raft (buy at General Store); the iron key; a waterskin (dropped by a
     // sand nomad)" — each requirement is one clause; a hazard's any-of counters
     // join with " or ". An Item / Ticket gate, or a SINGLE-counter hazard, whose
@@ -668,6 +712,16 @@ public sealed partial class RouteChoiceDialogViewModel
         if (!ShowShortcutCard) return;
         SelectedRoute = RouteChoiceResult.Shortcut;
         PreviewRequested?.Invoke(RouteChoiceResult.Shortcut);
+    }
+
+    [RelayCommand]
+    private void SelectToken()
+    {
+        if (!ShowTokenCard) return;
+        SelectedRoute = RouteChoiceResult.Token;
+        // Preview the post-landing walk (the only drawable segment — the token hop
+        // itself isn't a graph edge).
+        PreviewRequested?.Invoke(RouteChoiceResult.Token);
     }
 
     // The Details… button lights up once a route is picked: it opens the shared
