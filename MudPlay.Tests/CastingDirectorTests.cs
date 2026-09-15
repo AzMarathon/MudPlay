@@ -559,12 +559,11 @@ public sealed class CastingDirectorTests
     // ----- Emergency self-heal ----------------------------------------
 
     [Fact]
-    public void EmergencyHeal_OverridesMajorAndMinor_EvenAtDefaultPriority()
+    public void EmergencyHeal_OverridesMajorAndMinor_AtDefaultPriority()
     {
         // HP is in EVERY band at once (below minor, major, and emergency
-        // triggers) — Emergency's own spell must win, not Major or Minor, even
-        // though the user never touched priority ordering (Emergency isn't
-        // user-orderable — it always leads).
+        // triggers) — Emergency's own spell must win, not Major or Minor,
+        // because Emergency defaults to priority slot 1 (leads the queue).
         using Harness h = new();
         h.Spells.MinorHealSpell = "heal";
         h.Spells.MajorHealSpell = "fullheal";
@@ -577,6 +576,27 @@ public sealed class CastingDirectorTests
 
         Assert.Single(h.CastsSent);
         Assert.Equal("lastresort", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void EmergencyHeal_IsReorderable_DemotedBelowMajor_MajorFiresFirst()
+    {
+        // Emergency is now an ordinary priority row, not a hardcoded always-lead.
+        // Rank it below Major and Major wins even in the emergency band — proving
+        // the position is genuinely user-controlled.
+        using Harness h = new();
+        h.Spells.EmergencyHealSpell = "lastresort";
+        h.Spells.MajorHealSpell = "fullheal";
+        h.Spells.MinorHealSpell = "heal";
+        h.Spells.PriorityEmergencyHeal = 9;   // demoted to the back
+        h.Spells.PriorityMajorSelfHeal = 1;   // Major promoted to lead
+        h.Health.MajorHealCombatTrigger = 40;
+        h.Health.EmergencyHealTrigger = 20;
+
+        h.SetPrompt(hp: 15, maxHp: 100, ma: 100, maxMa: 100, inCombat: true);
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("fullheal", h.CastsSent[0]);
     }
 
     [Fact]

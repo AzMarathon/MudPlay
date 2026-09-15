@@ -16,16 +16,19 @@ public sealed class SpellsSettingsTests
     {
         SpellsSettings dto = new();
 
-        // Category priority defaults are an ordered 1..7 fence — protects
+        // Category priority defaults are an ordered 1..9 fence — protects
         // CastingDirector's between-round dispatch against a future
-        // accidental tie that would scramble cast order.
-        Assert.Equal(1, dto.PriorityMinorPartyHeal);
-        Assert.Equal(2, dto.PriorityMajorPartyHeal);
-        Assert.Equal(3, dto.PriorityMinorSelfHeal);
-        Assert.Equal(4, dto.PriorityMajorSelfHeal);
-        Assert.Equal(5, dto.PriorityCuring);
-        Assert.Equal(6, dto.PriorityBuffing);
-        Assert.Equal(7, dto.PriorityDebuffing);
+        // accidental tie that would scramble cast order. Emergency leads (1),
+        // downed-ally sits at 4 (after the party heals).
+        Assert.Equal(1, dto.PriorityEmergencyHeal);
+        Assert.Equal(2, dto.PriorityMinorPartyHeal);
+        Assert.Equal(3, dto.PriorityMajorPartyHeal);
+        Assert.Equal(4, dto.PriorityDownedAllyHeal);
+        Assert.Equal(5, dto.PriorityMinorSelfHeal);
+        Assert.Equal(6, dto.PriorityMajorSelfHeal);
+        Assert.Equal(7, dto.PriorityCuring);
+        Assert.Equal(8, dto.PriorityBuffing);
+        Assert.Equal(9, dto.PriorityDebuffing);
 
         // All spell-name slots empty by default (user configures per character).
         Assert.Null(dto.MinorHealSpell);
@@ -68,8 +71,10 @@ public sealed class SpellsSettingsTests
         SpellsSettings dto = new();
         int[] order =
         {
+            dto.PriorityEmergencyHeal,
             dto.PriorityMinorPartyHeal,
             dto.PriorityMajorPartyHeal,
+            dto.PriorityDownedAllyHeal,
             dto.PriorityMinorSelfHeal,
             dto.PriorityMajorSelfHeal,
             dto.PriorityCuring,
@@ -86,8 +91,10 @@ public sealed class SpellsSettingsTests
     {
         SpellsSettings dto = new()
         {
+            PriorityEmergencyHeal  = 8,
             PriorityMinorPartyHeal = 5,
             PriorityMajorPartyHeal = 1,
+            PriorityDownedAllyHeal = 9,
             PriorityMinorSelfHeal  = 6,
             PriorityMajorSelfHeal  = 2,
             PriorityCuring         = 3,
@@ -136,8 +143,10 @@ public sealed class SpellsSettingsTests
         SpellsSettings? round = JsonSerializer.Deserialize<SpellsSettings>(json);
 
         Assert.NotNull(round);
-        Assert.Equal(dto.PriorityMinorPartyHeal, round!.PriorityMinorPartyHeal);
+        Assert.Equal(dto.PriorityEmergencyHeal,  round!.PriorityEmergencyHeal);
+        Assert.Equal(dto.PriorityMinorPartyHeal, round.PriorityMinorPartyHeal);
         Assert.Equal(dto.PriorityMajorPartyHeal, round.PriorityMajorPartyHeal);
+        Assert.Equal(dto.PriorityDownedAllyHeal, round.PriorityDownedAllyHeal);
         Assert.Equal(dto.PriorityMinorSelfHeal,  round.PriorityMinorSelfHeal);
         Assert.Equal(dto.PriorityMajorSelfHeal,  round.PriorityMajorSelfHeal);
         Assert.Equal(dto.PriorityCuring,         round.PriorityCuring);

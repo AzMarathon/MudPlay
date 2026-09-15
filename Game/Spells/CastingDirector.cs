@@ -1561,8 +1561,8 @@ public sealed class CastingDirector : IDisposable
         }
         if (healRestEnabled)
         {
-            // Called before DownedAllyHeal so the two int.MinValue ties display in
-            // the same order they actually fire (stable sort keys off call order).
+            // Order added here doesn't matter — the queue re-sorts by each
+            // category's real priority number below.
             AddSurvival(SpellCategory.EmergencyHeal, PickEmergencySelfHeal(spells, health));
             AddSurvival(SpellCategory.DownedAllyHeal, PickDownedAllyHeal(party)?.Spell);
             AddSurvival(SpellCategory.MinorPartyHeal, PickMinorPartyHeal(party)?.Spell);
@@ -1597,13 +1597,13 @@ public sealed class CastingDirector : IDisposable
     }
 
     // The configured type-priority number for a between-round category (the Spells-tab
-    // priorities). EmergencyHeal and DownedAllyHeal have none — they always lead — so
-    // both sort first (their relative order comes from PrioritisedCategories' explicit
-    // yield order, not this number).
+    // priorities). Every category — Emergency and DownedAlly included — reads a
+    // user-reorderable slot; the defaults put Emergency first (1) and DownedAlly
+    // fourth, but the user can move any of them.
     private static int CategoryPriority(SpellsSettings s, SpellCategory cat) => cat switch
     {
-        SpellCategory.EmergencyHeal => int.MinValue,
-        SpellCategory.DownedAllyHeal => int.MinValue,
+        SpellCategory.EmergencyHeal => s.PriorityEmergencyHeal,
+        SpellCategory.DownedAllyHeal => s.PriorityDownedAllyHeal,
         SpellCategory.MinorPartyHeal => s.PriorityMinorPartyHeal,
         SpellCategory.MajorPartyHeal => s.PriorityMajorPartyHeal,
         SpellCategory.MinorSelfHeal => s.PriorityMinorSelfHeal,
@@ -1645,10 +1645,15 @@ public sealed class CastingDirector : IDisposable
     // order for determinism).
     private static IEnumerable<SpellCategory> PrioritisedCategories(SpellsSettings s)
     {
+        // Every between-round category, Emergency and DownedAlly included, walked
+        // in the user's Spells-tab priority order. Emergency defaults to slot 1
+        // (leads), DownedAlly to slot 4, but both are reorderable like the rest.
         (SpellCategory Cat, int Prio)[] order =
         {
+            (SpellCategory.EmergencyHeal,  s.PriorityEmergencyHeal),
             (SpellCategory.MinorPartyHeal, s.PriorityMinorPartyHeal),
             (SpellCategory.MajorPartyHeal, s.PriorityMajorPartyHeal),
+            (SpellCategory.DownedAllyHeal, s.PriorityDownedAllyHeal),
             (SpellCategory.MinorSelfHeal,  s.PriorityMinorSelfHeal),
             (SpellCategory.MajorSelfHeal,  s.PriorityMajorSelfHeal),
             (SpellCategory.Curing,         s.PriorityCuring),
@@ -1660,12 +1665,6 @@ public sealed class CastingDirector : IDisposable
             int p = a.Prio.CompareTo(b.Prio);
             return p != 0 ? p : ((int)a.Cat).CompareTo((int)b.Cat);
         });
-        // An emergency self-save outranks EVERYTHING, DownedAllyHeal included — a
-        // dead caster rescues nobody, so self-preservation leads the walk before
-        // even a downed ally. A downed ally is itself a life-critical rescue that
-        // always fires ahead of every user-orderable category.
-        yield return SpellCategory.EmergencyHeal;
-        yield return SpellCategory.DownedAllyHeal;
         foreach ((SpellCategory cat, int _) in order) yield return cat;
     }
 
@@ -2310,13 +2309,10 @@ public enum SpellCategory
     Curing         = 4,
     Buffing        = 5,
     Debuffing      = 6,
-    // Not user-orderable — a downed ally is a life-critical rescue that always
-    // outranks every other cast, so PrioritisedCategories emits it first
-    // unconditionally rather than reading a priority slot.
+    // A downed-ally rescue. Reorderable via SpellsSettings.PriorityDownedAllyHeal
+    // (defaults to slot 4). The enum value is only the equal-priority tiebreak.
     DownedAllyHeal = 7,
-    // Not user-orderable — an emergency save outranks EVERY other cast,
-    // DownedAllyHeal included (you can't rescue anyone if you die first), so
-    // PrioritisedCategories emits it before even that. See
-    // CastingDirector.PickEmergencySelfHeal.
+    // Last-resort self-save. Reorderable via SpellsSettings.PriorityEmergencyHeal
+    // (defaults to slot 1, so it leads). See CastingDirector.PickEmergencySelfHeal.
     EmergencyHeal  = 8,
 }

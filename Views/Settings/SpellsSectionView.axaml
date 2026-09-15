@@ -153,7 +153,7 @@
                                      ItemTemplate="{StaticResource SpellPickItem}"
                                      PlaceholderText="Type code or name…"
                                      Width="260" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Last-resort self-save — fires when Health → Emergency heal threshold trips, unconditionally ahead of every other cast (major/minor heal, cures, blesses/buffs, debuffs), in any state. Falls back to Major then Minor heal when left blank. Ignores the mana-floor gate — an emergency spends whatever mana is left."/>
+                                     ToolTip.Tip="Last-resort self-save — fires when the Health → Emergency heal threshold trips. It&apos;s a row in the spell-type priority list above, defaulting to slot 1 so it leads by default; reorder it there like any other. Fires in any state (combat/rest/walk) and ignores the mana-floor gate — an emergency spends whatever mana is left (it still won&apos;t attempt a spell it can&apos;t afford). Falls back to Major then Minor heal when left blank."/>
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="HP Regen"/>
                     <AutoCompleteBox Grid.Row="3" Grid.Column="1"

@@ -2,9 +2,10 @@
 
 <!-- current-version:start -->
 > **Version 3.86.0**
-> - New Emergency heal tier on Spells + Health: fires the instant HP drops to or below its own threshold, unconditionally ahead of Major/Minor heal, cures, blesses/buffs, and debuffs — even a downed ally's rescue
-> - Unlike Minor/Major, Emergency heal fires in any state (combat, resting, mid-walk) and ignores the mana-floor conservation gate — a true last-resort save
-> - Falls back to Major heal, then Minor heal, when left unconfigured, so a low Emergency threshold alone still guarantees a life-threat cast
+> - New Emergency heal tier (Spells + Health): a third configurable self-heal firing the instant HP hits its threshold. A reorderable row in the spell-type priority list, defaulting to slot 1 so it leads — rank it anywhere
+> - The downed-ally rescue is now a reorderable row in that list too (formerly a hidden always-first cast)
+> - Emergency fires in any state (combat/rest/walk) and ignores the mana-conservation floor — a true last-resort save; it still won't attempt a spell it can't afford
+> - Falls back to Major then Minor heal when its spell is unset, so a low threshold alone still guarantees a life-threat cast
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

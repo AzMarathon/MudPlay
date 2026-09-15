@@ -72,8 +72,8 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     private static readonly string[] _staticSearchLabels =
     {
         "Spells",
-        "Spell type priority", "Priority", "Minor party heal", "Major party heal",
-        "Minor self heal", "Major self heal", "Curing", "Buffing", "Debuffing",
+        "Spell type priority", "Priority", "Emergency heal", "Minor party heal", "Major party heal",
+        "Downed-ally heal", "Minor self heal", "Major self heal", "Curing", "Buffing", "Debuffing",
         "Healing", "Regeneration", "Minor heal", "Major heal", "Emergency heal",
         "HP Regen",
         "Other spells", "Cure Holds", "Cure poison", "Cure disease", "Cure blindness",
@@ -82,16 +82,20 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         "Ignore poison", "Ignore blindness", "Ignore confusion", "Ignore disease",
     };
 
-    // ----- Category priority (1-7) ----------------------------------
+    // ----- Category priority (1-9) ----------------------------------
 
-    // The seven between-round casting categories in fixed key order; the
+    // The nine between-round casting categories in fixed key order; the
     // ranking VM reorders them and reports each one's rank.
     private static readonly (string Key, string Label, string? Tip)[] _priorityDefs =
     {
+        ("EmergencyHeal", "Emergency heal",
+            "Priority slot for the last-resort Emergency heal. Defaults to 1 so it leads every between-round cast; reorder like any other."),
         ("MinorPartyHeal", "Minor party heal (single + party)",
             "Priority slot shared by the Party tab's Minor single-target heal and Minor AOE party heal."),
         ("MajorPartyHeal", "Major party heal (single + party)",
             "Priority slot shared by the Party tab's Major single-target heal and Major AOE party heal."),
+        ("DownedAllyHeal", "Downed-ally heal (rescue)",
+            "Priority slot for reviving a downed party member. Formerly always led; now reorderable."),
         ("MinorSelfHeal", "Minor self heal",
             "Priority slot for this tab's Minor heal pick."),
         ("MajorSelfHeal", "Major self heal",
@@ -105,7 +109,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     };
 
     // Reorderable between-round casting order. Row position is the rank, so the
-    // seven categories always form a clean 1..7 permutation.
+    // nine categories always form a clean 1..9 permutation.
     public PriorityRankingViewModel Priority { get; }
 
     // ----- Healing / regen ------------------------------------------
@@ -225,8 +229,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     private void CaptureSpellBoxesToActive()
     {
         Models.Profile.CombatProfileSpells s = _session.Active.Spells;
+        s.PriorityEmergencyHeal  = Priority.RankOf("EmergencyHeal");
         s.PriorityMinorPartyHeal = Priority.RankOf("MinorPartyHeal");
         s.PriorityMajorPartyHeal = Priority.RankOf("MajorPartyHeal");
+        s.PriorityDownedAllyHeal = Priority.RankOf("DownedAllyHeal");
         s.PriorityMinorSelfHeal  = Priority.RankOf("MinorSelfHeal");
         s.PriorityMajorSelfHeal  = Priority.RankOf("MajorSelfHeal");
         s.PriorityCuring         = Priority.RankOf("Curing");
@@ -262,8 +268,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         Models.Profile.CombatProfileSpells s = _session.Active.Spells;
         Priority.Load(_priorityDefs, key => key switch
         {
+            "EmergencyHeal"  => s.PriorityEmergencyHeal,
             "MinorPartyHeal" => s.PriorityMinorPartyHeal,
             "MajorPartyHeal" => s.PriorityMajorPartyHeal,
+            "DownedAllyHeal" => s.PriorityDownedAllyHeal,
             "MinorSelfHeal"  => s.PriorityMinorSelfHeal,
             "MajorSelfHeal"  => s.PriorityMajorSelfHeal,
             "Curing"         => s.PriorityCuring,
@@ -313,8 +321,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     // writes this; the per-profile subset also lands on the profile blob.
     private SpellsSettings BuildDto() => new()
     {
+        PriorityEmergencyHeal  = Priority.RankOf("EmergencyHeal"),
         PriorityMinorPartyHeal = Priority.RankOf("MinorPartyHeal"),
         PriorityMajorPartyHeal = Priority.RankOf("MajorPartyHeal"),
+        PriorityDownedAllyHeal = Priority.RankOf("DownedAllyHeal"),
         PriorityMinorSelfHeal  = Priority.RankOf("MinorSelfHeal"),
         PriorityMajorSelfHeal  = Priority.RankOf("MajorSelfHeal"),
         PriorityCuring         = Priority.RankOf("Curing"),
@@ -370,8 +380,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
         Priority.Load(_priorityDefs, key => key switch
         {
+            "EmergencyHeal"  => dto.PriorityEmergencyHeal,
             "MinorPartyHeal" => dto.PriorityMinorPartyHeal,
             "MajorPartyHeal" => dto.PriorityMajorPartyHeal,
+            "DownedAllyHeal" => dto.PriorityDownedAllyHeal,
             "MinorSelfHeal"  => dto.PriorityMinorSelfHeal,
             "MajorSelfHeal"  => dto.PriorityMajorSelfHeal,
             "Curing"         => dto.PriorityCuring,

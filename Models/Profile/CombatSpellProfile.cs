@@ -187,18 +187,20 @@ public sealed class CombatSpellProfile
 // fields, so a switch never disturbs them.
 public sealed class CombatProfileSpells
 {
-    public int PriorityMinorPartyHeal { get; set; } = 1;
-    public int PriorityMajorPartyHeal { get; set; } = 2;
-    public int PriorityMinorSelfHeal { get; set; } = 3;
-    public int PriorityMajorSelfHeal { get; set; } = 4;
-    public int PriorityCuring { get; set; } = 5;
-    public int PriorityBuffing { get; set; } = 6;
-    public int PriorityDebuffing { get; set; } = 7;
+    public int PriorityEmergencyHeal { get; set; } = 1;
+    public int PriorityMinorPartyHeal { get; set; } = 2;
+    public int PriorityMajorPartyHeal { get; set; } = 3;
+    public int PriorityDownedAllyHeal { get; set; } = 4;
+    public int PriorityMinorSelfHeal { get; set; } = 5;
+    public int PriorityMajorSelfHeal { get; set; } = 6;
+    public int PriorityCuring { get; set; } = 7;
+    public int PriorityBuffing { get; set; } = 8;
+    public int PriorityDebuffing { get; set; } = 9;
 
     public string? MinorHealSpell { get; set; }
     public string? MajorHealSpell { get; set; }
-    // Not user-orderable (no Priority field) — it always leads, mirroring
-    // DownedAllyHeal. See SpellsSettings.EmergencyHealSpell.
+    // Reorderable via PriorityEmergencyHeal (defaults to slot 1, so it leads).
+    // See SpellsSettings.EmergencyHealSpell.
     public string? EmergencyHealSpell { get; set; }
     public string? HpRegenSpell { get; set; }
 
@@ -206,8 +208,10 @@ public sealed class CombatProfileSpells
     public void CaptureFrom(SpellsSettings src)
     {
         ArgumentNullException.ThrowIfNull(src);
+        PriorityEmergencyHeal = src.PriorityEmergencyHeal;
         PriorityMinorPartyHeal = src.PriorityMinorPartyHeal;
         PriorityMajorPartyHeal = src.PriorityMajorPartyHeal;
+        PriorityDownedAllyHeal = src.PriorityDownedAllyHeal;
         PriorityMinorSelfHeal = src.PriorityMinorSelfHeal;
         PriorityMajorSelfHeal = src.PriorityMajorSelfHeal;
         PriorityCuring = src.PriorityCuring;
@@ -224,8 +228,10 @@ public sealed class CombatProfileSpells
     public void WriteInto(SpellsSettings dst)
     {
         ArgumentNullException.ThrowIfNull(dst);
+        dst.PriorityEmergencyHeal = PriorityEmergencyHeal;
         dst.PriorityMinorPartyHeal = PriorityMinorPartyHeal;
         dst.PriorityMajorPartyHeal = PriorityMajorPartyHeal;
+        dst.PriorityDownedAllyHeal = PriorityDownedAllyHeal;
         dst.PriorityMinorSelfHeal = PriorityMinorSelfHeal;
         dst.PriorityMajorSelfHeal = PriorityMajorSelfHeal;
         dst.PriorityCuring = PriorityCuring;
@@ -239,8 +245,10 @@ public sealed class CombatProfileSpells
 
     public CombatProfileSpells Clone() => new()
     {
+        PriorityEmergencyHeal = PriorityEmergencyHeal,
         PriorityMinorPartyHeal = PriorityMinorPartyHeal,
         PriorityMajorPartyHeal = PriorityMajorPartyHeal,
+        PriorityDownedAllyHeal = PriorityDownedAllyHeal,
         PriorityMinorSelfHeal = PriorityMinorSelfHeal,
         PriorityMajorSelfHeal = PriorityMajorSelfHeal,
         PriorityCuring = PriorityCuring,

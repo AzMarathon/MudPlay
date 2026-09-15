@@ -1676,10 +1676,10 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 
 ### Spell type priority
 
-**Default order (highest priority first):** Minor party heal → Major party heal → Minor self heal → Major self heal → Curing → Buffing → Debuffing.
-**What it does:** Every tick, MudPlay checks all seven categories and casts the highest-priority one that has something ready to fire. Use the **▲ / ▼** arrows on each row to reorder them — higher in the list casts earlier.
-**When you might change it:** Move Curing above self-heals if you'd rather cure a debilitating ailment before topping off HP; move Debuffing higher if landing your debuff matters more to you than proactive buffing.
-**Important notes:** Emergency heal and a downed ally rescue both always jump this queue no matter how you rank things — neither is part of this list and neither can be demoted. Emergency leads even ahead of the ally rescue (see below).
+**Default order (highest priority first):** Emergency heal → Minor party heal → Major party heal → Downed-ally heal (rescue) → Minor self heal → Major self heal → Curing → Buffing → Debuffing.
+**What it does:** Every tick, MudPlay checks all nine categories and casts the highest-priority one that has something ready to fire. Use the **▲ / ▼** arrows on each row to reorder them — higher in the list casts earlier.
+**When you might change it:** Move Curing above self-heals if you'd rather cure a debilitating ailment before topping off HP; move Debuffing higher if landing your debuff matters more to you than proactive buffing. Emergency heal defaults to the top so a life-threat save leads, but you can move it like any other row.
+**Important notes:** Emergency heal and the downed-ally rescue used to be hidden always-first casts; they're now ordinary rows in this list (defaulting to slots 1 and 4), so you can rank them wherever you like. Emergency heal keeps its special *gates* — it ignores the mana floor and fires in any state (see below) — but its *position* in the queue is now yours to set.
 
 ### Minor heal / Major heal
 
@@ -1689,7 +1689,7 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 ### Emergency heal
 
 **Default:** unset
-**What it does:** Your last-resort self-save. Unlike Minor and Major, Emergency heal isn't part of the reorderable priority list at all — the instant your HP drops to or below **Health → Emergency heal**, it fires *unconditionally*, ahead of literally everything else that round: Major heal, Minor heal, cures, every bless/buff, debuffs, even a downed party member's rescue. It also fires in **any** state — mid-fight, resting, or walking between rooms — where Minor heal only casts during combat or an actual rest. And it ignores the mana-floor gate (Health → Heal if above MA) that normally holds Minor/Major back to conserve mana: an emergency spends whatever's left, because there might not be a later. If you leave Emergency heal blank, MudPlay falls back to Major heal, then Minor heal, at the Emergency threshold — so setting a low **Emergency heal** trigger with no spell configured still gives your Major/Minor heal a true last-resort trigger point. Set the threshold below your Major heal (combat) trigger — Emergency is meant to be the "if all else has failed" band beneath it.
+**What it does:** Your last-resort self-save, and a third configurable heal spell. It's a row in the **spell-type priority list** above, defaulting to slot **1** — so out of the box it fires ahead of every other between-round cast (Major/Minor heal, cures, blesses, debuffs, even a downed ally's rescue) the instant your HP drops to or below **Health → Emergency heal**. You can reorder it like any other category if you want something else to lead. What stays special no matter where you rank it: it fires in **any** state — mid-fight, resting, or walking between rooms, where Minor heal only casts during combat or a rest — and it ignores the mana-floor gate (Health → Heal if above MA) that holds Minor/Major back to conserve mana. It still won't attempt a spell you can't afford the mana for (nothing can), but it spends whatever's left rather than conserving, because there might not be a later. If you leave Emergency heal blank, MudPlay falls back to Major heal, then Minor heal, at the Emergency threshold — so a low **Emergency heal** trigger with no spell set still gives your Major/Minor heal a true last-resort trigger point. Set the threshold below your Major heal (combat) trigger — Emergency is the "if all else has failed" band beneath it.
 
 ### HP Regen
 
@@ -2531,7 +2531,7 @@ This section is a compact, technical lookup table for every setting documented a
 
 | Setting | Default | Allowed Values | Config Key | Location |
 |---|---|---|---|---|
-| Spell type priority (7 categories) | Minor party heal(1)…Debuffing(7) | 1–7 permutation | `PriorityMinorPartyHeal` … `PriorityDebuffing` | Models/Profile/SpellsSettings.cs |
+| Spell type priority (9 categories) | Emergency heal(1)…Debuffing(9) | 1–9 permutation | `PriorityEmergencyHeal` … `PriorityDebuffing` | Models/Profile/SpellsSettings.cs |
 | Minor / Major / Emergency heal, HP Regen | unset | spell code | `MinorHealSpell`, `MajorHealSpell`, `EmergencyHealSpell`, `HpRegenSpell` | Models/Profile/SpellsSettings.cs |
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
 | Unified buff list (self + party bless, room light, mana-regen + reroll, when-HP/MA-full) | empty | spell / `#item` + targets + recast + conditions | `PartyBuffs` (`BuffSettings`) | Models/Profile/BuffSettings.cs (Buff Watchdog) |
