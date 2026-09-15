@@ -1,5 +1,9 @@
 # Version history
 
+## 3.88.11
+
+- Fix crash (stack overflow, no report) when entering loop-build mode — the CURRENT NAV rail's notification helper introduced in 3.88.10 recursed into itself
+
 ## 3.88.10
 
 - CURRENT NAV now shows a running loop as green, live-editable rooms (matching the builder's list) — click a room to change its command, delay, do-not-rest, or do-not-attack, or toggle the whole loop's "only attack in lair rooms", all without stopping or restarting the loop; the current room is highlighted

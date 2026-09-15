@@ -4270,7 +4270,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // the three CURRENT NAV lists (red builder / green running / read-only) swap cleanly.
     private void RaiseLoopRailNotifications()
     {
-        RaiseLoopRailNotifications();
+        OnPropertyChanged(nameof(IsLoopBuilding));
         OnPropertyChanged(nameof(IsRunningLoopEditable));
         OnPropertyChanged(nameof(ShowCurrentNavList));
     }
