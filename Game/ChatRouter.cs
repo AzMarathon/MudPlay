@@ -24,24 +24,41 @@ public sealed class ChatRouter : IDisposable
     private readonly List<IDisposable> _subs = new();
     private bool _disposed;
 
-    // FIFO of `/recipient message` lines sent but not yet confirmed. Outgoing
-    // telepath confirmations from the server don't echo the message text, so we
-    // have to correlate with the typed/sent command. A queue (not a single slot)
-    // because an engine can fire several sends back-to-back before any
-    // confirmation arrives — e.g. a @roomba reply answering with one telepath per
-    // item — and the server's generic "--- Telepath Sent to X ---" lines then
-    // arrive as their own burst with no way to tell them apart; each confirmation
-    // dequeues the next pending message in send order.
-    private readonly Queue<string> _pendingTelepathMessages = new();
+    // FIFO of `/recipient message` lines sent but not yet confirmed, each stamped
+    // with when it was captured. Outgoing telepath confirmations from the server
+    // don't echo the message text, so we have to correlate with the typed/sent
+    // command. A queue (not a single slot) because an engine can fire several
+    // sends back-to-back before any confirmation arrives — e.g. a @roomba reply
+    // answering with one telepath per item — and the server's generic "---
+    // Telepath Sent to X ---" lines then arrive as their own burst with no way to
+    // tell them apart; each confirmation dequeues the next pending message in
+    // send order (see TryDequeueFresh for the staleness check applied first).
+    private readonly Queue<(string Message, DateTimeOffset EnqueuedAt)> _pendingTelepathMessages = new();
     // Same pairing for an outgoing directed say: the typed `>Target message` carries
     // the message, the server's `--- Message Directed to X ---` confirmation the target.
-    private readonly Queue<string> _pendingDirectedMessages = new();
-    // Hard cap on either pending queue. A captured `/`-line that never yields a
-    // confirmation (some other slash-command) leaves a stale entry the next real
-    // confirmation wrongly consumes — the pairing drifts off-by-one and stays that
-    // way. Bounding drop-oldest keeps a runaway of unconfirmed captures from growing
-    // without limit; a real burst is a handful of lines, so 16 never trims live work.
+    private readonly Queue<(string Message, DateTimeOffset EnqueuedAt)> _pendingDirectedMessages = new();
+    // Hard cap on either pending queue. Bounding drop-oldest keeps a runaway of
+    // unconfirmed captures from growing without limit; a real burst is a handful
+    // of lines, so 16 never trims live work.
     private const int MaxPendingChatCaptures = 16;
+
+    // A captured `/`-line that never yields a confirmation (some other
+    // slash-command that isn't actually a telepath, or a genuine reply whose own
+    // "--- Telepath Sent ---" line the server never sent / this client never
+    // recognized) used to leave a stale entry sitting at the front of the queue
+    // FOREVER — the next real confirmation, however much later, wrongly dequeued
+    // it, and the pairing then drifted for every following exchange (report
+    // paradigm-20260915-055754: a @roomba reply to "martial sleeve" queued
+    // 2026-09-14 20:55 sat unconfirmed until 2026-09-15 05:35, when it got wrongly
+    // paired with that morning's unrelated "dark blue orb" query). A real
+    // confirmation arrives within a couple of seconds of the send; TryDequeueFresh
+    // discards anything older than this before trusting it as the real pairing —
+    // generous enough to survive a paced multi-line burst, nowhere near long
+    // enough for a stale cross-session entry to still count as "the" match.
+    private static readonly TimeSpan PendingCaptureStaleAfter = TimeSpan.FromSeconds(15);
+
+    private readonly LogService? _log;
+    private readonly Func<DateTimeOffset> _now;
 
     // Guards against double-enqueuing ONE physical send. An engine-fired reply
     // is captured via ObserveOutbound (the raw bytes, immediately). If that
@@ -85,11 +102,18 @@ public sealed class ChatRouter : IDisposable
     // isParadigmRealm gates the server-PvP channel: paradigm is the only realm
     // that emits the "Server PvP Message:" line, so on any other realm the sub
     // is a no-op. Optional (null → gate open) so tests can build a bare router.
-    public ChatRouter(MessageRouter router, Func<bool>? isParadigmRealm = null)
+    // log is optional (null → the stale-discard notice just doesn't surface,
+    // same fail-open convention as everywhere else in this codebase); clock is
+    // optional (defaults to the real wall clock) so tests can control time
+    // precisely for the staleness check without a real 15s sleep.
+    public ChatRouter(MessageRouter router, Func<bool>? isParadigmRealm = null,
+        LogService? log = null, Func<DateTimeOffset>? clock = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         _router = router;
         _isParadigmRealm = isParadigmRealm;
+        _log = log;
+        _now = clock ?? (() => DateTimeOffset.Now);
 
         Subscribe(router, KnownPatterns.ConversationGossip,
                   ChatChannel.Gossip,         groupPlayer: 0, groupMessage: 1);
@@ -115,7 +139,7 @@ public sealed class ChatRouter : IDisposable
         _subs.Add(router.Subscribe(KnownPatterns.ConversationDirectedSayOut, result =>
         {
             string? target = SafeGroup(result, 0);
-            string message = _pendingDirectedMessages.TryDequeue(out string? m) ? m : string.Empty;
+            string message = TryDequeueFresh(_pendingDirectedMessages, "directed say");
             _lastEnqueuedDirected = null;
             EntryClassified?.Invoke(new ChatLogEntry(
                 result.Line.Timestamp,
@@ -133,7 +157,7 @@ public sealed class ChatRouter : IDisposable
         _subs.Add(_router.Subscribe(KnownPatterns.ConversationTelepathOut, result =>
         {
             string? recipient = SafeGroup(result, 0);
-            string message = _pendingTelepathMessages.TryDequeue(out string? m) ? m : string.Empty;
+            string message = TryDequeueFresh(_pendingTelepathMessages, "telepath");
             _lastEnqueuedTelepath = null;
 
             EntryClassified?.Invoke(new ChatLogEntry(
@@ -299,10 +323,11 @@ public sealed class ChatRouter : IDisposable
     // then any message text. Anything that looks like that gets queued as a
     // pending message, consumed FIFO by the next confirmation(s) — see
     // _pendingTelepathMessages. The game has other slash-commands, so a /-line
-    // that turns out not to produce a telepath leaves a stale queued entry the
-    // next real confirmation wrongly consumes — the pairing then drifts off-by-one
-    // and stays that way; rare in practice. The MaxPendingChatCaptures cap only
-    // bounds a runaway (drop-oldest), it doesn't undo an established drift.
+    // that turns out not to produce a telepath (or one whose own confirmation
+    // the server never sends / this client never recognizes) leaves a stale
+    // queued entry — TryDequeueFresh discards it once it's too old to plausibly
+    // be the real match, rather than letting some arbitrarily later confirmation
+    // wrongly consume it and drift every pairing after that.
     private void TryCaptureTelepath(string text)
     {
         if (text.Length < 3 || text[0] != '/') return;
@@ -331,10 +356,31 @@ public sealed class ChatRouter : IDisposable
 
     // Enqueue with a hard cap: once a pending queue reaches MaxPendingChatCaptures,
     // drop the oldest so a stream of unconfirmed captures can't grow without bound.
-    private static void EnqueueBounded(Queue<string> queue, string message)
+    private void EnqueueBounded(Queue<(string Message, DateTimeOffset EnqueuedAt)> queue, string message)
     {
         if (queue.Count >= MaxPendingChatCaptures) queue.Dequeue();
-        queue.Enqueue(message);
+        queue.Enqueue((message, _now()));
+    }
+
+    // Dequeue the next pending capture for a just-arrived confirmation, first
+    // discarding anything at the front of the queue that's too old to plausibly
+    // be what THIS confirmation is for (see PendingCaptureStaleAfter) — a send
+    // whose own confirmation never arrived shouldn't get to steal a later,
+    // unrelated one and drift every pairing after it. Returns "" (same as an
+    // empty queue) when nothing fresh is left to match.
+    private string TryDequeueFresh(Queue<(string Message, DateTimeOffset EnqueuedAt)> queue, string kind)
+    {
+        DateTimeOffset now = _now();
+        while (queue.TryPeek(out (string Message, DateTimeOffset EnqueuedAt) head)
+               && now - head.EnqueuedAt > PendingCaptureStaleAfter)
+        {
+            queue.Dequeue();
+            _log?.Warn("ChatRouter",
+                $"discarding stale unconfirmed {kind} capture (queued {(now - head.EnqueuedAt).TotalSeconds:F0}s ago, "
+                + $"never confirmed): \"{head.Message}\" — its own confirmation never arrived, so it can't be the "
+                + "match for this one.");
+        }
+        return queue.TryDequeue(out (string Message, DateTimeOffset EnqueuedAt) fresh) ? fresh.Message : string.Empty;
     }
 
     private void Subscribe(

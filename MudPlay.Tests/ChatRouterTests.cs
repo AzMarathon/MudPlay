@@ -17,11 +17,11 @@ public sealed class ChatRouterTests
     /// assertions.
     /// </summary>
     private static (MessageRouter router, ChatRouter chat, List<ChatLogEntry> entries) Setup(
-        Func<bool>? isParadigmRealm = null)
+        Func<bool>? isParadigmRealm = null, LogService? log = null, Func<DateTimeOffset>? clock = null)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        ChatRouter chat = new(router, isParadigmRealm);
+        ChatRouter chat = new(router, isParadigmRealm, log, clock);
         List<ChatLogEntry> entries = new();
         chat.EntryClassified += entries.Add;
         return (router, chat, entries);
@@ -141,6 +141,56 @@ public sealed class ChatRouterTests
         Assert.Contains("\"a\"", entries[0].Message);
         Assert.Equal("Kit", entries[1].Speaker);
         Assert.Contains("\"b\"", entries[1].Message);
+    }
+
+    [Fact]
+    public void TelepathOut_StaleUnconfirmedSend_DiscardedInsteadOfStealingLaterConfirmation()
+    {
+        // Report paradigm-20260915-055754: a @roomba reply to "martial sleeve"
+        // was sent at 20:55 but its own "--- Telepath sent ---" confirmation
+        // never arrived/was never recognized — the entry sat in the queue for
+        // hours until the NEXT morning's unrelated "dark blue orb" query's
+        // confirmation wrongly dequeued it, displaying a nonsense answer to a
+        // question nobody asked. The stale entry must be discarded once it's
+        // long past any plausible real round-trip, not sit forever waiting to
+        // steal whichever confirmation happens along next.
+        DateTimeOffset now = new(2026, 9, 14, 20, 55, 43, TimeSpan.Zero);
+        var (router, chat, entries) = Setup(clock: () => now);
+
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes(
+            "/Farmer {no record of \"martial sleeve\"}\r"));
+        // Its own confirmation never arrives — Farmer's session moves on to
+        // other things for hours, no "--- Telepath sent to Farmer ---" line.
+
+        now = now.AddHours(8).AddMinutes(39);   // 2026-09-15 05:34:44 — next morning
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes(
+            "/Farmer {4 more matching item(s) - refine your search}\r"));
+        router.Dispatch(Line("--- Telepath sent to Farmer ---"));
+
+        ChatLogEntry e = Assert.Single(entries);
+        Assert.Equal("Farmer", e.Speaker);
+        // The FRESH reply, not the 8.5-hour-stale "martial sleeve" one.
+        Assert.Contains("4 more matching item", e.Message);
+        Assert.DoesNotContain("martial", e.Message);
+    }
+
+    [Fact]
+    public void TelepathOut_StaleEntryDiscard_LogsWarning()
+    {
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        LogService log = new();
+        List<LogEntry> lines = new();
+        log.EntryAdded += lines.Add;
+        var (router, chat, _) = Setup(log: log, clock: () => now);
+
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("/Farmer {no record of \"martial\"}\r"));
+        now = now.AddSeconds(30);   // well past PendingCaptureStaleAfter
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("/Farmer {no record of \"dark blue orb\"}\r"));
+        router.Dispatch(Line("--- Telepath sent to Farmer ---"));
+
+        Assert.Contains(lines, l => l.Severity == LogSeverity.Warn
+            && l.Source == "ChatRouter"
+            && l.Message.Contains("martial", StringComparison.Ordinal));
     }
 
     [Fact]

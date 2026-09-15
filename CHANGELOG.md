@@ -1,5 +1,10 @@
 # Version history
 
+## 3.88.2
+
+- Fixed the Conversation window (and the persisted talk log) permanently pairing outgoing telepath replies to the wrong question after any one reply's own confirmation went unrecognized — the stale, still-queued reply used to sit there until some later, unrelated confirmation wrongly claimed it (a @roomba answer from hours earlier surfacing under a brand-new, unrelated query). A queued send now expires after 15s of no confirmation instead of waiting forever, so a later confirmation pairs with the real, fresh send
+- bug reports addressed: paradigm-20260915-055754
+
 ## 3.88.1
 
 - The login-time quest-completion flag check (the `abil` burst on Paradigm / `sys … abil` on Stock) now runs **at most once per day** per character — relogging later the same day no longer re-fires it; the next day's first login checks again
