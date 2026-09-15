@@ -47,11 +47,11 @@ public sealed class SpellbookStateTests : IDisposable
         SpellRow(200, "barkskin", "bark", magery: 3, mageryLvl: 1, reqLevel: 1),
     ];
 
-    private (KnownSpellCatalog catalog, SpellbookState book) New()
+    private (KnownSpellCatalog catalog, SpellbookState book) New(object[]? spells = null)
     {
         string dir = Path.Combine(_root, "set");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "Spells.json"), JsonSerializer.Serialize(_spells));
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), JsonSerializer.Serialize(spells ?? _spells));
         File.WriteAllText(Path.Combine(dir, "Classes.json"), JsonSerializer.Serialize(_classes));
 
         GameDataCache cache = new(_root);
@@ -124,6 +124,59 @@ public sealed class SpellbookStateTests : IDisposable
 
         book.Refresh(13, 1); // reroll into Druid — Mage spell no longer available
         Assert.Equal(0, book.ObtainedCount);
+    }
+
+    // ----- alignment (CharAlign) -----------------------------------------
+
+    private static readonly object[] _alignedSpells =
+    [
+        SpellRow(300, "smite", "smit", magery: 1, mageryLvl: 1, reqLevel: 1, abil0: 97),  // GoodOnly
+        SpellRow(301, "curse", "curs", magery: 1, mageryLvl: 1, reqLevel: 1, abil0: 98),  // EvilOnly
+        SpellRow(302, "plain bolt", "bolt", magery: 1, mageryLvl: 1, reqLevel: 1),        // ungated
+    ];
+
+    [Fact]
+    public void Refresh_KnownAlignment_ExcludesNonMatchingUnobtainedSpell()
+    {
+        SpellbookState book = New(_alignedSpells).book;
+        book.Refresh(classNumber: 12, level: 1, charAlign: 1); // Good
+
+        string[] names = Names(book.Available);
+        Assert.Contains("smite", names);       // GoodOnly — matches
+        Assert.Contains("plain bolt", names);  // ungated — always shows
+        Assert.DoesNotContain("curse", names); // EvilOnly — not yet obtained, excluded
+    }
+
+    [Fact]
+    public void Refresh_AlreadyObtainedSpell_SurvivesAlignmentDriftAwayFromIt()
+    {
+        // Learned "curse" (EvilOnly) while Evil-aligned — the normal path: it's
+        // both eligible and obtained, so it shows regardless of the union logic.
+        SpellbookState book = New(_alignedSpells).book;
+        book.Refresh(classNumber: 12, level: 1, charAlign: 3); // Evil
+        book.MarkObtainedByName("curse");
+        Assert.Contains("curse", Names(book.Available));
+
+        // The character's alignment has since drifted to Good — MajorMUD doesn't
+        // retroactively un-teach a learned spell, so "curse" must still show even
+        // though it no longer matches the character's CURRENT alignment. A
+        // not-yet-obtained cross-alignment spell (there is none here past "curse")
+        // would correctly stay excluded — see the sibling test above.
+        book.Refresh(classNumber: 12, level: 1, charAlign: 1); // now Good
+        string[] names = Names(book.Available);
+        Assert.Contains("curse", names);   // obtained → survives the drift
+        Assert.Contains("smite", names);   // GoodOnly — now eligible too
+        Assert.True(book.IsObtained(book.Available.Single(s => s.Name == "curse").Number));
+    }
+
+    [Fact]
+    public void Refresh_CharAlignZero_NeverFiltersRegardlessOfObtainedState()
+    {
+        // Unknown alignment (no `who` observed yet) must never exclude anything —
+        // the union-back-in logic is a no-op when CharAlign is 0.
+        SpellbookState book = New(_alignedSpells).book;
+        book.Refresh(classNumber: 12, level: 1, charAlign: 0);
+        Assert.Equal(3, book.Available.Count);
     }
 
     [Fact]
@@ -413,7 +466,7 @@ public sealed class SpellbookStateTests : IDisposable
         };
 
     private static Dictionary<string, object> SpellRow(
-        int number, string name, string shortCode, int magery, int mageryLvl, int reqLevel)
+        int number, string name, string shortCode, int magery, int mageryLvl, int reqLevel, int abil0 = 1)
     {
         Dictionary<string, object> row = new()
         {
@@ -441,7 +494,7 @@ public sealed class SpellbookStateTests : IDisposable
         };
         for (int x = 0; x < 10; x++)
         {
-            row[$"Abil-{x}"] = x == 0 ? 1 : 0;
+            row[$"Abil-{x}"] = x == 0 ? abil0 : 0;
             row[$"AbilVal-{x}"] = 0;
         }
         return row;

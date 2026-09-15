@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using MudPlay.Game.Calculators;
 using MudPlay.Game.Spells;
 using MudPlay.Services;
 using Xunit;
@@ -69,11 +70,11 @@ public sealed class KnownSpellCatalogTests : IDisposable
             learnable: 0, learnedFrom: "\0", classes: "(*)", minBase: 1, abil0: 1),
     ];
 
-    private KnownSpellCatalog NewCatalog()
+    private KnownSpellCatalog NewCatalog(object[]? spells = null)
     {
         string dir = Path.Combine(_root, "set");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "Spells.json"), JsonSerializer.Serialize(_spells));
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), JsonSerializer.Serialize(spells ?? _spells));
         File.WriteAllText(Path.Combine(dir, "Classes.json"), JsonSerializer.Serialize(_classes));
 
         GameDataCache cache = new(_root);
@@ -203,6 +204,49 @@ public sealed class KnownSpellCatalogTests : IDisposable
     }
 
     // ----- synthetic-row builders ---------------------------------------
+
+    // ----- alignment gating (charAlign: 0 unknown, 1 Good, 2 Neutral, 3 Evil) -
+
+    private static readonly object[] _alignedSpells =
+    [
+        SpellRow(200, "smite", "smit", magery: 1, mageryLvl: 1, reqLevel: 1,
+            learnable: 1, classes: "(*)", minBase: 1, abil0: 97),  // GoodOnly
+        SpellRow(201, "curse", "curs", magery: 1, mageryLvl: 1, reqLevel: 1,
+            learnable: 1, classes: "(*)", minBase: 1, abil0: 98),  // EvilOnly
+        SpellRow(202, "balance", "bala", magery: 1, mageryLvl: 1, reqLevel: 1,
+            learnable: 1, classes: "(*)", minBase: 1, abil0: 112), // NeutralOnly
+        SpellRow(203, "plain bolt", "bolt", magery: 1, mageryLvl: 1, reqLevel: 1,
+            learnable: 1, classes: "(*)", minBase: 1, abil0: 1),   // no alignment gate
+    ];
+
+    [Fact]
+    public void Query_CharAlignZero_SkipsAlignmentFiltering_EveryAlignedSpellShows()
+    {
+        // Unknown alignment (no `who` has shown our own row yet) must never
+        // exclude — the caller doesn't get to guess wrong, it just doesn't filter.
+        // Query sorts by ReqLevel then Name — all four share ReqLevel 1, so this
+        // is alphabetical by full name (balance, curse, plain bolt, smite).
+        string[] shorts = Shorts(NewCatalog(_alignedSpells).Query(classNumber: 12, level: 0, charAlign: 0));
+        Assert.Equal(new[] { "bala", "curs", "bolt", "smit" }, shorts);
+    }
+
+    [Theory]
+    [InlineData(1, new[] { "smit", "bolt" })]  // Good: sees GoodOnly + ungated, not Evil/Neutral-only
+    [InlineData(2, new[] { "bala", "bolt" })]  // Neutral: sees NeutralOnly + ungated
+    [InlineData(3, new[] { "curs", "bolt" })]  // Evil: sees EvilOnly + ungated
+    public void Query_KnownAlignment_ShowsOnlyMatchingAndUngatedSpells(int charAlign, string[] expected)
+    {
+        string[] shorts = Shorts(NewCatalog(_alignedSpells).Query(classNumber: 12, level: 0, charAlign));
+        Assert.Equal(expected.OrderBy(s => s), shorts.OrderBy(s => s));
+    }
+
+    [Theory]
+    [InlineData(AlignmentBucket.Good, 1)]
+    [InlineData(AlignmentBucket.Neutral, 2)]
+    [InlineData(AlignmentBucket.Evil, 3)]
+    [InlineData(null, 0)]
+    public void CharAlignFor_MapsAlignmentBucketToQuerysIntScheme(AlignmentBucket? bucket, int expected)
+        => Assert.Equal(expected, KnownSpellCatalog.CharAlignFor(bucket));
 
     private static Dictionary<string, object> ClassRow(int number, string name, int magery, int mageryLvl)
         => new()

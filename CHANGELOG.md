@@ -1,5 +1,12 @@
 # Version history
 
+## 3.85.0
+
+- Spell Book: All / Heals / Buffs / Attacks / Party+AoE tabs across the top narrow the grid to what a spell actually does
+- A spell can land in more than one tab (a whole-party buff shows under both Buffs and Party+AoE) — switching tabs re-filters the same list rather than sorting each spell into one bucket
+- The class spell list (the Spell Book and the Settings → Spells pickers alike) now respects alignment — a not-yet-learned Good/Evil/Neutral-only spell your character couldn't currently learn is left out. The filtering rule already existed in KnownSpellCatalog but was never fed a real alignment; it now reads the same `who`-observed alignment the Equipment Manager's own Good/Evil gear filtering already uses
+- A spell you've already learned never disappears if your alignment later drifts away from it — an alignment-quest reward stays yours regardless of where your alignment goes afterward
+
 ## 3.84.0
 
 - New map overlay: **Level gates** marks every room holding a level gate with an amber corner wedge, so a doorway that won't let you through reads as shut before you walk to it

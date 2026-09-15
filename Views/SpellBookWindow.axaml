@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:spells="using:MudPlay.Game.Spells"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="520"
@@ -33,6 +34,24 @@
     </Window.Styles>
 
     <DockPanel LastChildFill="True">
+
+        <!-- ============ Category tabs ============ -->
+        <!-- All / Heals / Buffs / Attacks / Party+AoE. A spell can satisfy more
+             than one non-All tab (SpellBookCategoryClassifier), so this just
+             re-filters the one Rows grid below rather than swapping content
+             per tab — TabStrip is the header-only Avalonia control for exactly
+             that shape. -->
+        <TabStrip DockPanel.Dock="Top"
+                  ItemsSource="{Binding Categories}"
+                  SelectedItem="{Binding SelectedCategory, Mode=TwoWay}"
+                  Background="{StaticResource ChromeBgElevBrush}">
+            <TabStrip.ItemTemplate>
+                <DataTemplate x:DataType="spells:SpellBookCategory">
+                    <TextBlock Text="{Binding Converter={x:Static vm:SpellBookCategoryLabelConverter.Instance}}"
+                               FontSize="12"/>
+                </DataTemplate>
+            </TabStrip.ItemTemplate>
+        </TabStrip>
 
         <!-- ============ Control strip ============ -->
         <Border DockPanel.Dock="Top"

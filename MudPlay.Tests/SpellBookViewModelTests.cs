@@ -669,4 +669,69 @@ public sealed class SpellBookViewModelTests : IDisposable
         }
         return row;
     }
+
+    // ----- category tabs (SelectedCategory) --------------------------------
+
+    // "fireball": EnergyCost 500 — Attacks only, matching god's wrath's real shape.
+    private static Dictionary<string, object> AttackSpellRow(int number, string name, string shortCode)
+    {
+        Dictionary<string, object> row = SpellRow(number, name, shortCode, magery: 1, mageryLvl: 1, reqLevel: 1);
+        row["EnergyCost"] = 500;
+        row["MaxBase"] = 20;
+        row["Abil-0"] = 17; // Damage(-MR)
+        return row;
+    }
+
+    // "heal touch": Abil 18 (Heal) — Heals only, matching major healing's real shape.
+    private static Dictionary<string, object> HealSpellRow(int number, string name, string shortCode)
+    {
+        Dictionary<string, object> row = SpellRow(number, name, shortCode, magery: 1, mageryLvl: 1, reqLevel: 1);
+        row["MaxBase"] = 20;
+        row["Abil-0"] = 18; // Heal
+        return row;
+    }
+
+    // "party ward": Dur 40, Targets 13 (Full Party Area) — Buffs AND PartyOrAoe,
+    // matching chant / mass frenzy's real shape.
+    private static Dictionary<string, object> PartyBuffSpellRow(int number, string name, string shortCode)
+    {
+        Dictionary<string, object> row = SpellRow(number, name, shortCode, magery: 1, mageryLvl: 1, reqLevel: 1);
+        row["MinBase"] = 0;
+        row["Dur"] = 40;
+        row["Targets"] = 13;
+        row["Abil-0"] = 22; // Accuracy — an arbitrary non-damage/heal affect, like bless's own shape
+        return row;
+    }
+
+    [Fact]
+    public void SelectedCategory_FiltersRowsByClassification()
+    {
+        object[] spells =
+        [
+            AttackSpellRow(100, "fireball", "fire"),
+            HealSpellRow(101, "heal touch", "heal"),
+            PartyBuffSpellRow(102, "party ward", "ward"),
+        ];
+        SpellbookState book = NewBook(classNumber: 12, level: 5, spells: spells);
+        using SpellBookViewModel vm = new(book) { ShowAllSpells = true };
+
+        Assert.Equal(SpellBookCategory.All, vm.SelectedCategory); // default
+        Assert.Equal(3, vm.Rows.Count);
+
+        vm.SelectedCategory = SpellBookCategory.Attacks;
+        Assert.Equal(new[] { "fireball" }, vm.Rows.Select(r => r.Name));
+
+        vm.SelectedCategory = SpellBookCategory.Heals;
+        Assert.Equal(new[] { "heal touch" }, vm.Rows.Select(r => r.Name));
+
+        vm.SelectedCategory = SpellBookCategory.Buffs;
+        Assert.Equal(new[] { "party ward" }, vm.Rows.Select(r => r.Name));
+
+        // "party ward" satisfies both Buffs and PartyOrAoe — same spell, different tab.
+        vm.SelectedCategory = SpellBookCategory.PartyOrAoe;
+        Assert.Equal(new[] { "party ward" }, vm.Rows.Select(r => r.Name));
+
+        vm.SelectedCategory = SpellBookCategory.All;
+        Assert.Equal(3, vm.Rows.Count);
+    }
 }

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using MudPlay.Game.Calculators;
 using MudPlay.Game.GameData;
 using MudPlay.Services;
 
@@ -100,6 +101,20 @@ public sealed class KnownSpellCatalog
         return ResolveClassMagery(number, out _) != MageryNone;
     }
 
+    // Query/IsUsable's charAlign encoding: 0 = unknown (skip alignment
+    // filtering entirely — see IsUsable), 1 = Good, 2 = Neutral, 3 = Evil. Not
+    // a straight cast of AlignmentBucket (Good=0/Neutral=1/Evil=2 there, since
+    // 0 there is a real band, not "unknown") — this is the adapter between the
+    // equip-filter's live AlignmentBucket? (ItemEquipFilter.BucketForWord) and
+    // this catalog's own int scheme.
+    public static int CharAlignFor(AlignmentBucket? bucket) => bucket switch
+    {
+        AlignmentBucket.Good => 1,
+        AlignmentBucket.Neutral => 2,
+        AlignmentBucket.Evil => 3,
+        _ => 0,
+    };
+
     // Every spell classNumber can learn, gated to level (pass 0 for the full
     // list ignoring the level requirement). Sorted by ReqLevel then Name. Empty
     // for classes with no magery (Warriors, Thieves, etc.).
@@ -117,12 +132,17 @@ public sealed class KnownSpellCatalog
             results.Add(ToKnownSpell(row));
         }
 
-        results.Sort(static (a, b) =>
-        {
-            int byLevel = a.ReqLevel.CompareTo(b.ReqLevel);
-            return byLevel != 0 ? byLevel : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-        });
+        results.Sort(CompareByReqLevelThenName);
         return results;
+    }
+
+    // Query's own ordering — ReqLevel then Name — extracted so SpellbookState can
+    // re-sort after unioning an alignment-excluded, already-obtained spell back in
+    // (RebuildAvailable) without duplicating the comparator.
+    public static int CompareByReqLevelThenName(KnownSpell a, KnownSpell b)
+    {
+        int byLevel = a.ReqLevel.CompareTo(b.ReqLevel);
+        return byLevel != 0 ? byLevel : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
     }
 
     // Every code-145 mana-regen ROLL spell in the active set (nature tap / mana

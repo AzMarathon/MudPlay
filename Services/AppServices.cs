@@ -2386,16 +2386,27 @@ public sealed class AppServices
         // no-profile case alike. The obtained set is restored separately in
         // the ProfileLoaded handler below (after this seeds the class list),
         // so the learned checkmarks survive across sessions.
+        //
+        // Alignment comes from the SAME source as the Equipment Manager's own
+        // GoodOnly/EvilOnly gating (CanCharacterEquipItem / IsEquipRestricted
+        // above) — the `who`-observed title on our own Players row, not the
+        // stat screen (which doesn't report alignment at all). Unknown until a
+        // `who` has actually shown our own row this session, in which case
+        // charAlign stays 0 and IsUsable skips alignment filtering entirely
+        // rather than guessing.
         void SeedSpellbook(Models.Profile.LastKnownStats? snap, bool reseed = false)
         {
             int classNumber = snap is null ? 0 : SpellCatalog.ResolveClassNumber(snap.Class) ?? 0;
             int level = snap?.Level ?? 0;
+            Game.Calculators.AlignmentBucket? alignment = Game.Inventory.ItemEquipFilter.BucketForWord(
+                Players.Find(PlayerStats.Name)?.Alignment);
+            int charAlign = Game.Spells.KnownSpellCatalog.CharAlignFor(alignment);
             // reseed = the active game-data set changed under us: force a rebuild
             // even when the class number is unchanged, since the Spells table
             // itself was replaced. Refresh alone skips the rebuild on an
             // unchanged class number and would leave Available stale.
-            if (reseed) Spellbook.Reseed(classNumber, level);
-            else Spellbook.Refresh(classNumber, level);
+            if (reseed) Spellbook.Reseed(classNumber, level, charAlign);
+            else Spellbook.Refresh(classNumber, level, charAlign);
         }
 
         // A game-data set swap replaces the Spells / Classes tables under the
@@ -2455,6 +2466,19 @@ public sealed class AppServices
             // PromptParser to keep it the sole writer of the max fields).
             Player.ApplyStatScreenMax(snapshot.MaxHits, snapshot.MaxMana);
             SeedSpellbook(snapshot);
+        };
+        // Alignment doesn't come from `stat` (see SeedSpellbook above) — it's only
+        // ever refreshed by a `who` re-observing our own row. Without this, a
+        // character whose alignment wasn't yet known at the last `stat` stays
+        // unfiltered (GoodOnly/EvilOnly spells both visible) until the NEXT `stat`
+        // happens to run after a `who`. Mirrors AlignmentTracker's own self-row
+        // match (same PlayerObservation.SplitName + given-name comparison).
+        Players.ObservationRecorded += givenName =>
+        {
+            (string self, _) = Models.GameData.PlayerObservation.SplitName(PlayerStats.Name);
+            if (!string.IsNullOrEmpty(self)
+                && string.Equals(self, givenName, StringComparison.OrdinalIgnoreCase))
+                SeedSpellbook(Profile.Current?.LastKnownStats);
         };
         // The compact `health` command (Reset States, or a manual `health`) re-anchors
         // the HP + power-pool ceilings without the full stat-screen scroll. Snap

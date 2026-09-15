@@ -231,7 +231,26 @@ public sealed class SpellbookState
 
     private void RebuildAvailable()
     {
-        _available = new List<KnownSpell>(_catalog.Query(ClassNumber, level: 0, CharAlign));
+        List<KnownSpell> aligned = new(_catalog.Query(ClassNumber, level: 0, CharAlign));
+        // An alignment-gated spell the character has ALREADY obtained must never
+        // disappear just because their alignment has since drifted — MajorMUD
+        // doesn't retroactively un-teach a spell (an alignment-quest reward stays
+        // yours even if you later shift away from that alignment); only whether a
+        // NEW, not-yet-obtained spell can still be learned is gated by the CURRENT
+        // alignment. Union back in any already-obtained spell the filter excluded,
+        // reading the unfiltered (charAlign 0) list as the source of what to
+        // restore, then re-sort to keep Query's ReqLevel-then-Name order.
+        if (CharAlign != 0 && _obtainedNames.Count > 0)
+        {
+            HashSet<int> present = new(aligned.Select(s => s.Number));
+            foreach (KnownSpell s in _catalog.Query(ClassNumber, level: 0, charAlign: 0))
+            {
+                if (present.Contains(s.Number) || !_obtainedNames.Contains(s.Name)) continue;
+                aligned.Add(s);
+            }
+            aligned.Sort(KnownSpellCatalog.CompareByReqLevelThenName);
+        }
+        _available = aligned;
         // Class-scoped cast-item list is a full Items scan — resolve it once here,
         // on the same class-change / set-swap trigger, so per-pass GetCastItems reads
         // are free. GetClassCastItems keys only on class, so this is its full input.
