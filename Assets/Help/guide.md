@@ -1428,7 +1428,12 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 | `/rooms/{map}/{room}` | A room: name, exits, its lair tag, and its monsters grouped as lair / placed / assigned, exactly as the map's ROOM INFO panel groups them. |
 | `/monsters/{id}` | A monster's record — exp (with its multiplier applied), HP, AC, resists, attacks and drop table. |
 
-**Access.** Two things are required, not one. The socket is bound to loopback, so nothing outside your machine can reach it — but that alone isn't enough, because any program on your machine (or a web page you happen to be visiting) can also reach 127.0.0.1. So every request must carry a **bearer token**: `Authorization: Bearer <token>`. Requiring a header is what stops a random web page forging a request. The token lives in `.apitoken` in your app data folder, readable only by you, and **Show token** in Settings reveals it. **Regenerate** replaces it, immediately invalidating anything still using the old one — use that if it ends up somewhere it shouldn't. The token is never written to the program log, and a bug report records only whether the API was on and listening, never the token itself.
+**Access.** Two things are required, not one:
+
+- **Loopback binding** — the socket is bound to loopback, so nothing outside your machine can reach it. But that alone isn't enough, because any program on your machine (or a web page you happen to be visiting) can also reach 127.0.0.1.
+- **A bearer token** — every request must carry `Authorization: Bearer <token>`. Requiring a header is what stops a random web page forging a request.
+
+The token lives in `.apitoken` in your app data folder, readable only by you, and **Show token** in Settings reveals it. **Regenerate** replaces it, immediately invalidating anything still using the old one — use that if it ends up somewhere it shouldn't. The token is never written to the program log, and a bug report records only whether the API was on and listening, never the token itself.
 
 Reading the log with `curl`:
 
@@ -1768,7 +1773,14 @@ You can edit **several boards in one visit**: click between them freely and ever
 ### Reconnect when: Connect attempt fails / Carrier is lost mid-session / Server stops responding / After Cleanup
 
 **Default:** all Off
-**What it does:** Four independent triggers for automatic redialing: a failed initial connect attempt, the connection dropping mid-session, the server going silent long enough for the No-response check above to flag it dead, or the BBS's scheduled nightly cleanup finishing. "After Cleanup" is a two-part behavior: it also makes MudPlay proactively exit the realm and drop the connection *before* the BBS forcibly disconnects it, once a "shutting down soon" warning is seen. It waits for a safe room (no hostiles, not mid-fight), sends the exit command, and drops the carrier the moment the game confirms your character has been saved — so it disconnects cleanly regardless of which menu your board drops you to after leaving the realm.
+**What it does:** Four independent triggers for automatic redialing:
+
+- a failed initial connect attempt;
+- the connection dropping mid-session;
+- the server going silent long enough for the No-response check above to flag it dead;
+- the BBS's scheduled nightly cleanup finishing.
+
+"After Cleanup" is a two-part behavior: it also makes MudPlay proactively exit the realm and drop the connection *before* the BBS forcibly disconnects it, once a "shutting down soon" warning is seen. It waits for a safe room (no hostiles, not mid-fight), sends the exit command, and drops the carrier the moment the game confirms your character has been saved — so it disconnects cleanly regardless of which menu your board drops you to after leaving the realm.
 **Important notes:** "Server stops responding" fires once MudPlay detects the connection is dead — the "No-response (s)" value above sets how quickly that happens (even at `0`, a hung server is caught within about 60 seconds). "After Cleanup" depends on the "Cleanup wait (m)" field below to know how long to wait before redialing.
 
 ### Cleanup wait (m)
