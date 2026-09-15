@@ -1,5 +1,11 @@
 # Version history
 
+## 3.88.7
+
+- Travel (While Moving) gear no longer flips to Default mid-walk when you step out of a room the game-data Bosses table tags but you have no Bossing set — nothing was worn to revert, so it stays in your travel footwear
+- "Swap to default before entering lairs" now holds: Default is worn all the way through the lair (the movement hook no longer instantly re-wears the While Moving set) and swaps back to travel gear the step you leave into a non-lair room; a run of adjacent lairs stays in Default without flapping
+- bug reports addressed: paradigm-20260915-061646, paradigm-20260915-061734, paradigm-20260915-124359
+
 ## 3.88.4
 
 - Settings → Events: new "NEXT" column shows a live countdown to each event's next fire (At-time / Every while in-game); lifecycle events show —

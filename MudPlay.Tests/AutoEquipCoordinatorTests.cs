@@ -742,4 +742,100 @@ public sealed class AutoEquipCoordinatorTests
         coord.OnAboutToEnterRoom(lair);
         Assert.Empty(applied);   // stays in the movement set
     }
+
+    [Fact]
+    public void LeavingBossTaggedRoom_NoBossingSet_DoesNotRevertGear()
+    {
+        // The game-data Bosses table tags a room (e.g. a town room with a named NPC),
+        // but the character has NO Bossing set. Stepping out must not yank the While
+        // Moving gear into Default (report paradigm-20260915-061646 / -061734).
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        var applied = new List<string>();
+        var boss = new Game.Map.RoomKey(1, 500);
+        var plain = new Game.Map.RoomKey(1, 501);
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied,
+            isBossRoom: k => k == boss, isMoving: () => true);
+
+        coord.OnRoomChanged(previous: boss, current: plain);
+        Assert.Empty(applied);   // no Bossing set → nothing to revert
+    }
+
+    [Fact]
+    public void LairThenTransit_SwapsToDefaultThenBackToMovementSet()
+    {
+        // Into a lair → Default footwear; out of the lair into a transit room → back to
+        // the movement footwear, both on the pre-move hook (report paradigm-20260915-124359).
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        cfg.SwapToDefaultBeforeLairs = true;
+        var applied = new List<string>();
+        var lair = new Game.Map.RoomKey(16, 242);
+        var transit = new Game.Map.RoomKey(16, 240);
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied,
+            isBossRoom: _ => false, isLair: k => k == lair, isMoving: () => true);
+
+        coord.OnMovementStarted();               // wears move-set
+        applied.Clear();
+
+        coord.OnAboutToEnterRoom(lair);          // into a lair → Default
+        Assert.Equal(new[] { "default-set" }, applied);
+        applied.Clear();
+
+        coord.OnAboutToEnterRoom(transit);       // out of the lair → back to move-set
+        Assert.Equal(new[] { "move-set" }, applied);
+    }
+
+    [Fact]
+    public void LairSwap_MovementResume_DoesNotUndoDefault()
+    {
+        // After the pre-lair swap to Default, the loop resume (OnMovementStarted, fired
+        // when the gear-swap gate clears) must NOT re-wear the movement set — the thrash
+        // that kept the character in speed footwear inside lairs (report
+        // paradigm-20260915-124359).
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        cfg.SwapToDefaultBeforeLairs = true;
+        var applied = new List<string>();
+        var lair = new Game.Map.RoomKey(16, 242);
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied,
+            isBossRoom: _ => false, isLair: k => k == lair, isMoving: () => true);
+
+        coord.OnMovementStarted();               // wears move-set
+        coord.OnAboutToEnterRoom(lair);          // into a lair → Default
+        applied.Clear();
+
+        coord.OnMovementStarted();               // loop resume after the swap gate cleared
+        Assert.Empty(applied);                   // stays in Default, not re-wearing move-set
+    }
+
+    [Fact]
+    public void ConsecutiveLairs_NoSwapBackBetweenThem()
+    {
+        // Two adjacent lair rooms (no transit gap): once in Default we stay there rather
+        // than flapping move-set/Default between them (report paradigm-20260915-124359).
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        cfg.SwapToDefaultBeforeLairs = true;
+        var applied = new List<string>();
+        var lairA = new Game.Map.RoomKey(16, 242);
+        var lairB = new Game.Map.RoomKey(16, 243);
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied,
+            isBossRoom: _ => false, isLair: k => k == lairA || k == lairB, isMoving: () => true);
+
+        coord.OnMovementStarted();
+        coord.OnAboutToEnterRoom(lairA);         // move-set → Default
+        applied.Clear();
+
+        coord.OnAboutToEnterRoom(lairB);         // adjacent lair → stay in Default
+        Assert.Empty(applied);
+    }
 }
