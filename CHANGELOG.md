@@ -1,5 +1,12 @@
 # Version history
 
+## 3.86.9
+
+- Trigger responses now treat each **newline** as its own command — type one command per line in the Response box and every line is sent with its own Enter (previously you had to join them with `^M` or `;`); the same split now applies everywhere commands are chained (aliases, macros, loops)
+- Trigger editor: the empty gap above the Response box (left by a collapsed capture-hints row) is gone
+- Help guide: added a **"Writing a match pattern"** how-to for trigger regexes — literal `*` / `{name}` shortcuts plus a .NET-regex primer with a worked `(?<name>…)` capture example
+- Help guide: bigger body text, roomier spacing between paragraphs, and every wall-of-text section rewritten as lead sentences with bullet lists instead of giant blocked paragraphs
+
 ## 3.86.5
 
 - The "run to the blocked room anyway" route card now shows **why** the route is blocked, as subtext — previously the reason was computed but had nowhere to display, so a blocked card gave no clue what stopped you

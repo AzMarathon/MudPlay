@@ -1,12 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.86.5**
-> - The "run to the blocked room anyway" card now shows **why** the route is blocked, and a level-only block names the **level gate** and the level needed; the Choose-a-route window is wider so cards aren't cut off
-> - Bug reports now capture the route planner's decision for your last walk-to (reachable? blocked where? which exit and why), so a "blocked / no reason" route card is diagnosable from the capture
-> - Gear thrash fixed: the travelling→Default combat swap is debounced, so Paradigm's rapid combat-state flicker no longer swaps you between your While-Moving and Default gear on every brief engage
-> - Boss timers auto-start on a kill inferred from an exp gain (the engaged target was dropped before the death registered) — the just-killed name is matched against the boss table
-> - Boss timers also auto-start via a roster fallback: a boss that vanishes from a same-room re-parse of the "Also here:" list is marked killed, covering kills you never engaged
+> **Version 3.86.9**
+> - Trigger responses now treat each **newline** as its own command — one command per line, each sent with its own Enter (the same split now also applies to aliases, macros, and loops)
+> - Trigger editor: the empty gap above the Response box is gone
+> - Help guide: added a **"Writing a match pattern"** how-to for trigger regexes — literal shortcuts plus a .NET-regex primer with a worked capture example
+> - Help guide: bigger body text, roomier paragraph spacing, and every wall-of-text section rewritten as lead sentences with bullet lists instead of giant blocked paragraphs
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -15,6 +15,12 @@ namespace MudPlay.Views.Help;
 // is lives in HelpMarkup / HelpBook.
 public static class HelpContentRenderer
 {
+    // Body text a notch larger than the app default, and a roomier gap between
+    // paragraph blocks — the guide reads as prose, so it wants breathing room
+    // rather than the denser sizing the rest of the chrome uses.
+    private const double BodyFontSize = 14.5;
+    private const double ParagraphGap = 14;
+
     private static readonly FontFamily MonoFont = new("Consolas, Menlo, monospace");
     private static readonly IBrush CodeBrush = new SolidColorBrush(Color.Parse("#2AA198"));
     private static readonly IBrush GridLineBrush = new SolidColorBrush(Color.Parse("#40808080"));
@@ -32,7 +38,7 @@ public static class HelpContentRenderer
 
     public static Control Render(string? body)
     {
-        StackPanel panel = new() { Spacing = 9 };
+        StackPanel panel = new() { Spacing = ParagraphGap };
         if (string.IsNullOrWhiteSpace(body)) return panel;
 
         string[] lines = body.Replace("\r\n", "\n").Split('\n');
@@ -71,7 +77,7 @@ public static class HelpContentRenderer
     // blending into the surrounding explanation.
     private static int AppendParagraph(StackPanel panel, string[] lines, int i)
     {
-        TextBlock tb = new() { TextWrapping = TextWrapping.Wrap };
+        TextBlock tb = new() { TextWrapping = TextWrapping.Wrap, FontSize = BodyFontSize };
         AppendRuns(tb.Inlines!, lines[i]);
 
         if (IsWarning(lines[i]))
@@ -91,7 +97,7 @@ public static class HelpContentRenderer
 
     private static int AppendBullets(StackPanel panel, string[] lines, int i)
     {
-        StackPanel list = new() { Spacing = 3 };
+        StackPanel list = new() { Spacing = 5 };
         while (i < lines.Length && IsBullet(lines[i]))
         {
             string item = lines[i].TrimStart()[2..];
@@ -100,8 +106,8 @@ public static class HelpContentRenderer
                 ColumnDefinitions = new ColumnDefinitions("Auto,*"),
                 Margin = new Thickness(6, 0, 0, 0),
             };
-            TextBlock dot = new() { Text = "•", Margin = new Thickness(0, 0, 6, 0) };
-            TextBlock text = new() { TextWrapping = TextWrapping.Wrap };
+            TextBlock dot = new() { Text = "•", Margin = new Thickness(0, 0, 6, 0), FontSize = BodyFontSize };
+            TextBlock text = new() { TextWrapping = TextWrapping.Wrap, FontSize = BodyFontSize };
             AppendRuns(text.Inlines!, item);
             Grid.SetColumn(text, 1);
             row.Children.Add(dot);
@@ -139,7 +145,7 @@ public static class HelpContentRenderer
             for (int c = 0; c < cols; c++)
             {
                 string cell = c < rows[r].Length ? rows[r][c] : string.Empty;
-                TextBlock tb = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 4) };
+                TextBlock tb = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 5), FontSize = BodyFontSize - 1 };
                 AppendRuns(tb.Inlines!, cell, headerBold: r == 0);
                 Border box = new()
                 {
