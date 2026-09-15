@@ -30,7 +30,7 @@
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto" RowSpacing="8">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto" RowSpacing="8">
 
             <!-- ===== Name + Enabled ===== -->
             <Grid Grid.Row="0" ColumnDefinitions="100,*,Auto" ColumnSpacing="8">
@@ -82,32 +82,36 @@
                            FontSize="12"/>
             </Grid>
 
-            <!-- Status line — muted hint when valid, red when not.
-                 Two TextBlocks share the same row, gated by HasError. -->
-            <TextBlock Grid.Row="4"
-                       Margin="108,0,0,0"
-                       Text="{Binding StatusMessage}"
-                       Classes="MutedHint"
-                       IsVisible="{Binding !HasError}"/>
-            <TextBlock Grid.Row="4"
-                       Margin="108,0,0,0"
-                       Text="{Binding StatusMessage}"
-                       Foreground="#FFE06D6D" FontSize="11" TextWrapping="Wrap"
-                       IsVisible="{Binding HasError}"/>
-
-            <!-- Capture-hints panel — collapses when pattern has none. -->
-            <Grid Grid.Row="5" ColumnDefinitions="100,*" ColumnSpacing="8"
-                  IsVisible="{Binding CaptureHints, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Captures"/>
-                <TextBlock Grid.Column="1" Text="{Binding CaptureHints}"
-                           Foreground="{StaticResource ChromeFgBrush}"
-                           FontFamily="{StaticResource FontMono}"
-                           FontSize="11"
-                           ToolTip.Tip="These names are available inside Response / Notify via {name}. They populate from each match."/>
-            </Grid>
+            <!-- Status line + capture hints share one grid row so a collapsed
+                 hints panel (no captures) doesn't leave the grid's RowSpacing
+                 stranded as a doubled gap above the Response box. The inner
+                 StackPanel only spaces its *visible* children, so each piece
+                 that's absent contributes nothing. -->
+            <StackPanel Grid.Row="4" Spacing="4">
+                <!-- Status line — muted hint when valid, red when not.
+                     Two TextBlocks overlap, gated by HasError. -->
+                <TextBlock Margin="108,0,0,0"
+                           Text="{Binding StatusMessage}"
+                           Classes="MutedHint"
+                           IsVisible="{Binding !HasError}"/>
+                <TextBlock Margin="108,0,0,0"
+                           Text="{Binding StatusMessage}"
+                           Foreground="#FFE06D6D" FontSize="11" TextWrapping="Wrap"
+                           IsVisible="{Binding HasError}"/>
+                <!-- Capture-hints panel — collapses when pattern has none. -->
+                <Grid ColumnDefinitions="100,*" ColumnSpacing="8"
+                      IsVisible="{Binding CaptureHints, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Captures"/>
+                    <TextBlock Grid.Column="1" Text="{Binding CaptureHints}"
+                               Foreground="{StaticResource ChromeFgBrush}"
+                               FontFamily="{StaticResource FontMono}"
+                               FontSize="11"
+                               ToolTip.Tip="These names are available inside Response / Notify via {name}. They populate from each match."/>
+                </Grid>
+            </StackPanel>
 
             <!-- ===== Response (multi-line) ===== -->
-            <Grid Grid.Row="6" RowDefinitions="Auto,*,Auto" RowSpacing="3">
+            <Grid Grid.Row="5" RowDefinitions="Auto,*,Auto" RowSpacing="3">
                 <TextBlock Grid.Row="0" Classes="SectionHeader" Text="Response"/>
                 <TextBox   Grid.Row="1"
                            Text="{Binding Response, Mode=TwoWay}"
@@ -122,9 +126,9 @@
             </Grid>
 
             <!-- ===== Optional sidecars ===== -->
-            <TextBlock Grid.Row="7" Classes="SectionHeader" Text="Optional"/>
+            <TextBlock Grid.Row="6" Classes="SectionHeader" Text="Optional"/>
 
-            <Grid Grid.Row="8" ColumnDefinitions="100,*,Auto" ColumnSpacing="8">
+            <Grid Grid.Row="7" ColumnDefinitions="100,*,Auto" ColumnSpacing="8">
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Sound"/>
                 <TextBox   Grid.Column="1"
                            Text="{Binding SoundFile, Mode=TwoWay}"
@@ -136,7 +140,7 @@
             </Grid>
 
             <!-- ===== Buttons ===== -->
-            <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+            <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
                 <Button Content="Save"   Command="{Binding SaveCommand}"
                         IsEnabled="{Binding CanSave}"
                         IsDefault="True" MinWidth="80"/>
