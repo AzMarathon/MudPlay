@@ -13,6 +13,9 @@ public sealed class MacroStoreTests
     [InlineData("open chest^M;look",                   new[] { "open chest", "look" })]    // mixed delimiters
     [InlineData("   sneak  ;  hide  ",                 new[] { "sneak", "hide" })]         // trims fragments
     [InlineData(";;;n;;;",                             new[] { "n" })]                     // drops empties
+    [InlineData("north\nget all\nsouth",               new[] { "north", "get all", "south" })]  // newline = separator
+    [InlineData("north\r\nget all",                    new[] { "north", "get all" })]      // CRLF too
+    [InlineData("say hi\n;wave^Msmile",                new[] { "say hi", "wave", "smile" })]  // mixed with newlines
     [InlineData("",                                    new string[0])]
     [InlineData(null,                                  new string[0])]
     public void SplitCommandSteps_BehavesAsSpecified(string? input, string[] expected)

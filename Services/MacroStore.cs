@@ -87,16 +87,23 @@ public sealed class MacroStore
     }
 
     // Split a macro's Command into the individual lines it should send to the
-    // server — on either ^M (literal caret-M) or ;. Same multi-step
+    // server — on ^M (literal caret-M), ;, OR a real newline. Same multi-step
     // convention every other place in the app uses (login automator,
-    // triggers, aliases). Empty / whitespace-only fragments are dropped so a
-    // trailing separator doesn't fire an empty line.
+    // triggers, aliases). A newline counts because a multi-line field (the
+    // trigger Response box accepts Return) should send each line as its own
+    // command, each terminated with a CR — not one blob missing the Enters
+    // between them. Empty / whitespace-only fragments are dropped so a trailing
+    // separator doesn't fire an empty line.
     public static IReadOnlyList<string> SplitCommandSteps(string? command)
     {
         if (string.IsNullOrEmpty(command)) return Array.Empty<string>();
-        // Split on `^M` (literal) OR `;`. ^M is two characters so we
-        // pre-substitute it with `;` before the single-char split.
-        string normalized = command.Replace("^M", ";", StringComparison.Ordinal);
+        // Normalise every separator to `;` (^M is two chars; newlines may be
+        // \r\n or \n), then a single split covers all three.
+        string normalized = command
+            .Replace("^M", ";", StringComparison.Ordinal)
+            .Replace("\r\n", ";", StringComparison.Ordinal)
+            .Replace('\r', ';')
+            .Replace('\n', ';');
         string[] parts = normalized.Split(';');
         List<string> steps = new(parts.Length);
         foreach (string p in parts)

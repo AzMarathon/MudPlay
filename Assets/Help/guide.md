@@ -723,8 +723,29 @@ Beyond the engines, you can script your own automation. All three editors live i
   - **Scope** — which incoming lines it watches: *Game messages* (the default), a single chat channel (*Say / Yell / Gossip / Telepath / Gangpath / Broadcast*), *Chat (any)*, or the *System log*.
   - **Match type** — *Literal* (type the text as it appears; `*` wildcards a span and `{name}` captures a piece) or *Regex* (full .NET regex, with `(?<name>…)` for captures).
   - **Pattern** — the text or expression to match against each line. Any pieces you capture appear in the **Captures** row.
-  - **Response** — what MudPlay sends back on a match. Drop a captured value in with `{name}`, split multiple lines with `^M` or `;`, or leave it blank to send a bare Enter.
+  - **Response** — what MudPlay sends back on a match. Drop a captured value in with `{name}`.
+
+    To send **several commands**, put each on its own line in the box (the Response box accepts Enter) — every line is sent as a separate command, each with its own Enter. `^M` and `;` do the same thing on a single line, so `north;get all;south` is three commands too.
+
+    Leave the box blank to send a bare Enter.
   - **Sound** (optional) — a file picker is here, but sound playback isn't wired up yet, so it does nothing today.
+
+### Writing a match pattern
+
+**Literal** patterns match the text as it appears on the line. Two shortcuts make them flexible:
+
+- `*` matches any run of characters — `You are hit by *` matches whatever follows.
+- `{name}` captures a piece for the Response — `{attacker} hits you` captures the attacker's name, and you use it back as `{attacker}`.
+
+**Regex** patterns are full .NET regular expressions, for when a literal pattern can't say what you mean. The essentials:
+
+- **Ordinary letters and spaces match themselves.** The characters `. * + ? ( ) [ ] { } ^ $ | \` are special — put a `\` in front to match one literally (`\.` matches a real dot).
+- **Character shorthands:** `.` = any one character, `\d` = a digit, `\w` = a letter/digit/underscore, `\s` = a space. A set in brackets matches any one of its members — `[nsew]` matches a single compass letter.
+- **Repetition:** `+` = one or more, `*` = zero or more, `?` = optional (zero or one). So `\d+` matches a number of any length, and `.*` matches any span (the regex twin of literal `*`).
+- **Anchors:** `^` ties the match to the start of the line, `$` to the end — `^You gain \d+ experience\.$` matches only a whole exp line, nothing that merely contains one.
+- **Captures:** wrap a piece in `(?<name>…)` to pull it out for the Response. `^(?<who>\w+) tells you '(?<msg>.*)'$` captures **who** and **msg** from a telepath; a Response of `reply {who} — got: {msg}` sends them back.
+
+The **Captures** row lists every name your pattern defines, and the status line under the Pattern box turns **red** with the reason if the expression doesn't compile — so you can tell a typo from a valid pattern before you save.
 
 ---
 

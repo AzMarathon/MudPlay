@@ -115,10 +115,10 @@
                            FontFamily="{StaticResource FontMono}"
                            FontSize="12"
                            MinHeight="100"
-                           ToolTip.Tip="Sent to the game on match. {name} substitutes from the capture cache. Use ^M or ; to split into multiple lines. Leave blank to send a bare CR."/>
+                           ToolTip.Tip="Sent to the game on match. {name} substitutes from the capture cache. Put each command on its own line — or split with ^M or ; — and every command is sent with its own Enter. Leave blank to send a bare CR."/>
                 <TextBlock Grid.Row="2"
                            Classes="MutedHint"
-                           Text="{}{name} substitutes from the capture cache.  ^M or ; splits multi-line.  Blank = bare CR."/>
+                           Text="{}{name} substitutes from the capture cache.  One command per line (or ^M / ;) — each is sent with its own Enter.  Blank = bare CR."/>
             </Grid>
 
             <!-- ===== Optional sidecars ===== -->
