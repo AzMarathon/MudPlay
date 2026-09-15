@@ -2991,8 +2991,8 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 
 ### Event list (New… / Modify… / Remove)
 
-**What it does:** Shows every scheduled event you've defined, with its name, trigger, and action. **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
-**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference.
+**What it does:** Shows every scheduled event you've defined, with its **Name**, its trigger (**When**), a live countdown to its next fire (**Next**), and its action (**What**). **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
+**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time** and **Every** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, so they show a dash.
 
 ### Event editor — trigger types
 

@@ -53,6 +53,12 @@ public sealed class EventScheduler : IDisposable
 
     private readonly DispatcherTimer _atTimeTicker;
     private readonly Dictionary<ScheduledEvent, DispatcherTimer> _everyTimers = new();
+    // Wall-clock instant each running Every-timer is next expected to tick.
+    // DispatcherTimer doesn't expose its remaining interval, so we record the
+    // due-time ourselves for the Settings → Events "next call" countdown.
+    // Same lifetime as _everyTimers — populated on start, re-armed on tick,
+    // cleared when timers stop.
+    private readonly Dictionary<ScheduledEvent, DateTime> _everyNextFire = new();
     // (event → minute string we last fired at) so AtTime doesn't double-fire
     // within the same minute.
     private readonly Dictionary<ScheduledEvent, string> _atTimeFiredAt = new();
@@ -245,8 +251,15 @@ public sealed class EventScheduler : IDisposable
             DispatcherTimer t = new() { Interval = interval };
             // Capture by value — the timer outlives this loop iteration.
             ScheduledEvent captured = ev;
-            t.Tick += (_, _) => _events.Fire(captured);
+            t.Tick += (_, _) =>
+            {
+                // Re-arm the due-time before firing: DispatcherTimer repeats on
+                // the same interval, so the next tick lands one interval out.
+                _everyNextFire[captured] = DateTime.Now + interval;
+                _events.Fire(captured);
+            };
             _everyTimers[ev] = t;
+            _everyNextFire[ev] = DateTime.Now + interval;
             t.Start();
         }
     }
@@ -255,6 +268,33 @@ public sealed class EventScheduler : IDisposable
     {
         foreach (DispatcherTimer t in _everyTimers.Values) t.Stop();
         _everyTimers.Clear();
+        _everyNextFire.Clear();
+    }
+
+    // ----- Next-fire query (Settings → Events countdown) --------------
+
+    // Wall-clock instant this event is next expected to fire, or null when it
+    // has no live countdown: not in-game (timers only run while connected and
+    // past the first prompt), a lifecycle trigger (Logon / Logoff / Re-log fire
+    // on connection events, not a clock), disabled, or a malformed schedule.
+    // Every reads the tracked timer due-time; AtTime is derived from the
+    // configured HH:mm as the next occurrence from now.
+    public DateTime? GetNextFire(ScheduledEvent ev)
+    {
+        ArgumentNullException.ThrowIfNull(ev);
+        if (!_isInGame || ev.Disabled) return null;
+        switch (ev.TriggerType)
+        {
+            case EventTriggerType.Every:
+                return _everyNextFire.TryGetValue(ev, out DateTime due) ? due : null;
+            case EventTriggerType.AtTime:
+                if (ev.TryParseAtTime() is not { } target) return null;
+                DateTime now = DateTime.Now;
+                DateTime todayAt = now.Date + target.ToTimeSpan();
+                return todayAt > now ? todayAt : todayAt.AddDays(1);
+            default:
+                return null;
+        }
     }
 
     // ----- Helpers ----------------------------------------------------

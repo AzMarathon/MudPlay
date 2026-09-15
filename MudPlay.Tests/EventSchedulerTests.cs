@@ -252,6 +252,114 @@ public sealed class EventSchedulerTests
         Assert.Equal("save\r", Encoding.Latin1.GetString(sent[1]));
     }
 
+    // ----- Next-fire query (Settings → Events countdown) --------------
+
+    private static ScheduledEvent AtTimeEvent(string atTime, bool disabled = false) =>
+        new()
+        {
+            Name = $"at-{atTime}",
+            TriggerType = EventTriggerType.AtTime,
+            AtTime = atTime,
+            Disabled = disabled,
+            ActionType = EventActionType.Command,
+            CommandText = "who",
+        };
+
+    [Fact]
+    public void GetNextFire_NotInGame_ReturnsNull()
+    {
+        var (events, scheduler, _, _) = Build();
+        ScheduledEvent at = AtTimeEvent("23:59");
+        events.Add(at);
+
+        // No prompt observed — nothing is armed yet.
+        Assert.Null(scheduler.GetNextFire(at));
+    }
+
+    [Fact]
+    public void GetNextFire_LifecycleTrigger_InGame_ReturnsNull()
+    {
+        var (events, scheduler, prompt, _) = Build();
+        ScheduledEvent logon = CommandEvent(EventTriggerType.Logon, "stat");
+        events.Add(logon);
+
+        scheduler.NotifyConnected();
+        prompt.Append(PromptBytes);   // in-game.
+
+        // Logon / Logoff / Re-log fire on connection events, not a clock.
+        Assert.Null(scheduler.GetNextFire(logon));
+    }
+
+    [Fact]
+    public void GetNextFire_AtTime_InGame_ReturnsNextOccurrence()
+    {
+        var (events, scheduler, prompt, _) = Build();
+        ScheduledEvent at = AtTimeEvent("06:30");
+        events.Add(at);
+
+        scheduler.NotifyConnected();
+        prompt.Append(PromptBytes);   // in-game.
+
+        DateTime? next = scheduler.GetNextFire(at);
+        Assert.NotNull(next);
+        Assert.Equal(6, next!.Value.Hour);
+        Assert.Equal(30, next.Value.Minute);
+        Assert.True(next.Value > DateTime.Now);
+        Assert.True(next.Value <= DateTime.Now.AddDays(1));
+    }
+
+    [Fact]
+    public void GetNextFire_AtTime_MalformedTime_ReturnsNull()
+    {
+        var (events, scheduler, prompt, _) = Build();
+        ScheduledEvent at = AtTimeEvent("not-a-time");
+        events.Add(at);
+
+        scheduler.NotifyConnected();
+        prompt.Append(PromptBytes);
+
+        Assert.Null(scheduler.GetNextFire(at));
+    }
+
+    [Fact]
+    public void GetNextFire_DisabledEvent_ReturnsNull()
+    {
+        var (events, scheduler, prompt, _) = Build();
+        ScheduledEvent at = AtTimeEvent("06:30", disabled: true);
+        events.Add(at);
+
+        scheduler.NotifyConnected();
+        prompt.Append(PromptBytes);
+
+        Assert.Null(scheduler.GetNextFire(at));
+    }
+
+    [Fact]
+    public void GetNextFire_Every_InGame_ReturnsTrackedDueTime()
+    {
+        var (events, scheduler, prompt, _) = Build();
+        ScheduledEvent every = new()
+        {
+            Name = "every-30s",
+            TriggerType = EventTriggerType.Every,
+            EveryAmount = 30,
+            EveryUnit = EventTimeUnit.Seconds,
+            ActionType = EventActionType.Command,
+            CommandText = "stat",
+        };
+        events.Add(every);
+
+        scheduler.NotifyConnected();
+        prompt.Append(PromptBytes);   // in-game → the Every-timer is armed at now + 30s.
+
+        DateTime? next = scheduler.GetNextFire(every);
+        Assert.NotNull(next);
+        // No dispatcher pumps these in-process tests, so the timer hasn't
+        // ticked — the due-time sits within (now, now + 30s].
+        Assert.True(next!.Value > DateTime.Now);
+        Assert.True(next.Value <= DateTime.Now.AddSeconds(30));
+    }
+
     // ----- Dispose ----------------------------------------------------
 
     [Fact]

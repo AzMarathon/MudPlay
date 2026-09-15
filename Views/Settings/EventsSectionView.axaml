@@ -75,11 +75,13 @@
                     Background="{StaticResource ChromeBgElevBrush}">
                 <Grid RowDefinitions="Auto,1,*">
                     <!-- Header row. -->
-                    <Grid Grid.Row="0" ColumnDefinitions="200,180,*"
+                    <Grid Grid.Row="0" ColumnDefinitions="200,160,90,*"
                           Background="{StaticResource ChromeBgBrush}">
                         <TextBlock Grid.Column="0" Classes="ColumnHeader" Text="NAME"/>
                         <TextBlock Grid.Column="1" Classes="ColumnHeader" Text="WHEN"/>
-                        <TextBlock Grid.Column="2" Classes="ColumnHeader" Text="WHAT"/>
+                        <TextBlock Grid.Column="2" Classes="ColumnHeader" Text="NEXT"
+                                   ToolTip.Tip="Time until the next scheduled fire. Counts down only for At-time / Every events while connected and in-game; lifecycle events show —."/>
+                        <TextBlock Grid.Column="3" Classes="ColumnHeader" Text="WHAT"/>
                     </Grid>
                     <Border Grid.Row="1" Background="{StaticResource ChromeBorderSoftBrush}"/>
                     <!-- Rows. -->
@@ -91,14 +93,18 @@
                              DoubleTapped="OnRowDoubleTapped">
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="vm:EventRowViewModel">
-                                <Grid ColumnDefinitions="200,180,*" Margin="0,2,0,2">
+                                <Grid ColumnDefinitions="200,160,90,*" Margin="0,2,0,2">
                                     <TextBlock Grid.Column="0" Classes="RowText"
                                                Text="{Binding Name}"
                                                Margin="6,0,8,0"/>
                                     <TextBlock Grid.Column="1" Classes="RowText"
                                                Text="{Binding TimeText}"
                                                Margin="6,0,8,0"/>
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                    <TextBlock Grid.Column="2" Classes="RowText"
+                                               Text="{Binding NextCallText}"
+                                               FontFamily="{StaticResource FontMono}"
+                                               Margin="6,0,8,0"/>
+                                    <StackPanel Grid.Column="3" Orientation="Horizontal"
                                                 Margin="6,0,8,0">
                                         <TextBlock Classes="RowText"
                                                    Text="{Binding EventText}"/>

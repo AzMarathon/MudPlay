@@ -5,6 +5,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Events;
@@ -28,9 +29,14 @@ namespace MudPlay.ViewModels.Settings;
 // toggle. Matches the user expectation "flip the switch and walk away".
 public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
 {
+    // How often the "NEXT" countdown column re-renders while the tab is open.
+    private static readonly TimeSpan CountdownRefreshInterval = TimeSpan.FromSeconds(1);
+
     private readonly EventManager _events;
     private readonly ProfileService _profile;
+    private readonly EventScheduler? _scheduler;
     private readonly LogService? _log;
+    private readonly DispatcherTimer _countdownTicker;
     private Control? _view;
 
     public override string Id => "events";
@@ -74,26 +80,39 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
     };
 
     public EventsSectionViewModel()
-        : this(AppServices.Current.Events, AppServices.Current.Profile, AppServices.Current.Log) { }
+        : this(AppServices.Current.Events, AppServices.Current.Profile,
+               AppServices.Current.EventScheduler, AppServices.Current.Log) { }
 
-    public EventsSectionViewModel(EventManager events, ProfileService profile, LogService? log = null)
+    public EventsSectionViewModel(EventManager events, ProfileService profile,
+                                  EventScheduler? scheduler = null, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(events);
         ArgumentNullException.ThrowIfNull(profile);
         _events = events;
         _profile = profile;
+        _scheduler = scheduler;
         _log = log;
 
         _events.Events.CollectionChanged += OnEventsCollectionChanged;
         _events.AutoDisabledChanged += OnAutoDisabledChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
         _profile.ProfileClosed += OnProfileClosed;
+
+        // Live countdown for the "NEXT" column. Only the scheduler knows each
+        // running Every-timer's due-time, so the row can't self-refresh — the
+        // ticker pulls fresh due-times once a second while the tab is open.
+        _countdownTicker = new DispatcherTimer { Interval = CountdownRefreshInterval };
+        _countdownTicker.Tick += OnCountdownTick;
+        _countdownTicker.Start();
+
         OnDispose(() =>
         {
             _events.Events.CollectionChanged -= OnEventsCollectionChanged;
             _events.AutoDisabledChanged -= OnAutoDisabledChanged;
             _profile.ProfileLoaded -= OnProfileLoaded;
             _profile.ProfileClosed -= OnProfileClosed;
+            _countdownTicker.Tick -= OnCountdownTick;
+            _countdownTicker.Stop();
         });
 
         RebuildRows();
@@ -159,6 +178,16 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
     private void OnEventsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
         RebuildRows();
 
+    private void OnCountdownTick(object? sender, EventArgs e) => RefreshNextCall();
+
+    // Pull each row's next-fire due-time from the scheduler and reformat its
+    // countdown text. Null scheduler (tests / no engine) leaves every row at "—".
+    private void RefreshNextCall()
+    {
+        foreach (EventRowViewModel row in Rows)
+            row.UpdateNextCall(_scheduler?.GetNextFire(row.Source));
+    }
+
     private void OnAutoDisabledChanged()
     {
         // Re-flag each row's IsAutoDisabled without rebuilding the
@@ -191,5 +220,8 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
             Rows.Add(new EventRowViewModel(ev, _events.IsAutoDisabled(ev)));
         if (keepSelected is not null)
             SelectedRow = Rows.FirstOrDefault(r => ReferenceEquals(r.Source, keepSelected));
+        // Populate the countdown immediately so freshly added rows aren't blank
+        // until the next ticker pass.
+        RefreshNextCall();
     }
 }
