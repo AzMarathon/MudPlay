@@ -1,9 +1,13 @@
 using System;
 using System.Collections;
 using System.ComponentModel;
+using System.Linq;
+using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Avalonia.VisualTree;
 using MudPlay.Game;
 using MudPlay.Game.Map;
 using MudPlay.ViewModels.CharacterWorkshop;
@@ -45,6 +49,19 @@ public partial class BossesSectionView : UserControl
     {
         if (e.PropertyName == nameof(BossesSectionViewModel.IsParadigmRealm))
             ApplyRealmColumns();
+    }
+
+    // Double-click a boss row → walk to its room (the VM resolves single vs multi
+    // room). Ignore a double-tap that lands on the inline "Stop before" / "Grab All"
+    // checkboxes — those are edits, not a "go here" gesture — or outside a data row
+    // (a column header), where SelectedRow would fire a stale target.
+    private void OnRowDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (_vm is null || e.Source is not Visual src) return;
+        Visual[] chain = src.GetSelfAndVisualAncestors().ToArray();
+        if (chain.OfType<CheckBox>().Any()) return;
+        if (!chain.OfType<DataGridRow>().Any()) return;
+        if (_vm.SelectedRow is { } row) _vm.GotoBossCommand.Execute(row);
     }
 
     // Paradigm shows three early-window columns (5 / 10 / 20% off); Stock collapses

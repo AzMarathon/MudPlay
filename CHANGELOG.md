@@ -1,5 +1,10 @@
 # Version history
 
+## 3.87.0
+
+- **Double-click a boss** in the Bosses tab to walk to it — a single-room boss walks there immediately; a multi-room boss opens a picker listing its rooms **nearest first**, with **Run** (walk now), **Load** (arm the destination only), and **Cancel**
+- Double-tapping the Stop-before / Grab-All checkboxes still just toggles them, never firing the walk
+
 ## 3.86.9
 
 - Trigger responses now treat each **newline** as its own command — type one command per line in the Response box and every line is sent with its own Enter (previously you had to join them with `^M` or `;`); the same split now applies everywhere commands are chained (aliases, macros, loops)

@@ -923,6 +923,8 @@ A respawn-timer tracker. **Mark** or **Now** stamps a boss's kill time and the *
 
 The tab **opens sorted by the 100% timer with running timers on top**, so a fresh open surfaces what's active. Sorting by any timer column — or by **Boss**, **Respawn**, or **Last Killed** — groups cleanup spawns first, then bosses with a running timer, then idle ones. **Manage Bosses…** edits the list, and you can **Import / Export** a shared table. Tick **Stop before** to halt automation ahead of a boss.
 
+**Double-click a boss** to walk to it. A boss with a **single** room walks there straight away; one with **several** rooms opens a picker listing them **nearest first**, where **Run** starts the walk and **Load** only arms the destination (so you can start it later, the same as a GOTO's Load). (Double-tapping the Stop-before / Grab-All checkboxes just toggles them — it never fires the walk.)
+
 Tick **Grab All** (default off) to blindly grab a boss's loot the instant it's available — a "throw a get at everything" spray straight from game data, never a corpse scan. What it does depends on what the boss's name resolves to:
 
 - a **monster** — the instant it dies, `get` every item in its drop table (one `get <item>` per item it could drop, percentages ignored); works for cleanup bosses too (no timer needed).

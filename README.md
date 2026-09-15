@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.86.9**
-> - Trigger responses now treat each **newline** as its own command — one command per line, each sent with its own Enter (the same split now also applies to aliases, macros, and loops)
-> - Trigger editor: the empty gap above the Response box is gone
-> - Help guide: added a **"Writing a match pattern"** how-to for trigger regexes — literal shortcuts plus a .NET-regex primer with a worked capture example
-> - Help guide: bigger body text, roomier paragraph spacing, and every wall-of-text section rewritten as lead sentences with bullet lists instead of giant blocked paragraphs
+> **Version 3.87.0**
+> - **Double-click a boss** in the Bosses tab to walk to it — a single-room boss walks there immediately; a multi-room boss opens a picker listing its rooms **nearest first**, with **Run** (walk now), **Load** (arm the destination only), and **Cancel**
+> - Double-tapping the Stop-before / Grab-All checkboxes still just toggles them, never firing the walk
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
