@@ -303,6 +303,13 @@ public sealed class CharacterProfile
     // nothing completed yet.
     public List<QuestProgress>? QuestLog { get; set; }
 
+    // Local date the login-time quest-flag sync last ran for this character. The
+    // sync (the `abil` burst on Paradigm / `sys ... abil` on Stock) runs at most
+    // ONCE PER DAY — a relog later the same day skips it — so it's stamped here
+    // whenever a real check completes and compared against today on the next run.
+    // null = never synced (so the next eligible login runs it).
+    public System.DateOnly? LastQuestFlagSyncDate { get; set; }
+
     // Announce "[<quest> Quest is Now Available]" to the terminal when training crosses a
     // quest's minimum level, and dump the currently-available list once at login. Toggled
     // from the top of the Quest Status tab. Defaults on.

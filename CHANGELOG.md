@@ -1,5 +1,9 @@
 # Version history
 
+## 3.88.1
+
+- The login-time quest-completion flag check (the `abil` burst on Paradigm / `sys … abil` on Stock) now runs **at most once per day** per character — relogging later the same day no longer re-fires it; the next day's first login checks again
+
 ## 3.88.0
 
 - **Batch edit** on the Game Data Browser's **Monsters**, **Items**, and **Players** tables — select multiple rows and a Batch-edit button (between the filter box and the column picker) applies chosen fields to every selected record at once
