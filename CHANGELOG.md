@@ -1,9 +1,11 @@
 # Version history
 
-## 3.86.4
+## 3.86.5
 
-- A route that's blocked only because of your level now says so: the picker names the **level gate** (and the level it needs) instead of a generic "blocked" card or an incidental obstacle. Fixes routing into a level-gated area like the Ancient Fortress, whose graph is also "reachable" through an impassable door the picker used to report instead
-- bug reports addressed: paradigm-20260914-150959
+- The "run to the blocked room anyway" route card now shows **why** the route is blocked, as subtext — previously the reason was computed but had nowhere to display, so a blocked card gave no clue what stopped you
+- A route blocked only by your level now names the **level gate** (and the level it needs) rather than an incidental obstacle an all-gates-ignored path happened to cross — e.g. into the Ancient Fortress, whose graph is also "reachable" through an impassable door
+- The Choose-a-route window is wider so its cards no longer get cut off
+- bug reports addressed: paradigm-20260914-150959, paradigm-20260914-201123
 
 ## 3.86.3
 
