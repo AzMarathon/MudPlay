@@ -81,10 +81,19 @@ public sealed partial class RouteChoiceDialogViewModel
     // item-gate choice, the teleport caveat for a teleport choice, the trap caveat
     // for a trap-avoid choice, the avoided-rooms caveat for an avoid-override choice.
     public string GatedDetail =>
+        IsBlockedChoice ? BlockedDetail :
         IsTeleportChoice ? TeleportCaveat :
         IsTrapAvoidChoice ? TrapCaveat :
         IsAvoidOverrideChoice ? AvoidCaveat :
         RequirementSummary;
+
+    // The subtext under the "run to the blocked room anyway" card — WHY the route
+    // is blocked (a level gate, a locked door, a toll…). The reason is computed
+    // (RouteChoice.BlockedReason) but the blocked card has no FreeCard to show it
+    // in — a blocked route has no free route — so it surfaces here instead
+    // (report paradigm-20260914-201123: the card gave no clue what was blocking).
+    public string BlockedDetail { get; private set; } = "";
+    public bool IsBlockedChoice { get; private set; }
 
     // The footnote under the cards. One uniform line across every fork — the
     // per-case guidance lived in the card summaries anyway, and a plain "click a
@@ -316,6 +325,7 @@ public sealed partial class RouteChoiceDialogViewModel
         IsTeleportChoice = choice.Kind == RouteChoiceKind.Teleport;
         IsTrapAvoidChoice = choice.Kind == RouteChoiceKind.TrapAvoid;
         IsAvoidOverrideChoice = choice.Kind == RouteChoiceKind.AvoidOverride;
+        IsBlockedChoice = choice.Kind == RouteChoiceKind.Blocked;
         HasFreeRoute = choice.HasFreeRoute;
 
         // The extra avoid-crossing card (offered beside a hazard/gate route that
@@ -337,6 +347,7 @@ public sealed partial class RouteChoiceDialogViewModel
             SearchSummary = string.Empty;
             string reason = choice.BlockedReason ?? "a blocked exit";
             FreeSummary = $"No open route — blocked by {reason}";
+            BlockedDetail = $"Blocked by {reason}";
             GatedSummary = $"Run to the blocked room anyway — {StepsEta(choice.GatedStepCount, gatedEta)}";
             SendItSummary = string.Empty;
             RequirementSummary = string.Empty;

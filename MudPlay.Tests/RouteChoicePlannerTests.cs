@@ -720,6 +720,107 @@ public sealed class RouteChoicePlannerTests
     }
 
     [Fact]
+    public void PlanBlocked_LevelBlockedDestination_NamesTheLevelGate_NotAnImpassableDoorDetour()
+    {
+        // The Ancient Fortress shape: the destination (1/9) is reachable only past
+        // a level gate a low-level character fails — but the graph ALSO "reaches"
+        // it through an impassable 1000-picklock door (the pyramid door / pit
+        // drops). PlanBlocked must name the LEVEL gate, not the incidental door,
+        // so the picker tells the user WHY (they're not high enough level).
+        const string fortressJson = """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "Approach",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "1/8", "E": "1/2", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 2, "Name": "Gatehouse",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "1/9 (Level: 75 to 999)", "W": "1/1",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 8, "Name": "Pyramid",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "1/1", "S": "0", "E": "1/9 (Door [1000 picklocks/strength])", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 9, "Name": "Jailer Room",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "1/2",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        WithGraph(fortressJson, (bfs, graph, filter) =>
+        {
+            filter.LevelProvider = () => 28;               // under the level-75 gate
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;
+            filter.StrengthProvider = () => 10;
+            filter.PicklocksProvider = () => 0;            // can't pick the 1000-door
+            filter.MaxBashableStrengthProvider = () => 200;
+
+            BlockedRoutePlan? plan = RouteChoicePlanner.PlanBlocked(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(plan);
+            Assert.True(plan!.BlockExit.HasLevelGate,
+                "the named block must be the level gate, not the impassable door");
+            Assert.Equal(75, plan.BlockExit.MinLevel);
+            Assert.Equal(new RoomKey(1, 2), plan.StopRoom);
+        });
+    }
+
+    [Fact]
+    public void PlanBlocked_LevelGatedTeleportShortcut_NamesTheDestinationsOwnLevelGate_NotTheShortcut()
+    {
+        // Redstone-Tunnel shape: the destination (1/9) is reachable by a LAND route
+        // through a level-75 gate, OR by a level-40 teleport shortcut. A blocked
+        // walker routes around the shortcut, so the reported block must be the
+        // destination's own level-75 gate — not the level-40 portal it can't and
+        // wouldn't take (report paradigm-20260914-201123).
+        const string rooms = """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "Fork", "CMD": 6,
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "1/2", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 2, "Name": "Approach",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "1/1", "S": "0", "E": "1/9 (Level: 75 to 999)", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 9, "Name": "Destination",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "1/2",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        // CMD 6 on 1/1 synthesises a level-40 teleport STRAIGHT to 1/9 (1 hop) — a
+        // shorter shortcut than the 2-hop land route, so without refusing teleports
+        // the physical route takes it and the block would read as the level-40
+        // portal instead of the destination's level-75 gate.
+        const string tbInfo = """[ { "Number": 6, "Action": "go portal:minlevel 40:teleport 9 1\n" } ]""";
+
+        WithGraph(rooms, (bfs, graph, filter) =>
+        {
+            filter.LevelProvider = () => 28;               // under both gates
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;
+            filter.StrengthProvider = () => 10;
+            filter.PicklocksProvider = () => 0;
+            filter.MaxBashableStrengthProvider = () => 200;
+
+            // Guard the fixture: the level-40 teleport shortcut really is synthesised.
+            Assert.True(graph.GetRoom(new RoomKey(1, 1))!.Exits
+                            .TryGetValue(Direction.Teleport, out RoomExit tp) && tp.MinLevel == 40,
+                "fixture no longer produces the level-40 teleport shortcut");
+
+            BlockedRoutePlan? plan = RouteChoicePlanner.PlanBlocked(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(plan);
+            Assert.Equal(75, plan!.BlockExit.MinLevel);    // the destination's gate, NOT the level-40 portal
+            Assert.Equal(new RoomKey(1, 2), plan.StopRoom);
+        }, tbInfoJson: tbInfo);
+    }
+
+    [Fact]
     public void ClassifiesHazardProtectionRequirement()
     {
         WithGraph(HazardShortcutRoomsJson, (bfs, graph, filter) =>

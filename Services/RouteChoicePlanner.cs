@@ -513,9 +513,31 @@ public static class RouteChoicePlanner
         using (filter.SuspendAcquirableGates())
             if (bfs.FindPath(source, destination, filter) is { Count: > 0 }) return null;
 
-        // The route the walk would take with nothing in the way.
+        // Level-blocked first: would the destination be reachable if the character
+        // were high enough level, with every OTHER gate still honoured? Then the
+        // real barrier is a level gate — name that, not whatever incidental gate an
+        // all-gates-lifted physical route below happens to cross (e.g. the Ancient
+        // Fortress, whose only real way in is a level-75 exit but whose graph is
+        // also "reachable" through an impassable pyramid door and one-way pit drops).
+        //
+        // Refuse teleports: a level-gated teleport is usually a SHORTCUT a blocked
+        // walker would route around (report paradigm-20260914-201123 named a
+        // level-40 portal shortcut instead of the destination's own level-75 gate),
+        // so explain the block via the walked route the character actually commits
+        // to. Fall back to allowing teleports only when one is the sole way in.
+        LevelIgnoringFilter levelIgnoring = new(filter);
+        IReadOnlyList<Direction>? levelLifted =
+            bfs.FindPath(source, destination, levelIgnoring, refuseTeleports: true)
+            ?? bfs.FindPath(source, destination, levelIgnoring);
+        if (levelLifted is { Count: > 0 }
+            && FirstBlockOnRoute(graph, filter, source, levelLifted, ExitBlockReason.Level) is { } lg)
+            return lg;
+
+        // The route the walk would take with nothing in the way — teleport
+        // shortcuts refused first, for the same reason as above.
         IReadOnlyList<Direction>? physical =
-            bfs.FindPath(source, destination, filter, ignoreExitGates: true);
+            bfs.FindPath(source, destination, filter, ignoreExitGates: true, refuseTeleports: true)
+            ?? bfs.FindPath(source, destination, filter, ignoreExitGates: true);
         if (physical is null || physical.Count == 0) return null;   // truly disconnected
 
         // Follow it under the live filter; stop at the first exit that still blocks.
@@ -534,6 +556,31 @@ public static class RouteChoicePlanner
             reached.Add(cur);
         }
         return null;   // nothing blocked along the physical route (unexpected when free==null)
+    }
+
+    // Walk `route` from `source` under the live filter and return a run-to-block
+    // plan for the first exit whose block reasons intersect `mask`. Null when that
+    // block sits at the doorstep (nowhere to run to) or the route can't be
+    // followed / carries no matching block.
+    private static BlockedRoutePlan? FirstBlockOnRoute(
+        RoomGraphManager graph, MovementFilter filter, RoomKey source,
+        IReadOnlyList<Direction> route, ExitBlockReason mask)
+    {
+        RoomKey cur = source;
+        var reached = new List<RoomKey> { source };
+        foreach (Direction dir in route)
+        {
+            Room? room = graph.GetRoom(cur);
+            if (room is null || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            if ((filter.DescribeExitBlock(in exit) & mask) != ExitBlockReason.None)
+            {
+                if (cur.Equals(source)) return null;   // at the doorstep — nowhere to run
+                return new BlockedRoutePlan(cur, dir, exit, reached);
+            }
+            cur = exit.Target;
+            reached.Add(cur);
+        }
+        return null;
     }
 
     // The first teleport hop's landing-room label ("Silver River (12/34)"), or

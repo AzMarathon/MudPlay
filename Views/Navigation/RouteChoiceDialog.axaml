@@ -4,7 +4,7 @@
         x:Class="MudPlay.Views.Navigation.RouteChoiceDialog"
         x:DataType="vm:RouteChoiceDialogViewModel"
         Title="Choose a route"
-        Width="480" MinHeight="240" SizeToContent="Height"
+        Width="620" MinWidth="560" MinHeight="240" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>

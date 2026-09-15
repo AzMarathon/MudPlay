@@ -754,4 +754,25 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(vm.ShowOptions);
         Assert.Contains("Run to the blocked room", vm.GatedSummary);
     }
+
+    // The reason IS computed but the blocked card had no place to show it — a
+    // blocked route has no FreeCard. It must surface as the gated card's subtext
+    // (report paradigm-20260914-201123: "run to the blocked room anyway" with no
+    // clue what was blocking).
+    [Fact]
+    public void Blocked_SurfacesTheReason_AsTheGatedCardSubtext()
+    {
+        var vm = new RouteChoiceDialogViewModel("Dest (12/2371)", "Src (1/1678)");
+
+        var blocked = Choice() with
+        {
+            Kind = RouteChoiceKind.Blocked,
+            BlockedReason = "a level gate Teleport from 1/2681 (Redstone Tunnel, Dead-End) (Level 40+)",
+        };
+        vm.Populate(blocked, id => null);
+
+        Assert.True(vm.IsBlockedChoice);
+        Assert.Contains("Level 40+", vm.GatedDetail);
+        Assert.Contains("level gate", vm.GatedDetail);
+    }
 }

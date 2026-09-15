@@ -1,5 +1,12 @@
 # Version history
 
+## 3.86.5
+
+- The "run to the blocked room anyway" route card now shows **why** the route is blocked, as subtext — previously the reason was computed but had nowhere to display, so a blocked card gave no clue what stopped you
+- A route blocked only by your level now names the **level gate** (and the level it needs) at the destination itself, routing around level-gated teleport shortcuts a blocked walker wouldn't take — so a walk into the Ancient Fortress names its level-75 gate, not a level-40 portal shortcut on the way
+- The Choose-a-route window is wider so its cards no longer get cut off
+- bug reports addressed: paradigm-20260914-150959, paradigm-20260914-201123
+
 ## 3.86.3
 
 - Bug reports now capture the route planner's decision for your last walk-to: from your current room to the destination you picked, whether it's reachable, and — when blocked — the exact exit it stops at with that exit's raw gate fields, so a "blocked / no reason" route card can be diagnosed from the capture
