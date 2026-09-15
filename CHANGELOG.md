@@ -1,5 +1,13 @@
 # Version history
 
+## 3.87.0
+
+- **Double-click a boss** in the Bosses tab to walk to it — a single-room boss walks there immediately; a multi-room boss opens a picker listing its rooms **nearest first**, with **Run** (walk now), **Load** (arm the destination only), and **Cancel**
+- Double-tapping the Stop-before / Grab-All checkboxes still just toggles them, never firing the walk
+- Fixed a crash when clicking **Add boss** in the Manage Bosses dialog (a null grid reference in the scroll-to-new-row handler)
+- Default boss list: **minotaur champion** is now only in `1/2124`, and its adjacent room `1/2123` is now the **chest** boss (monster #69, its own respawn timer) — the seed had mislabeled `1/2123` as a second minotaur champion
+- bug reports addressed: Crash-20260914-231823
+
 ## 3.86.9
 
 - Trigger responses now treat each **newline** as its own command — type one command per line in the Response box and every line is sent with its own Enter (previously you had to join them with `^M` or `;`); the same split now applies everywhere commands are chained (aliases, macros, loops)

@@ -38,6 +38,7 @@
                   ItemsSource="{Binding Rows}"
                   SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                   Sorting="OnSorting"
+                  DoubleTapped="OnRowDoubleTapped"
                   IsVisible="{Binding HasBosses}"
                   Background="{StaticResource ChromeBgSunkenBrush}"
                   BorderThickness="1" BorderBrush="{StaticResource ChromeBorderBrush}"

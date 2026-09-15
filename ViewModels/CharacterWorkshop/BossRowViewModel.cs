@@ -39,6 +39,10 @@ public sealed partial class BossRowViewModel : ObservableObject
     public string Rooms { get; set; } = string.Empty;   // "map/room; map/room" — held for the filter
     public string Notes { get; set; } = string.Empty;   // free-text nuance, edited in the Manage dialog; shown read-only on the tab
 
+    // The boss's rooms as parsed RoomKeys (the double-click "walk to boss" target).
+    // Malformed entries are dropped by TryParseWire, so this is only the walkable ones.
+    public IReadOnlyList<RoomKey> RoomKeys { get; }
+
     [ObservableProperty] private bool _stopBefore;
 
     // Blind-grab-on-kill flag (inline-editable, like StopBefore): when set, the moment
@@ -96,6 +100,11 @@ public sealed partial class BossRowViewModel : ObservableObject
         _suppress = true;
         Name = def.Name;
         Rooms = BossRoomText.Format(def.Rooms);
+        RoomKeys = (def.Rooms ?? new List<string>())
+            .Select(r => RoomKey.TryParseWire(r, out RoomKey k) ? k : (RoomKey?)null)
+            .Where(k => k is not null)
+            .Select(k => k!.Value)
+            .ToList();
         Notes = def.Notes;
         StopBefore = def.StopBefore;
         GrabAll = def.GrabAll;

@@ -33,18 +33,26 @@ public partial class ManageBossesDialog : Window
     {
         Dispatcher.UIThread.Post(() =>
         {
-            DataGridColumn? first = BossGrid.Columns.Count > 0 ? BossGrid.Columns[0] : null;
-            BossGrid.ScrollIntoView(row, first);
-            BossGrid.SelectedItem = row;
-            BossGrid.Focus();
+            // Resolve the grid through the name scope, not the raw x:Name field: this
+            // dialog's manual InitializeComponent (AvaloniaXamlLoader.Load) doesn't
+            // populate the strongly-typed field, so dereferencing BossGrid directly
+            // NREs the moment the user clicks Add (same quirk worked around in
+            // BossesSectionView). A Background post can also run after the window
+            // closed — bail if the grid's gone rather than crash the app.
+            DataGrid? grid = BossGrid ?? this.FindControl<DataGrid>("BossGrid");
+            if (grid is null) return;
+            DataGridColumn? first = grid.Columns.Count > 0 ? grid.Columns[0] : null;
+            grid.ScrollIntoView(row, first);
+            grid.SelectedItem = row;
+            grid.Focus();
             // Open the Name cell for typing. Guarded: DataGrid.BeginEdit depends on
             // the row/cell being fully realised this frame, and a failed edit-open is
             // harmless — the row is already scrolled to, selected and focused, so the
             // user just clicks to edit. Never let it crash the common Add action.
             try
             {
-                if (first is not null) BossGrid.CurrentColumn = first;
-                BossGrid.BeginEdit();
+                if (first is not null) grid.CurrentColumn = first;
+                grid.BeginEdit();
             }
             catch (Exception) { /* edit-open is best-effort; selection already landed */ }
         }, DispatcherPriority.Background);

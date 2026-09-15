@@ -440,8 +440,8 @@
     "RespawnType": "Timed"
   },
   {
-    "Name": "minotaur champion",
-    "MonsterNumber": 60,
+    "Name": "chest",
+    "MonsterNumber": 69,
     "Rooms": [
       "1/2123"
     ],

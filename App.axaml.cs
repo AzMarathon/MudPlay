@@ -106,6 +106,11 @@ public partial class App : Application
                 MudPlay.ViewModels.CharacterWorkshop.BossTimerSyncViewModel,
                 MudPlay.Views.CharacterWorkshop.BossTimerSyncWindow>();
 
+            // Boss-room picker — shown when a double-clicked boss has multiple rooms.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.CharacterWorkshop.BossRoomPickerDialogViewModel,
+                MudPlay.Views.CharacterWorkshop.BossRoomPickerDialog>();
+
             // Per-action keybind rebind dialog — opened from any
             // toolbar button or menu item that owns a BuiltInAction.
             AppServices.Current.Dialogs.RegisterWindow<

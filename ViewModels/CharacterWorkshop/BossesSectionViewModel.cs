@@ -13,6 +13,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
 using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Views.CharacterWorkshop;
@@ -167,6 +168,39 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
             _timers.MarkKilled(row.Name.Trim().ToLowerInvariant(), when);
             RefreshStatuses();
         }
+    }
+
+    // Double-click a boss row → walk to its room. One room walks there immediately
+    // (arm + start, like the Roomba room Goto button). Several rooms open the picker,
+    // sorted nearest→furthest, where Run starts the walk and Load only arms it (the
+    // GOTO arm-without-start path). A boss with no walkable room recorded is a no-op.
+    [RelayCommand]
+    private async Task GotoBoss(BossRowViewModel? row)
+    {
+        if (row is null) return;
+        IReadOnlyList<RoomKey> rooms = row.RoomKeys;
+        if (rooms.Count == 0) return;
+        if (rooms.Count == 1)
+        {
+            AppServices.Current.GoWalkTo(rooms[0]);
+            return;
+        }
+
+        RoomKey? current = AppServices.Current.RoomTracker.State.CurrentRoom?.Key;
+        BfsMapper bfs = AppServices.Current.Bfs;
+        MovementFilter movement = AppServices.Current.Movement;
+        RoomGraphManager graph = AppServices.Current.RoomGraph;
+        IReadOnlyList<BossRoomOption> options = BossGotoRooms.BuildOptions(
+            rooms,
+            key => current is { } c ? bfs.DistanceBetween(c, key, movement) : null,
+            key => graph.GetRoom(key)?.DisplayName);
+
+        BossRoomPick? pick = await AppServices.Current.Dialogs
+            .OpenWindowAsync<BossRoomPickerDialogViewModel, BossRoomPick?>(
+                new BossRoomPickerDialogViewModel(row.Name, options));
+        if (pick is null) return;
+        if (pick.StartNow) AppServices.Current.GoWalkTo(pick.Room);
+        else AppServices.Current.QueueWalkTo(pick.Room);
     }
 
     [RelayCommand]
