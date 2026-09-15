@@ -4,6 +4,7 @@
 > **Version 3.87.0**
 > - **Double-click a boss** in the Bosses tab to walk to it — a single-room boss walks there immediately; a multi-room boss opens a picker listing its rooms **nearest first**, with **Run** (walk now), **Load** (arm the destination only), and **Cancel**
 > - Double-tapping the Stop-before / Grab-All checkboxes still just toggles them, never firing the walk
+> - Fixed a crash when clicking **Add boss** in the Manage Bosses dialog
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
