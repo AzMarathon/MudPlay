@@ -553,6 +553,27 @@ public sealed class CombatStateTrackerTests
     }
 
     [Fact]
+    public void ReObservingAfterSuppressionLifts_AssertsGate()
+    {
+        // The stale-CurrentRoom lair race (report paradigm-20260915-130624): a lair's
+        // hostile is first observed while the loop's "only attack in lair rooms"
+        // suppression still reads the previous, non-lair connector — auto-attack
+        // effectively OFF at observe time, so the gate never holds and the loop would
+        // walk straight through. On room confirmation the classifier re-emits the same
+        // roster with the suppression now lifted (CurrentRoom points at the real lair),
+        // and THAT re-observation must assert the gate so the loop holds to fight.
+        using Harness h = new() { AutoAttackEnabled = false };
+        h.AddMonster(1, "giant rat", killable: true);
+
+        h.Feed("Also here: giant rat.");
+        Assert.False(h.CombatGateHeld);   // suppressed at first observe → no hold
+
+        h.AutoAttackEnabled = true;       // room confirmed as a lair → suppression lifts
+        h.Feed("Also here: giant rat.");  // classifier re-emits the kept roster
+        Assert.True(h.CombatGateHeld);    // now holds to fight
+    }
+
+    [Fact]
     public void OnAutoAttackChanged_Off_ReleasesGateWithoutNewObservation()
     {
         // Toggling auto-combat off mid-round used to leave the walker gated

@@ -598,6 +598,22 @@ public sealed class RoomEntityClassifier : IDisposable
             && Current is { Entities.Count: > 0, Source: RoomObservationSource.AlsoHere } cur
             && cur.At >= moveAt)
         {
+            // The new room's occupants were parsed BEFORE this confirmation, while
+            // RoomTracker.CurrentRoom still pointed at the room we were leaving. A
+            // gate decision that keys off the room's IDENTITY — the loop's "only
+            // attack in lair rooms" / per-room "do not attack" suppression — was
+            // therefore decided for the WRONG room: a lair whose hostiles were seen
+            // while the previous (non-lair) connector was still "current" read as
+            // suppressed, the Combat gate never held, and the loop walked straight
+            // through it (report paradigm-20260915-130624). Now that the move is
+            // confirmed and CurrentRoom points here, re-emit the kept roster so every
+            // gate re-decides against the correct room — the CombatGate re-asserts
+            // and the loop holds to fight (the classifier is subscribed to
+            // RoomTracker.StateChanged ahead of the movement engines, so the gate
+            // lands before the loop's own advance sees it). Idempotent otherwise: an
+            // already-engaged fight short-circuits (server still swinging), a suppressed
+            // room stays clear, and the greet / sighting consumers de-dupe per player.
+            ReemitCurrent();
             return;
         }
 

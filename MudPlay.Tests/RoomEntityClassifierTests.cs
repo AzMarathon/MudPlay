@@ -1024,8 +1024,15 @@ public sealed class RoomEntityClassifierTests
         // Exits line lands → tracker confirms Town Gates → North Square.
         h.Tracker.NoteRoomObserved(new RoomObservation("North Square", new HashSet<Direction> { Direction.S }));
 
-        // No wipe: the fresh post-move occupant survives.
-        Assert.Single(h.Observations);
+        // No wipe: the fresh post-move occupant survives. AND the confirmation re-emits
+        // the kept roster — those occupants were parsed against the STALE current room
+        // (still Town Gates), so room-dependent gates (the loop's "only attack in lair
+        // rooms" suppression) must re-decide now that CurrentRoom points at the room we
+        // actually entered (report paradigm-20260915-130624). The re-emit carries the
+        // same roster, unchanged.
+        Assert.Equal(2, h.Observations.Count);
+        Assert.Equal(RoomObservationSource.AlsoHere, h.Observations[^1].Source);
+        Assert.Equal("giant rat", h.Observations[^1].Entities.Single().ResolvedName);
         Assert.NotNull(h.Classifier.Current);
         Assert.Single(h.Classifier.Current!.Value.Entities);
         Assert.Equal("giant rat", h.Classifier.Current.Value.Entities[0].ResolvedName);
