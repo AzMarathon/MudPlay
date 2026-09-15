@@ -1657,7 +1657,9 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **When you might change it:** Turn it on if you run MudPlay maximized or in a large window and don't want dead space around the text.
 **Important notes:** Applies live and keeps re-fitting as you resize the window, so it doubles as an "auto-fit to window" for anyone wanting the terminal to always fill the current window size exactly.
 
-The zoom never renders past an effective 32pt (the largest size in the Font size picker) regardless of your chosen Font size — this keeps a small chosen size from getting blown up to look identical to a large one, at the cost of possibly not quite filling an unusually large window when a small size is chosen. With a real font selected (JetBrains Mono or a system font, not MX437), the zoomed text stays crisp and antialiased at any size — MX437's bitmap glyphs upscale as blocky pixels instead, on purpose, to keep them authentic. This setting resets to Off whenever you close a profile, since it's stored per-character.
+The zoom never renders past an effective 32pt (the largest size in the Font size picker) regardless of your chosen Font size — this keeps a small chosen size from getting blown up to look identical to a large one, at the cost of possibly not quite filling an unusually large window when a small size is chosen.
+
+With a real font selected (JetBrains Mono or a system font, not MX437), the zoomed text stays crisp and antialiased at any size — MX437's bitmap glyphs upscale as blocky pixels instead, on purpose, to keep them authentic. This setting resets to Off whenever you close a profile, since it's stored per-character.
 
 ### Keep typing directed at the terminal when other windows are open
 
@@ -3049,7 +3051,13 @@ Beyond the catalogue, the queue skips:
 
 One shape can't be settled by wording at all: `Suijin shoots an arrow at bandit!` and `Suijin hurls a fireball at bandit!` are the same sentence. That one is decided by **who acted** — if the named player's class has no magery (Warrior, Witchunter, Ninja, Thief), they cannot be casting, so the line is dropped; from a class that *can* cast, or from a name the client doesn't know, it's kept. Class comes from the party screen, your own `stat` line, or the Players database (an observed class, else an unambiguous title).
 
-A monster *casting* at a partymate is deliberately still captured — uncatalogued monster spell messages are the main thing this is for. So is any line where a non-caster is the *subject* rather than the actor (`Suijin convulses violently!`), since that's a monster's spell landing on them. So is ambient room flavour, which in many areas is a room-spell trigger rather than scenery. Double-click the row to open the same editor the Messages tab uses, pre-filled with the raw text, so you can turn it into a real catalogue entry on the spot. Repeated candidates are also listed in Game Data → **Unrecognized Lines** (with a **Seen In** map:room column) for batch review later; dismissing one there is sticky, so it won't quietly resurface as "new" if it recurs.
+A few line shapes are deliberately still captured:
+
+- **a monster *casting* at a partymate** — uncatalogued monster spell messages are the main thing this is for;
+- **any line where a non-caster is the *subject*** rather than the actor (`Suijin convulses violently!`), since that's a monster's spell landing on them;
+- **ambient room flavour**, which in many areas is a room-spell trigger rather than scenery.
+
+Double-click the row to open the same editor the Messages tab uses, pre-filled with the raw text, so you can turn it into a real catalogue entry on the spot. Repeated candidates are also listed in Game Data → **Unrecognized Lines** (with a **Seen In** map:room column) for batch review later; dismissing one there is sticky, so it won't quietly resurface as "new" if it recurs.
 **Important notes:** On by default — the point of this toggle is catching the game's devs changing or adding message wording before it silently breaks something else (navigation, combat, condition tracking) that depends on recognizing that line.
 
 ---
@@ -3106,7 +3114,9 @@ A sweep runs in three phases:
 - **Whatever it was carrying is remembered.** The items stay in your pack, and Roomba writes down what it was holding and where each piece was going. The next sweep checks that list against your real inventory first (so anything you've since dropped, sold or worn is quietly forgotten) and delivers what's left before it scans anything. The list is saved per character, so it survives closing the client or relogging.
 - **Resume picks up where it left off.** The **Resume** button on the Roomba tab lights up whenever a sweep stopped with work outstanding (hover it to see how much), and stays greyed out otherwise. It carries on from that sweep's queue and skips the scan entirely — in a large gang house the scan is most of the time a sweep takes, and stopping early doesn't make what it already found wrong. Items someone else has taken in the meantime simply fail their pickup and drop out of the queue, exactly as they would mid-sweep. The unfinished queue is saved per character, so Resume still works after closing and reopening the client — which is exactly when you least want to re-walk the whole circuit. Use **Start Sweep** instead when you want a fresh look at every room.
 
-**Start Inventory — scan and log without moving anything.** Next to Start Sweep is **Start Inventory**: it walks the exact same labeled circuit, observes each room's floor, and honors **Search rooms for hidden items** exactly like a sweep's scan phase — but it never dispatches a single `get` or `drop`. It finishes automatically the moment its one lap completes (no sorting, no final scan — the lap it just took already reflects the true state). Use it if you've already got your own manual way of organizing the gang house and just want `@roomba`'s item-location log kept current without Roomba touching anything. The Roomba Log and the tab's completion summary both call this out explicitly so it's never mistaken for a sweep that sorted nothing.
+**Start Inventory — scan and log without moving anything.** Next to Start Sweep is **Start Inventory**: it walks the exact same labeled circuit, observes each room's floor, and honors **Search rooms for hidden items** exactly like a sweep's scan phase — but it never dispatches a single `get` or `drop`. It finishes automatically the moment its one lap completes (no sorting, no final scan — the lap it just took already reflects the true state).
+
+Use it if you've already got your own manual way of organizing the gang house and just want `@roomba`'s item-location log kept current without Roomba touching anything. The Roomba Log and the tab's completion summary both call this out explicitly so it's never mistaken for a sweep that sorted nothing.
 
 **Gangpath announcements.** Starting either mode gangpaths the gang house that it's underway, with the start date/time in your client's own timezone (`Roomba sorting starting - 2026-08-30 09:15 MST.`), and finishing announces the same way with item counts plus the start and finish time (`Roomba sorting complete - sorted N item(s), inventoried M item(s). started … finished …`). A few details:
 
@@ -3115,7 +3125,9 @@ A sweep runs in three phases:
 - "Sorted" and "inventoried" both count individual units, not stacks — a `35 orc-head` pile sorted or scanned in one go counts as 35.
 - Manually stopping a sweep early (or a navigation failure interrupting it) doesn't send a completion announce — only a genuine finish does, so the gang isn't told a sweep "completed" when it didn't.
 
-**Reading the tab.** Each room's **Status** column tracks it live — *Scanning* during the scan, *Cleaning* while it still holds items to move out, *Complete* once its movable clutter is gone. **Double-click a room** to see its current floor contents (from the final scan). The **Roomba Log** button opens a window with the full per-move record, everything left in place (tagged with why — *no matching room*, *every room that takes it is full*, *gone by sort time*, *too heavy to carry*, *couldn't be sorted this sweep — no room or headroom*, or *the pickup never landed*), and an end-of-run summary: rooms sorted, items sorted, and the explicit list of unmovable items. **Stop** ends a sweep early.
+**Reading the tab.** Each room's **Status** column tracks it live — *Scanning* during the scan, *Cleaning* while it still holds items to move out, *Complete* once its movable clutter is gone. **Double-click a room** to see its current floor contents (from the final scan).
+
+The **Roomba Log** button opens a window with the full per-move record, everything left in place (tagged with why — *no matching room*, *every room that takes it is full*, *gone by sort time*, *too heavy to carry*, *couldn't be sorted this sweep — no room or headroom*, or *the pickup never landed*), and an end-of-run summary: rooms sorted, items sorted, and the explicit list of unmovable items. **Stop** ends a sweep early.
 
 **Master List** — a separate button that opens a full, **sortable** table (click any column header — Item, Qty, Seen In, Market) of everything the item-location log currently knows: one row per item per room it was seen in (quantity included). Its parts:
 
@@ -3135,12 +3147,16 @@ Grant a gang member the **Query Roomba** remote-control permission (on the Playe
 
 That per-player permission is the only gate — there's no separate on/off checkbox; a member you haven't granted it to gets nothing. The log itself is shared BBS-wide (every character on the board sees the same sightings). The Roomba tab shows a **Roomba Data Timestamp** next to *Searches per room* — the time of the newest sighting anywhere in the log — so you can tell at a glance whether the gang-house data is current or stale (it reads "no data yet" before the first scan).
 
-**`@roomba sync`** — the no-hassle way to hand your item-location log to a gang member starting fresh on their own MudPlay install, no file/Discord/import-export needed. They gangpath (or telepath) `@roomba sync`; your client (with them granted the **Query Roomba** permission) replies with your whole log — **both the labeled gang-house rooms and the item sightings** — compressed into chat lines that merge straight into theirs, so their Roomba tab fills with the same rooms (ready to sweep) and their `@roomba` / Master List has all your item locations. A room they've already labeled themselves is left as-is.
+**`@roomba sync`** — the no-hassle way to hand your item-location log to a gang member starting fresh on their own MudPlay install, no file/Discord/import-export needed.
+
+They gangpath (or telepath) `@roomba sync`; your client (with them granted the **Query Roomba** permission) replies with your whole log — **both the labeled gang-house rooms and the item sightings** — compressed into chat lines that merge straight into theirs, so their Roomba tab fills with the same rooms (ready to sweep) and their `@roomba` / Master List has all your item locations. A room they've already labeled themselves is left as-is.
 
 - **Paced out** — a big gang house is a couple dozen lines, so the reply is released about 0.8s per line in the background: it never floods the channel or stalls your own combat/healing/movement, and a line dropped to the typing-rate limit is automatically re-sent.
 - **No review window** — unlike `@timer sync`'s boss-timer merge, a room-contents sighting has no "conflict" to weigh, so whichever side saw an item more recently just wins, silently. The reply finishes with a `Sync Complete` marker so you can see it landed in full.
 
-**The grant is one-way, in the direction the data flows.** To *receive* someone's log you send `@roomba sync` to them and **they** grant *you* "Query Roomba" — nothing else. Your own client adopts their reply simply because you asked for it (any `@roombadata` reply is accepted for a short window after your outbound `@roomba sync`); you don't also need to grant them anything, and a stray sync line you never requested is ignored. Conversely, if you *haven't* granted a sender "Query Roomba", their `@roomba` query or `@roomba sync` to you is denied. So if a sync seems to send but nothing updates, the usual cause is the *sender* not having granted you: check that they've given your character "Query Roomba" on their Players tab.
+**The grant is one-way, in the direction the data flows.** To *receive* someone's log you send `@roomba sync` to them and **they** grant *you* "Query Roomba" — nothing else. Your own client adopts their reply simply because you asked for it (any `@roombadata` reply is accepted for a short window after your outbound `@roomba sync`); you don't also need to grant them anything, and a stray sync line you never requested is ignored.
+
+Conversely, if you *haven't* granted a sender "Query Roomba", their `@roomba` query or `@roomba sync` to you is denied. So if a sync seems to send but nothing updates, the usual cause is the *sender* not having granted you: check that they've given your character "Query Roomba" on their Players tab.
 
 **Important notes:**
 
@@ -3160,7 +3176,13 @@ Not a Settings-window tab. Your character's gear loadouts — the four fixed set
 
 ## Command-Line / Environment
 
-MudPlay has a small command-line interface. The main custom flag is **`--profile`**, which launches straight into one or more saved profiles (see *Launch straight into a profile* under **Profiles** for the full syntax, quoting, and multi-instance behavior). There is also **`--reconnect`**, which connects on startup even when *Auto-connect when profile loads* is off — it exists for **Update the Client** to restore a session it interrupted, and it's only honoured for the profile loaded at startup. There is **no** `--data-dir` flag — to relocate the data folder use the `MUDPLAY_DATA_ROOT` environment variable below. Any other startup arguments are the standard ones Avalonia consumes; the app does nothing further with them.
+MudPlay has a small command-line interface:
+
+- **`--profile`** — launches straight into one or more saved profiles (see *Launch straight into a profile* under **Profiles** for the full syntax, quoting, and multi-instance behavior).
+- **`--reconnect`** — connects on startup even when *Auto-connect when profile loads* is off. It exists for **Update the Client** to restore a session it interrupted, and it's only honoured for the profile loaded at startup.
+- There is **no** `--data-dir` flag — to relocate the data folder use the `MUDPLAY_DATA_ROOT` environment variable below.
+
+Any other startup arguments are the standard ones Avalonia consumes; the app does nothing further with them.
 
 ### MUDPLAY_DATA_ROOT (environment variable)
 
