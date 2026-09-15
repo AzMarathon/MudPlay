@@ -13,19 +13,19 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 
 ## Features
 
-- **Faithful terminal** — Telnet (RFC 854/855 with NAWS + TERM-TYPE), an explicit VT100/ANSI escape-sequence parser, and a CP437 cell grid rendered by a custom Avalonia control that scales crisply to fill the window. No host TTY dependency.
-- **Connections & profiles** — per-character profiles layered over a 4-tier settings hierarchy (installed defaults → all characters → this BBS → this character, storing deltas only); multiple BBSes each with their own host/port/accounts; automated logon-menu navigation; and configurable redial/reconnect policies (connect-fail, carrier-lost, server-stall, post-cleanup).
-- **Combat automation** — primary/alternate attack and spell settings, target ordering and priority, backstab handling, area/single-target debuff spells with an immunity-aware fallback cascade, crowd handling, rest-aware back-off, and per-monster attack/priority overrides.
-- **Healing & spells** — HP/mana thresholds, rest management, cures, buffs, mana-regen roll-spell rerolling, a class-aware **Spell Book** (with per-spell cast-success odds and an interactive damage calculator), and a **Buff Watchdog** that shows your configured buffs, live timers, and recast-window markers at a glance.
-- **Navigation & looping** — a room-graph map with go-to routing over saved GOTO locations (search box or right-click menu), storable/runnable loops with exp/hour estimates, an **Auto-Lair** mode, trap and hazard handling (obtain-then-cross and fewest-traps routing), stash rooms, and map overlays.
-- **Party play** — party tracking, coordinated healing/blessing, leader-aware wait/invite logic, reconnect handling, and remote `@`-commands over chat channels — query (@health, @level, @exp, @inv…), move-me, change-my-settings, act-on-my-behalf, and party coordination — each gated by per-player permissions.
-- **Cash & items** — automated loot collection with sell/buy/stash/discard engines, banking, and equipment sets with auto-equip triggers.
-- **Character Workshop** — a unified hub for character management and development: live stats; **Equipment Manager** gear sets; an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons; **CP allocation** plans; **level projection**; quest, boss, and death tracking (with boss respawn timers you can sync between clients); character-info calculators; and **Roomba** — an automated gang-house item sorter backed by a shared item-location log you can query in-game with `@roomba`.
-- **Automation tools** — macros, aliases, triggers, and events; auto-engine toggles with per-character base modes and reconnect reconciliation; a one-press all-off kill switch; and a Sprint mode.
-- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser — whose **Monsters tab** curates the full roster with grouped min/max filters (combat stats, per-element resists signed to find vulnerabilities, spell immunity, magic-weapon requirement, type, and loot). Every engine reads from this data. A dedicated **Monster Intel** window answers "can I safely fight this thing right now" — Hits-You-% threshold checkboxes against your live AC/Dodge, an estimated rounds-to-kill per monster with your current weapon, plus its attacks and your own combat history against it — without digging into the Browser.
-- **Conversation & chat** — a dedicated conversation pane with per-channel filtering, search, logging, and history.
-- **Tools & diagnostics** — a timestamped full-ANSI scrollback with search/filter, a **Program Log**, **Session Stats**, a **Wire Inspector** for raw/classified stream inspection, and a ***built-in bug reporter (USE THIS WHEN REPORTING ISSUES — IT CAPTURES FAR MORE THAN YOU CAN DESCRIBE OR SHOW IN A SCREENSHOT)***.
-- **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, a customizable terminal right-click menu (add commands, direct links to a Workshop tab or calculator, and your own fly-out folders — rename, reorder, and import/export to share), edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.
+- **Faithful terminal** — Telnet (NAWS + TERM-TYPE), explicit VT100/ANSI parsing, and a CP437 cell grid rendered by a custom Avalonia control that scales crisply. No host TTY dependency.
+- **Profiles & settings** — per-character profiles over a 4-tier hierarchy (defaults → all characters → BBS → character, deltas only), multiple BBSes with their own accounts, automated logon, and configurable redial/reconnect.
+- **Combat** — attack/spell ordering and priority, backstab, single- and area-target debuffs with an immunity-aware fallback cascade, crowd and rest-aware handling, and per-monster overrides.
+- **Healing & spells** — HP/mana thresholds, rest management, cures, buffs, mana-regen rerolls, a class-aware **Spell Book** (cast-success odds + damage calculator), and a **Buff Watchdog** with live recast timers.
+- **Navigation** — a room-graph map with go-to routing over saved GOTOs, runnable **loops** with exp/hour estimates, an **Auto-Lair** mode, trap / hazard / teleport route pickers, a level-gate overlay, and stash rooms.
+- **Party play** — tracking, coordinated healing/blessing, leader-aware wait/invite, reconnect handling, and remote `@`-commands over chat (query, move-me, act-for-me, coordinate) — each gated by per-player permissions.
+- **Cash & items** — automated loot / sell / buy / stash / discard, banking, and equipment sets with auto-equip triggers.
+- **Character Workshop** — live stats, **Equipment Manager** + an **Item Finder** for what-if gear comparisons, **CP-allocation** plans, level projection, quest / boss / death tracking (boss timers syncable between clients), calculators, and **Roomba** gang-house item sorting with an in-game `@roomba` location log.
+- **Game Data** — import MajorMUD `.MDB` sets and browse or override every record across the 4 tiers; filter-rich **Monsters / Items / Players** tables with **batch edit** to set many records at once; and a **Monster Intel** window that answers "can I safely fight this now?" (Hits-You-% vs your live AC, rounds-to-kill, and your combat history).
+- **Automation tools** — macros, aliases, triggers, and events; per-engine toggles with a one-press all-off kill switch; and a Sprint mode.
+- **Conversation & chat** — a dedicated pane with per-channel filtering, search, logging, and history.
+- **Tools & diagnostics** — full-ANSI scrollback (search/filter), a **Program Log**, **Session Stats**, a **Wire Inspector**, and a ***built-in bug reporter — use it when reporting issues; it captures far more than a screenshot***.
+- **Quality of life** — editable toolbar, rebindable keys, a customizable terminal right-click menu, edge-snapping windows that move as a cluster, font/nav styling, output scaling, and type-through so keystrokes keep reaching the terminal.
 
 ## Getting started
 
@@ -46,9 +46,11 @@ If local state ever gets weird, `dotnet clean` and rebuild.
 
 ### First connection
 
-1. Launch the app and create a character profile (auth + which BBS to connect to).
-2. Set the BBS host/port and connect.
-3. For the full automation suite, open **Game Data** and import a MajorMUD `.MDB` database — this populates the monster/item/spell/room tables the engines read from. The terminal itself works without it.
+1. **Add a board.** File → **Profile Management** → BBSes → **Add**. Drops you into its settings.
+2. **Fill it in.** Host, port, your username + password. If the board needs it, add the **logon steps** — a message to wait for, the reply to send — that walk you from the BBS menu into the game.
+3. **Add a character** under that board (Profile Management → Characters → **Add**).
+4. **Connect.** **Alt+H**, or File → Connect. You're in.
+5. **Want the automation?** Open **Game Data** → **Import .mdb** and pick a MajorMUD database. That fills the monster/item/spell/room tables the engines read from. The terminal works fine without it — the robots don't.
 
 ### Where your data lives
 
@@ -58,17 +60,17 @@ Everything is stored under a single app-data folder, resolved per platform:
 - **Windows** — `%AppData%\MudPlay\`
 - **macOS** — `~/Library/Application Support/MudPlay/`
 
-Profiles, per-BBS settings, global settings, imported game data, and logs each live in their own subfolder. Settings files store only deltas from the tier beneath them, so they stay small and easy to back up. (Updating from an older build automatically lifts your data out of the previous nested `Data/` subfolder on first launch. If you're jumping from a **very old build** and the message catalogue looks stale or wrong, the one-time cleanup that used to fix that is retired — do a clean install of the data folder, or delete the obsolete `Global/Messages.seed.json` and each set's `messages.json` to fall back to the shipped data.)
+Profiles, per-BBS settings, global settings, imported game data, and logs each live in their own subfolder. Settings files store only deltas from the tier beneath them, so they stay small and easy to back up.
 
 ## Reporting a bug
 
 MudPlay has a **built-in bug reporter** that snapshots the client's state at the moment of the problem — far more useful than describing it from memory. Please use it when filing an issue:
 
-1. **Capture** — click the **Bug Report** button in the menu bar (or right-click the terminal → **Bug report…**). Type a short description of what went wrong and confirm.
-2. MudPlay writes a Markdown report to your **Desktop**, named `<realm>-<timestamp>.md`. It contains your player/inventory state, movement-engine status, relevant settings, the program log, and recent scrollback — with time-sensitive data frozen at click time.
-3. **File the issue** — open a new issue at **https://github.com/Tehshortbus/MudPlay/issues/new**, describe the problem, and **attach the generated `.md` file**.
+1. **Capture** — click **Bug Report** in the menu bar (or right-click the terminal → **Bug report…**), type a short description, and confirm.
+2. MudPlay writes `<realm>-<timestamp>.md` to your **Desktop**: your settings, character name/stats/inventory, movement-engine state, the program log, and ~750 lines of scrollback — all frozen at click time.
+3. **File the issue** at **https://github.com/Tehshortbus/MudPlay/issues/new**, and **attach the `.md` file**.
 
-The bug report includes almost all of the info needed to isolate the problem but a good description helps me target it faster. You can review the bug report before submitting if you wish but please leave as much context in the report as possible. The bug report does include all your settings, your character name, stats, inventory, client info, the program log and ~750 lines of backscroll.  ***It DOES NOT include your BBS login name or password or your login menu navigation settings.***
+A short description still helps me target it faster, and you can review the report before sending. ***It does NOT include your BBS login name, password, or logon-menu steps.***
 
 ## Contributing
 
