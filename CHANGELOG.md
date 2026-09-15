@@ -1,5 +1,12 @@
 # Version history
 
+## 3.88.14
+
+- The "walk to loop" itinerary in CURRENT NAV now lists only the walk-to steps, not the whole loop appended after them
+- A running loop now draws numbered green waypoint bubbles on the map — matching the CURRENT NAV rows — so you can tell which row is which room, the way the loop builder's red numbered pins already do
+- A loop no longer leaks one attack into a "do not attack" (or, under "only attack in lair rooms", a non-lair) room on entry — suppression now judges the room you're stepping into, not the one you're leaving, so it's honoured on the entry pass whether the flag was set live or configured before the run
+- bug reports addressed: paradigm-20260915-122832
+
 ## 3.88.11
 
 - Fix crash (stack overflow, no report) when entering loop-build mode — the CURRENT NAV rail's notification helper introduced in 3.88.10 recursed into itself

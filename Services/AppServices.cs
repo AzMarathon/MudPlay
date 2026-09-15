@@ -7004,22 +7004,50 @@ public sealed class AppServices
     // left untouched so it still shows the user's real ON/OFF.
     private bool CombatSuppressedInCurrentRoom()
     {
+        // Which room to judge suppression against. Normally the room we're standing in.
+        // BUT during a loop move the RoomTracker is still Pending on the room we're
+        // LEAVING (RoomConfidence.Pending: CurrentRoom lags until the next observation
+        // confirms the landing), while the monsters that just arrived belong to the room
+        // we're ENTERING. Keying off CurrentRoom there decides suppression for the wrong
+        // room, so a 'do not attack' / non-lair room leaks one attack on the entry pass
+        // — before the room confirms and suppression flips (report paradigm-20260915-122832,
+        // whether the flag was live-edited or configured before the run). So while a loop
+        // move is in flight, judge against the loop's expected target room instead.
+        Game.Map.RoomKey? evalKey;
+        bool evalIsLair;
+        if (LoopRunner.State == Game.Map.LoopState.Running
+            && RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
+            && LoopRunner.ExpectedMoveTarget is { } target)
+        {
+            evalKey = target;
+            evalIsLair = RoomGraph.GetRoom(target)?.HasLair ?? false;
+        }
+        else if (RoomTracker.State.CurrentRoom is { } here)
+        {
+            evalKey = here.Key;
+            evalIsLair = here.HasLair;
+        }
+        else
+        {
+            evalKey = null;
+            evalIsLair = false;
+        }
+
         bool suppressed =
             LoopRunner.State != Game.Map.LoopState.Idle
             && LoopRunner.CurrentLoop is { } loop
-            && RoomTracker.State.CurrentRoom is { } here
-            && Game.Map.LoopCombatSuppression.IsSuppressed(loop, here.Key, here.HasLair);
+            && evalKey is { } key
+            && Game.Map.LoopCombatSuppression.IsSuppressed(loop, key, evalIsLair);
 
         // Edge-trigger a Combat-log line on transition — the three gate Funcs
         // each call this per observation, so log only when (room, suppressed)
         // actually changes to avoid per-line spam. Explains a "loop walked past
         // hostiles" in the program log.
-        Game.Map.RoomKey? room = RoomTracker.State.CurrentRoom?.Key;
-        if (suppressed != _lastCombatSuppressed || !Equals(room, _lastCombatSuppressedRoom))
+        if (suppressed != _lastCombatSuppressed || !Equals(evalKey, _lastCombatSuppressedRoom))
         {
             _lastCombatSuppressed = suppressed;
-            _lastCombatSuppressedRoom = room;
-            if (suppressed && room is { } rk)
+            _lastCombatSuppressedRoom = evalKey;
+            if (suppressed && evalKey is { } rk)
                 Log.Combat("Combat", $"combat suppressed in {rk} — loop 'do not attack' / 'only lair rooms'");
         }
         return suppressed;

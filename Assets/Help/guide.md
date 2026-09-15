@@ -276,7 +276,7 @@ Chain several commands in one waypoint with `;` or `^M` — each is sent as its 
 
 ### Live-editing a running loop
 
-While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** rows — the running counterpart of the builder's red list. **Click any room** to change its **command**, **delay**, **No rest**, or **No atk** right there, and use **⚙ Entire Loop Settings** to toggle **Only attack in lair rooms** — all applied **live**, with no stop/restart. The room the loop is currently in is **highlighted**. Flag changes take effect on the loop's next decision and a delay change on that step's next run; **adding or removing a command** re-plans the circuit on the **next lap**. You **can't add, remove, or reorder rooms** while running — for that, **Pause** and reopen the builder (the red list), then resume.
+While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** rows — the running counterpart of the builder's red list. **Click any room** to change its **command**, **delay**, **No rest**, or **No atk** right there, and use **⚙ Entire Loop Settings** to toggle **Only attack in lair rooms** — all applied **live**, with no stop/restart. The room the loop is currently in is **highlighted**, and the map draws matching **numbered green bubbles** on each waypoint (the running twin of the builder's red pins) so you can tell which rail row is which room. Flag changes take effect on the loop's next decision and a delay change on that step's next run; **adding or removing a command** re-plans the circuit on the **next lap**. You **can't add, remove, or reorder rooms** while running — for that, **Pause** and reopen the builder (the red list), then resume.
 
 ### Entire Loop Settings
 

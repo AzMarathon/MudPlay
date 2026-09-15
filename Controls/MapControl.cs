@@ -99,6 +99,12 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<IReadOnlyList<RoomKey>?> LoopBuilderWaypointsProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(LoopBuilderWaypoints));
 
+    // Numbered green circles on each running-loop waypoint, in the same order as the
+    // running CURRENT NAV rows, so the rail and the map line up while a loop runs.
+    // Mirrors LoopBuilderWaypoints but green (running) rather than red (building).
+    public static readonly StyledProperty<IReadOnlyList<RoomKey>?> LoopRunningWaypointsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(LoopRunningWaypoints));
+
     // Loop preview drawn during the walker-driven approach phase of a loop run.
     // Distinct from LoopBuilderPath only by semantic (drawn with the same red
     // pen). Visible alongside the active WalkPath so the user sees both the
@@ -304,6 +310,12 @@ public sealed class MapControl : Control
     {
         get => GetValue(LoopBuilderWaypointsProperty);
         set => SetValue(LoopBuilderWaypointsProperty, value);
+    }
+
+    public IReadOnlyList<RoomKey>? LoopRunningWaypoints
+    {
+        get => GetValue(LoopRunningWaypointsProperty);
+        set => SetValue(LoopRunningWaypointsProperty, value);
     }
 
     public IReadOnlyList<RoomKey>? LoopApproachPreviewPath
@@ -744,6 +756,15 @@ public sealed class MapControl : Control
     private static readonly IBrush LoopBuilderWaypointTextBrush =
         new SolidColorBrush(Color.Parse("#FFFFFFFF"));
 
+    // Running-loop numbered overlay — green to match the running loop line + rail
+    // (NavLineKind.Loop / AccentGreenBrush).
+    private static readonly IBrush LoopRunningWaypointFill =
+        new SolidColorBrush(Color.Parse("#7AB870"));
+    private static readonly IPen   LoopRunningWaypointRing =
+        new Pen(new SolidColorBrush(Color.Parse("#FFFFFFFF")), 1.5);
+    private static readonly IBrush LoopRunningWaypointTextBrush =
+        new SolidColorBrush(Color.Parse("#FFFFFFFF"));
+
     // Auto-Lair numbered overlay — amber to match the section theme.
     private static readonly IBrush AutoLairWaypointFill =
         new SolidColorBrush(Color.Parse("#DC821E"));
@@ -851,6 +872,7 @@ public sealed class MapControl : Control
             LairModeProperty, LairRespawnSecondsProperty, LairMaxRespawnSecondsProperty, LairMonsterCountsProperty,
             HighlightShopsProperty, SpellModeProperty,
             WalkPathProperty, LoopPathProperty, LoopBuilderPathProperty, LoopBuilderWaypointsProperty,
+            LoopRunningWaypointsProperty,
             AutoLairWaypointsProperty, AutoLairApproachPathProperty,
             LoopApproachPreviewPathProperty, AvoidedRoomsProperty, LevelGatedRoomsProperty, StashRoomsProperty, GhRoomsProperty, GhFullRoomsProperty, LoopSequenceNumbersProperty,
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
@@ -1357,10 +1379,15 @@ public sealed class MapControl : Control
             DrawPathPolyline(context, WalkPath, walkPen, tilePixels, cx, cy);
         }
 
-        // Pass 5: numbered builder waypoint markers — drawn last so
-        // they sit on top of every polyline and every room node fill.
-        DrawLoopBuilderWaypoints(context, tilePixels, cx, cy);
-        DrawAutoLairWaypoints(context, tilePixels, cx, cy);
+        // Pass 5: numbered waypoint markers — drawn last so they sit on top of every
+        // polyline and every room node fill. Red while building, green while running
+        // (both numbered to match the CURRENT NAV rows), amber for Auto-Lair.
+        DrawNumberedWaypoints(context, LoopBuilderWaypoints,
+            LoopBuilderWaypointFill, LoopBuilderWaypointRing, LoopBuilderWaypointTextBrush, tilePixels, cx, cy);
+        DrawNumberedWaypoints(context, LoopRunningWaypoints,
+            LoopRunningWaypointFill, LoopRunningWaypointRing, LoopRunningWaypointTextBrush, tilePixels, cx, cy);
+        DrawNumberedWaypoints(context, AutoLairWaypoints,
+            AutoLairWaypointFill, AutoLairWaypointRing, AutoLairWaypointTextBrush, tilePixels, cx, cy);
     }
 
     private static Rect ComputeCellRect((int X, int Y) coord, double tilePixels, double cx, double cy)
@@ -1958,14 +1985,16 @@ public sealed class MapControl : Control
         ctx.DrawText(ft, p);
     }
 
-    // Draw a small numbered red circle on every loop-builder waypoint in click
-    // order (1, 2, 3, ...). The marker overlays the cell so the user sees the
-    // order at a glance even with the red polyline looping through the area.
-    // Skipped when the waypoint isn't on the current layout (different floor /
-    // disconnected island).
-    private void DrawLoopBuilderWaypoints(DrawingContext ctx, double tilePixels, double cx, double cy)
+    // Shared renderer for the numbered per-waypoint circle markers — the loop-builder
+    // (red), the running loop (green), and Auto-Lair (amber) all use it. Markers are
+    // numbered by list order (1, 2, 3, ...) so the map lines up with the CURRENT NAV
+    // rows, and double as an easy-to-spot "this is a waypoint" indicator at any zoom.
+    // A waypoint not on the current layout (different floor / disconnected island) is
+    // skipped.
+    private void DrawNumberedWaypoints(DrawingContext ctx, IReadOnlyList<RoomKey>? waypoints,
+        IBrush fill, IPen ring, IBrush textBrush, double tilePixels, double cx, double cy)
     {
-        if (LoopBuilderWaypoints is not { Count: > 0 } waypoints) return;
+        if (waypoints is not { Count: > 0 }) return;
         if (Layout is null) return;
 
         double radius = Math.Clamp(tilePixels * 0.32, 6.0, 14.0);
@@ -1977,18 +2006,14 @@ public sealed class MapControl : Control
             RoomKey key = waypoints[i];
             if (!Layout.Positions.TryGetValue(key, out var coord)) continue;
             Rect cell = ComputeCellRect(coord, tilePixels, cx, cy);
-            // Centre of the cell — the marker doubles as a clear
-            // "this is your waypoint" indicator that's easy to spot
-            // at any zoom level.
             Point centre = new(
                 cell.X + cell.Width  / 2.0,
                 cell.Y + cell.Height / 2.0);
-            ctx.DrawEllipse(LoopBuilderWaypointFill, LoopBuilderWaypointRing,
-                centre, radius, radius);
+            ctx.DrawEllipse(fill, ring, centre, radius, radius);
 
             string label = (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
             FormattedText ft = new(label, System.Globalization.CultureInfo.InvariantCulture,
-                FlowDirection.LeftToRight, tf, textSize, LoopBuilderWaypointTextBrush);
+                FlowDirection.LeftToRight, tf, textSize, textBrush);
             ctx.DrawText(ft, new Point(
                 centre.X - ft.Width  / 2,
                 centre.Y - ft.Height / 2));
