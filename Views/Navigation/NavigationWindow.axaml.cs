@@ -60,6 +60,10 @@ public partial class NavigationWindow : Window
         if (this.FindControl<ListBox>("BuilderClicksList") is { } builderList)
             WireBuilderClicksList(builderList);
 
+        // Running-loop green ListBox — click row to live-edit that waypoint.
+        if (this.FindControl<ListBox>("RunningLoopEditList") is { } runningList)
+            WireRunningLoopEditList(runningList);
+
         // Rail folder trees — drag a leaf row onto a folder node (or the
         // empty tree area) to move it. GOTO favourites, Loops, and
         // Auto-Lair setups each get the same leaf-drag → folder-drop
@@ -402,6 +406,33 @@ public partial class NavigationWindow : Window
         if (DataContext is NavigationViewModel vm
             && vm.EditBuilderWaypointActionCommand.CanExecute(row))
             vm.EditBuilderWaypointActionCommand.Execute(row);
+    }
+
+    private void WireRunningLoopEditList(ListBox list)
+    {
+        // Single-click any row live-edits that waypoint (command / delay / do-not-rest /
+        // do-not-attack) while the loop runs — no restart. No per-row buttons: rooms
+        // can't be added / removed / reordered mid-run.
+        list.AddHandler(PointerReleasedEvent, RunningLoopRowPointerReleased);
+    }
+
+    private void RunningLoopRowPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (e.Source is Button) return;
+        if (e.Source is not StyledElement el) return;
+        RunningLoopRow? row = null;
+        for (StyledElement? cur = el; cur is not null; cur = (cur as Control)?.Parent as StyledElement)
+        {
+            if (cur is ListBoxItem { DataContext: RunningLoopRow r })
+            {
+                row = r;
+                break;
+            }
+        }
+        if (row is null) return;
+        if (DataContext is NavigationViewModel vm
+            && vm.EditRunningWaypointActionCommand.CanExecute(row))
+            vm.EditRunningWaypointActionCommand.Execute(row);
     }
 
     // Per-row "✕" button — removes the waypoint at the row's index. Bound via

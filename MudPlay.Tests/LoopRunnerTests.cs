@@ -429,6 +429,64 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void ReconcileExpandedSteps_DelayChange_UpdatesStepInPlace_KeepsIndex()
+    {
+        // A live delay edit on the running-loop rail keeps the command count, so it's
+        // applied in place — the frozen CommandLoopStep is swapped for one carrying the
+        // new delay, without a re-expand and without moving the runner's position.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Loop loop = new("cmd", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "dep 100", 500),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        });
+        h.Runner.Start(loop);
+
+        CommandLoopStep before = h.Runner.ExpandedSteps.OfType<CommandLoopStep>().Single();
+        Assert.Equal(500, before.DelayMs);
+        int indexBefore = h.Runner.CurrentIndex;
+
+        loop.Waypoints.First(w => w.Command == "dep 100").DelayMs = 1200;
+        h.Runner.ReconcileExpandedSteps();
+
+        CommandLoopStep after = h.Runner.ExpandedSteps.OfType<CommandLoopStep>().Single();
+        Assert.Equal(1200, after.DelayMs);
+        Assert.Equal("dep 100", after.Command);
+        Assert.Equal(indexBefore, h.Runner.CurrentIndex);
+    }
+
+    [Fact]
+    public void ReconcileExpandedSteps_CommandAdded_ReExpandsAtNextLap()
+    {
+        // Adding a command changes the expanded step count, so reconcile can't swap in
+        // place mid-flight — it defers a re-expand to the next lap wrap. The new command
+        // step is absent until the lap closes, then present.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Loop loop = new("addcmd", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1)),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        });
+        h.Runner.Start(loop);
+        Assert.Empty(h.Runner.ExpandedSteps.OfType<CommandLoopStep>());
+
+        loop.Waypoints[1].Command = "smile";
+        h.Runner.ReconcileExpandedSteps();
+        Assert.Empty(h.Runner.ExpandedSteps.OfType<CommandLoopStep>());   // deferred, not yet applied
+
+        // Close a lap (observe B then A back to the entry) — the wrap re-expands.
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Tracker.NoteRoomObserved(new RoomObservation("A",
+            new HashSet<Direction> { Direction.N }));
+
+        Assert.Contains(h.Runner.ExpandedSteps.OfType<CommandLoopStep>(),
+            s => s.Command == "smile");
+    }
+
+    [Fact]
     public void MissingExit_FailsRun()
     {
         // Player at C (1/3 — only S exit). Loop is [A, B] which

@@ -977,6 +977,8 @@ public static class BugReportBuilder
             Kv(sb, "Loop only-attack-in-lair", curLoop.OnlyAttackInLairRooms.ToString());
             Kv(sb, "Loop do-not-attack waypoints",
                 curLoop.Waypoints.Count(w => w.DoNotAttack).ToString());
+            Kv(sb, "Loop do-not-rest waypoints",
+                curLoop.Waypoints.Count(w => w.DoNotRest).ToString());
             Kv(sb, "Combat suppressed in current room",
                 svc.RoomTracker.State.CurrentRoom is { } cur
                     ? Game.Map.LoopCombatSuppression.IsSuppressed(curLoop, cur.Key, cur.HasLair).ToString()
