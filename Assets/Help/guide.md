@@ -461,7 +461,7 @@ Auto-Heal / Rest (its toolbar toggle, or Settings → General) watches your HP a
 
 ## Casting priorities
 
-When more than one spell wants to fire, the caster follows the priority order on Settings → Spells — party heals, self heals, curing, buffing, then debuffing — and won't cast if it would drop you below your mana floors.
+When more than one spell wants to fire, the caster follows the priority order on Settings → Spells — by default emergency heal, party heals, downed-ally rescue, self heals, curing, buffing, then debuffing — and won't cast if it would drop you below your mana floors. The one exception is **emergency heal**: it leads the order by default and ignores the mana floor entirely, spending whatever mana is left to save you (see Emergency heal, below).
 
 Because a round's damage lines arrive a beat before the prompt that reports your new HP, the client waits for that confirmed HP before it will spend the round's one between-round cast on a **cure, buff, or debuff** right after a hit lands. Healing is never held this way — so if a round chunks you low, the client won't burn that round buffing on a stale "you look fine" reading and skip the heal; the heal fires the moment your real HP is confirmed.
 
@@ -1790,6 +1790,7 @@ Settings → Health. Two stacked sections — **Health (HP)** on top, **Mana / K
 
 **Default:** Resting 50%, Combat 0% (disabled — always heal)
 **What it does:** A mana floor that gates self-heal casts — below this, MudPlay skips the heal so mana can regenerate. `0` disables the gate entirely (always heal regardless of mana).
+**Important notes:** This floor gates Minor and Major heal only. **Emergency heal ignores it** — a last-resort save spends whatever mana is left rather than conserving it (it still won't attempt a spell it can't afford the mana for). So even with a high floor set here, your Emergency heal still fires in its band.
 
 ### Bless if above
 
