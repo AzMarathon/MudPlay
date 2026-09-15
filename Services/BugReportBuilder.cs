@@ -180,6 +180,10 @@ public static class BugReportBuilder
         // "my quest didn't auto-complete" report shows whether the sync ran and what it found.
         Kv(sb, "Quest flag sync on login", svc.QuestFlagSync.EnabledForCurrentProfile ? "on" : "off");
         Kv(sb, "Last quest flag sync", svc.QuestFlagSync.LastResult ?? "(not run this session)");
+        // The once-per-day gate's stored date — so a "didn't run at login" report shows
+        // it was skipped because it already ran earlier today, not that it's broken.
+        Kv(sb, "Quest flag sync last ran (date)",
+            svc.QuestFlagSync.LastSyncDate?.ToString("yyyy-MM-dd") ?? "(never)");
         // Diagnostic-channel state gates whether the Program-log tail carries any
         // decision trail: both flags default off, and every _log?.Debug/Combat
         // site is skipped at generation time when off, so a report captured with

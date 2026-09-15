@@ -78,6 +78,21 @@ public sealed class QuestFlagSyncManager
     // Whether the active character has opted into the login sync (Settings → General).
     public bool EnabledForCurrentProfile => _profile.Current is not null && _enabled();
 
+    // The local date this character last ran a real flag check — for the bug report.
+    public DateOnly? LastSyncDate => _profile.Current?.LastQuestFlagSyncDate;
+
+    // Once-per-day gate: true when a real check already completed on `today`, so a
+    // relog the same day skips the abil / sys-god burst. Pure + static for the test.
+    public static bool AlreadyCheckedToday(DateOnly? lastSync, DateOnly today) =>
+        lastSync == today;
+
+    // Stamp today's date and persist, so the rest of the day's logins skip the sync.
+    private void StampCheckedToday(CharacterProfile prof)
+    {
+        prof.LastQuestFlagSyncDate = DateOnly.FromDateTime(DateTime.Now);
+        _profile.Save();
+    }
+
     // On-demand run — for turning the setting on mid-session, when we're already playing.
     // Gated on enabled + in-realm (so flipping it at the character-select menu does nothing),
     // it syncs then RE-reports the now-current available quests (freshly-completed ones drop
@@ -102,6 +117,16 @@ public sealed class QuestFlagSyncManager
     {
         if (_profile.Current is not { } prof) return 0;
 
+        // Once per day: a relog later the same day doesn't re-fire the abil / sys-god
+        // burst. Stamped only when a real check actually completes below (not on the
+        // missing-sys-powers skip), so granting powers later the same day can still run.
+        if (AlreadyCheckedToday(prof.LastQuestFlagSyncDate, DateOnly.FromDateTime(DateTime.Now)))
+        {
+            LastResult = "skipped — already synced today";
+            _log?.Info("QuestFlags", $"sync: {LastResult}");
+            return 0;
+        }
+
         int? classId = _classId();
         IReadOnlyList<CrawledQuest> crawled = QuestCrawler.Crawl(_gameData, classId);
         if (crawled.Count == 0) return 0;
@@ -122,6 +147,7 @@ public sealed class QuestFlagSyncManager
         {
             LastResult = "nothing to check (no eligible incomplete quests at this level)";
             _log?.Info("QuestFlags", $"sync: {LastResult}");
+            StampCheckedToday(prof);
             return 0;
         }
 
@@ -131,6 +157,7 @@ public sealed class QuestFlagSyncManager
         {
             LastResult = "nothing to check (no incomplete detectable quests)";
             _log?.Info("QuestFlags", $"sync: {LastResult}");
+            StampCheckedToday(prof);
             return 0;
         }
 
@@ -156,10 +183,12 @@ public sealed class QuestFlagSyncManager
         {
             LastResult = $"{observed.Count} flag(s) read, nothing newly complete";
             _log?.Info("QuestFlags", $"sync: {LastResult}");
+            StampCheckedToday(prof);
             return 0;
         }
 
         ApplyComplete(prof, newly);
+        prof.LastQuestFlagSyncDate = DateOnly.FromDateTime(DateTime.Now);
         _profile.Save();
         LastResult = $"{observed.Count} flag(s) read, {newly.Count} quest(s) marked complete";
         _log?.Info("QuestFlags",

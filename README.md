@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.0**
-> - **Batch edit** on the Game Data Browser's **Monsters**, **Items**, and **Players** tables — select multiple rows and the Batch-edit button (between the filter box and the column picker) sets chosen fields on every selected record at once
-> - Per-field opt-in: enum/text fields have a Change checkbox; flags and permissions are tri-state **Leave / On / Off** (grant/revoke for player permissions), so batching one field never disturbs a record's other overrides
-> - Monsters/Items batch honours the tier picker (character / BBS / global); **Installed defaults** batch-resets the selected records
-> - Players table gains a **Gang** column (last-seen gang from the `who` parse)
-> - Game Data Browser opens wider with a minimum width, so table filter boxes and header buttons no longer collide
+> **Version 3.88.1**
+> - The login-time quest-completion flag check (the `abil` burst on Paradigm / `sys … abil` on Stock) now runs **at most once per day** per character — relogging later the same day no longer re-fires it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
