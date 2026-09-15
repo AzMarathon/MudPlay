@@ -435,7 +435,9 @@ Both cards show their trap count. Click either route to preview its line on the 
 
 Either way the card warns exactly how many marked rooms it crosses, and your **avoid list is left untouched** — only that one walk ignores it.
 
-It checks one thing first: if the destination *is* reachable without touching an avoided room once you **obtain** something — a raft to cross a river, a key for a door — the picker offers that obtain-and-cross route (which respects your avoids) instead of asking you to override them. So "route through your avoids" only comes up when crossing a marked room is genuinely the sole option, not when a raft two rooms away would do. That said, when the raft crossing *is* offered, an extra **"Route through N avoided room(s)"** card sits alongside it — plow through the marked rooms (no counter needed) if you'd rather not fetch the raft.
+It checks one thing first: if the destination *is* reachable without touching an avoided room once you **obtain** something — a raft to cross a river, a key for a door — the picker offers that obtain-and-cross route (which respects your avoids) instead of asking you to override them. So "route through your avoids" only comes up when crossing a marked room is genuinely the sole option, not when a raft two rooms away would do.
+
+That said, when the raft crossing *is* offered, an extra **"Route through N avoided room(s)"** card sits alongside it — plow through the marked rooms (no counter needed) if you'd rather not fetch the raft.
 
 Every card that skips the safe way — cross a hazard unprotected, or route through avoided rooms — is tinted **red** so the risky pick is obvious.
 
@@ -508,7 +510,10 @@ The healing, ranks, nags, and re-invite behaviour the window reflects are all co
 
 Party buffs are no longer set up here in the Party window. **All** automated buffing — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts — is now configured in **one unified list inside the Buff Watchdog** (View → Buff Watchdog): click **＋ Add buff**, pick a spell, and tick the party members (or **All**) it should be cast on. See **Buff Watchdog** under *Tools & Diagnostics* for the full walkthrough.
 
-Two things about party buffs stay worth knowing here. A single-target buff fires for any member who's **currently in your party** — a MajorMUD party is always in one room, so being in `par` means being in the room (a member who leaves or is uninvited drops out of the party and is no longer targeted). The one exception is a member who's **hiding**: the cast comes back *"You do not see … here!"*, so the client backs off that member — the Buff Watchdog marks them **"hidden — can't target"** — and retries the next time you **move** or they **reappear**. Targets are remembered by name, so your setup survives parties dissolving and reforming. And the two **bless while resting / during combat** gates that decide *when* the party-buff engine may cast still live on **Settings → Party**.
+Two things about party buffs stay worth knowing here:
+
+- **Who's targeted** — a single-target buff fires for any member who's **currently in your party** (a MajorMUD party is always in one room, so being in `par` means being in the room; a member who leaves or is uninvited drops out and is no longer targeted). The one exception is a member who's **hiding**: the cast comes back *"You do not see … here!"*, so the client backs off that member — the Buff Watchdog marks them **"hidden — can't target"** — and retries the next time you **move** or they **reappear**. Targets are remembered by name, so your setup survives parties dissolving and reforming.
+- **When it casts** — the two **bless while resting / during combat** gates that decide *when* the party-buff engine may cast still live on **Settings → Party**.
 
 ## Leaders and followers
 
@@ -621,7 +626,9 @@ The health and spellcasting engines keep you alive and buffed — resting, heali
 
 Auto-Heal / Rest (its toolbar toggle, or Settings → General) watches your HP and mana. Below your rest thresholds it sits and rests (or meditates) back up; below your run thresholds it flees; below your hang-up threshold it can drop the connection as a last resort. Every threshold is set on Settings → Health, as a percentage or an absolute value.
 
-**A hostile blocking your rest, even with Auto-Combat off.** A monster in the room keeps you *in combat*, and you can't rest while it's swinging at you. So when a rest is due (HP **or** mana below its *rest if below*) and an enemy is blocking it — but your HP is still **above** *run if below* — the engine will **fight it to clear the room even if Auto-Combat is off**, then rest once it's dead. If your HP then falls to *run if below* during that fight, it stops and **flees** instead (breaking combat first when *break before running* is set). This is automatic and needs no toggle — it's the only thing that reaches through an off Auto-Combat, and only to escape the sit-there-and-die deadlock; a healthy character just walks past monsters as before.
+**A hostile blocking your rest, even with Auto-Combat off.** A monster in the room keeps you *in combat*, and you can't rest while it's swinging at you. So when a rest is due (HP **or** mana below its *rest if below*) and an enemy is blocking it — but your HP is still **above** *run if below* — the engine will **fight it to clear the room even if Auto-Combat is off**, then rest once it's dead. If your HP then falls to *run if below* during that fight, it stops and **flees** instead (breaking combat first when *break before running* is set).
+
+This is automatic and needs no toggle — it's the only thing that reaches through an off Auto-Combat, and only to escape the sit-there-and-die deadlock; a healthy character just walks past monsters as before.
 
 ## Casting priorities
 
@@ -643,7 +650,9 @@ For mana-regen classes, the caster can rest to regen and — if configured — r
 
 Press **F2** to open the **Spell Book** — a read-only reference to your class's spells. It's a lookup companion for the Spells settings, not a place you configure automation: use it to find a spell's cast-code and effect, then type that code into the pickers on **Settings → Spells**. F2 again closes it, and it updates itself as you play (type `spells` or `stat` in the game to refresh what it knows).
 
-The list also respects your **alignment** — a Good-only, Evil-only, or Neutral-only spell you haven't learned yet stays hidden until your alignment actually matches it, everywhere the class list feeds (the book itself and the Settings → Spells pickers alike). A spell you've **already** learned never disappears, even if your alignment later drifts away from it — an alignment-quest reward stays yours. Alignment isn't part of `stat`'s output, so filtering only kicks in once the game has shown your own row in a `who` this session; before that, every alignment-gated spell still shows (nothing gets hidden on a guess).
+The list also respects your **alignment** — a Good-only, Evil-only, or Neutral-only spell you haven't learned yet stays hidden until your alignment actually matches it, everywhere the class list feeds (the book itself and the Settings → Spells pickers alike). A spell you've **already** learned never disappears, even if your alignment later drifts away from it — an alignment-quest reward stays yours.
+
+Alignment isn't part of `stat`'s output, so filtering only kicks in once the game has shown your own row in a `who` this session; before that, every alignment-gated spell still shows (nothing gets hidden on a guess).
 
 **All / Heals / Buffs / Attacks / Party+AoE** tabs across the top narrow the grid by what a spell actually does:
 
@@ -654,13 +663,24 @@ The list also respects your **alignment** — a Good-only, Evil-only, or Neutral
 
 A spell can land in more than one tab (a whole-party buff like chant shows under both Buffs and Party+AoE) — switching tabs re-filters the same list rather than sorting each spell into one fixed bucket. **All** clears the tab filter.
 
-The header names the class and level it's showing. The grid lists each spell with a **✓** if you've learned it, its **Code** (the cast-code you type), **Name**, **Lvl** (the level **your class** can actually learn it — respecting a trainer's level gate, so a spell your class learns late from a specific NPC reads its real level, not the spell's lower base requirement), **Mana** cost, **Success %** (see below), and **Effect** at your current level (hover the Effect cell for the raw scaling formula). **Double-click a spell** to open the game-data record of whatever teaches it — the **item** for a normal spell, or the **trainer NPC**'s record for a spell learned from an NPC (e.g. a Paladin's divine disfavour) — handy for finding where to buy or how to obtain a spell you haven't learned. Spells with neither an item nor a trainer source do nothing. Three controls up top narrow the list:
+The header names the class and level it's showing. The grid lists each spell with a **✓** if you've learned it, plus these columns:
+
+- **Code** — the cast-code you type.
+- **Name**.
+- **Lvl** — the level **your class** can actually learn it, respecting a trainer's level gate (so a spell your class learns late from a specific NPC reads its real level, not the spell's lower base requirement).
+- **Mana** cost.
+- **Success %** — see below.
+- **Effect** — at your current level (hover the Effect cell for the raw scaling formula).
+
+**Double-click a spell** to open the game-data record of whatever teaches it — the **item** for a normal spell, or the **trainer NPC**'s record for a spell learned from an NPC (e.g. a Paladin's divine disfavour) — handy for finding where to buy or how to obtain a spell you haven't learned. Spells with neither an item nor a trainer source do nothing. Three controls up top narrow the list:
 
 - **Show all** — off by default (you see only spells you're high enough level to cast); tick it to preview the whole class list, reading the **Lvl** column for when each unlocks.
 - **Known only** — hides spells you haven't learned yet.
 - **Search** — filter by cast-code or name.
 
-The **Success %** column is your **chance to land the cast** (as opposed to fizzling) — computed from your **Spellcasting** stat plus the spell's own difficulty, capped at 98% (100% for Kai). (It reads "Success %", not "Difficulty", because the number *is* your success chance — a higher value is better.) It's independent of your level: raising Spellcasting (or gear that boosts it) is what lifts it. A spell shows **—** when no chance can be stated — you're not a caster class, or your stats haven't been read yet (type `stat` in the game to populate them). Reopen the book after a `stat` to refresh it.
+The **Success %** column is your **chance to land the cast** (as opposed to fizzling) — computed from your **Spellcasting** stat plus the spell's own difficulty, capped at 98% (100% for Kai). (It reads "Success %", not "Difficulty", because the number *is* your success chance — a higher value is better.) It's independent of your level: raising Spellcasting (or gear that boosts it) is what lifts it.
+
+A spell shows **—** when no chance can be stated — you're not a caster class, or your stats haven't been read yet (type `stat` in the game to populate them). Reopen the book after a `stat` to refresh it.
 
 If your class carries wands, scrolls, or potions that cast a spell, a **Cast-on-use items** section at the bottom lists what each one casts, its mana, and its charges.
 
@@ -680,7 +700,9 @@ You don't have to wait for the engines, either: the **Action menu** (and the mat
 
 ## Banking
 
-When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand, then **walks back to where it left off and resumes the loop / Auto-Lair** it interrupted. The trip home uses the **full pathfinder** — the same one that handles your GOTOs — so if the grind area is walled behind a key-door, a hidden exit, a summon-drop key, or a lever/ask-NPC gate, it plans and crosses back *in* rather than stranding at the bank (getting *out* of such an area is easy; getting back *in* needs the gate-aware routing). Set the bank and thresholds on Settings → Cash. To bank right now regardless of the threshold, use **Action → Deposit All** (or its toolbar button / the `@deposit-all` remote command), which banks down to your keep-on-hand floor.
+When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand, then **walks back to where it left off and resumes the loop / Auto-Lair** it interrupted. The trip home uses the **full pathfinder** — the same one that handles your GOTOs — so if the grind area is walled behind a key-door, a hidden exit, a summon-drop key, or a lever/ask-NPC gate, it plans and crosses back *in* rather than stranding at the bank (getting *out* of such an area is easy; getting back *in* needs the gate-aware routing).
+
+Set the bank and thresholds on Settings → Cash. To bank right now regardless of the threshold, use **Action → Deposit All** (or its toolbar button / the `@deposit-all` remote command), which banks down to your keep-on-hand floor.
 
 ## Equipment sets
 
