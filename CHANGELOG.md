@@ -1,5 +1,10 @@
 # Version history
 
+## 3.86.3
+
+- Bug reports now capture the route planner's decision for your last walk-to: from your current room to the destination you picked, whether it's reachable, and — when blocked — the exact exit it stops at with that exit's raw gate fields, so a "blocked / no reason" route card can be diagnosed from the capture
+- bug reports addressed: paradigm-20260914-191158
+
 ## 3.86.2
 
 - Gear thrash fixed: the travelling→Default combat swap is debounced, so Paradigm's rapid *Combat Off* / *Combat Engaged* flicker no longer yanks you between your While-Moving and Default gear on every brief engage (the astral-slippers on/off churn) — a fight that outlasts a short settle still gears up

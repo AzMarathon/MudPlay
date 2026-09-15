@@ -1795,6 +1795,12 @@ public sealed class AppServices
     // MapControl (layout).
     public Game.Map.BfsMapper Bfs { get; private set; } = null!;
 
+    // The destination of the most recent walk-to the user requested, remembered
+    // past the walk's end so the bug report can re-plan and explain a route that
+    // failed or was declined at the picker. Set by RouteChoicePrompt.WalkAsync;
+    // null until the first walk-to this session.
+    public Game.Map.RoomKey? LastRequestedWalkTo { get; set; }
+
     // Per-character avoided + stash room set. Implements
     // Game.Map.IRoomFilter so pathing layers can plug
     // it into Bfs without further wiring.

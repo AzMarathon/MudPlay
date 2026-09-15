@@ -38,6 +38,10 @@ public static class RouteChoicePrompt
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // Remember it for the bug report even if the walk is declined at the picker
+        // or fails — so a capture can re-plan and explain what the picker decided.
+        services.LastRequestedWalkTo = destination;
+
         // Let the nav-map right-click menu that launched this walk close before we do
         // anything heavy.
         await Task.Yield();

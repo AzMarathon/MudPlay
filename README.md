@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.86.2**
+> **Version 3.86.3**
+> - Bug reports now capture the route planner's decision for your last walk-to (reachable? blocked where? which exit and why), so a "blocked / no reason" route card is diagnosable from the capture
 > - Gear thrash fixed: the travelling→Default combat swap is debounced, so Paradigm's rapid combat-state flicker no longer swaps you between your While-Moving and Default gear on every brief engage
 > - Boss timers auto-start on a kill inferred from an exp gain (the engaged target was dropped before the death registered) — the just-killed name is matched against the boss table
 > - Boss timers also auto-start via a roster fallback: a boss that vanishes from a same-room re-parse of the "Also here:" list is marked killed, covering kills you never engaged
