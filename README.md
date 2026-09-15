@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.86.3**
+> **Version 3.86.4**
+> - A route blocked only by your level now names the **level gate** (and the level needed) in the picker instead of a generic "blocked" card or an incidental obstacle
 > - Bug reports now capture the route planner's decision for your last walk-to (reachable? blocked where? which exit and why), so a "blocked / no reason" route card is diagnosable from the capture
 > - Gear thrash fixed: the travelling→Default combat swap is debounced, so Paradigm's rapid combat-state flicker no longer swaps you between your While-Moving and Default gear on every brief engage
 > - Boss timers auto-start on a kill inferred from an exp gain (the engaged target was dropped before the death registered) — the just-killed name is matched against the boss table

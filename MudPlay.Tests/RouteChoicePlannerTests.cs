@@ -720,6 +720,54 @@ public sealed class RouteChoicePlannerTests
     }
 
     [Fact]
+    public void PlanBlocked_LevelBlockedDestination_NamesTheLevelGate_NotAnImpassableDoorDetour()
+    {
+        // The Ancient Fortress shape: the destination (1/9) is reachable only past
+        // a level gate a low-level character fails — but the graph ALSO "reaches"
+        // it through an impassable 1000-picklock door (the pyramid door / pit
+        // drops). PlanBlocked must name the LEVEL gate, not the incidental door,
+        // so the picker tells the user WHY (they're not high enough level).
+        const string fortressJson = """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "Approach",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "1/8", "E": "1/2", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 2, "Name": "Gatehouse",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "1/9 (Level: 75 to 999)", "W": "1/1",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 8, "Name": "Pyramid",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "1/1", "S": "0", "E": "1/9 (Door [1000 picklocks/strength])", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 9, "Name": "Jailer Room",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "1/2",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        WithGraph(fortressJson, (bfs, graph, filter) =>
+        {
+            filter.LevelProvider = () => 28;               // under the level-75 gate
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;
+            filter.StrengthProvider = () => 10;
+            filter.PicklocksProvider = () => 0;            // can't pick the 1000-door
+            filter.MaxBashableStrengthProvider = () => 200;
+
+            BlockedRoutePlan? plan = RouteChoicePlanner.PlanBlocked(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(plan);
+            Assert.True(plan!.BlockExit.HasLevelGate,
+                "the named block must be the level gate, not the impassable door");
+            Assert.Equal(75, plan.BlockExit.MinLevel);
+            Assert.Equal(new RoomKey(1, 2), plan.StopRoom);
+        });
+    }
+
+    [Fact]
     public void ClassifiesHazardProtectionRequirement()
     {
         WithGraph(HazardShortcutRoomsJson, (bfs, graph, filter) =>

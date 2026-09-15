@@ -513,6 +513,19 @@ public static class RouteChoicePlanner
         using (filter.SuspendAcquirableGates())
             if (bfs.FindPath(source, destination, filter) is { Count: > 0 }) return null;
 
+        // Level-blocked first: would the destination be reachable if the character
+        // were high enough level, with every OTHER gate still honoured? Then the
+        // real barrier is a level gate — name that, not whatever incidental gate an
+        // all-gates-lifted physical route below happens to cross (e.g. the Ancient
+        // Fortress, whose only real way in is a level-75 exit but whose graph is
+        // also "reachable" through an impassable pyramid door and one-way pit drops
+        // — report paradigm-20260914-191158, a generic blocked card into it).
+        IReadOnlyList<Direction>? levelLifted =
+            bfs.FindPath(source, destination, new LevelIgnoringFilter(filter));
+        if (levelLifted is { Count: > 0 }
+            && FirstBlockOnRoute(graph, filter, source, levelLifted, ExitBlockReason.Level) is { } lg)
+            return lg;
+
         // The route the walk would take with nothing in the way.
         IReadOnlyList<Direction>? physical =
             bfs.FindPath(source, destination, filter, ignoreExitGates: true);
@@ -534,6 +547,31 @@ public static class RouteChoicePlanner
             reached.Add(cur);
         }
         return null;   // nothing blocked along the physical route (unexpected when free==null)
+    }
+
+    // Walk `route` from `source` under the live filter and return a run-to-block
+    // plan for the first exit whose block reasons intersect `mask`. Null when that
+    // block sits at the doorstep (nowhere to run to) or the route can't be
+    // followed / carries no matching block.
+    private static BlockedRoutePlan? FirstBlockOnRoute(
+        RoomGraphManager graph, MovementFilter filter, RoomKey source,
+        IReadOnlyList<Direction> route, ExitBlockReason mask)
+    {
+        RoomKey cur = source;
+        var reached = new List<RoomKey> { source };
+        foreach (Direction dir in route)
+        {
+            Room? room = graph.GetRoom(cur);
+            if (room is null || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            if ((filter.DescribeExitBlock(in exit) & mask) != ExitBlockReason.None)
+            {
+                if (cur.Equals(source)) return null;   // at the doorstep — nowhere to run
+                return new BlockedRoutePlan(cur, dir, exit, reached);
+            }
+            cur = exit.Target;
+            reached.Add(cur);
+        }
+        return null;
     }
 
     // The first teleport hop's landing-room label ("Silver River (12/34)"), or
