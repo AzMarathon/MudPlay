@@ -2331,7 +2331,9 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 ### Minor heal / Major heal
 
 **Default:** unset
-**What it does:** Your primary self-heal spell (Minor) and your bigger, life-threat self-heal spell (Major). Minor fires in the band between its own threshold and the Major threshold; once your HP drops into the (lower) Major band the Major heal **takes over** — Minor yields to it there by severity, so you don't have to re-order priorities to get the big heal at low HP. If you can't afford the Major heal, it falls back to Minor rather than skipping the heal. If you haven't set a Major heal at all, MudPlay uses Minor heal at the Major threshold. The same severity rule applies to the party Minor/Major heal slots.
+**What it does:** Your primary self-heal spell (Minor) and your bigger, life-threat self-heal spell (Major). Minor fires in the band between its own threshold and the Major threshold; once your HP drops into the (lower) Major band the Major heal **takes over** — Minor yields to it there by severity, so you don't have to re-order priorities to get the big heal at low HP.
+
+If you can't afford the Major heal, it falls back to Minor rather than skipping the heal. If you haven't set a Major heal at all, MudPlay uses Minor heal at the Major threshold. The same severity rule applies to the party Minor/Major heal slots.
 
 ### Emergency heal
 
@@ -2353,7 +2355,13 @@ If you leave Emergency heal blank, MudPlay falls back to Major heal, then Minor 
 
 ### Mana regen — moved to the Buff Watchdog
 
-The mana-regen spell and its **reroll** knobs are no longer picked here. Add the spell in the **Buff Watchdog** (View → Buff Watchdog → ＋ Add buff) and set its conditions there: **Cast before resting for mana** (keep it up only while you're resting for mana — recast through the rest, including a combat interruption, until mana tops up — rather than maintaining it always), plus **Reroll below abil 145** (the threshold — reroll while the spell's rolled mana-regen contribution read off `abil 145` lands under it) and **Max rerolls** (how many times to chase a better roll before accepting what landed). Rerolling works on **Paradigm** (it reads the roll back from `abil 145`); each reroll still runs through the normal between-round priority, so a due heal or cure fires ahead of it. See the **Buff Watchdog** section for details.
+The mana-regen spell and its **reroll** knobs are no longer picked here. Add the spell in the **Buff Watchdog** (View → Buff Watchdog → ＋ Add buff) and set its conditions there:
+
+- **Cast before resting for mana** — keep it up only while you're resting for mana (recast through the rest, including a combat interruption, until mana tops up), rather than maintaining it always;
+- **Reroll below abil 145** — the threshold: reroll while the spell's rolled mana-regen contribution read off `abil 145` lands under it;
+- **Max rerolls** — how many times to chase a better roll before accepting what landed.
+
+Rerolling works on **Paradigm** (it reads the roll back from `abil 145`); each reroll still runs through the normal between-round priority, so a due heal or cure fires ahead of it. See the **Buff Watchdog** section for details.
 
 ### When HP full / When Mana full — moved to the Buff Watchdog
 
@@ -2398,7 +2406,9 @@ Settings → Health. Two stacked sections — **Health (HP)** on top, **Mana / K
 ### Rest max (HP / MA)
 
 **Default:** 95% (both)
-**What it does:** Once resting, MudPlay stops and stands back up once the pool reaches this value. Both HP and Mana need to reach their own target before you stand (unless your class has no mana pool). The percentage is read against your **Default gear set's** max HP / mana — so a Pre-rest HP/Mana set that swaps in an item which changes your max doesn't move the target you tuned — and it's capped at your current gear's real max, so a rest set that lowers your pool can never leave you resting for a level you can't physically reach. The **heal**, **flee (run)**, and **emergency-hangup** HP triggers anchor to the same Default-set max, so they fire at the HP you tuned regardless of what set is worn.
+**What it does:** Once resting, MudPlay stops and stands back up once the pool reaches this value. Both HP and Mana need to reach their own target before you stand (unless your class has no mana pool).
+
+The percentage is read against your **Default gear set's** max HP / mana — so a Pre-rest HP/Mana set that swaps in an item which changes your max doesn't move the target you tuned — and it's capped at your current gear's real max, so a rest set that lowers your pool can never leave you resting for a level you can't physically reach. The **heal**, **flee (run)**, and **emergency-hangup** HP triggers anchor to the same Default-set max, so they fire at the HP you tuned regardless of what set is worn.
 
 ### Rest if below (HP / MA)
 
@@ -2517,7 +2527,9 @@ Settings → Party.
 
 Your self-bless slots always fire, party or not.
 
-**Supersession:** if a whole-party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer. Any OTHER pair of configured buffs that remove each other this way — two self-cast buffs, two whole-party buffs, a whole-party buff removing a member's buff, and so on — aren't auto-resolved like this one case is; they instead get the **⚠** warning described in the **Buff Watchdog** section, so you know about the conflict without the client silently changing what it casts.
+**Supersession:** if a whole-party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
+
+Any OTHER pair of configured buffs that remove each other this way — two self-cast buffs, two whole-party buffs, a whole-party buff removing a member's buff, and so on — aren't auto-resolved like this one case is; they instead get the **⚠** warning described in the **Buff Watchdog** section, so you know about the conflict without the client silently changing what it casts.
 
 ### Bless party while resting / Bless party during combat
 
@@ -2771,7 +2783,10 @@ Settings → Auto-Lair. This tab tunes the scheduler that loops between "lairs" 
 
 **Default:** `Default`
 **Available options:** `Default — closest ready lair (no idle waits)`, `Throughput — minimize wasted respawn only`
-**What it does:** How the scheduler picks the next lair. **Default** maximizes hits per run: it goes to the **closest lair that's up by the time you arrive** — a closer lair still on cooldown that pops *during* the walk counts, and beats a farther already-up one — and **never idles in a wait-room** for a nearer lair unless it'd actually be ready when you get there; only when no lair is up by arrival does it wait for the soonest. **Throughput** instead only cares about never wasting a respawn and treats your idle time as free, so it will park and wait for the soonest-popping lair even when another is already up.
+**What it does:** How the scheduler picks the next lair:
+
+- **Default** maximizes hits per run: it goes to the **closest lair that's up by the time you arrive** — a closer lair still on cooldown that pops *during* the walk counts, and beats a farther already-up one — and **never idles in a wait-room** for a nearer lair unless it'd actually be ready when you get there; only when no lair is up by arrival does it wait for the soonest.
+- **Throughput** only cares about never wasting a respawn and treats your idle time as free, so it will park and wait for the soonest-popping lair even when another is already up.
 **When you might change it:** Pick Throughput if you'd rather never walk into an already-picked-clean lair and don't mind standing in a wait-room to time each respawn perfectly.
 
 ### Idle penalty weight
@@ -2813,7 +2828,9 @@ Settings → Auto-Trainer. Controls *how* auto-training behaves once it runs —
 **Default:** Off
 **What it does:** The master auto-leveling switch. When on, and you're running a Loop or Auto-Lair, the moment your banked experience makes a new level trainable, MudPlay automatically pauses, detours to an allowed trainer, trains every level you can, then resumes what it was doing.
 **Solo only:** training briefly drops you out of and back into the realm, which disbands a party server-side — so an armed Auto-train never fires while you're grouped. Train between groups, or with "Train Now."
-**It checks it can pay first.** Before walking anywhere, MudPlay prices the whole run — including the second trainer when your banked levels span two level bands, since each charges its own markup — and compares it to the coin you're carrying. If you're short it collects the difference first: your stash rooms, then your bank, or a combination, picking the bank branch nearest the trainer rather than nearest you. Pick up enough coin along the way and it abandons the errand and heads straight for the trainer. If everything you can reach still falls short, nothing is walked: it logs how far short you are and roughly how many laps of your loop will close the gap, and stays armed.
+**It checks it can pay first.** Before walking anywhere, MudPlay prices the whole run — including the second trainer when your banked levels span two level bands, since each charges its own markup — and compares it to the coin you're carrying.
+
+If you're short it collects the difference first: your stash rooms, then your bank, or a combination, picking the bank branch nearest the trainer rather than nearest you. Pick up enough coin along the way and it abandons the errand and heads straight for the trainer. If everything you can reach still falls short, nothing is walked: it logs how far short you are and roughly how many laps of your loop will close the gap, and stays armed.
 **About stashed coin.** MudPlay tracks what it has hidden in each stash room, but any player who searches that room can take it — so a stash is only ever a good guess. The run confirms by searching when it arrives, and if the room has been emptied it simply re-prices from where it's standing and carries on to the bank.
 **Auto-Get Cash is borrowed, not changed.** A collection trip needs cash pickup on to work, so MudPlay switches it on for the duration and puts it back exactly as it found it. Your saved setting is never modified. Auto-stashing is suppressed for the same window, so the trip can't hide the coin it just came to collect.
 **Banking on the way home.** If Auto-deposit is on, a run that trained something offers the purse to it once the loop is running again — so a withdraw-and-train trip banks the leftovers on the way back rather than carrying them round the circuit.
