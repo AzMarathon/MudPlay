@@ -432,7 +432,14 @@ This cuts both ways: on the **"Obtain, then cross"** (buy) card, turning Auto-Se
 
 **Seeing the full step plan.** Once you **click a route** in the picker, the **Details…** button (bottom-left) lights up. It opens that route's complete, start-to-finish plan in a scrollable window — every move and every **detour** (a lever pulled in another room, a winch cranked, a door opened) shown inline as `12/431 Tower < s`: the room you're standing in, then the command sent from it. It's the same expansion the walker runs, so what you read is what it will do. The window's per-room extras — monster, hazard, and item-gate links — are described just below.
 
-**Seeing the route you're already on.** The window's **title bar shows the ETA** to arrive via the route (the same realm-aware estimate the route cards use). The estimate charges combat dwell only for lairs the party will **actually fight** — a room whose occupants are friendly, fled, or neutral-and-not-kill-on-sight is walked straight through, so a hostile-free path reads close to raw walk time instead of inflating by every lair marker on the way. The same **Details…** window opens from the **CURRENT NAV** panel's header (in the right rail) once a route is *running* — for whatever's currently executing: a point-to-point walk, a loop circuit, or an Auto-Lair approach, so you can check the path ahead without re-planning it. It also opens for a **previewed** walk-to — arm a destination in the search box (before you press Go) and Details… shows the route you're about to take. Three things the window shows at a glance:
+**Seeing the route you're already on.** The window's **title bar shows the ETA** to arrive via the route (the same realm-aware estimate the route cards use). The estimate charges combat dwell only for lairs the party will **actually fight** — a room whose occupants are friendly, fled, or neutral-and-not-kill-on-sight is walked straight through, so a hostile-free path reads close to raw walk time instead of inflating by every lair marker on the way.
+
+The same **Details…** window opens from other places too:
+
+- the **CURRENT NAV** panel's header (in the right rail) once a route is *running* — a point-to-point walk, a loop circuit, or an Auto-Lair approach, so you can check the path ahead without re-planning it;
+- a **previewed** walk-to — arm a destination in the search box (before you press Go) and Details… shows the route you're about to take.
+
+Three things the window shows at a glance:
 
 - **Each room name is a link** — click it to flash the room on the map and centre there, the same as an `@where` reply.
 - At every room on the route, its **notable monsters** — placed fixtures (a boss / NPC) and lair spawners — are listed under that step, each a **clickable link** to the monster's Game Data record — handy for sizing up what a hunting loop is about to walk into. Each name is **tinted by the monster's alignment** by default — evil red, neutral cyan, good or lawful white — mirroring how the game itself colours them. A **see-hidden** monster (one that defeats sneak) is flagged with an **👁 eyeball on either side of its name**, so you know it'll spot you coming.
@@ -561,7 +568,14 @@ Active party members get a few things for free regardless of the grid: the party
 - `@suicide` — forces your character's death, using the suicide password MudPlay captured from your in-game `set suicide`. It's an **Elevated Command**, and Settings → Other blocks it when your remaining lives are at or below your threshold.
 - A few things are **always refused, silently, no matter what's granted**: anything containing `reroll`, and `@party set suicide` — these can't be leaked or overridden.
 
-**Not commands:** the ailment broadcasts `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid. (Poison isn't broadcast — a member's **poison** chip is read from the `par` party screen's `P` flag, so it lights even for a partymate on another client.) A member's chip clears on the first of: the member broadcasting they're clear (`@ok`), the effect's duration lapsing, the `par` `P` flag dropping (poison), or **you witnessing any cure land on them** — including one cast by a party-mate using a spell your own class can't cast (a Priest's cure poison, antidote, freedom, cure disease, and heal+cures like curing wind). Cure recognition reads the game's own spell data, so it doesn't depend on you having that cure configured.
+**Not commands:** the ailment broadcasts `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid. (Poison isn't broadcast — a member's **poison** chip is read from the `par` party screen's `P` flag, so it lights even for a partymate on another client.)
+
+A member's chip clears on the first of:
+
+- the member broadcasting they're clear (`@ok`);
+- the effect's duration lapsing;
+- the `par` `P` flag dropping (poison);
+- **you witnessing any cure land on them** — including one cast by a party-mate using a spell your own class can't cast (a Priest's cure poison, antidote, freedom, cure disease, and heal+cures like curing wind). Cure recognition reads the game's own spell data, so it doesn't depend on you having that cure configured.
 
 ## Reconnecting
 
@@ -662,7 +676,11 @@ The **Currently Equipped:** readout next to the Item Finder button names the las
 
 The **Equipment Bonuses** panel shows the set's projected AC and stat totals. The projected AC assumes your **configured self-buffs are up** — it folds in the AC (and the Prot-Evil / Shadow / vile-ward effects) your buffs grant on top of the gear, and its tooltip breaks the total down by source (items, race/class/quests, buffs). "Configured buffs" here means everything that lands on you: self-only spells, whole-party buffs you keep on, and single-target buffs you cast on yourself.
 
-**Unwearable items are flagged and skipped.** If a slot holds an item your character can't currently wear — its **alignment**, level, or class requirement isn't met — the slot's label turns **red** with a **⚠** marker, and the engine **skips that piece** on every swap instead of bonking the game with a wear it will refuse. This matters most for **alignment**: MajorMUD force-removes an alignment-restricted item when your alignment drifts past its threshold (the "cleanup EP-zap"), and re-equipping it then fails (*"You may not wear that item!"* for armor, *"You may not use that weapon."* for a weapon). When that happens the client catches the refusal, blocks the slot, and prints a yellow terminal notice — `[<item> skipped, unable to wear — adjust set to correct]` — so you stop repeatedly failing on it. **Change that slot's item** (pick something wearable, or clear it) to lift the block; if your alignment returns and the item becomes wearable again, an alignment-only flag clears on its own.
+**Unwearable items are flagged and skipped.** If a slot holds an item your character can't currently wear — its **alignment**, level, or class requirement isn't met — the slot's label turns **red** with a **⚠** marker, and the engine **skips that piece** on every swap instead of bonking the game with a wear it will refuse.
+
+This matters most for **alignment**: MajorMUD force-removes an alignment-restricted item when your alignment drifts past its threshold (the "cleanup EP-zap"), and re-equipping it then fails (*"You may not wear that item!"* for armor, *"You may not use that weapon."* for a weapon). When that happens the client catches the refusal, blocks the slot, and prints a yellow terminal notice — `[<item> skipped, unable to wear — adjust set to correct]` — so you stop repeatedly failing on it.
+
+**Change that slot's item** (pick something wearable, or clear it) to lift the block; if your alignment returns and the item becomes wearable again, an alignment-only flag clears on its own.
 
 ## Item Finder
 
@@ -881,7 +899,13 @@ MudPlay's automation is a set of independent engines you switch on and off — c
 
 Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is an independent on/off switch. Your primary surface for them during play is the **Action menu** in the menu bar (the toolbar can also carry each as a button — add them in Settings → Toolbar + Shortcuts). An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates the combat/spell tuning. But **Auto-Bless stands alone** — self and party buffing is controlled by the Auto-Bless toggle and nothing else, so turning off Auto-Combat or Auto-Rest/Heal never stops your blessing.
 
-**Sneak-aware casting.** Casting a spell breaks Sneak (and Hide), so when **Auto-Sneak is on** MudPlay times its maintenance casts around your stealth: after any automated cast it re-issues sneak in place, so you don't walk on exposed. And when you're sneaking with **Auto-Combat off** — slipping past rooms rather than fighting them — a due buff, cure, or top-off heal is **held until you reach an empty room** (no monsters, so the cast can be followed by a clean re-sneak) instead of stripping sneak in a room you're only passing through. If a **see-hidden** monster forces a fight (with *Clear hostiles when sneak broken by see-hidden monster* on), the now-cleared room becomes that opportunity: the held casts fire there, you re-sneak, and the walk continues. Emergency survival is never held — a life-threatening heal, a flee, or an emergency hangup always fires immediately. Turn Auto-Sneak **off** and this all stops: casts simply go out on schedule, wherever you are.
+**Sneak-aware casting.** Casting a spell breaks Sneak (and Hide), so when **Auto-Sneak is on** MudPlay times its maintenance casts around your stealth:
+
+- After any automated cast it **re-issues sneak in place**, so you don't walk on exposed.
+- While sneaking with **Auto-Combat off** — slipping past rooms rather than fighting them — a due buff, cure, or top-off heal is **held until you reach an empty room** (no monsters, so the cast can be followed by a clean re-sneak) instead of stripping sneak in a room you're only passing through.
+- If a **see-hidden** monster forces a fight (with *Clear hostiles when sneak broken by see-hidden monster* on), the now-cleared room becomes that opportunity: the held casts fire there, you re-sneak, and the walk continues.
+
+Emergency survival is never held — a life-threatening heal, a flee, or an emergency hangup always fires immediately. Turn Auto-Sneak **off** and this all stops: casts simply go out on schedule, wherever you are.
 
 ## Manual one-shots and Reset States
 
@@ -1083,7 +1107,15 @@ For the selected row(s) you have three actions:
 
 **Monster Intel** (View menu, or the toolbar's *Monster Intel* button) is a fast pre-fight check, not a monster database browser — it answers one question: **can I safely fight this thing right now?** It now shows a quick **Abilities & resistances** summary (elemental weakness/strength, immunities, undead state, and so on), but for the full record on a monster (loot, every room it's placed in, the automation overlay editor), use the Game Data Browser's Monsters tab instead.
 
-**Character bar** — a strip across the top (once a character is loaded) showing your name/level/class, live HP, live Mana or Kai (whichever your class uses), your currently-equipped weapon's HitMagic, how many attack spells you've obtained, and **AC vs Selected Target** — the effective Armour Class the monster you've selected actually rolls against: your base AC (worn + buffs) plus Shadow, plus the wards that apply to *that* monster's alignment. Which anti-alignment ward exists depends on your realm: **Paradigm** uses **Vile Ward** (ability 1113, converted by your own evil tier) versus an evil target; **Stock** realms use **Prot Good** (ability 25) versus a good target. Prot Evil (versus evil targets) applies in both realms. Paradigm dropped Prot Good for Vile Ward, so a Prot-Good value is ignored there. It reads "—" until you pick a monster. It updates live as HP/mana tick and stays current if you swap gear or learn a new spell while the window is open.
+**Character bar** — a strip across the top (once a character is loaded) showing your name/level/class, live HP, live Mana or Kai (whichever your class uses), your currently-equipped weapon's HitMagic, how many attack spells you've obtained, and **AC vs Selected Target** — the effective Armour Class the monster you've selected actually rolls against: your base AC (worn + buffs) plus Shadow, plus the wards that apply to *that* monster's alignment.
+
+Which anti-alignment ward exists depends on your realm:
+
+- **Paradigm** uses **Vile Ward** (ability 1113, converted by your own evil tier) versus an evil target.
+- **Stock** realms use **Prot Good** (ability 25) versus a good target.
+- **Prot Evil** (versus evil targets) applies in both realms. Paradigm dropped Prot Good for Vile Ward, so a Prot-Good value is ignored there.
+
+**AC vs Selected Target** reads "—" until you pick a monster; it updates live as HP/mana tick and stays current if you swap gear or learn a new spell while the window is open.
 
 **Defense simulator** — the second row of the character bar is a live what-if for your defense. It **seeds to your current loadout** when the window opens, and re-seeds if you swap gear:
 
