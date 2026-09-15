@@ -6,6 +6,7 @@
 > - Per-field opt-in: enum/text fields have a Change checkbox; flags and permissions are tri-state **Leave / On / Off** (grant/revoke for player permissions), so batching one field never disturbs a record's other overrides
 > - Monsters/Items batch honours the tier picker (character / BBS / global); **Installed defaults** batch-resets the selected records
 > - Players table gains a **Gang** column (last-seen gang from the `who` parse)
+> - Game Data Browser opens wider with a minimum width, so table filter boxes and header buttons no longer collide
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

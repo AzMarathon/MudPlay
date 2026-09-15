@@ -9,6 +9,7 @@
 - Players batch: party behaviours + all 15 remote-control permissions, with a Set-all-permissions master
 - Monsters/Items batch honours the tier picker (character / BBS / global), and 'Installed defaults' batch-resets the selected records
 - Players table gains a **Gang** column showing each player's last-seen gang from the `who` parse
+- Game Data Browser opens wider with a minimum width, so a table's filter box and header buttons no longer collide on any tab
 
 ## 3.87.0
 
