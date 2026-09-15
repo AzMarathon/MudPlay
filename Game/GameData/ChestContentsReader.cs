@@ -57,7 +57,7 @@ public static class ChestContentsReader
         if (spells is null) return null;
         if (FindByNumber(spells, spellNumber) is not { } spellRow) return null;
 
-        int topTextblock = FirstAbilValue(spellRow, CastTextblockAbil);
+        int topTextblock = ResolveLootTextblock(spellRow);
         if (topTextblock <= 0) return null;
 
         JsonDocument? tbinfo = cache.GetRawTable("TBInfo");
@@ -93,7 +93,7 @@ public static class ChestContentsReader
             if (spell.ValueKind != JsonValueKind.Object) continue;
             int number = ReadInt(spell, "Number");
             if (number <= 0) continue;
-            int tb = FirstAbilValue(spell, CastTextblockAbil);
+            int tb = ResolveLootTextblock(spell);
             if (tb > 0) spellToTextblock[number] = tb;
         }
 
@@ -380,6 +380,24 @@ public static class ChestContentsReader
             if (number > 0) map[number] = ReadString(row, "Name");
         }
         return map;
+    }
+
+    // The loot textblock a chest-open spell casts. Normally the CastTextblock
+    // (Abil 148) slot's AbilVal holds the TBInfo number — but most Paradigm
+    // chest-open spells leave that 0 and stash the number in MinBase instead (the
+    // same quirk SpellInfoRowsBuilder's effect display already falls back on).
+    // Only treat MinBase as the textblock when the spell actually carries the
+    // CastTextblock ability, so a non-textblock spell's MinBase is never misread.
+    // 0 when the spell casts no textblock.
+    private static int ResolveLootTextblock(JsonElement spellRow)
+    {
+        for (int i = 0; i < AbilSlots; i++)
+        {
+            if (ReadInt(spellRow, $"Abil-{i}") != CastTextblockAbil) continue;
+            int val = ReadInt(spellRow, $"AbilVal-{i}");
+            return val > 0 ? val : ReadInt(spellRow, "MinBase");
+        }
+        return 0;
     }
 
     // First AbilVal-N whose Abil-N equals code, scanning the item/spell's ability
