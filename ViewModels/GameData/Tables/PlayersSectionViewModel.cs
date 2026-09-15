@@ -6,6 +6,7 @@ using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Batch;
 using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels.GameData.Tables;
@@ -25,7 +26,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Given Name", "Family Name", "@'s", "Last Seen",
+        "Given Name", "Family Name", "Gang", "@'s", "Last Seen",
     };
 
     public override string SearchKeyColumn => "Given Name";
@@ -43,9 +44,13 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
     public IRelayCommand AddAsyncCommand { get; }
     public IAsyncRelayCommand RemoveSelectedCommand { get; }
 
+    public IAsyncRelayCommand BatchEditAsyncCommand { get; }
+
     ICommand  IEditableTableSectionViewModel.OpenEditCommand => OpenEditAsyncCommand;
     ICommand? IEditableTableSectionViewModel.AddCommand      => AddAsyncCommand;
     ICommand? IEditableTableSectionViewModel.RemoveCommand   => RemoveSelectedCommand;
+    ICommand? IEditableTableSectionViewModel.BatchEditCommand => BatchEditAsyncCommand;
+    string?   IEditableTableSectionViewModel.BatchEditLabel  => "Batch edit";
 
     // Stored as a field so Dispose can detach — the database singleton
     // otherwise pins every section VM ever created across browser opens.
@@ -88,6 +93,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         OpenEditAsyncCommand  = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
         AddAsyncCommand       = new AsyncRelayCommand(AddAsync);
         RemoveSelectedCommand = new AsyncRelayCommand(RemoveSelectedAsync, () => SelectedRow is not null);
+        BatchEditAsyncCommand = new AsyncRelayCommand(BatchEditAsync);
 
         PropertyChanged += (_, e) =>
         {
@@ -134,6 +140,9 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
             {
                 ["Given Name"]  = p.GivenName,
                 ["Family Name"] = p.FamilyName,
+                // Last-seen gang from the `who` parse (preserved across sightings that
+                // don't re-report it); blank when never seen in a gang.
+                ["Gang"]        = p.Gang ?? string.Empty,
                 ["@'s"]         = RemoteControlsLabel(p.RemoteControls),
                 ["Last Seen"]   = p.LastSeenUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
             };
@@ -226,6 +235,39 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         // AccountName lives on the BBS-tier observation, not the customization
         // slice, so it takes its own write path.
         _db.SetAccountName(record.GivenName, result.Updated.AccountName);
+        Reload();
+    }
+
+    // Batch edit every selected player: fold the chosen behaviour toggles and
+    // permission grants/revokes onto each player's existing customization. Permissions
+    // and behaviours not opted into stay exactly as each player already has them.
+    private async Task BatchEditAsync()
+    {
+        if (_dialogs is null) return;
+        List<PlayerRecord> records = new();
+        foreach (GameDataRow row in SelectedRows)
+        {
+            string given = row.Get("Given Name") ?? string.Empty;
+            string family = row.Get("Family Name") ?? string.Empty;
+            string displayName = string.IsNullOrEmpty(family) ? given : $"{given} {family}";
+            if (string.IsNullOrEmpty(displayName)) continue;
+            foreach (PlayerRecord p in _db.Players)
+            {
+                if (string.Equals(p.DisplayName, displayName, StringComparison.OrdinalIgnoreCase))
+                {
+                    records.Add(p);
+                    break;
+                }
+            }
+        }
+        if (records.Count < 2) return;
+
+        PlayerBatchEditDialogViewModel vm = new(records.Count);
+        PlayerBatchResult? result = await _dialogs.OpenWindowAsync<PlayerBatchEditDialogViewModel, PlayerBatchResult>(vm);
+        if (result is null || !result.Changes.AnyFieldChosen) return;
+
+        foreach (PlayerRecord record in records)
+            _db.EditCustomization(record.GivenName, result.Changes.ApplyTo(record.ToCustomization()));
         Reload();
     }
 }

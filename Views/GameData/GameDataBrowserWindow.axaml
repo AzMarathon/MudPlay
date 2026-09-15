@@ -7,7 +7,8 @@
         x:Class="MudPlay.Views.GameData.GameDataBrowserWindow"
         x:DataType="vm:GameDataBrowserViewModel"
         Title="Game Data Browser"
-        Width="960" Height="640"
+        Width="1040" Height="640"
+        MinWidth="1040" MinHeight="480"
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>

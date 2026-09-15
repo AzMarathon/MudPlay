@@ -6,7 +6,9 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.GameData;
 using MudPlay.Game.Map;
 using MudPlay.Models.GameData;
+using MudPlay.Models.Settings;
 using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Batch;
 using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels.GameData.Tables;
@@ -133,6 +135,10 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     public IRelayCommand<GameDataRow?> OpenEditAsyncCommand { get; }
     ICommand IEditableTableSectionViewModel.OpenEditCommand => OpenEditAsyncCommand;
 
+    public IRelayCommand BatchEditAsyncCommand { get; }
+    ICommand? IEditableTableSectionViewModel.BatchEditCommand => BatchEditAsyncCommand;
+    string? IEditableTableSectionViewModel.BatchEditLabel => "Batch edit";
+
     public MonstersSectionViewModel(
         GameDataCache cache,
         SettingsResolver? resolver = null,
@@ -147,6 +153,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         _overlaySeed = overlaySeed;
         _roomGraph = roomGraph;
         OpenEditAsyncCommand = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
+        BatchEditAsyncCommand = new AsyncRelayCommand(BatchEditAsync);
 
         // Curation filter panel, grouped into legible sections. Every numeric facet
         // is a min/max range (either bound optional) so you can bracket — HP 500–2000,
@@ -453,6 +460,54 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
                 resolver, AppServices.Current.Confirm, "Monsters", result.WccNoStr,
                 result.Tier, result.Overlay, result.EqualsInstalledDefaults);
 
+        Reload();
+    }
+
+    // Batch edit every selected monster: fold the chosen fields onto each record's
+    // existing overlay at the chosen tier (or reset them all at the Defaults tier).
+    private async Task BatchEditAsync()
+    {
+        if (_dialogs is null || _resolverRef is not { } resolver) return;
+        List<GameDataRow> rows = SelectedRows
+            .Where(r => !string.IsNullOrEmpty(r.Get("Number")))
+            .ToList();
+        if (rows.Count < 2) return;
+
+        MonsterBatchEditDialogViewModel vm = new(
+            rows.Count,
+            resolver.WritableTiers(),
+            AppServices.Current.SpellShort.NumberByShort);
+
+        MonsterBatchResult? result = await _dialogs.OpenWindowAsync<MonsterBatchEditDialogViewModel, MonsterBatchResult>(vm);
+        if (result is null) return;
+
+        if (result.Tier == SettingsTier.Defaults)
+        {
+            bool ok = await AppServices.Current.Confirm.ConfirmAsync(
+                "Reset to installed defaults",
+                $"Clear every override on {rows.Count} selected monsters and restore the installed defaults?");
+            if (!ok) return;
+            foreach (GameDataRow row in rows)
+                resolver.ResetGameDataRecord("Monsters", row.Get("Number")!);
+            Reload();
+            return;
+        }
+
+        if (!result.Changes.AnyFieldChosen) return;
+
+        foreach (GameDataRow row in rows)
+        {
+            string wcc = row.Get("Number")!;
+            MonsterOverlay seedDefaults =
+                (_overlaySeed is not null && int.TryParse(wcc, out int seedNum))
+                    ? _overlaySeed.GetOverlay(seedNum)
+                    : new MonsterOverlay();
+            MonsterOverlay existing = resolver.ResolveGameData<MonsterOverlay>("Monsters", wcc, seedDefaults);
+            MonsterOverlay updated = result.Changes.ApplyTo(existing);
+            await GameDataOverrideApplier.ApplyAsync(
+                resolver, AppServices.Current.Confirm, "Monsters", wcc,
+                result.Tier, updated, updated.Equals(seedDefaults));
+        }
         Reload();
     }
 

@@ -72,6 +72,16 @@ public partial class App : Application
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.GameData.Edit.ItemEditDialogViewModel,
                 MudPlay.Views.GameData.Edit.ItemEditDialog>();
+            // Batch-edit dialogs — apply chosen fields to many selected rows at once.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.GameData.Batch.MonsterBatchEditDialogViewModel,
+                MudPlay.Views.GameData.Batch.MonsterBatchEditDialog>();
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.GameData.Batch.ItemBatchEditDialogViewModel,
+                MudPlay.Views.GameData.Batch.ItemBatchEditDialog>();
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.GameData.Batch.PlayerBatchEditDialogViewModel,
+                MudPlay.Views.GameData.Batch.PlayerBatchEditDialog>();
             // Interactive room-detail popup — Rooms tab double-click + Monsters
             // tab room chips. Clickable title/exits centre the Nav map, monster
             // names jump to their record, Add/Remove toggle the blacklist.

@@ -21,6 +21,14 @@ public interface IEditableTableSectionViewModel
     // presence so the button greys out before invocation.
     ICommand? RemoveCommand => null;
 
+    // Optional "Batch edit" button, rendered just left of the Columns picker (between
+    // the filter box and the column selector). Opens a batch dialog that applies chosen
+    // fields to every currently-selected row. null when the section has no batch editor.
+    // The View binds IsEnabled to a ≥2-selection so it greys out until a multi-selection
+    // exists; BatchEditLabel supplies the (count-bearing) button text.
+    ICommand? BatchEditCommand => null;
+    string? BatchEditLabel => null;
+
     // Optional Dismiss button next to Remove — a softer "decided, stop tracking" action
     // distinct from a hard Remove. Only the Unrecognized Lines tab uses it (sticky-dismiss
     // a candidate so its recurrences are ignored); every other section leaves it null.

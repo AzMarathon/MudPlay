@@ -1,5 +1,16 @@
 # Version history
 
+## 3.88.0
+
+- **Batch edit** on the Game Data Browser's **Monsters**, **Items**, and **Players** tables — select multiple rows and a Batch-edit button (between the filter box and the column picker) applies chosen fields to every selected record at once
+- Per-field opt-in: enum/text/number fields have a Change checkbox, flags and permissions are tri-state Leave / On / Off (On = grant, Off = revoke for player permissions), so batching one field never disturbs a record's other overrides
+- Monsters batch: relationship, attack priority, don't-backstab, kill-on-sight, physical command, and the three spell-override rungs
+- Items batch: all auto flags, cannot-be-taken, must-have-minimum, loyal, auto-obtain-for-path, Min-to-keep / Max-to-get
+- Players batch: party behaviours + all 15 remote-control permissions, with a Set-all-permissions master
+- Monsters/Items batch honours the tier picker (character / BBS / global), and 'Installed defaults' batch-resets the selected records
+- Players table gains a **Gang** column showing each player's last-seen gang from the `who` parse
+- Game Data Browser opens wider with a minimum width, so a table's filter box and header buttons no longer collide on any tab
+
 ## 3.87.0
 
 - **Double-click a boss** in the Bosses tab to walk to it — a single-room boss walks there immediately; a multi-room boss opens a picker listing its rooms **nearest first**, with **Run** (walk now), **Load** (arm the destination only), and **Cancel**

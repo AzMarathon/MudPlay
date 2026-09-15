@@ -1,0 +1,113 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.GameData.Batch"
+        xmlns:conv="using:MudPlay.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="620"
+        x:Class="MudPlay.Views.GameData.Batch.ItemBatchEditDialog"
+        x:DataType="vm:ItemBatchEditDialogViewModel"
+        Title="Batch edit items"
+        Width="460" Height="620"
+        MinWidth="400" MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.DataTemplates>
+        <DataTemplate DataType="vm:BatchToggle">
+            <TextBlock Text="{Binding Converter={x:Static vm:BatchToggleLabelConverter.Instance}}"/>
+        </DataTemplate>
+    </Window.DataTemplates>
+
+    <Window.Styles>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="MinWidth" Value="160"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+        <TextBlock Grid.Row="0" Text="{Binding Heading}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <TextBlock Grid.Row="1"
+                   Text="Each flag is Leave / On / Off across every selected item; Leave doesn't touch it. Pick 'Installed defaults' to reset the selected items instead."
+                   Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="8" Margin="0,0,14,0">
+                <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Use"/>
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding AvailableTiers}" SelectedItem="{Binding UseTier, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Converter={x:Static conv:SettingsTierLabelConverter.Instance}}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+
+                <StackPanel Spacing="6" IsVisible="{Binding !IsResetTier}">
+                    <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Auto-collect"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding AutoCollect, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Auto-discard"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding AutoDiscard, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Auto-open (container)"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding AutoOpen, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Auto-buy"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding AutoBuy, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Auto-sell"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding AutoSell, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Auto-stash"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding AutoStash, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Cannot be taken"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding CannotBeTaken, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Must have minimum"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding MustHaveMinimum, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Loyal item"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding LoyalItem, Mode=TwoWay}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Auto-obtain for path"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding AutoObtainForPath, Mode=TwoWay}"/>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="24,136,*" ColumnSpacing="8">
+                        <CheckBox Grid.Column="0" IsChecked="{Binding ChangeMinToKeep, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Min to keep"/>
+                        <TextBox Grid.Column="2" IsEnabled="{Binding ChangeMinToKeep}" Text="{Binding MinToKeep, Mode=TwoWay}" PlaceholderText="e.g. None or 5"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="24,136,*" ColumnSpacing="8">
+                        <CheckBox Grid.Column="0" IsChecked="{Binding ChangeMaxToGet, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Max to get"/>
+                        <TextBox Grid.Column="2" IsEnabled="{Binding ChangeMaxToGet}" Text="{Binding MaxToGet, Mode=TwoWay}" PlaceholderText="e.g. All or 10"/>
+                    </Grid>
+                </StackPanel>
+
+                <TextBlock IsVisible="{Binding IsResetTier}"
+                           Text="Applying will clear every override on the selected items, restoring the installed defaults."
+                           Foreground="{StaticResource AccentAmberBrush}" FontSize="11" TextWrapping="Wrap"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,14,0,0">
+            <Button Content="Cancel" Command="{Binding CancelCommand}" IsCancel="True" MinWidth="80"/>
+            <Button Content="Apply" Command="{Binding ApplyCommand}" IsDefault="True" MinWidth="80"/>
+        </StackPanel>
+    </Grid>
+</Window>

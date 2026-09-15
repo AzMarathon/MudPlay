@@ -1,0 +1,72 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.GameData.Batch"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="640"
+        x:Class="MudPlay.Views.GameData.Batch.PlayerBatchEditDialog"
+        x:DataType="vm:PlayerBatchEditDialogViewModel"
+        Title="Batch edit players"
+        Width="460" Height="640"
+        MinWidth="400" MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.DataTemplates>
+        <DataTemplate DataType="vm:BatchToggle">
+            <TextBlock Text="{Binding Converter={x:Static vm:BatchToggleLabelConverter.Instance}}"/>
+        </DataTemplate>
+    </Window.DataTemplates>
+
+    <Window.Styles>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="MinWidth" Value="200"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+        <TextBlock Grid.Row="0" Text="{Binding Heading}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <TextBlock Grid.Row="1"
+                   Text="Each behaviour and permission is Leave / On / Off across every selected player; On grants a permission, Off revokes it, Leave doesn't touch it."
+                   Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="6" Margin="0,0,14,0">
+                <TextBlock Text="Behaviour" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                <Grid ColumnDefinitions="200,*" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Invite to party if seen"/>
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding InviteToPartyIfSeen, Mode=TwoWay}"/>
+                </Grid>
+                <Grid ColumnDefinitions="200,*" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Join party if invited"/>
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding JoinPartyIfInvited, Mode=TwoWay}"/>
+                </Grid>
+                <Grid ColumnDefinitions="200,*" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Don't auto-delete"/>
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding DontAutoDelete, Mode=TwoWay}"/>
+                </Grid>
+
+                <TextBlock Text="Remote-control permissions" FontWeight="SemiBold" Margin="0,8,0,2"/>
+                <Grid ColumnDefinitions="200,*" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Set all permissions"/>
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding AllPermissions, Mode=TwoWay}"/>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Permissions}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PlayerBatchPermissionRow">
+                            <Grid ColumnDefinitions="200,*" ColumnSpacing="8" Margin="0,1">
+                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"/>
+                                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToggleOptions}" SelectedItem="{Binding Toggle, Mode=TwoWay}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,14,0,0">
+            <Button Content="Cancel" Command="{Binding CancelCommand}" IsCancel="True" MinWidth="80"/>
+            <Button Content="Apply" Command="{Binding ApplyCommand}" IsDefault="True" MinWidth="80"/>
+        </StackPanel>
+    </Grid>
+</Window>

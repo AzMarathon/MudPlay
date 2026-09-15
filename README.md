@@ -1,11 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.87.0**
-> - **Double-click a boss** in the Bosses tab to walk to it — a single-room boss walks there immediately; a multi-room boss opens a picker listing its rooms **nearest first**, with **Run** (walk now), **Load** (arm the destination only), and **Cancel**
-> - Double-tapping the Stop-before / Grab-All checkboxes still just toggles them, never firing the walk
-> - Fixed a crash when clicking **Add boss** in the Manage Bosses dialog
-> - Default boss list: **minotaur champion** corrected to room `1/2124`, and a **chest** boss added in `1/2123`
+> **Version 3.88.0**
+> - **Batch edit** on the Game Data Browser's **Monsters**, **Items**, and **Players** tables — select multiple rows and the Batch-edit button (between the filter box and the column picker) sets chosen fields on every selected record at once
+> - Per-field opt-in: enum/text fields have a Change checkbox; flags and permissions are tri-state **Leave / On / Off** (grant/revoke for player permissions), so batching one field never disturbs a record's other overrides
+> - Monsters/Items batch honours the tier picker (character / BBS / global); **Installed defaults** batch-resets the selected records
+> - Players table gains a **Gang** column (last-seen gang from the `who` parse)
+> - Game Data Browser opens wider with a minimum width, so table filter boxes and header buttons no longer collide
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
