@@ -41,15 +41,21 @@ public sealed class ChestContentsReaderTests : IDisposable
         [
           { "Number": 100, "Name": "Wooden Chest", "ItemType": 8,
             "Abil-0": 43, "AbilVal-0": 200 },
+          { "Number": 101, "Name": "MinBase Chest", "ItemType": 8,
+            "Abil-0": 43, "AbilVal-0": 201 },
           { "Number": 10, "Name": "Gold Ring", "ItemType": 2 },
           { "Number": 11, "Name": "Silver Ring", "ItemType": 2 },
           { "Number": 12, "Name": "Gem", "ItemType": 2 }
         ]
         """;
 
+    // Spell 200 carries the loot textblock in AbilVal (the common encoding).
+    // Spell 201 leaves AbilVal 0 and stashes it in MinBase — the Paradigm quirk
+    // that hid blackwood-chest contents until ResolveLootTextblock fell back to it.
     private const string SpellsJson = """
         [
-          { "Number": 200, "Name": "Open Wooden Chest", "Abil-0": 148, "AbilVal-0": 500 }
+          { "Number": 200, "Name": "Open Wooden Chest", "Abil-0": 148, "AbilVal-0": 500 },
+          { "Number": 201, "Name": "Open MinBase Chest", "Abil-0": 148, "AbilVal-0": 0, "MinBase": 500 }
         ]
         """;
 
@@ -119,5 +125,19 @@ public sealed class ChestContentsReaderTests : IDisposable
         ChestContents contents = ChestContentsReader.Read(NewCache(), 100)!;
         Assert.Equal(1, contents.MinItems);
         Assert.Equal(3, contents.MaxItems);
+    }
+
+    [Fact]
+    public void Read_Chest_ResolvesTextblockFromMinBase_WhenAbilValZero()
+    {
+        // Report: Paradigm's "great blackwood chest" showed no contents because
+        // its open spell stashes the loot textblock in MinBase with a zero
+        // AbilVal-148 (the majority encoding), which the reader used to miss.
+        // Item 101 mirrors that shape and must resolve the same drops as item 100.
+        ChestContents? contents = ChestContentsReader.Read(NewCache(), 101);
+        Assert.NotNull(contents);
+        Assert.Equal(
+            new[] { "Gold Ring", "Silver Ring", "Gem" },
+            contents!.Drops.Select(d => d.ItemName).ToArray());
     }
 }

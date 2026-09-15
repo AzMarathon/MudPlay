@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.8**
-> - Loop's "only attack in lair rooms" no longer walks straight through a lair when its monsters were seen the instant before the room confirmed — combat re-checks the room the moment it's confirmed, so it stops and fights in the lair instead of stepping past (the suppression had been deciding against the previous, non-lair connector room the client still thought it was standing in)
+> **Version 3.88.9**
+> - Chest contents now surface in the Item override editor for chests whose open spell stores its loot table in `MinBase` (most Paradigm chests) — the reader only read the ability-slot value before, so those chests showed no drop list
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
