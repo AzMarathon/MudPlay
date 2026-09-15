@@ -601,7 +601,9 @@ Because a round's damage lines arrive a beat before the prompt that reports your
 
 ## Curing and blessing
 
-Configure cure spells for holds, poison, disease, and blindness on **Settings → Spells**; the bless (buff) slots that recast as they expire now live in the **Buff Watchdog** (View → Buff Watchdog — one unified list for self *and* party buffs). Auto-blessing — self *and* party — is controlled by the **Auto-Bless** toggle and nothing else (it's independent of Auto-Combat and Auto-Rest/Heal). By default the engine buffs while you're **moving or standing idle** (including an idle rest) and holds off **during combat** and **during a triggered recovery rest** (when HP or MA fell below your rest-if-below setting). Two opt-in checkboxes override those holds — one to also bless during a recovery rest, one to also bless while actively fighting (the self pair on **Settings → Spells**, the party pair on **Settings → Party**). You can also tell it to ignore, or not announce, specific ailments.
+Configure cure spells for holds, poison, disease, and blindness on **Settings → Spells**; the bless (buff) slots that recast as they expire now live in the **Buff Watchdog** (View → Buff Watchdog — one unified list for self *and* party buffs).
+
+Auto-blessing — self *and* party — is controlled by the **Auto-Bless** toggle and nothing else (it's independent of Auto-Combat and Auto-Rest/Heal). By default the engine buffs while you're **moving or standing idle** (including an idle rest) and holds off **during combat** and **during a triggered recovery rest** (when HP or MA fell below your rest-if-below setting). Two opt-in checkboxes override those holds — one to also bless during a recovery rest, one to also bless while actively fighting (the self pair on **Settings → Spells**, the party pair on **Settings → Party**). You can also tell it to ignore, or not announce, specific ailments.
 
 ## Mana regen
 
@@ -613,7 +615,14 @@ Press **F2** to open the **Spell Book** — a read-only reference to your class'
 
 The list also respects your **alignment** — a Good-only, Evil-only, or Neutral-only spell you haven't learned yet stays hidden until your alignment actually matches it, everywhere the class list feeds (the book itself and the Settings → Spells pickers alike). A spell you've **already** learned never disappears, even if your alignment later drifts away from it — an alignment-quest reward stays yours. Alignment isn't part of `stat`'s output, so filtering only kicks in once the game has shown your own row in a `who` this session; before that, every alignment-gated spell still shows (nothing gets hidden on a guess).
 
-**All / Heals / Buffs / Attacks / Party+AoE** tabs across the top narrow the grid by what a spell actually does: **Heals** restores HP or cures poison, **Buffs** applies a maintained (timed) effect, **Attacks** costs casting energy (a combat-round spell), and **Party+AoE** hits more than one target in a single cast — a whole-party buff or heal, or an area attack. A spell can land in more than one tab (a whole-party buff like chant shows under both Buffs and Party+AoE) — switching tabs re-filters the same list rather than sorting each spell into one fixed bucket. **All** clears the tab filter.
+**All / Heals / Buffs / Attacks / Party+AoE** tabs across the top narrow the grid by what a spell actually does:
+
+- **Heals** — restores HP or cures poison.
+- **Buffs** — applies a maintained (timed) effect.
+- **Attacks** — costs casting energy (a combat-round spell).
+- **Party+AoE** — hits more than one target in a single cast (a whole-party buff or heal, or an area attack).
+
+A spell can land in more than one tab (a whole-party buff like chant shows under both Buffs and Party+AoE) — switching tabs re-filters the same list rather than sorting each spell into one fixed bucket. **All** clears the tab filter.
 
 The header names the class and level it's showing. The grid lists each spell with a **✓** if you've learned it, its **Code** (the cast-code you type), **Name**, **Lvl** (the level **your class** can actually learn it — respecting a trainer's level gate, so a spell your class learns late from a specific NPC reads its real level, not the spell's lower base requirement), **Mana** cost, **Success %** (see below), and **Effect** at your current level (hover the Effect cell for the raw scaling formula). **Double-click a spell** to open the game-data record of whatever teaches it — the **item** for a normal spell, or the **trainer NPC**'s record for a spell learned from an NPC (e.g. a Paladin's divine disfavour) — handy for finding where to buy or how to obtain a spell you haven't learned. Spells with neither an item nor a trainer source do nothing. Three controls up top narrow the list:
 
@@ -992,7 +1001,13 @@ The window is a sidebar plus a content pane:
 
 Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The Filter… box matches the **visible cell text** across every column — including the friendly labels, so on the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name. On the **Spells** tab it also understands ailment keywords: type `poison`, `confuse`, `blind`, or `hold` to list every spell that *applies* that effect (read from the spell's own ability codes, following the EndCast chain), not just spells with the word in their name. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
 
-The **Monsters** table carries a full column set for browsing and filtering monster stats: **Relationship** (right after the name — how *your* overlay tells the engine to treat this monster: **Enemy** / **Neutral** / **Friend** / **Flee** / **Hangup**, resolved across all four tiers just like the combat engine reads it, so an un-tagged monster shows **Enemy** and any relationship you or a shipped default set shows through here without opening the record), **Respawn** (respawn timer), **Exp** (the actual experience earned per kill — base × multiplier), **HP**, **AC/DR**, **Dodge**, **Magic Res**, **Acc (typ/max)** (typical/highest attack accuracy), **Damage**, **Exp Eff** (an exp-per-effort efficiency score), **Lair Exp**, **# Lairs**, **Avg Lair Size**, **Biggest Lair**, **Mag-wpn req** (the HitMagic level a weapon must meet to land a hit), and **Undead**.
+The **Monsters** table carries a full column set for browsing and filtering monster stats:
+
+- **Relationship** (right after the name) — how *your* overlay tells the engine to treat this monster: **Enemy** / **Neutral** / **Friend** / **Flee** / **Hangup**, resolved across all four tiers just like the combat engine reads it, so an un-tagged monster shows **Enemy** and any relationship you or a shipped default set shows through here without opening the record.
+- **Respawn** (respawn timer), **Exp** (experience per kill — base × multiplier), **HP**, **AC/DR**, **Dodge**, **Magic Res**.
+- **Acc (typ/max)** (typical/highest attack accuracy), **Damage**, **Exp Eff** (an exp-per-effort efficiency score).
+- **Lair Exp**, **# Lairs**, **Avg Lair Size**, **Biggest Lair**.
+- **Mag-wpn req** (the HitMagic level a weapon must meet to land a hit), and **Undead**.
 
 Every game-data record table — Monsters, Items, Spells, Rooms, Classes, Races, Lairs, Shops, and the like — has a **Columns ▾** button at its **top-right**: a picker to check/uncheck which columns show, so you can tailor each table to just the stats you care about. (The engine-backed utility tabs — Macros, Triggers, Aliases, Players, Incomplete Messages, Unrecognized Lines, Flavor Prefixes — keep their fixed columns, so they have no picker.) It also surfaces columns that are otherwise only used by the filter sidebar: on the Monsters tab, for instance, you can turn on the per-element resist columns (Cold / Fire / Stone / Lightning / Water), spell-immunity, and more, to *see* them in the grid instead of only filtering by them. Your choices are saved **per character**, per table; **Reset to defaults** in the picker restores that table's standard columns.
 
