@@ -35,6 +35,21 @@ public sealed class BossTimerStore
     private Dictionary<string, DateTimeOffset> _killed =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Fallback kill detection (roster disappearance). The boss-table monsters
+    // currently seen present in the room roster, and the room that set applies
+    // to. A boss that WAS present and then vanishes from a full "Also here:"
+    // re-parse (AlsoHere) — with no departure line to explain it — is a kill,
+    // even when we never engaged it (a party member's kill, or a witnessed
+    // death). Departures / room-changes update the set WITHOUT marking, so a mob
+    // that merely walked away can't be mistaken for a kill.
+    private readonly HashSet<string> _bossesPresent = new(StringComparer.OrdinalIgnoreCase);
+    private RoomKey? _presentRoom;
+
+    // A fallback vanish this close behind a primary-path (engaged-then-exp) mark
+    // is the SAME kill seen twice — skip it so the timer isn't re-stamped and
+    // Grab-All isn't double-fired.
+    private static readonly TimeSpan FallbackDedupeWindow = TimeSpan.FromSeconds(6);
+
     // Active BBS's nightly-cleanup config (time-of-day + zone) for "Respawns @
     // Cleanup" bosses. Resolved live so a BBS / setting change takes effect without
     // re-wiring; null when unset or unparseable → cleanup bosses can't auto-flip.
@@ -181,6 +196,78 @@ public sealed class BossTimerStore
             BossKilled?.Invoke(def);
             return;
         }
+    }
+
+    // Fallback kill signal: a boss-table monster we saw in the room roster is
+    // gone from a full "Also here:" re-parse of the SAME room. Attributes a death
+    // we never engaged (a party member's kill, a witnessed one) that the
+    // exp-inferred MonsterDied path can't name. Only an AlsoHere re-parse marks a
+    // kill — a Departure / RoomChange updates the present-set without marking, so
+    // a mob that walked away is never mistaken for a kill.
+    public void OnRoomEntitiesObserved(RoomEntitiesObservation obs, RoomKey? here)
+    {
+        if (here is not { } room)
+        {
+            _bossesPresent.Clear();
+            _presentRoom = null;
+            return;
+        }
+
+        HashSet<string> presentNow = BossesPresent(obs, room);
+
+        // Moved rooms (or first observation here): re-baseline, never mark.
+        if (_presentRoom != room)
+        {
+            _presentRoom = room;
+            _bossesPresent.Clear();
+            _bossesPresent.UnionWith(presentNow);
+            return;
+        }
+
+        if (obs.Source == RoomObservationSource.AlsoHere)
+        {
+            foreach (string name in _bossesPresent)
+            {
+                if (presentNow.Contains(name)) continue;
+                // Vanished from a same-room re-parse with no departure to explain
+                // it — a kill. Dedupe against a just-landed primary-path mark.
+                if (KilledAt(name) is { } at
+                    && DateTimeOffset.UtcNow - at.ToUniversalTime() < FallbackDedupeWindow)
+                    continue;
+                _log?.Info("Bosses",
+                    $"boss '{name}' vanished from a re-parse of {room} — marking killed (roster fallback)");
+                MarkKilled(name);
+                foreach (BossDef def in _bosses.Resolve())
+                    if (NameMatches(def.Name, name)) { BossKilled?.Invoke(def); break; }
+            }
+        }
+
+        // Death / Departure / Arrival / RoomChange all just re-baseline the set:
+        // a Death is handled by the engaged / candidate path, a Departure isn't a
+        // kill, and an Arrival adds. AlsoHere re-baselines after marking above.
+        _bossesPresent.Clear();
+        _bossesPresent.UnionWith(presentNow);
+    }
+
+    // The tracked-boss names present in this observation's roster whose rooms
+    // include the current room — the same room + name gates OnMonsterDied uses.
+    private HashSet<string> BossesPresent(RoomEntitiesObservation obs, RoomKey here)
+    {
+        HashSet<string> present = new(StringComparer.OrdinalIgnoreCase);
+        foreach (BossDef def in _bosses.Resolve())
+        {
+            if (!RoomsContain(def, here)) continue;
+            foreach (RoomEntity e in obs.Entities)
+            {
+                if (e.Kind != EntityKind.Monster) continue;
+                if (NameMatches(def.Name, e.ResolvedName) || NameMatches(def.Name, e.RawName))
+                {
+                    present.Add(def.Name);
+                    break;
+                }
+            }
+        }
+        return present;
     }
 
     private static bool RoomsContain(BossDef def, RoomKey key)

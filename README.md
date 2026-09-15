@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.86.0**
-> - New Emergency heal tier (Spells + Health): a third configurable self-heal firing the instant HP hits its threshold. A reorderable row in the spell-type priority list, defaulting to slot 1 so it leads — rank it anywhere
-> - The downed-ally rescue is now a reorderable row in that list too (formerly a hidden always-first cast)
-> - Emergency fires in any state (combat/rest/walk) and ignores the mana-conservation floor — a true last-resort save; it still won't attempt a spell it can't afford
-> - Falls back to Major then Minor heal when its spell is unset, so a low threshold alone still guarantees a life-threat cast
+> **Version 3.86.2**
+> - Gear thrash fixed: the travelling→Default combat swap is debounced, so Paradigm's rapid combat-state flicker no longer swaps you between your While-Moving and Default gear on every brief engage
+> - Boss timers auto-start on a kill inferred from an exp gain (the engaged target was dropped before the death registered) — the just-killed name is matched against the boss table
+> - Boss timers also auto-start via a roster fallback: a boss that vanishes from a same-room re-parse of the "Also here:" list is marked killed, covering kills you never engaged
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

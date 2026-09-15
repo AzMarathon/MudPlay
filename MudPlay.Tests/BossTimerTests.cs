@@ -271,6 +271,65 @@ public sealed class BossTimerTests : IDisposable
         Assert.Null(timers.KilledAt("ogre king"));
     }
 
+    private static RoomEntitiesObservation Roster(
+        RoomObservationSource source, params string[] monsterNames) => new(
+        "Also here: …",
+        monsterNames.Select(n => new RoomEntity(n, n, EntityKind.Monster, null)).ToList(),
+        DateTimeOffset.UtcNow,
+        source);
+
+    [Fact]
+    public void RosterFallback_BossVanishesFromReparse_MarksKilled()
+    {
+        // The user's fallback: the boss is in the "Also here:" list, then a
+        // same-room re-parse no longer shows it — a kill we never engaged.
+        SeedGameData(RealmType.ParaMud, ("giant spider", 52, 5, 1));
+        SeedBosses(Boss("giant spider", number: 52, rooms: "1/1678"));
+        var (_, timers, _) = NewStores();
+        RoomKey room = new(1, 1678);
+
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "giant spider"), room);
+        Assert.Null(timers.KilledAt("giant spider"));   // still present, not yet a kill
+
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), room);
+        Assert.NotNull(timers.KilledAt("giant spider"));   // vanished on re-parse → killed
+    }
+
+    [Fact]
+    public void RosterFallback_Departure_DoesNotMark()
+    {
+        // A boss that walks out (Departure) instead of dying must NOT start a timer.
+        SeedGameData(RealmType.ParaMud, ("giant spider", 52, 5, 1));
+        SeedBosses(Boss("giant spider", number: 52, rooms: "1/1678"));
+        var (_, timers, _) = NewStores();
+        RoomKey room = new(1, 1678);
+
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "giant spider"), room);
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.Departure), room);
+        Assert.Null(timers.KilledAt("giant spider"));
+
+        // A later AlsoHere without it must not resurrect the false kill either —
+        // the Departure already dropped it from the present-set.
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), room);
+        Assert.Null(timers.KilledAt("giant spider"));
+    }
+
+    [Fact]
+    public void RosterFallback_LeftTheRoom_DoesNotMark()
+    {
+        // Absence after we changed rooms isn't a kill — the boss just isn't here.
+        SeedGameData(RealmType.ParaMud, ("giant spider", 52, 5, 1));
+        SeedBosses(Boss("giant spider", number: 52, rooms: "1/1678"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnRoomEntitiesObserved(
+            Roster(RoomObservationSource.AlsoHere, "giant spider"), new RoomKey(1, 1678));
+        // A re-parse in a DIFFERENT room (we walked out) — the boss's room no longer
+        // matches, so nothing is marked.
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), new RoomKey(1, 1679));
+        Assert.Null(timers.KilledAt("giant spider"));
+    }
+
     [Fact]
     public void ActiveTimers_FiltersByRealm_AndOrdersBySoonestFull()
     {

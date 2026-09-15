@@ -102,6 +102,17 @@ public sealed class AutoEquipCoordinator : IDisposable
     // so toggling it mid-fight can't strand the flag.
     private bool _swappedToDefaultForCombat;
 
+    // Debounce for the travelling→Default combat swap. Paradigm flickers
+    // *Combat Off* / *Combat Engaged* rapidly, and each engage while in the
+    // While-Moving set would yank us into Default and back on every move — the
+    // gear thrash of report paradigm-20260914-154019 (astral slippers on/off).
+    // When a scheduler is supplied the swap is deferred by a short settle; a
+    // *Combat Off* within it cancels the swap (it was a flicker), a sustained
+    // fight lets it fire. Null scheduler → swap immediately (unit tests + any
+    // caller that doesn't wire a settle), so the debounce is opt-in via wiring.
+    private readonly Func<Action, IDisposable>? _scheduleCombatGearSwap;
+    private IDisposable? _pendingMovingCombatSwap;
+
     public AutoEquipCoordinator(
         PlayerState player,
         Func<EquipmentSettings> readEquipment,
@@ -114,7 +125,8 @@ public sealed class AutoEquipCoordinator : IDisposable
         Func<DateTimeOffset>? now = null,
         Func<Game.Map.RoomKey, bool>? isBossRoom = null,
         Func<Game.Map.RoomKey, bool>? isLair = null,
-        Func<bool>? isMoving = null)
+        Func<bool>? isMoving = null,
+        Func<Action, IDisposable>? scheduleCombatGearSwap = null)
     {
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(readEquipment);
@@ -133,6 +145,7 @@ public sealed class AutoEquipCoordinator : IDisposable
         _isBossRoom = isBossRoom;
         _isLair = isLair;
         _isMoving = isMoving;
+        _scheduleCombatGearSwap = scheduleCombatGearSwap;
         _log = log;
         _now = now ?? (() => DateTimeOffset.Now);
 
@@ -195,6 +208,10 @@ public sealed class AutoEquipCoordinator : IDisposable
     // fight and reverts to Default only once recovered, the long-standing rule.
     private void OnCombatChanged(bool inCombat)
     {
+        // A *Combat Off* cancels a deferred travelling→Default swap — the engage
+        // that armed it was flicker, so we stay in the movement set.
+        if (!inCombat) CancelPendingMovingCombatSwap();
+
         if (inCombat)
         {
             // In a boss room the fight is fought in the Bossing set — it wins over the
@@ -202,19 +219,31 @@ public sealed class AutoEquipCoordinator : IDisposable
             // the idempotent backstop for a boss room entered without a planned step.
             if (CurrentRoomIsBoss() && EnabledSet(EquipTriggerType.Bossing) is not null)
             {
+                CancelPendingMovingCombatSwap();
                 _inMovementSet = false;
                 Fire(EquipTriggerType.Bossing);
                 return;
             }
             // A hostile appeared while we were travelling in the movement set — swap to
             // Default and let combat engage. Independent of SwapToDefaultOnCombat, which
-            // governs only the rest-interrupt case below.
-            if (_inMovementSet)
+            // governs only the rest-interrupt case below. Deferred behind a settle when
+            // a scheduler is wired, so Paradigm's rapid combat-state flicker doesn't
+            // thrash the movement / Default gear on every brief engage.
+            if (_inMovementSet && _pendingMovingCombatSwap is null)
             {
-                _inMovementSet = false;
-                _log?.Info(EquipmentManager.LogCategory,
-                    "hostiles recognized while moving — swapping to Default for the fight");
-                Fire(EquipTriggerType.Default);
+                if (_scheduleCombatGearSwap is null)
+                {
+                    FireMovingCombatSwap();
+                    return;
+                }
+                _pendingMovingCombatSwap = _scheduleCombatGearSwap(() =>
+                {
+                    _pendingMovingCombatSwap = null;
+                    // Still fighting and still in the movement set → a sustained fight,
+                    // gear up. Combat cleared or the posture moved on → the settle
+                    // outlived a flicker, do nothing.
+                    if (_player.InCombat && _inMovementSet) FireMovingCombatSwap();
+                });
                 return;
             }
         }
@@ -258,6 +287,20 @@ public sealed class AutoEquipCoordinator : IDisposable
                 Fire(rt);
             }
         }
+    }
+
+    private void FireMovingCombatSwap()
+    {
+        _inMovementSet = false;
+        _log?.Info(EquipmentManager.LogCategory,
+            "hostiles recognized while moving — swapping to Default for the fight");
+        Fire(EquipTriggerType.Default);
+    }
+
+    private void CancelPendingMovingCombatSwap()
+    {
+        _pendingMovingCombatSwap?.Dispose();
+        _pendingMovingCombatSwap = null;
     }
 
     // A loop or Auto-Lair run just began — swap to the Default (baseline) set.
@@ -491,5 +534,9 @@ public sealed class AutoEquipCoordinator : IDisposable
         }
     }
 
-    public void Dispose() => _player.PropertyChanged -= OnPlayerChanged;
+    public void Dispose()
+    {
+        CancelPendingMovingCombatSwap();
+        _player.PropertyChanged -= OnPlayerChanged;
+    }
 }

@@ -576,6 +576,55 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Equal(new[] { "default-set" }, applied);
     }
 
+    private sealed class CancelHandle(Action onDispose) : IDisposable
+    {
+        public void Dispose() => onDispose();
+    }
+
+    [Fact]
+    public void MovingCombatSwap_Debounced_FlickerCancels_SustainedFires()
+    {
+        // With a settle scheduler wired, the travelling→Default combat swap is
+        // deferred: a *Combat Off* within the window cancels it (Paradigm's combat
+        // flicker), a fight that outlasts it still gears up. Report
+        // paradigm-20260914-154019 (astral slippers thrash).
+        var player = new PlayerState { InCombat = false };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        var applied = new List<string>();
+        Action? pending = null;
+        bool cancelled = false;
+        using AutoEquipCoordinator coord = new(
+            player, () => cfg, () => false, () => false,
+            id => { applied.Add(id); return EquipResult.Applied; },
+            () => true, () => true, log: null, now: null,
+            scheduleCombatGearSwap: cb =>
+            {
+                pending = cb; cancelled = false;
+                return new CancelHandle(() => { cancelled = true; pending = null; });
+            });
+
+        coord.OnMovementStarted();
+        Assert.Equal(new[] { "move-set" }, applied);
+        applied.Clear();
+
+        // Flicker: engage arms the settle (no immediate swap); a *Combat Off*
+        // before it fires cancels it and we stay in the movement set.
+        player.InCombat = true;
+        Assert.NotNull(pending);
+        Assert.Empty(applied);
+        player.InCombat = false;
+        Assert.True(cancelled);
+        Assert.Empty(applied);
+
+        // Sustained: engage arms the settle, it elapses while still in combat → swap.
+        player.InCombat = true;
+        Assert.NotNull(pending);
+        pending!.Invoke();
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
     [Fact]
     public void MovementStopped_RevertsToDefault()
     {

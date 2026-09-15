@@ -1,5 +1,12 @@
 # Version history
 
+## 3.86.2
+
+- Gear thrash fixed: the travelling→Default combat swap is debounced, so Paradigm's rapid *Combat Off* / *Combat Engaged* flicker no longer yanks you between your While-Moving and Default gear on every brief engage (the astral-slippers on/off churn) — a fight that outlasts a short settle still gears up
+- Boss timers now auto-start on a kill inferred from an exp gain, where the engaged target was dropped before the death registered: the just-killed name is retained and matched against the boss table
+- Boss timers also auto-start via a roster fallback — a boss seen in the "Also here:" list that vanishes from a same-room re-parse (with no departure line) is marked killed, covering kills you never engaged
+- bug reports addressed: paradigm-20260914-154019, paradigm-20260914-173323
+
 ## 3.86.0
 
 - New Emergency heal tier (Spells + Health): a third configurable self-heal that fires the instant HP hits its own threshold (default 20%). It's a reorderable row in the spell-type priority list, defaulting to slot 1 so it leads every between-round cast — but you can rank it anywhere
