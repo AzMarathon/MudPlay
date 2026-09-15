@@ -22,6 +22,26 @@ public sealed partial class EventRowViewModel : ObservableObject
 
     [ObservableProperty] private bool _isAutoDisabled;
 
+    // Countdown to this event's next scheduled fire, refreshed on a ticker by
+    // the section VM (EventScheduler owns the real due-time; the row just
+    // formats it). "—" when there's no live countdown — a lifecycle trigger,
+    // disabled, or the client isn't in-game.
+    [ObservableProperty] private string _nextCallText = "—";
+
+    // Recompute NextCallText from the scheduler's due-time. dueAt is null when
+    // there's no active countdown.
+    public void UpdateNextCall(DateTime? dueAt) => NextCallText = FormatCountdown(dueAt);
+
+    private static string FormatCountdown(DateTime? dueAt)
+    {
+        if (dueAt is not { } due) return "—";
+        TimeSpan left = due - DateTime.Now;
+        if (left < TimeSpan.Zero) left = TimeSpan.Zero;
+        if (left.TotalHours >= 1) return $"{(int)left.TotalHours}h {left.Minutes:00}m";
+        if (left.TotalMinutes >= 1) return $"{left.Minutes}m {left.Seconds:00}s";
+        return $"{left.Seconds}s";
+    }
+
     public string Name => string.IsNullOrWhiteSpace(Source.Name) ? "(unnamed)" : Source.Name;
 
     public string TimeText => Source.TriggerType switch

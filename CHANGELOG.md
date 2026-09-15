@@ -1,5 +1,9 @@
 # Version history
 
+## 3.88.4
+
+- Settings → Events: new "NEXT" column shows a live countdown to each event's next fire (At-time / Every while in-game); lifecycle events show —
+
 ## 3.88.3
 
 - Emergency heal no longer loses to Major self heal when a profile's priority ranks collide on the same slot (a profile ranked from before Emergency heal existed can still have Major sitting on slot 1, the same default slot Emergency claims) — the equal-priority tiebreak now resolves to Emergency, matching its "leads every between-round cast" contract, instead of silently falling through to Major every round no matter how low HP drops
