@@ -773,6 +773,12 @@ public sealed class MapControl : Control
     private static readonly IBrush AutoLairWaypointTextBrush =
         new SolidColorBrush(Color.Parse("#FFFFFFFF"));
 
+    // Very thin black outline stroked around the numbered-waypoint labels so the white
+    // number reads on the paler fills — the running-loop green (#7AB870) in particular
+    // washed out white-on-fill.
+    private static readonly IPen NumberedWaypointTextOutline =
+        new Pen(new SolidColorBrush(Color.Parse("#FF000000")), 0.75);
+
     // Cross-hatch overlay for teleport-CMD rooms. Fully-opaque bright
     // cyan with a 1.5 px stroke so the pattern reads at default zoom
     // without disappearing into the cell fill — the prior #B0FFFFFF
@@ -2014,9 +2020,14 @@ public sealed class MapControl : Control
             string label = (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
             FormattedText ft = new(label, System.Globalization.CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight, tf, textSize, textBrush);
-            ctx.DrawText(ft, new Point(
-                centre.X - ft.Width  / 2,
-                centre.Y - ft.Height / 2));
+            Point textOrigin = new(centre.X - ft.Width / 2, centre.Y - ft.Height / 2);
+            // Fill the glyphs (textBrush) and stroke a thin black outline so the number
+            // stays legible on the paler fills. Fall back to a plain fill if the glyph
+            // run can't be turned into geometry.
+            if (ft.BuildGeometry(textOrigin) is { } glyphs)
+                ctx.DrawGeometry(textBrush, NumberedWaypointTextOutline, glyphs);
+            else
+                ctx.DrawText(ft, textOrigin);
         }
     }
 
