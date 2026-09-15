@@ -202,6 +202,23 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void ExpectedMoveTarget_TracksTheInFlightMovesDestination()
+    {
+        // Combat-suppression reads ExpectedMoveTarget to judge a room-entry engage against
+        // the room the loop is stepping INTO while the move is still pending (the tracker
+        // still reports the room we're leaving). Pin that it names the in-flight move's
+        // destination and advances with each leg.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());                                  // first leg N: 1/1 → 1/2
+        Assert.Equal(new RoomKey(1, 2), h.Runner.ExpectedMoveTarget);
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));  // land at 1/2 → next leg S: 1/2 → 1/1
+        Assert.Equal(new RoomKey(1, 1), h.Runner.ExpectedMoveTarget);
+    }
+
+    [Fact]
     public void ResumeAfterDetour_ThroughGates_ReEntersGatedGrindArea()
     {
         // A bank / trainer detour ends at C (1/3); the loop's waypoints (1/1, 1/2)

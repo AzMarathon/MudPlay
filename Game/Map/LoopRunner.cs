@@ -235,6 +235,12 @@ public sealed class LoopRunner : IRecoverableEngine
     public Loop? CurrentLoop => _loop;
     public int CurrentIndex => _index;
 
+    // The room an in-flight move is heading INTO (null when no move is pending). While
+    // a loop move is unconfirmed the RoomTracker still reports the room we're leaving, so
+    // combat-suppression checks read this to judge against the room we're entering — see
+    // AppServices.CombatSuppressedInCurrentRoom (report paradigm-20260915-122832).
+    public RoomKey? ExpectedMoveTarget => _expectedMoveTarget;
+
     // Name of the most recently RUN loop, retained after the run stops (unlike
     // CurrentLoop, which nulls on Stop/Reset). Set when a loop starts and only
     // overwritten by the next loop — so after a death or manual stop, @path can

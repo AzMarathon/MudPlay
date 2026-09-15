@@ -603,6 +603,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         Game.Map.LoopRunner runner = _services.LoopRunner;
         LoopSequenceNumbers = null;     // per UX rule: no number overlay during execution
+        LoopRunningWaypoints = null;    // set below only while the circle is actually running
 
         if (runner.CurrentLoop is not { } loop)
         {
@@ -657,10 +658,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Running / paused circle — blue cycle line, full ring,
-        // anchored at CircleStartRoom so it stays static across step
-        // advances.
+        // Running / paused circle — green cycle line, full ring, anchored at
+        // CircleStartRoom so it stays static across step advances, plus the numbered
+        // green waypoint bubbles (same rotated order as RunningLoopRows) so the map
+        // lines up with the CURRENT NAV rows.
         LoopApproachPreviewPath = null;
+        LoopRunningWaypoints = loop.Waypoints.Select(w => w.Key).ToList();
         if (source is { } start)
         {
             IReadOnlyList<RoomKey> keys = runner.ResolveLoopRoomKeys(start);
@@ -938,6 +941,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Ordered RoomKey list for the map's numbered builder-waypoint markers.
     // Mirrors LoopBuilderSessionViewModel.WaypointKeys.
     [ObservableProperty] private IReadOnlyList<RoomKey>? _loopBuilderWaypoints;
+
+    // Ordered RoomKey list for the map's numbered green running-loop markers — the
+    // running counterpart of LoopBuilderWaypoints, in the same order as RunningLoopRows
+    // so the map bubbles line up with the CURRENT NAV rows while a loop runs.
+    [ObservableProperty] private IReadOnlyList<RoomKey>? _loopRunningWaypoints;
 
     // Red preview polyline drawn during the walker-approach phase of a loop
     // run. Lets the user see the upcoming cycle alongside the blue walk-to
@@ -4270,7 +4278,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // the three CURRENT NAV lists (red builder / green running / read-only) swap cleanly.
     private void RaiseLoopRailNotifications()
     {
-        RaiseLoopRailNotifications();
+        OnPropertyChanged(nameof(IsLoopBuilding));
         OnPropertyChanged(nameof(IsRunningLoopEditable));
         OnPropertyChanged(nameof(ShowCurrentNavList));
     }
@@ -4448,12 +4456,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 _suppressLoopSettingWrite = false;
 
                 // Approach phase (incl. a pause taken mid-approach — IsApproachInFlight):
-                // read-only itinerary — the loop-wide settings row, the walker's approach
-                // steps, then the loop's own circle steps (all Upcoming, the loop hasn't
-                // begun). The runner expands its circle up front, so ExpandedSteps is the
-                // rotated cycle we'll run on arrival; numbering continues across both so
-                // the user reads one itinerary. Once the circle starts the green
-                // live-editable list takes over (below).
+                // read-only itinerary of JUST the walk-to the loop's entry — the loop-wide
+                // settings row plus the walker's approach steps. The loop's own circle steps
+                // are deliberately NOT appended here: they made the approach list read as one
+                // enormous itinerary when the user only wanted "how do I get there". Once the
+                // circle starts, the green live-editable list takes over (below).
                 if (runner.IsApproachInFlight)
                 {
                     CurrentNavRows.Add(new CurrentNavRowViewModel(
@@ -4469,14 +4476,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                             : (i == idx ? CurrentNavRowStatus.Current : CurrentNavRowStatus.Upcoming);
                         CurrentNavRows.Add(new CurrentNavRowViewModel(
                             index: i + 1, label: steps[i].Display, status: status));
-                    }
-                    IReadOnlyList<LoopStep> circle = runner.ExpandedSteps;
-                    for (int i = 0; i < circle.Count; i++)
-                    {
-                        CurrentNavRows.Add(new CurrentNavRowViewModel(
-                            index: steps.Count + i + 1,
-                            label: circle[i].Display,
-                            status: CurrentNavRowStatus.Upcoming));
                     }
                     break;
                 }

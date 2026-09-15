@@ -679,6 +679,7 @@
                                  LoopPath="{Binding LoopPath}"
                                  LoopBuilderPath="{Binding LoopBuilderPath}"
                                  LoopBuilderWaypoints="{Binding LoopBuilderWaypoints}"
+                                 LoopRunningWaypoints="{Binding LoopRunningWaypoints}"
                                  LoopApproachPreviewPath="{Binding LoopApproachPreviewPath}"
                                  AvoidedRooms="{Binding AvoidedRooms}"
                                  LevelGatedRooms="{Binding LevelGatedRooms}"

@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.10**
-> - CURRENT NAV now shows a running loop as green, live-editable rooms (matching the builder's list) — click a room to change its command, delay, do-not-rest, or do-not-attack, or toggle the whole loop's "only attack in lair rooms", all without stopping or restarting the loop; the current room is highlighted
-> - Rooms can't be added, removed, or reordered while running; flag and delay edits apply at once, and adding/removing a command takes effect on the next lap
+> **Version 3.88.14**
+> - The "walk to loop" itinerary in CURRENT NAV now lists only the walk-to steps, not the whole loop appended after them
+> - A running loop now draws numbered green waypoint bubbles on the map — matching the CURRENT NAV rows — so you can tell which row is which room, the way the loop builder's red numbered pins already do
+> - A loop no longer leaks one attack into a "do not attack" (or non-lair, under "only attack in lair rooms") room on entry — suppression now judges the room you're stepping into, not the one you're leaving, whether the flag was set live or configured before the run
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
