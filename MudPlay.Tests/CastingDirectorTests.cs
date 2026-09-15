@@ -600,6 +600,27 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void EmergencyHeal_WinsTiebreak_WhenPriorityCollidesWithMajorSelfHeal()
+    {
+        // Report paradigm-20260915-093211: a profile whose MajorSelfHeal rank
+        // was set to slot 1 before Emergency existed still has that value after
+        // upgrading, colliding with Emergency's own default slot 1. The tiebreak
+        // (SpellCategory's declaration order, not the raw priority ints) must
+        // still resolve to Emergency, not silently fall through to Major.
+        using Harness h = new();
+        h.Spells.MajorHealSpell = "fullheal";
+        h.Spells.EmergencyHealSpell = "lastresort";
+        h.Spells.PriorityMajorSelfHeal = h.Spells.PriorityEmergencyHeal;   // collision
+        h.Health.MajorHealCombatTrigger = 40;
+        h.Health.EmergencyHealTrigger = 20;
+
+        h.SetPrompt(hp: 15, maxHp: 100, ma: 100, maxMa: 100, inCombat: true);
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("lastresort", h.CastsSent[0]);
+    }
+
+    [Fact]
     public void EmergencyHeal_FallsBackToMajor_WhenEmergencyNotConfigured()
     {
         using Harness h = new();
