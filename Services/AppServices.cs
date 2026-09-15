@@ -2158,7 +2158,7 @@ public sealed class AppServices
         // The server-PvP channel is paradigm-only; the closure is evaluated
         // lazily at line-match time, so GameData being assigned later in the
         // ctor is safe.
-        Chat = new Game.ChatRouter(Router, () => GameData.ActiveRealm == Game.RealmType.ParaMud);
+        Chat = new Game.ChatRouter(Router, () => GameData.ActiveRealm == Game.RealmType.ParaMud, Log);
         ChatHistory = new Game.ChatHistoryStore(Chat);
         PlayerState = new Game.PlayerState();
         PromptScanner = new WirePromptScanner();
