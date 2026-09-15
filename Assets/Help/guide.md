@@ -45,7 +45,11 @@ Everything to do with characters and BBSes now lives in one place: **File → Pr
     MudPlay --profile "Fujin" --profile "Alt" --profile "Bob"
     ```
 
-  `--profile` overrides *Auto-load last profile* for that launch, and if the profile's own auto-connect is on it connects on its own — so `--profile` gets you all the way in. If a name **doesn't resolve** — a typo, or a bare name that lives on more than one BBS — MudPlay shows the reason **right on the terminal** and opens a blank profile; it won't silently load a different character. (For the ambiguous case, re-launch with the `BBS/Name` form it suggests.) Running several at once shares one data folder, so use a *different* character per instance; the game data and BBS setup are shared, only the character differs.
+  `--profile` overrides *Auto-load last profile* for that launch, and if the profile's own auto-connect is on it connects on its own — so `--profile` gets you all the way in.
+
+  If a name **doesn't resolve** — a typo, or a bare name that lives on more than one BBS — MudPlay shows the reason **right on the terminal** and opens a blank profile; it won't silently load a different character. (For the ambiguous case, re-launch with the `BBS/Name` form it suggests.)
+
+  Running several at once shares one data folder, so use a *different* character per instance; the game data and BBS setup are shared, only the character differs.
 
 Settings live in four tiers — **Defaults → Global → BBS → Character** — so a profile only records what differs from the tier beneath it. (The Settings Menu section notes each setting's tier.)
 
@@ -60,11 +64,19 @@ Open **Profile Management** from **File**, the **View** menu, or its toolbar but
 
 Because deleting, renaming, or moving the **loaded** character (or removing the BBS it lives on) would pull the rug out from under your live session, those actions ask you to **disconnect first**. Everything you do to *other* characters works while you're still connected.
 
-BBS **connection details** (host, port, redial, display, realm mechanics, credentials) are edited over in **Settings → BBS + Display**, and **Edit settings…** in Profile Management is the shortcut there — it opens that tab with the selected board already picked, so you don't have to find it in the Settings list. Profile Management is where BBSes are created, renamed, removed, and where characters are assigned to them; Settings is where a selected BBS's details are edited. Selecting a BBS in Settings **only** edits that board now — it never moves your character (use **Assign to BBS** here for that).
+BBS **connection details** (host, port, redial, display, realm mechanics, credentials) are edited over in **Settings → BBS + Display**, and **Edit settings…** in Profile Management is the shortcut there — it opens that tab with the selected board already picked, so you don't have to find it in the Settings list.
+
+The division of labour: **Profile Management** is where BBSes are created, renamed, removed, and where characters are assigned to them; **Settings** is where a selected BBS's details are edited. Selecting a BBS in Settings **only** edits that board now — it never moves your character (use **Assign to BBS** for that).
 
 ## Setting up a BBS
 
-First **add the board** in **Profile Management** (File → Profile Management → BBSes → Add) — that's where BBSes are created, renamed, and removed now. Add drops you straight into **Settings → BBS + Display** for the new board (you can get back there any time with **Edit settings…**, or by double-clicking the board in the list). Fill in its **host** and **port**, your **username / password**, and — if the board needs it — the **automated logon** steps that walk you from the BBS menu into the game. Reconnect behavior and terminal size live here too. These are **BBS-tier**: shared by every character on that board. (The board's **name** is set when you add/rename it in Profile Management.)
+First **add the board** in **Profile Management** (File → Profile Management → BBSes → Add) — that's where BBSes are created, renamed, and removed now. Add drops you straight into **Settings → BBS + Display** for the new board (you can get back there any time with **Edit settings…**, or by double-clicking the board in the list). Fill in:
+
+- its **host** and **port**;
+- your **username / password**;
+- and — if the board needs it — the **automated logon** steps that walk you from the BBS menu into the game.
+
+Reconnect behavior and terminal size live here too. These are **BBS-tier**: shared by every character on that board. (The board's **name** is set when you add/rename it in Profile Management.)
 
 Each logon step is a **Message** to wait for and a **Response** to send when it appears (with `{username}` / `{password}` tokens for your saved credentials). Two rules keep the sequence healthy:
 
@@ -138,7 +150,11 @@ Each is modeless and toggles closed on its own key. Default hotkeys are shown; a
 
 The **Settings** window follows the same modeless rule — the terminal stays interactive while it's open — and **OK / Apply / Cancel** decide whether your edits stick.
 
-**Snapping windows together.** As you drag the panel windows — Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, and Session Stats — they **snap flush to each other's edges** when you bring one within about a finger's width of another, so you can build a tidy layout without lining anything up by hand. Dragging the **main window** then carries the whole snapped cluster with it, keeping your arrangement intact; grab any of the other panels and it **pulls off freely**. Turn this off with **Settings → General → "Snap windows together"** if you'd rather every window float on its own. (Windows opened from *inside* a panel — editors and dialogs — don't snap.) If a panel ever drifts off-screen or the layout gets untidy, **View → Reset layout** returns every window to its default position and size.
+**Snapping windows together.** As you drag the panel windows — Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, and Session Stats — they **snap flush to each other's edges** when you bring one within about a finger's width of another, so you can build a tidy layout without lining anything up by hand.
+
+Dragging the **main window** then carries the whole snapped cluster with it, keeping your arrangement intact; grab any of the other panels and it **pulls off freely**. Turn this off with **Settings → General → "Snap windows together"** if you'd rather every window float on its own. (Windows opened from *inside* a panel — editors and dialogs — don't snap.)
+
+If a panel ever drifts off-screen or the layout gets untidy, **View → Reset layout** returns every window to its default position and size.
 
 ## Keeping MudPlay up to date
 
@@ -168,7 +184,9 @@ Each combat round the engine picks one main action — **cast an attack spell** 
 
 Two things always sit above that choice: a **backstab opener** fires first when eligible, and **debuff spells** are a separate extra action that can land the same round.
 
-**Taking a round yourself.** If you hand-type an attack mid-fight — a **combat spell** (any spell that costs round energy, i.e. an attack, as opposed to a 0-energy heal/buff) or a **physical attack** (`a`/`at`/`att`/`aa`, `bash`/`sm`/`sma`/`smash`, `bs`) — the engine treats it as a **user override** and holds its own auto-attack for that round, so it won't fight you by re-sending its action on top of yours. Control returns automatically on the next combat round. A hand-cast **heal/buff/cure** (0 energy) is *not* an override — after it lands the engine resumes attacking right away, same as before.
+**Taking a round yourself.** If you hand-type an attack mid-fight — a **combat spell** (any spell that costs round energy, as opposed to a 0-energy heal/buff) or a **physical attack** (`a`/`at`/`att`/`aa`, `bash`/`sm`/`sma`/`smash`, `bs`) — the engine treats it as a **user override** and holds its own auto-attack for that round, so it won't fight you by re-sending its action on top of yours. Control returns automatically on the next combat round.
+
+A hand-cast **heal/buff/cure** (0 energy) is *not* an override — after it lands the engine resumes attacking right away, same as before.
 
 ## Targeting
 
@@ -206,7 +224,9 @@ When a walk / loop / Auto-Lair **can't continue**, the reason is named rather th
 
 On **Paradigm**, that dialog should almost never appear: whenever the tracker drifts, the client asks the game `rm` for your authoritative room and re-anchors from the answer — before it ever falls back to the blind reverse-walk recovery, and again as a last resort before giving up — so it only truly gives up when `rm` itself can't answer (and a `rm` that a confusion fumble eats is simply re-asked until the confusion passes).
 
-Even with **no automation running** — you've stopped the engines and are walking a block of identically-named rooms (a grid of same-name "Soldier's Quarters" cells, where no single room display can tell one cell from the next) by hand or being dragged by a party leader — the client keeps trying to place you: it narrows down which look-alike room you're in from the *sequence* of moves you make and the rooms they reveal, and silently re-anchors the moment that sequence fits exactly one room. It sends nothing to the game to do this — it's pure inference from what you're already doing — and if the walk stays genuinely ambiguous it just stays Lost rather than guess.
+Even with **no automation running** — you've stopped the engines and are walking a block of identically-named rooms (a grid of same-name "Soldier's Quarters" cells, where no single room display can tell one cell from the next) by hand or being dragged by a party leader — the client keeps trying to place you: it narrows down which look-alike room you're in from the *sequence* of moves you make and the rooms they reveal, and silently re-anchors the moment that sequence fits exactly one room.
+
+It sends nothing to the game to do this — it's pure inference from what you're already doing — and if the walk stays genuinely ambiguous it just stays Lost rather than guess.
 
 The status line is also **colour-coded**: **amber** while movement is held for a reason (resting, held, confused, party wait, Auto-All off…) and **red** when a nav action fails or the tracker loses your position — so a problem is glaring rather than buried in grey.
 
@@ -243,7 +263,13 @@ Or build it off the map: **Navigation Management → New Loop** opens an editor 
 
 **Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Run**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to *both* right-click Favorites flyouts (the terminal's and the map's, green for loops, amber for lairs) alongside your starred GOTO rooms, so you can start it from anywhere.
 
-Each waypoint can carry its own per-room settings, edited **inline in the Edit Loop table**: a **command** + **delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`), a **"No rest"** flag, and a **"No atk"** flag. Chain several commands in one waypoint with `;` or `^M` — each is sent as its own line (e.g. `get all;drop coins`), the same convention macros and the pre-/post-rest commands use. (While *building* a loop from the map, click a waypoint row in the CURRENT NAV strip to set the same options in a small dialog.) If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
+Each waypoint can carry its own per-room settings, edited **inline in the Edit Loop table**:
+
+- a **command** + **delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`);
+- a **"No rest"** flag;
+- a **"No atk"** flag.
+
+Chain several commands in one waypoint with `;` or `^M` — each is sent as its own line (e.g. `get all;drop coins`), the same convention macros and the pre-/post-rest commands use. (While *building* a loop from the map, click a waypoint row in the CURRENT NAV strip to set the same options in a small dialog.) If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
 
 - **No rest** — the loop won't rest in this room even when HP/MA drop below your "rest if below" gates; it advances instead. Only this exact room is protected.
 - **No atk (do not attack here)** — the loop skips combat in this room *as if auto-combat were off*, walking on even when the Min/Max monster count is met. The one exception: if a **rest** is triggered here (HP or MA below its gate), it still clears the room so the rest can proceed. Only this exact room is affected.
@@ -271,7 +297,9 @@ A small **Realm:** line under the headline notes which game-data realm is active
 
 **Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
 
-**How long it stays in a lair.** It leaves for the next one as soon as the fight is over *and* the drops are picked up — it won't walk off and abandon loot it just fought for. "Fight over" means the room re-displays with no monster you'd engage left in it, which is the reliable signal; the game's own `*Combat Off*` line isn't usable on its own, since it also fires every time you cast and once per strike for thrown weapons and the like. **Engage timeout** (Settings → Auto-Lair, default 30s) is only the upper bound now, for a fight that never resolves — something you can't kill, or one that ran away.
+**How long it stays in a lair.** It leaves for the next one as soon as the fight is over *and* the drops are picked up — it won't walk off and abandon loot it just fought for.
+
+"Fight over" means the room re-displays with no monster you'd engage left in it, which is the reliable signal; the game's own `*Combat Off*` line isn't usable on its own, since it also fires every time you cast and once per strike for thrown weapons and the like. **Engage timeout** (Settings → Auto-Lair, default 30s) is only the upper bound, for a fight that never resolves — something you can't kill, or one that ran away.
 
 **A lair that hasn't respawned costs a few seconds, not the full timeout.** If nothing turns up within a moment of stepping in, Auto-Lair takes that as "not back yet" and moves on to the next lair rather than standing in an empty room — entering already burned that lair's timer, so there's nothing to be gained by waiting there. If it still looks like it's idling, the usual reason is that the monsters you're after don't actually *spawn* in that room: some wander in from elsewhere on their own schedule, and a room they merely pass through isn't a lair Auto-Lair can time.
 
@@ -306,7 +334,9 @@ The panel lists clickable links to everything attached to the room:
 
 **-150 is the cut-off**: at -150 or above you can make out a room's contents; below it (very dark / pitch black) the game hides them, so you need enough carried light to lift `Your Illu` to -150 or better.
 
-**`@where` on the map.** When you `@where` another MudPlay user and their client answers with its location (a telepath like `Fujin telepaths: {Adventurer's Guild, Universal Trainer (map 1, room 1376); exit s: west}`), the map — if it's open — **flashes that room green and centres on it** for about 15 seconds, then drifts back to following you. `@where` several people and **each answered square lights up at once**, fading out on its own 15-second timer; the map re-centres on the **newest** reply as it lands, leaving the earlier flashes where they are. It only reacts while the Navigation window is open; a reply that lands with the map closed is ignored.
+**`@where` on the map.** When you `@where` another MudPlay user and their client answers with its location (a telepath like `Fujin telepaths: {Adventurer's Guild, Universal Trainer (map 1, room 1376); exit s: west}`), the map — if it's open — **flashes that room green and centres on it** for about 15 seconds, then drifts back to following you.
+
+`@where` several people and **each answered square lights up at once**, fading out on its own 15-second timer; the map re-centres on the **newest** reply as it lands, leaving the earlier flashes where they are. It only reacts while the Navigation window is open; a reply that lands with the map closed is ignored.
 
 The **Overlays ▾** button layers lairs, shops, spell rooms, and **level gates** onto the map and toggles the **Legend** — which you can **drag anywhere on the map** (it remembers where you put it; toggle it off and back on and it snaps back into view if the window has since shrunk).
 
