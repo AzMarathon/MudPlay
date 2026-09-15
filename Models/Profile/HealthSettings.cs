@@ -68,6 +68,14 @@ public sealed class HealthSettings
     // value. Default 40 (%).
     public int MajorHealCombatTrigger { get; set; } = 40;
 
+    // Cast SpellsSettings.EmergencyHealSpell — falling back to Major then Minor
+    // when unset — the instant HP drops to or below this value, in ANY state
+    // (combat, resting, mid-walk). Unlike every other heal tier, this one
+    // ignores HealIfAboveMaCombat/Resting (see CastingDirector.PickEmergencySelfHeal):
+    // an emergency spends whatever mana is left rather than conserving the pool
+    // for later — there might not BE a later. Default 20 (%).
+    public int EmergencyHealTrigger { get; set; } = 20;
+
     // ----- MA / Kai -------------------------------------------------
 
     // How RestMaxMa / RestIfBelowMa / RunIfBelowMa / BlessIfAboveMa are read at
@@ -141,6 +149,7 @@ public sealed class HealthSettings
         HealRestTrigger = HealRestTrigger,
         MinorHealCombatTrigger = MinorHealCombatTrigger,
         MajorHealCombatTrigger = MajorHealCombatTrigger,
+        EmergencyHealTrigger = EmergencyHealTrigger,
         MaThresholdMode = MaThresholdMode,
         RestMaxMa = RestMaxMa,
         RestIfBelowMa = RestIfBelowMa,

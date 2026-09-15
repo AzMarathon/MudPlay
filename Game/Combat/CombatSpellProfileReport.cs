@@ -83,10 +83,11 @@ public static class CombatSpellProfileReport
     private static string DescribeSpells(CombatProfileSpells? s)
     {
         if (s is null) return "spells —";
-        return $"spells[prio mph{s.PriorityMinorPartyHeal}/Mph{s.PriorityMajorPartyHeal}/" +
-               $"msh{s.PriorityMinorSelfHeal}/Msh{s.PriorityMajorSelfHeal}/" +
+        return $"spells[prio em{s.PriorityEmergencyHeal}/mph{s.PriorityMinorPartyHeal}/Mph{s.PriorityMajorPartyHeal}/" +
+               $"rescue{s.PriorityDownedAllyHeal}/msh{s.PriorityMinorSelfHeal}/Msh{s.PriorityMajorSelfHeal}/" +
                $"cure{s.PriorityCuring}/buff{s.PriorityBuffing}/deb{s.PriorityDebuffing}" +
-               $" · minheal={s.MinorHealSpell ?? "—"} majheal={s.MajorHealSpell ?? "—"} hpregen={s.HpRegenSpell ?? "—"}]";
+               $" · minheal={s.MinorHealSpell ?? "—"} majheal={s.MajorHealSpell ?? "—"}" +
+               $" emheal={s.EmergencyHealSpell ?? "—"} hpregen={s.HpRegenSpell ?? "—"}]";
     }
 
     // "main+off" (main only when no off-hand), "—" when the slot is empty.

@@ -118,7 +118,7 @@
                   <StackPanel Spacing="2">
                     <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
                                Foreground="{Binding ActiveProfileAccentBrush}"/>
-                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto">
+                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Minor heal"/>
                     <AutoCompleteBox Grid.Row="0" Grid.Column="1"
                                      Text="{Binding MinorHealSpell, Mode=TwoWay}"
@@ -143,8 +143,20 @@
                                      Width="260" HorizontalAlignment="Left"
                                      ToolTip.Tip="Expensive self-heal — fires when Health → Major heal (combat) threshold trips."/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="HP Regen"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Emergency heal"/>
                     <AutoCompleteBox Grid.Row="2" Grid.Column="1"
+                                     Text="{Binding EmergencyHealSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding EmergencyHealSpellUnlearned}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Last-resort self-save — fires when the Health → Emergency heal threshold trips. It&apos;s a row in the spell-type priority list above, defaulting to slot 1 so it leads by default; reorder it there like any other. Fires in any state (combat/rest/walk) and ignores the mana-floor gate — an emergency spends whatever mana is left (it still won&apos;t attempt a spell it can&apos;t afford). Falls back to Major then Minor heal when left blank."/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="HP Regen"/>
+                    <AutoCompleteBox Grid.Row="3" Grid.Column="1"
                                      Text="{Binding HpRegenSpell, Mode=TwoWay}"
                                      Classes.unlearnedSpell="{Binding HpRegenSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"

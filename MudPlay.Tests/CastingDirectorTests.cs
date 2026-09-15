@@ -556,6 +556,141 @@ public sealed class CastingDirectorTests
         Assert.Equal("heal", h.CastsSent[0]);
     }
 
+    // ----- Emergency self-heal ----------------------------------------
+
+    [Fact]
+    public void EmergencyHeal_OverridesMajorAndMinor_AtDefaultPriority()
+    {
+        // HP is in EVERY band at once (below minor, major, and emergency
+        // triggers) — Emergency's own spell must win, not Major or Minor,
+        // because Emergency defaults to priority slot 1 (leads the queue).
+        using Harness h = new();
+        h.Spells.MinorHealSpell = "heal";
+        h.Spells.MajorHealSpell = "fullheal";
+        h.Spells.EmergencyHealSpell = "lastresort";
+        h.Health.MinorHealCombatTrigger = 70;
+        h.Health.MajorHealCombatTrigger = 40;
+        h.Health.EmergencyHealTrigger = 20;
+
+        h.SetPrompt(hp: 15, maxHp: 100, ma: 100, maxMa: 100, inCombat: true);
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("lastresort", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void EmergencyHeal_IsReorderable_DemotedBelowMajor_MajorFiresFirst()
+    {
+        // Emergency is now an ordinary priority row, not a hardcoded always-lead.
+        // Rank it below Major and Major wins even in the emergency band — proving
+        // the position is genuinely user-controlled.
+        using Harness h = new();
+        h.Spells.EmergencyHealSpell = "lastresort";
+        h.Spells.MajorHealSpell = "fullheal";
+        h.Spells.MinorHealSpell = "heal";
+        h.Spells.PriorityEmergencyHeal = 9;   // demoted to the back
+        h.Spells.PriorityMajorSelfHeal = 1;   // Major promoted to lead
+        h.Health.MajorHealCombatTrigger = 40;
+        h.Health.EmergencyHealTrigger = 20;
+
+        h.SetPrompt(hp: 15, maxHp: 100, ma: 100, maxMa: 100, inCombat: true);
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("fullheal", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void EmergencyHeal_FallsBackToMajor_WhenEmergencyNotConfigured()
+    {
+        using Harness h = new();
+        h.Spells.MinorHealSpell = "heal";
+        h.Spells.MajorHealSpell = "fullheal";       // no EmergencyHealSpell set
+        h.Health.EmergencyHealTrigger = 20;
+
+        h.SetPrompt(hp: 15, maxHp: 100, inCombat: true);
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("fullheal", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void EmergencyHeal_FallsBackToMinor_WhenNeitherEmergencyNorMajorConfigured()
+    {
+        using Harness h = new();
+        h.Spells.MinorHealSpell = "heal";           // no Emergency, no Major
+        h.Health.EmergencyHealTrigger = 20;
+
+        h.SetPrompt(hp: 15, maxHp: 100, inCombat: true);
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("heal", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void EmergencyHeal_AboveThreshold_NoCast()
+    {
+        using Harness h = new();
+        h.Spells.EmergencyHealSpell = "lastresort";
+        h.Health.EmergencyHealTrigger = 20;
+
+        h.SetPrompt(hp: 25, maxHp: 100, inCombat: true);   // 25% > 20% trigger
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void EmergencyHeal_IgnoresManaFloor_UnlikeMinorAndMajor()
+    {
+        // The same MA-floor setup that HealManaFloor_Combat_BelowFloor_SuppressesHeal
+        // proves suppresses Minor — Emergency must NOT be gated by it. An
+        // emergency spends whatever mana is left rather than conserving the
+        // pool for a "later" that might not come.
+        using Harness h = new();
+        h.Spells.EmergencyHealSpell = "lastresort";
+        h.Health.EmergencyHealTrigger = 20;
+        h.Health.HealIfAboveMaCombat = 60;
+
+        h.SetPrompt(hp: 15, maxHp: 100, ma: 5, maxMa: 100, inCombat: true);   // MA 5% << 60% floor
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("lastresort", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void EmergencyHeal_FiresOutsideCombatAndRest_UnlikeMinor()
+    {
+        // Minor heal's own gate refuses to fire mid-walk (InCombat false AND
+        // not Resting) — Emergency has no such restriction, it fires in ANY
+        // state. Standing (not resting, not in combat) is exactly the state
+        // Minor would refuse.
+        using Harness h = new();
+        h.Spells.EmergencyHealSpell = "lastresort";
+        h.Health.EmergencyHealTrigger = 20;
+
+        h.SetPrompt(hp: 15, maxHp: 100, inCombat: false, position: PlayerPosition.Standing);
+        h.Director.OnCombatTick();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("lastresort", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void EmergencyHeal_RespectsHardAffordabilityGate()
+    {
+        // Emergency bypasses the CONSERVATION floor (HealIfAboveMa*) but still
+        // can't cast a spell it genuinely can't pay for — the game would just
+        // refuse it. The generic post-Pick mana-cost check in Evaluate applies
+        // to every category alike, Emergency included.
+        using Harness h = new();
+        h.Spells.EmergencyHealSpell = "lastresort";
+        h.Health.EmergencyHealTrigger = 20;
+        h.ManaCosts["lastresort"] = 50;
+
+        h.SetPrompt(hp: 15, maxHp: 100, ma: 10, maxMa: 100, inCombat: true);   // can't afford 50
+
+        Assert.Empty(h.CastsSent);
+    }
+
     // ----- Tier 2 cures (game-data Messages driven) -----------------
 
     private sealed class CureHarness : IDisposable

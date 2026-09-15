@@ -11,36 +11,45 @@ namespace MudPlay.Models.Profile;
 // on HealthSettings — the Health tab UI surfaces them. SpellsSettings only owns
 // the spell names. Party-cast picks live on PartySettings.
 //
-// Priority slots are 1–7 (lower = earlier). Two pairs share priority (Minor
+// Priority slots are 1–9 (lower = earlier). Two pairs share priority (Minor
 // party heal covers single + party AOE versions; same for Major) because the
 // engine picks single vs AOE at cast time based on how many party members are
 // below threshold — only the category ordering lives here.
 public sealed class SpellsSettings
 {
-    // ----- Category priority (1-7) ----------------------------------
+    // ----- Category priority (1-9) ----------------------------------
+
+    // Priority slot for the last-resort EmergencyHealSpell. Defaults to 1 so an
+    // emergency leads every between-round cast, but it's user-reorderable like
+    // any other slot.
+    public int PriorityEmergencyHeal { get; set; } = 1;
 
     // Priority slot shared by Party tab's Minor single-target heal and Minor
     // AOE party heal.
-    public int PriorityMinorPartyHeal { get; set; } = 1;
+    public int PriorityMinorPartyHeal { get; set; } = 2;
 
     // Priority slot shared by Party tab's Major single-target heal and Major
     // AOE party heal.
-    public int PriorityMajorPartyHeal { get; set; } = 2;
+    public int PriorityMajorPartyHeal { get; set; } = 3;
+
+    // Priority slot for the downed-ally rescue heal. Formerly hardcoded to lead;
+    // now a reorderable slot, defaulting after the party heals.
+    public int PriorityDownedAllyHeal { get; set; } = 4;
 
     // Priority slot for this tab's MinorHealSpell.
-    public int PriorityMinorSelfHeal { get; set; } = 3;
+    public int PriorityMinorSelfHeal { get; set; } = 5;
 
     // Priority slot for this tab's MajorHealSpell.
-    public int PriorityMajorSelfHeal { get; set; } = 4;
+    public int PriorityMajorSelfHeal { get; set; } = 6;
 
     // Priority slot for cure spells (the four cure-* picks below).
-    public int PriorityCuring { get; set; } = 5;
+    public int PriorityCuring { get; set; } = 7;
 
     // Priority slot for buff / bless casts (the bless slots).
-    public int PriorityBuffing { get; set; } = 6;
+    public int PriorityBuffing { get; set; } = 8;
 
     // Priority slot for between-round debuffs (CombatSettings' debuff slots).
-    public int PriorityDebuffing { get; set; } = 7;
+    public int PriorityDebuffing { get; set; } = 9;
 
     // ----- Healing / regeneration -----------------------------------
 
@@ -51,6 +60,14 @@ public sealed class SpellsSettings
     // Expensive self-heal — fires when HealthSettings.MajorHealCombatTrigger
     // trips.
     public string? MajorHealSpell { get; set; }
+
+    // Last-resort self-heal — fires when HealthSettings.EmergencyHealTrigger
+    // trips, unconditionally ahead of every other between-round category
+    // (major/minor heal, cures, buffs, debuffs — see
+    // Game.Spells.CastingDirector.PrioritisedCategories). Falls back to
+    // MajorHealSpell then MinorHealSpell when unset, so an emergency still
+    // fires something rather than nothing.
+    public string? EmergencyHealSpell { get; set; }
 
     // Auto-regen utility (e.g. troll-skin) cast during downtime.
     public string? HpRegenSpell { get; set; }

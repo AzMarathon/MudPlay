@@ -91,7 +91,7 @@
                                  ToolTip.Tip="Thresholds below are read as absolute HP."/>
                 </StackPanel>
 
-                <Grid ColumnDefinitions="180,130,100" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="180,130,100" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rest max"/>
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
                                    Value="{Binding RestMaxHp, Mode=TwoWay}"
@@ -137,21 +137,30 @@
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding MajorHealCombatTriggerConverted}"/>
 
-                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Run if below"/>
+                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Emergency heal"/>
                     <NumericUpDown Grid.Row="5" Grid.Column="1"
+                                   Value="{Binding EmergencyHealTrigger, Mode=TwoWay}"
+                                   Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Cast Spells → Emergency heal the instant HP drops to or below this, in ANY state — combat, resting, mid-walk. Overrides everything else that round (major/minor heal, cures, blesses/buffs, debuffs) and ignores the mana-floor gate below: this is a last-resort save, not a routine heal."/>
+                    <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding EmergencyHealTriggerConverted}"/>
+
+                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="FieldLabel" Text="Run if below"/>
+                    <NumericUpDown Grid.Row="6" Grid.Column="1"
                                    Value="{Binding RunIfBelowHp, Mode=TwoWay}"
                                    Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
                                    ToolTip.Tip="Trigger flee behavior when HP falls this low. 0 = off (never flee on HP)."/>
-                    <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
+                    <TextBlock Grid.Row="6" Grid.Column="2" Classes="FieldLabel"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding RunIfBelowHpConverted}"/>
 
-                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="FieldLabel" Text="Hang up if below"/>
-                    <NumericUpDown Grid.Row="6" Grid.Column="1"
+                    <TextBlock Grid.Row="7" Grid.Column="0" Classes="FieldLabel" Text="Hang up if below"/>
+                    <NumericUpDown Grid.Row="7" Grid.Column="1"
                                    Value="{Binding HangIfBelowHp, Mode=TwoWay}"
                                    Minimum="{Binding HangMinimum}" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
                                    ToolTip.Tip="Drop the connection when HP falls this low — emergency last resort. This can go negative in either mode, down to the realm death floor (HP % goes negative while bleeding out, as par shows), so you can set the hangup deep in the bleeding-out band, closer to death. 0 = hang the moment you drop. To turn it off, use 'Disable hang-ups' in Other settings."/>
-                    <TextBlock Grid.Row="6" Grid.Column="2" Classes="FieldLabel"
+                    <TextBlock Grid.Row="7" Grid.Column="2" Classes="FieldLabel"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding HangIfBelowHpConverted}"/>
                 </Grid>
