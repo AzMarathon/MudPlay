@@ -69,6 +69,16 @@ public sealed class AutoEquipCoordinator : IDisposable
     // revert is owed.
     private bool _inMovementSet;
 
+    // True while we've swapped to the Default set because we stepped into a game-data
+    // lair with "swap to default before lairs" on. Distinct from _inMovementSet so the
+    // movement hook (OnMovementStarted, fired on the loop's own resume after the swap
+    // gate clears) doesn't immediately yank us back into the While Moving set mid-lair —
+    // the thrash that left the character fighting lairs in speed footwear (report
+    // paradigm-20260915-124359). Cleared when we step out into a non-lair room (swap
+    // back to the movement set), when the run stops, or when the option is turned off.
+    // A run of adjacent lairs keeps it set so the gear doesn't flap between them.
+    private bool _inLairDefault;
+
     // Last room the tracker confirmed us into, so combat-entry and the movement
     // handlers can tell whether the current room is a boss room (gear precedence).
     private Game.Map.RoomKey? _currentRoom;
@@ -327,6 +337,13 @@ public sealed class AutoEquipCoordinator : IDisposable
     public void OnMovementStarted()
     {
         if (_inMovementSet) return;
+        // We deliberately swapped to Default for a lair (swap-before-lairs) and this is
+        // the loop resuming the step once the swap gate cleared — re-wearing the movement
+        // set here would instantly undo the lair loadout (report paradigm-20260915-124359).
+        // The pre-move handler swaps back on the way into a non-lair room. Self-heals: if
+        // the option is turned off mid-run the latch drops and the movement set resumes.
+        if (_inLairDefault && _readEquipment().SwapToDefaultBeforeLairs) return;
+        _inLairDefault = false;
         if (_player.InCombat) return;
         if (_hpGateAsserted() || _maGateAsserted()) return;
         if (CurrentRoomIsBoss()) return;
@@ -342,6 +359,13 @@ public sealed class AutoEquipCoordinator : IDisposable
     // stop reverts.
     public void OnMovementStopped()
     {
+        // A run that ended in (or at the edge of) a lair is already in the Default set —
+        // just clear the lair-travel latch; there's nothing to revert.
+        if (_inLairDefault)
+        {
+            _inLairDefault = false;
+            return;
+        }
         if (!_inMovementSet) return;
         _inMovementSet = false;
         if (_player.InCombat || _hpGateAsserted() || _maGateAsserted() || CurrentRoomIsBoss()) return;
@@ -368,7 +392,13 @@ public sealed class AutoEquipCoordinator : IDisposable
             }
             return;
         }
-        if (prevBoss)
+        // Only revert on leaving if a Bossing set is actually configured. Without one we
+        // never wore boss gear on entry (every boss-entry path gates on EnabledSet), so
+        // there's nothing to undo — and the game-data Bosses table tags plenty of mundane
+        // rooms (a town room with a named NPC). A character with no Bossing set was being
+        // yanked out of its While Moving gear into Default every time it stepped out of
+        // such a room mid-walk (report paradigm-20260915-061646 / -061734).
+        if (prevBoss && EnabledSet(EquipTriggerType.Bossing) is not null)
         {
             // Stepping out of a boss room always reverts to Default FIRST (clears the
             // boss loadout), then re-layers the movement set if we're still travelling.
@@ -402,14 +432,31 @@ public sealed class AutoEquipCoordinator : IDisposable
             }
             return;
         }
-        if (_inMovementSet
-            && _isLair is { } lair && lair(next)
-            && _readEquipment().SwapToDefaultBeforeLairs
-            && MovementSetActive())
+        // Lair gear swap (opt-in "swap to default before lairs"): wear the Default set in
+        // game-data lair rooms and the While Moving set in the transit rooms between them.
+        // Both directions fire on the pre-move hook so we land already geared for the room
+        // we're stepping into. A run of adjacent lairs stays in Default (no flap); a gap
+        // re-wears the movement set for the walk and swaps back to Default at the next lair
+        // (reports paradigm-20260915-124359 / -130624).
+        if (_readEquipment().SwapToDefaultBeforeLairs
+            && MovementSetActive()
+            && _isLair is { } lair)
         {
-            _inMovementSet = false;
-            _log?.Info(EquipmentManager.LogCategory, "about to enter a lair — swapping to Default before the step");
-            Fire(EquipTriggerType.Default);
+            bool nextIsLair = lair(next);
+            if (nextIsLair && _inMovementSet)
+            {
+                _inMovementSet = false;
+                _inLairDefault = true;
+                _log?.Info(EquipmentManager.LogCategory, "about to enter a lair — swapping to Default before the step");
+                Fire(EquipTriggerType.Default);
+            }
+            else if (!nextIsLair && _inLairDefault)
+            {
+                _inLairDefault = false;
+                _inMovementSet = true;
+                _log?.Info(EquipmentManager.LogCategory, "leaving the lair — back to the While Moving set before the step");
+                Fire(EquipTriggerType.WhileMoving);
+            }
         }
     }
 
