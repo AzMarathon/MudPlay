@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.31**
-> - New per-slot option under the AoE-debuff slot, "Only cast on the first round in a room": the AoE debuff is attempted only on room entry and abandoned once the fight's underway, so it isn't cast late on a half-dead room (wasted mana). Default off keeps offering it until it lands once for the room.
-> - Multi-attack no longer double-fires when a deferred combat-resume runs right after the round's attack already went out
-> - Gear no longer strands you travelling and fighting in weak pre-rest gear — resuming the loop after a rest now reverts to your travel gear (While-Moving if enabled, else Default); pre-rest gear is held only while you're actually sitting
-> - Meditate no longer flip-flops between the pre-rest set and Default while you sit — a pre-rest set that changes your max mana made the percentage rest-target ride the pool's momentary size during the gear swap and "complete" the rest early; the rest gate now waits for the max to settle, so it meditates until mana truly tops off, then reverts once
-> - Attack spells no longer fire at a "dead thing" — a monster killed in the split-second after you enter a room now waits for the room to re-display instead of casting at the just-killed mob's stale roster entry
+> **Version 3.88.32**
+> - **Critical**: an emergency heal could lose its round to an unrelated attack and never fire — attack-slot and between-round (heal/buff/cure) casts now pace on independent clocks so one can never block the other
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
