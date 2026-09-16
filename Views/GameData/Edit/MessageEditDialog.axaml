@@ -38,6 +38,19 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
         </Style>
+        <!-- Small muted text button beside a section header (Expand all / Collapse all). -->
+        <Style Selector="Button.TreeToolBtn">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="6,1"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="Background" Value="{StaticResource ChromeBgSunkenBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.TreeToolBtn:pointerover /template/ ContentPresenter">
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
     </Window.Styles>
 
     <Window.Resources>
@@ -393,13 +406,19 @@
                      effect a link to its Monster / Spell record or map room. Huge
                      teleport sweeps collapse to a one-line summary in the decoder. -->
                 <StackPanel Spacing="4" IsVisible="{Binding HasEffectTree}">
-                  <TextBlock Classes="FieldLabel" Text="Conditional effects" Margin="0,6,0,0"/>
+                  <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,6,0,0" VerticalAlignment="Center">
+                    <TextBlock Classes="FieldLabel" Text="Conditional effects"/>
+                    <Button Classes="TreeToolBtn" Content="expand all"
+                            Command="{Binding ExpandAllEffectsCommand}"/>
+                    <Button Classes="TreeToolBtn" Content="collapse all"
+                            Command="{Binding CollapseAllEffectsCommand}"/>
+                  </StackPanel>
                   <TreeView ItemsSource="{Binding EffectTree}" Background="Transparent"
                             BorderThickness="0">
                     <TreeView.Styles>
-                      <!-- Deep nested rolls open collapsed; branches open expanded. -->
+                      <!-- Live expand state bound two-way so the buttons can drive it. -->
                       <Style Selector="TreeViewItem" x:DataType="vm:SpellEffectNode">
-                        <Setter Property="IsExpanded" Value="{Binding StartExpanded}"/>
+                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
                       </Style>
                       <Style Selector="Border.node">
                         <Setter Property="Padding" Value="4,1"/>

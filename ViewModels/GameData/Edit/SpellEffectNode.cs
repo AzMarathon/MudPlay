@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace MudPlay.ViewModels.GameData.Edit;
 
@@ -9,7 +10,7 @@ namespace MudPlay.ViewModels.GameData.Edit;
 // effect as mixed text/link runs (summon → monster record, teleport → map room, cast →
 // spell record). Deep or huge sub-trees collapse to a single summary node. Rendered as
 // an expandable tree in the spell record's Game Data tab.
-public sealed class SpellEffectNode
+public sealed partial class SpellEffectNode : ObservableObject
 {
     // Weighted chance of this outcome under its parent random block; null on a branch
     // header (a condition, not a roll).
@@ -26,8 +27,10 @@ public sealed class SpellEffectNode
     // A condition header (bordered + tinted) vs a plain outcome/effect row.
     public bool IsBranch { get; init; }
 
-    // Branches start expanded; deep nested rolls start collapsed so the tree opens tidy.
-    public bool StartExpanded { get; init; } = true;
+    // The tree's live expand state — bound two-way by the view so the Expand all /
+    // Collapse all buttons can drive it. Branches and shallow rolls open; deep rolls
+    // and the big collapsed room lists start closed so the tree opens tidy.
+    [ObservableProperty] private bool _isExpanded = true;
 
     public bool HasChildren => Children.Count > 0;
     public bool HasPercent => Percent is not null;

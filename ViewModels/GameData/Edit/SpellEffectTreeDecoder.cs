@@ -105,7 +105,7 @@ public static class SpellEffectTreeDecoder
             Children = BuildTerminalChildren(ctx, rest, depth, ancestors),
             IsBranch = true,
             Tone = tone,
-            StartExpanded = true,
+            IsExpanded = true,
         };
     }
 
@@ -118,8 +118,8 @@ public static class SpellEffectTreeDecoder
         if (cmds.Count == 1 && Parse(cmds[0]).Verb == "random")
         {
             int random = ArgInt(Parse(cmds[0]).Args, 0);
-            if (TryCollapseTeleports(ctx, random) is { } summary)
-                return new[] { new SpellEffectNode { Runs = summary } };
+            if (TryCollapseTeleports(ctx, random) is { } tele)
+                return new[] { new SpellEffectNode { Runs = tele.Summary, Children = tele.Rooms, IsExpanded = false } };
             return DecodeBlock(ctx, random, depth + 1, ancestors);
         }
         return new[] { BuildSequenceNode(ctx, null, cmds, depth, ancestors) };
@@ -154,10 +154,18 @@ public static class SpellEffectTreeDecoder
         runs.AddRange(effectRuns);
 
         var children = new List<SpellEffectNode>();
-        bool collapsedRandom = false;
+        bool collapsedRandom = false, collapsedTeleport = false;
         if (random > 0)
         {
-            if (TryCollapseTeleports(ctx, random) is { } summary) { runs.AddRange(summary); collapsedRandom = true; }
+            if (TryCollapseTeleports(ctx, random) is { } tele)
+            {
+                // Summary on this line; the individual rooms become hidden children so
+                // the "N destinations" can be expanded to see them.
+                runs.AddRange(tele.Summary);
+                children.AddRange(tele.Rooms);
+                collapsedRandom = true;
+                collapsedTeleport = true;
+            }
             else children.AddRange(DecodeBlock(ctx, random, depth + 1, ancestors));
         }
         if (tailStart < cmds.Count)
@@ -166,7 +174,10 @@ public static class SpellEffectTreeDecoder
         if (effectRuns.Count == 0 && !collapsedRandom && children.Count == 0)
             runs.Add(new MdbInline("nothing"));
 
-        return new SpellEffectNode { Percent = pct, Runs = runs, Children = children, StartExpanded = depth < 1 };
+        // A collapsed room sweep starts closed even at the top level; other nodes follow
+        // the shallow-open rule.
+        bool expanded = !collapsedTeleport && depth < 1;
+        return new SpellEffectNode { Percent = pct, Runs = runs, Children = children, IsExpanded = expanded };
     }
 
     // A gate command (level / carry / no-NPCs) and its human phrase, or false for an
@@ -234,9 +245,11 @@ public static class SpellEffectTreeDecoder
         return runs;
     }
 
-    // If a random block is all teleports (a sweep / crossing table), return a one-line
-    // summary instead of listing every destination. Null when it isn't collapsible.
-    private static IReadOnlyList<MdbInline>? TryCollapseTeleports(Ctx ctx, int tbNum)
+    // If a random block is all teleports (a sweep / crossing table), collapse it to a
+    // one-line summary whose hidden children are the individual destination rooms — so a
+    // 99-room sweep reads as one line but still expands to every room. Null when the
+    // block isn't a teleport-only table.
+    private static (IReadOnlyList<MdbInline> Summary, IReadOnlyList<SpellEffectNode> Rooms)? TryCollapseTeleports(Ctx ctx, int tbNum)
     {
         if (!ctx.Tb.TryGetValue(tbNum, out JsonElement entry)) return null;
         string action = entry.TryGetProperty("Action", out JsonElement a) && a.ValueKind == JsonValueKind.String
@@ -256,19 +269,20 @@ public static class SpellEffectTreeDecoder
         }
         if (dests.Count < TeleportCollapseThreshold) return null;
 
+        // The individual destinations, hidden until the summary is expanded.
+        var rooms = new List<SpellEffectNode>(dests.Count);
+        foreach ((int m, int r) in dests)
+            rooms.Add(new SpellEffectNode { Runs = new[] { new MdbInline("→ "), RoomLink(ctx, m, r) } });
+
         string? common = ctx.RoomNames.TryGetValue(dests[0], out string? n0) ? n0 : null;
         foreach ((int m, int r) in dests)
             if (!ctx.RoomNames.TryGetValue((m, r), out string? nm) || nm != common) { common = null; break; }
 
         string count = dests.Count.ToString(CultureInfo.InvariantCulture);
-        if (common is { Length: > 0 })
-        {
-            var runs = new List<MdbInline> { new("→ ") };
-            runs.Add(RoomLink(ctx, dests[0].Map, dests[0].Room, common));
-            runs.Add(new MdbInline($" ({count} rooms)"));
-            return runs;
-        }
-        return new[] { new MdbInline($"→ a random room ({count} destinations)") };
+        var summary = common is { Length: > 0 }
+            ? new List<MdbInline> { new("→ "), RoomLink(ctx, dests[0].Map, dests[0].Room, common), new($" ({count} rooms)") }
+            : new List<MdbInline> { new($"→ a random room ({count} destinations)") };
+        return (summary, rooms);
     }
 
     // ----- link runs -----

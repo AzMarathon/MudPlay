@@ -115,16 +115,19 @@ public sealed class SpellEffectTreeDecoderTests : IDisposable
     }
 
     [Fact]
-    public void Decode_CollapsesTeleportSweepToNamedSummary()
+    public void Decode_CollapsesTeleportSweepToExpandableSummary()
     {
         var sweepOutcome = new SpellInfoRowsBuilder(NewCache()).BuildEffectTree(1000)[0].Children[1];
-        // A 5-teleport table with one common destination name collapses to a single line,
-        // not five children.
-        Assert.Empty(sweepOutcome.Children);
+        // A 5-teleport table with one common destination name collapses to a single
+        // summary line...
         string text = Flatten(sweepOutcome);
         Assert.Contains("Deep Sea", text);
         Assert.Contains("(5 rooms)", text);
         Assert.Contains(sweepOutcome.Runs, r => r.IsLink);   // the destination is a map link
+        // ...but stays expandable: the individual rooms are hidden children, collapsed by default.
+        Assert.False(sweepOutcome.IsExpanded);
+        Assert.Equal(5, sweepOutcome.Children.Count);
+        Assert.All(sweepOutcome.Children, room => Assert.Contains(room.Runs, r => r.IsLink));
     }
 
     [Fact]
