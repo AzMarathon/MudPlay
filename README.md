@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.90.0**
-> - Paradigm route picker now offers a blue **token card** alongside the normal walk when a held transport token reaches your destination faster — never auto-taken, always your pick
-> - Picking it uses the token and resumes the walk from where it drops you; if the room isn't monster-free it walks overland and uses the token at the first clear room (solo only for now)
-> - New **Settings → Other** knobs (Paradigm only): turn token routing off, and set how many rooms a token must save before the card appears
-> - The Paradigm message seed now recognizes each transport token's use lines (your own and the witnessed third-person form)
+> **Version 3.91.0**
+> - Party leaders can now take token routes: after the leader tokens, it tells each member to use theirs (`@do use`), confirms each arrives at the landing, and retries a few times
+> - Fully regrouped → the walk continues; otherwise it fails out with the reason in the nav header and sits
+> - Fixed the token-use command to send the token's full name (so the "the Lost City" token isn't mistyped)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

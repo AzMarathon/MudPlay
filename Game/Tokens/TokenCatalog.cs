@@ -62,6 +62,17 @@ public static partial class TokenCatalog
         return m.Success ? m.Groups["place"].Value.Trim() : null;
     }
 
+    // "A gryphon drops <name> off in <location>!" -> the arriving player's name; null
+    // otherwise. Printed to everyone already IN the landing room when someone tokens in
+    // — the party leader (who landed first) watches its own room for this to confirm
+    // each member regrouped. The location isn't needed (we know the room we're in).
+    public static string? MatchArrivalMessage(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return null;
+        Match m = ArrivalMessageRegex().Match(line.Trim());
+        return m.Success ? m.Groups["name"].Value.Trim() : null;
+    }
+
     // Held tokens in a carried-item list, as (LookName, Place) pairs deduped by the
     // normalized place (a player holds only one of each anyway).
     public static IReadOnlyList<(string LookName, string Place)> HeldTokens(IEnumerable<string> carriedItems)
@@ -84,4 +95,8 @@ public static partial class TokenCatalog
     [GeneratedRegex(@"^you invoke the token and summon a gryphon to (?<place>.+?)!*\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex UseMessageRegex();
+
+    [GeneratedRegex(@"^a gryphon drops (?<name>.+?) off in .+$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ArrivalMessageRegex();
 }

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.91.0
+
+- Party leaders can now take token routes: after the leader tokens, it telepaths each member `@do use <token>`, watches its landing room for each to arrive, and retries a few times (6s apart)
+- Fully regrouped → the walk continues; otherwise it fails out with the reason in the nav header and sits for you to sort out
+- Fixed the token-use command to send the token's full name, so the "the Lost City" token isn't mistyped
+
 ## 3.90.0
 
 - Paradigm route picker now offers a blue **token card** alongside the normal walk when a held transport token reaches your destination faster — never auto-taken, always your pick

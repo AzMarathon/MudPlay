@@ -40,6 +40,15 @@ public sealed class TokenCatalogTests
     public void MatchUseMessage_ExtractsPlace(string line, string? expected)
         => Assert.Equal(expected, TokenCatalog.MatchUseMessage(line));
 
+    [Theory]
+    [InlineData("A gryphon drops Boost off in the Lost City!", "Boost")]
+    [InlineData("A gryphon drops Ermias off in Silvermere!", "Ermias")]
+    [InlineData("A gryphon drops Sir Reginald off in Kingsport!", "Sir Reginald")]
+    [InlineData("You invoke the token and summon a gryphon to Silvermere!", null)]
+    [InlineData("The gryphon lands.", null)]
+    public void MatchArrivalMessage_ExtractsArrivingName(string line, string? expected)
+        => Assert.Equal(expected, TokenCatalog.MatchArrivalMessage(line));
+
     [Fact]
     public void MatchLookNameLine_OnlyMatchesTheNameLine()
     {

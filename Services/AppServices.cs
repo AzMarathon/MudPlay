@@ -6647,6 +6647,14 @@ public sealed class AppServices
         // Walker.WalkTo (never back through the picker) so it can't re-offer a token.
         TokenRoute = new Game.Tokens.TokenRouteCoordinator(
             inParty: () => PartyState.IsInParty,
+            isLeader: () => PartyState.IsInParty && PartyState.SelfIsLeader,
+            // Other party members (never self) to regroup after a leader token — by
+            // name; the coordinator addresses each by given name.
+            membersToRegroup: () => PartyState.Members
+                .Where(m => !m.IsSelf && !string.IsNullOrWhiteSpace(m.Name))
+                .Select(m => m.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
             roomHasNpc: () => CombatTracker.HasRoomNpc,
             walkToDest: dest => Walker.WalkTo(dest, supersedeSilently: true, preferTeleportFree: true),
             stopWalker: () => Walker.Stop("token route: using token in a clear room"),
@@ -6659,6 +6667,7 @@ public sealed class AppServices
             },
             log: Log);
         Tokens.TokenUsed += TokenRoute.OnTokenUsed;
+        Tokens.MemberArrived += TokenRoute.OnMemberArrived;
         Walker.Event += TokenRoute.OnWalkEvent;
         RoomTracker.StateChanged += t =>
         {

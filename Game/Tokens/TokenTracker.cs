@@ -40,6 +40,11 @@ public sealed class TokenTracker : IDisposable
     // and party-confirm logic off it (the use also wipes buffs via negate magic).
     public event Action<string>? TokenUsed;
 
+    // Fired when someone tokens INTO the room we're in ("A gryphon drops <name> off in
+    // <location>!"). Carries the arriving player's name. The party-regroup coordinator
+    // watches this in the leader's landing room to confirm members regrouped.
+    public event Action<string>? MemberArrived;
+
     public TimeSpan PerLookPace { get; set; } = TimeSpan.FromMilliseconds(400);
     public TimeSpan SettleWindow { get; set; } = TimeSpan.FromSeconds(2);
     // Let the use + its teleport resolve before re-looking for the true count.
@@ -164,6 +169,13 @@ public sealed class TokenTracker : IDisposable
             _log?.Info("Tokens", $"token use succeeded → {usedPlace} (buffs wiped by negate magic)");
             TokenUsed?.Invoke(usedPlace);
             _ = RelookAfterDelayAsync(usedPlace);
+            return;
+        }
+
+        // Someone else tokened into our room — surface it for the regroup coordinator.
+        if (TokenCatalog.MatchArrivalMessage(line) is { } arrival)
+        {
+            MemberArrived?.Invoke(arrival);
             return;
         }
 
