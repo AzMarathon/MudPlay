@@ -1984,10 +1984,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         var builder = new LoopBuilderSessionViewModel(
             _services.Loops, _services.RoomGraph, _services.Movement);
         builder.PropertyChanged += OnLoopBuilderPropertyChanged;
-        builder.ProposedName = row.Source.Name;
-        builder.Notes        = row.Source.Notes;
-        foreach (LoopWaypoint w in row.Source.Waypoints)
-            builder.AddClick(w.Key);
+        SeedBuilderFromLoop(builder, row.Source);
 
         LoopBuilder = builder;
         CurrentMode = NavigationMode.LoopBuild;
@@ -2791,15 +2788,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
         else
         {
-            // Entering Loop build from anywhere else — tear down any
-            // engine that's currently driving (AutoLair scheduler OR
-            // an in-flight walk) AND any opposing build mode so the
-            // user lands in a clean Loop build session.
+            // Entering Loop build from anywhere else. Building a loop is just
+            // clicking rooms — it never moves the player — so a walk-to in flight is
+            // LEFT RUNNING and its user-pause gate is left untouched; only hitting Run
+            // supersedes it (see RunStop). AutoLair (a full movement mode sharing the
+            // map-click surface) is still torn down, along with any opposing build
+            // mode, so the user lands in a clean Loop build session.
             if (_services.AutoLair.IsActive)
                 _services.AutoLair.Stop("loop mode requested");
-            if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
-                _services.Walker.Stop("loop mode requested");
-            _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
             if (CurrentMode == NavigationMode.AutoLair)
             {
                 if (!_services.AutoLair.IsActive) _services.AutoLair.Clear();
@@ -2824,12 +2820,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             bool preloadLast = _services.Resolver
                 .Resolve<Models.Profile.GeneralSettings>("General").LoadLastRanLoop;
             if (preloadLast && _services.LoopRunner.LastRunLoop is { Waypoints.Count: >= 2 } last)
-            {
-                builder.ProposedName = last.Name;
-                builder.Notes        = last.Notes;
-                foreach (LoopWaypoint w in last.Waypoints)
-                    builder.AddClick(w.Key);
-            }
+                SeedBuilderFromLoop(builder, last);
 
             LoopBuilder = builder;
             CurrentMode = NavigationMode.LoopBuild;
@@ -3680,6 +3671,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // Pause/Run under the armed destination.
             if (QueuedDestination is not null) return "Run";
 
+            // In Loop build with a runnable loop, Run runs the loop (superseding any
+            // in-flight walk-to) — so the chip reads Run, not the walk-to's Stop.
+            if (CurrentMode == NavigationMode.LoopBuild && LoopBuilder?.CanSave == true)
+                return "Run";
+
             Game.Map.LoopRunner runner = _services.LoopRunner;
             if (runner.State is Game.Map.LoopState.Running
                               or Game.Map.LoopState.Approaching
@@ -4134,7 +4130,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             else _services.AutoLair.Pause();
             return;
         }
-        if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
+        // In Loop build with a runnable loop, Run means "run the loop" (which takes
+        // movement over from any in-flight walk-to) — don't treat a walking walker as
+        // a plain Stop here; fall through to the build-start branch below.
+        bool loopRunReady = CurrentMode == NavigationMode.LoopBuild && LoopBuilder?.CanSave == true;
+        if (!loopRunReady && _services.Walker.State is WalkState.Walking or WalkState.Paused)
         {
             _services.Walker.Stop("user stop from Navigation");
             return;
@@ -4153,6 +4153,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             Game.Map.Loop? transient = LoopBuilder.BuildTransient();
             if (transient is not null)
             {
+                // Building a loop no longer stops an in-flight walk-to (only Run
+                // does) — take movement over now: stop the walker and lift the
+                // user-pause gate before the loop runner starts.
+                if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
+                    _services.Walker.Stop("loop run supersedes walk-to");
+                _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
                 _services.LoopRunner.Start(transient);
                 if (CurrentMode == NavigationMode.LoopBuild) ToggleLoopMode();
             }
@@ -4190,6 +4196,30 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Pause flow: stop the runner via the user gate, then re-open the
     // builder pre-seeded with the running loop's name + notes + click list
     // so the user can edit before hitting Run again.
+    // Seed a fresh builder session from a saved / cached / running loop — the FULL
+    // loadout, not just the circuit shape. The bare AddClick(key) seeding used before
+    // dropped every per-waypoint setting (command / delay / do-not-rest / do-not-attack)
+    // AND the loop-wide Only-attack-in-lair flag, so re-opening or re-running a cached
+    // loop lost them (a do-not-attack room came back un-flagged). Used by every path
+    // that opens the builder from an existing loop: Load, the cached-last-loop preload,
+    // and pause-opens-builder.
+    private static void SeedBuilderFromLoop(LoopBuilderSessionViewModel builder, Loop loop)
+    {
+        builder.ProposedName          = loop.Name;
+        builder.Notes                 = loop.Notes;
+        builder.OnlyAttackInLairRooms = loop.OnlyAttackInLairRooms;
+        foreach (LoopWaypoint w in loop.Waypoints)
+        {
+            int before = builder.Clicks.Count;
+            builder.AddClick(w.Key);
+            // AddClick skips a room that's not in the graph; only attach the action
+            // when the click actually landed, so the row index stays aligned.
+            if (builder.Clicks.Count > before)
+                builder.SetClickAction(builder.Clicks.Count - 1,
+                    w.Command, w.DelayMs, w.DoNotRest, w.DoNotAttack);
+        }
+    }
+
     private void OpenBuilderForRunningLoop()
     {
         Game.Map.LoopRunner runner = _services.LoopRunner;
@@ -4201,9 +4231,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         var builder = new LoopBuilderSessionViewModel(
             _services.Loops, _services.RoomGraph, _services.Movement);
         builder.PropertyChanged += OnLoopBuilderPropertyChanged;
-        builder.ProposedName = loop.Name;
-        builder.Notes        = loop.Notes;
-        foreach (LoopWaypoint w in loop.Waypoints) builder.AddClick(w.Key);
+        SeedBuilderFromLoop(builder, loop);
 
         LoopBuilder = builder;
         CurrentMode = NavigationMode.LoopBuild;
