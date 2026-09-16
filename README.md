@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.18**
-> - Spell Game Data tab: new "Cast in rooms" lists every room the spell is cast in with clickable map links (first 20 inline, the rest behind a "show N more" expander), replacing the old "Cast By" row's capped, unlinked room tokens (non-room casters still shown there)
-> - Carry-gate rows now labelled with their source command: "Requires carrying (checkitem)" / "Avoided by carrying (failitem)"
-> - New "Conditional effects" tree surfaces a room spell's percentage-gated logic — level/carry/no-NPC branches → weighted outcomes → summon / cast / teleport effects, each a link to its record or map room; effects read top-down so a mid-line gate nests only its trailing steps; huge teleport sweeps collapse to a one-line summary that expands to the individual rooms; Expand all / Collapse all buttons drive the whole tree
+> **Version 3.88.19**
+> - A due self-buff recast (e.g. under Self-Bless-While-Resting) standing the character up mid-rest no longer prematurely ends the recovery — the gate used to fall back to the low rest-trigger the instant position left Resting/Meditating, releasing movement with the pool still far short of its rest-max target; it now keeps chasing the real target and re-sits until it's actually reached
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
