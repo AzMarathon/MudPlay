@@ -1,5 +1,9 @@
 # Version history
 
+## 3.94.4
+
+- Exp/hr estimator: the assumption knobs (I'm Rooming, Seconds per room, Rounds to kill a mob, Real-world multiplier) now live in a **⚙ Estimate Settings** flyout at the top of the panel — mirroring the loop builder's Entire Loop Settings — so the panel leads with the result and room list instead of the knobs
+
 ## 3.94.3
 
 - New Loop / Edit Loop editor: the waypoint table's "No rest" / "No atk" checkboxes now line up under their column headers — the ↑↓✕ button columns were auto-sized (empty in the header), which widened the header's Waypoints column and shifted every column after it off its cells

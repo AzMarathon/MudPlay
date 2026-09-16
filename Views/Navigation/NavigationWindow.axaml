@@ -2154,6 +2154,66 @@
                                                 IsVisible="{Binding ExpEstimator.HasClicks}"
                                                 Command="{Binding ClearEstimatorClicksCommand}"/>
 
+                                        <!-- Estimate Settings — the estimator's assumption knobs (I'm
+                                             Rooming, seconds per room, rounds to kill, real-world
+                                             multiplier), tucked into a flyout header the same way the
+                                             loop builder's Entire Loop Settings is, so the panel leads
+                                             with the result and the room list instead of the knobs. -->
+                                        <Button HorizontalAlignment="Center"
+                                                HorizontalContentAlignment="Center"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Padding="2,0"
+                                                FontSize="13"
+                                                Content="⚙  Estimate Settings  ⚙"
+                                                ToolTip.Tip="The assumptions the exp/hr estimate is built on — how you fight and how fast you move.">
+                                            <Button.Flyout>
+                                                <Flyout Placement="Bottom">
+                                                    <StackPanel Spacing="6" Width="250">
+                                                        <TextBlock Text="Estimate Settings"
+                                                                   FontSize="11" FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                                                        <CheckBox IsChecked="{Binding ExpEstimator.AreaCombat, Mode=TwoWay}"
+                                                                  FontSize="11"
+                                                                  ToolTip.Tip="On: you hit every mob in the room at once, so a room clears in your rounds-to-kill no matter how many mobs. Off: you kill mobs one at a time (room cost scales with the mob count)."
+                                                                  Content="I'm Rooming"/>
+                                                        <!-- Labels stack ABOVE each picker and wrap so a long
+                                                             label doesn't clip the value in the narrow flyout. -->
+                                                        <StackPanel Spacing="2">
+                                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                       Text="Seconds per room (loop pace)"/>
+                                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
+                                                                           Value="{Binding ExpEstimator.SecondsPerStep, Mode=TwoWay}"
+                                                                           Minimum="0" Maximum="30" Increment="0.1"
+                                                                           FormatString="0.0" ShowButtonSpinner="True"
+                                                                           ToolTip.Tip="Your EFFECTIVE time per room while looping — NOT your raw walk speed. In a fighting loop each room is a move command + its server round-trip + an attack + the combat tick, so the real pace is ~1.2–1.4s even at 1.0 movespeed (default 1.4). Set it too low and a loop that backtracks past cleared lairs reads too high. Only costs exp when a hop is too long to finish inside a 5s round; short hops ride the downtime free."/>
+                                                        </StackPanel>
+                                                        <StackPanel Spacing="2">
+                                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                       Text="Rounds to kill a mob"/>
+                                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
+                                                                           Value="{Binding ExpEstimator.RoundsPerMob, Mode=TwoWay}"
+                                                                           Minimum="0.1" Maximum="50" Increment="0.5"
+                                                                           FormatString="0.0" ShowButtonSpinner="True"
+                                                                           ToolTip.Tip="Average combat rounds to kill one monster (5s per round). When rooming, this is the rounds to clear the whole room."/>
+                                                        </StackPanel>
+                                                        <StackPanel Spacing="2">
+                                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                       Text="Real-world multiplier (0–1)"/>
+                                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
+                                                                           Value="{Binding ExpEstimator.RealConditionsMultiplier, Mode=TwoWay}"
+                                                                           Minimum="0.1" Maximum="1" Increment="0.01"
+                                                                           FormatString="0.00" ShowButtonSpinner="True"
+                                                                           ToolTip.Tip="Haircut for real conditions (regen breaks, missed rounds, travel). 1.0 = perfect play; 0.9 default."/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Flyout>
+                                            </Button.Flyout>
+                                        </Button>
+
                                         <!-- Headline result. -->
                                         <Border Background="{StaticResource ChromeBgElevBrush}"
                                                 BorderBrush="#2F8F83" BorderThickness="1"
@@ -2304,48 +2364,6 @@
                                                 </DataTemplate>
                                             </ListBox.ItemTemplate>
                                         </ListBox>
-
-                                        <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>
-
-                                        <CheckBox IsChecked="{Binding ExpEstimator.AreaCombat, Mode=TwoWay}"
-                                                  FontSize="11"
-                                                  ToolTip.Tip="On: you hit every mob in the room at once, so a room clears in your rounds-to-kill no matter how many mobs. Off: you kill mobs one at a time (room cost scales with the mob count)."
-                                                  Content="I'm Rooming"/>
-
-                                        <!-- Labels stack ABOVE each picker and wrap: the rail is only
-                                             290px wide, so a side-by-side label + full-size
-                                             NumericUpDown clips the value and a long single-line label
-                                             pushes the section wider than its neighbours. -->
-                                        <StackPanel Spacing="2">
-                                            <TextBlock FontSize="11" TextWrapping="Wrap"
-                                                       Foreground="{StaticResource ChromeFgSecBrush}"
-                                                       Text="Seconds per room (loop pace)"/>
-                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
-                                                           Value="{Binding ExpEstimator.SecondsPerStep, Mode=TwoWay}"
-                                                           Minimum="0" Maximum="30" Increment="0.1"
-                                                           FormatString="0.0" ShowButtonSpinner="True"
-                                                           ToolTip.Tip="Your EFFECTIVE time per room while looping — NOT your raw walk speed. In a fighting loop each room is a move command + its server round-trip + an attack + the combat tick, so the real pace is ~1.2–1.4s even at 1.0 movespeed (default 1.4). Set it too low and a loop that backtracks past cleared lairs reads too high. Only costs exp when a hop is too long to finish inside a 5s round; short hops ride the downtime free."/>
-                                        </StackPanel>
-                                        <StackPanel Spacing="2">
-                                            <TextBlock FontSize="11" TextWrapping="Wrap"
-                                                       Foreground="{StaticResource ChromeFgSecBrush}"
-                                                       Text="Rounds to kill a mob"/>
-                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
-                                                           Value="{Binding ExpEstimator.RoundsPerMob, Mode=TwoWay}"
-                                                           Minimum="0.1" Maximum="50" Increment="0.5"
-                                                           FormatString="0.0" ShowButtonSpinner="True"
-                                                           ToolTip.Tip="Average combat rounds to kill one monster (5s per round). When rooming, this is the rounds to clear the whole room."/>
-                                        </StackPanel>
-                                        <StackPanel Spacing="2">
-                                            <TextBlock FontSize="11" TextWrapping="Wrap"
-                                                       Foreground="{StaticResource ChromeFgSecBrush}"
-                                                       Text="Real-world multiplier (0–1)"/>
-                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
-                                                           Value="{Binding ExpEstimator.RealConditionsMultiplier, Mode=TwoWay}"
-                                                           Minimum="0.1" Maximum="1" Increment="0.01"
-                                                           FormatString="0.00" ShowButtonSpinner="True"
-                                                           ToolTip.Tip="Haircut for real conditions (regen breaks, missed rounds, travel). 1.0 = perfect play; 0.9 default."/>
-                                        </StackPanel>
 
                                     </StackPanel>
                                 </StackPanel>
