@@ -544,13 +544,12 @@ public sealed class CombatManagerSpellsTests
     // Report paradigm-20260815-202319 ("not re-engaging combat after buffing mid-combat"):
     // a between-round self-buff (armr) fires, then the round's nuke (lbol, MaxCasts=1)
     // KILLS one mob in a multi-mob room. The death→re-observe re-picks the live survivor
-    // as BOTH _currentTarget and _castingSpellTarget, but its re-cast loses the round's
-    // slot to the 500ms burst guard — parking the engine in _combatOff spell mode. The
-    // spell heartbeat bails while _combatOff, and the between-round-cast spell-resume used
-    // to be blocked by the DeathInterruptWindow (a DIFFERENT mob just died), so nothing
-    // re-engaged until the survivor's OWN swing woke OnCombatLine ~5s later. The resume now
-    // recognises a re-picked live survivor (currentTarget == castingSpellTarget, present in
-    // the resynced roster) and fires immediately on the kill's *Combat Off*.
+    // as BOTH _currentTarget and _castingSpellTarget. Fresh-engage dispatch now bypasses
+    // CastCoordinator's recast-interval burst guard (report paradigm-20260916-033047 —
+    // GAME_MECHANICS.md's confirmed rule that a between-round buff and a real attack
+    // spell are independent slots server-side), so the survivor's re-cast fires
+    // immediately at the re-observe instead of waiting on the kill's *Combat Off* to
+    // trigger a separate resume path.
     [Fact]
     public void BetweenRoundBuff_KillLeavesSurvivor_ResumesSurvivorImmediately()
     {
@@ -566,22 +565,15 @@ public sealed class CombatManagerSpellsTests
         // A between-round survival buff interrupts the round (it drops *Combat Off*).
         h.Cast.NotifyExternalCastSent();
         h.Combat.NoteBetweenRoundCast();
+        int sentBeforeReObserve = h.Sent.Count;
 
         // lbol kills rotworm this round; its exp drops the target. The room re-display
-        // then hands us the survivor, which the re-observe re-picks — but the re-cast
-        // loses the round's slot to the burst guard, so nothing new goes out yet (parked
-        // in _combatOff spell mode with the survivor latched).
+        // then hands us the survivor, which the re-observe re-picks and immediately
+        // re-engages — the buff and the attack spell no longer compete for the round.
         h.Feed("You gain 100 experience.");
         h.Feed("Also here: thin leprous outcast.");
-        Assert.Equal("lbol rotworm", h.LastSent);            // re-pick's cast blocked — still parked
-        int sentBeforeOff = h.Sent.Count;
 
-        // The kill's *Combat Off* lands in the resume window: the survivor re-engages
-        // immediately (cascade reset for the new target → the normal spell) instead of
-        // stalling a full round.
-        h.Feed("*Combat Off*");
-
-        Assert.Equal(sentBeforeOff + 1, h.Sent.Count);
+        Assert.Equal(sentBeforeReObserve + 1, h.Sent.Count);
         Assert.Equal("lbol thin leprous outcast", h.LastSent);
     }
 
@@ -1503,8 +1495,7 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: giant rat.");        // announce harm at the rat (per-target cap 1)
         Assert.Equal("harm giant rat", h.LastSent);
         h.Feed("The giant rat dies.");          // kill → per-target counters reset
-        h.Feed("Also here: orc.");
-        h.Tick();
+        h.Feed("Also here: orc.");              // fresh engage fires immediately — no tick needed
 
         Assert.Equal("harm orc", h.LastSent);   // spell again, not weapon
     }
@@ -2289,18 +2280,23 @@ public sealed class CombatManagerSpellsTests
         Assert.Null(h.Combat.Snapshot().CurrentTarget);
     }
 
-    // Report paradigm-20260824-215802: engaged a fresh shade after a kill left
-    // _combatOff stuck true, but the attack spell lost the round's cast slot to a
-    // self-buff sent moments earlier (blocked by CastCoordinator's MinRecastInterval
-    // guard — a genuine, correct block, not a bug on its own). DispatchRoundAction's
-    // default case only cleared _combatOff inside the TryCast-succeeded branch, so a
-    // blocked engage left it stuck — OnCombatTick's spell-mode heartbeat gates on
-    // !_combatOff, so nothing ever retried the attack for the rest of the fight (the
-    // character sat there getting hit with no offense at all). _combatOff must clear
-    // as soon as the engine commits to engaging this round, whether or not the send
-    // itself succeeds, so the very next tick gets a chance to retry.
+    // Report paradigm-20260916-033047: a between-round self-buff (Energy=0 —
+    // prfl / vlwa / etc.) landing the instant a fresh monster arrives used to
+    // hand the newcomer a free round. GAME_MECHANICS.md's confirmed rule (2026-08-16)
+    // is that a between-round spell "rides between the round's main action, so
+    // one is free each round on top of your attack" — a 0-energy buff and a real
+    // attack spell (500+ energy) are independent slots server-side, never
+    // competing for the same round. CastCoordinator's MinRecastInterval is a
+    // pure client-side burst guard against CastingDirector re-firing its OWN
+    // casts within one frame (its own doc comment: combat's dispatch is already
+    // paced once-per-round, "so it can't burst") — it was never meant to model
+    // the server's real per-round rule, but a fresh engage's DispatchRoundAction
+    // call didn't bypass it, so an unrelated buff moments earlier deferred the
+    // attack to the next tick regardless — a full free round for whatever just
+    // walked in. bypassRecastInterval on the fresh-engage dispatch (mirroring the
+    // already-fixed debuff-then-attack case) fires the attack immediately instead.
     [Fact]
-    public void EngageBlockedByRecastInterval_ClearsCombatOff_RetriesNextTick()
+    public void EngageAfterBetweenRoundBuff_AttacksImmediately_NotBlocked()
     {
         using Harness h = new();
         h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
@@ -2309,34 +2305,29 @@ public sealed class CombatManagerSpellsTests
         // A prior kill's *Combat Off* leaves _combatOff true, same as production.
         h.Feed("*Combat Off*");
 
-        // A cast just went out (e.g. a self-buff) — stamps CastCoordinator's
-        // recast-interval clock.
+        // A between-round self-buff just went out — stamps CastCoordinator's
+        // recast-interval clock, same as it would moments before a fresh arrival.
         Assert.True(h.Cast.TryCast("vlwa"));
         Assert.Equal("vlwa", h.LastSent);
 
         // A fresh engage arrives immediately after — well within MinRecastInterval
-        // (500ms) — so the attack-spell TryCast is synchronously blocked. Before the
-        // fix, _combatOff stayed stuck true here and nothing ever retried.
+        // (500ms). The attack must fire the SAME tick, not defer to the next round.
         h.Feed("Also here: shade.");
-        Assert.Equal("vlwa", h.LastSent);              // still blocked — nothing new sent
-        Assert.False(h.Combat.CombatOff);              // the fix: cleared regardless of the block
-        Assert.Equal("shade", h.Combat.Snapshot().CastingSpellTarget);
-
-        // Past the recast-interval guard, the next tick must retry and actually attack.
-        h.AdvanceClock(TimeSpan.FromMilliseconds(600));
-        h.Cast.OnCombatTick();
-        h.Combat.OnCombatTick();
 
         Assert.Equal("turn shade", h.LastSent);
+        Assert.False(h.Combat.CombatOff);
+        Assert.False(h.Combat.IsSpellAttackOwed);
     }
 
     // Follow-up report paradigm-20260824-235607 reproduced the same visible stall
     // after the _combatOff fix, but from a fresh process. With no prior hit/miss,
-    // TickEngine.LastCombatTick was null. The initial attack lost the burst guard to
-    // a login self-buff, no attack reached the server, and the shade's armour-block
-    // wording ("reaches out for you") matched none of TickEngine's generic patterns.
-    // The timer fallback therefore never started, so the "retry next tick" promised
-    // by the earlier fix had no tick to run on. A blocked attack must seed the real
+    // TickEngine.LastCombatTick was null. The initial attack was genuinely blocked
+    // (CastCoordinator's failure latch — a fizzle, unlike the now-fixed burst-guard
+    // collision covered by EngageAfterBetweenRoundBuff_AttacksImmediately_NotBlocked
+    // above), no attack reached the server, and the shade's armour-block wording
+    // ("reaches out for you") matched none of TickEngine's generic patterns. The
+    // timer fallback therefore never started, so the "retry next tick" promised by
+    // the earlier fix had no tick to run on. A blocked attack must seed the real
     // fallback and reserve that next round from CastingDirector.
     [Fact]
     public void FreshSession_BlockedEngage_SeedsTickFallbackAndReservesRetryRound()
@@ -2354,11 +2345,13 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "shade");
 
         Assert.Null(tick.LastCombatTick); // brand-new process: no prior combat cadence
-        Assert.True(h.Cast.TryCast("vlwa"));
+        // A genuine server-side failure (fizzle) latches CastCoordinator's block —
+        // the ONE thing bypassRecastInterval must never punch through.
+        h.Feed("You attempt to cast heal, but fail.");
 
         h.Feed("Also here: shade.");
 
-        Assert.Equal("vlwa", h.LastSent); // attack was locally burst-blocked
+        Assert.Empty(h.Sent);                    // attack genuinely blocked, nothing sent
         Assert.False(h.Combat.CombatOff);
         Assert.True(h.Combat.IsSpellAttackOwed); // no second buff may steal the retry
         Assert.NotNull(tick.LastCombatTick);      // production timer fallback can now fire
