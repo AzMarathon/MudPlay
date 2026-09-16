@@ -3638,4 +3638,78 @@ public sealed class HealthManagerTests
         h.Health.NoteRoomChanged();
         Assert.False(h.ManaGateHeld);
     }
+
+    // ----- gear-swap max-pool fluctuation freeze -------------------------
+    // Regression for paradigm-20260916-141742: a pre-rest gear swap's +MaxMana
+    // confirmations stream in AFTER the send finishes, so PlayerState.MaxMa (and the
+    // %-based rest target derived from it) walks through partial values while the pool
+    // value stays pinned. A percentage target that momentarily drops UNDER the pinned
+    // mana cleared the rest gate as "recovered" though mana never rose — recovery-complete
+    // reverted to Default, the max jumped back, the pool re-read below trigger, and the
+    // pre-rest swap fired again: the Pre-rest⇄Default gear thrash. The gate must hold
+    // through the unsettled window and only re-decide once the max holds steady.
+
+    [Fact]
+    public void MaGateResting_GearSwapLowersMaxUnderPinnedMana_HoldsGateThenClearsOnceSettled()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Percentage,
+            RestIfBelowMa = 50,   // trigger 50% of max
+            RestMaxMa = 60,       // rest-target 60% of max
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+
+        // max 800 → trigger 400, target 480. Ma 390 < 400 → assert + meditate.
+        h.SetPrompt(hp: 700, maxHp: 700, ma: 390, maxMa: 800);
+        h.DrainPost();
+        Assert.True(h.ManaGateHeld);
+        Assert.Contains("meditate", h.SentLines);
+
+        // Sitting to recover — now actively resting, so the clear floor is the target.
+        h.State.Position = PlayerPosition.Meditating;
+        h.Health.Evaluate();
+        Assert.True(h.ManaGateHeld);
+
+        // A pre-rest gear swap lowers MaxMa to 600 (target 60% → 360). Mana is pinned at
+        // 390 — it never regenerated — yet 390 >= 360 would clear the gate on the old
+        // code. The max just moved, so the gate must FREEZE, not clear.
+        h.Clock += TimeSpan.FromMilliseconds(200);
+        h.SetPrompt(hp: 700, maxHp: 700, ma: 390, maxMa: 600);
+        Assert.True(h.ManaGateHeld);
+
+        // Max holds steady past the settle window. Now the gate re-decides against the
+        // settled max (target 360) — the pool genuinely sits above it → clears once.
+        h.Clock += TimeSpan.FromSeconds(2);
+        h.Health.Evaluate();
+        Assert.False(h.ManaGateHeld);
+    }
+
+    // A real regen recovery with a STEADY max still clears at the target — the freeze
+    // must not strand a genuine top-off (it only holds while the max is moving).
+    [Fact]
+    public void MaGateResting_ManaRegensToTargetWithSteadyMax_ClearsNormally()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Percentage,
+            RestIfBelowMa = 50,
+            RestMaxMa = 60,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+
+        h.SetPrompt(hp: 700, maxHp: 700, ma: 390, maxMa: 800);   // < 400 trigger → assert
+        h.DrainPost();
+        Assert.True(h.ManaGateHeld);
+        h.State.Position = PlayerPosition.Meditating;
+        h.Health.Evaluate();
+        Assert.True(h.ManaGateHeld);
+
+        // Regen climbs mana to the target with max unchanged — a genuine recovery.
+        h.Clock += TimeSpan.FromSeconds(5);
+        h.SetPrompt(hp: 700, maxHp: 700, ma: 490, maxMa: 800);   // >= 480 target
+        Assert.False(h.ManaGateHeld);
+    }
 }

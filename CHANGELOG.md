@@ -1,11 +1,13 @@
 # Version history
 
-## 3.88.29
+## 3.88.31
 
 - New per-slot option under the AoE-debuff slot, "Only cast on the first round in a room": the AoE debuff is attempted only on room entry (before the first combat round) and abandoned once the fight is underway — so when a higher-priority buff/heal takes the room-entry between-round slot, the debuff is skipped rather than cast on a half-dead room the next round (wasted mana). Default off: keep offering it each round until it lands once for the room.
 - Multi-attack no longer double-fires when a deferred combat-resume runs right after the round's attack already went out — the deferred resume is now abandoned if an attack fired during its delay window (a path the earlier double-fire guard didn't cover)
 - Gear no longer strands you travelling and fighting in weak pre-rest gear — resuming the loop after a rest (or after a combat-clear swap-back into a pre-rest set) now reverts to your travel gear: the While-Moving set if enabled, otherwise Default. Before, with no While-Moving set the resume did nothing and left the pre-rest loadout on through several rooms and into combat (getting ravaged). The pre-rest set is now held only while you're actually sitting, and pre-rest swaps are suppressed while in combat
-- bug reports addressed: paradigm-20260916-104702, paradigm-20260916-104923, paradigm-20260916-105458
+- Meditate no longer flip-flops your gear between the pre-rest set and Default while you sit — a pre-rest set that changes your max mana/HP made the percentage rest-target ride the pool's momentary size as the swap's wear/rem echoes streamed in, so the target briefly dropped under your (unchanged) mana and the rest "completed" without you actually recovering, only to re-trigger a beat later. The rest gate now waits for the pool's max to settle after a gear swap before deciding you've recovered, so it meditates in the pre-rest set until mana genuinely tops off, then reverts once
+- Attack spells no longer fire at a "dead thing" — when a monster is killed in the split-second after you enter a room (during the arrival hold that waits for the room to settle), the engine now waits for the room to re-display instead of casting at the just-killed mob's stale roster entry
+- bug reports addressed: paradigm-20260916-104702, paradigm-20260916-104923, paradigm-20260916-105458, paradigm-20260916-141344, paradigm-20260916-141742
 
 ## 3.88.25
 

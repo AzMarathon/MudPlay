@@ -251,6 +251,7 @@ public sealed partial class CombatManager : IDisposable
     // engage latency, so keep it short.
     private static readonly TimeSpan ArrivalSettleWindow = TimeSpan.FromMilliseconds(350);
     private bool _arrivalSettleArmed;
+    private DateTimeOffset _arrivalSettleArmedAt;
     private bool _arrivalSettleBypass;
     private Action<TimeSpan, Action>? _scheduleArrivalSettle;
 
@@ -1165,6 +1166,22 @@ public sealed partial class CombatManager : IDisposable
         if (_disposed || !_arrivalSettleArmed) return;
         _arrivalSettleArmed = false;
         if (_classifier.Current is not { } cur) return;
+        // A monster died DURING this settle window (a burst kill landing between arm and
+        // now). Its death forced a roster resync (a room re-display) that hasn't arrived
+        // yet, so the accumulated roster can still name the just-killed mob — or a fresh
+        // same-named arrival that isn't confirmed in-room. Engaging now re-picks that
+        // name and corpse-casts at a target the server rejects a beat later with
+        // "you don't see X here" (report paradigm-20260916-141344: nebo at a dead
+        // muckworm). Defer to the in-flight resync: force the re-display and let the
+        // confirmed, pruned roster drive a clean engage instead of racing it.
+        if (_lastDeathAt > _arrivalSettleArmedAt)
+        {
+            _log?.Combat(LogCategory,
+                "arrival-settle: a kill landed during the window — deferring engage to the "
+                + "roster resync so the round's action can't corpse-cast a just-killed mob");
+            TrySendRoomRefresh("kill during arrival-settle");
+            return;
+        }
         _log?.Combat(LogCategory,
             "arrival-settle: window elapsed with no room re-display — engaging the accumulated room");
         _arrivalSettleBypass = true;
@@ -1448,6 +1465,7 @@ public sealed partial class CombatManager : IDisposable
             if (!_arrivalSettleArmed)
             {
                 _arrivalSettleArmed = true;
+                _arrivalSettleArmedAt = DateTimeOffset.Now;
                 _log?.Combat(LogCategory,
                     $"arrival-settle: holding first engage {ArrivalSettleWindow.TotalMilliseconds:F0}ms " +
                     "so a simultaneous burst + room re-display decide together");
