@@ -226,7 +226,7 @@
                             IsEnabled="{Binding EnableTokenRoutes}">
                     <TextBlock Classes="FieldLabel" Text="Only when it saves at least"/>
                     <NumericUpDown Value="{Binding TokenRouteMinRoomsShorter, Mode=TwoWay}"
-                                   Minimum="1" Maximum="50" Increment="1"
+                                   Minimum="1" Maximum="300" Increment="1"
                                    FormatString="0" ShowButtonSpinner="True"
                                    Width="120" MinWidth="120"
                                    ToolTip.Tip="A token route is only offered when it reaches the destination at least this many rooms sooner than walking. A one- or two-room saving isn't worth a token's gold, daily charge, and buff-wipe. Default 3. Applies to every character on this install."/>
@@ -236,7 +236,7 @@
                           IsChecked="{Binding TokenUseWhenPartyIncomplete, Mode=TwoWay}"
                           Margin="0,6,0,0"
                           IsEnabled="{Binding EnableTokenRoutes}"
-                          ToolTip.Tip="Only matters as a party leader. After tokening, the leader sends the party across and waits for everyone to follow (retrying a few times). When UNCHECKED (default): if someone still can't follow, the leader does NOT token — it stops in the room with the reason in the nav header so you can sort it out. When checked: the leader uses its token anyway and walks on, leaving the stragglers behind. Applies to every character on this install."/>
+                          ToolTip.Tip="Only matters as a party leader. On a token route the leader sends the party across FIRST and waits for everyone to follow (retrying a few times), then tokens across itself LAST. When UNCHECKED (default): if a member still can't follow, the leader does NOT token — it stays in the room with the reason in the nav header so you can sort it out. When checked: the leader tokens across anyway and walks on, leaving the stragglers behind. Applies to every character on this install."/>
             </StackPanel>
 
             <!-- Cleanup-Player-Database row: prose-style "Cleanup Player

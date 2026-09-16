@@ -105,9 +105,9 @@ public sealed class GlobalSettings
     public bool EnableTokenRoutes { get; set; } = true;
 
     // Only surface a token route when it saves at least this many rooms over the
-    // overland walk (a token use costs gold, a daily charge, and wipes buffs, so a
-    // one-room saving isn't worth offering). Install-wide; default 3.
-    public int TokenRouteMinRoomsShorter { get; set; } = 3;
+    // overland walk (a token use costs gold, a daily charge, and wipes buffs, so it's
+    // only worth offering for a big saving). Install-wide; default 50.
+    public int TokenRouteMinRoomsShorter { get; set; } = 50;
 
     // Party token-route behaviour when some members fail to token across after the
     // regroup retries. false (default) — the leader does NOT token; it fails out in

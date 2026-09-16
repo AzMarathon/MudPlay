@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.92.0**
-> - Buffing pauses when a transport-token use is imminent (the token's negate magic wipes buffs) — held until the token fires or 30s, then resumes; works whether you token or a leader sends you across
-> - The **Buff Watchdog** shows a "Paused by token usage" status while the hold is active
-> - Party token retries now re-broadcast `.@party` (only members still present are re-told) instead of per-member `@do` — no Execute-commands grant needed
+> **Version 3.92.1**
+> - Token route "minimum rooms saved" now defaults to 50 (was 3) — a token's gold + charge + buff-wipe is only worth a big shortcut; the spinner now goes to 300
+> - Corrected the party-token setting's tooltip to the real order (party across first, leader last)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

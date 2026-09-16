@@ -1,5 +1,10 @@
 # Version history
 
+## 3.92.1
+
+- Token route "minimum rooms saved" now defaults to 50 (was 3) — a token's gold + charge + buff-wipe is only worth it for a big shortcut; the spinner now goes up to 300
+- Corrected the party-token setting's tooltip to the real order (party across first, leader last)
+
 ## 3.92.0
 
 - Buffing now pauses when a transport-token use is imminent (the token's negate magic wipes every buff) — held until the token fires or 30 seconds elapse, then resumes; works whether you use the token yourself or a party leader sends you across (`@party`/`@do use …`, full name or shorthand)

@@ -184,7 +184,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // Paradigm realm (IsParadigmRealm), since tokens are a Paradigm-only item.
     [ObservableProperty] private bool _enableTokenRoutes = true;
     // Only surface a token route when it saves at least this many rooms over walking.
-    [ObservableProperty] private int _tokenRouteMinRoomsShorter = 3;
+    [ObservableProperty] private int _tokenRouteMinRoomsShorter = 50;
     // Party token behaviour when members can't follow after the regroup retries: off
     // (default) waits/fails out in the room; on uses the token anyway and leaves them.
     [ObservableProperty] private bool _tokenUseWhenPartyIncomplete;
@@ -271,7 +271,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         // setting per install). Persist alongside the char-tier write so the
         // user's single Apply commits everything.
         int sanitized = Math.Clamp(PlayerCleanupDays, 0, 3650);
-        int tokenMin = Math.Clamp(TokenRouteMinRoomsShorter, 1, 50);
+        int tokenMin = Math.Clamp(TokenRouteMinRoomsShorter, 1, 300);
         GlobalSettings g = _globalSettings.Current;
         if (g.PlayerCleanupDays != sanitized
             || g.PyramidSolverEnabled != PyramidSolverEnabled
@@ -330,7 +330,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         PyramidSolverEnabled = _globalSettings?.Current.PyramidSolverEnabled ?? true;
         AsylumSolverEnabled = _globalSettings?.Current.AsylumSolverEnabled ?? true;
         EnableTokenRoutes = _globalSettings?.Current.EnableTokenRoutes ?? true;
-        TokenRouteMinRoomsShorter = _globalSettings?.Current.TokenRouteMinRoomsShorter ?? 3;
+        TokenRouteMinRoomsShorter = _globalSettings?.Current.TokenRouteMinRoomsShorter ?? 50;
         TokenUseWhenPartyIncomplete = _globalSettings?.Current.TokenUseWhenPartyIncomplete ?? false;
         ApplyToServices(dto);
     }
