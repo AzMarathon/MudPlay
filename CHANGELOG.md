@@ -5,6 +5,7 @@
 - Paradigm route picker now offers a blue **token card** alongside the normal walk when a held transport token reaches your destination faster — never auto-taken, always your pick
 - Picking it uses the token and resumes the walk from where it drops you; if the room isn't monster-free it walks overland and uses the token at the first clear room (solo only for now — party regroup is still to come)
 - New **Settings → Other** knobs (Paradigm only): turn token routing off, and set how many rooms a token must save before the card appears
+- The Paradigm message seed now recognizes each transport token's use lines — your own "You invoke the token…" and the witnessed "&lt;name&gt; invokes a token…" — linked to their token spells
 
 ## 3.89.0
 
