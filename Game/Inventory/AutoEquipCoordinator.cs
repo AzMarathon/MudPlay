@@ -345,7 +345,14 @@ public sealed class AutoEquipCoordinator : IDisposable
         if (_inLairDefault && _readEquipment().SwapToDefaultBeforeLairs) return;
         _inLairDefault = false;
         if (_player.InCombat) return;
-        if (_hpGateAsserted() || _maGateAsserted()) return;
+        // Hold the pre-rest set only while we're actually SITTING (a rest posture) — not
+        // on a lingering rest-gate flag. A rest gate stays asserted until the pool tops
+        // off at rest-target, but the loop can resume travelling before then (e.g. the HP
+        // rest finished and it moved on while mana is still below its target). Gating on
+        // the gate FLAG left the character travelling — and fighting — in weak pre-rest
+        // gear for rooms on end (report paradigm-20260916-104923). Once we're up and
+        // moving, wear the movement set; the pre-rest set resumes only if we sit again.
+        if (IsRestPosture(_player.Position)) return;
         if (CurrentRoomIsBoss()) return;
         if (!MovementSetActive()) return;
         _inMovementSet = true;

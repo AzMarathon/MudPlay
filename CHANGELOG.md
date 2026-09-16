@@ -4,7 +4,7 @@
 
 - New per-slot option under the AoE-debuff slot, "Only cast on the first round in a room": the AoE debuff is attempted only on room entry (before the first combat round) and abandoned once the fight is underway — so when a higher-priority buff/heal takes the room-entry between-round slot, the debuff is skipped rather than cast on a half-dead room the next round (wasted mana). Default off: keep offering it each round until it lands once for the room.
 - Multi-attack no longer double-fires when a deferred combat-resume runs right after the round's attack already went out — the deferred resume is now abandoned if an attack fired during its delay window (a path the earlier double-fire guard didn't cover)
-- Gear no longer swaps into a weak pre-rest set mid-combat — a sit/rest posture during a fight (or the swap-to-Default-on-combat thrash) kept re-equipping rest gear and getting the character ravaged; pre-rest swaps are now suppressed while in combat, and the rest set is restored only once the fight clears
+- Gear no longer strands you travelling and fighting in weak pre-rest gear — when the loop resumes moving after a rest, it now wears the While-Moving / Default set even if a rest gate still lingers (an HP rest finishing while mana was still below its target used to keep you in pre-rest gear for rooms on end, then into combat, getting ravaged); the pre-rest set is held only while you're actually sitting, and pre-rest swaps are also suppressed while in combat
 - bug reports addressed: paradigm-20260916-104702, paradigm-20260916-104923, paradigm-20260916-105458
 
 ## 3.88.25

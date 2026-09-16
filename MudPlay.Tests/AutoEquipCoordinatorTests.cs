@@ -678,6 +678,53 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Equal(new[] { "default-set" }, applied);
     }
 
+    // Report paradigm-20260916-104923: an HP rest finished and the loop resumed moving
+    // while the MANA gate still lingered (pool below rest-target). The movement-gear swap
+    // must fire — standing + travelling wears the movement set even with a lingering rest
+    // gate; only an actual rest posture holds the pre-rest gear.
+    [Fact]
+    public void MovementStarted_RestGateLingeringButStanding_WearsMovementSet()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player, readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => true,        // mana rest still lingering below target
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        coord.OnMovementStarted();
+        Assert.Equal(new[] { "move-set" }, applied);
+    }
+
+    [Fact]
+    public void MovementStarted_WhileSittingAtRest_HoldsPreRestGear()
+    {
+        // The other half: actually SITTING (rest posture) still holds — no movement swap.
+        var player = new PlayerState { Position = PlayerPosition.Resting };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player, readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => true,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        coord.OnMovementStarted();
+        Assert.Empty(applied);
+    }
+
     [Fact]
     public void EmptyMovementSet_DoesNotSuppressLoopStartDefault()
     {
