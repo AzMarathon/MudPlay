@@ -173,8 +173,9 @@ public sealed class SpellsGameDataTabTests : IDisposable
     public void CastBy_DropsRedundantRoomTokens_KeepsMonsterCaster()
     {
         // "Cast By" room tokens are now rendered in full by "Cast in rooms", so they're
-        // dropped here — only the monster caster remains.
-        Seed("Spells", "[{\"Number\":800,\"Name\":\"sea 1\",\"Casted By\":\"Room #5, Room #6, Monster #877\"}]");
+        // dropped here — only the monster caster remains. The column stores rooms in the
+        // map/room form ("Room 17/1418"), not "Room #N".
+        Seed("Spells", "[{\"Number\":800,\"Name\":\"sea 1\",\"Casted By\":\"Room 17/1418, Room 17/1419, Monster #877\"}]");
         Seed("Monsters", "[{\"Number\":877,\"Name\":\"dark treant\"}]");
         _cache.SwitchSet("v1.11p");
 
@@ -190,7 +191,7 @@ public sealed class SpellsGameDataTabTests : IDisposable
     {
         // When "Cast By" held only rooms (and a "+ more" cap), the row vanishes entirely —
         // the complete list lives in "Cast in rooms".
-        Seed("Spells", "[{\"Number\":801,\"Name\":\"sea 2\",\"Casted By\":\"Room #5, Room #6, +\"}]");
+        Seed("Spells", "[{\"Number\":801,\"Name\":\"sea 2\",\"Casted By\":\"Room 17/1418, Room 17/1419, +\"}]");
         _cache.SwitchSet("v1.11p");
 
         IReadOnlyList<GameDataInfoRow> rows = new SpellsSectionViewModel(_cache).BuildSpellInfoRowsForTests(801);

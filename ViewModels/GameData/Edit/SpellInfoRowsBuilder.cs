@@ -484,12 +484,15 @@ public sealed class SpellInfoRowsBuilder
     // clickable for Monsters / Items / Spells, an inert no-op for other kinds
     // (Room / TextBlock / Class) or a token that doesn't resolve (kept as text so
     // nothing is dropped).
-    // A "<Kind> #N" source token whose kind is a room — the redundant half of the
-    // "Cast By" column now rendered fully by the "Cast in rooms" scan.
+    // A source token whose kind is a room — the redundant half of the "Cast By"
+    // column now rendered fully by the "Cast in rooms" scan. The token leads with
+    // "Room " in either form the denormalized column uses ("Room #1418" or the
+    // map/room "Room 17/1418"), so match on the leading word, not a "#N" shape.
     private static bool IsRoomSourceToken(string token)
     {
-        Match m = SourceToken.Match(token);
-        return m.Success && string.Equals(m.Groups[1].Value, "room", StringComparison.OrdinalIgnoreCase);
+        string t = token.TrimStart();
+        return t.StartsWith("room", StringComparison.OrdinalIgnoreCase)
+            && (t.Length == 4 || !char.IsLetter(t[4]));   // "Room …", not "Roomba…"
     }
 
     private (string Display, ICommand Open, bool Linked) ResolveSource(string token)
