@@ -2170,6 +2170,71 @@ public sealed class HealthManagerTests
         Assert.True(h.Health.RestInFlight);
     }
 
+    [Fact]
+    public void Rest_RepeatedInterruptionsBelowTarget_EachOneStaysAssertedAndResends()
+    {
+        // Report paradigm-20260916-035714: a rest cycle survived one interruption
+        // (a heal cast standing the character up) but not a SECOND one in the same
+        // cycle — the fix must hold across an arbitrary run of interruptions, not
+        // just the first, since wasActivelyResting is recomputed fresh every tick
+        // from _restInFlight + _restConfirmedByPrompt (which the prior resend
+        // re-establishes before the next interruption lands).
+        using Harness h = new();
+        h.State.MaxMa = 0;
+        h.SetPrompt(hp: 200, maxHp: 400);   // below 60% trigger (240)
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(1, h.SentLines.Count(l => l == "rest"));
+
+        h.State.Position = PlayerPosition.Resting;
+
+        // First interruption: HP climbed to 260 (above 240 trigger, below 380 target).
+        h.State.Hp = 260;
+        h.State.Position = PlayerPosition.Standing;
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(2, h.SentLines.Count(l => l == "rest"));
+
+        h.State.Position = PlayerPosition.Resting;
+
+        // Second interruption in the SAME cycle: HP climbed further to 300 (still
+        // above trigger, still below target). Must ALSO stay asserted + resend.
+        h.State.Hp = 300;
+        h.State.Position = PlayerPosition.Standing;
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(3, h.SentLines.Count(l => l == "rest"));
+    }
+
+    [Fact]
+    public void Meditate_InterruptedBelowTarget_GateStaysAssertedAndReMeditates()
+    {
+        // Report paradigm-20260915-211744: SelfBlessWhileResting stands the
+        // character up mid-meditate to recast a due buff (vlwa). MA had already
+        // climbed past the rest-TRIGGER (30%) but was nowhere near the
+        // rest-MAX target (95%) — the interruption must not let the clear-floor
+        // fall back to the trigger and release the gate early; it should stay
+        // asserted and keep re-meditating until the real target is reached.
+        HealthSettings s = new() { UseMeditateAbility = true };
+        using Harness h = new(s);
+        h.State.MaxHp = 200;
+        h.State.Hp = 200;         // HP healthy — only MA gates.
+        h.State.MaxMa = 100;
+        h.State.HasPromptData = true;
+        h.State.Ma = 20;          // below the 30% rest trigger
+        Assert.Equal(1, h.SentLines.Count(l => l == "meditate"));
+        Assert.True(h.Health.MaGateAsserted);
+
+        h.State.Position = PlayerPosition.Meditating;
+        Assert.True(h.Health.RestInFlight);
+
+        // Mana climbed to 60 (above the 30 trigger, far below the 95 target)
+        // when a due self-buff stands the character up.
+        h.State.Ma = 60;
+        h.State.Position = PlayerPosition.Standing;
+
+        Assert.True(h.Health.MaGateAsserted);
+        Assert.Equal(2, h.SentLines.Count(l => l == "meditate"));
+        Assert.True(h.Health.RestInFlight);
+    }
+
     // ----- Hangup-on-emergency (Cluster 5c) -------------------------
 
     [Fact]

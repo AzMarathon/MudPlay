@@ -701,6 +701,20 @@ public sealed class HealthManager : IDisposable
         // clears it unconditionally) masked the bug for movers but not for a
         // party member sitting still recovering mana.
         bool restingFamily = _state.Position is PlayerPosition.Resting or PlayerPosition.Meditating;
+        // Snapshot whether we were genuinely mid-recovery THIS tick, before the
+        // interruption branch below resets it — used only to pick this tick's
+        // clear-floor further down, never persisted. Without it, a same-tick
+        // interruption (a due self-buff standing us up under
+        // SelfBlessWhileResting, or any other momentary stand) flips
+        // _restInFlight false BEFORE the clear-floor check runs, which
+        // silently drops the floor from the rest-MAX target down to the much
+        // lower rest-trigger — clearing a still-below-target gate as if the
+        // trigger were "good enough" and releasing movement having recovered
+        // only a fraction of the intended pool (report paradigm-20260915-211744:
+        // a vlwa recast stood the character up at 356/682 mana, the gate cleared
+        // against the 273 trigger instead of the 614 target, and the loop
+        // resumed immediately).
+        bool wasActivelyResting = _restInFlight && _restConfirmedByPrompt;
         if (_restInFlight && restingFamily)
         {
             _restConfirmedByPrompt = true;
@@ -751,7 +765,7 @@ public sealed class HealthManager : IDisposable
         // has fired (_restInFlight), switch to the target floor so the sit-down
         // holds out to a full recovery instead of standing back up the moment it
         // ticks one point above the trigger.
-        int hpClearFloor = _restInFlight ? hpRestTarget : hpRestTrigger;
+        int hpClearFloor = (_restInFlight || wasActivelyResting) ? hpRestTarget : hpRestTrigger;
 
         // Strictly below — "rest if below N" rests only when the pool is
         // under N, never AT N. (Equal-or-less traps a level-2 mystic: 1 max
@@ -776,7 +790,7 @@ public sealed class HealthManager : IDisposable
                 AsserterName,
                 skipRest
                     ? "do-not-rest room — advancing instead of resting"
-                    : _restInFlight
+                    : _restInFlight || wasActivelyResting
                         ? $"HP {_state.Hp}/{_state.MaxHp} >= rest-target={hpRestTarget}"
                         : $"HP {_state.Hp}/{_state.MaxHp} recovered above rest-trigger={hpRestTrigger} before rest started");
         }
@@ -789,7 +803,7 @@ public sealed class HealthManager : IDisposable
             ? Math.Min(maRestTrigger + 1, maRestMax)
             : maRestMax;
         // See hpClearFloor above — same pre-send-vs-resting distinction for MA.
-        int maClearFloor = _restInFlight ? maRestTarget : maRestTrigger;
+        int maClearFloor = (_restInFlight || wasActivelyResting) ? maRestTarget : maRestTrigger;
 
         // Strictly below (see HP gate above) — the mystic-at-level-2 case.
         if (!skipRest && !_maGateAsserted && _state.Ma < maRestTrigger && _state.MaxMa > 0)
@@ -811,7 +825,7 @@ public sealed class HealthManager : IDisposable
                 AsserterName,
                 skipRest
                     ? "do-not-rest room — advancing instead of resting"
-                    : _restInFlight
+                    : _restInFlight || wasActivelyResting
                         ? $"MA {_state.Ma}/{_state.MaxMa} >= rest-target={maRestTarget}"
                         : $"MA {_state.Ma}/{_state.MaxMa} recovered above rest-trigger={maRestTrigger} before rest started");
         }
