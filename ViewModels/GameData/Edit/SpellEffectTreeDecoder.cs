@@ -269,10 +269,16 @@ public static class SpellEffectTreeDecoder
         }
         if (dests.Count < TeleportCollapseThreshold) return null;
 
-        // The individual destinations, hidden until the summary is expanded.
-        var rooms = new List<SpellEffectNode>(dests.Count);
+        // The destinations are plain rooms (no per-room gate), so stack them as one
+        // wrapped, comma-separated list of "name map/room" links — like the "Cast in
+        // rooms" row — rather than a line per room. Hidden until the summary expands.
+        var linkRuns = new List<MdbInline>();
         foreach ((int m, int r) in dests)
-            rooms.Add(new SpellEffectNode { Runs = new[] { new MdbInline("→ "), RoomLink(ctx, m, r) } });
+        {
+            if (linkRuns.Count > 0) linkRuns.Add(new MdbInline(", "));
+            linkRuns.Add(RoomLink(ctx, m, r, RoomLabel(ctx, m, r)));
+        }
+        var rooms = new[] { new SpellEffectNode { Runs = linkRuns } };
 
         string? common = ctx.RoomNames.TryGetValue(dests[0], out string? n0) ? n0 : null;
         foreach ((int m, int r) in dests)
@@ -283,6 +289,13 @@ public static class SpellEffectTreeDecoder
             ? new List<MdbInline> { new("→ "), RoomLink(ctx, dests[0].Map, dests[0].Room, common), new($" ({count} rooms)") }
             : new List<MdbInline> { new($"→ a random room ({count} destinations)") };
         return (summary, rooms);
+    }
+
+    // "name map/room" for a room, or bare "map/room" when the name is missing.
+    private static string RoomLabel(Ctx ctx, int map, int room)
+    {
+        string mr = $"{map.ToString(CultureInfo.InvariantCulture)}/{room.ToString(CultureInfo.InvariantCulture)}";
+        return ctx.RoomNames.TryGetValue((map, room), out string? n) && n.Length > 0 ? $"{n} {mr}" : mr;
     }
 
     // ----- link runs -----

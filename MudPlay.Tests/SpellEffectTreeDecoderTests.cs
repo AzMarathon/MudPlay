@@ -124,10 +124,12 @@ public sealed class SpellEffectTreeDecoderTests : IDisposable
         Assert.Contains("Deep Sea", text);
         Assert.Contains("(5 rooms)", text);
         Assert.Contains(sweepOutcome.Runs, r => r.IsLink);   // the destination is a map link
-        // ...but stays expandable: the individual rooms are hidden children, collapsed by default.
+        // ...but stays expandable: one hidden child stacks every room as a wrapped list of
+        // "name map/room" links (not one line per room), collapsed by default.
         Assert.False(sweepOutcome.IsExpanded);
-        Assert.Equal(5, sweepOutcome.Children.Count);
-        Assert.All(sweepOutcome.Children, room => Assert.Contains(room.Runs, r => r.IsLink));
+        SpellEffectNode roomList = Assert.Single(sweepOutcome.Children);
+        Assert.Equal(5, roomList.Runs.Count(r => r.IsLink));
+        Assert.Contains(roomList.Runs, r => r.IsLink && r.Text == "Deep Sea 17/501");
     }
 
     [Fact]
