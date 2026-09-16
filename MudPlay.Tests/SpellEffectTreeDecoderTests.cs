@@ -37,7 +37,10 @@ public sealed class SpellEffectTreeDecoderTests : IDisposable
     }
 
     private const string SpellsJson = """
-        [ { "Number": 1000, "Name": "Sea Crossing", "Abil-0": 148, "AbilVal-0": 5000 } ]
+        [
+          { "Number": 1000, "Name": "Sea Crossing", "Abil-0": 148, "AbilVal-0": 5000 },
+          { "Number": 1001, "Name": "Ordered Summon", "Abil-0": 148, "AbilVal-0": 6000 }
+        ]
         """;
 
     private const string TBInfoJson = """
@@ -45,7 +48,8 @@ public sealed class SpellEffectTreeDecoderTests : IDisposable
           { "Number": 5000, "Action": "failitem 690:failitem 691:random 5001\nmaxlevel 49:checkitem 690:random 5002\n" },
           { "Number": 5001, "Action": "30:addexp 0\n100:random 5003\n" },
           { "Number": 5002, "Action": "100:nomonsters:summon 880:summon 880:summon 904\n" },
-          { "Number": 5003, "Action": "20:teleport 501 17\n40:teleport 502 17\n60:teleport 503 17\n80:teleport 504 17\n100:teleport 505 17\n" }
+          { "Number": 5003, "Action": "20:teleport 501 17\n40:teleport 502 17\n60:teleport 503 17\n80:teleport 504 17\n100:teleport 505 17\n" },
+          { "Number": 6000, "Action": "100:summon 904:nomonsters:summon 880:summon 880:summon 880\n" }
         ]
         """;
 
@@ -139,6 +143,23 @@ public sealed class SpellEffectTreeDecoderTests : IDisposable
         Assert.Contains("×2", text);            // two identical summons collapse
         Assert.Contains("crimson mist", text);
         Assert.Contains(outcome.Runs, r => r.IsLink && r.Text == "sea hag");
+    }
+
+    [Fact]
+    public void Decode_MidSequenceGate_NestsOnlyTrailingCommands()
+    {
+        // "summon 904 : nomonsters : summon 880 ×3" runs top-down: crimson mist is
+        // unconditional; the sea hags fire only when the room is empty. The gate must
+        // scope to the trailing summons, NOT hoist onto the whole outcome.
+        var outcome = Assert.Single(new SpellInfoRowsBuilder(NewCache()).BuildEffectTree(1001));
+        Assert.Equal(100, outcome.Percent);
+        Assert.Equal("crimson mist", Flatten(outcome));   // own line, no gate prefix
+
+        var gated = Assert.Single(outcome.Children);
+        string text = Flatten(gated);
+        Assert.StartsWith("if no NPCs in the room —", text);
+        Assert.Contains("sea hag", text);
+        Assert.Contains("×3", text);
     }
 
     [Fact]

@@ -70,7 +70,7 @@ public static class SpellEffectTreeDecoder
                 {
                     int pct = Math.Max(0, threshold - prevThreshold);
                     prevThreshold = threshold;
-                    nodes.Add(BuildOutcome(ctx, pct, cmds.GetRange(1, cmds.Count - 1), depth, ancestors));
+                    nodes.Add(BuildSequenceNode(ctx, pct, cmds.GetRange(1, cmds.Count - 1), depth, ancestors));
                 }
                 else
                 {
@@ -82,14 +82,26 @@ public static class SpellEffectTreeDecoder
         finally { ancestors.Remove(tbNum); }
     }
 
-    // A conditional line: its gate commands form the (tinted) branch header; the rest
-    // is the terminal effect / random rolled when the gate passes.
+    // A conditional line: its LEADING gate commands form the (tinted) branch header;
+    // the rest is the terminal effect / random rolled when the gate passes.
     private static SpellEffectNode BuildBranch(Ctx ctx, List<string> cmds, int depth, HashSet<int> ancestors)
     {
-        (string? phrase, string tone, List<string> rest) = SplitConditions(ctx, cmds);
+        int i = 0;
+        var gates = new List<string>();
+        bool hasFail = false, hasCheck = false;
+        while (i < cmds.Count && TryGate(ctx, cmds[i], out string phrase))
+        {
+            (string verb, _) = Parse(cmds[i]);
+            if (verb == "failitem") hasFail = true;
+            else if (verb == "checkitem") hasCheck = true;
+            gates.Add(phrase);
+            i++;
+        }
+        string tone = hasFail && !hasCheck ? "danger" : hasCheck ? "accent" : "neutral";
+        var rest = cmds.GetRange(i, cmds.Count - i);
         return new SpellEffectNode
         {
-            Runs = new[] { new MdbInline(phrase ?? "on entry") },
+            Runs = new[] { new MdbInline(gates.Count > 0 ? string.Join(", ", gates) : "on entry") },
             Children = BuildTerminalChildren(ctx, rest, depth, ancestors),
             IsBranch = true,
             Tone = tone,
@@ -97,84 +109,92 @@ public static class SpellEffectTreeDecoder
         };
     }
 
-    // The terminal of a branch (after its gates): a random block → its weighted
-    // outcomes as children; otherwise a single effect line.
+    // The terminal of a branch (after its leading gates): a bare `random` redirects
+    // straight to that block's weighted outcomes (no wrapper node); anything else is a
+    // single ordered sequence node.
     private static IReadOnlyList<SpellEffectNode> BuildTerminalChildren(Ctx ctx, List<string> cmds, int depth, HashSet<int> ancestors)
     {
-        int random = RandomTarget(cmds);
-        if (random > 0)
+        if (cmds.Count == 0) return Array.Empty<SpellEffectNode>();
+        if (cmds.Count == 1 && Parse(cmds[0]).Verb == "random")
         {
+            int random = ArgInt(Parse(cmds[0]).Args, 0);
             if (TryCollapseTeleports(ctx, random) is { } summary)
                 return new[] { new SpellEffectNode { Runs = summary } };
             return DecodeBlock(ctx, random, depth + 1, ancestors);
         }
-        IReadOnlyList<MdbInline> runs = BuildEffectRuns(ctx, cmds);
-        return runs.Count > 0 ? new[] { new SpellEffectNode { Runs = runs } } : Array.Empty<SpellEffectNode>();
+        return new[] { BuildSequenceNode(ctx, null, cmds, depth, ancestors) };
     }
 
-    // A weighted outcome: its percentage, an optional gate prefix (a mid-outcome
-    // condition such as `nomonsters`), then either a nested random (children) or a
-    // direct effect line.
-    private static SpellEffectNode BuildOutcome(Ctx ctx, int pct, List<string> cmds, int depth, HashSet<int> ancestors)
+    // A weighted outcome — or any effect sequence — built in COMMAND ORDER. Leading
+    // gates prefix this node; effects up to the next gate are its own line; a `random`
+    // redirect fills its children; and a gate that appears AFTER an effect nests the
+    // remainder as a child (the game runs the line top-down and a failed gate aborts the
+    // rest, so `summon A : nomonsters : summon B` means "A always, then B only if the
+    // room is empty" — not "A and B when empty").
+    private static SpellEffectNode BuildSequenceNode(Ctx ctx, int? pct, List<string> cmds, int depth, HashSet<int> ancestors)
     {
-        (string? phrase, _, List<string> rest) = SplitConditions(ctx, cmds);
-        int random = RandomTarget(rest);
-        IReadOnlyList<MdbInline> effectRuns = BuildEffectRuns(ctx, rest);
+        int i = 0;
+        var gates = new List<string>();
+        while (i < cmds.Count && TryGate(ctx, cmds[i], out string phrase)) { gates.Add(phrase); i++; }
 
+        var effectCmds = new List<string>();
+        int random = 0;
+        for (; i < cmds.Count; i++)
+        {
+            if (TryGate(ctx, cmds[i], out _)) break;   // a gate after effects → nested tail child
+            (string verb, string[] args) = Parse(cmds[i]);
+            if (verb == "random") random = ArgInt(args, 0);
+            else effectCmds.Add(cmds[i]);
+        }
+        int tailStart = i;
+
+        IReadOnlyList<MdbInline> effectRuns = BuildEffectRuns(ctx, effectCmds);
         var runs = new List<MdbInline>();
-        if (phrase is not null) runs.Add(new MdbInline($"if {phrase} — "));
+        if (gates.Count > 0) runs.Add(new MdbInline($"if {string.Join(", ", gates)} — "));
         runs.AddRange(effectRuns);
 
+        var children = new List<SpellEffectNode>();
+        bool collapsedRandom = false;
         if (random > 0)
         {
-            if (TryCollapseTeleports(ctx, random) is { } summary)
-            {
-                runs.AddRange(summary);
-                return new SpellEffectNode { Percent = pct, Runs = runs };
-            }
-            return new SpellEffectNode
-            {
-                Percent = pct,
-                Runs = runs,
-                Children = DecodeBlock(ctx, random, depth + 1, ancestors),
-                StartExpanded = depth < 1,
-            };
+            if (TryCollapseTeleports(ctx, random) is { } summary) { runs.AddRange(summary); collapsedRandom = true; }
+            else children.AddRange(DecodeBlock(ctx, random, depth + 1, ancestors));
         }
+        if (tailStart < cmds.Count)
+            children.Add(BuildSequenceNode(ctx, null, cmds.GetRange(tailStart, cmds.Count - tailStart), depth, ancestors));
 
-        if (effectRuns.Count == 0) runs.Add(new MdbInline("nothing"));
-        return new SpellEffectNode { Percent = pct, Runs = runs };
+        if (effectRuns.Count == 0 && !collapsedRandom && children.Count == 0)
+            runs.Add(new MdbInline("nothing"));
+
+        return new SpellEffectNode { Percent = pct, Runs = runs, Children = children, StartExpanded = depth < 1 };
     }
 
-    // Pull the gate commands (level / carry / no-NPCs) out of a command list, returning
-    // the human-readable condition phrase, the branch tone, and the remaining effect /
-    // random commands. `nomonsters` is a CONDITION — the line fires only when the room
+    // A gate command (level / carry / no-NPCs) and its human phrase, or false for an
+    // effect command. `nomonsters` is a CONDITION — the line fires only when the room
     // holds no NPCs — not an effect that clears the room.
-    private static (string? Phrase, string Tone, List<string> Remaining) SplitConditions(Ctx ctx, List<string> cmds)
+    private static bool TryGate(Ctx ctx, string cmd, out string phrase)
     {
-        var conditions = new List<string>();
-        var rest = new List<string>();
-        bool hasFail = false, hasCheck = false;
-        foreach (string c in cmds)
+        (string verb, string[] args) = Parse(cmd);
+        switch (verb)
         {
-            (string verb, string[] args) = Parse(c);
-            if (verb == "nomonsters") { conditions.Add("no NPCs in the room"); continue; }
-            if (!ConditionVerbs.Contains(verb)) { rest.Add(c); continue; }
-            switch (verb)
-            {
-                case "minlevel": conditions.Add($"level ≥ {Arg(args, 0)}"); break;
-                case "maxlevel": conditions.Add($"level ≤ {Arg(args, 0)}"); break;
-                case "checkitem": hasCheck = true; conditions.Add("carrying " + ItemName(ctx, Arg(args, 0))); break;
-                case "failitem": hasFail = true; conditions.Add("not carrying " + ItemName(ctx, Arg(args, 0))); break;
-                default: conditions.Add(args.Length > 0 ? $"{verb} {string.Join(" ", args)}" : verb); break;
-            }
+            case "nomonsters": phrase = "no NPCs in the room"; return true;
+            case "minlevel": phrase = $"level ≥ {Arg(args, 0)}"; return true;
+            case "maxlevel": phrase = $"level ≤ {Arg(args, 0)}"; return true;
+            case "checkitem": phrase = "carrying " + ItemName(ctx, Arg(args, 0)); return true;
+            case "failitem": phrase = "not carrying " + ItemName(ctx, Arg(args, 0)); return true;
         }
-        string tone = hasFail && !hasCheck ? "danger" : hasCheck ? "accent" : "neutral";
-        return (conditions.Count > 0 ? string.Join(", ", conditions) : null, tone, rest);
+        if (ConditionVerbs.Contains(verb))
+        {
+            phrase = args.Length > 0 ? $"{verb} {string.Join(" ", args)}" : verb;
+            return true;
+        }
+        phrase = string.Empty;
+        return false;
     }
 
     // Build the display runs for a set of effect commands (summon / cast / teleport),
     // resolving names to links. Consecutive identical summons collapse to "×N".
-    // Conditions (nomonsters / level / carry) are stripped upstream by SplitConditions.
+    // Conditions (nomonsters / level / carry) are split out upstream by the sequence walk.
     private static IReadOnlyList<MdbInline> BuildEffectRuns(Ctx ctx, List<string> cmds)
     {
         var runs = new List<MdbInline>();
@@ -285,16 +305,6 @@ public static class SpellEffectTreeDecoder
 
     // ----- helpers -----
     private static void AddSep(List<MdbInline> runs) { if (runs.Count > 0) runs.Add(new MdbInline(", ")); }
-
-    private static int RandomTarget(List<string> cmds)
-    {
-        foreach (string c in cmds)
-        {
-            (string verb, string[] args) = Parse(c);
-            if (verb == "random") return ArgInt(args, 0);
-        }
-        return 0;
-    }
 
     private static (string Verb, string[] Args) Parse(string cmd)
     {
