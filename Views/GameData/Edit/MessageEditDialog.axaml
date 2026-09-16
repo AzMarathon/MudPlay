@@ -414,9 +414,12 @@
                             Command="{Binding CollapseAllEffectsCommand}"/>
                   </StackPanel>
                   <TreeView ItemsSource="{Binding EffectTree}" Background="Transparent"
-                            BorderThickness="0">
+                            BorderThickness="0"
+                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <TreeView.Styles>
-                      <!-- Live expand state bound two-way so the buttons can drive it. -->
+                      <!-- Live expand state bound two-way so the buttons can drive it.
+                           Stretch the item content so a wide runs list wraps to the tree
+                           width instead of scrolling off the edge. -->
                       <Style Selector="TreeViewItem" x:DataType="vm:SpellEffectNode">
                         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
                       </Style>
