@@ -1,5 +1,11 @@
 # Version history
 
+## 3.88.15
+
+- Navigation through the Treetops vine puzzle above the Lost City (the route to the volcano / Undermountain) now solves — its five-gate lever chain (turn knot → move branch → pull vine → push knot → tear bark) sat one level deeper than the walker's nested action-exit auto-solver allowed, so walk-to bailed with "route needs an action-gated exit the walker can't auto-solve"
+- Raised the auto-solver's nesting ceiling well past any known chained-lever puzzle (real cycles and runaway length are still caught by their own guards)
+- bug reports addressed: paradigm-20260915-163334, paradigm-20260915-163607
+
 ## 3.88.14
 
 - The "walk to loop" itinerary in CURRENT NAV now lists only the walk-to steps, not the whole loop appended after them

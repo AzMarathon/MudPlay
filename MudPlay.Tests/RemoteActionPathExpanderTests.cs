@@ -487,73 +487,80 @@ public sealed class RemoteActionPathExpanderTests : IDisposable
         Assert.True(innerPull >= 0 && innerPull < nested && nested < outerPull);
     }
 
-    // Depth cap: a linear chain of four nested gates off 1/2 (E is the top exit;
-    // its lever in 1/20 is behind N, whose lever in 1/21 is behind S, whose lever
-    // in 1/22 is behind W, whose lever in 1/23 is behind D). Opening E recurses
-    // N→S→W→D; crossing the 4th gate (D) is attempted at depth 3, so depth+1=4
-    // exceeds MaxNestedDepth (3) and the whole detour clean-fails. Each lever room
-    // holds the PREVIOUS gate's action and has a plain reverse to 1/2.
-    private const string DeeplyNestedGraphJson = """
-        [
-          { "Map Number": 1, "Room Number": 1, "Name": "Start",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "1/2", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 1, "Room Number": 2, "Name": "Hub",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "1/20 (Hidden/Needs 1 Actions, any order)",
-            "S": "1/21 (Hidden/Needs 1 Actions, any order)",
-            "E": "1/9 (Hidden/Needs 1 Actions, any order)",
-            "W": "1/22 (Hidden/Needs 1 Actions, any order)",
-            "NE": "1/24", "NW": "0", "SE": "0", "SW": "0", "U": "0",
-            "D": "1/23 (Hidden/Needs 1 Actions, any order)" },
-          { "Map Number": 1, "Room Number": 9, "Name": "Vault",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "0", "W": "1/2",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 1, "Room Number": 20, "Name": "LeverE",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "1/2", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
-            "D": "Action#1 [on the E exit of room 1/2]: pull lever" },
-          { "Map Number": 1, "Room Number": 21, "Name": "LeverN",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "1/2", "S": "0", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
-            "D": "Action#1 [on the N exit of room 1/2]: pull lever" },
-          { "Map Number": 1, "Room Number": 22, "Name": "LeverS",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "1/2", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
-            "D": "Action#1 [on the S exit of room 1/2]: pull lever" },
-          { "Map Number": 1, "Room Number": 23, "Name": "LeverW",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "1/2",
-            "D": "Action#1 [on the W exit of room 1/2]: pull lever" },
-          { "Map Number": 1, "Room Number": 24, "Name": "LeverD",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "1/2", "U": "0",
-            "D": "Action#1 [on the D exit of room 1/2]: pull lever" }
-        ]
-        """;
+    // Build a synthetic linear lever-chain graph with `gates` nested action-gated
+    // exits, mirroring the Paradigm treetops vine puzzle's shape: the destination
+    // (1/9000) sits behind the top gate, whose lever is in a room reachable only
+    // by crossing the next-deeper gate, and so on down to a freely-reached bottom
+    // lever. Opening the top exit therefore recurses gates-1 levels deep — it
+    // solves when gates-1 <= MaxNestedDepth (i.e. gates <= cap+1) and truncates
+    // beyond that. The five-gate case is the actual vine puzzle in miniature.
+    //
+    // Layout: 1 (start) -E-> spine 2..(gates+1), a plain W/E line. Gate k departs
+    // spine room (gates-k+2) upward (U); the top gate (k == gates, at room 2)
+    // leads to the vault, every other gate to lever room 500+k+1. Lever room
+    // 500+k carries gate k's "pull lever" (plus a plain reverse to its source);
+    // the bottom lever (gate 1) sits in the freely-reached room 501.
+    private static string LinearLeverChainJson(int gates)
+    {
+        static string R(int num, string name, params (string Dir, string Val)[] exits)
+        {
+            string[] order = { "N", "S", "E", "W", "NE", "NW", "SE", "SW", "U", "D" };
+            var map = order.ToDictionary(d => d, _ => "0");
+            foreach ((string dir, string val) in exits) map[dir] = val;
+            string cells = string.Join(", ", order.Select(d => $"\"{d}\": \"{map[d]}\""));
+            return $"{{ \"Map Number\": 1, \"Room Number\": {num}, \"Name\": \"{name}\", "
+                 + $"\"Light\": 0, \"Shop\": 0, \"Lair\": \"\", \"Delay\": 0, {cells} }}";
+        }
+
+        var rooms = new List<string> { R(1, "Start", ("E", "1/2")) };
+
+        for (int r = 2; r <= gates + 1; r++)
+        {
+            int k = gates - r + 2;   // gate number departing this spine room
+            var exits = new List<(string, string)>();
+            if (r > 2) exits.Add(("W", $"1/{r - 1}"));
+            if (r < gates + 1) exits.Add(("E", $"1/{r + 1}"));
+            string gateTarget = k == gates ? "1/9000" : $"1/{500 + k + 1}";
+            exits.Add(("U", $"{gateTarget} (Hidden/Needs 1 Actions, any order)"));
+            if (k == 1) exits.Add(("D", "1/501"));   // free bottom-lever room
+            rooms.Add(R(r, "Spine", exits.ToArray()));
+        }
+
+        rooms.Add(R(9000, "Vault", ("W", "1/2")));
+
+        for (int k = 2; k <= gates; k++)
+            rooms.Add(R(500 + k, $"Lever{k}",
+                ("D", $"1/{gates - k + 3}"),   // reverse to source of gate k-1
+                ("N", $"Action#1 [on the U exit of room 1/{gates - k + 2}]: pull lever")));
+
+        rooms.Add(R(501, "Lever1",
+            ("U", $"1/{gates + 1}"),
+            ("N", $"Action#1 [on the U exit of room 1/{gates + 1}]: pull lever")));
+
+        return "[" + string.Join(",\n", rooms) + "]";
+    }
 
     [Fact]
-    public void DeeplyNestedRemoteAction_ExceedsDepthCap_Truncates()
+    public void DeeplyNestedRemoteAction_WithinDepthCap_RecursivelySolved()
     {
-        RoomGraphManager graph = NewGraph(DeeplyNestedGraphJson);
+        // Five nested gates — the vine puzzle's depth — sit well inside
+        // MaxNestedDepth, so the detour is fully built: every gate's lever is
+        // pulled and the walk crosses the primed top exit into the vault.
+        const int gates = 5;
+        RoomGraphManager graph = NewGraph(LinearLeverChainJson(gates));
         BfsMapper bfs = new(graph);
 
         var steps = RemoteActionPathExpander.Expand(
             graph, new RoomKey(1, 1),
-            new[] { Direction.E, Direction.E }, bfs);
+            new[] { Direction.E, Direction.U }, bfs);
 
-        // Four levels of nesting exceed the depth cap, so the whole detour is
-        // abandoned and only the first plain hop survives.
-        MoveStep only = Assert.IsType<MoveStep>(Assert.Single(steps));
-        Assert.Equal(new RoomKey(1, 2), only.ExpectedTarget);
-        Assert.False(RemoteActionPathExpander.ReachesDestination(steps, new RoomKey(1, 9)));
+        Assert.True(RemoteActionPathExpander.ReachesDestination(steps, new RoomKey(1, 9000)));
+        Assert.Equal(gates, steps.Count(s => s is CommandStep { Command: "pull lever" }));
+
+        MoveStep topCross = Assert.IsType<MoveStep>(steps[^1]);
+        Assert.Equal(Direction.U, topCross.Direction);
+        Assert.Equal(new RoomKey(1, 9000), topCross.ExpectedTarget);
+        Assert.True(topCross.SkipSpecialDispatch);
     }
 
     // Lever-cycle: gate N (→1/30) needs a lever in 1/31, reachable only through
@@ -610,6 +617,25 @@ public sealed class RemoteActionPathExpanderTests : IDisposable
         MoveStep only = Assert.IsType<MoveStep>(Assert.Single(steps));
         Assert.Equal(new RoomKey(1, 2), only.ExpectedTarget);
         Assert.False(RemoteActionPathExpander.ReachesDestination(steps, new RoomKey(1, 9)));
+    }
+
+    [Fact]
+    public void DeeplyNestedRemoteAction_ExceedsDepthCap_Truncates()
+    {
+        // Seventeen nested gates exceed MaxNestedDepth (15): opening the top exit
+        // would recurse sixteen levels, so the deepest crossing clean-fails and the
+        // whole detour is abandoned — only the first plain hop survives. This is the
+        // mis-modelled / runaway guard the cap exists for.
+        RoomGraphManager graph = NewGraph(LinearLeverChainJson(17));
+        BfsMapper bfs = new(graph);
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1),
+            new[] { Direction.E, Direction.U }, bfs);
+
+        MoveStep only = Assert.IsType<MoveStep>(Assert.Single(steps));
+        Assert.Equal(new RoomKey(1, 2), only.ExpectedTarget);
+        Assert.False(RemoteActionPathExpander.ReachesDestination(steps, new RoomKey(1, 9000)));
     }
 
     [Fact]
