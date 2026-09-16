@@ -29,12 +29,19 @@ public static class RemoteActionPathExpander
     // Levels of nesting the recursive detour builder will solve before falling
     // back to clean-fail. One level = a lever whose room is reached only by
     // crossing another action-gated exit (the confirmed tomb-vault case is a
-    // single level: open the alcove, then pull the order lever). A moderate
-    // bound so genuinely deeper — or mis-modelled — nests fail safe rather than
-    // emit a long speculative compound walk. Cycles are caught independently by
-    // the visited-set regardless of this cap; raising it is the one knob to
-    // support deeper nests once their timing is confirmed in-game.
-    private const int MaxNestedDepth = 3;
+    // single level: open the alcove, then pull the order lever). The Paradigm
+    // treetops vine puzzle above the Lost City (map 16 rooms ~547-569, on the
+    // route to the volcano / Undermountain) is a confirmed FIVE-gate linear
+    // chain — each lever room sits behind the previous gate — so it recurses
+    // four levels deep from the last gate outward; a cap of 3 stranded it.
+    //
+    // This is NOT the infinite-loop guard: real lever-cycles are caught by the
+    // stack-scoped visited-set, and total assembled length is bounded by
+    // MaxDetourSteps — both independent of this number. It's an arbitrary ceiling
+    // so a genuinely deep chain (a longer chained-lever puzzle elsewhere in the
+    // game) still solves rather than clean-failing, while a mis-modelled runaway
+    // still eventually bails. Set high enough to cover the deepest real puzzle.
+    private const int MaxNestedDepth = 15;
 
     // Absolute backstop on the assembled detour length for one top-level exit —
     // guards the pathological deep-but-branchy case that stays under the depth

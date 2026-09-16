@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.14**
-> - The "walk to loop" itinerary in CURRENT NAV now lists only the walk-to steps, not the whole loop appended after them
-> - A running loop now draws numbered green waypoint bubbles on the map — matching the CURRENT NAV rows — so you can tell which row is which room, the way the loop builder's red numbered pins already do
-> - A loop no longer leaks one attack into a "do not attack" (or non-lair, under "only attack in lair rooms") room on entry — suppression now judges the room you're stepping into, not the one you're leaving, whether the flag was set live or configured before the run
+> **Version 3.88.15**
+> - Navigation through the Treetops vine puzzle above the Lost City (the route to the volcano / Undermountain) now solves — its five-gate lever chain (turn knot → move branch → pull vine → push knot → tear bark) sat one level deeper than the walker's nested action-exit auto-solver allowed, so walk-to bailed with "route needs an action-gated exit the walker can't auto-solve"
+> - Raised the auto-solver's nesting ceiling well past any known chained-lever puzzle (real cycles and runaway length are still caught by their own guards)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
