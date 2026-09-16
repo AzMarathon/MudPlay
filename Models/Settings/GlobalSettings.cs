@@ -109,6 +109,12 @@ public sealed class GlobalSettings
     // one-room saving isn't worth offering). Install-wide; default 3.
     public int TokenRouteMinRoomsShorter { get; set; } = 3;
 
+    // Party token-route behaviour when some members fail to token across after the
+    // regroup retries. false (default) — the leader does NOT token; it fails out in
+    // the room and sits so you can sort out the stragglers. true — the leader uses its
+    // token anyway and walks on, leaving the failed members behind. Install-wide.
+    public bool TokenUseWhenPartyIncomplete { get; set; }
+
     // Snap MudPlay's panel windows to each other's edges as you drag them, and
     // move the whole snapped cluster when the main window is dragged. When false,
     // windows float freely. Install-wide (Global tier — a UI preference, not

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.91.1
+
+- Reworked party token routing to the correct order: the leader sends the party across **first** (`.@party use token`), watches each member port, re-directs any stragglers a few times, and only tokens across **itself last**
+- New **Settings → Other** checkbox (Paradigm): take a token route even when a party member can't follow — off by default, so the leader waits and fails out in the room (with the reason in the nav header) rather than leaving anyone behind
+- Token use lines are now recognized from the token spells' seeded messages, not a separate hardcoded pattern
+
 ## 3.91.0
 
 - Party leaders can now take token routes: after the leader tokens, it telepaths each member `@do use <token>`, watches its landing room for each to arrive, and retries a few times (6s apart)

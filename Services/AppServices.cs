@@ -4644,11 +4644,16 @@ public sealed class AppServices
             send: cmd => SendGameCommand(cmd),
             carried: () => Inventory.Snapshot.CarriedItems,
             onParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            // Recognise the token use lines through the seeded token spell messages —
+            // the wording lives in the Messages catalogue, not a second hardcoded regex.
+            matchSelfUse: MatchTokenSelfUse,
+            matchMemberDeparted: MatchTokenMemberDeparted,
             log: Log);
         Profile.ProfileLoaded += _ => Tokens.Clear();
-        // A set swap changes which tokens exist and where they teleport — clear the
-        // charge tracker AND drop the cached teleport map so it re-reads the new set.
-        GameData.ActiveSetChanged += _ => { Tokens.Clear(); _tokenTeleports = null; };
+        // A set swap changes which tokens exist, where they teleport, and their spell
+        // messages — clear the charge tracker AND drop the cached teleport map + use
+        // matchers so they re-read the new set.
+        GameData.ActiveSetChanged += _ => { Tokens.Clear(); _tokenTeleports = null; _tokenUseMatchers = null; };
         // @token <name> — read-only remaining-charges report off the tracker.
         TokenQuery = new Game.Remote.TokenQueryHandler(RemoteCommands, Tokens);
 
@@ -6648,13 +6653,21 @@ public sealed class AppServices
         TokenRoute = new Game.Tokens.TokenRouteCoordinator(
             inParty: () => PartyState.IsInParty,
             isLeader: () => PartyState.IsInParty && PartyState.SelfIsLeader,
-            // Other party members (never self) to regroup after a leader token — by
-            // name; the coordinator addresses each by given name.
-            membersToRegroup: () => PartyState.Members
+            // Party members (never self) to bring across, by given name.
+            partyMembers: () => PartyState.Members
                 .Where(m => !m.IsSelf && !string.IsNullOrWhiteSpace(m.Name))
-                .Select(m => m.Name)
+                .Select(m => GivenNameOf(m.Name) ?? m.Name)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList(),
+            // Of those, the ones still standing in the leader's room (i.e. not yet
+            // ported) — the "check the room" the retry loop re-directs.
+            membersStillHere: () => PartyState.Members
+                .Where(m => !m.IsSelf && !string.IsNullOrWhiteSpace(m.Name))
+                .Select(m => GivenNameOf(m.Name) ?? m.Name)
+                .Where(IsGivenNameInRoom)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            useWhenIncomplete: () => Settings.Current.TokenUseWhenPartyIncomplete,
             roomHasNpc: () => CombatTracker.HasRoomNpc,
             walkToDest: dest => Walker.WalkTo(dest, supersedeSilently: true, preferTeleportFree: true),
             stopWalker: () => Walker.Stop("token route: using token in a clear room"),
@@ -6667,7 +6680,7 @@ public sealed class AppServices
             },
             log: Log);
         Tokens.TokenUsed += TokenRoute.OnTokenUsed;
-        Tokens.MemberArrived += TokenRoute.OnMemberArrived;
+        Tokens.MemberDeparted += TokenRoute.OnMemberDeparted;
         Walker.Event += TokenRoute.OnWalkEvent;
         RoomTracker.StateChanged += t =>
         {
@@ -8564,6 +8577,46 @@ public sealed class AppServices
 
     private System.Collections.Generic.IReadOnlyDictionary<string, Game.Tokens.TokenTeleportInfo> TokenTeleportMap()
         => _tokenTeleports ??= Game.Tokens.TokenTeleportReader.ReadAll(GameData);
+
+    // Compiled matchers for the token spells' seeded messages, so the token use lines
+    // are recognised from the Messages catalogue (single source of the wording) rather
+    // than a hardcoded regex. One per token record (Name "token of <place>"): the
+    // CasterMessage (self-use → place) and the WitnessMessage (someone else's use →
+    // the {source} actor name). Built once, dropped on a set swap.
+    private System.Collections.Generic.List<(string Place, Game.Spells.CasterMessageMatcher Caster, Game.Spells.CasterMessageMatcher Witness)>? _tokenUseMatchers;
+
+    private System.Collections.Generic.List<(string Place, Game.Spells.CasterMessageMatcher Caster, Game.Spells.CasterMessageMatcher Witness)> TokenUseMatchers()
+    {
+        if (_tokenUseMatchers is { } cached) return cached;
+        var list = new System.Collections.Generic.List<(string, Game.Spells.CasterMessageMatcher, Game.Spells.CasterMessageMatcher)>();
+        foreach (Models.GameData.MessageRecord r in Messages.Messages)
+        {
+            if (Game.Tokens.TokenCatalog.PlaceOf(r.Name) is not { } place) continue;
+            if (Game.Spells.CasterMessageMatcher.TryCreate(r.CasterMessage) is not { } caster) continue;
+            if (Game.Spells.CasterMessageMatcher.TryCreate(r.WitnessMessage) is not { } witness) continue;
+            list.Add((place, caster, witness));
+        }
+        _tokenUseMatchers = list;
+        return list;
+    }
+
+    // A token self-use line → its place (via the CasterMessage), or null.
+    private string? MatchTokenSelfUse(string line)
+    {
+        foreach ((string place, Game.Spells.CasterMessageMatcher caster, _) in TokenUseMatchers())
+            if (caster.TryMatch(line, out _)) return place;
+        return null;
+    }
+
+    // Someone else's token use line → the actor's name (the WitnessMessage's {source}
+    // capture), or null.
+    private string? MatchTokenMemberDeparted(string line)
+    {
+        foreach ((_, _, Game.Spells.CasterMessageMatcher witness) in TokenUseMatchers())
+            if (witness.TryMatch(line, out System.Collections.Generic.IReadOnlyList<string> caps) && caps.Count > 0)
+                return caps[0];
+        return null;
+    }
 
     // Plan a token route for a user walk-to (Paradigm only): if a held transport token
     // reaches the destination enough rooms sooner than walking, return a Token

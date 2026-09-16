@@ -32,22 +32,9 @@ public sealed class TokenCatalogTests
     public void ParseUsesRemaining_ReadsCount(string line, int expected)
         => Assert.Equal(expected, TokenCatalog.ParseUsesRemaining(line));
 
-    [Theory]
-    [InlineData("You invoke the token and summon a gryphon to Silvermere!", "Silvermere")]
-    [InlineData("You invoke the token and summon a gryphon to the Lost City!", "the Lost City")]
-    [InlineData("You invoke the token and summon a gryphon to Port Blackwater!", "Port Blackwater")]
-    [InlineData("The gryphon lands.", null)]
-    public void MatchUseMessage_ExtractsPlace(string line, string? expected)
-        => Assert.Equal(expected, TokenCatalog.MatchUseMessage(line));
-
-    [Theory]
-    [InlineData("A gryphon drops Boost off in the Lost City!", "Boost")]
-    [InlineData("A gryphon drops Ermias off in Silvermere!", "Ermias")]
-    [InlineData("A gryphon drops Sir Reginald off in Kingsport!", "Sir Reginald")]
-    [InlineData("You invoke the token and summon a gryphon to Silvermere!", null)]
-    [InlineData("The gryphon lands.", null)]
-    public void MatchArrivalMessage_ExtractsArrivingName(string line, string? expected)
-        => Assert.Equal(expected, TokenCatalog.MatchArrivalMessage(line));
+    // The token use lines (self / witnessed) are recognised from the seeded spell
+    // messages now, not TokenCatalog — see TokenTeleportReaderTests / the AppServices
+    // matchers. TokenCatalog keeps only the pure place/look-reply helpers.
 
     [Fact]
     public void MatchLookNameLine_OnlyMatchesTheNameLine()
@@ -55,17 +42,6 @@ public sealed class TokenCatalogTests
         Assert.Equal("Arlysia", TokenCatalog.MatchLookNameLine("token of Arlysia"));
         Assert.Null(TokenCatalog.MatchLookNameLine(
             "This token can be used to summon a gryphon for transport to arlysia."));
-    }
-
-    [Fact]
-    public void UseMessage_And_LookName_ShareKey_EvenWithTheDrift()
-    {
-        // The use line may drop "the" for "the Lost City" while the item name keeps it;
-        // both must resolve to the same tracker key.
-        string fromUse = TokenCatalog.MatchUseMessage(
-            "You invoke the token and summon a gryphon to Lost City!")!;
-        string fromLook = TokenCatalog.MatchLookNameLine("token of the Lost City")!;
-        Assert.Equal(TokenCatalog.NormalizePlace(fromLook), TokenCatalog.NormalizePlace(fromUse));
     }
 
     [Fact]

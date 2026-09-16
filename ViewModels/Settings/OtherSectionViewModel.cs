@@ -67,6 +67,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Token routes";
             yield return "Enable token routing";
             yield return "Minimum rooms saved";
+            yield return "Take token even if party can't follow";
             foreach (StubGroup g in StubGroups)
             foreach (StubField f in g.Fields)
                 yield return f.Label;
@@ -184,6 +185,9 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _enableTokenRoutes = true;
     // Only surface a token route when it saves at least this many rooms over walking.
     [ObservableProperty] private int _tokenRouteMinRoomsShorter = 3;
+    // Party token behaviour when members can't follow after the regroup retries: off
+    // (default) waits/fails out in the room; on uses the token anyway and leaves them.
+    [ObservableProperty] private bool _tokenUseWhenPartyIncomplete;
 
     // True on a Paradigm realm — gates the visibility of the token-routing rows (the
     // feature is meaningless off Paradigm). Refreshed on game-data set changes.
@@ -273,13 +277,15 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             || g.PyramidSolverEnabled != PyramidSolverEnabled
             || g.AsylumSolverEnabled != AsylumSolverEnabled
             || g.EnableTokenRoutes != EnableTokenRoutes
-            || g.TokenRouteMinRoomsShorter != tokenMin)
+            || g.TokenRouteMinRoomsShorter != tokenMin
+            || g.TokenUseWhenPartyIncomplete != TokenUseWhenPartyIncomplete)
         {
             g.PlayerCleanupDays = sanitized;
             g.PyramidSolverEnabled = PyramidSolverEnabled;
             g.AsylumSolverEnabled = AsylumSolverEnabled;
             g.EnableTokenRoutes = EnableTokenRoutes;
             g.TokenRouteMinRoomsShorter = tokenMin;
+            g.TokenUseWhenPartyIncomplete = TokenUseWhenPartyIncomplete;
             _globalSettings.Save();
         }
 
@@ -325,6 +331,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         AsylumSolverEnabled = _globalSettings?.Current.AsylumSolverEnabled ?? true;
         EnableTokenRoutes = _globalSettings?.Current.EnableTokenRoutes ?? true;
         TokenRouteMinRoomsShorter = _globalSettings?.Current.TokenRouteMinRoomsShorter ?? 3;
+        TokenUseWhenPartyIncomplete = _globalSettings?.Current.TokenUseWhenPartyIncomplete ?? false;
         ApplyToServices(dto);
     }
 
@@ -387,6 +394,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnAsylumSolverEnabledChanged(bool value) => MarkDirty();
     partial void OnEnableTokenRoutesChanged(bool value) => MarkDirty();
     partial void OnTokenRouteMinRoomsShorterChanged(int value) => MarkDirty();
+    partial void OnTokenUseWhenPartyIncompleteChanged(bool value) => MarkDirty();
 
     private void MarkDirty()
     {

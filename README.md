@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.91.0**
-> - Party leaders can now take token routes: after the leader tokens, it tells each member to use theirs (`@do use`), confirms each arrives at the landing, and retries a few times
-> - Fully regrouped → the walk continues; otherwise it fails out with the reason in the nav header and sits
-> - Fixed the token-use command to send the token's full name (so the "the Lost City" token isn't mistyped)
+> **Version 3.91.1**
+> - Party token routing (leader): sends the party across first (`.@party use token`), watches each member port, re-directs stragglers a few times, then tokens across itself last
+> - New **Settings → Other** checkbox (Paradigm): take a token route even when a party member can't follow — off by default (the leader waits and fails out in the room rather than leaving anyone)
+> - Token use lines are now recognized from the token spells' seeded messages
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

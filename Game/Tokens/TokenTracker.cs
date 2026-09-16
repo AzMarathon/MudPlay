@@ -22,6 +22,11 @@ public sealed class TokenTracker : IDisposable
     private readonly Action<string> _send;                 // raw wire sender (SendGameCommand)
     private readonly Func<IReadOnlyList<string>> _carried; // Inventory.Snapshot.CarriedItems
     private readonly Func<bool> _onParadigm;
+    // Recognise the token use lines via the seeded token spell messages (one place
+    // for the wording): self-use → the matched token's place; someone else's use in
+    // our room → the actor's name (the WitnessMessage's {source} capture).
+    private readonly Func<string, string?> _matchSelfUse;
+    private readonly Func<string, string?> _matchMemberDeparted;
     private readonly LogService? _log;
     private LineExtractor? _lines;
 
@@ -40,10 +45,11 @@ public sealed class TokenTracker : IDisposable
     // and party-confirm logic off it (the use also wipes buffs via negate magic).
     public event Action<string>? TokenUsed;
 
-    // Fired when someone tokens INTO the room we're in ("A gryphon drops <name> off in
-    // <location>!"). Carries the arriving player's name. The party-regroup coordinator
-    // watches this in the leader's landing room to confirm members regrouped.
-    public event Action<string>? MemberArrived;
+    // Fired when someone else uses a token in the room we're in (their WitnessMessage,
+    // "<name> invokes a token and summons a gryphon to <place>!"). Carries the departing
+    // player's name. The party-regroup coordinator — the leader tokens LAST — watches
+    // this in its own room to confirm each member ported before it follows.
+    public event Action<string>? MemberDeparted;
 
     public TimeSpan PerLookPace { get; set; } = TimeSpan.FromMilliseconds(400);
     public TimeSpan SettleWindow { get; set; } = TimeSpan.FromSeconds(2);
@@ -56,14 +62,20 @@ public sealed class TokenTracker : IDisposable
         Action<string> send,
         Func<IReadOnlyList<string>> carried,
         Func<bool> onParadigm,
+        Func<string, string?> matchSelfUse,
+        Func<string, string?> matchMemberDeparted,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(send);
         ArgumentNullException.ThrowIfNull(carried);
         ArgumentNullException.ThrowIfNull(onParadigm);
+        ArgumentNullException.ThrowIfNull(matchSelfUse);
+        ArgumentNullException.ThrowIfNull(matchMemberDeparted);
         _send = send;
         _carried = carried;
         _onParadigm = onParadigm;
+        _matchSelfUse = matchSelfUse;
+        _matchMemberDeparted = matchMemberDeparted;
         _log = log;
     }
 
@@ -162,9 +174,9 @@ public sealed class TokenTracker : IDisposable
     {
         string line = emitted.Text;
 
-        // A successful use prints "You invoke the token…" regardless of whether we're
-        // mid-collect — always catch it: signal listeners and reconcile the count.
-        if (TokenCatalog.MatchUseMessage(line) is { } usedPlace)
+        // A successful use prints the token spell's CasterMessage regardless of whether
+        // we're mid-collect — always catch it: signal listeners and reconcile the count.
+        if (_matchSelfUse(line) is { } usedPlace)
         {
             _log?.Info("Tokens", $"token use succeeded → {usedPlace} (buffs wiped by negate magic)");
             TokenUsed?.Invoke(usedPlace);
@@ -172,10 +184,11 @@ public sealed class TokenTracker : IDisposable
             return;
         }
 
-        // Someone else tokened into our room — surface it for the regroup coordinator.
-        if (TokenCatalog.MatchArrivalMessage(line) is { } arrival)
+        // Someone else used a token in our room (their WitnessMessage) — surface the
+        // actor for the regroup coordinator.
+        if (_matchMemberDeparted(line) is { } departed)
         {
-            MemberArrived?.Invoke(arrival);
+            MemberDeparted?.Invoke(departed);
             return;
         }
 
