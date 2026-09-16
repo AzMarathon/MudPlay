@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.94.3**
-> - New Loop / Edit Loop editor: the waypoint table's "No rest" / "No atk" checkboxes now line up under their headers (the ↑↓✕ button columns had shifted every column off its cells)
-> - New Loop / Edit Loop editor: while it's open, left-clicking a room on the Navigation map appends that room to the waypoint list
+> **Version 3.94.4**
+> - Exp/hr estimator: the assumption knobs (I'm Rooming, Seconds per room, Rounds to kill a mob, Real-world multiplier) now live in a **⚙ Estimate Settings** flyout at the top of the panel, mirroring the loop builder's Entire Loop Settings — so the panel leads with the result and room list
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
