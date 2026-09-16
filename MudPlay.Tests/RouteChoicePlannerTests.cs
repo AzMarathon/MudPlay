@@ -1433,6 +1433,90 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    // Report paradigm-20260915-182554 (the TWO-ROUTE twin of the sole case above):
+    // an avoid-honouring route EXISTS (a long detour), and a shorter route through a
+    // marked-avoid room exists — but OBTAINING a boat opens an even shorter avoid-
+    // respecting river crossing. The two-route avoid-override must defer so Evaluate
+    // offers "buy a boat and sail" instead of nagging about the avoid.
+    //   detour (avoid + gate honoured, 5 hops): 1/1-N-1/2-N-1/3-N-1/4-N-1/6-N-1/9
+    //   avoid-crossing  (3 hops):               1/1-E-1/5(Avoided)-E-1/7-E-1/9
+    //   boat (hazard, 2 hops, gate-suspended):  1/1-S-1/8(River 700)-S-1/9
+    private const string AvoidTwoRouteWithHazardBypassJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "1/8", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "D1", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "D2", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "D3", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/6", "S": "1/3", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "D4", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/9", "S": "1/4", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Avoided", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/7", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 7, "Name": "AvoidMid", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 8, "Name": "River", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/1", "S": "1/9", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/8", "S": "1/6", "E": "0", "W": "1/7",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void NoTwoRouteAvoidOverride_WhenAnAcquirableCounterOpensAShorterAvoidRespectingRoute()
+    {
+        WithGraph(AvoidTwoRouteWithHazardBypassJson, (bfs, graph, filter) =>
+        {
+            filter.MarkAvoided(new RoomKey(1, 5));   // the avoid-crossing shortcut runs through here
+
+            // Two-route avoid-override would otherwise fire (5-hop detour vs 3-hop
+            // through-avoid, saves 2) — but a boat opens a 2-hop avoid-respecting river
+            // route, so it must defer to Evaluate instead of offering the override.
+            Assert.Null(RouteChoicePlanner.EvaluateAvoidOverride(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
+
+            // Evaluate surfaces the river crossing (obtain boat / cross), avoid-respecting.
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+            Assert.NotNull(choice);
+            RouteRequirement req = Assert.Single(choice!.Requirements);
+            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);
+            Assert.Equal(new[] { 42 }, req.ItemIds);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 8), new RoomKey(1, 9) },
+                choice.GatedPath);   // the river route, not through avoided 1/5
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 8) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;   // no boat carried
+        });
+    }
+
     [Fact]
     public void AvoidAlternative_IsNull_WhenNothingIsMarkedAvoid()
     {

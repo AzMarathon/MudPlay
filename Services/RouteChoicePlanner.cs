@@ -436,6 +436,21 @@ public static class RouteChoicePlanner
         // it's meaningfully shorter, or the user's deliberate avoid stands.
         if (free!.Count - overrideRoute.Count < MinAvoidOverrideSavings) return null;
 
+        // ...but if OBTAINING an acquirable gate item opens an avoid-respecting route
+        // shorter than even the avoid-crossing override, that's the better answer —
+        // defer to Evaluate, which surfaces the obtain / cross options (all of which
+        // honour the avoids), rather than asking the user to override a deliberate
+        // avoid for a marginal saving. This is the two-route twin of the sole-case
+        // deferral above. (Report paradigm-20260915-182554: standing at the boatman —
+        // a shop that sells boats — a walk to the river-turtle boss offered only a
+        // 423-step avoid-honouring detour vs a 421-step through-avoids route, and never
+        // the far shorter "buy a boat and sail the river" route, because this fork
+        // returned before Evaluate could weigh the obtainable water counter.)
+        using (filter.SuspendAcquirableGates())
+            if (bfs.FindPath(source, destination, filter) is { Count: > 0 } obtainable
+                && obtainable.Count < overrideRoute.Count)
+                return null;
+
         return new RouteChoice(
             free.Count, overrideRoute.Count,
             Array.Empty<RouteRequirement>(),

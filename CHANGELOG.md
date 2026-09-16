@@ -1,5 +1,10 @@
 # Version history
 
+## 3.88.16
+
+- The route picker now offers an "obtain and cross" route (e.g. buy a boat and sail the river) when it's shorter than detouring around your Avoid rooms — standing at the boatman, a walk to a river destination surfaced only a long avoid-detour vs a through-avoids route and never the far shorter boat crossing, because the avoid-override fork returned before the obtain/cross evaluation ran (the two-route twin of an earlier sole-route fix)
+- bug reports addressed: paradigm-20260915-182554
+
 ## 3.88.15
 
 - Navigation through the Treetops vine puzzle above the Lost City (the route to the volcano / Undermountain) now solves — its five-gate lever chain (turn knot → move branch → pull vine → push knot → tear bark) sat one level deeper than the walker's nested action-exit auto-solver allowed, so walk-to bailed with "route needs an action-gated exit the walker can't auto-solve"

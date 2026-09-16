@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.15**
-> - Navigation through the Treetops vine puzzle above the Lost City (the route to the volcano / Undermountain) now solves — its five-gate lever chain (turn knot → move branch → pull vine → push knot → tear bark) sat one level deeper than the walker's nested action-exit auto-solver allowed, so walk-to bailed with "route needs an action-gated exit the walker can't auto-solve"
-> - Raised the auto-solver's nesting ceiling well past any known chained-lever puzzle (real cycles and runaway length are still caught by their own guards)
+> **Version 3.88.16**
+> - The route picker now offers an "obtain and cross" route (e.g. buy a boat and sail the river) when it's shorter than detouring around your Avoid rooms — previously, standing at the boatman, a walk to a river destination showed only the long avoid-detour and never the far shorter boat crossing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
