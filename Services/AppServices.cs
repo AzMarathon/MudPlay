@@ -152,6 +152,22 @@ public sealed class AppServices
     public void SetCenterNavigationIfOpenOpener(Action<Game.Map.RoomKey> opener) => _centerNavigationIfOpenOpener = opener;
     public void CenterNavigationIfOpen(Game.Map.RoomKey key) => _centerNavigationIfOpenOpener?.Invoke(key);
 
+    // While a Create/Edit Loop dialog is open it registers a sink here, so a left-click
+    // on the Navigation map appends the clicked room to that dialog's waypoint list. The
+    // map lives in the Navigation window and the loop editor is a separate modeless
+    // dialog, so they coordinate through this holder (the dialog's code-behind sets the
+    // sink on Opened, clears it on Closed). Null = no editor capturing map clicks.
+    private Action<Game.Map.RoomKey>? _loopWaypointCaptureSink;
+    public void SetLoopWaypointCaptureSink(Action<Game.Map.RoomKey>? sink) => _loopWaypointCaptureSink = sink;
+    // Returns true when an open loop editor consumed the click (so the caller skips its
+    // own map-click handling); false when no editor is capturing.
+    public bool TryCaptureLoopWaypoint(Game.Map.RoomKey key)
+    {
+        if (_loopWaypointCaptureSink is not { } sink) return false;
+        sink(key);
+        return true;
+    }
+
     // Flashes a room green on the map and centres on it for a few seconds ONLY if
     // the Navigation window is already open — never force-opens it. Driven by
     // WhereReplyTracker when an @where reply telepath lands, so an answered

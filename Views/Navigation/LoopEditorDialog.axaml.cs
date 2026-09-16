@@ -1,6 +1,8 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using MudPlay.Services;
 using MudPlay.ViewModels.Navigation;
 
 namespace MudPlay.Views.Navigation;
@@ -13,7 +15,23 @@ public partial class LoopEditorDialog : Window
     public LoopEditorDialog()
     {
         InitializeComponent();
+        // While this dialog is open, route the Navigation map's left-clicks to it so a
+        // clicked room is appended as a waypoint. Registered on the shared holder that
+        // the Navigation window consults (see AppServices.TryCaptureLoopWaypoint), and
+        // cleared on close so map clicks stop feeding a dismissed editor. Opened/Closed
+        // cover every close path (Save, Cancel, title-bar X) uniformly.
+        Opened += OnDialogOpened;
+        Closed += OnDialogClosed;
     }
+
+    private void OnDialogOpened(object? sender, EventArgs e)
+    {
+        if (DataContext is LoopEditorDialogViewModel vm)
+            AppServices.CurrentOrNull?.SetLoopWaypointCaptureSink(vm.AddWaypointByRoomKey);
+    }
+
+    private void OnDialogClosed(object? sender, EventArgs e)
+        => AppServices.CurrentOrNull?.SetLoopWaypointCaptureSink(null);
 
     // Enter while focus is on the add-room TextBox commits the highlighted (or
     // top) search result via AddWaypointCommand. We set e.Handled = true so the

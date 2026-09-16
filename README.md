@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.94.1**
-> - Character Workshop no longer lags on the Player Info tab while the Equipment Manager streams a gear swap — the tab's stats/wealth/equipped-list refreshes are now coalesced into one once the swap settles, instead of rebuilding on every wear/rem confirmation
+> **Version 3.94.3**
+> - New Loop / Edit Loop editor: the waypoint table's "No rest" / "No atk" checkboxes now line up under their headers (the ↑↓✕ button columns had shifted every column off its cells)
+> - New Loop / Edit Loop editor: while it's open, left-clicking a room on the Navigation map appends that room to the waypoint list
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

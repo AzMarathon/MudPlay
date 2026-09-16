@@ -61,8 +61,13 @@
 
             <!-- Waypoints header row — column titles aligned to the table's
                  shared ColumnDefinitions below. -->
-            <Grid Grid.Row="2" ColumnDefinitions="32,*,150,72,50,50,Auto,Auto,Auto" ColumnSpacing="4"
-                  Margin="6,4,6,0">
+            <!-- Column widths + insets must match the waypoint-row template below
+                 EXACTLY or the headers drift off their cells: the ↑↓✕ columns are
+                 fixed (not Auto) so the empty header cells don't collapse and widen
+                 the * column, and the Margin matches the row's ListBox-border +
+                 WaypointRow-border + padding inset (1+1+6). -->
+            <Grid Grid.Row="2" ColumnDefinitions="32,*,150,72,50,50,30,30,30" ColumnSpacing="4"
+                  Margin="8,4,8,0">
                 <TextBlock Grid.Column="1" Text="Waypoints" FontSize="11"
                            Foreground="{StaticResource ChromeFgMutedBrush}"/>
                 <TextBlock Grid.Column="2" Text="Command" FontSize="10"
@@ -94,7 +99,9 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:LoopWaypointRowViewModel">
                         <Border Classes="WaypointRow">
-                            <Grid ColumnDefinitions="32,*,150,72,50,50,Auto,Auto,Auto" ColumnSpacing="4">
+                            <!-- ColumnDefinitions must stay identical to the header grid
+                                 above (fixed ↑↓✕ widths, not Auto) so headers line up. -->
+                            <Grid ColumnDefinitions="32,*,150,72,50,50,30,30,30" ColumnSpacing="4">
                                 <TextBlock Grid.Column="0"
                                            Text="{Binding Index}"
                                            HorizontalAlignment="Right"

@@ -2900,6 +2900,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // it, it already shows the last-clicked room.
         RoomInfo.Show(key);
 
+        // A Create/Edit Loop dialog open elsewhere can capture map clicks to build its
+        // waypoint list; when one does, the click is consumed here so it doesn't also
+        // drive the mode dispatch below (which is Idle/no-op with that dialog up anyway).
+        if (_services.TryCaptureLoopWaypoint(key)) return;
+
         switch (CurrentMode)
         {
             case NavigationMode.LoopBuild:
