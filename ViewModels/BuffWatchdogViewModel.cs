@@ -32,6 +32,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     // the self section header — NOT the profile name, which can differ. Null on the
     // test ctor / before the statline is parsed.
     private readonly Func<string?>? _readSelfName;
+    private readonly Game.Tokens.TokenTracker? _tokens;
 
     private string _configSignature = string.Empty;
     private bool _needsRebuild = true;
@@ -52,6 +53,13 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     public ObservableCollection<BuffWatchdogPlayerGroup> Groups { get; } = new();
 
     [ObservableProperty] private bool _isEmpty;
+
+    // True while a Paradigm transport-token use is holding buffing (the token's negate
+    // magic is about to wipe every buff). Surfaced as a status line in the window;
+    // cleared when the token fires or its 30s safety window times out. Driven by
+    // TokenTracker.BuffPauseChanged.
+    [ObservableProperty] private bool _tokenPauseActive;
+    public string TokenPauseStatus => "Paused by token usage";
 
     // Window layout: whether the config table sits above / below / left / right of the
     // timer bars. Chosen in Settings → General (persisted on
@@ -132,7 +140,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                () => AppServices.Current.Resolver.Resolve<SpellsSettings>("Spells"),
                () => AppServices.Current.Profile.Current?.PartyBuffs,
                AppServices.Current.PartyState,
-               () => AppServices.Current.PlayerStats.Name)
+               () => AppServices.Current.PlayerStats.Name,
+               AppServices.Current.Tokens)
     {
         Buffs = new BuffPanelViewModel(AppServices.Current.PartyState);
     }
@@ -141,7 +150,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         CastingDirector castDirector, SpellbookState spellbook,
         Game.TickEngine tick, ProfileService profile,
         Func<SpellsSettings> readSpells, Func<BuffSettings?> readPartyBuffs,
-        Game.PartyState? party = null, Func<string?>? readSelfName = null)
+        Game.PartyState? party = null, Func<string?>? readSelfName = null,
+        Game.Tokens.TokenTracker? tokens = null)
     {
         _castDirector = castDirector;
         _spellbook = spellbook;
@@ -151,12 +161,18 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         _readPartyBuffs = readPartyBuffs;
         _party = party;
         _readSelfName = readSelfName;
+        _tokens = tokens;
 
         _spellbook.Changed += OnSpellbookChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
         _profile.ProfileMutated += OnProfileMutated;
         _tick.HeartbeatElapsed += OnHeartbeat;
         if (_party is not null) _party.Members.CollectionChanged += OnPartyMembersChanged;
+        if (_tokens is not null)
+        {
+            _tokens.BuffPauseChanged += OnTokenBuffPauseChanged;
+            _tokenPauseActive = _tokens.IsBuffPausedForToken;
+        }
 
         _layout = _profile.Current?.BuffWatchdogLayout ?? BuffWatchdogLayout.ConfigTop;
         _configCollapsed = _profile.Current?.BuffWatchdogConfigCollapsed ?? false;
@@ -184,6 +200,10 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         }
         return members;
     }
+
+    // TokenTracker.BuffPauseChanged (UI thread) — flip the "paused by token usage"
+    // status on/off as the pre-token buff-hold opens and releases.
+    private void OnTokenBuffPauseChanged() => TokenPauseActive = _tokens?.IsBuffPausedForToken ?? false;
 
     private void OnSpellbookChanged() => MarkRebuildAndRefresh();
     private void OnProfileLoaded(CharacterProfile p)
@@ -677,6 +697,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         _profile.ProfileMutated -= OnProfileMutated;
         _tick.HeartbeatElapsed -= OnHeartbeat;
         if (_party is not null) _party.Members.CollectionChanged -= OnPartyMembersChanged;
+        if (_tokens is not null) _tokens.BuffPauseChanged -= OnTokenBuffPauseChanged;
         Buffs?.Dispose();
     }
 }

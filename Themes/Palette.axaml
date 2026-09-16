@@ -47,6 +47,9 @@
     <Color x:Key="AccentAmberColor">#FFD4A24C</Color>
     <Color x:Key="AccentAmberSoftColor">#2ED4A24C</Color>
     <Color x:Key="AccentCyanColor">#FF5FB3D9</Color>
+    <!-- CyanSoft mirrors AmberSoft/RedSoft: cyan-blue at ~18% opacity, for the
+         (distinctly non-danger) token route card fill. -->
+    <Color x:Key="AccentCyanSoftColor">#2E5FB3D9</Color>
     <Color x:Key="AccentRedColor">#FFE06060</Color>
     <!-- RedSoft mirrors AmberSoft: red at ~18% opacity for a "danger" card fill. -->
     <Color x:Key="AccentRedSoftColor">#2EE06060</Color>
@@ -58,6 +61,7 @@
     <SolidColorBrush x:Key="AccentAmberBrush"      Color="{StaticResource AccentAmberColor}"/>
     <SolidColorBrush x:Key="AccentAmberSoftBrush"  Color="{StaticResource AccentAmberSoftColor}"/>
     <SolidColorBrush x:Key="AccentCyanBrush"       Color="{StaticResource AccentCyanColor}"/>
+    <SolidColorBrush x:Key="AccentCyanSoftBrush"   Color="{StaticResource AccentCyanSoftColor}"/>
     <SolidColorBrush x:Key="AccentRedBrush"        Color="{StaticResource AccentRedColor}"/>
     <SolidColorBrush x:Key="AccentRedSoftBrush"    Color="{StaticResource AccentRedSoftColor}"/>
     <SolidColorBrush x:Key="AccentYellowBrush"     Color="{StaticResource AccentYellowColor}"/>

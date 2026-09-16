@@ -1,5 +1,51 @@
 # Version history
 
+## 3.94.0
+
+- Stock realms now show limited-use item charges too (they print no "Uses remaining" line): the client counts the `use`s you send and shows remaining = the item's max charges − what you've spent
+- Rechargeable items (align-quest cloaks, tokens) restock to full at your BBS's configured cleanup time; finite ones (the wands) stay spent; the counts persist per character across restarts
+
+## 3.93.0
+
+- Character Info now shows a limited-use item's **remaining charges** next to it (e.g. "token of Silvermere - 5 Charges") — captured from the "Uses remaining: N" a `look` prints on Paradigm; transport tokens fill in automatically (looked on login), any other charged item when you look at it
+- (Stock realms print no charge count, so nothing shows there — stock use-counting is a follow-up)
+
+## 3.92.1
+
+- Token route "minimum rooms saved" now defaults to 50 (was 3) — a token's gold + charge + buff-wipe is only worth it for a big shortcut; the spinner now goes up to 300
+- Corrected the party-token setting's tooltip to the real order (party across first, leader last)
+
+## 3.92.0
+
+- Buffing now pauses when a transport-token use is imminent (the token's negate magic wipes every buff) — held until the token fires or 30 seconds elapse, then resumes; works whether you use the token yourself or a party leader sends you across (`@party`/`@do use …`, full name or shorthand)
+- The **Buff Watchdog** shows a "Paused by token usage" status while the hold is in effect, and clears it when tokening finishes or the timer expires
+- Party token retries now re-broadcast `.@party` (a room-local say, so only members still present are re-told) instead of per-member `@do` — no Execute-commands grant needed
+
+## 3.91.1
+
+- Reworked party token routing to the correct order: the leader sends the party across **first** (`.@party use token`), watches each member port, re-directs any stragglers a few times, and only tokens across **itself last**
+- New **Settings → Other** checkbox (Paradigm): take a token route even when a party member can't follow — off by default, so the leader waits and fails out in the room (with the reason in the nav header) rather than leaving anyone behind
+- Token use lines are now recognized from the token spells' seeded messages, not a separate hardcoded pattern
+
+## 3.91.0
+
+- Party leaders can now take token routes: after the leader tokens, it telepaths each member `@do use <token>`, watches its landing room for each to arrive, and retries a few times (6s apart)
+- Fully regrouped → the walk continues; otherwise it fails out with the reason in the nav header and sits for you to sort out
+- Fixed the token-use command to send the token's full name, so the "the Lost City" token isn't mistyped
+
+## 3.90.0
+
+- Paradigm route picker now offers a blue **token card** alongside the normal walk when a held transport token reaches your destination faster — never auto-taken, always your pick
+- Picking it uses the token and resumes the walk from where it drops you; if the room isn't monster-free it walks overland and uses the token at the first clear room (solo only for now — party regroup is still to come)
+- New **Settings → Other** knobs (Paradigm only): turn token routing off, and set how many rooms a token must save before the card appears
+- The Paradigm message seed now recognizes each transport token's use lines — your own "You invoke the token…" and the witnessed "&lt;name&gt; invokes a token…" — linked to their token spells
+
+## 3.89.0
+
+- The client now tracks the daily charges of your Paradigm **transport tokens** — on login it `look`s each held token to read its "Uses remaining" count, and re-reads after any `use` (so a use blocked by an NPC in the room, too little gold, or too low a level never mis-counts)
+- New **`@token`** remote command — bare, it lists every held token's remaining charges; with a name, it reports just that one
+- (Foundation for token-aware routing and party token coordination — those land in follow-up PRs)
+
 ## 3.88.32
 
 - **Critical**: an emergency heal could lose its round to an unrelated attack and never fire — a fresh-engage attack and a between-round cast (heal/buff/cure) were sharing one "last cast" clock even though they're independent slots server-side; an attack landing an instant before an emergency heal was due silently blocked the heal for the same reason the attack itself is allowed to bypass that clock. The two are now paced on separate clocks so neither can ever block the other, in either direction.

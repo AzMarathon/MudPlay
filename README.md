@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.32**
-> - **Critical**: an emergency heal could lose its round to an unrelated attack and never fire — attack-slot and between-round (heal/buff/cure) casts now pace on independent clocks so one can never block the other
+> **Version 3.94.0**
+> - Stock realms now show limited-use item charges too — the client counts the `use`s you send and shows remaining = the item's max charges − what you've spent (stock prints no "Uses remaining" line)
+> - Rechargeable items (align-quest cloaks, tokens) restock at your BBS's configured cleanup time; finite ones (the wands) stay spent; counts persist per character
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

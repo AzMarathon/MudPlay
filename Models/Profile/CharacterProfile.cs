@@ -190,6 +190,12 @@ public sealed class CharacterProfile
     // confirmed by searching on arrival. null / empty = nothing stashed.
     public Dictionary<string, long>? StashedCopper { get; set; }
 
+    // Client-tracked use counts for limited-use items, keyed by item number. Populated
+    // on STOCK realms (which print no "Uses remaining" on look) so remaining = max −
+    // Used can be shown; a rechargeable item restocks at cleanup. null / empty = none
+    // tracked. See ItemUseCountTracker.
+    public Dictionary<int, ItemUseRecord>? ItemUseCounts { get; set; }
+
     // LEGACY Roomba Mode fields — superseded by the BBS-tier RoombaSettings
     // (Data/BBS/{bbs}/roomba.json; see GhRoomLabelStore) since every character
     // on a BBS shares one gang house. Kept ONLY so GhRoomLabelStore can lift an

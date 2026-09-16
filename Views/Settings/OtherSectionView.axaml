@@ -212,6 +212,33 @@
                       Margin="0,8,0,0"
                       ToolTip.Tip="When checked (default): walking to a room inside a random-teleport maze pocket (the Warped Asylum) drives look-peeks and reshuffles until a route exists, then hands the final walk back. When unchecked: the walk fails normally. Applies to every character on this install."/>
 
+            <!-- Paradigm transport-token routing (Global tier). The whole block only
+                 shows on a Paradigm realm — tokens are a Paradigm-only item. When on,
+                 a walk-to whose destination a held token reaches faster surfaces a
+                 (never-auto) blue token card in the route picker. The threshold hides
+                 marginal token routes that aren't worth the gold + charge + buff-wipe. -->
+            <StackPanel Orientation="Vertical" Spacing="2" IsVisible="{Binding IsParadigmRealm}">
+                <TextBlock Classes="FieldLabel" Text="Paradigm transport tokens:" Margin="0,14,0,0"/>
+                <CheckBox Content="Offer token routes in the route picker"
+                          IsChecked="{Binding EnableTokenRoutes, Mode=TwoWay}"
+                          ToolTip.Tip="When checked (default): if a Paradigm transport token you're carrying reaches your walk-to destination meaningfully faster than walking, the route picker shows a blue 'use token' card alongside the normal route. It's never taken automatically — you pick it. Using a token costs gold, spends one of its daily charges, and wipes your buffs (negate magic). When unchecked: token cards never appear. Applies to every character on this install."/>
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0" VerticalAlignment="Center"
+                            IsEnabled="{Binding EnableTokenRoutes}">
+                    <TextBlock Classes="FieldLabel" Text="Only when it saves at least"/>
+                    <NumericUpDown Value="{Binding TokenRouteMinRoomsShorter, Mode=TwoWay}"
+                                   Minimum="1" Maximum="300" Increment="1"
+                                   FormatString="0" ShowButtonSpinner="True"
+                                   Width="120" MinWidth="120"
+                                   ToolTip.Tip="A token route is only offered when it reaches the destination at least this many rooms sooner than walking. A one- or two-room saving isn't worth a token's gold, daily charge, and buff-wipe. Default 3. Applies to every character on this install."/>
+                    <TextBlock Classes="FieldLabel" Text="rooms."/>
+                </StackPanel>
+                <CheckBox Content="Take a token route even if a party member can't follow"
+                          IsChecked="{Binding TokenUseWhenPartyIncomplete, Mode=TwoWay}"
+                          Margin="0,6,0,0"
+                          IsEnabled="{Binding EnableTokenRoutes}"
+                          ToolTip.Tip="Only matters as a party leader. On a token route the leader sends the party across FIRST and waits for everyone to follow (retrying a few times), then tokens across itself LAST. When UNCHECKED (default): if a member still can't follow, the leader does NOT token — it stays in the room with the reason in the nav header so you can sort it out. When checked: the leader tokens across anyway and walks on, leaving the stragglers behind. Applies to every character on this install."/>
+            </StackPanel>
+
             <!-- Cleanup-Player-Database row: prose-style "Cleanup Player
                  Database after [spinner] days." — spinner widened from
                  90→120 so 4-digit values (e.g. 3650-day max) render

@@ -140,7 +140,7 @@ public static class RouteChoicePrompt
     // walk-to doesn't flash a window; a plan that drags gets the feedback.
     private const int RouteCalcRevealDelayMs = 150;
 
-    private enum RoutePlanKind { Teleport, TrapAvoid, AvoidOverride, ItemGate, Blocked, AutoObtainSole, PlainWalk }
+    private enum RoutePlanKind { Token, Teleport, TrapAvoid, AvoidOverride, ItemGate, Blocked, AutoObtainSole, PlainWalk }
 
     // The outcome of route planning: which fork (if any) to surface, the resolved
     // choice for the picker, and the ready-to-log decision line. Pure computation —
@@ -171,6 +171,17 @@ public static class RouteChoicePrompt
             }
             return avoidLiftedCache;
         }
+
+        // Token fork first (Paradigm only): a held transport token that reaches the
+        // destination enough rooms sooner than walking. It's an explicit opt-in feature
+        // and the biggest shortcut on offer, so it leads — the picker shows the plain
+        // overland walk beside the blue token card. TryPlanTokenRoute short-circuits off
+        // Paradigm / when disabled, so this costs nothing on other realms.
+        RouteChoice? token = services.TryPlanTokenRoute(src, destination);
+        if (token is not null)
+            return new(RoutePlanKind.Token, token,
+                $"route pick {src} -> {destination}: token fork — token to {token.TokenPlace} lands {token.TokenLanding}, "
+                + $"saves {token.FreeStepCount - token.GatedStepCount} room(s) vs overland {token.FreeStepCount}; showing picker");
 
         // Walk-vs-teleport fork takes precedence over the item-gate fork: if the
         // shortest route teleports and a pure-walking route also exists, let the user
@@ -453,6 +464,9 @@ public static class RouteChoicePrompt
                 RouteChoiceResult.SearchEnRoute => choice.GatedPath,
                 RouteChoiceResult.AvoidOverrideAlt => choice.AvoidAlternativePath,
                 RouteChoiceResult.Shortcut => choice.ShortcutPath,
+                // The token route's only drawable segment is the post-landing walk (the
+                // token hop isn't a graph edge).
+                RouteChoiceResult.Token => choice.GatedPath,
                 _ => null,
             });
             // A pre-selected route (trap-avoid defaults to the trap-free line) draws
@@ -492,6 +506,26 @@ public static class RouteChoicePrompt
             // any other result walks nothing.
             if (result == RouteChoiceResult.Gated && choice.StopRoom is { } stop)
                 CommitWalk(services, stop, gated: false);
+            return;
+        }
+
+        if (choice.Kind == RouteChoiceKind.Token)
+        {
+            switch (result)
+            {
+                case RouteChoiceResult.Free:
+                    // "Walk it" — the plain overland route, no token.
+                    CommitWalk(services, destination, gated: false);
+                    break;
+                case RouteChoiceResult.Token when choice.TokenPlace is { } place && choice.TokenLanding is { } landing:
+                    // Use the token, then resume from its landing. The coordinator
+                    // declines (returns false) in a party — party regroup is a later
+                    // stage — so fall back to the plain overland walk there.
+                    if (!services.TokenRoute.TryBegin(place, landing, destination))
+                        CommitWalk(services, destination, gated: false);
+                    break;
+                // null → cancelled: walk nothing.
+            }
             return;
         }
 

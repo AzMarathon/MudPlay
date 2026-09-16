@@ -97,6 +97,24 @@ public sealed class GlobalSettings
     // TeleportMazeSolver.Enabled. Surfaced in Settings → Other.
     public bool AsylumSolverEnabled { get; set; } = true;
 
+    // Master enable for Paradigm transport-token routing — when true (default) a
+    // walk-to whose destination a held token reaches meaningfully faster surfaces a
+    // (never-auto) token card in the route picker; when false, token cards never
+    // appear. Install-wide (Global tier); read live at plan time. Surfaced in
+    // Settings → Other (Paradigm realms only).
+    public bool EnableTokenRoutes { get; set; } = true;
+
+    // Only surface a token route when it saves at least this many rooms over the
+    // overland walk (a token use costs gold, a daily charge, and wipes buffs, so it's
+    // only worth offering for a big saving). Install-wide; default 50.
+    public int TokenRouteMinRoomsShorter { get; set; } = 50;
+
+    // Party token-route behaviour when some members fail to token across after the
+    // regroup retries. false (default) — the leader does NOT token; it fails out in
+    // the room and sits so you can sort out the stragglers. true — the leader uses its
+    // token anyway and walks on, leaving the failed members behind. Install-wide.
+    public bool TokenUseWhenPartyIncomplete { get; set; }
+
     // Snap MudPlay's panel windows to each other's edges as you drag them, and
     // move the whole snapped cluster when the main window is dragged. When false,
     // windows float freely. Install-wide (Global tier — a UI preference, not

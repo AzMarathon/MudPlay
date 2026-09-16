@@ -430,6 +430,20 @@ public sealed class AppServices
     // GroundItems survey; replies only.
     public Game.Remote.InventoryQueryHandler InventoryQuery { get; private set; } = null!;
 
+    // Paradigm transport-token charge tracker + its @token read-only query handler.
+    public Game.Tokens.TokenTracker Tokens { get; private set; } = null!;
+    public Game.Remote.TokenQueryHandler TokenQuery { get; private set; } = null!;
+
+    // General limited-use item charge tracker — captures "Uses remaining: N" from any
+    // `look` (Paradigm-only line), surfaced in Character Info. Tokens populate via their
+    // login look; other limited-use items when the player looks at them.
+    public Game.Inventory.ItemChargeTracker ItemCharges { get; private set; } = null!;
+
+    // Stock-realm counterpart: counts `use` sends for limited-use items (stock prints
+    // no charge line) so Character Info can show remaining = max − used; rechargeables
+    // restock at the BBS cleanup time. Persisted on the character profile.
+    public Game.Inventory.ItemUseCountTracker ItemUseCounts { get; private set; } = null!;
+
     // Write-side consumer of RemoteCommands for the inventory /
     // cash action commands — @get-all / @drop-all /
     // @deposit-all (ExecuteCommands) and @share (party-whitelist).
@@ -1545,6 +1559,12 @@ public sealed class AppServices
     // held: walk to its source, let the room settle, grab the ground drop, then one
     // live-filter walk to the destination that self-selects shortcut vs long route.
     public Game.Map.ShortcutSourceCoordinator ShortcutSource { get; private set; } = null!;
+
+    // Executes a picked Paradigm token route (solo): use the transport token, then
+    // resume the walk from its landing to the destination — deferring the use to the
+    // first monster-free room when the current one isn't clear. Begun only by the
+    // route picker's explicit token pick; declines in a party (regroup is a later stage).
+    public Game.Tokens.TokenRouteCoordinator TokenRoute { get; private set; } = null!;
 
     // On-demand party-inventory probe — broadcasts @have and aggregates
     // the party's replies into per-member counts. Feeds
@@ -3900,6 +3920,10 @@ public sealed class AppServices
         // burn mana on a buff the room tears straight back off.
         CastDirector.SetBuffStripRoomGate(
             () => RoomBuffStrip.StripsBuffs(RoomTracker.State.CurrentRoom?.Spell ?? 0));
+        // Token buff-pause — hold buffing while a transport-token use is imminent (its
+        // negate magic wipes buffs); TokenTracker opens the window on an outbound token
+        // use and closes it on the success line or a 30s timeout.
+        CastDirector.SetTokenBuffPauseGate(() => Tokens.IsBuffPausedForToken);
         // Sneak-maintenance defer — hold buffs / cures for the next empty room when
         // a stealth runner is walking combat-off through an occupied room, so the
         // cast (which breaks sneak) can be followed by a re-sneak instead of
@@ -4624,6 +4648,60 @@ public sealed class AppServices
         // InventoryManager snapshot; @what reports the GroundItems survey. No
         // wire output either.
         InventoryQuery = new Game.Remote.InventoryQueryHandler(RemoteCommands, Inventory, GroundItems, Currency);
+
+        // Paradigm transport-token daily-charge tracking. Reads each held token's
+        // "Uses remaining: N" via `look` (on login + after a `use`), Paradigm-only.
+        // The raw wire sender matches QuestFlagProbe; the outbound tap + line feed
+        // are wired in MainWindowViewModel. Cleared on profile / set swap so a new
+        // character re-reads from scratch.
+        Tokens = new Game.Tokens.TokenTracker(
+            send: cmd => SendGameCommand(cmd),
+            carried: () => Inventory.Snapshot.CarriedItems,
+            onParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            // Recognise the token use lines through the seeded token spell messages —
+            // the wording lives in the Messages catalogue, not a second hardcoded regex.
+            matchSelfUse: MatchTokenSelfUse,
+            matchMemberDeparted: MatchTokenMemberDeparted,
+            // Safety-release timer for the pre-token buff-pause window.
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
+        Profile.ProfileLoaded += _ => Tokens.Clear();
+        // A set swap changes which tokens exist, where they teleport, and their spell
+        // messages — clear the charge tracker AND drop the cached teleport map + use
+        // matchers so they re-read the new set.
+        GameData.ActiveSetChanged += _ => { Tokens.Clear(); _tokenTeleports = null; _tokenUseMatchers = null; };
+        // @token <name> — read-only remaining-charges report off the tracker.
+        TokenQuery = new Game.Remote.TokenQueryHandler(RemoteCommands, Tokens);
+
+        // General limited-use item charges from look replies (Paradigm "Uses remaining:
+        // N"). Cleared on profile swap so a new character re-reads from scratch. The
+        // line feed + outbound tap are wired in MainWindowViewModel alongside Tokens.
+        ItemCharges = new Game.Inventory.ItemChargeTracker(
+            carried: () => Inventory.Snapshot.CarriedItems,
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
+        Profile.ProfileLoaded += _ => ItemCharges.Clear();
+
+        // Stock use-counting for limited-use items (persisted on the profile; rechargeables
+        // restock at the BBS cleanup time — reuses the boss-timer cleanup config).
+        ItemUseCounts = new Game.Inventory.ItemUseCountTracker(
+            gameData: GameData,
+            carried: () => Inventory.Snapshot.CarriedItems,
+            itemNumberOf: ItemNumberByName,
+            onStock: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
+            cleanupConfig: ResolveBossCleanupConfig,
+            profile: Profile,
+            log: Log);
 
         // @timer — read-only report of the boss respawn timers being tracked. Reads
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
@@ -6614,6 +6692,48 @@ public sealed class AppServices
         Inventory.Changed += ShortcutSource.OnInventoryChanged;
         RoomTracker.StateChanged += _ => ShortcutSource.OnCombatStateChanged();
 
+        // Solo token-route execution: on a picked token card, use the token then walk
+        // from its landing to the destination — walking overland to the first clear
+        // room first when the current room has NPCs. The resume walk goes straight to
+        // Walker.WalkTo (never back through the picker) so it can't re-offer a token.
+        TokenRoute = new Game.Tokens.TokenRouteCoordinator(
+            inParty: () => PartyState.IsInParty,
+            isLeader: () => PartyState.IsInParty && PartyState.SelfIsLeader,
+            // Party members (never self) to bring across, by given name.
+            partyMembers: () => PartyState.Members
+                .Where(m => !m.IsSelf && !string.IsNullOrWhiteSpace(m.Name))
+                .Select(m => GivenNameOf(m.Name) ?? m.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            // Of those, the ones still standing in the leader's room (i.e. not yet
+            // ported) — the "check the room" the retry loop re-directs.
+            membersStillHere: () => PartyState.Members
+                .Where(m => !m.IsSelf && !string.IsNullOrWhiteSpace(m.Name))
+                .Select(m => GivenNameOf(m.Name) ?? m.Name)
+                .Where(IsGivenNameInRoom)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            useWhenIncomplete: () => Settings.Current.TokenUseWhenPartyIncomplete,
+            roomHasNpc: () => CombatTracker.HasRoomNpc,
+            walkToDest: dest => Walker.WalkTo(dest, supersedeSilently: true, preferTeleportFree: true),
+            stopWalker: () => Walker.Stop("token route: using token in a clear room"),
+            send: cmd => SendGameCommand(cmd),
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
+        Tokens.TokenUsed += TokenRoute.OnTokenUsed;
+        Tokens.MemberDeparted += TokenRoute.OnMemberDeparted;
+        Walker.Event += TokenRoute.OnWalkEvent;
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed)
+                TokenRoute.OnRoomChanged(t.NewRoom?.Key);
+        };
+
         // Follower-side @comeback. Watches for a movement-failure
         // line (prevents-movement flag / over-encumbered) immediately
         // before "You are no longer following X." — the signature of being
@@ -8496,6 +8616,123 @@ public sealed class AppServices
     // auto-deposit engine weighs). Backs the withdraw-before-buy decision.
     private long PathItemCashOnHand() => Inventory.Snapshot.Currency.TotalCopperValue;
 
+    // The active set's token teleports, keyed by normalized place — read once and
+    // cached, dropped on a set swap (see the ActiveSetChanged handler). Null until
+    // first use.
+    private System.Collections.Generic.IReadOnlyDictionary<string, Game.Tokens.TokenTeleportInfo>? _tokenTeleports;
+
+    private System.Collections.Generic.IReadOnlyDictionary<string, Game.Tokens.TokenTeleportInfo> TokenTeleportMap()
+        => _tokenTeleports ??= Game.Tokens.TokenTeleportReader.ReadAll(GameData);
+
+    // Compiled matchers for the token spells' seeded messages, so the token use lines
+    // are recognised from the Messages catalogue (single source of the wording) rather
+    // than a hardcoded regex. One per token record (Name "token of <place>"): the
+    // CasterMessage (self-use → place) and the WitnessMessage (someone else's use →
+    // the {source} actor name). Built once, dropped on a set swap.
+    private System.Collections.Generic.List<(string Place, Game.Spells.CasterMessageMatcher Caster, Game.Spells.CasterMessageMatcher Witness)>? _tokenUseMatchers;
+
+    private System.Collections.Generic.List<(string Place, Game.Spells.CasterMessageMatcher Caster, Game.Spells.CasterMessageMatcher Witness)> TokenUseMatchers()
+    {
+        if (_tokenUseMatchers is { } cached) return cached;
+        var list = new System.Collections.Generic.List<(string, Game.Spells.CasterMessageMatcher, Game.Spells.CasterMessageMatcher)>();
+        foreach (Models.GameData.MessageRecord r in Messages.Messages)
+        {
+            if (Game.Tokens.TokenCatalog.PlaceOf(r.Name) is not { } place) continue;
+            if (Game.Spells.CasterMessageMatcher.TryCreate(r.CasterMessage) is not { } caster) continue;
+            if (Game.Spells.CasterMessageMatcher.TryCreate(r.WitnessMessage) is not { } witness) continue;
+            list.Add((place, caster, witness));
+        }
+        _tokenUseMatchers = list;
+        return list;
+    }
+
+    // A token self-use line → its place (via the CasterMessage), or null.
+    private string? MatchTokenSelfUse(string line)
+    {
+        foreach ((string place, Game.Spells.CasterMessageMatcher caster, _) in TokenUseMatchers())
+            if (caster.TryMatch(line, out _)) return place;
+        return null;
+    }
+
+    // Someone else's token use line → the actor's name (the WitnessMessage's {source}
+    // capture), or null.
+    private string? MatchTokenMemberDeparted(string line)
+    {
+        foreach ((_, _, Game.Spells.CasterMessageMatcher witness) in TokenUseMatchers())
+            if (witness.TryMatch(line, out System.Collections.Generic.IReadOnlyList<string> caps) && caps.Count > 0)
+                return caps[0];
+        return null;
+    }
+
+    // Plan a token route for a user walk-to (Paradigm only): if a held transport token
+    // reaches the destination enough rooms sooner than walking, return a Token
+    // RouteChoice the picker surfaces as the blue card alongside the overland walk.
+    // Null when disabled, off Paradigm, no held token qualifies, or none beats the
+    // room-savings threshold. Only offers a token the character can actually use — the
+    // level and gold gates are checked here so the card never proposes a doomed use.
+    // Reads the graph / inventory / stats like the other planners; called from
+    // RouteChoicePrompt.PlanRouteChoice (which owns the off-thread-race handling).
+    public RouteChoice? TryPlanTokenRoute(Game.Map.RoomKey src, Game.Map.RoomKey destination)
+    {
+        if (GameData.ActiveRealm != Game.RealmType.ParaMud) return null;
+        if (!Settings.Current.EnableTokenRoutes) return null;
+        if (!Inventory.IsLoaded) return null;
+
+        System.Collections.Generic.IReadOnlyDictionary<string, Game.Tokens.TokenTeleportInfo> map = TokenTeleportMap();
+        if (map.Count == 0) return null;
+
+        long cash = PathItemCashOnHand();
+        int? level = Stats.HasParsed ? PlayerStats.Level : null;
+
+        // Held tokens the character can actually use (level + gold gates), paired with
+        // their live daily-charge counts (null = not looked yet — still offered).
+        var usable = new System.Collections.Generic.List<(Game.Tokens.TokenTeleportInfo Info, int? Charges)>();
+        foreach ((string _, string place) in Game.Tokens.TokenCatalog.HeldTokens(Inventory.Snapshot.CarriedItems))
+        {
+            if (!map.TryGetValue(Game.Tokens.TokenCatalog.NormalizePlace(place), out Game.Tokens.TokenTeleportInfo info))
+                continue;
+            if (level is { } lvl && lvl < info.MinLevel) continue;   // can't use it yet
+            if (cash < info.CostCopper) continue;                    // can't afford it
+            usable.Add((info, Tokens.ChargesFor(place)));
+        }
+        if (usable.Count == 0) return null;
+
+        // The overland walk this token route competes against.
+        System.Collections.Generic.IReadOnlyList<Game.Map.Direction>? overland = Bfs.FindPath(src, destination, Movement);
+        if (overland is null || overland.Count == 0) return null;
+
+        Game.Tokens.TokenRouteCandidate? best = Game.Tokens.TokenRouteEvaluator.Best(
+            overland.Count, usable,
+            landing => Bfs.FindPath(landing, destination, Movement)?.Count,
+            System.Math.Max(1, Settings.Current.TokenRouteMinRoomsShorter));
+        if (best is not { } b) return null;
+
+        // The onward walk from the landing (for the card's preview / ETA / details).
+        System.Collections.Generic.IReadOnlyList<Game.Map.Direction>? fromLanding =
+            Bfs.FindPath(b.Landing, destination, Movement);
+        if (fromLanding is null) return null;
+
+        return new RouteChoice(
+            FreeStepCount: overland.Count,
+            GatedStepCount: b.TokenWalkSteps,
+            Requirements: System.Array.Empty<RouteRequirement>(),
+            FreePath: RouteChoicePlanner.BuildKeyPath(RoomGraph, src, overland),
+            GatedPath: RouteChoicePlanner.BuildKeyPath(RoomGraph, b.Landing, fromLanding),
+            Kind: RouteChoiceKind.Token,
+            TeleportLanding: TokenLandingLabel(b.Landing),
+            TokenPlace: b.Place,
+            TokenLanding: b.Landing,
+            TokenCostCopper: b.CostCopper,
+            TokenMinLevel: b.MinLevel,
+            TokenCharges: b.Charges);
+    }
+
+    // "Silvermere (1/1813)" — the token landing's display label for the picker.
+    private string TokenLandingLabel(Game.Map.RoomKey landing)
+        => RoomGraph.GetRoom(landing)?.Name is { Length: > 0 } name
+            ? $"{name} ({landing})"
+            : landing.ToString();
+
     // Configured bank room for the shop router's withdraw leg, or null when
     // unset / unparseable. Reuses the Cash section's BankRoomKey (the
     // auto-deposit destination), so "where I bank" stays one setting.
@@ -9646,6 +9883,15 @@ public sealed class AppServices
             ? implied[0]
             : null;
     }
+
+    // Item number for a carried item name in the active set (0 when unresolved) — used
+    // by the stock use-counter to key charges by number.
+    private int ItemNumberByName(string name)
+        => !string.IsNullOrWhiteSpace(name)
+           && GameData.FindRowByName("Items", name) is { } row
+           && row.TryGetProperty("Number", out System.Text.Json.JsonElement n)
+           && n.ValueKind == System.Text.Json.JsonValueKind.Number
+            ? n.GetInt32() : 0;
 
     // Parse the active BBS's nightly-cleanup time + zone into a config for the
     // cleanup-boss DEAD/ALIVE state. Null when no BBS, a blank time, or an

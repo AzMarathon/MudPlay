@@ -50,6 +50,12 @@ public enum RouteChoiceKind
                // marked "avoid" (sole case), or a much shorter route exists through one
                // (two-route case). Offered so the user can override their own avoid list
                // for this one walk, warned about which/how many avoided rooms it crosses.
+    Token,     // (Paradigm only) a held transport token teleports to a fixed town that
+               // reaches the destination meaningfully faster than walking. Unlike an
+               // in-game teleport this is NOT a graph edge — the token is USED (costs
+               // gold + a daily charge + wipes buffs), lands the player at the token's
+               // town, then the walk resumes from there. Never auto-taken — the user
+               // picks it against the plain overland route shown alongside.
 }
 
 // A "run to the blocked room anyway" plan: the furthest room the walker can
@@ -109,7 +115,18 @@ public sealed record RouteChoice(
     // against the reliable long route. ShortcutItems is never auto-obtained.
     IReadOnlyList<RoomKey>? ShortcutPath = null,
     int ShortcutStepCount = 0,
-    IReadOnlyList<int>? ShortcutItems = null)
+    IReadOnlyList<int>? ShortcutItems = null,
+    // For a Token choice (Paradigm transport token): the token's place ("Silvermere"),
+    // the room it lands in, the gold cost in copper, the level needed to use it, and
+    // the daily charges left (null = not yet looked). FreeStepCount/FreePath are the
+    // overland walk; GatedStepCount/GatedPath are the landing→destination walk the
+    // token shortcut leaves. TeleportLanding carries the landing's display label,
+    // reused from the teleport fork. Zero/null for every other kind.
+    string? TokenPlace = null,
+    RoomKey? TokenLanding = null,
+    long TokenCostCopper = 0,
+    int TokenMinLevel = 0,
+    int? TokenCharges = null)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -646,7 +663,7 @@ public static class RouteChoicePlanner
     // first, then each hop's target) for the picker's map preview. Stops at the
     // first hop the graph can't resolve — a defensive guard; a freshly-planned
     // BFS path is always resolvable end to end.
-    private static IReadOnlyList<RoomKey> BuildKeyPath(
+    internal static IReadOnlyList<RoomKey> BuildKeyPath(
         RoomGraphManager graph, RoomKey source, IReadOnlyList<Direction> path)
     {
         var keys = new List<RoomKey>(path.Count + 1) { source };

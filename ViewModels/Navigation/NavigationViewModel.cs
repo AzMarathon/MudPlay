@@ -78,6 +78,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.RoomTracker.StateChanged += OnTrackerStateChanged;
         _services.Recovery.TierChanged    += OnRecoveryTierChanged;
         _services.Walker.Event += OnWalkerEvent;
+        _services.TokenRoute.RegroupFailed += OnTokenRegroupFailed;
         _services.MovementCoordinator.PauseStateChanged += OnPauseChanged;
         _services.MovementCoordinator.GatesChanged += OnGatesChanged;
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
@@ -169,6 +170,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.RoomTracker.StateChanged -= OnTrackerStateChanged;
         _services.Recovery.TierChanged    -= OnRecoveryTierChanged;
         _services.Walker.Event -= OnWalkerEvent;
+        _services.TokenRoute.RegroupFailed -= OnTokenRegroupFailed;
         _services.MovementCoordinator.PauseStateChanged -= OnPauseChanged;
         _services.MovementCoordinator.GatesChanged -= OnGatesChanged;
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
@@ -566,6 +568,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // so a later Run can't re-send us to a stale destination (the room we just
     // died in) — clearing it here matches how Stop clears the queued destination.
     private void ClearNavIntentOnDeath() => QueuedDestination = null;
+
+    // A party token regroup gave up (members didn't reach the landing after the
+    // retries) — surface the reason in the top bar (⚠) and sit, same channel a
+    // walker/loop failure uses. Fired on the UI thread by the coordinator.
+    private void OnTokenRegroupFailed(string reason) => EngineError = reason;
 
     private void OnLoopRunnerEvent(LoopEvent e)
     {

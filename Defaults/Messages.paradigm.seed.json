@@ -26167,5 +26167,138 @@
         "Number": 5855
       }
     ]
+  },
+  {
+    "Id": "027e0ea54a1cee7f",
+    "Name": "token of Silvermere",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You invoke the token and summon a gryphon to Silvermere!",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{source} invokes a token and summons a gryphon to Silvermere!",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5054
+      }
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
+  },
+  {
+    "Id": "f4e73f18adc1272b",
+    "Name": "token of Rhudaur",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You invoke the token and summon a gryphon to Rhudaur!",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{source} invokes a token and summons a gryphon to Rhudaur!",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5055
+      }
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
+  },
+  {
+    "Id": "ecde7d929017b7f4",
+    "Name": "token of Khazarad",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You invoke the token and summon a gryphon to Khazarad!",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{source} invokes a token and summons a gryphon to Khazarad!",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5056
+      }
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
+  },
+  {
+    "Id": "6ac2ff1c5528fac9",
+    "Name": "token of the Lost City",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You invoke the token and summon a gryphon to the Lost City!",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{source} invokes a token and summons a gryphon to the Lost City!",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5057
+      }
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
+  },
+  {
+    "Id": "3866cabc6b37fb8e",
+    "Name": "token of Arlysia",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You invoke the token and summon a gryphon to Arlysia!",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{source} invokes a token and summons a gryphon to Arlysia!",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5058
+      }
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
+  },
+  {
+    "Id": "47077bfbc1ac1bd8",
+    "Name": "token of Port Blackwater",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You invoke the token and summon a gryphon to Port Blackwater!",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{source} invokes a token and summons a gryphon to Port Blackwater!",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5086
+      }
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
+  },
+  {
+    "Id": "f3a3f9c631cafacb",
+    "Name": "token of Kingsport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You invoke the token and summon a gryphon to Kingsport!",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{source} invokes a token and summons a gryphon to Kingsport!",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5625
+      }
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   }
 ]

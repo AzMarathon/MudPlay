@@ -215,6 +215,20 @@
          which reflows this grid + the splitter whenever BuffWatchdogViewModel.Layout
          changes (and collapses the splitter for a class with no configurable buffs).
          Both zones are star-sized so they grow to fill the window. -->
+    <DockPanel>
+    <!-- Token buff-pause banner: shown while a transport-token use is holding buffing
+         (its negate magic is about to wipe buffs). Cleared when the token fires or the
+         30s window times out. Cyan to match the token route card. -->
+    <Border DockPanel.Dock="Top"
+            IsVisible="{Binding TokenPauseActive}"
+            Background="{StaticResource ChromeBgElevBrush}"
+            BorderBrush="{StaticResource AccentCyanBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="8,3">
+        <TextBlock Text="{Binding TokenPauseStatus}"
+                   FontSize="11" FontWeight="SemiBold"
+                   Foreground="{StaticResource AccentCyanBrush}"/>
+    </Border>
     <Grid x:Name="ZonesGrid">
 
         <ScrollViewer x:Name="ConfigZone"
@@ -467,4 +481,5 @@
                     FontSize="11"/>
         </Grid>
     </Grid>
+    </DockPanel>
 </Window>
