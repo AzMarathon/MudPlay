@@ -165,7 +165,8 @@ public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditabl
             isNew:           isNew,
             cache:           _cache,
             gameDataInfo:    info,
-            spellFormula:    formula);
+            spellFormula:    formula,
+            effectTree:      new SpellInfoRowsBuilder(_cache).BuildEffectTree(spellNumber));
         MessageEditResult? result = await _dialogs
             .OpenWindowAsync<MessageEditDialogViewModel, MessageEditResult>(vm);
         if (result is null) return;

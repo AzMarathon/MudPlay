@@ -143,6 +143,12 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     // True when the Game Data tab has content to show.
     public bool HasGameData => GameDataInfo.Count > 0;
 
+    // The spell's decoded effect tree (conditional branches → weighted outcomes → linked
+    // effects), shown below the flat info rows on the Game Data tab. Empty for spells with
+    // no TextBlock effect and for plain Messages-tab edits.
+    public IReadOnlyList<SpellEffectNode> EffectTree { get; }
+    public bool HasEffectTree => EffectTree.Count > 0;
+
     // Interactive damage calculator (level + resist pickers), non-null only for a
     // damage spell. Sits at the top of the Game Data tab.
     public SpellDamageCalcViewModel? DamageCalc { get; }
@@ -237,7 +243,8 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         bool isNew,
         GameDataCache? cache = null,
         IReadOnlyList<GameDataInfoRow>? gameDataInfo = null,
-        MudPlay.Game.Spells.SpellFormulaInput? spellFormula = null)
+        MudPlay.Game.Spells.SpellFormulaInput? spellFormula = null,
+        IReadOnlyList<SpellEffectNode>? effectTree = null)
     {
         ArgumentNullException.ThrowIfNull(original);
         ArgumentNullException.ThrowIfNull(existingRecords);
@@ -246,6 +253,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         _isNew           = isNew;
         _cache           = cache;
         GameDataInfo     = gameDataInfo ?? Array.Empty<GameDataInfoRow>();
+        EffectTree       = effectTree ?? Array.Empty<SpellEffectNode>();
 
         // A damage spell drives an interactive level/resist damage calculator on
         // the Game Data tab (see SpellDamageCalcViewModel); the redundant static

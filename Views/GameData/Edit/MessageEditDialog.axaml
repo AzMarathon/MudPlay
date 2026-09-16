@@ -375,6 +375,76 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+
+                <!-- ===== Conditional effect tree (room spells with a TextBlock) =====
+                     The percentage-gated logic the flat rows above can't show: which
+                     level / carry conditions branch to which weighted outcomes, each
+                     effect a link to its Monster / Spell record or map room. Huge
+                     teleport sweeps collapse to a one-line summary in the decoder. -->
+                <StackPanel Spacing="4" IsVisible="{Binding HasEffectTree}">
+                  <TextBlock Classes="FieldLabel" Text="Conditional effects" Margin="0,6,0,0"/>
+                  <TreeView ItemsSource="{Binding EffectTree}" Background="Transparent"
+                            BorderThickness="0">
+                    <TreeView.Styles>
+                      <!-- Deep nested rolls open collapsed; branches open expanded. -->
+                      <Style Selector="TreeViewItem" x:DataType="vm:SpellEffectNode">
+                        <Setter Property="IsExpanded" Value="{Binding StartExpanded}"/>
+                      </Style>
+                      <Style Selector="Border.node">
+                        <Setter Property="Padding" Value="4,1"/>
+                        <Setter Property="CornerRadius" Value="3"/>
+                      </Style>
+                      <Style Selector="Border.branch">
+                        <Setter Property="BorderThickness" Value="2,0,0,0"/>
+                        <Setter Property="Padding" Value="6,3"/>
+                        <Setter Property="Background" Value="{StaticResource ChromeBgSunkenBrush}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderSoftBrush}"/>
+                      </Style>
+                      <Style Selector="Border.branch.danger">
+                        <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+                      </Style>
+                      <Style Selector="Border.branch.accent">
+                        <Setter Property="BorderBrush" Value="{StaticResource AccentCyanBrush}"/>
+                      </Style>
+                    </TreeView.Styles>
+                    <TreeView.ItemTemplate>
+                      <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:SpellEffectNode">
+                        <Border Classes="node" Classes.branch="{Binding IsBranch}"
+                                Classes.danger="{Binding IsDanger}" Classes.accent="{Binding IsAccent}">
+                          <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <!-- weighted-chance pill -->
+                            <Border IsVisible="{Binding HasPercent}"
+                                    Background="{StaticResource ChromeBgSunkenBrush}"
+                                    CornerRadius="3" Padding="4,0" VerticalAlignment="Center">
+                              <TextBlock Text="{Binding PercentText}"
+                                         Foreground="{StaticResource AccentGreenBrush}"
+                                         FontFamily="{StaticResource FontMono}" FontSize="11"/>
+                            </Border>
+                            <!-- mixed text / record-link runs -->
+                            <ItemsControl ItemsSource="{Binding Runs}" VerticalAlignment="Center">
+                              <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                              </ItemsControl.ItemsPanel>
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MdbInline">
+                                  <StackPanel Orientation="Horizontal">
+                                    <Button Classes="MdbLink" Content="{Binding Text}"
+                                            Command="{Binding Open}" IsVisible="{Binding IsLink}"
+                                            ToolTip.Tip="Open this record"/>
+                                    <TextBlock Text="{Binding Text}" IsVisible="{Binding IsPlainRun}"
+                                               Foreground="{StaticResource ChromeFgBrush}"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                                               VerticalAlignment="Center"/>
+                                  </StackPanel>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </Border>
+                      </TreeDataTemplate>
+                    </TreeView.ItemTemplate>
+                  </TreeView>
+                </StackPanel>
                 </StackPanel>
               </ScrollViewer>
             </TabItem>

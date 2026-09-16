@@ -1,5 +1,11 @@
 # Version history
 
+## 3.88.18
+
+- Spell Game Data tab "Cast in rooms" now lists every room the spell is cast in with clickable map links (was a capped, unlinked list)
+- Carry-gate rows now labelled with their source command: "Requires carrying (checkitem)" / "Avoided by carrying (failitem)"
+- New "Conditional effects" tree surfaces a room spell's percentage-gated logic — level/carry branches → weighted outcomes → summon / cast / teleport effects, each a link to its record or map room; huge teleport sweeps collapse to a one-line summary
+
 ## 3.88.17
 
 - Extended the 3.88.16 fix to the other two route-picker forks that compared only gate-honoured routes: the **teleport** and **trap-avoid** pickers now also defer to an "obtain and cross" route when buying/obtaining an item (e.g. a boat) opens a shorter route, so a buyable shortcut isn't hidden behind a teleport-danger or trap warning — trap-avoid only defers when the obtainable route is *also* trap-free, so a trap warning is never dropped

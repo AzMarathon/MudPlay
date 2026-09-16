@@ -245,10 +245,13 @@ public sealed class SpellInfoRowsBuilder
                             rows.Add(BuildLinkRow("Summons", "Monsters", fx.Summons));
                         if (fx.Casts.Count > 0)
                             rows.Add(BuildLinkRow("Casts", "Spells", fx.Casts));
+                        // The two gates read the same item ids on a spell that lists
+                        // both (sea 2 lists the raft/skiff under both), so name the
+                        // source directive in each label to keep them distinguishable.
                         if (fx.Required.Count > 0)
-                            rows.Add(BuildLinkRow("Requires carrying", "Items", fx.Required));
+                            rows.Add(BuildLinkRow("Requires carrying (checkitem)", "Items", fx.Required));
                         if (fx.Avoided.Count > 0)
-                            rows.Add(BuildLinkRow("Avoided by carrying", "Items", fx.Avoided));
+                            rows.Add(BuildLinkRow("Avoided by carrying (failitem)", "Items", fx.Avoided));
                     }
                     continue;
                 }
@@ -327,7 +330,43 @@ public sealed class SpellInfoRowsBuilder
         }
 
         AppendNegatedByRow(rows, spellNumber);
+        AppendCastInRoomsRow(rows, spellNumber);
         return rows;
+    }
+
+    // The rooms that cast this spell on entry — every room whose Spell field equals it.
+    // These are NOT in the "Casted By" column (which lists textblock / monster casters),
+    // so scan the Rooms table directly (the same one-scan-per-open pattern as
+    // AppendNegatedByRow). Every room is a clickable map-jump link, and the full list is
+    // shown — no truncation.
+    private void AppendCastInRoomsRow(List<GameDataInfoRow> rows, int spellNumber)
+    {
+        if (spellNumber <= 0) return;
+        JsonDocument? doc = _cache.GetRawTable("Rooms");
+        if (doc is null) return;
+
+        var links = new List<GameDataRecordLink>();
+        var names = new List<string>();
+        foreach (JsonElement r in doc.RootElement.EnumerateArray())
+        {
+            if (ReadInt(r, "Spell") != spellNumber) continue;
+            int map = ReadInt(r, "Map Number");
+            int room = ReadInt(r, "Room Number");
+            if (map <= 0 || room <= 0) continue;
+            string mapRoom = $"{map.ToString(CultureInfo.InvariantCulture)}/{room.ToString(CultureInfo.InvariantCulture)}";
+            string label = r.TryGetProperty("Name", out JsonElement e) && e.ValueKind == JsonValueKind.String
+                && CleanString(e.GetString()) is { } nm ? $"{nm} {mapRoom}" : mapRoom;
+            var key = new Game.Map.RoomKey(map, room);
+            links.Add(new GameDataRecordLink(label, ", ", new RelayCommand(() => AppServices.Current.NavigateToRoom(key))));
+            names.Add(label);
+        }
+        if (links.Count == 0) return;
+
+        GameDataRecordLink last = links[^1];
+        links[^1] = new GameDataRecordLink(last.Name, string.Empty, last.Open, last.IsLinked);
+        rows.Add(new GameDataInfoRow(
+            $"Cast in rooms ({links.Count.ToString(CultureInfo.InvariantCulture)})",
+            string.Join(", ", names), links));
     }
 
     private static bool IsSourceListField(string field) =>
@@ -345,6 +384,24 @@ public sealed class SpellInfoRowsBuilder
         "Spells"   => new AsyncRelayCommand(() => AppServices.Current.OpenSpellRecordAsync(number)),
         _          => new RelayCommand(() => { }),
     };
+
+    // The spell's TextBlock (Abil-148) decoded into the expandable effect tree shown on
+    // the Game Data tab — conditional branches, weighted outcomes, and linked effects
+    // (summon / cast / teleport). The flat Summons / Casts / carry rows above give the
+    // at-a-glance list; this tree surfaces the percentage-gated logic they can't.
+    // Empty when the spell has no TextBlock effect.
+    public IReadOnlyList<SpellEffectNode> BuildEffectTree(int spellNumber)
+    {
+        JsonDocument? doc = _cache.GetRawTable("Spells");
+        if (doc is null) return Array.Empty<SpellEffectNode>();
+        foreach (JsonElement r in doc.RootElement.EnumerateArray())
+            if (ReadInt(r, "Number") == spellNumber)
+            {
+                int tb = FindAbilVal(r, 148);
+                return tb > 0 ? SpellEffectTreeDecoder.Decode(_cache, tb) : Array.Empty<SpellEffectNode>();
+            }
+        return Array.Empty<SpellEffectNode>();
+    }
 
     // A row whose value is a list of record references (ids in table), each a
     // clickable link. Value keeps the plain comma-joined names as the text

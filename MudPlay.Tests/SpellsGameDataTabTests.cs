@@ -123,7 +123,7 @@ public sealed class SpellsGameDataTabTests : IDisposable
         var vm = new SpellsSectionViewModel(_cache);
         IReadOnlyList<GameDataInfoRow> rows = vm.BuildSpellInfoRowsForTests(753);
 
-        GameDataInfoRow avoided = rows.First(r => r.Label == "Avoided by carrying");
+        GameDataInfoRow avoided = rows.First(r => r.Label == "Avoided by carrying (failitem)");
         Assert.Equal("log raft [#690], wooden skiff [#691], silverbark canoe [#1181]", avoided.Value);
         // The bare "TextBlock 2750" record number is not shown.
         Assert.DoesNotContain(rows, r => r.Label == "TextBlock");
@@ -148,7 +148,7 @@ public sealed class SpellsGameDataTabTests : IDisposable
         IReadOnlyList<GameDataInfoRow> rows = vm.BuildSpellInfoRowsForTests(1040);
 
         Assert.Equal("dark treant [#877]", rows.First(r => r.Label == "Summons").Value);
-        Assert.Equal("manhole [#185]", rows.First(r => r.Label == "Avoided by carrying").Value);
+        Assert.Equal("manhole [#185]", rows.First(r => r.Label == "Avoided by carrying (failitem)").Value);
         // The unhelpful raw "TextBlock 9404" effect row is suppressed.
         Assert.DoesNotContain(rows, r => r.Label == "Effect" && r.Value.StartsWith("TextBlock"));
     }
@@ -166,6 +166,6 @@ public sealed class SpellsGameDataTabTests : IDisposable
         var vm = new SpellsSectionViewModel(_cache);
         IReadOnlyList<GameDataInfoRow> rows = vm.BuildSpellInfoRowsForTests(760);
 
-        Assert.DoesNotContain(rows, r => r.Label is "Avoided by carrying" or "Requires carrying");
+        Assert.DoesNotContain(rows, r => r.Label is "Avoided by carrying (failitem)" or "Requires carrying (checkitem)");
     }
 }

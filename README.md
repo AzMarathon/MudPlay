@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.17**
-> - Extended the boat-route fix to the teleport and trap-avoid route pickers too: they now defer to an "obtain and cross" route when buying/obtaining an item opens a shorter way, so a buyable shortcut isn't hidden behind a teleport-danger or trap warning (trap-avoid only defers when the obtainable route is also trap-free)
+> **Version 3.88.18**
+> - Spell Game Data tab "Cast in rooms" now lists every room the spell is cast in with clickable map links (was a capped, unlinked list)
+> - Carry-gate rows now labelled with their source command: "Requires carrying (checkitem)" / "Avoided by carrying (failitem)"
+> - New "Conditional effects" tree surfaces a room spell's percentage-gated logic — level/carry branches → weighted outcomes → summon / cast / teleport effects, each a link to its record or map room; huge teleport sweeps collapse to a one-line summary
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
