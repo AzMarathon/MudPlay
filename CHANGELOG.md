@@ -1,5 +1,9 @@
 # Version history
 
+## 3.94.1
+
+- Character Workshop no longer lags on the Player Info tab while the Equipment Manager streams a gear swap — the tab rebuilt its stats/wealth/equipped-list readouts on every one of a swap's dozen-plus wear/rem confirmations; those refreshes are now coalesced into one once the swap settles
+
 ## 3.94.0
 
 - Stock realms now show limited-use item charges too (they print no "Uses remaining" line): the client counts the `use`s you send and shows remaining = the item's max charges − what you've spent

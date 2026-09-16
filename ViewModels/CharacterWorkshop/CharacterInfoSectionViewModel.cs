@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
@@ -49,6 +50,14 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     private readonly Game.Inventory.ItemChargeTracker _itemCharges;
     // Stock counterpart — remaining = max − uses counted (stock prints no charge line).
     private readonly Game.Inventory.ItemUseCountTracker _useCounts;
+    // A gear-set swap streams a dozen-plus wear/rem confirmations, each firing
+    // InventoryManager.Changed — and they keep arriving AFTER the EquipmentManager's
+    // send window closes. Rebuilding the derived-stat + wealth + equipped-list
+    // readouts on every one rebuilds the whole EquippedItems collection a dozen times
+    // in a burst, re-laying-out the visible Player Info list and lagging the workshop
+    // while it's open on that tab. Coalesce it: each change (re)starts this timer and
+    // one refresh runs once the burst goes quiet.
+    private readonly DispatcherTimer _inventoryRefreshDebounce;
     private Control? _view;
 
     public override string Id => "characterinfo";
@@ -208,6 +217,15 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         _naming = naming;
         _itemCharges = itemCharges;
         _useCounts = useCounts;
+
+        _inventoryRefreshDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        _inventoryRefreshDebounce.Tick += (_, _) =>
+        {
+            _inventoryRefreshDebounce.Stop();
+            RefreshDerived();
+            RefreshWealth();
+            RefreshInventory();
+        };
 
         _stats.PropertyChanged += OnStatsChanged;
         _inventory.Changed += OnInventoryChanged;
@@ -663,15 +681,18 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     private void OnStatsChanged(object? sender, PropertyChangedEventArgs e) => Refresh();
     // An `i` dump (or incremental coin/item line) landed — refold gear into
     // derived combat and re-pull wealth + the full carry list.
-    private void OnInventoryChanged()
+    // Coalesced — see _inventoryRefreshDebounce. A gear swap's per-confirmation change
+    // storm collapses to a single derived/wealth/inventory refresh once it settles.
+    private void OnInventoryChanged() => ScheduleInventoryRefresh();
+
+    private void ScheduleInventoryRefresh()
     {
-        RefreshDerived();
-        RefreshWealth();
-        RefreshInventory();
+        _inventoryRefreshDebounce.Stop();
+        _inventoryRefreshDebounce.Start();
     }
     // A limited-use item's charge count landed from a look reply — just re-fold the
     // carry list so the charge readouts update (stats / wealth are unaffected).
-    private void OnItemChargesChanged() => RefreshInventory();
+    private void OnItemChargesChanged() => ScheduleInventoryRefresh();
 
     private void OnPlayersChanged(object? sender, NotifyCollectionChangedEventArgs e) => RefreshAlignment();
     // Dark-cloud line fired (or a `who` cleared it) — just sync the flag; the
@@ -684,6 +705,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
     public override void Dispose()
     {
+        _inventoryRefreshDebounce.Stop();
         _stats.PropertyChanged -= OnStatsChanged;
         _inventory.Changed -= OnInventoryChanged;
         _itemCharges.Changed -= OnItemChargesChanged;
