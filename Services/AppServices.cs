@@ -3910,6 +3910,10 @@ public sealed class AppServices
         // burn mana on a buff the room tears straight back off.
         CastDirector.SetBuffStripRoomGate(
             () => RoomBuffStrip.StripsBuffs(RoomTracker.State.CurrentRoom?.Spell ?? 0));
+        // Token buff-pause — hold buffing while a transport-token use is imminent (its
+        // negate magic wipes buffs); TokenTracker opens the window on an outbound token
+        // use and closes it on the success line or a 30s timeout.
+        CastDirector.SetTokenBuffPauseGate(() => Tokens.IsBuffPausedForToken);
         // Sneak-maintenance defer — hold buffs / cures for the next empty room when
         // a stealth runner is walking combat-off through an occupied room, so the
         // cast (which breaks sneak) can be followed by a re-sneak instead of
@@ -4648,6 +4652,13 @@ public sealed class AppServices
             // the wording lives in the Messages catalogue, not a second hardcoded regex.
             matchSelfUse: MatchTokenSelfUse,
             matchMemberDeparted: MatchTokenMemberDeparted,
+            // Safety-release timer for the pre-token buff-pause window.
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
             log: Log);
         Profile.ProfileLoaded += _ => Tokens.Clear();
         // A set swap changes which tokens exist, where they teleport, and their spell

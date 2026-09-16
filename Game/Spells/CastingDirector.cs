@@ -96,6 +96,7 @@ public sealed class CastingDirector : IDisposable
     private Func<int>? _restRealMaxHp;
     private Func<bool>? _inputCaptured;
     private Func<bool>? _buffStripRoom;
+    private Func<bool>? _tokenBuffPause;
     // True when sneak-maintenance casts (buffs + cures) should be HELD for the
     // next empty room: auto-sneak is on, auto-combat won't clear the current room,
     // and an NPC is present. Casting breaks sneak (GAME_MECHANICS) and you can't
@@ -539,6 +540,17 @@ public sealed class CastingDirector : IDisposable
     {
         ArgumentNullException.ThrowIfNull(isBuffStripRoom);
         _buffStripRoom = isBuffStripRoom;
+    }
+
+    // Wire the token buff-pause gate. When the predicate returns true, a Paradigm
+    // transport-token use is imminent (or in flight) — its negate magic will wipe every
+    // buff — so the Buffing category is held until the use fires or the window times
+    // out. Same rationale as the buff-strip-room gate; heals / cures / debuffs run
+    // normally. Optional — until wired, buffs fail open.
+    public void SetTokenBuffPauseGate(Func<bool> isTokenUseImminent)
+    {
+        ArgumentNullException.ThrowIfNull(isTokenUseImminent);
+        _tokenBuffPause = isTokenUseImminent;
     }
 
     // Wire the sneak-maintenance defer gate. When the predicate returns true
@@ -2005,6 +2017,15 @@ public sealed class CastingDirector : IDisposable
         if (_buffStripRoom?.Invoke() == true)
         {
             _log?.Combat(LogCategory, "buff skipped — room strips buffs on entry.");
+            return null;
+        }
+
+        // Token buff-pause: a transport-token use is imminent and will wipe every buff
+        // (negate magic), so don't burn mana putting one up now — it resumes when the
+        // use fires or the pause times out.
+        if (_tokenBuffPause?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory, "buff skipped — token use imminent (buffs about to be wiped).");
             return null;
         }
 

@@ -139,8 +139,9 @@ public sealed class TokenRouteCoordinatorTests
         h.Coord.OnMemberDeparted("Boost");            // Boost ported; Ermias hasn't
 
         h.StillHere = new List<string> { "Ermias" };  // room-check: Ermias still here
-        h.FireLast();                                 // regroup tick → re-direct Ermias
-        Assert.Contains("/Ermias @do use token of Silvermere", h.Sent);
+        int before = h.Sent.Count;
+        h.FireLast();                                 // regroup tick → re-broadcast (only Ermias hears it)
+        Assert.Contains(".@party use token of Silvermere", h.Sent.GetRange(before, h.Sent.Count - before));
         Assert.DoesNotContain("use token of Silvermere", h.Sent);   // leader still waiting
 
         h.StillHere = new List<string>();             // Ermias ported now

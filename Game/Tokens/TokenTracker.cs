@@ -64,6 +64,7 @@ public sealed class TokenTracker : IDisposable
         Func<bool> onParadigm,
         Func<string, string?> matchSelfUse,
         Func<string, string?> matchMemberDeparted,
+        Action<int, Action> schedule,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(send);
@@ -71,12 +72,55 @@ public sealed class TokenTracker : IDisposable
         ArgumentNullException.ThrowIfNull(onParadigm);
         ArgumentNullException.ThrowIfNull(matchSelfUse);
         ArgumentNullException.ThrowIfNull(matchMemberDeparted);
+        ArgumentNullException.ThrowIfNull(schedule);
         _send = send;
         _carried = carried;
         _onParadigm = onParadigm;
         _matchSelfUse = matchSelfUse;
         _matchMemberDeparted = matchMemberDeparted;
+        _schedule = schedule;
         _log = log;
+    }
+
+    // ----- Buff-pause window -----
+    // A token use casts negate magic, wiping every buff — so rebuffing in the moments
+    // BEFORE it fires is wasted. When we see a token use go out (our own, or one a
+    // leader relays to us via @party/@do), we hold buffing until the use actually
+    // succeeds (TokenUsed) or a safety timeout elapses (a use blocked by an NPC / gold
+    // / level prints no success line, so the hold must self-release). The buff engine
+    // gates on IsBuffPausedForToken; the Buff Watchdog surfaces it via BuffPauseChanged.
+    private const int BuffPauseTimeoutMs = 30_000;
+    private readonly Action<int, Action> _schedule;
+    private bool _buffPauseActive;
+    private int _buffPauseGen;
+
+    public bool IsBuffPausedForToken => _buffPauseActive;
+    public event Action? BuffPauseChanged;
+
+    private void ArmBuffPause(string place)
+    {
+        int gen = ++_buffPauseGen;
+        if (!_buffPauseActive)
+        {
+            _buffPauseActive = true;
+            _log?.Info("Tokens", $"buffing paused — token use to {place} imminent (negate magic will wipe buffs)");
+            BuffPauseChanged?.Invoke();
+        }
+        // (Re-)arm the safety release: if no success line lands within the window the
+        // use failed, so let buffing resume.
+        _schedule(BuffPauseTimeoutMs, () =>
+        {
+            if (gen == _buffPauseGen) ClearBuffPause("timed out (use never confirmed)");
+        });
+    }
+
+    private void ClearBuffPause(string why)
+    {
+        if (_disposed || !_buffPauseActive) return;
+        _buffPauseActive = false;
+        _buffPauseGen++;
+        _log?.Info("Tokens", $"buffing resumed — token pause cleared: {why}");
+        BuffPauseChanged?.Invoke();
     }
 
     public void AttachLineExtractor(LineExtractor lines)
@@ -122,9 +166,33 @@ public sealed class TokenTracker : IDisposable
         {
             string line = raw.Trim();
             if (line.Length < 5 || !line.StartsWith("use ", StringComparison.OrdinalIgnoreCase)) continue;
-            if (TokenCatalog.PlaceOf(line[4..].Trim()) is { } place)
+            // Resolve the `use <arg>` against held tokens — full "token of <place>" OR
+            // a shorthand partial (`use lost`, relayed by a leader's @party/@do) — so a
+            // relayed token use still arms the buff-pause + re-look.
+            if (ResolveHeldTokenUseArg(line[4..]) is { } place)
+            {
+                ArmBuffPause(place);
                 _ = RelookAfterDelayAsync(place);
+            }
         }
+    }
+
+    // The place of the held token a `use <arg>` refers to (full name or shorthand
+    // partial), or null when the arg matches no held token. Match is a case-insensitive
+    // substring of the token's full name or its normalized place — the same loose
+    // resolution the game does for a partial `use`.
+    private string? ResolveHeldTokenUseArg(string arg)
+    {
+        string a = arg.Trim();
+        if (a.Length < 3) return null;
+        string aLower = a.ToLowerInvariant();
+        foreach ((string lookName, string place) in TokenCatalog.HeldTokens(_carried()))
+        {
+            if (lookName.ToLowerInvariant().Contains(aLower)
+                || TokenCatalog.NormalizePlace(place).Contains(aLower))
+                return place;
+        }
+        return null;
     }
 
     // Charges last read for a token, addressed by "token of X" or bare "X". null when
@@ -179,6 +247,7 @@ public sealed class TokenTracker : IDisposable
         if (_matchSelfUse(line) is { } usedPlace)
         {
             _log?.Info("Tokens", $"token use succeeded → {usedPlace} (buffs wiped by negate magic)");
+            ClearBuffPause("token used");   // the use fired — let buffing resume (rebuff after landing)
             TokenUsed?.Invoke(usedPlace);
             _ = RelookAfterDelayAsync(usedPlace);
             return;

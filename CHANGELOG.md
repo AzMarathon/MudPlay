@@ -1,5 +1,11 @@
 # Version history
 
+## 3.92.0
+
+- Buffing now pauses when a transport-token use is imminent (the token's negate magic wipes every buff) — held until the token fires or 30 seconds elapse, then resumes; works whether you use the token yourself or a party leader sends you across (`@party`/`@do use …`, full name or shorthand)
+- The **Buff Watchdog** shows a "Paused by token usage" status while the hold is in effect, and clears it when tokening finishes or the timer expires
+- Party token retries now re-broadcast `.@party` (a room-local say, so only members still present are re-told) instead of per-member `@do` — no Execute-commands grant needed
+
 ## 3.91.1
 
 - Reworked party token routing to the correct order: the leader sends the party across **first** (`.@party use token`), watches each member port, re-directs any stragglers a few times, and only tokens across **itself last**

@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.91.1**
-> - Party token routing (leader): sends the party across first (`.@party use token`), watches each member port, re-directs stragglers a few times, then tokens across itself last
-> - New **Settings → Other** checkbox (Paradigm): take a token route even when a party member can't follow — off by default (the leader waits and fails out in the room rather than leaving anyone)
-> - Token use lines are now recognized from the token spells' seeded messages
+> **Version 3.92.0**
+> - Buffing pauses when a transport-token use is imminent (the token's negate magic wipes buffs) — held until the token fires or 30s, then resumes; works whether you token or a leader sends you across
+> - The **Buff Watchdog** shows a "Paused by token usage" status while the hold is active
+> - Party token retries now re-broadcast `.@party` (only members still present are re-told) instead of per-member `@do` — no Execute-commands grant needed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

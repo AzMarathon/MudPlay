@@ -201,9 +201,11 @@ public sealed class TokenRouteCoordinator
         if (_regroupRetries < MaxRegroupRetries)
         {
             _regroupRetries++;
-            _log?.Info("Tokens", $"token route to {_place}: regroup retry {_regroupRetries}/{MaxRegroupRetries} — re-directing {string.Join(", ", _regroupPending)}");
-            foreach (string given in _regroupPending)
-                _send($"/{given} @do {UseCommand()}");   // targeted (needs the member's Execute-commands grant)
+            _log?.Info("Tokens", $"token route to {_place}: regroup retry {_regroupRetries}/{MaxRegroupRetries} — still here: {string.Join(", ", _regroupPending)}");
+            // Re-broadcast rather than target: `.@party` is a room-local say, so only
+            // the members still standing here (not yet ported) hear it — no per-player
+            // grant needed, and those who already left don't get re-told.
+            _send($".@party {UseCommand()}");
             ScheduleRegroupTick();
             return;
         }
