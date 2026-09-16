@@ -294,6 +294,17 @@ public static class RouteChoicePlanner
         // danger — a one-room shortcut isn't worth a lethal-plane gamble.
         if (walk.Count - tele.Count < MinTeleportSavings) return null;
 
+        // ...but if OBTAINING an acquirable gate item opens a route shorter than the
+        // teleport itself, that route is the better answer — defer to Evaluate, which
+        // surfaces the obtain/cross options, rather than framing the choice as a
+        // lethal-teleport gamble. Same deferral the avoid-override fork uses, so a
+        // buyable boat isn't hidden behind a teleport warning. (obtainable < tele can
+        // only happen by crossing a suspended gate, so Evaluate is guaranteed to fire.)
+        using (filter.SuspendAcquirableGates())
+            if (bfs.FindPath(source, destination, filter) is { Count: > 0 } obtainable
+                && obtainable.Count < tele.Count)
+                return null;
+
         return new RouteChoice(
             walk.Count, tele.Count,
             Array.Empty<RouteRequirement>(),
@@ -342,6 +353,16 @@ public static class RouteChoicePlanner
 
         int fewestTraps = bfs.CountTrapsOnPath(source, fewest);
         if (fewestTraps >= shortestTraps) return null;   // can't dodge any → no fork
+
+        // ...but if OBTAINING a gate item opens a route that is both shorter AND
+        // trap-free, that beats trusting a step-time disarm — defer to Evaluate so it
+        // surfaces the obtain/cross options. Require trap-free: an obtainable route that
+        // still crosses a trap must keep this warning, so only a clean route defers.
+        using (filter.SuspendAcquirableGates())
+            if (bfs.FindPath(source, destination, filter) is { Count: > 0 } obtainable
+                && obtainable.Count < shortest.Count
+                && bfs.CountTrapsOnPath(source, obtainable) == 0)
+                return null;
 
         return new RouteChoice(
             fewest.Count, shortest.Count,

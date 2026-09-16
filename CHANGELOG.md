@@ -1,5 +1,9 @@
 # Version history
 
+## 3.88.17
+
+- Extended the 3.88.16 fix to the other two route-picker forks that compared only gate-honoured routes: the **teleport** and **trap-avoid** pickers now also defer to an "obtain and cross" route when buying/obtaining an item (e.g. a boat) opens a shorter route, so a buyable shortcut isn't hidden behind a teleport-danger or trap warning — trap-avoid only defers when the obtainable route is *also* trap-free, so a trap warning is never dropped
+
 ## 3.88.16
 
 - The route picker now offers an "obtain and cross" route (e.g. buy a boat and sail the river) when it's shorter than detouring around your Avoid rooms — standing at the boatman, a walk to a river destination surfaced only a long avoid-detour vs a through-avoids route and never the far shorter boat crossing, because the avoid-override fork returned before the obtain/cross evaluation ran (the two-route twin of an earlier sole-route fix)
