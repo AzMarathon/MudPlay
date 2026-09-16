@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.19**
-> - A due self-buff recast (e.g. under Self-Bless-While-Resting) standing the character up mid-rest no longer prematurely ends the recovery — the gate used to fall back to the low rest-trigger the instant position left Resting/Meditating, releasing movement with the pool still far short of its rest-max target; it now keeps chasing the real target and re-sits until it's actually reached
+> **Version 3.88.20**
+> - A monster arriving the instant a between-round self-buff (e.g. a mana-regen reroll) fired no longer gets a free round — the fresh-engage attack now fires immediately instead of deferring to the next tick behind the client's own burst guard
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
