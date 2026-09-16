@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.94.0**
-> - Stock realms now show limited-use item charges too — the client counts the `use`s you send and shows remaining = the item's max charges − what you've spent (stock prints no "Uses remaining" line)
-> - Rechargeable items (align-quest cloaks, tokens) restock at your BBS's configured cleanup time; finite ones (the wands) stay spent; counts persist per character
+> **Version 3.94.1**
+> - Character Workshop no longer lags on the Player Info tab while the Equipment Manager streams a gear swap — the tab's stats/wealth/equipped-list refreshes are now coalesced into one once the swap settles, instead of rebuilding on every wear/rem confirmation
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
