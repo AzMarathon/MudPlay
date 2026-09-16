@@ -1,5 +1,10 @@
 # Version history
 
+## 3.94.0
+
+- Stock realms now show limited-use item charges too (they print no "Uses remaining" line): the client counts the `use`s you send and shows remaining = the item's max charges − what you've spent
+- Rechargeable items (align-quest cloaks, tokens) restock to full at your BBS's configured cleanup time; finite ones (the wands) stay spent; the counts persist per character across restarts
+
 ## 3.93.0
 
 - Character Info now shows a limited-use item's **remaining charges** next to it (e.g. "token of Silvermere - 5 Charges") — captured from the "Uses remaining: N" a `look` prints on Paradigm; transport tokens fill in automatically (looked on login), any other charged item when you look at it

@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.93.0**
-> - Character Info now shows a limited-use item's **remaining charges** next to it (e.g. "token of Silvermere - 5 Charges") — captured from the "Uses remaining: N" a `look` prints on Paradigm; transport tokens fill in automatically, other charged items when you look at them
-> - (Stock realms print no charge count, so nothing shows there yet — stock use-counting is a follow-up)
+> **Version 3.94.0**
+> - Stock realms now show limited-use item charges too — the client counts the `use`s you send and shows remaining = the item's max charges − what you've spent (stock prints no "Uses remaining" line)
+> - Rechargeable items (align-quest cloaks, tokens) restock at your BBS's configured cleanup time; finite ones (the wands) stay spent; counts persist per character
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

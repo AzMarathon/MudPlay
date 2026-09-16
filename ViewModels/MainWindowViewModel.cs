@@ -3192,6 +3192,9 @@ public partial class MainWindowViewModel : ObservableObject
         // Limited-use item charges — arms on an outbound `look <item>` so the reply's
         // "Uses remaining: N" is captured (tokens' login looks included).
         AppServices.Current.ItemCharges.ObserveOutbound(data);
+        // Stock use-counting — counts an outbound `use <item>` for a limited-use item
+        // (stock has no charge line; no-op on Paradigm, which reads the look reply).
+        AppServices.Current.ItemUseCounts.ObserveOutbound(data);
         var t = _telnet;
         if (t is not null) _ = FireSendAsync(t, data);
     }

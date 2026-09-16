@@ -47,6 +47,8 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     private readonly CurrencyNaming _naming;
     // Limited-use item charges captured from look replies (Paradigm "Uses remaining").
     private readonly Game.Inventory.ItemChargeTracker _itemCharges;
+    // Stock counterpart — remaining = max − uses counted (stock prints no charge line).
+    private readonly Game.Inventory.ItemUseCountTracker _useCounts;
     private Control? _view;
 
     public override string Id => "characterinfo";
@@ -186,7 +188,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     // False until the first `i` dump is parsed — drives the "type i to load" hint.
     [ObservableProperty] private bool _inventoryLoaded;
 
-    public CharacterInfoSectionViewModel(PlayerStats stats, GameDataCache gameData, InventoryManager inventory, PlayerDatabase playerDb, AlignmentTracker alignmentTracker, QuestBonusState questBonuses, CurrencyNaming naming, ItemChargeTracker itemCharges)
+    public CharacterInfoSectionViewModel(PlayerStats stats, GameDataCache gameData, InventoryManager inventory, PlayerDatabase playerDb, AlignmentTracker alignmentTracker, QuestBonusState questBonuses, CurrencyNaming naming, ItemChargeTracker itemCharges, ItemUseCountTracker useCounts)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -196,6 +198,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         ArgumentNullException.ThrowIfNull(questBonuses);
         ArgumentNullException.ThrowIfNull(naming);
         ArgumentNullException.ThrowIfNull(itemCharges);
+        ArgumentNullException.ThrowIfNull(useCounts);
         _stats = stats;
         _gameData = gameData;
         _inventory = inventory;
@@ -204,10 +207,12 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         _questBonuses = questBonuses;
         _naming = naming;
         _itemCharges = itemCharges;
+        _useCounts = useCounts;
 
         _stats.PropertyChanged += OnStatsChanged;
         _inventory.Changed += OnInventoryChanged;
         _itemCharges.Changed += OnItemChargesChanged;
+        _useCounts.Changed += OnItemChargesChanged;
         _playerDb.Players.CollectionChanged += OnPlayersChanged;
         _alignmentTracker.StaleChanged += OnAlignmentStaleChanged;
         _questBonuses.Changed += OnQuestBonusesChanged;
@@ -633,12 +638,18 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         InventoryLoaded = _inventory.IsLoaded;
     }
 
-    // "5 Charges" for a limited-use item whose charge count we've captured from a look
-    // reply, else empty. Populated on Paradigm (where the "Uses remaining" line exists).
+    // "5 Charges" for a limited-use item — its remaining charges, else empty. On
+    // Paradigm the count comes from the "Uses remaining" line a look prints; on stock
+    // (no such line) it's max − uses-counted for a finite limited-use item.
     private string ChargesTextFor(string name)
-        => _itemCharges.ChargesFor(name) is { } n
+    {
+        int? remaining = _gameData.ActiveRealm == MudPlay.Game.RealmType.ParaMud
+            ? _itemCharges.ChargesFor(name)
+            : _useCounts.RemainingFor(ResolveItemNumber(name));
+        return remaining is { } n
             ? string.Create(CultureInfo.InvariantCulture, $"{n} Charge{(n == 1 ? "" : "s")}")
             : string.Empty;
+    }
 
     private static string Display(string value) => string.IsNullOrEmpty(value) ? "—" : value;
 
@@ -676,6 +687,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         _stats.PropertyChanged -= OnStatsChanged;
         _inventory.Changed -= OnInventoryChanged;
         _itemCharges.Changed -= OnItemChargesChanged;
+        _useCounts.Changed -= OnItemChargesChanged;
         _playerDb.Players.CollectionChanged -= OnPlayersChanged;
         _alignmentTracker.StaleChanged -= OnAlignmentStaleChanged;
         _questBonuses.Changed -= OnQuestBonusesChanged;

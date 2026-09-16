@@ -439,6 +439,11 @@ public sealed class AppServices
     // login look; other limited-use items when the player looks at them.
     public Game.Inventory.ItemChargeTracker ItemCharges { get; private set; } = null!;
 
+    // Stock-realm counterpart: counts `use` sends for limited-use items (stock prints
+    // no charge line) so Character Info can show remaining = max − used; rechargeables
+    // restock at the BBS cleanup time. Persisted on the character profile.
+    public Game.Inventory.ItemUseCountTracker ItemUseCounts { get; private set; } = null!;
+
     // Write-side consumer of RemoteCommands for the inventory /
     // cash action commands — @get-all / @drop-all /
     // @deposit-all (ExecuteCommands) and @share (party-whitelist).
@@ -4686,6 +4691,17 @@ public sealed class AppServices
             },
             log: Log);
         Profile.ProfileLoaded += _ => ItemCharges.Clear();
+
+        // Stock use-counting for limited-use items (persisted on the profile; rechargeables
+        // restock at the BBS cleanup time — reuses the boss-timer cleanup config).
+        ItemUseCounts = new Game.Inventory.ItemUseCountTracker(
+            gameData: GameData,
+            carried: () => Inventory.Snapshot.CarriedItems,
+            itemNumberOf: ItemNumberByName,
+            onStock: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
+            cleanupConfig: ResolveBossCleanupConfig,
+            profile: Profile,
+            log: Log);
 
         // @timer — read-only report of the boss respawn timers being tracked. Reads
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
@@ -9867,6 +9883,15 @@ public sealed class AppServices
             ? implied[0]
             : null;
     }
+
+    // Item number for a carried item name in the active set (0 when unresolved) — used
+    // by the stock use-counter to key charges by number.
+    private int ItemNumberByName(string name)
+        => !string.IsNullOrWhiteSpace(name)
+           && GameData.FindRowByName("Items", name) is { } row
+           && row.TryGetProperty("Number", out System.Text.Json.JsonElement n)
+           && n.ValueKind == System.Text.Json.JsonValueKind.Number
+            ? n.GetInt32() : 0;
 
     // Parse the active BBS's nightly-cleanup time + zone into a config for the
     // cleanup-boss DEAD/ALIVE state. Null when no BBS, a blank time, or an
