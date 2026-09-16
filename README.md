@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.94.4**
-> - Exp/hr estimator: the assumption knobs (I'm Rooming, Seconds per room, Rounds to kill a mob, Real-world multiplier) now live in a **⚙ Estimate Settings** flyout at the top of the panel, mirroring the loop builder's Entire Loop Settings — so the panel leads with the result and room list
+> **Version 3.94.5**
+> - Session Stats: the Session Statistics panel now shows a **Loop laps** readout while a loop runs — laps completed, last and average lap time, the live current-lap timer, and the room each lap starts at (one lap = a full completion of the circuit)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

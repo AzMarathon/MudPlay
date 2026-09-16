@@ -506,6 +506,34 @@
                                    ToolTip.Tip="{Binding CurrencyStashedTip}"/>
                         <TextBlock Grid.Column="2" Classes="dim" Text="—" HorizontalAlignment="Right"/>
                     </Grid>
+
+                    <!-- Loop laps — one lap = a full completion of the running loop.
+                         Live while a loop runs (current lap ticks up), — when idle. -->
+                    <TextBlock Classes="sub" Text="{Binding LapLoopName, StringFormat='Loop laps — {0}'}"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Laps completed"/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding LapCount}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Last lap"/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding LastLapText}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Average lap"/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding AverageLapText}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Current lap"/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding CurrentLapText}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Starts at"/>
+                        <TextBlock Grid.Column="1" Classes="val" Margin="8,0,0,0"
+                                   HorizontalAlignment="Right"
+                                   TextTrimming="CharacterEllipsis"
+                                   Text="{Binding LapStartRoomText}"
+                                   ToolTip.Tip="{Binding LapStartRoomText}"/>
+                    </Grid>
                 </StackPanel>
             </Expander>
 

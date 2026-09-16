@@ -6,6 +6,7 @@ using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Cash;
 using MudPlay.Game.Combat;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 
 namespace MudPlay.ViewModels;
@@ -63,6 +64,12 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // Opens the Players Seen window — routed back to MainWindowViewModel for the
     // same modeless toggle-window reason as the transaction opener above.
     private readonly Action _openPlayersSeen;
+
+    // Loop-lap readouts read straight off the runner each tick (it already tracks
+    // durations, count, and the circle-start room). The graph resolves that start
+    // room's key to a display name.
+    private readonly LoopRunner _runner;
+    private readonly RoomGraphManager _graph;
 
     // Drives the live wall-clock ticking of durations / rates: the
     // time-derived figures advance with real time even when no tracker input
@@ -181,6 +188,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         TimeAnalysisTracker time,
         SessionActivityTracker activity,
         HpMaHistoryTracker hpMaHistory,
+        LoopRunner runner,
+        RoomGraphManager graph,
         SessionStatsLayoutStore layout,
         PlayerStats stats,
         GameDataCache gameData,
@@ -192,6 +201,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(activity);
         ArgumentNullException.ThrowIfNull(hpMaHistory);
+        ArgumentNullException.ThrowIfNull(runner);
+        ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -202,6 +213,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _timeTracker = time;
         _activityTracker = activity;
         _hpMaTracker = hpMaHistory;
+        _runner = runner;
+        _graph = graph;
         _layoutStore = layout;
         _stats = stats;
         _gameData = gameData;
@@ -545,7 +558,33 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         // The countdown reads live PlayerStats + the wall clock, so it must
         // re-fire every tick even when the Activity snapshot compares equal.
         OnPropertyChanged(nameof(TimeToLevelText));
+
+        // Lap readouts read the runner live (current lap ticks up each second);
+        // re-fire them every tick, same as the countdown above.
+        OnPropertyChanged(nameof(IsLoopRunning));
+        OnPropertyChanged(nameof(LapLoopName));
+        OnPropertyChanged(nameof(LapCount));
+        OnPropertyChanged(nameof(LastLapText));
+        OnPropertyChanged(nameof(AverageLapText));
+        OnPropertyChanged(nameof(CurrentLapText));
+        OnPropertyChanged(nameof(LapStartRoomText));
     }
+
+    // ----- Loop laps ---------------------------------------------------
+    // Read live off the LoopRunner each 1s tick (Refresh raises PropertyChanged for
+    // all of these). A "lap" is one full completion of a running loop. While a loop
+    // runs these reflect the current run; idle shows — (the runner clears its lap
+    // history on stop). The runner already tracks durations, count, and the
+    // circle-start room; the graph resolves that room's key to a display name.
+    public bool IsLoopRunning => _runner.State != LoopState.Idle;
+    public string LapLoopName => _runner.CurrentLoop?.Name ?? _runner.LastRunLoopName ?? "—";
+    public int LapCount => _runner.CompletedLaps;
+    public string LastLapText => _runner.LapHistory.Count > 0 ? Fmt(_runner.LapHistory[^1]) : "—";
+    public string AverageLapText => _runner.CompletedLaps > 0 ? Fmt(_runner.AverageLapTime) : "—";
+    public string CurrentLapText => IsLoopRunning ? Fmt(_runner.CurrentLapTime) : "—";
+    public string LapStartRoomText => _runner.CircleStartRoom is { } k
+        ? (_graph.GetRoom(k) is { } r ? $"{r.DisplayName} · {k}" : k.ToString())
+        : "—";
 
     private static string Fmt(TimeSpan t) =>
         $"{(int)t.TotalHours:D2}:{t.Minutes:D2}:{t.Seconds:D2}";
