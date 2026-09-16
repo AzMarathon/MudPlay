@@ -703,6 +703,32 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Equal(new[] { "move-set" }, applied);
     }
 
+    // The core of report paradigm-20260916-104923: the user has NO While-Moving set
+    // (disabled). After a combat-clear swap-back left Pre-rest gear on, resuming the loop
+    // used to no-op (OnMovementStarted returns without a movement set) — travelling and
+    // fighting in Pre-rest. It must revert to Default so travel gear is worn.
+    [Fact]
+    public void MovementStarted_NoMovementSet_RevertsToDefault()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.PreRestMana, enabled: true, "mana-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: false, "move-set"));   // disabled
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player, readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        coord.OnMovementStarted();
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
     [Fact]
     public void MovementStarted_WhileSittingAtRest_HoldsPreRestGear()
     {

@@ -4,7 +4,7 @@
 > **Version 3.88.29**
 > - New per-slot option under the AoE-debuff slot, "Only cast on the first round in a room": the AoE debuff is attempted only on room entry and abandoned once the fight's underway, so it isn't cast late on a half-dead room (wasted mana). Default off keeps offering it until it lands once for the room.
 > - Multi-attack no longer double-fires when a deferred combat-resume runs right after the round's attack already went out
-> - Gear no longer strands you travelling and fighting in weak pre-rest gear — resuming the loop after a rest now wears the While-Moving/Default set even if a rest gate still lingers (pre-rest gear is held only while you're actually sitting)
+> - Gear no longer strands you travelling and fighting in weak pre-rest gear — resuming the loop after a rest now reverts to your travel gear (While-Moving if enabled, else Default); pre-rest gear is held only while you're actually sitting
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

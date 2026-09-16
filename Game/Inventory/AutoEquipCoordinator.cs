@@ -354,10 +354,20 @@ public sealed class AutoEquipCoordinator : IDisposable
         // moving, wear the movement set; the pre-rest set resumes only if we sit again.
         if (IsRestPosture(_player.Position)) return;
         if (CurrentRoomIsBoss()) return;
-        if (!MovementSetActive()) return;
-        _inMovementSet = true;
-        _log?.Info(EquipmentManager.LogCategory, "nav engine moving — wearing the While Moving set");
-        Fire(EquipTriggerType.WhileMoving);
+        if (MovementSetActive())
+        {
+            _inMovementSet = true;
+            _log?.Info(EquipmentManager.LogCategory, "nav engine moving — wearing the While Moving set");
+            Fire(EquipTriggerType.WhileMoving);
+            return;
+        }
+        // No While-Moving set configured — travel in Default. Without this, a rest /
+        // combat swap-back (e.g. the "still rest-gated → Pre-rest" swap when combat
+        // clears) is never corrected on the resume, so the loop travels — and fights —
+        // in weak pre-rest gear (report paradigm-20260916-104923: While-Moving disabled,
+        // walked 4 rooms into a monster room in Pre-rest). Fire is diff-based, so this
+        // no-ops when we're already in Default.
+        Fire(EquipTriggerType.Default);
     }
 
     // The nav engine went fully idle — a walk-to reached its destination, or a loop /
@@ -508,6 +518,10 @@ public sealed class AutoEquipCoordinator : IDisposable
             // swap-to-Default-on-combat restore (report paradigm-20260916-104923). Combat
             // gear holds until OnCombatStateChanged restores the rest set once combat clears.
             if (_player.InCombat) return;
+            // Sitting to rest leaves the movement set — clear the latch so the next
+            // OnMovementStarted re-applies travel gear on the resume (otherwise the
+            // idempotency guard thinks we're still travelling and never re-wears it).
+            _inMovementSet = false;
             Fire(restType);
         }
         else if (to == PlayerPosition.Standing && IsRestPosture(from))
