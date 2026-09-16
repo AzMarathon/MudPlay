@@ -1,5 +1,10 @@
 # Version history
 
+## 3.88.32
+
+- **Critical**: an emergency heal could lose its round to an unrelated attack and never fire — a fresh-engage attack and a between-round cast (heal/buff/cure) were sharing one "last cast" clock even though they're independent slots server-side; an attack landing an instant before an emergency heal was due silently blocked the heal for the same reason the attack itself is allowed to bypass that clock. The two are now paced on separate clocks so neither can ever block the other, in either direction.
+- bug reports addressed: paradigm-20260916-113009
+
 ## 3.88.31
 
 - New per-slot option under the AoE-debuff slot, "Only cast on the first round in a room": the AoE debuff is attempted only on room entry (before the first combat round) and abandoned once the fight is underway — so when a higher-priority buff/heal takes the room-entry between-round slot, the debuff is skipped rather than cast on a half-dead room the next round (wasted mana). Default off: keep offering it each round until it lands once for the room.

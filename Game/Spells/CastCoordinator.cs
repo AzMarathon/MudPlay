@@ -13,14 +13,19 @@ namespace MudPlay.Game.Spells;
 // Three gates compose the "can I cast right now?" check:
 //   - Recent-cast cooldown — one cast per combat round (5.5s default, matches
 //     MajorMUD's between-round cap). Cleared by OnCombatTick so the very next round
-//     can cast immediately.
+//     can cast immediately. Tracked on TWO independent clocks — _lastAttackSentAt
+//     for CombatManager's attack-slot dispatches, _lastBetweenRoundSentAt for
+//     CastingDirector's heals/buffs/cures/debuffs — since the two occupy
+//     independent slots server-side and neither may block the other (see
+//     _lastAttackSentAt's comment for the report this fixed).
 //   - Cast-blocked latch — set on server failure lines (fizzle, no-mana,
 //     already-cast-this-round, interrupted). Cleared by OnCombatTick OR by the
 //     CastBlockExpiry timeout (safety net: out of combat no tick will fire, so we'd
-//     be stuck otherwise).
+//     be stuck otherwise). Shared across both slots — a genuine server rejection is
+//     a real "something's wrong" signal regardless of which slot drew it.
 //   - Min recast interval — short sub-cooldown between two consecutive TryCast
-//     attempts (500ms) to absorb burst calls when CastingDirector evaluates
-//     multiple candidates in the same frame.
+//     attempts on the SAME clock (500ms) to absorb burst calls when CastingDirector
+//     evaluates multiple candidates in the same frame.
 //
 // This is a foundation layer — it does NOT decide what to cast; CastingDirector
 // picks the spell and target and calls TryCast. External engines that cast spells
@@ -60,7 +65,22 @@ public sealed class CastCoordinator : IDisposable
     private readonly IDisposable _interruptSub;
 
     private Action<byte[]>? _wireSender;
-    private DateTimeOffset _lastCastSentAt = DateTimeOffset.MinValue;
+    // Attack-spell dispatches (CombatManager, always bypassRoundCooldown) and
+    // between-round dispatches (CastingDirector's heals/buffs/cures/debuffs, never
+    // bypassRoundCooldown) occupy independent slots server-side — confirmed
+    // GAME_MECHANICS.md: a 0-energy between-round spell "rides between the round's
+    // main action, so one is free each round on top of your attack." A single
+    // shared clock let one slot's send block the other's: a fresh-engage attack
+    // (which legitimately bypasses its own cooldown to fire instantly) stamped the
+    // same clock CastingDirector's un-bypassed emergency-heal check reads, so the
+    // heal lost its round to an unrelated attack and never got a window to fire —
+    // the character died waiting (report paradigm-20260916-113009). Tracked
+    // separately per slot so an attack firing can never block a heal, or vice
+    // versa. bypassRoundCooldown is always true for attack-slot calls and always
+    // false for between-round calls (see class doc), so it doubles as the
+    // discriminator between the two clocks.
+    private DateTimeOffset _lastAttackSentAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastBetweenRoundSentAt = DateTimeOffset.MinValue;
     private DateTimeOffset _castBlockedSince = DateTimeOffset.MinValue;
     private bool _castBlocked;
     private bool _disposed;
@@ -124,14 +144,16 @@ public sealed class CastCoordinator : IDisposable
     }
 
     // True while the failure latch or the recent-cast cooldown would reject a cast.
-    // Auto-clears the block latch on read once CastBlockExpiry elapses.
+    // Auto-clears the block latch on read once CastBlockExpiry elapses. Sole caller
+    // is CastingDirector's between-round decision, so this reads the between-round
+    // clock — an attack dispatch elsewhere never makes this true.
     public bool IsCastBlocked
     {
         get
         {
             ExpireStaleBlockLatch();
             if (_castBlocked) return true;
-            return DateTimeOffset.Now - _lastCastSentAt < CastCommandCooldown;
+            return DateTimeOffset.Now - _lastBetweenRoundSentAt < CastCommandCooldown;
         }
     }
 
@@ -181,13 +203,18 @@ public sealed class CastCoordinator : IDisposable
             CastFailed?.Invoke(CastFailureReason.Blocked, "cast-blocked", spellName.Trim());
             return false;
         }
+        // bypassRoundCooldown is always true for attack-slot calls (CombatManager)
+        // and always false for between-round calls (CastingDirector) — see the
+        // class doc and _lastAttackSentAt's comment — so it doubles as which
+        // independent clock this attempt is paced against.
+        DateTimeOffset lastSentAt = bypassRoundCooldown ? _lastAttackSentAt : _lastBetweenRoundSentAt;
         // The once-per-round cooldown gates re-casts; the initial engage bypasses it.
-        if (!bypassRoundCooldown && now - _lastCastSentAt < CastCommandCooldown)
+        if (!bypassRoundCooldown && now - lastSentAt < CastCommandCooldown)
         {
             CastFailed?.Invoke(CastFailureReason.Blocked, "cast-blocked", spellName.Trim());
             return false;
         }
-        if (!bypassRecastInterval && now - _lastCastSentAt < MinRecastInterval)
+        if (!bypassRecastInterval && now - lastSentAt < MinRecastInterval)
         {
             CastFailed?.Invoke(CastFailureReason.Blocked, "recast-interval", spellName.Trim());
             return false;
@@ -203,26 +230,27 @@ public sealed class CastCoordinator : IDisposable
             ? spell
             : $"{spell} {target.Trim()}";
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
-        _lastCastSentAt = now;
+        if (bypassRoundCooldown) _lastAttackSentAt = now; else _lastBetweenRoundSentAt = now;
         _lastSpellSent = spell;
         _log?.Info(LogCategory, $"cast spell={spell} target={target ?? "<self>"}");
         CastSent?.Invoke(line);
         return true;
     }
 
-    // External-cast notification. Engines that issue spell commands outside the
-    // coordinator (CombatManager's pre-attack debuff, a user-typed `c X` line, etc.)
-    // must call this so the cooldown blocks subsequent TryCast attempts for this
-    // round.
+    // External-cast notification. Engines that issue between-round spell commands
+    // outside TryCast (an item-cast buff's equip→use→re-equip sequence, a
+    // user-typed `c X` line, etc.) must call this so the between-round cooldown
+    // blocks subsequent TryCast attempts for this round.
     public void NotifyExternalCastSent()
     {
-        _lastCastSentAt = DateTimeOffset.Now;
+        _lastBetweenRoundSentAt = DateTimeOffset.Now;
         _log?.Debug(LogCategory, "external cast noted — cooldown started");
     }
 
-    // Hook the combat-tick boundary. Clears the block latch + resets the
-    // recent-cast cooldown so the next round can cast immediately. Subscribe by
-    // wiring TickEngine.CombatTickElapsed to this method in AppServices.
+    // Hook the combat-tick boundary. Clears the block latch + resets both
+    // recent-cast clocks so the next round can cast immediately on either slot.
+    // Subscribe by wiring TickEngine.CombatTickElapsed to this method in
+    // AppServices.
     public void OnCombatTick()
     {
         if (_castBlocked)
@@ -230,7 +258,8 @@ public sealed class CastCoordinator : IDisposable
             _castBlocked = false;
             _log?.Debug(LogCategory, "cast-block latch cleared on combat tick");
         }
-        _lastCastSentAt = DateTimeOffset.MinValue;
+        _lastAttackSentAt = DateTimeOffset.MinValue;
+        _lastBetweenRoundSentAt = DateTimeOffset.MinValue;
     }
 
     // ----- failure handlers ------------------------------------------

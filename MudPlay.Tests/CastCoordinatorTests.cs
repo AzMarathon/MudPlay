@@ -229,25 +229,46 @@ public sealed class CastCoordinatorTests
     }
 
     [Fact]
-    public void RoundCooldownBypassAlone_StillBlockedByRecastInterval()
+    public void AttackAfterBetweenRoundCast_NeedsNoRecastIntervalBypass()
     {
-        // Regression pin: a mid-fight self-buff cast, then an immediate combat
-        // re-attack fired within 500ms. bypassRoundCooldown clears the 5.5s
-        // round gate but NOT the burst guard, so the re-attack was rejected as
-        // "recast-interval" and slid to the next tick — a wasted round the mob
-        // swung through. This documents the exact defect the flag below fixes.
+        // A between-round cast (armr, no bypass — CastingDirector's own shape) and
+        // an attack-slot cast (mmis, bypassRoundCooldown — CombatManager's shape)
+        // occupy independent slots server-side (GAME_MECHANICS.md), so they're
+        // paced on separate clocks: the attack landing the same instant needs no
+        // recast-interval bypass at all, since it was never competing with the
+        // buff's clock in the first place.
         using Harness h = new();
-        Assert.True(h.Cast.TryCast("armr"));                                    // self-buff
-        Assert.False(h.Cast.TryCast("mmis", "outcast", bypassRoundCooldown: true));
-        Assert.Single(h.Sent);
-        Assert.Contains(h.Failures, f => f.Detail == "recast-interval");
+        Assert.True(h.Cast.TryCast("armr"));                                    // between-round buff
+        Assert.True(h.Cast.TryCast("mmis", "outcast", bypassRoundCooldown: true));
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("mmis outcast", h.LastSent);
+    }
+
+    [Fact]
+    public void BetweenRoundCastAfterAttack_NeedsNoRecastIntervalBypass()
+    {
+        // Report paradigm-20260916-113009: a fresh-engage attack (bypassRoundCooldown)
+        // stamped the SAME shared clock an immediately-following emergency heal (no
+        // bypass, CastingDirector's own shape) checked without one — so the heal lost
+        // its round to an unrelated attack and never got a window to fire before the
+        // character died. Attack-slot and between-round casts are independent slots
+        // server-side and must never block each other in EITHER direction — this is
+        // the reverse of AttackAfterBetweenRoundCast_NeedsNoRecastIntervalBypass above.
+        using Harness h = new();
+        Assert.True(h.Cast.TryCast("soul", "fat orca", bypassRoundCooldown: true)); // fresh-engage attack
+        Assert.True(h.Cast.TryCast("dmer"));                                       // emergency heal, same instant
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("dmer", h.LastSent);
     }
 
     [Fact]
     public void RecastIntervalBypass_LetsResumeReattackLandImmediately()
     {
-        // The combat dispatch passes bypassRecastInterval so the re-attack after
-        // a within-500ms self-buff goes out the same frame instead of deferring.
+        // Explicitly passing both bypass flags still works (now redundant for this
+        // specific cross-slot shape now that attack and between-round casts pace on
+        // separate clocks — see AttackAfterBetweenRoundCast_NeedsNoRecastIntervalBypass
+        // above — but bypassRecastInterval remains meaningful for a same-slot burst,
+        // e.g. two attack-spell dispatches landing in the same frame).
         using Harness h = new();
         Assert.True(h.Cast.TryCast("armr"));                                    // self-buff
         Assert.True(h.Cast.TryCast("mmis", "outcast",
