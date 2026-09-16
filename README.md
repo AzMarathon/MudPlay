@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.94.5**
-> - Session Stats: the Session Statistics panel now shows a **Loop laps** readout while a loop runs — laps completed, last and average lap time, the live current-lap timer, and the room each lap starts at (one lap = a full completion of the circuit)
+> **Version 3.94.7**
+> - Building a loop no longer cancels a walk-to in progress — building just collects rooms and leaves your walk running; the Navigation menu's **Run** takes over (stops the walk, starts the loop), while the toolbar Start/Stop/Pause still control the walk
+> - Re-opening or re-running a cached loop no longer loses its settings — per-room command/delay/no-rest/no-attack and the loop-wide Only-attack-in-lair flag now carry over, not just the rooms
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

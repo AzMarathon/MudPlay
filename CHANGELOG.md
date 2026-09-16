@@ -1,5 +1,10 @@
 # Version history
 
+## 3.94.7
+
+- Building a loop no longer cancels a walk-to in progress — entering build mode just collects rooms and leaves your walk running. The Navigation menu's **Run** takes movement over (stops the walk, starts the loop); the toolbar Start/Stop/Pause still control the walk itself
+- Re-opening or re-running a cached loop no longer loses its settings — the per-room command / delay / no-rest / no-attack flags and the loop-wide Only-attack-in-lair setting now carry over (previously only the rooms were restored, so e.g. a do-not-attack room came back un-flagged)
+
 ## 3.94.5
 
 - Session Stats: the Session Statistics panel now shows a **Loop laps** readout while a loop runs — laps completed, last lap time, average lap time, the live current-lap timer, and the room each lap starts at (one lap = a full completion of the circuit)
