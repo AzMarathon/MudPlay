@@ -285,6 +285,18 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         AddWaypointError = string.Empty;
     }
 
+    // Append a waypoint for a room picked on the Navigation map. The map's left-click
+    // is routed here while this dialog is open (see AppServices.TryCaptureLoopWaypoint /
+    // the dialog code-behind). Ignores a click on a room not in the loaded graph;
+    // same-room-twice-in-a-row is allowed on purpose, same as AddWaypoint above.
+    public void AddWaypointByRoomKey(RoomKey key)
+    {
+        if (_graph.GetRoom(key) is null) return;
+        Waypoints.Add(new LoopWaypointRowViewModel(new LoopWaypoint(key), _graph));
+        RenumberRows();
+        AddWaypointError = string.Empty;
+    }
+
     // Last-resort literal resolution — covers the case where the user typed
     // something that didn't show up in SearchResults (e.g. an exact key whose
     // debounce hadn't fired yet). Returns null when ambiguous so we don't

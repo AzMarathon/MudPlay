@@ -1,5 +1,10 @@
 # Version history
 
+## 3.94.3
+
+- New Loop / Edit Loop editor: the waypoint table's "No rest" / "No atk" checkboxes now line up under their column headers — the ↑↓✕ button columns were auto-sized (empty in the header), which widened the header's Waypoints column and shifted every column after it off its cells
+- New Loop / Edit Loop editor: while the dialog is open, left-clicking a room on the Navigation map now appends that room to the waypoint list (no need to type its key/name)
+
 ## 3.94.1
 
 - Character Workshop no longer lags on the Player Info tab while the Equipment Manager streams a gear swap — the tab rebuilt its stats/wealth/equipped-list readouts on every one of a swap's dozen-plus wear/rem confirmations; those refreshes are now coalesced into one once the swap settles
