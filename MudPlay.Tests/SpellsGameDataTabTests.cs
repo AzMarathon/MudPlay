@@ -168,4 +168,50 @@ public sealed class SpellsGameDataTabTests : IDisposable
 
         Assert.DoesNotContain(rows, r => r.Label is "Avoided by carrying (failitem)" or "Requires carrying (checkitem)");
     }
+
+    [Fact]
+    public void CastBy_DropsRedundantRoomTokens_KeepsMonsterCaster()
+    {
+        // "Cast By" room tokens are now rendered in full by "Cast in rooms", so they're
+        // dropped here — only the monster caster remains.
+        Seed("Spells", "[{\"Number\":800,\"Name\":\"sea 1\",\"Casted By\":\"Room #5, Room #6, Monster #877\"}]");
+        Seed("Monsters", "[{\"Number\":877,\"Name\":\"dark treant\"}]");
+        _cache.SwitchSet("v1.11p");
+
+        IReadOnlyList<GameDataInfoRow> rows = new SpellsSectionViewModel(_cache).BuildSpellInfoRowsForTests(800);
+
+        GameDataInfoRow castBy = rows.First(r => r.Label == "Cast By");
+        Assert.Contains("dark treant", castBy.Value);
+        Assert.DoesNotContain("Room", castBy.Value);
+    }
+
+    [Fact]
+    public void CastBy_RoomsOnly_DropsWholeRow()
+    {
+        // When "Cast By" held only rooms (and a "+ more" cap), the row vanishes entirely —
+        // the complete list lives in "Cast in rooms".
+        Seed("Spells", "[{\"Number\":801,\"Name\":\"sea 2\",\"Casted By\":\"Room #5, Room #6, +\"}]");
+        _cache.SwitchSet("v1.11p");
+
+        IReadOnlyList<GameDataInfoRow> rows = new SpellsSectionViewModel(_cache).BuildSpellInfoRowsForTests(801);
+        Assert.DoesNotContain(rows, r => r.Label == "Cast By");
+    }
+
+    [Fact]
+    public void CastInRooms_ShowsFirstTwentyInline_RestInOverflow()
+    {
+        string rooms = "[" + string.Join(",", Enumerable.Range(1, 25).Select(i =>
+            $"{{\"Number\":{i},\"Map Number\":17,\"Room Number\":{1000 + i},\"Spell\":802,\"Name\":\"Crystal Lake\"}}")) + "]";
+        Seed("Spells", "[{\"Number\":802,\"Name\":\"sea 3\"}]");
+        Seed("Rooms", rooms);
+        _cache.SwitchSet("v1.11p");
+
+        IReadOnlyList<GameDataInfoRow> rows = new SpellsSectionViewModel(_cache).BuildSpellInfoRowsForTests(802);
+
+        GameDataInfoRow cir = rows.First(r => r.Label.StartsWith("Cast in rooms"));
+        Assert.Equal("Cast in rooms (25)", cir.Label);
+        Assert.Equal(20, cir.Links!.Count);
+        Assert.True(cir.HasOverflow);
+        Assert.Equal(5, cir.Overflow!.Count);
+    }
 }

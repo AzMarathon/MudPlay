@@ -134,7 +134,7 @@ public sealed class SpellEffectTreeDecoderTests : IDisposable
         var outcome = Assert.Single(branch.Children);
         Assert.Equal(100, outcome.Percent);
         string text = Flatten(outcome);
-        Assert.Contains("clears the room", text);
+        Assert.Contains("no NPCs in the room", text);   // nomonsters is a gate, not "clears the room"
         Assert.Contains("sea hag", text);
         Assert.Contains("×2", text);            // two identical summons collapse
         Assert.Contains("crimson mist", text);

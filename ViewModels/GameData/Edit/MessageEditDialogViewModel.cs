@@ -437,9 +437,18 @@ public sealed record TierOption(SettingsTier Value, string Label);
 // Links, when present, are the clickable record references rendered in place of
 // the plain Value (Value still holds the same names as text — the fallback the
 // template shows when there are no links, and what tests read).
-public sealed record GameDataInfoRow(string Label, string Value, IReadOnlyList<GameDataRecordLink>? Links = null)
+public sealed record GameDataInfoRow(
+    string Label,
+    string Value,
+    IReadOnlyList<GameDataRecordLink>? Links = null,
+    IReadOnlyList<GameDataRecordLink>? Overflow = null)
 {
     public bool HasLinks => Links is { Count: > 0 };
+
+    // Links held back behind a "show N more" expander — used by long lists (Cast in
+    // rooms) that show the first batch inline and hide the tail until asked.
+    public bool HasOverflow => Overflow is { Count: > 0 };
+    public string OverflowLabel => $"show {(Overflow?.Count ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture)} more";
 }
 
 // One row in MessageEditDialogViewModel.LinkRows — pairs the back-reference's raw

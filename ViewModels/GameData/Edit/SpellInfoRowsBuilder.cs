@@ -335,10 +335,10 @@ public sealed class SpellInfoRowsBuilder
     }
 
     // The rooms that cast this spell on entry — every room whose Spell field equals it.
-    // These are NOT in the "Casted By" column (which lists textblock / monster casters),
-    // so scan the Rooms table directly (the same one-scan-per-open pattern as
-    // AppendNegatedByRow). Every room is a clickable map-jump link, and the full list is
-    // shown — no truncation.
+    // The denormalized "Casted By" column lists these same rooms but capped ("+ more") and
+    // unlinked, so this scan supersedes its room tokens (which BuildSourceListLinkRow now
+    // drops): the full list, every room a clickable map-jump link, no truncation. Same
+    // one-scan-per-open pattern as AppendNegatedByRow.
     private void AppendCastInRoomsRow(List<GameDataInfoRow> rows, int spellNumber)
     {
         if (spellNumber <= 0) return;
@@ -364,9 +364,24 @@ public sealed class SpellInfoRowsBuilder
 
         GameDataRecordLink last = links[^1];
         links[^1] = new GameDataRecordLink(last.Name, string.Empty, last.Open, last.IsLinked);
+
+        // A room spell can be cast in hundreds of rooms — show the first batch inline
+        // and hide the tail behind a "show N more" expander so the tab isn't flooded.
+        const int inlineCap = 20;
+        IReadOnlyList<GameDataRecordLink> visible = links, overflow = Array.Empty<GameDataRecordLink>();
+        if (links.Count > inlineCap)
+        {
+            // Restore the trailing ", " on the last visible link so it flows into the
+            // hidden tail when expanded.
+            GameDataRecordLink lastVisible = links[inlineCap - 1];
+            links[inlineCap - 1] = new GameDataRecordLink(lastVisible.Name, ", ", lastVisible.Open, lastVisible.IsLinked);
+            visible = links.GetRange(0, inlineCap);
+            overflow = links.GetRange(inlineCap, links.Count - inlineCap);
+        }
+
         rows.Add(new GameDataInfoRow(
             $"Cast in rooms ({links.Count.ToString(CultureInfo.InvariantCulture)})",
-            string.Join(", ", names), links));
+            string.Join(", ", names), visible, overflow));
     }
 
     private static bool IsSourceListField(string field) =>
@@ -432,6 +447,12 @@ public sealed class SpellInfoRowsBuilder
         if (value.ValueKind != JsonValueKind.String || CleanString(value.GetString()) is not { } raw)
             return null;
 
+        // "Cast By" room tokens are the same rooms the dedicated "Cast in rooms" row now
+        // lists in full with map links, so drop them here (and, with them, the room-driven
+        // "+ more" cap) to leave "Cast By" holding only the non-room casters — monsters /
+        // textblocks — that "Cast in rooms" doesn't cover.
+        bool dropRooms = string.Equals(field, "Casted By", StringComparison.OrdinalIgnoreCase);
+
         string[] parts = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var names = new List<string>();
         var links = new List<GameDataRecordLink>();
@@ -439,19 +460,21 @@ public sealed class SpellInfoRowsBuilder
         foreach (string part in parts)
         {
             if (part.Contains('+')) { cappedInData = true; continue; }   // MDB list-cap marker
+            if (dropRooms && IsRoomSourceToken(part)) continue;
             (string display, ICommand open, bool linked) = ResolveSource(part);
             if (names.Contains(display, StringComparer.OrdinalIgnoreCase)) continue;
             names.Add(display);
             links.Add(new GameDataRecordLink(display, ", ", open, linked));
         }
-        if (links.Count == 0) return cappedInData ? new GameDataInfoRow(FriendlyLabel(field), "+ more") : null;
+        bool showCap = cappedInData && !dropRooms;   // the cap was the room overflow now shown in "Cast in rooms"
+        if (links.Count == 0) return showCap ? new GameDataInfoRow(FriendlyLabel(field), "+ more") : null;
 
         // Trim the last real link's separator, then append the cap marker as text.
         GameDataRecordLink last = links[^1];
-        links[^1] = new GameDataRecordLink(last.Name, cappedInData ? ", " : string.Empty, last.Open, last.IsLinked);
-        if (cappedInData) links.Add(new GameDataRecordLink("+ more", string.Empty, NoOpCommand, isLinked: false));
+        links[^1] = new GameDataRecordLink(last.Name, showCap ? ", " : string.Empty, last.Open, last.IsLinked);
+        if (showCap) links.Add(new GameDataRecordLink("+ more", string.Empty, NoOpCommand, isLinked: false));
 
-        string text = string.Join(", ", names) + (cappedInData ? ", + more" : string.Empty);
+        string text = string.Join(", ", names) + (showCap ? ", + more" : string.Empty);
         return new GameDataInfoRow(FriendlyLabel(field), text, links);
     }
 
@@ -461,6 +484,14 @@ public sealed class SpellInfoRowsBuilder
     // clickable for Monsters / Items / Spells, an inert no-op for other kinds
     // (Room / TextBlock / Class) or a token that doesn't resolve (kept as text so
     // nothing is dropped).
+    // A "<Kind> #N" source token whose kind is a room — the redundant half of the
+    // "Cast By" column now rendered fully by the "Cast in rooms" scan.
+    private static bool IsRoomSourceToken(string token)
+    {
+        Match m = SourceToken.Match(token);
+        return m.Success && string.Equals(m.Groups[1].Value, "room", StringComparison.OrdinalIgnoreCase);
+    }
+
     private (string Display, ICommand Open, bool Linked) ResolveSource(string token)
     {
         Match m = SourceToken.Match(token);

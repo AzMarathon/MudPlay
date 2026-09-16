@@ -40,6 +40,23 @@
         </Style>
     </Window.Styles>
 
+    <Window.Resources>
+        <!-- One record-reference run: a blue link chip (Monsters / Items / Spells /
+             rooms) or inert text, plus its plain trailing separator. Shared by the
+             inline link list and the "show N more" overflow expander. -->
+        <DataTemplate x:Key="RecordLinkTemplate" x:DataType="vm:GameDataRecordLink">
+          <StackPanel Orientation="Horizontal">
+            <Button Classes="MdbLink" Content="{Binding Name}" Command="{Binding Open}"
+                    IsVisible="{Binding IsLinked}" ToolTip.Tip="Open this record"/>
+            <TextBlock Text="{Binding Name}" IsVisible="{Binding !IsLinked}"
+                       Foreground="{StaticResource ChromeFgBrush}"
+                       FontFamily="{StaticResource FontMono}" FontSize="11" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding Trailing}" Foreground="{StaticResource ChromeFgBrush}"
+                       FontFamily="{StaticResource FontMono}" FontSize="11" VerticalAlignment="Center"/>
+          </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
         <Grid RowDefinitions="*,Auto" RowSpacing="10">
 
@@ -343,34 +360,28 @@
                                    Foreground="{StaticResource ChromeFgBrush}"
                                    FontFamily="{StaticResource FontMono}" FontSize="11"
                                    TextWrapping="Wrap"/>
-                        <!-- Record-reference rows (Summons / Casts / Casted By /
-                             Negated by / …): each name a blue link to its record. -->
-                        <ItemsControl Grid.Column="1" ItemsSource="{Binding Links}"
-                                      IsVisible="{Binding HasLinks}">
-                          <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                              <WrapPanel Orientation="Horizontal"/>
-                            </ItemsPanelTemplate>
-                          </ItemsControl.ItemsPanel>
-                          <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:GameDataRecordLink">
-                              <StackPanel Orientation="Horizontal">
-                                <Button Classes="MdbLink" Content="{Binding Name}"
-                                        Command="{Binding Open}"
-                                        IsVisible="{Binding IsLinked}"
-                                        ToolTip.Tip="Open this record in the Game Data browser"/>
-                                <TextBlock Text="{Binding Name}" IsVisible="{Binding !IsLinked}"
-                                           Foreground="{StaticResource ChromeFgBrush}"
-                                           FontFamily="{StaticResource FontMono}" FontSize="11"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding Trailing}"
-                                           Foreground="{StaticResource ChromeFgBrush}"
-                                           FontFamily="{StaticResource FontMono}" FontSize="11"
-                                           VerticalAlignment="Center"/>
-                              </StackPanel>
-                            </DataTemplate>
-                          </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <!-- Record-reference rows (Summons / Casts / Cast By / Cast in
+                             rooms / Negated by / …): each name a blue link to its record.
+                             A long list (Cast in rooms) shows its first batch inline and
+                             hides the tail behind a "show N more" expander. -->
+                        <StackPanel Grid.Column="1" IsVisible="{Binding HasLinks}" Spacing="2">
+                          <ItemsControl ItemsSource="{Binding Links}"
+                                        ItemTemplate="{StaticResource RecordLinkTemplate}">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                          </ItemsControl>
+                          <Expander IsVisible="{Binding HasOverflow}" Header="{Binding OverflowLabel}"
+                                    Padding="0" Margin="0" HorizontalAlignment="Left">
+                            <ItemsControl ItemsSource="{Binding Overflow}"
+                                          ItemTemplate="{StaticResource RecordLinkTemplate}"
+                                          Margin="0,4,0,0">
+                              <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                              </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                          </Expander>
+                        </StackPanel>
                       </Grid>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>

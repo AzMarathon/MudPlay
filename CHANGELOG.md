@@ -2,9 +2,9 @@
 
 ## 3.88.18
 
-- Spell Game Data tab "Cast in rooms" now lists every room the spell is cast in with clickable map links (was a capped, unlinked list)
+- Spell Game Data tab: new "Cast in rooms" lists every room the spell is cast in with clickable map links (first 20 inline, the rest behind a "show N more" expander), replacing the old "Cast By" row's capped, unlinked room tokens (non-room casters still shown there)
 - Carry-gate rows now labelled with their source command: "Requires carrying (checkitem)" / "Avoided by carrying (failitem)"
-- New "Conditional effects" tree surfaces a room spell's percentage-gated logic — level/carry branches → weighted outcomes → summon / cast / teleport effects, each a link to its record or map room; huge teleport sweeps collapse to a one-line summary
+- New "Conditional effects" tree surfaces a room spell's percentage-gated logic — level/carry/no-NPC branches → weighted outcomes → summon / cast / teleport effects, each a link to its record or map room; huge teleport sweeps collapse to a one-line summary
 
 ## 3.88.17
 

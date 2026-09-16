@@ -82,36 +82,15 @@ public static class SpellEffectTreeDecoder
         finally { ancestors.Remove(tbNum); }
     }
 
-    // A conditional line: leading gate commands form the (tinted) branch header; the
-    // rest is the terminal effect / random rolled when the gate passes.
+    // A conditional line: its gate commands form the (tinted) branch header; the rest
+    // is the terminal effect / random rolled when the gate passes.
     private static SpellEffectNode BuildBranch(Ctx ctx, List<string> cmds, int depth, HashSet<int> ancestors)
     {
-        var conditions = new List<string>();
-        var itemRuns = new List<MdbInline>();
-        bool hasFail = false, hasCheck = false;
-        int splitAt = 0;
-        for (; splitAt < cmds.Count; splitAt++)
-        {
-            (string verb, string[] args) = Parse(cmds[splitAt]);
-            if (!ConditionVerbs.Contains(verb)) break;
-            switch (verb)
-            {
-                case "minlevel": conditions.Add($"level ≥ {Arg(args, 0)}"); break;
-                case "maxlevel": conditions.Add($"level ≤ {Arg(args, 0)}"); break;
-                case "checkitem": hasCheck = true; conditions.Add("carrying " + ItemName(ctx, Arg(args, 0))); break;
-                case "failitem": hasFail = true; conditions.Add("not carrying " + ItemName(ctx, Arg(args, 0))); break;
-                default: conditions.Add(verb + " " + string.Join(" ", args)); break;
-            }
-        }
-
-        var terminal = cmds.GetRange(splitAt, cmds.Count - splitAt);
-        IReadOnlyList<SpellEffectNode> children = BuildTerminalChildren(ctx, terminal, depth, ancestors);
-
-        string tone = hasFail && !hasCheck ? "danger" : hasCheck ? "accent" : "neutral";
+        (string? phrase, string tone, List<string> rest) = SplitConditions(ctx, cmds);
         return new SpellEffectNode
         {
-            Runs = new[] { new MdbInline(conditions.Count > 0 ? string.Join(", ", conditions) : "on entry") },
-            Children = children,
+            Runs = new[] { new MdbInline(phrase ?? "on entry") },
+            Children = BuildTerminalChildren(ctx, rest, depth, ancestors),
             IsBranch = true,
             Tone = tone,
             StartExpanded = true,
@@ -129,24 +108,29 @@ public static class SpellEffectTreeDecoder
                 return new[] { new SpellEffectNode { Runs = summary } };
             return DecodeBlock(ctx, random, depth + 1, ancestors);
         }
-        (IReadOnlyList<MdbInline> runs, _) = BuildEffectRuns(ctx, cmds);
+        IReadOnlyList<MdbInline> runs = BuildEffectRuns(ctx, cmds);
         return runs.Count > 0 ? new[] { new SpellEffectNode { Runs = runs } } : Array.Empty<SpellEffectNode>();
     }
 
-    // A weighted outcome: its percentage plus either a nested random (children) or a
+    // A weighted outcome: its percentage, an optional gate prefix (a mid-outcome
+    // condition such as `nomonsters`), then either a nested random (children) or a
     // direct effect line.
     private static SpellEffectNode BuildOutcome(Ctx ctx, int pct, List<string> cmds, int depth, HashSet<int> ancestors)
     {
-        int random = RandomTarget(cmds);
-        (IReadOnlyList<MdbInline> runs, bool nothing) = BuildEffectRuns(ctx, cmds);
+        (string? phrase, _, List<string> rest) = SplitConditions(ctx, cmds);
+        int random = RandomTarget(rest);
+        IReadOnlyList<MdbInline> effectRuns = BuildEffectRuns(ctx, rest);
+
+        var runs = new List<MdbInline>();
+        if (phrase is not null) runs.Add(new MdbInline($"if {phrase} — "));
+        runs.AddRange(effectRuns);
 
         if (random > 0)
         {
             if (TryCollapseTeleports(ctx, random) is { } summary)
             {
-                var merged = new List<MdbInline>(runs);
-                merged.AddRange(summary);
-                return new SpellEffectNode { Percent = pct, Runs = merged };
+                runs.AddRange(summary);
+                return new SpellEffectNode { Percent = pct, Runs = runs };
             }
             return new SpellEffectNode
             {
@@ -157,19 +141,43 @@ public static class SpellEffectTreeDecoder
             };
         }
 
-        if (runs.Count == 0 || nothing)
-            return new SpellEffectNode { Percent = pct, Runs = new[] { new MdbInline("nothing") } };
+        if (effectRuns.Count == 0) runs.Add(new MdbInline("nothing"));
         return new SpellEffectNode { Percent = pct, Runs = runs };
     }
 
-    // Build the display runs for a set of effect commands (summon/cast/teleport/
-    // nomonsters/addexp), resolving names to links. Consecutive identical summons
-    // collapse to "×N". Returns whether the only content was a do-nothing (addexp 0).
-    private static (IReadOnlyList<MdbInline> Runs, bool Nothing) BuildEffectRuns(Ctx ctx, List<string> cmds)
+    // Pull the gate commands (level / carry / no-NPCs) out of a command list, returning
+    // the human-readable condition phrase, the branch tone, and the remaining effect /
+    // random commands. `nomonsters` is a CONDITION — the line fires only when the room
+    // holds no NPCs — not an effect that clears the room.
+    private static (string? Phrase, string Tone, List<string> Remaining) SplitConditions(Ctx ctx, List<string> cmds)
+    {
+        var conditions = new List<string>();
+        var rest = new List<string>();
+        bool hasFail = false, hasCheck = false;
+        foreach (string c in cmds)
+        {
+            (string verb, string[] args) = Parse(c);
+            if (verb == "nomonsters") { conditions.Add("no NPCs in the room"); continue; }
+            if (!ConditionVerbs.Contains(verb)) { rest.Add(c); continue; }
+            switch (verb)
+            {
+                case "minlevel": conditions.Add($"level ≥ {Arg(args, 0)}"); break;
+                case "maxlevel": conditions.Add($"level ≤ {Arg(args, 0)}"); break;
+                case "checkitem": hasCheck = true; conditions.Add("carrying " + ItemName(ctx, Arg(args, 0))); break;
+                case "failitem": hasFail = true; conditions.Add("not carrying " + ItemName(ctx, Arg(args, 0))); break;
+                default: conditions.Add(args.Length > 0 ? $"{verb} {string.Join(" ", args)}" : verb); break;
+            }
+        }
+        string tone = hasFail && !hasCheck ? "danger" : hasCheck ? "accent" : "neutral";
+        return (conditions.Count > 0 ? string.Join(", ", conditions) : null, tone, rest);
+    }
+
+    // Build the display runs for a set of effect commands (summon / cast / teleport),
+    // resolving names to links. Consecutive identical summons collapse to "×N".
+    // Conditions (nomonsters / level / carry) are stripped upstream by SplitConditions.
+    private static IReadOnlyList<MdbInline> BuildEffectRuns(Ctx ctx, List<string> cmds)
     {
         var runs = new List<MdbInline>();
-        bool sawSomething = false, sawNothing = false;
-
         int i = 0;
         while (i < cmds.Count)
         {
@@ -185,14 +193,12 @@ public static class SpellEffectTreeDecoder
                     AddSep(runs);
                     runs.Add(MonsterLink(ctx, mon));
                     if (count > 1) runs.Add(new MdbInline($" ×{count}"));
-                    sawSomething = true;
                     break;
                 }
                 case "cast":
                     AddSep(runs);
                     runs.Add(new MdbInline("casts "));
                     runs.Add(SpellLink(ctx, ArgInt(args, 0)));
-                    sawSomething = true;
                     break;
                 case "teleport":
                 {
@@ -200,21 +206,12 @@ public static class SpellEffectTreeDecoder
                     AddSep(runs);
                     runs.Add(new MdbInline("→ "));
                     runs.Add(RoomLink(ctx, map, room));
-                    sawSomething = true;
                     break;
                 }
-                case "nomonsters":
-                    AddSep(runs);
-                    runs.Add(new MdbInline("clears the room"));
-                    sawSomething = true;
-                    break;
-                case "addexp":
-                    if (ArgInt(args, 0) == 0) sawNothing = true;
-                    break;
             }
             i++;
         }
-        return (runs, !sawSomething && sawNothing);
+        return runs;
     }
 
     // If a random block is all teleports (a sweep / crossing table), return a one-line
