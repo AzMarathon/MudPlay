@@ -2171,6 +2171,39 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
+    public void Rest_RepeatedInterruptionsBelowTarget_EachOneStaysAssertedAndResends()
+    {
+        // Report paradigm-20260916-035714: a rest cycle survived one interruption
+        // (a heal cast standing the character up) but not a SECOND one in the same
+        // cycle — the fix must hold across an arbitrary run of interruptions, not
+        // just the first, since wasActivelyResting is recomputed fresh every tick
+        // from _restInFlight + _restConfirmedByPrompt (which the prior resend
+        // re-establishes before the next interruption lands).
+        using Harness h = new();
+        h.State.MaxMa = 0;
+        h.SetPrompt(hp: 200, maxHp: 400);   // below 60% trigger (240)
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(1, h.SentLines.Count(l => l == "rest"));
+
+        h.State.Position = PlayerPosition.Resting;
+
+        // First interruption: HP climbed to 260 (above 240 trigger, below 380 target).
+        h.State.Hp = 260;
+        h.State.Position = PlayerPosition.Standing;
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(2, h.SentLines.Count(l => l == "rest"));
+
+        h.State.Position = PlayerPosition.Resting;
+
+        // Second interruption in the SAME cycle: HP climbed further to 300 (still
+        // above trigger, still below target). Must ALSO stay asserted + resend.
+        h.State.Hp = 300;
+        h.State.Position = PlayerPosition.Standing;
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(3, h.SentLines.Count(l => l == "rest"));
+    }
+
+    [Fact]
     public void Meditate_InterruptedBelowTarget_GateStaysAssertedAndReMeditates()
     {
         // Report paradigm-20260915-211744: SelfBlessWhileResting stands the
