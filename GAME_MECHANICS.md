@@ -20,6 +20,14 @@ it isn't here and you're unsure, ask.
 - **Combat round = 5 seconds** (precisely ~5.04s; the client surfaces it as a round "5" for
   human input). This is the cadence of combat lines, and a between-round spell can be cast
   **once per combat round**.
+  - **The between-round cycle runs on this SAME 5s tick WHETHER OR NOT you are in combat**
+    *([CONFIRMED] 2026-09-16, user)* — the one-0-energy-cast-per-round cap always applies; a second
+    within the same 5s window draws "You have already cast a spell this round!". So the client's
+    slot tracking must NOT be gated on its `InCombat` flag (which flickers false during the
+    between-kill *Combat Off* gap): a fresh arrival's pre-attack debuff fired in that flicker
+    re-entered a spent round and its rejection latched the block that then delayed the coupled
+    attack a whole round (report `paradigm-20260916-074131`). Tracked time-scoped to the 5s window
+    in `CastingDirector`, freed on the round tick or after the window lapses.
 - **Spell round = 3 seconds.** Buff/debuff durations on a player, item durations, and spell
   durations (e.g. a teleport / boat-transit spell) are all counted in **spell rounds** — so a
   duration of `N` rounds lasts `N × 3` seconds. A debuff falls off on the same 3s cadence.

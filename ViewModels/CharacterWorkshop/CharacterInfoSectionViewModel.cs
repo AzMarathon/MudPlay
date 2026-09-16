@@ -56,7 +56,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     [ObservableProperty] private string _race = "—";
     [ObservableProperty] private string _charClass = "—";
     [ObservableProperty] private int _level;
-    [ObservableProperty] private int _exp;
+    [ObservableProperty] private long _exp;
     [ObservableProperty] private int _lives;
     [ObservableProperty] private int _cp;
     [ObservableProperty] private string _hits = "—";

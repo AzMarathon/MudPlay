@@ -25,7 +25,10 @@ public sealed partial class PlayerStats : ObservableObject
 
     // ----- Progression ---------------------------------------------------
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _level;
-    [ObservableProperty] [field: Owner(typeof(StatParser))] private int _exp;
+    // Total experience — long, not int: Paradigm characters pass int32 (2.1B)
+    // and reach hundreds of billions, so an int silently overflowed / rejected
+    // the parse and the total drifted off gain-line accrual.
+    [ObservableProperty] [field: Owner(typeof(StatParser))] private long _exp;
     // Lives remaining — half of the Lives/CP: N/M field.
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _lives;
     // Character points available to spend — the other half of Lives/CP: N/M.
@@ -36,12 +39,12 @@ public sealed partial class PlayerStats : ObservableObject
     // Shrinks as XP comes in; clamped to 0 server-side when the character
     // already has enough exp to level (won't go negative even if they've
     // accumulated way past the threshold).
-    [ObservableProperty] [field: Owner(typeof(StatParser))] private int _expToNext;
+    [ObservableProperty] [field: Owner(typeof(StatParser))] private long _expToNext;
     // Total exp required to span the current level — the parenthesized (M)
     // in the exp line. NOT the cumulative threshold; the DELTA between the
     // current-level floor and the next-level floor. Constant for the current
     // level; the running progress is M - ExpToNext.
-    [ObservableProperty] [field: Owner(typeof(StatParser))] private int _levelExpSpan;
+    [ObservableProperty] [field: Owner(typeof(StatParser))] private long _levelExpSpan;
     // Progress through the current level as a percent (0–100) — the [P%] on
     // the exp line. Computed server-side as
     // (LevelExpSpan - ExpToNext) / LevelExpSpan × 100.

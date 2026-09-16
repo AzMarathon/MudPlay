@@ -105,7 +105,7 @@ public sealed class LevelUpAnnouncer : IDisposable
     private void OnScreenParsed(LastKnownStats snapshot) =>
         SeedBaseline(snapshot.Level, snapshot.Exp, snapshot.Class, snapshot.Race);
 
-    private void SeedBaseline(int level, int exp, string className, string raceName)
+    private void SeedBaseline(int level, long exp, string className, string raceName)
     {
         int highest = HighestTrainable(level, exp, className, raceName);
         if (highest < 0) return;   // chart/level not resolvable yet — wait for a real reading
@@ -113,7 +113,7 @@ public sealed class LevelUpAnnouncer : IDisposable
         _haveBaseline = true;
     }
 
-    private void OnExperienceGained(int newTotal)
+    private void OnExperienceGained(long newTotal)
     {
         int highest = HighestTrainable(_stats.Level, _stats.Exp, _stats.Class, _stats.Race);
         if (highest < 0) return;   // can't resolve the chart yet
@@ -161,7 +161,7 @@ public sealed class LevelUpAnnouncer : IDisposable
     // Highest level the running exp already meets the cumulative threshold for — the
     // top Level-Projection row whose "Exp to level" is 0. Returns the current level
     // when nothing above is banked, or -1 when the chart can't be resolved yet.
-    private int HighestTrainable(int level, int exp, string className, string raceName)
+    private int HighestTrainable(int level, long exp, string className, string raceName)
     {
         if (level <= 0) return -1;
         int chart = ExperienceTableCalculator.CalcExpChart(

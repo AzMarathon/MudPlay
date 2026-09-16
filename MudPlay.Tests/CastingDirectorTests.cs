@@ -956,13 +956,35 @@ public sealed class CastingDirectorTests
         h.FeedLine("You have been poisoned!");
         h.FeedLine("You have been paralyzed!");
         h.CastsSent.Clear();
-        h.Cast.OnCombatTick();      // clear recent-cast cooldown
+        h.Cast.OnCombatTick();               // clear recent-cast cooldown
+        h.Director.NotifyRoundComplete();    // new round frees the one-per-round between-round slot
 
         // Trigger a fresh evaluation (combat tick path).
         h.Director.OnCombatTick();
 
         Assert.Single(h.CastsSent);
         Assert.Equal("freedom", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void BetweenRoundSlot_StaysSpentAcrossCombatOffFlicker()
+    {
+        // Report paradigm-20260916-074131: the one-per-round between-round slot must
+        // survive the brief *Combat Off* flicker between kills (InCombat=false), so a
+        // freshly-arrived monster's pre-attack debuff doesn't re-fire into an
+        // already-spent round and draw "already cast this round" — whose block latch
+        // then delays the coupled attack a whole round. The slot used to be
+        // InCombat-gated, masking it false in exactly that flicker.
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Director.MarkBetweenRoundSlotUsed();
+        Assert.True(h.Director.BetweenRoundSlotUsed);
+
+        h.State.InCombat = false;                       // *Combat Off* between kills
+        Assert.True(h.Director.BetweenRoundSlotUsed);    // still spent — was masked false before
+
+        h.Director.NotifyRoundComplete();               // the real round tick frees it
+        Assert.False(h.Director.BetweenRoundSlotUsed);
     }
 
     // ----- Buffing (bless slot walk) ---------------------------------
@@ -1353,6 +1375,7 @@ public sealed class CastingDirectorTests
         h.FeedLine("You are blessed!");
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();   // new round frees the one-per-round between-round slot
 
         h.Director.Evaluate();
 
@@ -1481,6 +1504,7 @@ public sealed class CastingDirectorTests
         h.FeedLine("You are blessed!");        // 300s timer
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();      // new round frees the between-round slot
 
         h.Director.Evaluate();                 // mid-duration → no recast
         Assert.Empty(h.CastsSent);
@@ -1490,8 +1514,9 @@ public sealed class CastingDirectorTests
         Assert.Equal("bless", h.CastsSent[0]);
 
         // The recast re-armed the optimistic timer, so a stale re-evaluation this
-        // round can't fire a second bless.
+        // round can't fire a second bless (slot freed here so the TIMER is what blocks).
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
     }
@@ -1587,6 +1612,7 @@ public sealed class CastingDirectorTests
         h.FeedLine("You are blessed!");        // 300s timer
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();      // new round frees the between-round slot
 
         h.Director.Evaluate();                 // mid-duration → no recast
         Assert.Empty(h.CastsSent);
@@ -1680,6 +1706,7 @@ public sealed class CastingDirectorTests
         // sitting "active" for the full 300s.
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();      // new round frees the between-round slot
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
         Assert.Equal("bles", h.CastsSent[0]);
@@ -1772,7 +1799,7 @@ public sealed class CastingDirectorTests
         h.Health.BlessIfAboveMa = 0;
         h.State.MaxMa = 100;
         h.State.Ma = 100;
-        h.State.InCombat = false;   // out of combat: isolate the failure handling from the round gate
+        h.State.InCombat = false;   // the per-round cap applies in or out of combat now
         h.RecordCondition("mshi", MessageFlags.None,
             applied: "You feel protected!", endsWith: "Your mageshield shimmers and fades.");
 
@@ -1787,6 +1814,7 @@ public sealed class CastingDirectorTests
         // Timer dropped → it re-attempts rather than sitting phantom-active for 300s.
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();      // new round frees the between-round slot
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
         Assert.Equal("mshi", h.CastsSent[0]);
@@ -2357,6 +2385,7 @@ public sealed class CastingDirectorTests
         h.FeedLine("You are blessed!");
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();   // new round frees the between-round slot
 
         h.Director.Evaluate();
 
@@ -3062,11 +3091,13 @@ public sealed class CastingDirectorTests
         h.Confirm("You do not see Raijin here!");   // hidden ⇒ back off
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
         h.Director.Evaluate();
         Assert.Empty(h.CastsSent);           // still hiding ⇒ skipped, no spam
 
         h.Director.NoteRoomChanged();        // we moved ⇒ retry
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();    // new round frees the between-round slot
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
         Assert.Equal("bles Raijin", h.CastsSent[0]);
@@ -3088,11 +3119,13 @@ public sealed class CastingDirectorTests
         h.Confirm("You do not see Raijin here!");
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
         h.Director.Evaluate();
         Assert.Empty(h.CastsSent);           // still hiding
 
         h.InRoom.Add("Raijin");              // reappears in "Also here:" (unhid)
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();    // new round frees the between-round slot
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
     }
@@ -3172,6 +3205,7 @@ public sealed class CastingDirectorTests
         h.Confirm("You cast bless on Raijin!");
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();                // new round frees the between-round slot
         h.Director.Evaluate();                           // casts on Goldar
         h.Confirm("You cast bless on Goldar!");
         Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
@@ -3197,6 +3231,7 @@ public sealed class CastingDirectorTests
         h.Confirm("You cast bless on Raijin!");
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();              // new round frees the between-round slot
         h.Director.Evaluate();
         h.Confirm("You cast bless on Goldar!");
         Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
@@ -3412,6 +3447,7 @@ public sealed class CastingDirectorTests
         // No Confirm() — timer never starts.
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();   // new round frees the between-round slot
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
@@ -3460,6 +3496,7 @@ public sealed class CastingDirectorTests
         h.Confirm("You cast bless on Raijin!");
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();   // new round frees the between-round slot
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);

@@ -445,6 +445,43 @@ public sealed class StatParserTests
     }
 
     [Fact]
+    public void ExpLine_ParadigmScale_ExceedsInt32_CapturedAsLong()
+    {
+        // Paradigm exp passes int32 (2,147,483,647) into the tens of billions — the
+        // whole reason Exp / ExpToNext / LevelExpSpan are long. Line transcribed from
+        // report paradigm-20260916-081052: the int parse used to reject the (M) total
+        // (7,411,379,231) so the whole line failed and Exp drifted off gain-line accrual.
+        var (p, s) = Setup();
+        p.FeedTestLine("Exp: 7050294193 Level: 64 Exp needed for next level: 361085038 (7411379231) [95%]");
+        Assert.Equal(7050294193L, s.Exp);
+        Assert.Equal(64,          s.Level);
+        Assert.Equal(361085038L,  s.ExpToNext);
+        Assert.Equal(7411379231L, s.LevelExpSpan);
+        Assert.Equal(95,          s.LevelPercent);
+    }
+
+    [Fact]
+    public void ExperienceGainLine_PastInt32_NoClamp()
+    {
+        // A gain that pushes the total past int.MaxValue must accrue in full, not clamp
+        // to 2,147,483,647 (the old int-field bug).
+        var (p, s) = Setup();
+        p.FeedTestLine("Exp: 2100000000 Level: 64 Exp needed for next level: 10 (20) [50%]");
+        p.FeedTestLine("You gain 200000000 experience.");
+        Assert.Equal(2300000000L, s.Exp);
+    }
+
+    [Fact]
+    public void StatScreenInlineExp_ParadigmScale_CapturedAsLong()
+    {
+        // The stat screen packs Exp inline ("Race: Gaunt One   Exp: 7049892943
+        // Perception: 188") — the same >int32 value must parse there too.
+        var (p, s) = Setup();
+        p.FeedTestLine("Race: Gaunt One   Exp: 7049892943      Perception:    188");
+        Assert.Equal(7049892943L, s.Exp);
+    }
+
+    [Fact]
     public void ExpLine_PartialProgressCaptures()
     {
         // Halfway through level 1 — earned 1475 of the 2950-exp

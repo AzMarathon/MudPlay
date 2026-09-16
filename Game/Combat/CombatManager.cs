@@ -3387,9 +3387,20 @@ public sealed partial class CombatManager : IDisposable
                 && string.Equals(curT, _castingSpellTarget, StringComparison.OrdinalIgnoreCase);
             bool manualPaced = _lastBetweenRoundCastManual
                 && DateTimeOffset.Now - _lastManualCastResumeAt < ManualResumePacing;
+            // The attack already fired this round if our last attack went out AFTER the
+            // between-round cast. That's the pre-attack-debuff-then-attack sequence
+            // (isto → hsto same round, both 0-energy debuff + real attack): the attack's
+            // OWN *Combat Off* then lands in the debuff's resume window and would
+            // re-announce the attack a SECOND time (report paradigm-20260916-083245: two
+            // hsto sent back-to-back as monsters arrived). The weapon resume above guards
+            // this via ResumeAfterAttackGuard; the spell resume needs the same check. A
+            // genuine mid-round survival cast (heal/buff) fires AFTER the attack, so
+            // _lastAttackSentAt <= _betweenRoundCastAt and the resume still runs.
+            bool attackAlreadyFiredThisRound = _lastAttackSentAt > _betweenRoundCastAt;
             if (!suppressBetweenRoundResume
                 && DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _betweenRoundCastAt != _lastSpellResumeForBetweenRoundCastAt
+                && !attackAlreadyFiredThisRound
                 && !manualPaced
                 && !_userAttackOverride   // user hand-typed this round's attack — hold our own until next round
                 && _castingSpellTarget is { } spellTarget

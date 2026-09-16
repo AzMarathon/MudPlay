@@ -90,7 +90,7 @@ public sealed partial class StatParser : IDisposable
     // Level-Projection threshold mid-play. LevelUpAnnouncer listens here so it
     // announces a reachable level only on a genuine gain, never on a login
     // hydrate or a catch-up poll.
-    public event Action<int>? ExperienceGained;
+    public event Action<long>? ExperienceGained;
 
     // Fires when the compact `health`-command output re-anchors the HP + power
     // pool. Carries (maxHits, poolMax) — poolMax is the mana OR kai ceiling, 0
@@ -504,7 +504,7 @@ public sealed partial class StatParser : IDisposable
         // can be added as parallel bool fields if a future consumer
         // wants it).
         TryInt(text, LevelRx(),        "Level",        v => Stats.Level        = v);
-        TryInt(text, ExpRx(),          "Exp",          v => Stats.Exp          = v);
+        TryLong(text, ExpRx(),         "Exp",          v => Stats.Exp          = v);
         TryInt(text, PerceptionRx(),   "Perception",   v => Stats.Perception   = v);
         TryInt(text, StealthRx(),      "Stealth",      v => Stats.Stealth      = v);
         TryInt(text, ThieveryRx(),     "Thievery",     v => Stats.Thievery     = v);
@@ -537,11 +537,13 @@ public sealed partial class StatParser : IDisposable
         if (!m.Success) return;
         System.Globalization.NumberStyles ns = System.Globalization.NumberStyles.Integer;
         System.Globalization.CultureInfo inv = System.Globalization.CultureInfo.InvariantCulture;
-        if (!int.TryParse(m.Groups[1].Value, ns, inv, out int exp))      return;
-        if (!int.TryParse(m.Groups[2].Value, ns, inv, out int level))    return;
-        if (!int.TryParse(m.Groups[3].Value, ns, inv, out int toNext))   return;
-        if (!int.TryParse(m.Groups[4].Value, ns, inv, out int threshold))return;
-        if (!int.TryParse(m.Groups[5].Value, ns, inv, out int percent))  return;
+        // Exp / needed / span are long — Paradigm's values pass int32. Level and
+        // percent stay int.
+        if (!long.TryParse(m.Groups[1].Value, ns, inv, out long exp))      return;
+        if (!int.TryParse(m.Groups[2].Value, ns, inv, out int level))      return;
+        if (!long.TryParse(m.Groups[3].Value, ns, inv, out long toNext))   return;
+        if (!long.TryParse(m.Groups[4].Value, ns, inv, out long threshold))return;
+        if (!int.TryParse(m.Groups[5].Value, ns, inv, out int percent))    return;
         Stats.Exp           = exp;
         Stats.Level         = level;
         Stats.ExpToNext     = toNext;
@@ -586,10 +588,9 @@ public sealed partial class StatParser : IDisposable
         if (!m.Success) return;
         if (!long.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Integer,
             System.Globalization.CultureInfo.InvariantCulture, out long gained)) return;
-        // Exp is an int field; clamp the running total so a huge gain can't
-        // overflow it (high-level MajorMUD exp can pass int range).
-        long total = (long)Stats.Exp + gained;
-        Stats.Exp = total > int.MaxValue ? int.MaxValue : (int)total;
+        // Stats.Exp is a long, so the running total holds Paradigm's hundreds-of-
+        // billions without the int clamp that used to pin it at int.MaxValue.
+        Stats.Exp += gained;
         HasParsed = true;
         _log?.Log(LogSeverity.Debug, "StatParser", $"Exp += {gained} → {Stats.Exp} (gain line).");
         ExperienceGained?.Invoke(Stats.Exp);
@@ -674,6 +675,19 @@ public sealed partial class StatParser : IDisposable
         if (!m.Success) return;
         if (!int.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Integer,
             System.Globalization.CultureInfo.InvariantCulture, out int v)) return;
+        set(v);
+        HasParsed = true;
+        _fieldsCapturedThisArm++;
+        _log?.Log(LogSeverity.Debug, "StatParser", $"{field} = {v}");
+    }
+
+    // Long sibling of TryInt — for Exp, whose Paradigm value passes int32.
+    private void TryLong(string text, Regex rx, string field, Action<long> set)
+    {
+        Match m = rx.Match(text);
+        if (!m.Success) return;
+        if (!long.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out long v)) return;
         set(v);
         HasParsed = true;
         _fieldsCapturedThisArm++;
