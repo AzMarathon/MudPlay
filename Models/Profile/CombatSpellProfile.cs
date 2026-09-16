@@ -37,6 +37,7 @@ public sealed class CombatSpellProfile
     public ThresholdMode SpellManaThresholdMode { get; set; } = ThresholdMode.Percentage;
     public int DrainHpTrigger { get; set; } = 50;
     public bool DrainsOverrideAoe { get; set; }
+    public bool AreaDebuffFirstRoundOnly { get; set; }
 
     // Physical attack verbs + room-skip / flee thresholds — a full combat posture,
     // not just spells.
@@ -89,6 +90,7 @@ public sealed class CombatSpellProfile
             SpellManaThresholdMode = src.SpellManaThresholdMode,
             DrainHpTrigger = src.DrainHpTrigger,
             DrainsOverrideAoe = src.DrainsOverrideAoe,
+            AreaDebuffFirstRoundOnly = src.AreaDebuffFirstRoundOnly,
             NormalAttackCommand = src.NormalAttackCommand,
             AlternateAttackCommand = src.AlternateAttackCommand,
             MinMonstersInRoom = src.MinMonstersInRoom,
@@ -116,6 +118,7 @@ public sealed class CombatSpellProfile
         dst.SpellManaThresholdMode = SpellManaThresholdMode;
         dst.DrainHpTrigger = DrainHpTrigger;
         dst.DrainsOverrideAoe = DrainsOverrideAoe;
+        dst.AreaDebuffFirstRoundOnly = AreaDebuffFirstRoundOnly;
         dst.NormalAttackCommand = NormalAttackCommand;
         dst.AlternateAttackCommand = AlternateAttackCommand;
         dst.MinMonstersInRoom = MinMonstersInRoom;
@@ -142,6 +145,7 @@ public sealed class CombatSpellProfile
         SpellManaThresholdMode = src.SpellManaThresholdMode;
         DrainHpTrigger = src.DrainHpTrigger;
         DrainsOverrideAoe = src.DrainsOverrideAoe;
+        AreaDebuffFirstRoundOnly = src.AreaDebuffFirstRoundOnly;
         NormalAttackCommand = src.NormalAttackCommand;
         AlternateAttackCommand = src.AlternateAttackCommand;
         MinMonstersInRoom = src.MinMonstersInRoom;
@@ -166,6 +170,7 @@ public sealed class CombatSpellProfile
         SpellManaThresholdMode = SpellManaThresholdMode,
         DrainHpTrigger = DrainHpTrigger,
         DrainsOverrideAoe = DrainsOverrideAoe,
+        AreaDebuffFirstRoundOnly = AreaDebuffFirstRoundOnly,
         NormalAttackCommand = NormalAttackCommand,
         AlternateAttackCommand = AlternateAttackCommand,
         MinMonstersInRoom = MinMonstersInRoom,

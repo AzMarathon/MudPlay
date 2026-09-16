@@ -345,6 +345,43 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Empty(applied);
     }
 
+    // A rest posture flickering mid-fight must NOT swap into a pre-rest set — you can't
+    // rest in combat, and wearing weak rest gear gets you ravaged (report
+    // paradigm-20260916-104923). Combat gear holds; the swap-back happens on combat clear.
+    [Fact]
+    public void RestPostureDuringCombat_DoesNotSwapToPreRestSet()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "hp-set"));
+        cfg.SwapToDefaultOnCombat = true;
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => true,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        player.InCombat = true;
+        applied.Clear();
+
+        // Sit mid-fight (HealthManager re-sits, a pre-rest wear breaks, etc.) → NO pre-rest swap.
+        player.Position = PlayerPosition.Resting;
+        Assert.Empty(applied);
+
+        // Control: the same sit out of combat DOES fire the pre-rest swap.
+        player.InCombat = false;
+        applied.Clear();
+        player.Position = PlayerPosition.Standing;
+        player.Position = PlayerPosition.Resting;
+        Assert.Equal(new[] { "hp-set" }, applied);
+    }
+
     // Flag on but NOT rest-gated (a plain fight, not interrupting a rest) → no swap.
     [Fact]
     public void SwapOnCombat_Enabled_NotRestGated_DoesNothing()

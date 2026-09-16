@@ -494,7 +494,15 @@ public sealed class AutoEquipCoordinator : IDisposable
     {
         if (from == to) return;
         if (ClassifyRest(to, _hpGateAsserted(), _maGateAsserted()) is { } restType)
+        {
+            // Never swap into a pre-rest set while fighting. You can't rest in combat, so
+            // a sit/rest-posture mid-fight is transient — swapping to weak pre-rest gear
+            // there gets the character ravaged, and it thrashes against the
+            // swap-to-Default-on-combat restore (report paradigm-20260916-104923). Combat
+            // gear holds until OnCombatStateChanged restores the rest set once combat clears.
+            if (_player.InCombat) return;
             Fire(restType);
+        }
         else if (to == PlayerPosition.Standing && IsRestPosture(from))
         {
             // Only revert to Default when we're actually swapping BACK from a

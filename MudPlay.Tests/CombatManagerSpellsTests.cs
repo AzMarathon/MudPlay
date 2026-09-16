@@ -1669,6 +1669,47 @@ public sealed class CombatManagerSpellsTests
         Assert.Single(h.AllSent, s => s == "curse");
     }
 
+    // Report paradigm-20260916-104702: with "AoE debuff first round only" set, once the
+    // fight is underway in the room the debuff is abandoned — a round-2+ debuff (its
+    // between-round slot lost to a higher-priority buff on entry) is wasted mana. The
+    // debuff fires on entry (combat not seen yet), but a rejected/held round-1 attempt is
+    // NOT retried once an attack has been swung.
+    [Fact]
+    public void AreaDebuffFirstRoundOnly_NotRetriedOnceCombatSeen()
+    {
+        using Harness h = new();
+        // Slot spent every round → the pre-attack can't land the debuff on entry, so it's
+        // never cast (no once-per-room tag) — the exact situation the user hits when a
+        // higher-priority buff owns the between-round slot on room entry.
+        h.Combat.SetBetweenRoundSlotQuery(() => true);
+        h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.Settings.AreaDebuffFirstRoundOnly = true;
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");        // pre-attack HELD (slot spent); blast attacks → combat seen
+        Assert.DoesNotContain("curse", h.AllSent);   // debuff never landed on entry
+
+        // 'First round only' abandons the debuff now that combat's underway.
+        Assert.Null(h.Combat.PickInBetweenDebuff());
+    }
+
+    [Fact]
+    public void AreaDebuffFirstRoundOnly_Off_RetriesAfterCombatSeen()
+    {
+        // Same shape, flag OFF (default): the debuff keeps retrying until it lands.
+        using Harness h = new();
+        h.Combat.SetBetweenRoundSlotQuery(() => true);
+        h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.DoesNotContain("curse", h.AllSent);
+
+        Assert.Equal("curse", h.Combat.PickInBetweenDebuff()?.Spell);   // retries — no first-round gate
+    }
+
     // The corpse-cast guard on the immediate post-debuff attack: an AoE debuff that
     // kills the room drops the target in the gap before the deferred attack runs, so
     // the attack must re-validate and skip rather than blast an empty room (report

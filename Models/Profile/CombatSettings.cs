@@ -193,6 +193,14 @@ public sealed class CombatSettings
     // Area-effect debuff (e.g. blind-room, curse-room).
     public CombatSpellSlot AreaDebuffSpell { get; set; } = new();
 
+    // When true, the AoE debuff is only attempted on room ENTRY — before any combat
+    // round has been seen in the room — and is abandoned for the room once the fight
+    // is underway. A debuff that lands on the first round softens the whole pack; one
+    // that lands on round 2+ (because a higher-priority buff/heal took the between-round
+    // slot on entry) is mostly wasted mana on a half-dead room. Default false: keep
+    // retrying each open between-round slot until it lands once per room.
+    public bool AreaDebuffFirstRoundOnly { get; set; }
+
     // Single-target debuff (e.g. weakness, slow). Ignores MinEnemies.
     public CombatSpellSlot SingleTargetDebuffSpell { get; set; } = new();
 

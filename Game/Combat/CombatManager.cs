@@ -198,6 +198,14 @@ public sealed partial class CombatManager : IDisposable
     private bool _committedToRoom;
     public bool HasCommittedToCurrentRoom => _committedToRoom;
 
+    // True once we've swung/cast an attack in THIS room, i.e. the fight is underway.
+    // Gates the AoE debuff under CombatSettings.AreaDebuffFirstRoundOnly: a debuff is
+    // only worth landing on entry (before the first round softens nothing yet), so once
+    // this flips the debuff is abandoned for the room. Set in NoteAttackSent, reset on a
+    // physical room change (NotePreMove) — the same lifetime as the AoE-debuff per-room
+    // cap it rides alongside.
+    private bool _combatSeenThisRoom;
+
     // Guard-redirect memory. MajorMUD "guarded" monsters (a brigand chief guarded
     // by brigands) can't be hit directly while a guard is in the room — each swing
     // we aim at the chief is redirected to a guard, announced by "<guard> moves to
@@ -1836,6 +1844,9 @@ public sealed partial class CombatManager : IDisposable
         // Leaving the room ends our commitment to it — the next room re-earns
         // the "Kill all engaged" hold by meeting the engage window again.
         _committedToRoom = false;
+        // Fresh room — the AoE debuff's "first round only" gate re-opens (combat
+        // hasn't been seen here yet).
+        _combatSeenThisRoom = false;
         // Leaving the room drops any debuff still awaiting a rejection — its mark is
         // gone with the room reset, so there's nothing left to roll back.
         _debuffAwaitingConfirm = null;
@@ -2916,10 +2927,25 @@ public sealed partial class CombatManager : IDisposable
     private void DeferResumeEngage(RoomEntitiesObservation live)
     {
         string? target = _currentTarget;
+        // Snapshot the last-attack clock at SCHEDULE time. If a real attack fires during
+        // the deferral window, the round's action has already gone out — a resume now
+        // would double it. This catches the deferred-resume double-fire that no
+        // scheduling-time guard can (the guard passed before the attack landed): the
+        // pre-attack-then-attack sends hsto mid-deferral, then this resume re-picks and
+        // re-sends hsto (report paradigm-20260916-105458). A between-round-cast bypass
+        // resume is unaffected — its cast doesn't advance _lastAttackSentAt, so the
+        // snapshot is unchanged and the legitimate resume still fires.
+        DateTimeOffset attackAtSchedule = _lastAttackSentAt;
 
         void Dispatch()
         {
             if (_disposed || !_isEnabled()) return;
+            if (_lastAttackSentAt != attackAtSchedule)
+            {
+                _log?.Combat(LogCategory,
+                    "resume skipped — an attack fired during the deferral (the round's action already went out)");
+                return;
+            }
             if (target is not null
                 && (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase)
                     || _classifier.Current is not { } fresh
@@ -3680,6 +3706,10 @@ public sealed partial class CombatManager : IDisposable
         // reads this even when engagement is already confirmed (the death→re-
         // observe re-engage happens mid-fight, long after Engaged).
         _lastAttackSentAt = DateTimeOffset.Now;
+        // The fight is underway in this room — closes the AoE debuff's "first round
+        // only" window (the pre-attack debuff fires BEFORE this in the same dispatch,
+        // so it still gets its entry shot).
+        _combatSeenThisRoom = true;
         // A swing since the last death means the death→re-observe path has run;
         // a later cast-interrupt Off should resume, not stand down (see
         // _attackSentSinceDeath).
