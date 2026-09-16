@@ -1012,6 +1012,9 @@ public partial class MainWindowViewModel : ObservableObject
         // Token charge tracker — parses each held token's `look` "Uses remaining: N"
         // reply and the "You invoke the token…" use line (Paradigm transport tokens).
         AppServices.Current.Tokens.AttachLineExtractor(Lines);
+        // General limited-use item charges — captures "Uses remaining: N" from any
+        // `look` reply (tokens ride the same line feed; other items when looked).
+        AppServices.Current.ItemCharges.AttachLineExtractor(Lines);
         // Inbound ailment chip-clear — PartyAilmentTracker watches server
         // lines for OUR cure spell landing on a party member (matched by the
         // cure spell's CasterMessage template) and clears that member's
@@ -3186,6 +3189,9 @@ public partial class MainWindowViewModel : ObservableObject
         // Token tracker — a `use <token>` here triggers a re-look to reconcile its
         // remaining charges (Paradigm-gated inside the observer).
         AppServices.Current.Tokens.ObserveOutbound(data);
+        // Limited-use item charges — arms on an outbound `look <item>` so the reply's
+        // "Uses remaining: N" is captured (tokens' login looks included).
+        AppServices.Current.ItemCharges.ObserveOutbound(data);
         var t = _telnet;
         if (t is not null) _ = FireSendAsync(t, data);
     }

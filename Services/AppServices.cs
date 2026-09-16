@@ -434,6 +434,11 @@ public sealed class AppServices
     public Game.Tokens.TokenTracker Tokens { get; private set; } = null!;
     public Game.Remote.TokenQueryHandler TokenQuery { get; private set; } = null!;
 
+    // General limited-use item charge tracker — captures "Uses remaining: N" from any
+    // `look` (Paradigm-only line), surfaced in Character Info. Tokens populate via their
+    // login look; other limited-use items when the player looks at them.
+    public Game.Inventory.ItemChargeTracker ItemCharges { get; private set; } = null!;
+
     // Write-side consumer of RemoteCommands for the inventory /
     // cash action commands — @get-all / @drop-all /
     // @deposit-all (ExecuteCommands) and @share (party-whitelist).
@@ -4667,6 +4672,20 @@ public sealed class AppServices
         GameData.ActiveSetChanged += _ => { Tokens.Clear(); _tokenTeleports = null; _tokenUseMatchers = null; };
         // @token <name> — read-only remaining-charges report off the tracker.
         TokenQuery = new Game.Remote.TokenQueryHandler(RemoteCommands, Tokens);
+
+        // General limited-use item charges from look replies (Paradigm "Uses remaining:
+        // N"). Cleared on profile swap so a new character re-reads from scratch. The
+        // line feed + outbound tap are wired in MainWindowViewModel alongside Tokens.
+        ItemCharges = new Game.Inventory.ItemChargeTracker(
+            carried: () => Inventory.Snapshot.CarriedItems,
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
+        Profile.ProfileLoaded += _ => ItemCharges.Clear();
 
         // @timer — read-only report of the boss respawn timers being tracked. Reads
         // the boss catalog + persisted kill-times; no wire output beyond its reply.

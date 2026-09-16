@@ -15,10 +15,17 @@ public sealed class WorkshopItemRow
     public bool CanOpen { get; }
     public ICommand Open { get; }
 
-    public WorkshopItemRow(string name, string slot, int itemNumber)
+    // Charge readout for a limited-use item, e.g. "5 Charges" — shown after the name
+    // in the panel. Empty for items with no known charge count (unlimited, not looked,
+    // or a stock realm that prints none). Set from ItemChargeTracker.
+    public string Charges { get; }
+    public bool HasCharges => Charges.Length > 0;
+
+    public WorkshopItemRow(string name, string slot, int itemNumber, string charges = "")
     {
         Name = name;
         Slot = slot;
+        Charges = charges;
         CanOpen = itemNumber > 0;
         Open = new RelayCommand(
             () => { if (itemNumber > 0) _ = AppServices.Current.ItemRecord.OpenAsync(itemNumber); },

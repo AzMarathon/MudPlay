@@ -1,5 +1,10 @@
 # Version history
 
+## 3.93.0
+
+- Character Info now shows a limited-use item's **remaining charges** next to it (e.g. "token of Silvermere - 5 Charges") — captured from the "Uses remaining: N" a `look` prints on Paradigm; transport tokens fill in automatically (looked on login), any other charged item when you look at it
+- (Stock realms print no charge count, so nothing shows there — stock use-counting is a follow-up)
+
 ## 3.92.1
 
 - Token route "minimum rooms saved" now defaults to 50 (was 3) — a token's gold + charge + buff-wipe is only worth it for a big shortcut; the spinner now goes up to 300

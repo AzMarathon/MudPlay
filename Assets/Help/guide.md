@@ -977,7 +977,7 @@ Finally, if the only thing left un-recovered is **currency**, the death counts a
 
 ## Character Info and Calculators
 
-**Character Info** is your read-only character sheet — stats, skills, the attack table (per attack type: accuracy, damage range, and swings per round, computed from your stats and equipped weapon), and folded-in quest bonuses. It also lists your worn, carried, and key-ring inventory, each a clickable link to its Game Data record (an item whose dumped name didn't resolve stays plain text).
+**Character Info** is your read-only character sheet — stats, skills, the attack table (per attack type: accuracy, damage range, and swings per round, computed from your stats and equipped weapon), and folded-in quest bonuses. It also lists your worn, carried, and key-ring inventory, each a clickable link to its Game Data record (an item whose dumped name didn't resolve stays plain text). A **limited-use item shows its remaining charges** next to it (e.g. *token of Silvermere - 5 Charges*) once the client has seen them — on **Paradigm**, where `look`ing an item prints "Uses remaining: N"; transport tokens fill in automatically (they're looked on login), any other charged item when you look at it. (Stock realms don't print a charge count, so nothing shows there.)
 
 Below the wealth block it shows an **AC / DR breakdown** in two lines: one for what your worn gear grants, and one for what your **configured self-buffs** add on top (assuming they're up) — the same buff figure the Equipment Manager and Monster Intel use.
 

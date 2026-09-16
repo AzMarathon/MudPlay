@@ -57,7 +57,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         // shared state; the Character Info tab (reader) folds them into derived combat.
         var questBonuses = new QuestBonusState();
 
-        Sections.Add(new CharacterInfoSectionViewModel(playerStats, gameData, inventory, players, alignment, questBonuses, AppServices.Current.Currency));
+        Sections.Add(new CharacterInfoSectionViewModel(playerStats, gameData, inventory, players, alignment, questBonuses, AppServices.Current.Currency, AppServices.Current.ItemCharges));
 
         Sections.Add(new DeathSectionViewModel(recovery, profile));
 

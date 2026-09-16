@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.92.1**
-> - Token route "minimum rooms saved" now defaults to 50 (was 3) — a token's gold + charge + buff-wipe is only worth a big shortcut; the spinner now goes to 300
-> - Corrected the party-token setting's tooltip to the real order (party across first, leader last)
+> **Version 3.93.0**
+> - Character Info now shows a limited-use item's **remaining charges** next to it (e.g. "token of Silvermere - 5 Charges") — captured from the "Uses remaining: N" a `look` prints on Paradigm; transport tokens fill in automatically, other charged items when you look at them
+> - (Stock realms print no charge count, so nothing shows there yet — stock use-counting is a follow-up)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
