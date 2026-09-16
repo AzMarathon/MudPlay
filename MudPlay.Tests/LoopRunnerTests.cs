@@ -185,6 +185,28 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void Start_AtNonFirstWaypoint_PreservesAuthoredOrder_ButBeginsAtEntry()
+    {
+        // User report (2026-09-16): a running loop's waypoint numbering must stay fixed to
+        // the authored order no matter where the player enters or recovers — the runner
+        // used to rotate _loop.Waypoints so the entry became waypoint 0, which renumbered
+        // the map/rail (and mutated the shared saved loop) on every recovery reroute.
+        // Entering at B (the 2nd authored waypoint) must NOT reorder the loop: the display
+        // list stays [A, B], while execution still begins at the entry (first move B→A).
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 2));   // player at B, the SECOND authored waypoint
+        h.Runner.Start(AbCycle());
+
+        // Authored order untouched — A is still waypoint 1.
+        IReadOnlyList<LoopWaypoint> wps = h.Runner.CurrentLoop!.Waypoints;
+        Assert.Equal(new RoomKey(1, 1), wps[0].Key);
+        Assert.Equal(new RoomKey(1, 2), wps[1].Key);
+
+        // But traversal begins at the entry (B): first leg B→A is south.
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    [Fact]
     public void WrapsAtEnd_AndFiresRepeatStarted()
     {
         // Complete one full lap (N + S back to 1/1) — wrap fires

@@ -660,8 +660,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
         // Running / paused circle — green cycle line, full ring, anchored at
         // CircleStartRoom so it stays static across step advances, plus the numbered
-        // green waypoint bubbles (same rotated order as RunningLoopRows) so the map
-        // lines up with the CURRENT NAV rows.
+        // green waypoint bubbles in the loop's authored order (fixed numbering, same as
+        // RunningLoopRows) so the map lines up with the CURRENT NAV rows.
         LoopApproachPreviewPath = null;
         LoopRunningWaypoints = loop.Waypoints.Select(w => w.Key).ToList();
         if (source is { } start)
@@ -4524,7 +4524,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         LoopBuilder.SetClickAction(row.Index - 1, result.Command, result.DelayMs, result.DoNotRest, result.DoNotAttack);
     }
 
-    // Build the green running-loop rail from the loop's (rotated) waypoints, marking
+    // Build the green running-loop rail from the loop's authored waypoints (fixed order
+    // and numbering — never reordered by where the player entered/recovered), marking
     // the room the player is currently in so the rail can highlight it. Called from the
     // Looping branch of RebuildCurrentNavRows while the circle runs.
     private void RebuildRunningLoopRows(Loop loop)
@@ -4568,9 +4569,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
         if (result is null) return;
 
-        // Rows are built from the loop's (rotated) waypoint list in order, so the row
-        // index maps straight in; verify by Key and fall back to a key match in case a
-        // recovery reroute rotated the loop since the row was built.
+        // Rows are built from the loop's authored waypoint list in order, so the row
+        // index maps straight in; verify by Key and fall back to a key match for safety.
         IReadOnlyList<LoopWaypoint> wps = loop.Waypoints;
         int i = row.Index - 1;
         LoopWaypoint? wp = i >= 0 && i < wps.Count && wps[i].Key.Equals(row.Key)

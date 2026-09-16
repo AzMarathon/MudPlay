@@ -1,5 +1,9 @@
 # Version history
 
+## 3.88.25
+
+- Running-loop waypoint numbers no longer shift while looping — the runner kept re-rotating the loop's waypoint order to whatever room you entered or recovered at (on every recovery reroute), which renumbered the map/rail and scrambled the saved loop's authored order; the authored order is now immutable and the entry is just a start offset, so the numbers stay fixed to the order you authored and per-room edits stay on the rooms you set
+
 ## 3.88.24
 
 - Character Info Exp now matches the in-game value on Paradigm — exp fields widened to 64-bit so totals past ~2.1 billion (into the hundreds of billions) no longer overflow the parse and drift off gain-line accrual
