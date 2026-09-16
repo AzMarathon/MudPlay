@@ -506,6 +506,9 @@
                            IsVisible="{Binding AreaDebuffSpellMisSlotWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                            Foreground="{StaticResource SeverityWarnBrush}"
                            FontSize="11" Margin="160,0,0,2" TextWrapping="Wrap"/>
+                <CheckBox Content="Only cast on the first round in a room" Margin="160,0,0,0"
+                          IsChecked="{Binding AreaDebuffFirstRoundOnly, Mode=TwoWay}"
+                          ToolTip.Tip="Attempt the AoE debuff only on room entry (before the first combat round). If a higher-priority buff/heal takes the round's between-round cast slot on entry, the debuff is abandoned for the room rather than landing on round 2+, where it's mostly wasted mana. Off = keep retrying until it lands once per room."/>
 
                 <!-- Debuff (single target — no Min enemies). -->
                 <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">

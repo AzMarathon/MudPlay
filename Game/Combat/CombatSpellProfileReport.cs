@@ -58,7 +58,8 @@ public static class CombatSpellProfileReport
             profile.MultiAttack2Enabled
                 ? SlotDetail("multi2", profile.MultiAttack2Spell, roomWide: false)
                 : "multi2 off",
-            SlotDetail("AoE-debuff", profile.AreaDebuffSpell, roomWide: true),
+            SlotDetail("AoE-debuff", profile.AreaDebuffSpell, roomWide: true)
+                + (profile.AreaDebuffFirstRoundOnly ? " 1st-round-only" : ""),
             SlotDetail("debuff", profile.SingleTargetDebuffSpell, roomWide: false),
             SlotDetail("normal", profile.NormalAttackSpell, roomWide: false),
             SlotDetail("alt", profile.AlternateAttackSpell, roomWide: false),

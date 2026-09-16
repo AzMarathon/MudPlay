@@ -245,6 +245,9 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int _areaDebuffMinEnemies;
     [ObservableProperty] private int? _areaDebuffMaxCastsPerRoom;
     [ObservableProperty] private int _areaDebuffMinManaPerCast;
+    // Only attempt the AoE debuff on room entry (before the first combat round);
+    // abandon it for the room once the fight's underway. Default off.
+    [ObservableProperty] private bool _areaDebuffFirstRoundOnly;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SingleTargetDebuffSpellUnlearned))]
@@ -643,6 +646,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
                 MaxCastsPerRoom = ClampCasts(AreaDebuffMaxCastsPerRoom),
                 MinManaPerCast  = ClampSpell(AreaDebuffMinManaPerCast),
             },
+            AreaDebuffFirstRoundOnly = AreaDebuffFirstRoundOnly,
             SingleTargetDebuffSpell = new CombatSpellSlot
             {
                 SpellName       = NullIfBlank(SingleTargetDebuffSpellName),
@@ -788,6 +792,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         AreaDebuffMinEnemies      = dto.AreaDebuffSpell.MinEnemies;
         AreaDebuffMaxCastsPerRoom = dto.AreaDebuffSpell.MaxCastsPerRoom;
         AreaDebuffMinManaPerCast  = dto.AreaDebuffSpell.MinManaPerCast;
+        AreaDebuffFirstRoundOnly  = dto.AreaDebuffFirstRoundOnly;
 
         SingleTargetDebuffSpellName       = dto.SingleTargetDebuffSpell.SpellName;
         SingleTargetDebuffMaxCastsPerRoom = dto.SingleTargetDebuffSpell.MaxCastsPerRoom;

@@ -355,6 +355,33 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("nuke giant rat", h.LastSent);
     }
 
+    // Corpse-cast on the arrival-settle path (report paradigm-20260916-141344: nebo at a
+    // dead muckworm). A straggler kill's death line lands INSIDE the settle window — its
+    // roster resync (a forced re-display) is still in flight when the window elapses, so
+    // the accumulated roster can still name the just-killed mob (or a fresh same-named
+    // arrival not yet confirmed in-room). Engaging then re-picks that name and casts at a
+    // target the server rejects a beat later. The settle-elapsed path must defer to the
+    // resync — force the re-display, cast nothing — instead of racing it.
+    [Fact]
+    public void ArrivalSettle_KillLandsInsideWindow_DefersToResync_NoCorpseCast()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nebo", MinEnemies = 1 };
+        h.AddMonster(1, "muckworm");
+
+        h.Arrive("muckworm");                       // arms the settle hold (no target yet)
+        Assert.Equal(string.Empty, h.LastSent);
+
+        h.Combat.NoteMonsterDied("muckworm");       // a kill's death line lands inside the window
+        int sentBeforeSettle = h.Sent.Count;
+
+        h.FireSettle();                             // window elapsed — a kill happened mid-window
+
+        Assert.DoesNotContain("nebo muckworm", h.AllSent);   // never corpse-cast
+        Assert.Equal(sentBeforeSettle + 1, h.Sent.Count);    // exactly the CR resync went out
+        Assert.Equal(string.Empty, h.LastSent);              // = the bare CR (trimmed to empty)
+    }
+
     // Post-kill re-engage race (reports 081053, 081654, 103708, 135433). Each realm
     // gives monsters custom death messages we can't map to the flavored target, so
     // the specific-death matcher misses and combat used to re-cast at the corpse on
@@ -1667,6 +1694,47 @@ public sealed class CombatManagerSpellsTests
         h.Tick();
         Assert.Equal("blast", h.LastSent);
         Assert.Single(h.AllSent, s => s == "curse");
+    }
+
+    // Report paradigm-20260916-104702: with "AoE debuff first round only" set, once the
+    // fight is underway in the room the debuff is abandoned — a round-2+ debuff (its
+    // between-round slot lost to a higher-priority buff on entry) is wasted mana. The
+    // debuff fires on entry (combat not seen yet), but a rejected/held round-1 attempt is
+    // NOT retried once an attack has been swung.
+    [Fact]
+    public void AreaDebuffFirstRoundOnly_NotRetriedOnceCombatSeen()
+    {
+        using Harness h = new();
+        // Slot spent every round → the pre-attack can't land the debuff on entry, so it's
+        // never cast (no once-per-room tag) — the exact situation the user hits when a
+        // higher-priority buff owns the between-round slot on room entry.
+        h.Combat.SetBetweenRoundSlotQuery(() => true);
+        h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.Settings.AreaDebuffFirstRoundOnly = true;
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");        // pre-attack HELD (slot spent); blast attacks → combat seen
+        Assert.DoesNotContain("curse", h.AllSent);   // debuff never landed on entry
+
+        // 'First round only' abandons the debuff now that combat's underway.
+        Assert.Null(h.Combat.PickInBetweenDebuff());
+    }
+
+    [Fact]
+    public void AreaDebuffFirstRoundOnly_Off_RetriesAfterCombatSeen()
+    {
+        // Same shape, flag OFF (default): the debuff keeps retrying until it lands.
+        using Harness h = new();
+        h.Combat.SetBetweenRoundSlotQuery(() => true);
+        h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.DoesNotContain("curse", h.AllSent);
+
+        Assert.Equal("curse", h.Combat.PickInBetweenDebuff()?.Spell);   // retries — no first-round gate
     }
 
     // The corpse-cast guard on the immediate post-debuff attack: an AoE debuff that

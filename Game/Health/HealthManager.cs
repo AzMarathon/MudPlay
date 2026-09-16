@@ -187,6 +187,27 @@ public sealed class HealthManager : IDisposable
     private bool _forceClearForRest;
     private DateTimeOffset _restClearLastEngageAt;
     private static readonly TimeSpan RestClearReEngageInterval = TimeSpan.FromSeconds(5);
+    // A gear-set swap's max-pool confirmations ("You are now wearing X") stream in over
+    // several seconds AFTER the paced send finishes — EquipmentMaxPoolSync applies a
+    // +MaxHP/+MaxMana delta per echo — so PlayerState.MaxHp/MaxMa, and every rest
+    // threshold derived from it (DefaultSetMaxPool = liveMax − worn + def, plus the
+    // real-max caps), walk through partial values while the swap settles. Re-deciding a
+    // rest gate against that moving max flips it around a pinned pool value: the target
+    // drops under the current pool → gate clears → recovery-complete reverts to Default
+    // → the max jumps back → the pool now reads below trigger → gate re-asserts → the
+    // pre-rest swap fires again … the Pre-rest⇄Default gear thrash of report
+    // paradigm-20260916-141742. Freeze each gate's assert/clear transition until its
+    // pool's max has held steady for this window, so the gate only ever re-decides
+    // against a coherent (settled) max. This only DELAYS the decision by the window —
+    // once settled the real-max caps still apply (the lowered-pool strand fixes
+    // paradigm-20260902-052036 / -20260903-110346 stand), and a static-max fight is
+    // never frozen (report paradigm-20260912-103110 unaffected). Resolves on the next
+    // incidental Evaluate after the window (prompts / meditate ticks fire ~1/s).
+    private static readonly TimeSpan MaxPoolSettleWindow = TimeSpan.FromMilliseconds(1500);
+    private int _lastSeenMaxHp = -1;
+    private int _lastSeenMaxMa = -1;
+    private DateTimeOffset _maxHpChangedAt;
+    private DateTimeOffset _maxMaChangedAt;
     private bool _fledThisCombat;        // reacted to run-trigger (flee OR @heal), awaiting combat end
     private bool _wasInCombat;           // previous Evaluate's InCombat — falling-edge detection for the rest-send reconfirm
     private bool _hangFired;             // emergency-hangup latch; re-arms when danger passes
@@ -748,6 +769,18 @@ public sealed class HealthManager : IDisposable
         bool combatJustEnded = _wasInCombat && !_state.InCombat;
         _wasInCombat = _state.InCombat;
 
+        // Stamp when either pool's max last moved between two real (>0) values — the
+        // 0→N first-prompt population only seeds the baseline (no stamp), so a fresh
+        // manager isn't born "unsettled" and the very first assert isn't frozen. A pool
+        // whose max changed within MaxPoolSettleWindow is held below, so the rest gate
+        // never re-decides against a mid-gear-swap partial max.
+        if (_lastSeenMaxHp <= 0) _lastSeenMaxHp = _state.MaxHp;
+        else if (_state.MaxHp > 0 && _state.MaxHp != _lastSeenMaxHp) { _lastSeenMaxHp = _state.MaxHp; _maxHpChangedAt = _now(); }
+        if (_lastSeenMaxMa <= 0) _lastSeenMaxMa = _state.MaxMa;
+        else if (_state.MaxMa > 0 && _state.MaxMa != _lastSeenMaxMa) { _lastSeenMaxMa = _state.MaxMa; _maxMaChangedAt = _now(); }
+        bool hpMaxUnsettled = _maxHpChangedAt != default && _now() - _maxHpChangedAt < MaxPoolSettleWindow;
+        bool maMaxUnsettled = _maxMaChangedAt != default && _now() - _maxMaChangedAt < MaxPoolSettleWindow;
+
         // ----- HP gate transitions ---------------------------------
         (int hpRestTrigger, int hpRestMax) = ResolveRestThresholds(
             s.HpThresholdMode, s.RestIfBelowHp, s.RestMaxHp,
@@ -771,7 +804,7 @@ public sealed class HealthManager : IDisposable
         // under N, never AT N. (Equal-or-less traps a level-2 mystic: 1 max
         // KAI, trigger 0, spend the KAI → MA 0 == trigger 0 would pause for
         // mana forever.)
-        if (!skipRest && !_hpGateAsserted && _state.MaxHp > 0 && _state.Hp < hpRestTrigger)
+        if (!skipRest && !hpMaxUnsettled && !_hpGateAsserted && _state.MaxHp > 0 && _state.Hp < hpRestTrigger)
         {
             _hpGateAsserted = true;
             _hpGateConfirmed = false;
@@ -782,7 +815,7 @@ public sealed class HealthManager : IDisposable
             // rest send — see ConfirmHpGate for why.
             _post(ConfirmHpGate);
         }
-        else if (_hpGateAsserted && (skipRest || _state.Hp >= hpClearFloor))
+        else if (_hpGateAsserted && (skipRest || (!hpMaxUnsettled && _state.Hp >= hpClearFloor)))
         {
             _hpGateAsserted = false;
             _hpGateConfirmed = false;
@@ -806,7 +839,7 @@ public sealed class HealthManager : IDisposable
         int maClearFloor = (_restInFlight || wasActivelyResting) ? maRestTarget : maRestTrigger;
 
         // Strictly below (see HP gate above) — the mystic-at-level-2 case.
-        if (!skipRest && !_maGateAsserted && _state.Ma < maRestTrigger && _state.MaxMa > 0)
+        if (!skipRest && !maMaxUnsettled && !_maGateAsserted && _state.Ma < maRestTrigger && _state.MaxMa > 0)
         {
             _maGateAsserted = true;
             _maGateConfirmed = false;
@@ -817,7 +850,7 @@ public sealed class HealthManager : IDisposable
             // rest send — see ConfirmMaGate for why.
             _post(ConfirmMaGate);
         }
-        else if (_maGateAsserted && (skipRest || _state.Ma >= maClearFloor))
+        else if (_maGateAsserted && (skipRest || (!maMaxUnsettled && _state.Ma >= maClearFloor)))
         {
             _maGateAsserted = false;
             _maGateConfirmed = false;
@@ -1226,7 +1259,13 @@ public sealed class HealthManager : IDisposable
         (int hpRestTrigger, _) = ResolveRestThresholds(
             s.HpThresholdMode, s.RestIfBelowHp, s.RestMaxHp,
             _defaultSetMaxHp, _realMaxHp, _state.MaxHp);
-        if (_state.MaxHp > 0 && _state.Hp < hpRestTrigger)
+        // A "recovered above trigger" reading while the max is unsettled (a gear swap's
+        // confirmations still streaming) can't be trusted — the trigger is riding a
+        // transient max (report paradigm-20260916-141742). The breach that asserted this
+        // gate was real (assert only fires against a settled max), so hold it confirmed
+        // rather than stand down on stale info.
+        bool hpMaxUnsettled = _maxHpChangedAt != default && _now() - _maxHpChangedAt < MaxPoolSettleWindow;
+        if (hpMaxUnsettled || (_state.MaxHp > 0 && _state.Hp < hpRestTrigger))
         {
             _hpGateConfirmed = true;
             Evaluate();
@@ -1249,7 +1288,10 @@ public sealed class HealthManager : IDisposable
         (int maRestTrigger, _) = ResolveRestThresholds(
             s.MaThresholdMode, s.RestIfBelowMa, s.RestMaxMa,
             _defaultSetMaxMa, _realMaxMa, _state.MaxMa);
-        if (_state.MaxMa > 0 && _state.Ma < maRestTrigger)
+        // See ConfirmHpGate — a transient max can't retract a real breach (report
+        // paradigm-20260916-141742).
+        bool maMaxUnsettled = _maxMaChangedAt != default && _now() - _maxMaChangedAt < MaxPoolSettleWindow;
+        if (maMaxUnsettled || (_state.MaxMa > 0 && _state.Ma < maRestTrigger))
         {
             _maGateConfirmed = true;
             Evaluate();

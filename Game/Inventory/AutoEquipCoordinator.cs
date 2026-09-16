@@ -345,12 +345,29 @@ public sealed class AutoEquipCoordinator : IDisposable
         if (_inLairDefault && _readEquipment().SwapToDefaultBeforeLairs) return;
         _inLairDefault = false;
         if (_player.InCombat) return;
-        if (_hpGateAsserted() || _maGateAsserted()) return;
+        // Hold the pre-rest set only while we're actually SITTING (a rest posture) — not
+        // on a lingering rest-gate flag. A rest gate stays asserted until the pool tops
+        // off at rest-target, but the loop can resume travelling before then (e.g. the HP
+        // rest finished and it moved on while mana is still below its target). Gating on
+        // the gate FLAG left the character travelling — and fighting — in weak pre-rest
+        // gear for rooms on end (report paradigm-20260916-104923). Once we're up and
+        // moving, wear the movement set; the pre-rest set resumes only if we sit again.
+        if (IsRestPosture(_player.Position)) return;
         if (CurrentRoomIsBoss()) return;
-        if (!MovementSetActive()) return;
-        _inMovementSet = true;
-        _log?.Info(EquipmentManager.LogCategory, "nav engine moving — wearing the While Moving set");
-        Fire(EquipTriggerType.WhileMoving);
+        if (MovementSetActive())
+        {
+            _inMovementSet = true;
+            _log?.Info(EquipmentManager.LogCategory, "nav engine moving — wearing the While Moving set");
+            Fire(EquipTriggerType.WhileMoving);
+            return;
+        }
+        // No While-Moving set configured — travel in Default. Without this, a rest /
+        // combat swap-back (e.g. the "still rest-gated → Pre-rest" swap when combat
+        // clears) is never corrected on the resume, so the loop travels — and fights —
+        // in weak pre-rest gear (report paradigm-20260916-104923: While-Moving disabled,
+        // walked 4 rooms into a monster room in Pre-rest). Fire is diff-based, so this
+        // no-ops when we're already in Default.
+        Fire(EquipTriggerType.Default);
     }
 
     // The nav engine went fully idle — a walk-to reached its destination, or a loop /
@@ -494,7 +511,19 @@ public sealed class AutoEquipCoordinator : IDisposable
     {
         if (from == to) return;
         if (ClassifyRest(to, _hpGateAsserted(), _maGateAsserted()) is { } restType)
+        {
+            // Never swap into a pre-rest set while fighting. You can't rest in combat, so
+            // a sit/rest-posture mid-fight is transient — swapping to weak pre-rest gear
+            // there gets the character ravaged, and it thrashes against the
+            // swap-to-Default-on-combat restore (report paradigm-20260916-104923). Combat
+            // gear holds until OnCombatStateChanged restores the rest set once combat clears.
+            if (_player.InCombat) return;
+            // Sitting to rest leaves the movement set — clear the latch so the next
+            // OnMovementStarted re-applies travel gear on the resume (otherwise the
+            // idempotency guard thinks we're still travelling and never re-wears it).
+            _inMovementSet = false;
             Fire(restType);
+        }
         else if (to == PlayerPosition.Standing && IsRestPosture(from))
         {
             // Only revert to Default when we're actually swapping BACK from a

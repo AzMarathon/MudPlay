@@ -995,6 +995,7 @@ public sealed partial class CombatManager
             settings, obs, picked.RawName, CountEngageable(obs), picked.MonsterNumber);
         if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return false;
         if (!DebuffDecisionAllowed(decision, ctx)) return false;
+        if (AreaDebuffPastFirstRound(settings, decision)) return false;
 
         // A debuff is due. Let the director's in-between window fire a
         // higher-priority survival cast first (it can't fire the debuff itself
@@ -1150,6 +1151,7 @@ public sealed partial class CombatManager
             settings, obs, target, CountEngageable(obs), ResolveMonsterNumber(obs, target));
         if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return null;
         if (!DebuffDecisionAllowed(decision, ctx)) return null;
+        if (AreaDebuffPastFirstRound(settings, decision)) return null;
 
         // An area debuff (e.g. stinking cloud) blankets the room and MUST be cast
         // bare — `stnk`, never `stnk <mob>`. A single-target debuff keeps its mob.
@@ -1194,6 +1196,21 @@ public sealed partial class CombatManager
         };
         if (!ok) WarnInvalidDebuffSlot(code, decision.Action, energy, targets);
         return ok;
+    }
+
+    // The AoE-debuff "first round only" gate (CombatSettings.AreaDebuffFirstRoundOnly):
+    // once combat has been seen in this room, abandon the area debuff — a debuff that
+    // couldn't win the between-round slot on entry (a higher-priority buff/heal took it)
+    // is wasted mana on a round-2+ half-dead room. Only the AREA debuff is gated; the
+    // single-target debuff is unaffected. Logged once per skip so a capture explains the
+    // hold. Off by default — the debuff otherwise keeps retrying until it lands once.
+    private bool AreaDebuffPastFirstRound(CombatSettings settings, CombatSpellDecision decision)
+    {
+        if (decision.Action != CombatSpellAction.AreaDebuff) return false;
+        if (!settings.AreaDebuffFirstRoundOnly || !_combatSeenThisRoom) return false;
+        _log?.Combat(LogCategory,
+            $"AoE debuff {decision.Spell} skipped — 'first round only' is set and combat has already been seen this room");
+        return true;
     }
 
     private void WarnInvalidDebuffSlot(string code, CombatSpellAction action, int energy, int targets)

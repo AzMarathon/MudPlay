@@ -2113,6 +2113,8 @@ Settings → Combat. Two switches live *outside* this tab and gate everything he
 
 A debuff slot only accepts a **0-energy** between-round spell — an attack spell (which costs energy) can't be a debuff — with **slot-appropriate targeting**: a single-enemy scope for the single-target slot, an area/room scope for the AoE slot. A mismatch (an attack spell, or a targeted spell in the AoE slot / an AoE in the single slot) is flagged right under the slot on this tab and refused at cast time with a program-log note.
 
+Only **one 0-energy between-round spell** fires per combat round (the game's own limit — a heal, cure, buff, or debuff, whichever your Settings → Spells priority ranks highest that round). So a room-entry round where a maintenance buff or heal is due can take that slot and leave the AoE debuff to the *next* round. By default the AoE debuff stays "owed" and keeps trying each round until it lands once for the room. The **"Only cast on the first round in a room"** checkbox under the AoE-debuff slot changes that: with it ticked, the AoE debuff is only attempted on entry (before the first combat round) and is **abandoned for the room** once the fight is underway — a debuff that lands on round 2+ (against a half-dead pack) is mostly wasted mana, so this skips it rather than spend the cast late.
+
 ### Action order
 
 **Default:** `Spells first`

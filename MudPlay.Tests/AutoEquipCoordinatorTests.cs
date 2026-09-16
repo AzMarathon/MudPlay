@@ -345,6 +345,43 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Empty(applied);
     }
 
+    // A rest posture flickering mid-fight must NOT swap into a pre-rest set — you can't
+    // rest in combat, and wearing weak rest gear gets you ravaged (report
+    // paradigm-20260916-104923). Combat gear holds; the swap-back happens on combat clear.
+    [Fact]
+    public void RestPostureDuringCombat_DoesNotSwapToPreRestSet()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "hp-set"));
+        cfg.SwapToDefaultOnCombat = true;
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => true,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        player.InCombat = true;
+        applied.Clear();
+
+        // Sit mid-fight (HealthManager re-sits, a pre-rest wear breaks, etc.) → NO pre-rest swap.
+        player.Position = PlayerPosition.Resting;
+        Assert.Empty(applied);
+
+        // Control: the same sit out of combat DOES fire the pre-rest swap.
+        player.InCombat = false;
+        applied.Clear();
+        player.Position = PlayerPosition.Standing;
+        player.Position = PlayerPosition.Resting;
+        Assert.Equal(new[] { "hp-set" }, applied);
+    }
+
     // Flag on but NOT rest-gated (a plain fight, not interrupting a rest) → no swap.
     [Fact]
     public void SwapOnCombat_Enabled_NotRestGated_DoesNothing()
@@ -639,6 +676,79 @@ public sealed class AutoEquipCoordinatorTests
         applied.Clear();
         coord.OnMovementStopped();   // walk-to arrived / run stopped
         Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    // Report paradigm-20260916-104923: an HP rest finished and the loop resumed moving
+    // while the MANA gate still lingered (pool below rest-target). The movement-gear swap
+    // must fire — standing + travelling wears the movement set even with a lingering rest
+    // gate; only an actual rest posture holds the pre-rest gear.
+    [Fact]
+    public void MovementStarted_RestGateLingeringButStanding_WearsMovementSet()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player, readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => true,        // mana rest still lingering below target
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        coord.OnMovementStarted();
+        Assert.Equal(new[] { "move-set" }, applied);
+    }
+
+    // The core of report paradigm-20260916-104923: the user has NO While-Moving set
+    // (disabled). After a combat-clear swap-back left Pre-rest gear on, resuming the loop
+    // used to no-op (OnMovementStarted returns without a movement set) — travelling and
+    // fighting in Pre-rest. It must revert to Default so travel gear is worn.
+    [Fact]
+    public void MovementStarted_NoMovementSet_RevertsToDefault()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.PreRestMana, enabled: true, "mana-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: false, "move-set"));   // disabled
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player, readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        coord.OnMovementStarted();
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    [Fact]
+    public void MovementStarted_WhileSittingAtRest_HoldsPreRestGear()
+    {
+        // The other half: actually SITTING (rest posture) still holds — no movement swap.
+        var player = new PlayerState { Position = PlayerPosition.Resting };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player, readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => true,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        coord.OnMovementStarted();
+        Assert.Empty(applied);
     }
 
     [Fact]
