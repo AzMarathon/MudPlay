@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.16**
-> - The route picker now offers an "obtain and cross" route (e.g. buy a boat and sail the river) when it's shorter than detouring around your Avoid rooms — previously, standing at the boatman, a walk to a river destination showed only the long avoid-detour and never the far shorter boat crossing
+> **Version 3.88.17**
+> - Extended the boat-route fix to the teleport and trap-avoid route pickers too: they now defer to an "obtain and cross" route when buying/obtaining an item opens a shorter way, so a buyable shortcut isn't hidden behind a teleport-danger or trap warning (trap-avoid only defers when the obtainable route is also trap-free)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

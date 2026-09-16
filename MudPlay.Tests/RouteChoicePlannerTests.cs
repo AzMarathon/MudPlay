@@ -1213,6 +1213,223 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    // ----- Teleport / TrapAvoid forks defer to an obtainable shortcut ----
+    //
+    // The pre-Evaluate forks weigh only gate-honoured routes; without a deferral they
+    // preempt Evaluate's obtain/cross even when buying a boat opens a far shorter route
+    // (the same gap the avoid-override fork had — report paradigm-20260915-182554).
+
+    // Teleport route (1/1 =tele=> 1/5 -E- 1/6 -E- 1/9, 3 hops) vs pure walk (1/1-N-1/2
+    // -N-1/3-N-1/4-N-1/7-N-1/9, 5 hops) — teleport fires. But a boat opens 1/1-S-1/8
+    // (River 700)-S-1/9 (2 hops), shorter than the teleport. 1/5 is teleport-only.
+    private const string TeleportObtainBypassJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "CMD": 5,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "1/8", "E": "1/5 (Item: 5)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Landing", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/6", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "L2", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "W1", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "W2", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "W3", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/7", "S": "1/3", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 7, "Name": "W4", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/9", "S": "1/4", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 8, "Name": "River", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/1", "S": "1/9", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/8", "S": "1/7", "E": "0", "W": "1/6",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // CMD-5 chain teleports to 1/5 (matching the (Item: 5) exit target so it promotes).
+    private const string TeleportTo5TbInfo =
+        """[ { "Number": 5, "Action": "go arch:teleport 5 1\n" } ]""";
+
+    [Fact]
+    public void NoTeleportChoice_WhenAnObtainableRouteBeatsTheTeleport()
+    {
+        WithGraph(TeleportObtainBypassJson, (bfs, graph, filter) =>
+        {
+            // The teleport would otherwise be offered (3 hops vs a 5-hop walk), but a
+            // boat opens a 2-hop river route shorter than the teleport → defer.
+            Assert.Null(RouteChoicePlanner.EvaluateTeleport(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
+
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+            Assert.NotNull(choice);
+            RouteRequirement req = Assert.Single(choice!.Requirements);
+            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);
+            Assert.Equal(new[] { 42 }, req.ItemIds);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 8), new RoomKey(1, 9) },
+                choice.GatedPath);
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        tbInfoJson: TeleportTo5TbInfo,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 8) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;
+        });
+    }
+
+    // Trapped shortest (1/1-E(Trap)-1/5-E-1/6-E-1/9, 3 hops) vs a 4-hop trap-free
+    // detour — trap-avoid fires. But a boat opens a 2-hop trap-free river route.
+    private const string TrapObtainBypassJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "1/8", "E": "1/5 (Trap)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "T1", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/6", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "T2", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "D1", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "D2", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "D3", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/9", "S": "1/3", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 8, "Name": "River", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/1", "S": "1/9", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/8", "S": "1/4", "E": "0", "W": "1/6",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void NoTrapAvoidChoice_WhenAnObtainableTrapFreeRouteIsShorter()
+    {
+        WithGraph(TrapObtainBypassJson, (bfs, graph, filter) =>
+        {
+            // Trap-avoid would otherwise fire (3-hop trapped vs 4-hop clean detour), but
+            // a boat opens a 2-hop trap-free river route → defer to Evaluate.
+            Assert.Null(RouteChoicePlanner.EvaluateTrapAvoid(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
+
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+            Assert.NotNull(choice);
+            RouteRequirement req = Assert.Single(choice!.Requirements);
+            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 8), new RoomKey(1, 9) },
+                choice.GatedPath);
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 8) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;
+        });
+    }
+
+    // TrapObtainBypass, but the river crossing (1/8 → 1/9) is itself trapped, so the
+    // boat route isn't clean — the trap-avoid deferral must NOT fire.
+    private const string TrapObtainBypassTrappedRiverJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "1/8", "E": "1/5 (Trap)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "T1", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/6", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "T2", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "D1", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "D2", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "D3", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/9", "S": "1/3", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 8, "Name": "River", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/1", "S": "1/9 (Trap)", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/8", "S": "1/4", "E": "0", "W": "1/6",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // Guard: the trap-avoid deferral must NOT fire when the obtainable route still
+    // crosses a trap — the trap warning has to stand.
+    [Fact]
+    public void KeepsTrapAvoidChoice_WhenTheObtainableRouteAlsoTraps()
+    {
+        WithGraph(TrapObtainBypassTrappedRiverJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTrapAvoid(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+            Assert.NotNull(choice);   // boat route is trapped too → trap-avoid still offered
+            Assert.Equal(RouteChoiceKind.TrapAvoid, choice!.Kind);
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 8) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;
+        });
+    }
+
     // ----- EvaluateAvoidOverride: route-through-avoided-rooms fork ----
     //
     // 1/1 ──E── 1/5 ──E── 1/9   the ONLY route to 1/9 runs through 1/5.
