@@ -204,7 +204,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
             !string.IsNullOrWhiteSpace(TargetMessage)  ||
             !string.IsNullOrWhiteSpace(WitnessMessage) ||
             !string.IsNullOrWhiteSpace(AppliedMessage);
-        if (!hasAnyLine) return "At least one perspective line (Caster / Target / Witness / Applied) is required.";
+        if (!hasAnyLine) return "At least one perspective line (You casting / Casting on you / 3rd party witness / Buff/debuff applied) is required.";
         if (FindDuplicate() is { } dup)
             return $"Another record already has this identity (Name + all four lines): '{dup.Name}'.";
         return null;

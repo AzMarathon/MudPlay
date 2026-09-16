@@ -1,5 +1,13 @@
 # Version history
 
+## 3.88.24
+
+- Character Info Exp now matches the in-game value on Paradigm — exp fields widened to 64-bit so totals past ~2.1 billion (into the hundreds of billions) no longer overflow the parse and drift off gain-line accrual
+- AoE debuff / attack no longer stalls until the monsters swing when a monster arrives mid-round — the one-per-round between-round cast slot is tracked on the true 5s round cadence (in or out of combat) instead of being masked off during the between-kill *Combat Off* flicker, so a duplicate pre-attack debuff no longer latches the block that delayed the attack
+- Multi-attack no longer fires twice when a monster enters the room — the between-round-cast resume is suppressed when the round's attack already fired after the between-round cast
+- Spell message "User Definitions" labels renamed for clarity: You casting / Casting on you / 3rd party witness / Buff/debuff applied / Buff/debuff worn off
+- bug reports addressed: paradigm-20260916-074131, paradigm-20260916-081052, paradigm-20260916-083245
+
 ## 3.88.20
 
 - A monster arriving the instant a between-round self-buff (e.g. a mana-regen reroll) fired no longer gets a free round — the fresh-engage attack was deferring to the next tick behind the client's own burst guard even though a buff and a real attack spell are independent slots server-side; it now fires immediately, same as the debuff-then-attack path already did

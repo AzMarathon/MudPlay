@@ -97,23 +97,23 @@
                            DisplayMemberBinding="{Binding Label}"
                            HorizontalAlignment="Stretch"/>
 
-                <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Caster"
+                <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="You casting"
                            ToolTip.Tip="Line YOU see when YOU cast / use / proc this."/>
                 <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding CasterMessage, Mode=TwoWay}"/>
 
-                <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Target"
+                <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Casting on you"
                            ToolTip.Tip="Line YOU see when the spell hits / is cast on YOU."/>
                 <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding TargetMessage, Mode=TwoWay}"/>
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Witness"
+                <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="3rd party witness"
                            ToolTip.Tip="Line YOU see when someone else casts on someone else."/>
                 <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding WitnessMessage, Mode=TwoWay}"/>
 
-                <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Applied"
+                <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Buff/debuff applied"
                            ToolTip.Tip="Buff/debuff begin line YOU see when the effect starts on you."/>
                 <TextBox   Grid.Row="5" Grid.Column="1" Text="{Binding AppliedMessage, Mode=TwoWay}"/>
 
-                <TextBlock Grid.Row="6" Grid.Column="0" Classes="FieldLabel" Text="Wears off"
+                <TextBlock Grid.Row="6" Grid.Column="0" Classes="FieldLabel" Text="Buff/debuff worn off"
                            ToolTip.Tip="Wear-off line YOU see when the buff/debuff above expires."/>
                 <TextBox   Grid.Row="6" Grid.Column="1" Text="{Binding AppliedEndsWith, Mode=TwoWay}"/>
 

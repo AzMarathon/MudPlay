@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.88.20**
-> - A monster arriving the instant a between-round self-buff (e.g. a mana-regen reroll) fired no longer gets a free round — the fresh-engage attack now fires immediately instead of deferring to the next tick behind the client's own burst guard
+> **Version 3.88.24**
+> - Character Info Exp now matches the in-game value on Paradigm — exp fields widened to 64-bit so totals past ~2.1 billion no longer overflow and drift
+> - AoE debuff / attack no longer stalls until the monsters swing when a monster arrives mid-round — the one-per-round between-round cast slot is tracked on the true 5s round cadence (in or out of combat), not masked off during the between-kill *Combat Off* flicker
+> - Multi-attack no longer fires twice when a monster enters the room
+> - Spell message "User Definitions" labels renamed for clarity: You casting / Casting on you / 3rd party witness / Buff/debuff applied / Buff/debuff worn off
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -607,6 +607,27 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(1, h.AllSent.Count(s => s == "lbol giant rat"));   // exactly one lbol
     }
 
+    // Report paradigm-20260916-083245 ("firing 2 multi-attacks"): a between-round cast
+    // stamps the resume window, THEN the round's attack fires (the pre-attack-debuff-
+    // then-attack sequence — debuff before the attack, same round). The attack's OWN
+    // *Combat Off* lands in that window and used to re-announce the attack a SECOND time.
+    // The spell resume now suppresses itself when the attack already fired this round
+    // (last attack sent AFTER the between-round cast), matching the weapon path.
+    [Fact]
+    public void BetweenRoundThenAttack_CombatOffDoesNotDoubleFire()
+    {
+        using Harness h = new();
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Combat.NoteBetweenRoundCast();                 // between-round cast opens the resume window
+        h.Feed("Also here: giant rat.");                 // engage → blast fires AFTER the between-round cast
+        Assert.Equal("blast", h.LastSent);
+
+        h.Feed("*Combat Off*");                          // the attack's own Off, inside the resume window
+        Assert.Equal(1, h.AllSent.Count(s => s == "blast"));   // NOT re-announced a second time
+    }
+
     // MaxCasts must count real rounds, not damage-line ticks. A multi-hit attack spell
     // (each cast lands several damage lines) plus the mob's counter-swing trips the tick
     // 2-3× per ~5s round; without the tally gate a MaxCasts=2 spell hit its cap in a

@@ -27,11 +27,13 @@ public sealed class LastKnownStats
 
     // ----- Progression ---------------------------------------------------
     public int Level { get; set; }
-    public int Exp { get; set; }
+    // long, not int — Paradigm exp passes int32 (2.1B) into the hundreds of
+    // billions. See PlayerStats._exp.
+    public long Exp { get; set; }
     public int Lives { get; set; }
     public int Cp { get; set; }
-    public int ExpToNext { get; set; }
-    public int LevelExpSpan { get; set; }
+    public long ExpToNext { get; set; }
+    public long LevelExpSpan { get; set; }
     public int LevelPercent { get; set; }
 
     // ----- Vitals --------------------------------------------------------

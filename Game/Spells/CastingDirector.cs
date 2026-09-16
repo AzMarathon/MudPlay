@@ -182,15 +182,27 @@ public sealed class CastingDirector : IDisposable
     // timer-drop in OnCastFailed against a stale marker (report -130111).
     private DateTime _pendingSelfBuffArmedAt;
 
-    // True once we've cast a between-round spell (heal / cure / buff / debuff /
-    // item) THIS combat round. The game allows only ONE 0-energy between-round cast
-    // per round across all of them — a second draws "You have already cast a spell
-    // this round!" and does NOT fire. So while this is set we suppress further
-    // between-round casts (in combat) rather than send doomed ones. Cleared on the
-    // combat ROUND TICK (NotifyRoundComplete, wired to TickEngine.CombatTickElapsed —
-    // NOT *Combat Off*, which fires per kill and would re-open the slot mid-round in a
-    // multi-mob fight). Never consulted out of combat, where no per-round cap applies.
-    private bool _betweenRoundSlotUsed;
+    // When we last cast a between-round spell (heal / cure / buff / debuff / item).
+    // The game allows only ONE 0-energy between-round cast per round across all of
+    // them — a second draws "You have already cast a spell this round!" and does NOT
+    // fire. The between-round cycle runs on the SAME ~5s cadence as combat rounds and
+    // applies WHETHER OR NOT WE ARE IN COMBAT (confirmed 2026-09-16, user), so the slot
+    // is time-scoped, not gated on _state.InCombat: it's "spent" for RoundWindow after a
+    // cast. Freed early at the true round boundary (NotifyRoundComplete, wired to
+    // TickEngine.CombatTickElapsed — NOT *Combat Off*, which fires per kill and would
+    // re-open the slot mid-round in a multi-mob fight); out of combat, where no tick
+    // fires, the RoundWindow lapse frees it. The old InCombat gate masked the slot false
+    // during the brief between-kill *Combat Off* flicker, so a freshly-arrived monster's
+    // pre-attack debuff re-fired into a spent round and its rejection latched the block
+    // that then delayed the coupled attack a whole round (report paradigm-20260916-074131).
+    private DateTime _betweenRoundSlotUsedAt = DateTime.MinValue;
+
+    // The between-round / combat-round cadence — one 0-energy cast per this window.
+    private static readonly TimeSpan RoundWindow = TimeSpan.FromSeconds(5);
+
+    // True while this round's single between-round slot is spent (a cast landed within
+    // the current round window and no round tick has freed it since).
+    private bool SlotSpentThisRound => _now() - _betweenRoundSlotUsedAt < RoundWindow;
 
     // True only for the duration of a single Evaluate driven by a damage-line combat
     // tick (set in OnCombatTick, cleared in its finally). While set, the non-heal
@@ -731,7 +743,7 @@ public sealed class CastingDirector : IDisposable
         _pendingSelfBuffShort = null;
         _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
-        _betweenRoundSlotUsed = false;
+        _betweenRoundSlotUsedAt = DateTime.MinValue;
         _pausedAt = null;
     }
 
@@ -855,24 +867,22 @@ public sealed class CastingDirector : IDisposable
     // between-round cast slot so the new round can cast once. Keyed to the combat
     // round cadence, NOT *Combat Off*: *Combat Off* fires per kill, so in a multi-mob
     // room it would re-open the slot several times a round and let the storm back in.
-    public void NotifyRoundComplete() => _betweenRoundSlotUsed = false;
+    public void NotifyRoundComplete() => _betweenRoundSlotUsedAt = DateTime.MinValue;
 
-    // An external between-round cast — the combat engine's pre-attack debuff,
-    // which fires directly rather than through Evaluate — just went out. Spend
-    // this round's single between-round slot so Evaluate won't queue a second one
-    // and draw "You have already cast a spell this round!". Cleared on the round
-    // tick by NotifyRoundComplete; no-op out of combat, where no per-round cap
-    // applies.
-    public void MarkBetweenRoundSlotUsed()
-    {
-        if (_state.InCombat) _betweenRoundSlotUsed = true;
-    }
+    // An external between-round cast — the combat engine's pre-attack debuff, which
+    // fires directly rather than through Evaluate — just went out. Spend this round's
+    // single between-round slot so Evaluate won't queue a second one and draw "You have
+    // already cast a spell this round!". Freed at the round tick (NotifyRoundComplete)
+    // or after RoundWindow. Stamped regardless of _state.InCombat — the per-round cap
+    // applies whether or not the client thinks it's in combat (and the pre-attack debuff
+    // fires during the between-kill *Combat Off* flicker where InCombat reads false).
+    public void MarkBetweenRoundSlotUsed() => _betweenRoundSlotUsedAt = _now();
 
     // True when this round's single between-round cast is already spent — the same
     // predicate Evaluate gates on (so a null from Evaluate means "slot gone", not
     // "nothing due"). The combat engine reads this before a pre-attack debuff so it
     // won't fire a doomed cast into a spent slot.
-    public bool BetweenRoundSlotUsed => _state.InCombat && _betweenRoundSlotUsed;
+    public bool BetweenRoundSlotUsed => SlotSpentThisRound;
 
     // The mana-regen roll-spell reroller staged a reroll (its last roll came in
     // below the configured threshold). Instead of firing it on the raw wire, stash
@@ -1030,7 +1040,7 @@ public sealed class CastingDirector : IDisposable
     {
         if (reason == CastFailureReason.Blocked) return;
         if (reason == CastFailureReason.AlreadyCastThisRound)
-            _betweenRoundSlotUsed = true;
+            _betweenRoundSlotUsedAt = _now();
         if (_pendingSelfBuffShort is not { } shortCode) return;
         if (!string.Equals(spell, shortCode, StringComparison.OrdinalIgnoreCase)) return;
         // Only OUR just-sent recast draws a rejection worth acting on. A rejection
@@ -1362,14 +1372,15 @@ public sealed class CastingDirector : IDisposable
         // engine firing several buffs a round because the per-hit combat tick kept
         // clearing the coordinator's one-per-round cooldown (report
         // paradigm-20260816-101702). The slot frees at the true round boundary
-        // (NotifyRoundComplete). Out of combat no per-round cap applies, so the gate
-        // is combat-only.
-        if (_state.InCombat && _betweenRoundSlotUsed) return null;
+        // (NotifyRoundComplete) or after RoundWindow. The per-round cap applies in AND
+        // out of combat (the between-round cycle runs on the same ~5s tick regardless),
+        // so the gate is no longer combat-only.
+        if (SlotSpentThisRound) return null;
 
         string? cast = RunDecisionPass(healRestEnabled, blessEnabled);
         // Mark the round's single between-round slot spent so a second Evaluate this
-        // round doesn't send another (doomed) cast; cleared at the round boundary.
-        if (cast is not null && _state.InCombat) _betweenRoundSlotUsed = true;
+        // round doesn't send another (doomed) cast; freed at the round boundary / window.
+        if (cast is not null) _betweenRoundSlotUsedAt = _now();
         return cast;
     }
 
