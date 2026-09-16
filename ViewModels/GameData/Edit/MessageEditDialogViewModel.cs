@@ -143,6 +143,24 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     // True when the Game Data tab has content to show.
     public bool HasGameData => GameDataInfo.Count > 0;
 
+    // The spell's decoded effect tree (conditional branches → weighted outcomes → linked
+    // effects), shown below the flat info rows on the Game Data tab. Empty for spells with
+    // no TextBlock effect and for plain Messages-tab edits.
+    public IReadOnlyList<SpellEffectNode> EffectTree { get; }
+    public bool HasEffectTree => EffectTree.Count > 0;
+
+    [RelayCommand] private void ExpandAllEffects() => SetEffectsExpanded(EffectTree, true);
+    [RelayCommand] private void CollapseAllEffects() => SetEffectsExpanded(EffectTree, false);
+
+    private static void SetEffectsExpanded(IReadOnlyList<SpellEffectNode> nodes, bool expanded)
+    {
+        foreach (SpellEffectNode n in nodes)
+        {
+            n.IsExpanded = expanded;
+            SetEffectsExpanded(n.Children, expanded);
+        }
+    }
+
     // Interactive damage calculator (level + resist pickers), non-null only for a
     // damage spell. Sits at the top of the Game Data tab.
     public SpellDamageCalcViewModel? DamageCalc { get; }
@@ -237,7 +255,8 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         bool isNew,
         GameDataCache? cache = null,
         IReadOnlyList<GameDataInfoRow>? gameDataInfo = null,
-        MudPlay.Game.Spells.SpellFormulaInput? spellFormula = null)
+        MudPlay.Game.Spells.SpellFormulaInput? spellFormula = null,
+        IReadOnlyList<SpellEffectNode>? effectTree = null)
     {
         ArgumentNullException.ThrowIfNull(original);
         ArgumentNullException.ThrowIfNull(existingRecords);
@@ -246,6 +265,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         _isNew           = isNew;
         _cache           = cache;
         GameDataInfo     = gameDataInfo ?? Array.Empty<GameDataInfoRow>();
+        EffectTree       = effectTree ?? Array.Empty<SpellEffectNode>();
 
         // A damage spell drives an interactive level/resist damage calculator on
         // the Game Data tab (see SpellDamageCalcViewModel); the redundant static
@@ -429,9 +449,18 @@ public sealed record TierOption(SettingsTier Value, string Label);
 // Links, when present, are the clickable record references rendered in place of
 // the plain Value (Value still holds the same names as text — the fallback the
 // template shows when there are no links, and what tests read).
-public sealed record GameDataInfoRow(string Label, string Value, IReadOnlyList<GameDataRecordLink>? Links = null)
+public sealed record GameDataInfoRow(
+    string Label,
+    string Value,
+    IReadOnlyList<GameDataRecordLink>? Links = null,
+    IReadOnlyList<GameDataRecordLink>? Overflow = null)
 {
     public bool HasLinks => Links is { Count: > 0 };
+
+    // Links held back behind a "show N more" expander — used by long lists (Cast in
+    // rooms) that show the first batch inline and hide the tail until asked.
+    public bool HasOverflow => Overflow is { Count: > 0 };
+    public string OverflowLabel => $"show {(Overflow?.Count ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture)} more";
 }
 
 // One row in MessageEditDialogViewModel.LinkRows — pairs the back-reference's raw

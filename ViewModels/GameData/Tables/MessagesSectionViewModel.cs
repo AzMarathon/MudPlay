@@ -272,10 +272,13 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         // tab does — so an incomplete record can be filled with the spell's details in view.
         IReadOnlyList<GameDataInfoRow>? info = null;
         Game.Spells.SpellFormulaInput? formula = null;
+        IReadOnlyList<SpellEffectNode>? effectTree = null;
         if (_cache is not null && TryLinkedSpellNumber(original, out int spellNumber))
         {
-            info = new SpellInfoRowsBuilder(_cache).Build(spellNumber);
+            var builder = new SpellInfoRowsBuilder(_cache);
+            info = builder.Build(spellNumber);
             formula = new Game.Spells.KnownSpellCatalog(_cache).GetFormulaByNumber(spellNumber);
+            effectTree = builder.BuildEffectTree(spellNumber);
         }
 
         MessageEditDialogViewModel vm = new(
@@ -285,7 +288,8 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
             isNew: false,
             cache: _cache,
             gameDataInfo: info,
-            spellFormula: formula);
+            spellFormula: formula,
+            effectTree: effectTree);
         MessageEditResult? result = await _dialogs.OpenWindowAsync<MessageEditDialogViewModel, MessageEditResult>(vm);
         if (result is null) return;
 

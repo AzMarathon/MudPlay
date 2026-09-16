@@ -123,7 +123,7 @@ public sealed class SpellsGameDataTabTests : IDisposable
         var vm = new SpellsSectionViewModel(_cache);
         IReadOnlyList<GameDataInfoRow> rows = vm.BuildSpellInfoRowsForTests(753);
 
-        GameDataInfoRow avoided = rows.First(r => r.Label == "Avoided by carrying");
+        GameDataInfoRow avoided = rows.First(r => r.Label == "Avoided by carrying (failitem)");
         Assert.Equal("log raft [#690], wooden skiff [#691], silverbark canoe [#1181]", avoided.Value);
         // The bare "TextBlock 2750" record number is not shown.
         Assert.DoesNotContain(rows, r => r.Label == "TextBlock");
@@ -148,7 +148,7 @@ public sealed class SpellsGameDataTabTests : IDisposable
         IReadOnlyList<GameDataInfoRow> rows = vm.BuildSpellInfoRowsForTests(1040);
 
         Assert.Equal("dark treant [#877]", rows.First(r => r.Label == "Summons").Value);
-        Assert.Equal("manhole [#185]", rows.First(r => r.Label == "Avoided by carrying").Value);
+        Assert.Equal("manhole [#185]", rows.First(r => r.Label == "Avoided by carrying (failitem)").Value);
         // The unhelpful raw "TextBlock 9404" effect row is suppressed.
         Assert.DoesNotContain(rows, r => r.Label == "Effect" && r.Value.StartsWith("TextBlock"));
     }
@@ -166,6 +166,53 @@ public sealed class SpellsGameDataTabTests : IDisposable
         var vm = new SpellsSectionViewModel(_cache);
         IReadOnlyList<GameDataInfoRow> rows = vm.BuildSpellInfoRowsForTests(760);
 
-        Assert.DoesNotContain(rows, r => r.Label is "Avoided by carrying" or "Requires carrying");
+        Assert.DoesNotContain(rows, r => r.Label is "Avoided by carrying (failitem)" or "Requires carrying (checkitem)");
+    }
+
+    [Fact]
+    public void CastBy_DropsRedundantRoomTokens_KeepsMonsterCaster()
+    {
+        // "Cast By" room tokens are now rendered in full by "Cast in rooms", so they're
+        // dropped here — only the monster caster remains. The column stores rooms in the
+        // map/room form ("Room 17/1418"), not "Room #N".
+        Seed("Spells", "[{\"Number\":800,\"Name\":\"sea 1\",\"Casted By\":\"Room 17/1418, Room 17/1419, Monster #877\"}]");
+        Seed("Monsters", "[{\"Number\":877,\"Name\":\"dark treant\"}]");
+        _cache.SwitchSet("v1.11p");
+
+        IReadOnlyList<GameDataInfoRow> rows = new SpellsSectionViewModel(_cache).BuildSpellInfoRowsForTests(800);
+
+        GameDataInfoRow castBy = rows.First(r => r.Label == "Cast By");
+        Assert.Contains("dark treant", castBy.Value);
+        Assert.DoesNotContain("Room", castBy.Value);
+    }
+
+    [Fact]
+    public void CastBy_RoomsOnly_DropsWholeRow()
+    {
+        // When "Cast By" held only rooms (and a "+ more" cap), the row vanishes entirely —
+        // the complete list lives in "Cast in rooms".
+        Seed("Spells", "[{\"Number\":801,\"Name\":\"sea 2\",\"Casted By\":\"Room 17/1418, Room 17/1419, +\"}]");
+        _cache.SwitchSet("v1.11p");
+
+        IReadOnlyList<GameDataInfoRow> rows = new SpellsSectionViewModel(_cache).BuildSpellInfoRowsForTests(801);
+        Assert.DoesNotContain(rows, r => r.Label == "Cast By");
+    }
+
+    [Fact]
+    public void CastInRooms_ShowsFirstTwentyInline_RestInOverflow()
+    {
+        string rooms = "[" + string.Join(",", Enumerable.Range(1, 25).Select(i =>
+            $"{{\"Number\":{i},\"Map Number\":17,\"Room Number\":{1000 + i},\"Spell\":802,\"Name\":\"Crystal Lake\"}}")) + "]";
+        Seed("Spells", "[{\"Number\":802,\"Name\":\"sea 3\"}]");
+        Seed("Rooms", rooms);
+        _cache.SwitchSet("v1.11p");
+
+        IReadOnlyList<GameDataInfoRow> rows = new SpellsSectionViewModel(_cache).BuildSpellInfoRowsForTests(802);
+
+        GameDataInfoRow cir = rows.First(r => r.Label.StartsWith("Cast in rooms"));
+        Assert.Equal("Cast in rooms (25)", cir.Label);
+        Assert.Equal(20, cir.Links!.Count);
+        Assert.True(cir.HasOverflow);
+        Assert.Equal(5, cir.Overflow!.Count);
     }
 }
