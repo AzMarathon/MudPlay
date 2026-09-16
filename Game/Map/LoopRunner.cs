@@ -758,7 +758,6 @@ public sealed class LoopRunner : IRecoverableEngine
         {
             _log?.Info("LoopRunner",
                 $"Start branch=at-waypoint: player already at {here}; no approach needed");
-            RotateLoopTo(here);
             _circleStartRoom = here;
             ExpandSteps();
             Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
@@ -787,13 +786,11 @@ public sealed class LoopRunner : IRecoverableEngine
             return false;
         }
 
-        // Rotate + expand UP FRONT — the cycle's entry is committed at
-        // the moment we pick the closest waypoint. Doing it here (vs
-        // after the walker finishes) means ResolveLoopRoomKeys(closest)
-        // produces the correct cycle for the approach-preview overlay,
-        // and the eventual hand-off into Running needs no further
-        // mutation.
-        RotateLoopTo(closest.Value);
+        // Commit the cycle's entry UP FRONT — the moment we pick the closest
+        // waypoint. Setting _circleStartRoom before ExpandSteps means the runtime
+        // traversal begins at the entry (and ResolveLoopRoomKeys(closest) produces
+        // the correct approach-preview cycle) WITHOUT reordering the authored
+        // waypoint list — the entry is just a start offset into the fixed cycle.
         _circleStartRoom = closest;
         _approachTarget  = closest;
         ExpandSteps();
@@ -830,36 +827,33 @@ public sealed class LoopRunner : IRecoverableEngine
         return best;
     }
 
-    // Rotate the loop's Waypoints so the circle begins at waypoint instead of
-    // Waypoints[0]. No-op when Waypoints is empty or the target isn't in the list.
-    // The runtime step list is rebuilt separately by ExpandSteps.
-    private void RotateLoopTo(RoomKey waypoint)
+    // The authored waypoints, ordered so traversal BEGINS at the entry the run /
+    // recovery picked (_circleStartRoom), WITHOUT ever reordering _loop.Waypoints.
+    // The authored order is the single source of truth for the map/rail numbering,
+    // which must stay fixed to what the user authored no matter where they enter or
+    // recover — so the entry is only a start offset into the fixed cycle, computed as
+    // a transient view here. Returns the authored list unchanged when there's no
+    // anchor or the anchor is already waypoint 0.
+    private IReadOnlyList<LoopWaypoint> RuntimeWaypointOrder()
     {
-        if (_loop is null) return;
-        if (_loop.Waypoints.Count == 0) return;
+        IReadOnlyList<LoopWaypoint> wps =
+            _loop?.Waypoints ?? (IReadOnlyList<LoopWaypoint>)System.Array.Empty<LoopWaypoint>();
+        if (wps.Count == 0 || _circleStartRoom is not { } anchor) return wps;
 
         int k = -1;
-        for (int i = 0; i < _loop.Waypoints.Count; i++)
-        {
-            if (_loop.Waypoints[i].Key.Equals(waypoint)) { k = i; break; }
-        }
-        if (k <= 0) return;     // not found, or already at index 0 — no rotation needed
+        for (int i = 0; i < wps.Count; i++)
+            if (wps[i].Key.Equals(anchor)) { k = i; break; }
+        if (k <= 0) return wps;   // anchor not found, or already first — no offset needed
 
-        // Build the rotated waypoint list. We mutate the in-memory
-        // loop only — the on-disk file stays in its canonical
-        // (waypoint-0-first) form.
-        var rotated = new List<LoopWaypoint>(_loop.Waypoints.Count);
-        for (int i = 0; i < _loop.Waypoints.Count; i++)
-        {
-            rotated.Add(_loop.Waypoints[(k + i) % _loop.Waypoints.Count]);
-        }
-        _loop.Waypoints = rotated;
-        _log?.Info("LoopRunner",
-            $"rotated loop '{_loop.Name}' to start at waypoint {waypoint} (index {k})");
+        var ordered = new List<LoopWaypoint>(wps.Count);
+        for (int i = 0; i < wps.Count; i++)
+            ordered.Add(wps[(k + i) % wps.Count]);
+        return ordered;
     }
 
-    // (Re)compute _expandedSteps from the loop's current waypoint order + the
-    // active filter. Called after every rotation and on every avoid-list change.
+    // (Re)compute _expandedSteps from the runtime traversal order (authored order
+    // starting at the entry) + the active filter. Called on start, recovery, and every
+    // avoid-list change. Never mutates the authored waypoint list.
     private void ExpandSteps()
     {
         if (_loop is null || _bfs is null)
@@ -867,23 +861,23 @@ public sealed class LoopRunner : IRecoverableEngine
             _expandedSteps = new List<LoopStep>();
             return;
         }
+        IReadOnlyList<LoopWaypoint> wps = RuntimeWaypointOrder();
         // Route-scoped @wealth warm-up: probe the party only when a leg of the
         // cycle actually crosses a toll. LoopExpander is a pure helper (no
         // side effects), so the probe lives here — one debounced round-trip
         // covers every toll leg in the expansion.
         if (_filter is not null)
         {
-            IReadOnlyList<LoopWaypoint> wps = _loop.Waypoints;
             for (int i = 0; i < wps.Count; i++)
                 _filter.WarmForRoute(_bfs, wps[i].Key, wps[(i + 1) % wps.Count].Key);
         }
 
         (IReadOnlyList<LoopStep> steps,
          IReadOnlyList<(RoomKey From, RoomKey To)> unreachable)
-                = LoopExpander.Expand(_loop.Waypoints, _bfs, _filter);
+                = LoopExpander.Expand(wps, _bfs, _filter);
         _expandedSteps = new List<LoopStep>(steps);
         _log?.Info("LoopRunner",
-            $"expand: loop='{_loop.Name}' waypoints={_loop.Waypoints.Count} → {steps.Count} step(s), {unreachable.Count} unreachable segment(s)");
+            $"expand: loop='{_loop.Name}' waypoints={wps.Count} → {steps.Count} step(s), {unreachable.Count} unreachable segment(s)");
         if (unreachable.Count > 0)
         {
             foreach ((RoomKey from, RoomKey to) in unreachable)
@@ -912,8 +906,11 @@ public sealed class LoopRunner : IRecoverableEngine
         for (int i = 0; i < _expandedSteps.Count; i++)
             if (_expandedSteps[i] is CommandLoopStep) cmdStepIdx.Add(i);
 
+        // Iterate the RUNTIME order (authored order from the entry) so the
+        // command-bearing waypoints line up 1:1, in sequence, with the CommandLoopSteps
+        // in _expandedSteps (which was expanded in that same order).
         var cmdWaypoints = new List<LoopWaypoint>();
-        foreach (LoopWaypoint w in _loop.Waypoints)
+        foreach (LoopWaypoint w in RuntimeWaypointOrder())
             if (!string.IsNullOrEmpty(w.Command)) cmdWaypoints.Add(w);
 
         if (cmdWaypoints.Count != cmdStepIdx.Count)
