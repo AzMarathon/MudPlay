@@ -1614,7 +1614,17 @@ public sealed partial class CombatManager : IDisposable
         // maps its decision onto the wire (backstab verb, combat-spell cast,
         // or weapon swing). Spell categories only participate when the caster
         // is wired — otherwise the order is just Backstab vs Physical.
-        DispatchRoundAction(settings, picked, engageable.Count, obs);
+        // bypassRecastInterval: a monster arriving is independent of whatever
+        // we were just doing — a due self-buff/reroll cast (CastingDirector's
+        // Buffing category) sets _lastCastSentAt moments before this fresh
+        // engage runs, and without the bypass CastCoordinator's recast interval
+        // defers the attack SPELL to the next tick, handing the newcomer a free
+        // round (report paradigm-20260916-033047: prfl's reroll cast landed the
+        // same instant a giant squid arrived, the attack was blocked/deferred,
+        // and the squid got a full round of unanswered hits before the retry
+        // fired). The buff and the attack are independent slots server-side —
+        // mirrors the identical fix for the debuff-then-attack case above.
+        DispatchRoundAction(settings, picked, engageable.Count, obs, bypassRecastInterval: true);
     }
 
     // True when a backstab is still owed for this room — sneaking, with

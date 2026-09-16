@@ -1,5 +1,10 @@
 # Version history
 
+## 3.88.20
+
+- A monster arriving the instant a between-round self-buff (e.g. a mana-regen reroll) fired no longer gets a free round — the fresh-engage attack was deferring to the next tick behind the client's own burst guard even though a buff and a real attack spell are independent slots server-side; it now fires immediately, same as the debuff-then-attack path already did
+- bug reports addressed: paradigm-20260916-032652, paradigm-20260916-033047
+
 ## 3.88.19
 
 - A due self-buff recast (e.g. under Self-Bless-While-Resting) standing the character up mid-rest no longer prematurely ends the recovery — the gate used to fall back to the low rest-trigger the instant position left Resting/Meditating, releasing movement with the pool still far short of its rest-max target; it now keeps chasing the real target and re-sits until it's actually reached

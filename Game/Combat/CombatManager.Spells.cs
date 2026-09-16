@@ -415,12 +415,15 @@ public sealed partial class CombatManager
                 // A combat spell owns the round. Announce it ONCE and instantly: the
                 // engage bypasses the shared 5.5s round cooldown (mirroring a weapon's
                 // cooldown-free SendAttack), so a fresh mob is cast at immediately
-                // rather than after it swings. bypassRecastInterval (set ONLY by the
-                // interrupt-resume caller) additionally skips the 500ms burst guard so a
-                // re-attack fired the instant a mid-fight self-buff's *Combat Off* lands
-                // isn't deferred a whole round — the mob's free swing. Ordinary dispatch
-                // (engage / arrival / tick) leaves it false so the guard still absorbs a
-                // burst of dispatches in the same frame. The server then auto-repeats the
+                // rather than after it swings. bypassRecastInterval additionally skips
+                // the 500ms burst guard: a between-round cast (self-buff / reroll, or the
+                // debuff half of debuff-then-attack) can stamp CastCoordinator's recast
+                // clock moments before this dispatch, so a fresh engage / arrival and an
+                // interrupt-resume pass it true to still land THIS round's attack behind
+                // one — a buff and a real attack are independent slots server-side, never
+                // competing for the round. The plain per-round re-decide paths (@kill
+                // retarget, target-priority follow) leave it false so the guard still
+                // absorbs a burst of dispatches in the same frame. The server then auto-repeats the
                 // spell each round; the heartbeat re-announces only if the chooser's
                 // decision later changes. Set the bridge even when the cast is blocked so
                 // we stay in spell mode and retry next tick rather than swinging.

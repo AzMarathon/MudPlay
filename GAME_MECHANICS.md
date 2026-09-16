@@ -3861,6 +3861,15 @@ glass jug               5               2 gold crowns
     it send several between-round spells a round. On the rejection the just-sent spell didn't fire, so its
     optimistic recast timer is dropped (it re-attempts next round) and the round's slot is latched spent
     (`CastingDirector.OnCastFailed`).
+  - **[CONFIRMED, user 2026-09-16] A between-round buff never delays the SAME round's real attack —
+    a fresh engage must fire instantly right behind one.** Casting a 0-energy buff (`prfl`, `vlwa`, …) and
+    then immediately attacking a monster that just arrived is legitimate the same round; there is no
+    server-side wait. `CombatManager`'s fresh-engage dispatch used to go through `CastCoordinator`'s
+    `MinRecastInterval` — a pure client-side burst guard against `CastingDirector` re-firing its OWN casts
+    within one frame, never meant to model this server rule — so a buff landing the instant a monster walked
+    in deferred the attack to the next tick, handing the newcomer a free round (report
+    `paradigm-20260916-033047`). The fresh-engage `DispatchRoundAction` call now passes
+    `bypassRecastInterval: true`, matching the already-correct debuff-then-attack path.
 - **A self-buff's active/recast state is keyed to its own 4-letter cast code**, resolved from game data: the
   success line (`Spells` → *user definitions* → CasterMessage / AppliedMessage) starts the duration timer,
   and the buff's OWN wear-off (`AppliedEndsWith`) clears it. **Distinct buffs that merely share an applied /
