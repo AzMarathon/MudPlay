@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.94.7**
-> - Building a loop no longer cancels a walk-to in progress — building just collects rooms and leaves your walk running; the Navigation menu's **Run** takes over (stops the walk, starts the loop), while the toolbar Start/Stop/Pause still control the walk
-> - Re-opening or re-running a cached loop no longer loses its settings — per-room command/delay/no-rest/no-attack and the loop-wide Only-attack-in-lair flag now carry over, not just the rooms
+> **Version 3.95.0**
+> - Session Stats counts spell combat properly — a spell cast's flavor line is no longer miscounted as a swing miss, so a spell-only caster stops racking up a phantom miss every round
+> - Player Statistics shows one row **per attack spell** (damage range, cast count, accuracy) instead of a single lumped "Spell" row; spell accuracy is landed-vs-resisted casts
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -8282,18 +8282,23 @@ public sealed class AppServices
     // damage row instead of being miscounted as a melee swing. Re-read on each
     // refresh so a slot change takes effect without a reconnect; a blank /
     // unknown / message-less slot contributes nothing.
-    private IReadOnlyList<Game.Spells.CasterMessageMatcher> AttackSpellMatchers()
+    private IReadOnlyList<(string Name, Game.Spells.CasterMessageMatcher Matcher)> AttackSpellMatchers()
     {
         Models.Profile.CombatSettings combat =
             ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
-        List<Game.Spells.CasterMessageMatcher> list = new(2);
+        List<(string, Game.Spells.CasterMessageMatcher)> list = new(2);
         Add(combat.NormalAttackSpell?.SpellName);
         Add(combat.AlternateAttackSpell?.SpellName);
         return list;
 
+        // The configured slot name is the per-spell display key — NormalAttackSpell
+        // first so it's the "primary" a resisted cast is attributed to (see
+        // CombatSessionTracker.ResolvePendingSpellMiss).
         void Add(string? spellName)
         {
-            if (AttackSpellMatcherFor(spellName) is { } matcher) list.Add(matcher);
+            if (!string.IsNullOrWhiteSpace(spellName)
+                && AttackSpellMatcherFor(spellName) is { } matcher)
+                list.Add((spellName.Trim(), matcher));
         }
     }
 

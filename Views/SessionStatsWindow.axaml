@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:combat="using:MudPlay.Game.Combat"
         xmlns:controls="using:MudPlay.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -375,12 +376,24 @@
                         <TextBlock Grid.Column="2" Classes="dimr" Text="{Binding ProcRangeText}"/>
                         <TextBlock Grid.Column="3" Classes="dimr" Text="{Binding Combat.ProcAvgDamage, StringFormat='{}{0:F0}'}"/>
                     </Grid>
-                    <Grid ColumnDefinitions="*,30,52,28,44" IsVisible="{Binding HasSpells}">
-                        <TextBlock Grid.Column="0" Classes="lbl" Text="Spell"/>
-                        <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Combat.SpellHits, StringFormat='{}×{0}'}"/>
-                        <TextBlock Grid.Column="2" Classes="dimr" Text="{Binding SpellRangeText}"/>
-                        <TextBlock Grid.Column="3" Classes="dimr" Text="{Binding Combat.SpellAvgDamage, StringFormat='{}{0:F0}'}"/>
-                    </Grid>
+                    <!-- One row per configured attack spell: name · casts · damage
+                         range · avg · accuracy. A spell only appears once it's been
+                         cast. Accuracy is landed / (landed + resisted casts) — ~100%
+                         for most Paradigm combat spells, which rarely fail to land. -->
+                    <ItemsControl ItemsSource="{Binding Combat.Spells}" IsVisible="{Binding HasSpells}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="combat:SpellCombatStat">
+                                <Grid ColumnDefinitions="*,30,52,28,44">
+                                    <TextBlock Grid.Column="0" Classes="lbl" Text="{Binding Name}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Casts, StringFormat='{}×{0}'}"/>
+                                    <TextBlock Grid.Column="2" Classes="dimr" Text="{Binding RangeText}"/>
+                                    <TextBlock Grid.Column="3" Classes="dimr" Text="{Binding AvgDamage, StringFormat='{}{0:F0}'}"/>
+                                    <TextBlock Grid.Column="4" Classes="valr" Text="{Binding AccuracyPercent, StringFormat='{}{0:F0}%'}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
                     <!-- Defense — dodge and miss folded into one "avoided" rate. -->
                     <Grid ColumnDefinitions="*,30,52,28,44" Margin="0,4,0,0">
