@@ -145,6 +145,18 @@ public sealed class ItemChargeTrackerTests : IDisposable
     }
 
     [Fact]
+    public void HeldToken_IsNotAutoLooked_TokenTrackerOwnsItsLoginLook()
+    {
+        _carried.Add("token of Silvermere");
+        _tracker.EnsureChargesKnown();
+        Assert.Empty(_sent);                      // TokenTracker's own RefreshAsync looks it instead
+
+        Look("look token of Silvermere");         // that look's reply still lands here
+        Line("Uses remaining: 3");
+        Assert.Equal(3, _tracker.RemainingFor(40));
+    }
+
+    [Fact]
     public void Use_ReLooks_AndReconcilesToTheTrueCount()
     {
         _carried.Add("gnarled wand");
