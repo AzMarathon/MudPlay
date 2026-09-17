@@ -42,7 +42,7 @@ public sealed class ItemChargeTracker : IDisposable
 
     private readonly GameDataCache _gameData;
     private readonly ProfileService _profile;
-    private readonly Func<IReadOnlyList<string>> _held;   // carried pack + worn/wielded gear
+    private readonly Func<IReadOnlyList<string>> _held;   // carried pack + worn/wielded gear + key-ring
     private readonly Func<string, int> _itemNumberOf;
     private readonly Func<bool> _onParadigm;
     private readonly Func<BossCleanupConfig?> _cleanupConfig;

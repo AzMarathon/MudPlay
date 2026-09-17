@@ -33,7 +33,7 @@ public sealed class ItemUseCountTracker
     private const int ConfirmWindowMs = 5000;
 
     private readonly GameDataCache _gameData;
-    private readonly Func<IReadOnlyList<string>> _held;   // carried pack + worn/wielded gear
+    private readonly Func<IReadOnlyList<string>> _held;   // carried pack + worn/wielded gear + key-ring
     private readonly Func<string, int> _itemNumberOf;
     private readonly Func<bool> _onStock;
     private readonly Func<BossCleanupConfig?> _cleanupConfig;

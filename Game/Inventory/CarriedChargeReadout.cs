@@ -16,7 +16,7 @@ public sealed class CarriedChargeReadout : IDisposable
     private readonly ItemChargeTracker _paraCharges;
     private readonly ItemUseCountTracker _stockCounts;
     private readonly Func<string, int> _itemNumberOf;
-    private readonly Func<IReadOnlyList<string>> _held;   // carried pack + worn/wielded gear
+    private readonly Func<IReadOnlyList<string>> _held;   // carried pack + worn/wielded gear + key-ring
 
     // Re-raised when either underlying tracker's counts change, so a single subscriber
     // (Character Info) refreshes without knowing which realm's tracker moved.

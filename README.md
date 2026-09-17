@@ -6,7 +6,7 @@
 > - Limited-use item charges are tracked for all charged items and persist per character between sessions (rechargeables restock at the BBS cleanup time; finite items stay spent)
 > - Paradigm keeps counts live on its own — an unknown charged item is auto-looked, and an item is re-looked after a use so a blocked/failed use never mis-counts
 > - Stock counts only **successful** uses — confirmed by the item's cast message, so a bonked/blocked use no longer burns a charge
-> - Worn/wielded cast-on-use gear (rechargeable maces, amulets, etc.) is now tracked too, not just unworn pack items
+> - Worn/wielded cast-on-use gear (rechargeable maces, amulets, etc.) and key-ring keys are now tracked too, not just unworn pack items
 > - Character Info's per-item charge readout reads through the same shared source as `@uses`, so the two never disagree
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

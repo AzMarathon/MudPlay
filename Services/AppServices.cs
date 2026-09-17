@@ -9959,16 +9959,22 @@ public sealed class AppServices
             : null;
     }
 
-    // Names of every item the player currently holds — carried pack AND worn/wielded
-    // gear — for charge tracking. Cast-on-use rechargeables (a wielded mace, a worn
-    // amulet) live in EquippedItems, so a carried-only list would never count their
-    // uses; the resolvers match a `use`/`look` against this combined list.
+    // Names of every item the player currently holds — carried pack, worn/wielded gear,
+    // AND key-ring keys — for charge tracking. Cast-on-use rechargeables (a wielded mace,
+    // a worn amulet) live in EquippedItems and some charged items are keys, so a
+    // carried-only list would never count their uses; the resolvers match a `use`/`look`
+    // against this combined list. Key entries carry a stack-count prefix ("3 iron key"),
+    // stripped here so the name resolves to its item number.
     private System.Collections.Generic.IReadOnlyList<string> HeldItemNames()
     {
         Game.Inventory.InventorySnapshot snap = Inventory.Snapshot;
-        var names = new System.Collections.Generic.List<string>(snap.CarriedItems.Count + snap.EquippedItems.Count);
+        int keyCount = snap.Keys?.Count ?? 0;
+        var names = new System.Collections.Generic.List<string>(
+            snap.CarriedItems.Count + snap.EquippedItems.Count + keyCount);
         names.AddRange(snap.CarriedItems);
         foreach (Game.Inventory.EquippedItem e in snap.EquippedItems) names.Add(e.Name);
+        if (snap.Keys is { } keys)
+            foreach (string k in keys) names.Add(Game.Inventory.InventorySnapshot.ParseKeyEntry(k).Name);
         return names;
     }
 
