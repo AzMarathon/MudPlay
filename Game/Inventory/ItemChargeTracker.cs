@@ -16,9 +16,10 @@ namespace MudPlay.Game.Inventory;
 //     ItemCharges) so it survives between sessions;
 //   • auto-looks a held charged item (carried or worn) whose count we don't know yet,
 //     so the readout fills itself in without the user thinking to look;
-//   • re-looks an item after a `use` of it, so a manual or remote use reconciles to the
-//     game's true count — a blocked / failed use never mis-decrements, because the look
-//     reply is the source of truth (tokens work the same way, see TokenTracker);
+//   • re-looks an item after a use OR a stack removal (drop / sell / give / put), so a
+//     manual or remote use reconciles to the game's true count and a dropped top-of-stack
+//     copy hands off to the next copy's charges — a blocked / failed use never mis-
+//     decrements, because the look reply is the source of truth (tokens work this way too);
 //   • treats a RECHARGEABLE item (Retain After Uses) as restocked to its game-data max
 //     once the BBS cleanup boundary passes, and a FINITE item's count as permanent.
 // Gated to Paradigm (Func onParadigm): stock realms print no such line and use the
@@ -115,7 +116,14 @@ public sealed class ItemChargeTracker : IDisposable
     }
 
     public int? RemainingForName(string name)
-        => string.IsNullOrWhiteSpace(name) ? null : RemainingFor(_itemNumberOf(name));
+        => string.IsNullOrWhiteSpace(name) ? null : RemainingFor(_itemNumberOf(Singular(name)));
+
+    // A stacked carry entry reads as "2 gnarled wand" — Paradigm keeps the name singular
+    // under a leading count. Strip the count so the name resolves to its item number and
+    // a re-look sends the bare name. (A stack's charges are the TOP copy's; `look` only
+    // ever reports the top, so tracking one number per item — reconciled on each use /
+    // drop — follows the top as copies deplete and the next surfaces.)
+    private static string Singular(string name) => CountedCommand.SplitLeadingCount(name).Name;
 
     // Look up (and dispatch) the charges of any held charged item we don't yet know.
     // Called on inventory-settle. No-op off Paradigm. Each unknown item gets one paced
@@ -124,9 +132,10 @@ public sealed class ItemChargeTracker : IDisposable
     public void EnsureChargesKnown()
     {
         if (_disposed || !_onParadigm()) return;
-        foreach (string name in _held())
+        foreach (string entry in _held())
         {
-            if (string.IsNullOrWhiteSpace(name)) continue;
+            if (string.IsNullOrWhiteSpace(entry)) continue;
+            string name = Singular(entry);                                  // strip a stack's leading count
             int number = _itemNumberOf(name);
             if (number <= 0 || _autoAttempted.Contains(number)) continue;   // one look per item per session
             if (RemainingFor(number) is not null) continue;                 // already known
@@ -147,8 +156,16 @@ public sealed class ItemChargeTracker : IDisposable
         _schedule(AutoLookPaceMs, DispatchNextAutoLook);
     }
 
-    // Outbound `look <item>` (arm capture) or `use <item>` (schedule a reconciling
-    // re-look). Tokens' login looks ride this path too, so their charges persist here.
+    // Verbs that change which copy of a stacked item is "on top": using it spends the
+    // top copy's charge, and removing a copy (drop / sell / give / put) surfaces the next
+    // one — which carries its OWN charge count. Each triggers a reconciling re-look so
+    // the stored count follows the current top, matching how `look` only ever reports the
+    // top-of-stack (last-obtained) copy on Paradigm.
+    private static readonly string[] RelookVerbs = { "use ", "drop ", "sell ", "give ", "put " };
+
+    // Outbound `look <item>` (arm capture) or a stack-changing verb (schedule a
+    // reconciling re-look). Tokens' login looks ride this path too, so their charges
+    // persist here.
     public void ObserveOutbound(byte[] data)
     {
         if (_disposed || !_onParadigm() || data is null || data.Length == 0) return;
@@ -164,14 +181,19 @@ public sealed class ItemChargeTracker : IDisposable
                 _schedule(LookReplyWindowMs, () => { if (gen == _pendingGen) _pendingItem = null; });
                 continue;
             }
-            if (line.StartsWith("use ", StringComparison.OrdinalIgnoreCase)
-                && ResolveHeld(line[4..].Trim()) is { } useName)
-                ScheduleRelook(useName);
+            foreach (string verb in RelookVerbs)
+                if (line.StartsWith(verb, StringComparison.OrdinalIgnoreCase)
+                    && ResolveHeld(line[verb.Length..].Trim()) is { } name)
+                {
+                    ScheduleRelook(name);
+                    break;
+                }
         }
     }
 
-    // A confirmed use is reconciled by re-looking (the reply is the truth), so a blocked
-    // use never mis-decrements. Debounced per item.
+    // A use or a stack removal is reconciled by re-looking (the reply is the truth), so a
+    // blocked use never mis-decrements and a dropped top copy hands off to the next one's
+    // count. Debounced per item.
     private void ScheduleRelook(string name)
     {
         int number = _itemNumberOf(name);
@@ -257,13 +279,13 @@ public sealed class ItemChargeTracker : IDisposable
         string a = arg.ToLowerInvariant();
         foreach (string held in _held())
             if (!string.IsNullOrWhiteSpace(held) && held.ToLowerInvariant().Contains(a))
-                return held;
+                return Singular(held);
         // `use <item> <target>` — fall back to the first word matching a held item.
         string first = a.Split(' ')[0];
         if (first.Length >= MinLookArgLength && first != a)
             foreach (string held in _held())
                 if (!string.IsNullOrWhiteSpace(held) && held.ToLowerInvariant().Contains(first))
-                    return held;
+                    return Singular(held);
         return null;
     }
 

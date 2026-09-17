@@ -145,7 +145,13 @@ public sealed class ItemUseCountTracker
         if (ItemChargeMeta.Read(_gameData, number) is not { IsLimitedUse: true } meta) return;
         if (_profile.Current is not { } prof) return;
 
-        int used = Math.Min(meta.MaxUses, EffectiveUsed(number, meta) + 1);
+        // A FINITE item poofs when its top copy empties; in a stack the next copy is then
+        // on top, assumed full (a fresh drop = max charges). Not guaranteed — a partial
+        // copy picked off the ground breaks it — but it's the best a realm with no charges
+        // line can do, so wrap to 0 (a fresh full copy) rather than cap at spent. A
+        // rechargeable item is retained empty and refills at cleanup, so it caps instead.
+        int next = EffectiveUsed(number, meta) + 1;
+        int used = !meta.Recharges && next >= meta.MaxUses ? 0 : Math.Min(meta.MaxUses, next);
         prof.ItemUseCounts ??= new Dictionary<int, ItemUseRecord>();
         prof.ItemUseCounts[number] = new ItemUseRecord(used, _now());
         _profile.Save();
@@ -177,13 +183,17 @@ public sealed class ItemUseCountTracker
         foreach (string c in _held())
         {
             if (string.IsNullOrWhiteSpace(c)) continue;
-            string cl = c.ToLowerInvariant();
-            if (a == cl || a.StartsWith(cl + " ", StringComparison.Ordinal)) return c;
+            string cl = Singular(c).ToLowerInvariant();
+            if (a == cl || a.StartsWith(cl + " ", StringComparison.Ordinal)) return Singular(c);
         }
         string first = a.Split(' ')[0];
         if (first.Length >= 3)
             foreach (string c in _held())
-                if (!string.IsNullOrWhiteSpace(c) && c.ToLowerInvariant().Contains(first)) return c;
+                if (!string.IsNullOrWhiteSpace(c) && Singular(c).ToLowerInvariant().Contains(first)) return Singular(c);
         return null;
     }
+
+    // Strip a stacked carry entry's leading count ("2 gnarled wand" → "gnarled wand") so
+    // it resolves to its item number. The name stays singular under the count.
+    private static string Singular(string name) => CountedCommand.SplitLeadingCount(name).Name;
 }

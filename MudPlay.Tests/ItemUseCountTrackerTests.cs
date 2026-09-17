@@ -167,6 +167,22 @@ public sealed class ItemUseCountTrackerTests : IDisposable
     }
 
     [Fact]
+    public void StackedEntry_ResolvesUnderLeadingCount()
+    {
+        _carried.Add("2 gnarled wand");           // a stack — name singular under the count
+        Use("gnarled wand"); Line(WandMsg);
+        Assert.Equal(9, _tracker.RemainingFor(10));
+    }
+
+    [Fact]
+    public void FiniteStack_AssumesNextCopyFull_WhenTopEmpties()
+    {
+        _carried.Add("2 gnarled wand");
+        for (int i = 0; i < 10; i++) { Use("gnarled wand"); Line(WandMsg); }   // empty the top copy
+        Assert.Equal(10, _tracker.RemainingFor(10));   // next copy assumed full (fresh drop = max)
+    }
+
+    [Fact]
     public void UseWithTarget_StillResolvesAndConfirms()
     {
         _carried.Add("gnarled wand");

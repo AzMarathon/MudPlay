@@ -49,17 +49,22 @@ public sealed class CarriedChargeReadout : IDisposable
     private bool OnParadigm => _gameData.ActiveRealm == MudPlay.Game.RealmType.ParaMud;
 
     // Remaining charges for a carried item by name, realm-aware. Null when unknown
-    // (Paradigm: never looked) or the item isn't a limited-use item.
+    // (Paradigm: never looked) or the item isn't a limited-use item. A stacked entry's
+    // leading count is stripped so it resolves (the count reflects the whole stack; the
+    // charges are the top copy's).
     public int? RemainingForName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
-        return OnParadigm ? _paraCharges.RemainingForName(name) : _stockCounts.RemainingFor(_itemNumberOf(name));
+        return OnParadigm ? _paraCharges.RemainingForName(name) : _stockCounts.RemainingFor(_itemNumberOf(Singular(name)));
     }
 
     // Whether a carried item is a limited-use (charged) item per the active set.
     public bool IsLimitedUse(string name)
         => !string.IsNullOrWhiteSpace(name)
-           && ItemChargeMeta.Read(_gameData, _itemNumberOf(name)) is { IsLimitedUse: true };
+           && ItemChargeMeta.Read(_gameData, _itemNumberOf(Singular(name))) is { IsLimitedUse: true };
+
+    // Strip a stacked carry entry's leading count ("2 gnarled wand" → "gnarled wand").
+    private static string Singular(string name) => CountedCommand.SplitLeadingCount(name).Name;
 
     public readonly record struct ChargedItem(string Name, int? Remaining);
 

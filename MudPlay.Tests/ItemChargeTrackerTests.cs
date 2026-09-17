@@ -173,6 +173,30 @@ public sealed class ItemChargeTrackerTests : IDisposable
     }
 
     [Fact]
+    public void StackedEntry_ResolvesUnderLeadingCount_AndTracksTopCopy()
+    {
+        _carried.Add("2 gnarled wand");           // a stack — name stays singular under the count
+        Look("look gnarled");                     // resolves the stack, strips the count
+        Line("Uses remaining: 3");
+        Assert.Equal(3, _tracker.RemainingFor(10));
+        Assert.Equal(3, _tracker.RemainingForName("2 gnarled wand"));   // display resolves under the count
+    }
+
+    [Fact]
+    public void DroppingTopCopy_ReLooks_ToNextCopysCount()
+    {
+        _carried.Add("2 gnarled wand");
+        Look("look gnarled"); Line("Uses remaining: 5");   // the top copy
+
+        _sent.Clear();
+        _tracker.ObserveOutbound(Bytes("drop gnarled wand"));   // top copy dropped → next surfaces
+        FireTimers();                              // debounce → re-look sends the singular name
+        Assert.Contains("look gnarled wand", _sent);
+        Line("Uses remaining: 8");                 // the next copy's charges
+        Assert.Equal(8, _tracker.RemainingFor(10));
+    }
+
+    [Fact]
     public void TokenLook_RecordsEvenWhenGameDataUseCountIsZero()
     {
         _carried.Add("token of Silvermere");

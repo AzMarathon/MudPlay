@@ -7,6 +7,7 @@
 - Paradigm now keeps counts live on its own: an unknown charged item is auto-looked, and an item is re-looked after a use so a blocked/failed use never mis-counts
 - Stock now counts only **successful** uses — a use is confirmed by the item's cast message, so a bonked/blocked use no longer burns a charge
 - Worn/wielded cast-on-use gear (rechargeable maces, amulets, and the like) and key-ring keys are now tracked too — previously only unworn pack items were counted, so worn rechargeables read as perpetually full
+- Stacked charged items track the top-of-stack copy: Paradigm re-looks when the top is used up or dropped so the next copy's charges take over; stock assumes a fresh copy is full once the top empties
 - Character Info's per-item charge readout now reads through the same shared source as `@uses`, so the two never disagree
 
 ## 3.95.0
