@@ -578,6 +578,7 @@ Active party members get a few things for free regardless of the grid: the party
 | `@have` | `<item>` | whether you carry, wear, or hold a matching item on the key ring |
 | `@inv` | — | your carried pack and keys |
 | `@token` | — or `<name>` | remaining daily charges of your held transport tokens — bare lists them all, a name reports just that one (Paradigm) |
+| `@uses` | — or `<item>` | remaining charges of a carried limited-use item — bare lists every charged item you carry, a name (shorthand ok, best-match) reports just that one |
 
 ### Move me around
 
@@ -981,8 +982,10 @@ Finally, if the only thing left un-recovered is **currency**, the death counts a
 
 **Character Info** is your read-only character sheet — stats, skills, the attack table (per attack type: accuracy, damage range, and swings per round, computed from your stats and equipped weapon), and folded-in quest bonuses. It also lists your worn, carried, and key-ring inventory, each a clickable link to its Game Data record (an item whose dumped name didn't resolve stays plain text). A **limited-use item shows its remaining charges** next to it (e.g. *token of Silvermere - 5 Charges*). How the count is known depends on the realm:
 
-- **Paradigm** prints "Uses remaining: N" when you `look` an item, so the count is read straight from that — transport tokens fill in automatically (they're looked on login), any other charged item when you look at it.
-- **Stock** prints no charge line, so the client **counts the `use`s you send** and shows remaining = the item's max charges minus what you've spent. **Rechargeable** items (the align-quest cloaks, and tokens where they exist) restock to full at your BBS's configured **cleanup time** (Settings → BBS); **finite** items (the gnarled / teak / mahogany wands) stay spent. These counts are saved per character, so they survive a restart. Infinite-use items (e.g. the nexus spear on stock) show no charge line.
+- **Paradigm** prints "Uses remaining: N" when you `look` an item, so the count is read straight from that — the authoritative source. The client fills the readout in for you: any carried charged item whose count it doesn't know yet gets **looked automatically**, and it **re-looks after a use** (yours or one a party member remotes to you) to reconcile — so a use that's *blocked* (an NPC in the room, too little gold, too low a level) never wrongly drops the count. Transport tokens fill in the same way (they're looked on login).
+- **Stock** prints no charge line, so the client **counts the `use`s you send** and shows remaining = the item's max charges minus what you've spent. **Rechargeable** items (the align-quest cloaks, and tokens where they exist) restock to full at your BBS's configured **cleanup time** (Settings → BBS); **finite** items (the gnarled / teak / mahogany wands) stay spent. Infinite-use items (e.g. the nexus spear on stock) show no charge line.
+
+On both realms these counts are **saved per character**, so they survive a restart — and a rechargeable item is assumed back to full once your BBS's cleanup time has passed, without needing to look at it again. The same figures back the `@uses` remote query.
 
 Below the wealth block it shows an **AC / DR breakdown** in two lines: one for what your worn gear grants, and one for what your **configured self-buffs** add on top (assuming they're up) — the same buff figure the Equipment Manager and Monster Intel use.
 

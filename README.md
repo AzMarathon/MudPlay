@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.95.0**
-> - Session Stats counts spell combat properly — a spell cast's flavor line is no longer miscounted as a swing miss, so a spell-only caster stops racking up a phantom miss every round
-> - Player Statistics shows one row **per attack spell** (damage range, cast count, accuracy) instead of a single lumped "Spell" row — every damage-dealing slot (normal, alternate, multi-attack, drain), not just single-target; spell accuracy is landed-vs-resisted casts
+> **Version 3.96.0**
+> - New `@uses` remote command — `@uses <item>` (shorthand, best-match) reports a carried limited-use item's remaining charges; bare `@uses` lists every charged item you carry
+> - Limited-use item charges are tracked for all charged items and persist per character between sessions (rechargeables restock at the BBS cleanup time; finite items stay spent)
+> - Paradigm keeps counts live on its own — an unknown charged item is auto-looked, and an item is re-looked after a use so a blocked/failed use never mis-counts
+> - Character Info's per-item charge readout reads through the same shared source as `@uses`, so the two never disagree
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

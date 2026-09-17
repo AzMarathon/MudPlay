@@ -196,6 +196,13 @@ public sealed class CharacterProfile
     // tracked. See ItemUseCountTracker.
     public Dictionary<int, ItemUseRecord>? ItemUseCounts { get; set; }
 
+    // Client-tracked remaining charges for limited-use items, keyed by item number.
+    // Populated ON PARADIGM (which prints "Uses remaining: N" on look) — the count is
+    // read from the game, not derived. A rechargeable item restocks to max at cleanup;
+    // a finite item's count persists depleted forever. null / empty = none tracked.
+    // See ItemChargeTracker. (Stock uses ItemUseCounts above instead.)
+    public Dictionary<int, ItemChargeRecord>? ItemCharges { get; set; }
+
     // LEGACY Roomba Mode fields — superseded by the BBS-tier RoombaSettings
     // (Data/BBS/{bbs}/roomba.json; see GhRoomLabelStore) since every character
     // on a BBS shares one gang house. Kept ONLY so GhRoomLabelStore can lift an

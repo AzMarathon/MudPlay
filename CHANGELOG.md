@@ -1,5 +1,12 @@
 # Version history
 
+## 3.96.0
+
+- New `@uses` remote command — `@uses <item>` (shorthand, best-match) reports a carried limited-use item's remaining charges; bare `@uses` lists every charged item you carry
+- Limited-use item charges are now tracked for all charged items and persist per character between sessions (rechargeable items restock at the BBS cleanup time; finite items stay spent)
+- Paradigm now keeps counts live on its own: an unknown charged item is auto-looked, and an item is re-looked after a use so a blocked/failed use never mis-counts
+- Character Info's per-item charge readout now reads through the same shared source as `@uses`, so the two never disagree
+
 ## 3.95.0
 
 - Session Stats now counts spell combat properly: a spell cast's flavor line ("You scatter some ashes…!") is no longer miscounted as a swing miss, so a spell-only caster no longer racks up a phantom miss every round
