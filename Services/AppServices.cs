@@ -460,6 +460,13 @@ public sealed class AppServices
     // restock at the BBS cleanup time. Persisted on the character profile.
     public Game.Inventory.ItemUseCountTracker ItemUseCounts { get; private set; } = null!;
 
+    // Realm-aware charge lookup over the two trackers above, shared by Character Info
+    // and the @uses remote query so their readouts never diverge.
+    public Game.Inventory.CarriedChargeReadout CarriedCharges { get; private set; } = null!;
+
+    // @uses [item] — read-only remaining-charges report off CarriedCharges.
+    public Game.Remote.ItemUsesQueryHandler ItemUsesQuery { get; private set; } = null!;
+
     // Write-side consumer of RemoteCommands for the inventory /
     // cash action commands — @get-all / @drop-all /
     // @deposit-all (ExecuteCommands) and @share (party-whitelist).
@@ -4694,11 +4701,20 @@ public sealed class AppServices
         // @token <name> — read-only remaining-charges report off the tracker.
         TokenQuery = new Game.Remote.TokenQueryHandler(RemoteCommands, Tokens);
 
-        // General limited-use item charges from look replies (Paradigm "Uses remaining:
-        // N"). Cleared on profile swap so a new character re-reads from scratch. The
-        // line feed + outbound tap are wired in MainWindowViewModel alongside Tokens.
+        // Paradigm limited-use item charges from look replies ("Uses remaining: N"),
+        // persisted per-character (CharacterProfile.ItemCharges): auto-looks an unknown
+        // charged item, and re-looks after a `use` to reconcile. Rechargeables restock
+        // at the BBS cleanup time. The look sender is SendGameCommand (rides the same
+        // outbound tap so its looks re-arm capture); the line feed + outbound tap are
+        // wired in MainWindowViewModel alongside Tokens.
         ItemCharges = new Game.Inventory.ItemChargeTracker(
-            carried: () => Inventory.Snapshot.CarriedItems,
+            gameData: GameData,
+            profile: Profile,
+            heldItems: HeldItemNames,
+            itemNumberOf: ItemNumberByName,
+            onParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            cleanupConfig: ResolveBossCleanupConfig,
+            sendLook: cmd => SendGameCommand(cmd),
             schedule: (ms, action) =>
             {
                 var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
@@ -4706,18 +4722,39 @@ public sealed class AppServices
                 timer.Start();
             },
             log: Log);
-        Profile.ProfileLoaded += _ => ItemCharges.Clear();
+        Profile.ProfileLoaded += _ => ItemCharges.ResetSession();
 
         // Stock use-counting for limited-use items (persisted on the profile; rechargeables
-        // restock at the BBS cleanup time — reuses the boss-timer cleanup config).
+        // restock at the BBS cleanup time — reuses the boss-timer cleanup config). Only
+        // SUCCESSFUL uses count: a use is confirmed by the item's use-spell caster message
+        // (from its game-data on-use record), so a bonked/blocked use burns nothing. The
+        // line feed is attached in MainWindowViewModel alongside ItemCharges.
         ItemUseCounts = new Game.Inventory.ItemUseCountTracker(
             gameData: GameData,
-            carried: () => Inventory.Snapshot.CarriedItems,
+            heldItems: HeldItemNames,
             itemNumberOf: ItemNumberByName,
             onStock: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             cleanupConfig: ResolveBossCleanupConfig,
             profile: Profile,
+            useConfirmLine: BuildItemUseLinePredicate,
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
             log: Log);
+
+        // One realm-aware charge lookup shared by Character Info and @uses.
+        CarriedCharges = new Game.Inventory.CarriedChargeReadout(
+            GameData, ItemCharges, ItemUseCounts, ItemNumberByName, HeldItemNames);
+
+        // Fill in charges for any carried charged item we don't know yet, whenever the
+        // carry list changes (Paradigm-only inside the tracker). Idempotent + paced.
+        Inventory.Changed += () => ItemCharges.EnsureChargesKnown();
+
+        // @uses [item] — remaining charges of a carried limited-use item; bare lists all.
+        ItemUsesQuery = new Game.Remote.ItemUsesQueryHandler(RemoteCommands, CarriedCharges);
 
         // @timer — read-only report of the boss respawn timers being tracked. Reads
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
@@ -8221,19 +8258,27 @@ public sealed class AppServices
     // Null when the active set carries no message for the spell — the reactive
     // path then stays inert and only the predictive timer keeps the buff up.
     private Func<string, bool>? BuildSpellLinePredicate(int spellNumber)
+        => spellNumber <= 0 ? null : LinePredicateFor(FindSpellMessage(spellNumber, string.Empty));
+
+    // A line predicate for a message record's player-facing line: a placeholder template
+    // compiles to a CasterMessageMatcher; a plain literal (no {s}/{damage}) falls back to
+    // a case-insensitive Contains. Null when the record is missing or carries no text.
+    private static Func<string, bool>? LinePredicateFor(Models.GameData.MessageRecord? rec)
     {
-        if (spellNumber <= 0) return null;
-        Models.GameData.MessageRecord? rec = FindSpellMessage(spellNumber, string.Empty);
         if (rec is null) return null;
-        string text = !string.IsNullOrWhiteSpace(rec.CasterMessage)
-            ? rec.CasterMessage
-            : rec.TargetMessage;
+        string text = !string.IsNullOrWhiteSpace(rec.CasterMessage) ? rec.CasterMessage : rec.TargetMessage;
         if (string.IsNullOrWhiteSpace(text)) return null;
         if (Game.Spells.CasterMessageMatcher.TryCreate(text) is { } matcher)
             return line => matcher.TryMatch(line, out _);
         string literal = text.Trim();
         return line => line.Contains(literal, StringComparison.OrdinalIgnoreCase);
     }
+
+    // A line predicate recognising an item's use-spell caster message — the line you see
+    // when a `use <item>` actually fires. The stock use-counter arms on the send and
+    // counts only when this confirms, so a bonked / blocked use burns nothing.
+    private Func<string, bool>? BuildItemUseLinePredicate(int itemNumber)
+        => LinePredicateFor(FindItemMessage(itemNumber));
 
     // Find the active set's Models.GameData.MessageRecord for an
     // item — the line YOU see when the item procs / is used. Resolution order:
@@ -9912,6 +9957,25 @@ public sealed class AppServices
         return Game.GameData.ClassTitleTable.LookupClasses(record.Title) is { Count: 1 } implied
             ? implied[0]
             : null;
+    }
+
+    // Names of every item the player currently holds — carried pack, worn/wielded gear,
+    // AND key-ring keys — for charge tracking. Cast-on-use rechargeables (a wielded mace,
+    // a worn amulet) live in EquippedItems and some charged items are keys, so a
+    // carried-only list would never count their uses; the resolvers match a `use`/`look`
+    // against this combined list. Key entries carry a stack-count prefix ("3 iron key"),
+    // stripped here so the name resolves to its item number.
+    private System.Collections.Generic.IReadOnlyList<string> HeldItemNames()
+    {
+        Game.Inventory.InventorySnapshot snap = Inventory.Snapshot;
+        int keyCount = snap.Keys?.Count ?? 0;
+        var names = new System.Collections.Generic.List<string>(
+            snap.CarriedItems.Count + snap.EquippedItems.Count + keyCount);
+        names.AddRange(snap.CarriedItems);
+        foreach (Game.Inventory.EquippedItem e in snap.EquippedItems) names.Add(e.Name);
+        if (snap.Keys is { } keys)
+            foreach (string k in keys) names.Add(Game.Inventory.InventorySnapshot.ParseKeyEntry(k).Name);
+        return names;
     }
 
     // Item number for a carried item name in the active set (0 when unresolved) — used

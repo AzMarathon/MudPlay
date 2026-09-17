@@ -46,10 +46,8 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     private readonly QuestBonusState _questBonuses;
     // Resolves the per-BBS runic word for the carried-coins readout.
     private readonly CurrencyNaming _naming;
-    // Limited-use item charges captured from look replies (Paradigm "Uses remaining").
-    private readonly Game.Inventory.ItemChargeTracker _itemCharges;
-    // Stock counterpart — remaining = max − uses counted (stock prints no charge line).
-    private readonly Game.Inventory.ItemUseCountTracker _useCounts;
+    // Realm-aware limited-use charge lookup (Paradigm look counts / stock counted-uses).
+    private readonly Game.Inventory.CarriedChargeReadout _charges;
     // A gear-set swap streams a dozen-plus wear/rem confirmations, each firing
     // InventoryManager.Changed — and they keep arriving AFTER the EquipmentManager's
     // send window closes. Rebuilding the derived-stat + wealth + equipped-list
@@ -197,7 +195,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     // False until the first `i` dump is parsed — drives the "type i to load" hint.
     [ObservableProperty] private bool _inventoryLoaded;
 
-    public CharacterInfoSectionViewModel(PlayerStats stats, GameDataCache gameData, InventoryManager inventory, PlayerDatabase playerDb, AlignmentTracker alignmentTracker, QuestBonusState questBonuses, CurrencyNaming naming, ItemChargeTracker itemCharges, ItemUseCountTracker useCounts)
+    public CharacterInfoSectionViewModel(PlayerStats stats, GameDataCache gameData, InventoryManager inventory, PlayerDatabase playerDb, AlignmentTracker alignmentTracker, QuestBonusState questBonuses, CurrencyNaming naming, Game.Inventory.CarriedChargeReadout charges)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -206,8 +204,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         ArgumentNullException.ThrowIfNull(alignmentTracker);
         ArgumentNullException.ThrowIfNull(questBonuses);
         ArgumentNullException.ThrowIfNull(naming);
-        ArgumentNullException.ThrowIfNull(itemCharges);
-        ArgumentNullException.ThrowIfNull(useCounts);
+        ArgumentNullException.ThrowIfNull(charges);
         _stats = stats;
         _gameData = gameData;
         _inventory = inventory;
@@ -215,8 +212,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         _alignmentTracker = alignmentTracker;
         _questBonuses = questBonuses;
         _naming = naming;
-        _itemCharges = itemCharges;
-        _useCounts = useCounts;
+        _charges = charges;
 
         _inventoryRefreshDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _inventoryRefreshDebounce.Tick += (_, _) =>
@@ -229,8 +225,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
         _stats.PropertyChanged += OnStatsChanged;
         _inventory.Changed += OnInventoryChanged;
-        _itemCharges.Changed += OnItemChargesChanged;
-        _useCounts.Changed += OnItemChargesChanged;
+        _charges.Changed += OnItemChargesChanged;
         _playerDb.Players.CollectionChanged += OnPlayersChanged;
         _alignmentTracker.StaleChanged += OnAlignmentStaleChanged;
         _questBonuses.Changed += OnQuestBonusesChanged;
@@ -656,18 +651,13 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         InventoryLoaded = _inventory.IsLoaded;
     }
 
-    // "5 Charges" for a limited-use item — its remaining charges, else empty. On
-    // Paradigm the count comes from the "Uses remaining" line a look prints; on stock
-    // (no such line) it's max − uses-counted for a finite limited-use item.
+    // "5 Charges" for a limited-use item — its remaining charges, else empty. Realm-aware
+    // via the shared readout: Paradigm reads the "Uses remaining" look count, stock uses
+    // max − uses-counted for a finite limited-use item.
     private string ChargesTextFor(string name)
-    {
-        int? remaining = _gameData.ActiveRealm == MudPlay.Game.RealmType.ParaMud
-            ? _itemCharges.ChargesFor(name)
-            : _useCounts.RemainingFor(ResolveItemNumber(name));
-        return remaining is { } n
+        => _charges.RemainingForName(name) is { } n
             ? string.Create(CultureInfo.InvariantCulture, $"{n} Charge{(n == 1 ? "" : "s")}")
             : string.Empty;
-    }
 
     private static string Display(string value) => string.IsNullOrEmpty(value) ? "—" : value;
 
@@ -708,8 +698,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         _inventoryRefreshDebounce.Stop();
         _stats.PropertyChanged -= OnStatsChanged;
         _inventory.Changed -= OnInventoryChanged;
-        _itemCharges.Changed -= OnItemChargesChanged;
-        _useCounts.Changed -= OnItemChargesChanged;
+        _charges.Changed -= OnItemChargesChanged;
         _playerDb.Players.CollectionChanged -= OnPlayersChanged;
         _alignmentTracker.StaleChanged -= OnAlignmentStaleChanged;
         _questBonuses.Changed -= OnQuestBonusesChanged;

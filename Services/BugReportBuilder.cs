@@ -193,6 +193,14 @@ public static class BugReportBuilder
             tokenCharges.Count == 0
                 ? "(none read this session)"
                 : string.Join(", ", tokenCharges.Select(c => $"{c.Place}={c.Remaining}")));
+        // Carried limited-use item charges (what @uses / Character Info would show) —
+        // Paradigm look counts or stock counted-uses, "?" when a charged item's count
+        // isn't read yet. So a "charges wrong / never filled in" report shows the state.
+        IReadOnlyList<Game.Inventory.CarriedChargeReadout.ChargedItem> itemCharges = svc.CarriedCharges.AllCharged();
+        Kv(sb, "Item charges",
+            itemCharges.Count == 0
+                ? "(no limited-use items carried)"
+                : string.Join(", ", itemCharges.Select(c => $"{c.Name}={(c.Remaining is { } n ? n.ToString() : "?")}")));
         // Diagnostic-channel state gates whether the Program-log tail carries any
         // decision trail: both flags default off, and every _log?.Debug/Combat
         // site is skipped at generation time when off, so a report captured with
