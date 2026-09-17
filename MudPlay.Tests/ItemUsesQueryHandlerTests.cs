@@ -58,7 +58,8 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
         _stock = new ItemUseCountTracker(
             gameData: _cache, heldItems: () => _carried, itemNumberOf: Number,
             onStock: () => _cache.ActiveRealm != RealmType.ParaMud,
-            cleanupConfig: () => null, profile: _profile, now: () => Now, log: null);
+            cleanupConfig: () => null, profile: _profile,
+            useConfirmLine: _ => null, schedule: (_, _) => { }, now: () => Now, log: null);
         _readout = new CarriedChargeReadout(_cache, _para, _stock, Number, () => _carried);
     }
 

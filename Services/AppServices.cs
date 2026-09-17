@@ -4725,7 +4725,10 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ => ItemCharges.ResetSession();
 
         // Stock use-counting for limited-use items (persisted on the profile; rechargeables
-        // restock at the BBS cleanup time — reuses the boss-timer cleanup config).
+        // restock at the BBS cleanup time — reuses the boss-timer cleanup config). Only
+        // SUCCESSFUL uses count: a use is confirmed by the item's use-spell caster message
+        // (from its game-data on-use record), so a bonked/blocked use burns nothing. The
+        // line feed is attached in MainWindowViewModel alongside ItemCharges.
         ItemUseCounts = new Game.Inventory.ItemUseCountTracker(
             gameData: GameData,
             heldItems: HeldItemNames,
@@ -4733,6 +4736,13 @@ public sealed class AppServices
             onStock: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             cleanupConfig: ResolveBossCleanupConfig,
             profile: Profile,
+            useConfirmLine: BuildItemUseLinePredicate,
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
             log: Log);
 
         // One realm-aware charge lookup shared by Character Info and @uses.
@@ -8248,19 +8258,27 @@ public sealed class AppServices
     // Null when the active set carries no message for the spell — the reactive
     // path then stays inert and only the predictive timer keeps the buff up.
     private Func<string, bool>? BuildSpellLinePredicate(int spellNumber)
+        => spellNumber <= 0 ? null : LinePredicateFor(FindSpellMessage(spellNumber, string.Empty));
+
+    // A line predicate for a message record's player-facing line: a placeholder template
+    // compiles to a CasterMessageMatcher; a plain literal (no {s}/{damage}) falls back to
+    // a case-insensitive Contains. Null when the record is missing or carries no text.
+    private static Func<string, bool>? LinePredicateFor(Models.GameData.MessageRecord? rec)
     {
-        if (spellNumber <= 0) return null;
-        Models.GameData.MessageRecord? rec = FindSpellMessage(spellNumber, string.Empty);
         if (rec is null) return null;
-        string text = !string.IsNullOrWhiteSpace(rec.CasterMessage)
-            ? rec.CasterMessage
-            : rec.TargetMessage;
+        string text = !string.IsNullOrWhiteSpace(rec.CasterMessage) ? rec.CasterMessage : rec.TargetMessage;
         if (string.IsNullOrWhiteSpace(text)) return null;
         if (Game.Spells.CasterMessageMatcher.TryCreate(text) is { } matcher)
             return line => matcher.TryMatch(line, out _);
         string literal = text.Trim();
         return line => line.Contains(literal, StringComparison.OrdinalIgnoreCase);
     }
+
+    // A line predicate recognising an item's use-spell caster message — the line you see
+    // when a `use <item>` actually fires. The stock use-counter arms on the send and
+    // counts only when this confirms, so a bonked / blocked use burns nothing.
+    private Func<string, bool>? BuildItemUseLinePredicate(int itemNumber)
+        => LinePredicateFor(FindItemMessage(itemNumber));
 
     // Find the active set's Models.GameData.MessageRecord for an
     // item — the line YOU see when the item procs / is used. Resolution order:

@@ -1015,6 +1015,8 @@ public partial class MainWindowViewModel : ObservableObject
         // General limited-use item charges — captures "Uses remaining: N" from any
         // `look` reply (tokens ride the same line feed; other items when looked).
         AppServices.Current.ItemCharges.AttachLineExtractor(Lines);
+        // Stock use-counting confirms a use by the item's cast message on the line feed.
+        AppServices.Current.ItemUseCounts.AttachLineExtractor(Lines);
         // Inbound ailment chip-clear — PartyAilmentTracker watches server
         // lines for OUR cure spell landing on a party member (matched by the
         // cure spell's CasterMessage template) and clears that member's
