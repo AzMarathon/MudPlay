@@ -48,7 +48,7 @@ public sealed class ItemChargeTrackerTests : IDisposable
         _tracker = new ItemChargeTracker(
             gameData: _cache,
             profile: _profile,
-            carried: () => _carried,
+            heldItems: () => _carried,
             itemNumberOf: Number,
             onParadigm: () => _paradigm,
             cleanupConfig: () => new BossCleanupConfig(TimeSpan.FromHours(21), TimeZoneInfo.Utc),

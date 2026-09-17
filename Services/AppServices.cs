@@ -4710,7 +4710,7 @@ public sealed class AppServices
         ItemCharges = new Game.Inventory.ItemChargeTracker(
             gameData: GameData,
             profile: Profile,
-            carried: () => Inventory.Snapshot.CarriedItems,
+            heldItems: HeldItemNames,
             itemNumberOf: ItemNumberByName,
             onParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             cleanupConfig: ResolveBossCleanupConfig,
@@ -4728,7 +4728,7 @@ public sealed class AppServices
         // restock at the BBS cleanup time — reuses the boss-timer cleanup config).
         ItemUseCounts = new Game.Inventory.ItemUseCountTracker(
             gameData: GameData,
-            carried: () => Inventory.Snapshot.CarriedItems,
+            heldItems: HeldItemNames,
             itemNumberOf: ItemNumberByName,
             onStock: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             cleanupConfig: ResolveBossCleanupConfig,
@@ -4737,7 +4737,7 @@ public sealed class AppServices
 
         // One realm-aware charge lookup shared by Character Info and @uses.
         CarriedCharges = new Game.Inventory.CarriedChargeReadout(
-            GameData, ItemCharges, ItemUseCounts, ItemNumberByName, () => Inventory.Snapshot.CarriedItems);
+            GameData, ItemCharges, ItemUseCounts, ItemNumberByName, HeldItemNames);
 
         // Fill in charges for any carried charged item we don't know yet, whenever the
         // carry list changes (Paradigm-only inside the tracker). Idempotent + paced.
@@ -9939,6 +9939,19 @@ public sealed class AppServices
         return Game.GameData.ClassTitleTable.LookupClasses(record.Title) is { Count: 1 } implied
             ? implied[0]
             : null;
+    }
+
+    // Names of every item the player currently holds — carried pack AND worn/wielded
+    // gear — for charge tracking. Cast-on-use rechargeables (a wielded mace, a worn
+    // amulet) live in EquippedItems, so a carried-only list would never count their
+    // uses; the resolvers match a `use`/`look` against this combined list.
+    private System.Collections.Generic.IReadOnlyList<string> HeldItemNames()
+    {
+        Game.Inventory.InventorySnapshot snap = Inventory.Snapshot;
+        var names = new System.Collections.Generic.List<string>(snap.CarriedItems.Count + snap.EquippedItems.Count);
+        names.AddRange(snap.CarriedItems);
+        foreach (Game.Inventory.EquippedItem e in snap.EquippedItems) names.Add(e.Name);
+        return names;
     }
 
     // Item number for a carried item name in the active set (0 when unresolved) — used

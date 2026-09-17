@@ -19,7 +19,7 @@ namespace MudPlay.Game.Inventory;
 public sealed class ItemUseCountTracker
 {
     private readonly GameDataCache _gameData;
-    private readonly Func<IReadOnlyList<string>> _carried;
+    private readonly Func<IReadOnlyList<string>> _held;   // carried pack + worn/wielded gear
     private readonly Func<string, int> _itemNumberOf;
     private readonly Func<bool> _onStock;
     private readonly Func<BossCleanupConfig?> _cleanupConfig;
@@ -32,7 +32,7 @@ public sealed class ItemUseCountTracker
 
     public ItemUseCountTracker(
         GameDataCache gameData,
-        Func<IReadOnlyList<string>> carried,
+        Func<IReadOnlyList<string>> heldItems,
         Func<string, int> itemNumberOf,
         Func<bool> onStock,
         Func<BossCleanupConfig?> cleanupConfig,
@@ -41,7 +41,7 @@ public sealed class ItemUseCountTracker
         LogService? log = null)
     {
         _gameData = gameData ?? throw new ArgumentNullException(nameof(gameData));
-        _carried = carried ?? throw new ArgumentNullException(nameof(carried));
+        _held = heldItems ?? throw new ArgumentNullException(nameof(heldItems));
         _itemNumberOf = itemNumberOf ?? throw new ArgumentNullException(nameof(itemNumberOf));
         _onStock = onStock ?? throw new ArgumentNullException(nameof(onStock));
         _cleanupConfig = cleanupConfig ?? throw new ArgumentNullException(nameof(cleanupConfig));
@@ -50,15 +50,15 @@ public sealed class ItemUseCountTracker
         _log = log;
     }
 
-    // Remaining charges for a carried limited-use item, or null when it isn't a finite
+    // Remaining charges for a held limited-use item, or null when it isn't a finite
     // limited-use item (infinite / non-charged). Recharge-adjusted.
     public int? RemainingFor(int itemNumber)
         => ItemChargeMeta.Read(_gameData, itemNumber) is { IsLimitedUse: true } meta
             ? Math.Max(0, meta.MaxUses - EffectiveUsed(itemNumber, meta))
             : null;
 
-    // Outbound `use <item>` / `use <item> <target>` for a carried limited-use item →
-    // count a use. Stock only — Paradigm reads charges from the look reply instead.
+    // Outbound `use <item>` / `use <item> <target>` for a held limited-use item (carried
+    // or worn) → count a use. Stock only — Paradigm reads charges from the look reply.
     public void ObserveOutbound(byte[] data)
     {
         if (!_onStock() || data is null || data.Length == 0) return;
@@ -67,7 +67,7 @@ public sealed class ItemUseCountTracker
         {
             string line = raw.Trim();
             if (!line.StartsWith("use ", StringComparison.OrdinalIgnoreCase)) continue;
-            if (ResolveCarried(line[4..].Trim()) is not { } name) continue;
+            if (ResolveHeld(line[4..].Trim()) is not { } name) continue;
             int number = _itemNumberOf(name);
             if (number > 0) RecordUse(number);
         }
@@ -99,14 +99,15 @@ public sealed class ItemUseCountTracker
         return rec.Used;
     }
 
-    // The carried item a `use` arg refers to: a carried name that is a prefix of the
-    // arg (item-then-target), else one whose name contains the arg's first word. First
-    // match wins — the loose resolution the game does for a partial.
-    private string? ResolveCarried(string arg)
+    // The held item (carried or worn) a `use` arg refers to: a held name that is a prefix
+    // of the arg (item-then-target), else one whose name contains the arg's first word.
+    // First match wins — the loose resolution the game does for a partial. Worn gear is
+    // included because cast-on-use rechargeables (a wielded mace) are used while worn.
+    private string? ResolveHeld(string arg)
     {
         if (arg.Length < 2) return null;
         string a = arg.ToLowerInvariant();
-        foreach (string c in _carried())
+        foreach (string c in _held())
         {
             if (string.IsNullOrWhiteSpace(c)) continue;
             string cl = c.ToLowerInvariant();
@@ -114,7 +115,7 @@ public sealed class ItemUseCountTracker
         }
         string first = a.Split(' ')[0];
         if (first.Length >= 3)
-            foreach (string c in _carried())
+            foreach (string c in _held())
                 if (!string.IsNullOrWhiteSpace(c) && c.ToLowerInvariant().Contains(first)) return c;
         return null;
     }

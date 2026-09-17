@@ -49,7 +49,7 @@ public sealed class ItemUseCountTrackerTests : IDisposable
     private ItemUseCountTracker NewTracker()
         => new(
             gameData: _cache,
-            carried: () => _carried,
+            heldItems: () => _carried,
             itemNumberOf: name => name switch
             {
                 "gnarled wand" => 10,

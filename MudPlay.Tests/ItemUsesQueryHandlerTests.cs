@@ -52,11 +52,11 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
         _profile.LoadBlank();
 
         _para = new ItemChargeTracker(
-            gameData: _cache, profile: _profile, carried: () => _carried, itemNumberOf: Number,
+            gameData: _cache, profile: _profile, heldItems: () => _carried, itemNumberOf: Number,
             onParadigm: () => _cache.ActiveRealm == RealmType.ParaMud,
             cleanupConfig: () => null, sendLook: _ => { }, schedule: (_, _) => { }, now: () => Now, log: null);
         _stock = new ItemUseCountTracker(
-            gameData: _cache, carried: () => _carried, itemNumberOf: Number,
+            gameData: _cache, heldItems: () => _carried, itemNumberOf: Number,
             onStock: () => _cache.ActiveRealm != RealmType.ParaMud,
             cleanupConfig: () => null, profile: _profile, now: () => Now, log: null);
         _readout = new CarriedChargeReadout(_cache, _para, _stock, Number, () => _carried);

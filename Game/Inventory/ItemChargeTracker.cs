@@ -14,7 +14,7 @@ namespace MudPlay.Game.Inventory;
 //   • records the "Uses remaining: N" from any `look <item>` reply against that item,
 //     keyed by item number, PERSISTED on the character profile (CharacterProfile.
 //     ItemCharges) so it survives between sessions;
-//   • auto-looks a carried charged item whose count we don't know yet (EnsureChargesKnown),
+//   • auto-looks a held charged item (carried or worn) whose count we don't know yet,
 //     so the readout fills itself in without the user thinking to look;
 //   • re-looks an item after a `use` of it, so a manual or remote use reconciles to the
 //     game's true count — a blocked / failed use never mis-decrements, because the look
@@ -42,7 +42,7 @@ public sealed class ItemChargeTracker : IDisposable
 
     private readonly GameDataCache _gameData;
     private readonly ProfileService _profile;
-    private readonly Func<IReadOnlyList<string>> _carried;
+    private readonly Func<IReadOnlyList<string>> _held;   // carried pack + worn/wielded gear
     private readonly Func<string, int> _itemNumberOf;
     private readonly Func<bool> _onParadigm;
     private readonly Func<BossCleanupConfig?> _cleanupConfig;
@@ -52,11 +52,11 @@ public sealed class ItemChargeTracker : IDisposable
     private readonly LogService? _log;
     private LineExtractor? _lines;
 
-    private string? _pendingItem;        // carried name whose look reply we await
+    private string? _pendingItem;        // held-item name whose look reply we await
     private int _pendingNumber;
     private int _pendingGen;
 
-    private readonly Queue<string> _autoLookQueue = new();  // carried names to auto-look
+    private readonly Queue<string> _autoLookQueue = new();  // held-item names to auto-look
     private readonly HashSet<int> _autoAttempted = new();   // numbers auto-looked this session — never retried
     private bool _autoDispatching;
 
@@ -69,7 +69,7 @@ public sealed class ItemChargeTracker : IDisposable
     public ItemChargeTracker(
         GameDataCache gameData,
         ProfileService profile,
-        Func<IReadOnlyList<string>> carried,
+        Func<IReadOnlyList<string>> heldItems,
         Func<string, int> itemNumberOf,
         Func<bool> onParadigm,
         Func<BossCleanupConfig?> cleanupConfig,
@@ -80,7 +80,7 @@ public sealed class ItemChargeTracker : IDisposable
     {
         _gameData = gameData ?? throw new ArgumentNullException(nameof(gameData));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
-        _carried = carried ?? throw new ArgumentNullException(nameof(carried));
+        _held = heldItems ?? throw new ArgumentNullException(nameof(heldItems));
         _itemNumberOf = itemNumberOf ?? throw new ArgumentNullException(nameof(itemNumberOf));
         _onParadigm = onParadigm ?? throw new ArgumentNullException(nameof(onParadigm));
         _cleanupConfig = cleanupConfig ?? throw new ArgumentNullException(nameof(cleanupConfig));
@@ -117,14 +117,14 @@ public sealed class ItemChargeTracker : IDisposable
     public int? RemainingForName(string name)
         => string.IsNullOrWhiteSpace(name) ? null : RemainingFor(_itemNumberOf(name));
 
-    // Look up (and dispatch) the charges of any carried charged item we don't yet know.
+    // Look up (and dispatch) the charges of any held charged item we don't yet know.
     // Called on inventory-settle. No-op off Paradigm. Each unknown item gets one paced
     // `look`; a persisted count (or a rechargeable that cleanup-resolves to max) needs
     // no look, so this stays quiet after the first encounter with each item.
     public void EnsureChargesKnown()
     {
         if (_disposed || !_onParadigm()) return;
-        foreach (string name in _carried())
+        foreach (string name in _held())
         {
             if (string.IsNullOrWhiteSpace(name)) continue;
             int number = _itemNumberOf(name);
@@ -156,7 +156,7 @@ public sealed class ItemChargeTracker : IDisposable
         foreach (string raw in text.Split('\r', '\n'))
         {
             string line = raw.Trim();
-            if (LookArg(line) is { } lookArg && ResolveCarried(lookArg) is { } lookName)
+            if (LookArg(line) is { } lookArg && ResolveHeld(lookArg) is { } lookName)
             {
                 _pendingItem = lookName;
                 _pendingNumber = _itemNumberOf(lookName);
@@ -165,7 +165,7 @@ public sealed class ItemChargeTracker : IDisposable
                 continue;
             }
             if (line.StartsWith("use ", StringComparison.OrdinalIgnoreCase)
-                && ResolveCarried(line[4..].Trim()) is { } useName)
+                && ResolveHeld(line[4..].Trim()) is { } useName)
                 ScheduleRelook(useName);
         }
     }
@@ -249,21 +249,21 @@ public sealed class ItemChargeTracker : IDisposable
         return null;
     }
 
-    // The carried item a look/use arg refers to — case-insensitive substring, the loose
-    // resolution the game does for a partial. First match wins.
-    private string? ResolveCarried(string arg)
+    // The held item (carried or worn) a look/use arg refers to — case-insensitive
+    // substring, the loose resolution the game does for a partial. First match wins.
+    private string? ResolveHeld(string arg)
     {
         if (arg.Length < 2) return null;
         string a = arg.ToLowerInvariant();
-        foreach (string carried in _carried())
-            if (!string.IsNullOrWhiteSpace(carried) && carried.ToLowerInvariant().Contains(a))
-                return carried;
-        // `use <item> <target>` — fall back to the first word matching a carried item.
+        foreach (string held in _held())
+            if (!string.IsNullOrWhiteSpace(held) && held.ToLowerInvariant().Contains(a))
+                return held;
+        // `use <item> <target>` — fall back to the first word matching a held item.
         string first = a.Split(' ')[0];
         if (first.Length >= MinLookArgLength && first != a)
-            foreach (string carried in _carried())
-                if (!string.IsNullOrWhiteSpace(carried) && carried.ToLowerInvariant().Contains(first))
-                    return carried;
+            foreach (string held in _held())
+                if (!string.IsNullOrWhiteSpace(held) && held.ToLowerInvariant().Contains(first))
+                    return held;
         return null;
     }
 

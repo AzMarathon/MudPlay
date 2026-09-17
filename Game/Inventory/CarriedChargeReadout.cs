@@ -16,7 +16,7 @@ public sealed class CarriedChargeReadout : IDisposable
     private readonly ItemChargeTracker _paraCharges;
     private readonly ItemUseCountTracker _stockCounts;
     private readonly Func<string, int> _itemNumberOf;
-    private readonly Func<IReadOnlyList<string>> _carried;
+    private readonly Func<IReadOnlyList<string>> _held;   // carried pack + worn/wielded gear
 
     // Re-raised when either underlying tracker's counts change, so a single subscriber
     // (Character Info) refreshes without knowing which realm's tracker moved.
@@ -27,13 +27,13 @@ public sealed class CarriedChargeReadout : IDisposable
         ItemChargeTracker paraCharges,
         ItemUseCountTracker stockCounts,
         Func<string, int> itemNumberOf,
-        Func<IReadOnlyList<string>> carried)
+        Func<IReadOnlyList<string>> heldItems)
     {
         _gameData = gameData ?? throw new ArgumentNullException(nameof(gameData));
         _paraCharges = paraCharges ?? throw new ArgumentNullException(nameof(paraCharges));
         _stockCounts = stockCounts ?? throw new ArgumentNullException(nameof(stockCounts));
         _itemNumberOf = itemNumberOf ?? throw new ArgumentNullException(nameof(itemNumberOf));
-        _carried = carried ?? throw new ArgumentNullException(nameof(carried));
+        _held = heldItems ?? throw new ArgumentNullException(nameof(heldItems));
         _paraCharges.Changed += RaiseChanged;
         _stockCounts.Changed += RaiseChanged;
     }
@@ -63,14 +63,14 @@ public sealed class CarriedChargeReadout : IDisposable
 
     public readonly record struct ChargedItem(string Name, int? Remaining);
 
-    // Every carried charged item with its remaining charges (null = unread), in carry
-    // order, one row per distinct item name. Includes items known to be charged even
+    // Every held charged item (carried or worn) with its remaining charges (null =
+    // unread), one row per distinct item name. Includes items known to be charged even
     // when the count isn't read yet.
     public IReadOnlyList<ChargedItem> AllCharged()
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var list = new List<ChargedItem>();
-        foreach (string name in _carried())
+        foreach (string name in _held())
         {
             if (string.IsNullOrWhiteSpace(name) || !seen.Add(name)) continue;
             int? remaining = RemainingForName(name);
@@ -80,19 +80,19 @@ public sealed class CarriedChargeReadout : IDisposable
         return list;
     }
 
-    // Best-match a query to a carried item name — exact (case-insensitive), else the
-    // first carried name the query is a prefix of, else the first that contains it. The
+    // Best-match a query to a held item name (carried or worn) — exact (case-insensitive),
+    // else the first name the query is a prefix of, else the first that contains it. The
     // loose resolution the game does for a partial. Null when nothing matches.
     public string? ResolveCarried(string query)
     {
         if (string.IsNullOrWhiteSpace(query)) return null;
         string q = query.Trim().ToLowerInvariant();
-        IReadOnlyList<string> carried = _carried();
-        foreach (string name in carried)
+        IReadOnlyList<string> held = _held();
+        foreach (string name in held)
             if (!string.IsNullOrWhiteSpace(name) && name.ToLowerInvariant() == q) return name;
-        foreach (string name in carried)
+        foreach (string name in held)
             if (!string.IsNullOrWhiteSpace(name) && name.ToLowerInvariant().StartsWith(q, StringComparison.Ordinal)) return name;
-        foreach (string name in carried)
+        foreach (string name in held)
             if (!string.IsNullOrWhiteSpace(name) && name.ToLowerInvariant().Contains(q)) return name;
         return null;
     }
