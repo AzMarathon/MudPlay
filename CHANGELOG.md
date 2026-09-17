@@ -3,7 +3,7 @@
 ## 3.95.0
 
 - Session Stats now counts spell combat properly: a spell cast's flavor line ("You scatter some ashes…!") is no longer miscounted as a swing miss, so a spell-only caster no longer racks up a phantom miss every round
-- Player Statistics shows one row **per attack spell** — its damage range, cast count, and accuracy — instead of a single lumped "Spell" row. Spell accuracy is landed-vs-resisted casts (near 100% for most Paradigm combat spells, which rarely fail to land)
+- Player Statistics shows one row **per attack spell** — its damage range, cast count, and accuracy — instead of a single lumped "Spell" row. Every damage-dealing attack-spell slot is recognised (normal, alternate, multi-attack, multi-attack-2, drain), not just the single-target slots. Spell accuracy is landed-vs-resisted casts (near 100% for most Paradigm combat spells, which rarely fail to land)
 
 ## 3.94.7
 

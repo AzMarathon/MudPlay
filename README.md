@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.95.0**
 > - Session Stats counts spell combat properly — a spell cast's flavor line is no longer miscounted as a swing miss, so a spell-only caster stops racking up a phantom miss every round
-> - Player Statistics shows one row **per attack spell** (damage range, cast count, accuracy) instead of a single lumped "Spell" row; spell accuracy is landed-vs-resisted casts
+> - Player Statistics shows one row **per attack spell** (damage range, cast count, accuracy) instead of a single lumped "Spell" row — every damage-dealing slot (normal, alternate, multi-attack, drain), not just single-target; spell accuracy is landed-vs-resisted casts
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
