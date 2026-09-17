@@ -324,7 +324,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     // Drives the spell row's visibility — hidden until a configured attack
     // spell lands.
-    public bool HasSpells => Combat.SpellHits > 0;
+    public bool HasSpells => Combat.Spells.Count > 0;
 
     // ----- Session Statistics (currency) -------------------------------
     // The copper totals/rate read as coin denominations rather than raw

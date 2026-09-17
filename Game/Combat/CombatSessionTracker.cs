@@ -51,10 +51,18 @@ public sealed class CombatSessionTracker : IDisposable
     // refreshed on the data boundaries (see RefreshMatchers). Null delegates =>
     // no recognition (the proc / spell rows stay zero), so the tracker still
     // works standalone with only the fixed-pattern offensive figures.
-    private readonly Func<IReadOnlyList<CasterMessageMatcher>>? _resolveSpellMatchers;
+    private readonly Func<IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>>? _resolveSpellMatchers;
     private readonly Func<CasterMessageMatcher?>? _resolveProcMatcher;
-    private IReadOnlyList<CasterMessageMatcher> _spellMatchers = Array.Empty<CasterMessageMatcher>();
+    private IReadOnlyList<(string Name, CasterMessageMatcher Matcher)> _spellMatchers =
+        Array.Empty<(string, CasterMessageMatcher)>();
     private CasterMessageMatcher? _procMatcher;
+
+    // Per-attack-spell landed damage + resisted-cast count, keyed by the configured
+    // spell name. Landed = a recognised damage line; Misses = a resisted cast (see
+    // ResolvePendingSpellMiss). Ordered by first appearance for a stable display.
+    private sealed class SpellAccum { public DamageTally Dmg; public int Misses; }
+    private readonly Dictionary<string, SpellAccum> _perSpell = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _spellOrder = new();
 
     private DamageTally _hit;
     private DamageTally _crit;
@@ -62,6 +70,15 @@ public sealed class CombatSessionTracker : IDisposable
     private DamageTally _round;
     private DamageTally _proc;
     private DamageTally _spell;
+    // The last counted miss may actually be a spell-cast EMOTE ("You scatter some
+    // ashes in a sweeping motion!") — a self-emote ending in "!" the miss skeleton
+    // can't tell from a real whiff. Set when a miss is counted; a spell that lands
+    // right after retracts it (OnLineDispatched), and a physical hit / combat-off
+    // resolves it (weapon whiff or resisted cast).
+    private bool _emoteMissCandidate;
+    // Any physical swing landed this combat — distinguishes a weapon whiff (keep the
+    // miss) from a resisted spell cast (reattribute) at combat-off. Reset on Engaged.
+    private bool _physicalHitThisCombat;
     private int _misses;
     private int _mobHits;
     private int _mobMisses;
@@ -89,7 +106,7 @@ public sealed class CombatSessionTracker : IDisposable
     public CombatSessionTracker(
         MessageRouter router,
         RoundDamageTracker rounds,
-        Func<IReadOnlyList<CasterMessageMatcher>>? resolveSpellMatchers = null,
+        Func<IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>>? resolveSpellMatchers = null,
         Func<CasterMessageMatcher?>? resolveProcMatcher = null)
     {
         ArgumentNullException.ThrowIfNull(router);
@@ -120,8 +137,51 @@ public sealed class CombatSessionTracker : IDisposable
     // swap. Cheap and idempotent — safe to call on a hot event.
     public void RefreshMatchers()
     {
-        _spellMatchers = _resolveSpellMatchers?.Invoke() ?? Array.Empty<CasterMessageMatcher>();
+        _spellMatchers = _resolveSpellMatchers?.Invoke() ?? Array.Empty<(string, CasterMessageMatcher)>();
         _procMatcher = _resolveProcMatcher?.Invoke();
+    }
+
+    // Per-spell accumulator, created on first sight of a spell so the display keeps
+    // configured-but-never-cast spells out until they actually fire.
+    private SpellAccum Spell(string name)
+    {
+        if (!_perSpell.TryGetValue(name, out SpellAccum? a))
+        {
+            a = new SpellAccum();
+            _perSpell[name] = a;
+            _spellOrder.Add(name);
+        }
+        return a;
+    }
+
+    // A miss left un-retracted (no spell landed after it) during a spell-combat run
+    // with no physical swing this combat was a RESISTED cast, not a whiff — move it
+    // from the physical-miss bucket to the primary attack spell's resist count.
+    private void ResolvePendingSpellMiss()
+    {
+        if (_emoteMissCandidate && !_physicalHitThisCombat
+            && _spellMatchers.Count > 0 && _misses > 0)
+        {
+            _misses--;
+            Spell(_spellMatchers[0].Name).Misses++;
+            Changed?.Invoke();
+        }
+        _emoteMissCandidate = false;
+    }
+
+    private IReadOnlyList<SpellCombatStat> BuildSpellStats()
+    {
+        if (_spellOrder.Count == 0) return Array.Empty<SpellCombatStat>();
+        List<SpellCombatStat> list = new(_spellOrder.Count);
+        foreach (string name in _spellOrder)
+        {
+            SpellAccum a = _perSpell[name];
+            if (a.Dmg.Count == 0 && a.Misses == 0) continue;
+            list.Add(new SpellCombatStat(
+                name, a.Dmg.Count, a.Misses,
+                a.Dmg.Count == 0 ? 0 : a.Dmg.Min, a.Dmg.Max, a.Dmg.Sum));
+        }
+        return list;
     }
 
     // Point-in-time copy of the session's combat figures. The physical extent is
@@ -156,7 +216,8 @@ public sealed class CombatSessionTracker : IDisposable
             SpellHits:           _spell.Count,
             SpellMinDamage:      _spell.Count == 0 ? 0 : _spell.Min,
             SpellMaxDamage:      _spell.Max,
-            SpellTotalDamage:    _spell.Sum);
+            SpellTotalDamage:    _spell.Sum,
+            Spells:              BuildSpellStats());
 
     // Zero every counter — called on the session boundary (connect / character
     // switch), matching RoundDamageTracker.Reset.
@@ -168,11 +229,15 @@ public sealed class CombatSessionTracker : IDisposable
         _round = default;
         _proc = default;
         _spell = default;
+        _perSpell.Clear();
+        _spellOrder.Clear();
         _misses = 0;
         _mobHits = 0;
         _mobMisses = 0;
         _dodges = 0;
         _lastWasLandedSwing = false;
+        _emoteMissCandidate = false;
+        _physicalHitThisCombat = false;
         _currentLineRecognized = false;
         _engaged = false;
         Changed?.Invoke();
@@ -191,11 +256,17 @@ public sealed class CombatSessionTracker : IDisposable
         // classifier: a cast like "You cast {s} at {target} for {damage}
         // damage!" carries the first-person "You" source UserHits also matches,
         // so without claiming it here it would be miscounted as a melee hit.
-        foreach (CasterMessageMatcher m in _spellMatchers)
+        foreach ((string name, CasterMessageMatcher m) in _spellMatchers)
         {
             if (m.TryMatchDamage(text, out int sdmg))
             {
                 _spell.Add(sdmg);
+                Spell(name).Dmg.Add(sdmg);
+                // The cast's emote was just counted as a physical miss; a landed spell
+                // means that "miss" was the emote — retract it so spell combat doesn't
+                // inflate the miss count.
+                if (_emoteMissCandidate && _misses > 0) _misses--;
+                _emoteMissCandidate = false;
                 _currentLineRecognized = true;
                 Changed?.Invoke();
                 return;
@@ -241,6 +312,8 @@ public sealed class CombatSessionTracker : IDisposable
         else
             _hit.Add(dmg);
         _lastWasLandedSwing = true; // a weapon proc may follow this connected swing
+        _emoteMissCandidate = false; // a real physical swing landed — not a spell round
+        _physicalHitThisCombat = true;
         Changed?.Invoke();
     }
 
@@ -250,6 +323,10 @@ public sealed class CombatSessionTracker : IDisposable
         // line seen while combat is engaged is a real swing whiff.
         if (!_engaged) return;
         _misses++;
+        // This miss might be a spell-cast emote, not a whiff — a spell landing right
+        // after retracts it (OnLineDispatched); an un-retracted one is resolved at
+        // combat-off (weapon whiff kept, resisted cast reattributed).
+        _emoteMissCandidate = true;
         _lastWasLandedSwing = false; // a whiff can't precede a proc
         Changed?.Invoke();
     }
@@ -286,7 +363,12 @@ public sealed class CombatSessionTracker : IDisposable
         // spurious mid-round "*Combat Off*" (the server emits one when we cast)
         // doesn't strand a following real swing-miss uncounted.
         if (match.Groups.Count == 0) return;
-        _engaged = string.Equals(match.Groups[0], "Engaged", StringComparison.OrdinalIgnoreCase);
+        bool engaged = string.Equals(match.Groups[0], "Engaged", StringComparison.OrdinalIgnoreCase);
+        if (engaged)
+            _physicalHitThisCombat = false; // fresh combat — no swing has landed yet
+        else
+            ResolvePendingSpellMiss();      // combat ended — reclassify a stuck emote-miss
+        _engaged = engaged;
     }
 
     private void OnRoundComplete(RoundSummary summary)

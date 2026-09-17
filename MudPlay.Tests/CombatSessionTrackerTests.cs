@@ -26,7 +26,7 @@ public sealed class CombatSessionTrackerTests
         public int ChangedCount { get; private set; }
 
         public Harness(
-            IReadOnlyList<CasterMessageMatcher>? spellMatchers = null,
+            IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>? spellMatchers = null,
             CasterMessageMatcher? procMatcher = null)
         {
             DefaultPatterns.Seed(Router);
@@ -353,7 +353,7 @@ public sealed class CombatSessionTrackerTests
         // also matches — recognition on the LineDispatched pass must veto the
         // physical-swing classifier so it never becomes a melee hit.
         using Harness h = new(
-            spellMatchers: new[] { Matcher("You cast {s} at {target} for {damage} damage!") });
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
 
         h.Feed("You cast fireball at the kobold for 12 damage!");
 
@@ -423,7 +423,7 @@ public sealed class CombatSessionTrackerTests
     public void ProcAndSpellDamage_CountTowardRoundTotal_NotAsSwings()
     {
         using Harness h = new(
-            spellMatchers: new[] { Matcher("You cast {s} at {target} for {damage} damage!") },
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) },
             procMatcher: Matcher("Your weapon sears {target} for {damage} damage!"));
 
         h.Feed("You slash the kobold for 8 damage!");          // swing  → round +8
@@ -448,7 +448,7 @@ public sealed class CombatSessionTrackerTests
     public void Reset_ZeroesProcAndSpellRows()
     {
         using Harness h = new(
-            spellMatchers: new[] { Matcher("You cast {s} at {target} for {damage} damage!") },
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) },
             procMatcher: Matcher("Your weapon sears {target} for {damage} damage!"));
 
         h.Feed("You slash the kobold for 8 damage!");
@@ -462,5 +462,68 @@ public sealed class CombatSessionTrackerTests
         Assert.Equal(0, s.SpellHits);
         Assert.Equal(0, s.ProcTotalDamage);
         Assert.Equal(0, s.SpellTotalDamage);
+        Assert.Empty(s.Spells);
+    }
+
+    // ----- spell combat: phantom misses + per-spell breakdown ----------
+
+    [Fact]
+    public void SpellCastEmote_FollowedByLandedSpell_RetractsPhantomMiss()
+    {
+        // A spell-cast emote ("You scatter …!") matches the whiff skeleton and is
+        // counted as a miss while engaged — but the spell landing right after means
+        // that "miss" was the emote, so it's retracted. Spell-only combat therefore
+        // doesn't inflate the miss count.
+        using Harness h = new(
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
+        h.Feed("*Combat Engaged*");
+        h.Feed("You scatter some ashes in a sweeping motion!");   // cast emote
+        h.Feed("You cast blast at the kobold for 809 damage!");   // the spell lands
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(0, s.Misses);          // emote miss retracted
+        Assert.Equal(1, s.SpellHits);
+        SpellCombatStat blast = Assert.Single(s.Spells);
+        Assert.Equal("blast", blast.Name);
+        Assert.Equal(1, blast.Landed);
+        Assert.Equal(0, blast.Misses);
+        Assert.Equal(809, blast.MaxDamage);
+        Assert.Equal(100d, blast.AccuracyPercent);
+    }
+
+    [Fact]
+    public void SpellCast_Resisted_ReattributedAsSpellMiss_NotPhysical()
+    {
+        // A cast emote with no damage line following (resist / no effect) is not a
+        // weapon whiff — at combat-off it's moved to the spell's resist count.
+        using Harness h = new(
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
+        h.Feed("*Combat Engaged*");
+        h.Feed("You scatter some ashes in a sweeping motion!");   // cast emote, resisted
+        h.Feed("*Combat Off*");
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(0, s.Misses);          // not a physical whiff
+        SpellCombatStat blast = Assert.Single(s.Spells);
+        Assert.Equal(0, blast.Landed);
+        Assert.Equal(1, blast.Misses);      // resisted cast
+        Assert.Equal(1, blast.Casts);
+    }
+
+    [Fact]
+    public void WeaponWhiff_AfterAHit_StaysPhysical_NotReattributed()
+    {
+        // A genuine weapon whiff (a swing landed this combat) is NOT reattributed to
+        // a spell resist at combat-off.
+        using Harness h = new(
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
+        h.Feed("*Combat Engaged*");
+        h.Feed("You punch acid slime for 8 damage!");   // a real swing lands
+        h.Feed("You punch acid slime!");                 // a real whiff
+        h.Feed("*Combat Off*");
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(1, s.Misses);          // kept as a physical miss
+        Assert.Empty(s.Spells);
     }
 }

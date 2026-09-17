@@ -1,5 +1,10 @@
 # Version history
 
+## 3.95.0
+
+- Session Stats now counts spell combat properly: a spell cast's flavor line ("You scatter some ashes…!") is no longer miscounted as a swing miss, so a spell-only caster no longer racks up a phantom miss every round
+- Player Statistics shows one row **per attack spell** — its damage range, cast count, and accuracy — instead of a single lumped "Spell" row. Every damage-dealing attack-spell slot is recognised (normal, alternate, multi-attack, multi-attack-2, drain), not just the single-target slots. Spell accuracy is landed-vs-resisted casts (near 100% for most Paradigm combat spells, which rarely fail to land)
+
 ## 3.94.7
 
 - Building a loop no longer cancels a walk-to in progress — entering build mode just collects rooms and leaves your walk running. The Navigation menu's **Run** takes movement over (stops the walk, starts the loop); the toolbar Start/Stop/Pause still control the walk itself

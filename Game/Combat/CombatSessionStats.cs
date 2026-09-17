@@ -45,7 +45,10 @@ public readonly record struct CombatSessionStats(
     int SpellHits,
     int SpellMinDamage,
     int SpellMaxDamage,
-    long SpellTotalDamage)
+    long SpellTotalDamage,
+    // Per-attack-spell breakdown (name · damage extent · landed / resisted casts).
+    // Empty when no attack spell is configured or none has been cast yet.
+    System.Collections.Generic.IReadOnlyList<SpellCombatStat> Spells)
 {
     // Every swing that connected (hit + crit + backstab).
     public int LandedSwings => Hits + Crits + Backstabs;
@@ -126,4 +129,20 @@ public readonly record struct CombatSessionStats(
 
     private static double Pct(int part, int whole) => whole == 0 ? 0 : 100.0 * part / whole;
     private static double Avg(long total, int count) => count == 0 ? 0 : (double)total / count;
+}
+
+// One configured attack spell's session performance. Landed = casts whose damage
+// line was seen; Misses = casts that resisted / had no effect (rare on Paradigm —
+// most combat spells don't fail to land). Damage extent is across landed casts.
+public readonly record struct SpellCombatStat(
+    string Name, int Landed, int Misses, int MinDamage, int MaxDamage, long TotalDamage)
+{
+    public int Casts => Landed + Misses;
+    public double AccuracyPercent => Casts == 0 ? 0 : 100.0 * Landed / Casts;
+    public double AvgDamage => Landed == 0 ? 0 : (double)TotalDamage / Landed;
+    // Damage extent for display: em-dash range, a single value when min==max, "—"
+    // when nothing landed (a spell with only resists so far).
+    public string RangeText => MaxDamage <= 0 ? "—"
+        : MinDamage == MaxDamage ? MaxDamage.ToString()
+        : $"{MinDamage}–{MaxDamage}";
 }

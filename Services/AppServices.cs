@@ -8282,18 +8282,32 @@ public sealed class AppServices
     // damage row instead of being miscounted as a melee swing. Re-read on each
     // refresh so a slot change takes effect without a reconnect; a blank /
     // unknown / message-less slot contributes nothing.
-    private IReadOnlyList<Game.Spells.CasterMessageMatcher> AttackSpellMatchers()
+    private IReadOnlyList<(string Name, Game.Spells.CasterMessageMatcher Matcher)> AttackSpellMatchers()
     {
         Models.Profile.CombatSettings combat =
             ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
-        List<Game.Spells.CasterMessageMatcher> list = new(2);
+        List<(string, Game.Spells.CasterMessageMatcher)> list = new(5);
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        // Every damage-dealing attack-spell slot, so multi-attack / drain casts are
+        // recognised off their caster messages too — not just the single-target slots.
+        // The pure debuff slots (area / single-target debuff) have no {damage} line and
+        // are skipped. NormalAttackSpell first = the "primary" a resisted cast is
+        // attributed to (see CombatSessionTracker.ResolvePendingSpellMiss); a spell in
+        // two slots (e.g. nebo as normal AND drain) is added once.
         Add(combat.NormalAttackSpell?.SpellName);
         Add(combat.AlternateAttackSpell?.SpellName);
+        Add(combat.MultiAttackSpell?.SpellName);
+        Add(combat.MultiAttack2Spell?.SpellName);
+        Add(combat.DrainSpell?.SpellName);
         return list;
 
         void Add(string? spellName)
         {
-            if (AttackSpellMatcherFor(spellName) is { } matcher) list.Add(matcher);
+            if (string.IsNullOrWhiteSpace(spellName)) return;
+            string name = spellName.Trim();
+            if (!seen.Add(name)) return; // same spell already claimed by an earlier slot
+            if (AttackSpellMatcherFor(name) is { } matcher)
+                list.Add((name, matcher));
         }
     }
 
