@@ -592,18 +592,22 @@ there** — treat as close-but-unconfirmed until a Paradigm source or capture pi
   collision needs Paradigm + a dark room + a stale target — but it is the reason a speculative
   `break` is worse than a no-op there. Send one only when an attack actually went out.
 
-### Attack-prevented states *([CONFIRMED] 2026-09-03, user)*
+### Attack-prevented states *([CONFIRMED] 2026-09-03, user; corrected 2026-09-17, user)*
 
 - Some status effects — a **stun**, **petrification/petrify**, a leg/body **bind** — leave the
-  character **unable to issue an attack command at all**. While the state is up the server refuses
-  the attack; when the wear-off message lands the block clears and attacking resumes.
-- The block covers **both physical and spell attacks** — it is not one or the other. A message
-  tagged with the **AttackPrevented** effect flag means "hold every attack" (weapon swing, attack
-  spell, and offensive debuff) until the paired wear-off fires. Non-attack casts (self cures /
-  buffs / heals) are a separate concern and not governed by this flag.
+  character **unable to issue any command that acts, not just an attack**. While the state is up
+  the server refuses it (echoing the ailment's name, e.g. "You are stunned!"); when the wear-off
+  message lands the block clears and acting resumes.
+- The block covers **physical attacks, spell attacks, AND non-attack casts** (self heals / cures /
+  buffs) alike — it is not attack-only. A message tagged with the **AttackPrevented** effect flag
+  means "hold every cast and every attack" (weapon swing, attack spell, offensive debuff, AND a
+  between-round self-heal/buff/cure) until the paired wear-off fires. (Originally recorded as
+  attack-only; corrected 2026-09-17 after a session transcript showed a between-round Minor Heal
+  cast sent into a stun window come back denied with no mana spent and no heal confirmation.)
 - The client honours this by gating every combat attack chokepoint on
-  `ConditionTracker.IsAttackPrevented` (see `CombatManager.AttacksBlocked`): while true it sends
-  nothing and re-attempts each round, so the fight resumes the instant the effect wears off.
+  `ConditionTracker.IsAttackPrevented` (see `CombatManager.AttacksBlocked`), AND CastingDirector's
+  between-round heal/cure/buff/debuff loop on the same flag (`CastingDirector.AttacksPrevented`):
+  while true both send nothing and re-attempt as soon as the wear-off fires.
 
 - **[OBSERVED]** Backstab command: `bs <target>`.
 - **[OBSERVED]** A monster in the room with the **see-hidden** ability reveals the sneaker to

@@ -132,6 +132,10 @@ public sealed class CastingDirector : IDisposable
     // PromptScanner.PromptObserved which never matches the BBS menu). Mirrors the same
     // fix already shipped for the party poller's par/@health telepaths.
     private bool _suspended;
+    // Edge-log guard for the AttackPrevented hold below (AttacksPrevented) — mirrors
+    // CombatManager._attackBlockLogged so a report shows exactly when the hold began
+    // and lifted instead of a line per Evaluate().
+    private bool _conditionBlockLogged;
     // Reports whether the combat tick currently firing OnCombatTick was driven by a
     // server combat line (TickEngine.RecordCombatTick) rather than the 5 s timer
     // fallback. A damage-line-driven tick fires DURING the round's line burst, before
@@ -1367,6 +1371,16 @@ public sealed class CastingDirector : IDisposable
         if (!_state.HasPromptData) return null;
         if (_state.MaxHp <= 0) return null;
         if (_state.Hp <= 0) return null;     // dead — DeathRecoveryManager owns this case
+        // Stun / petrify / bind refuse EVERY cast, not just attacks — a between-round
+        // heal sent into this window is silently swallowed (no mana spent, no confirm
+        // line), yet CastCoordinator still stamps its round cooldown as if it landed,
+        // stranding the slot for a full round even after the condition clears (an
+        // emergency heal lost its retry window and the character died mid-stunlock).
+        // Hold here instead, same as CombatManager.AttacksBlocked, so the slot is
+        // still free the instant ConditionEnded's re-evaluate fires. Corrects the
+        // GAME_MECHANICS.md note that only attacks were governed by AttackPrevented —
+        // a between-round self-heal is refused by it too.
+        if (AttacksPrevented()) return null;
         if (_cast.IsCastBlocked) return null;
         // A prior survival cast already spent a round the combat engine's attack
         // spell was owed — sit out entirely so that resume can reclaim the very
@@ -1394,6 +1408,22 @@ public sealed class CastingDirector : IDisposable
         // round doesn't send another (doomed) cast; freed at the round boundary / window.
         if (cast is not null) _betweenRoundSlotUsedAt = _now();
         return cast;
+    }
+
+    // True while an AttackPrevented condition (stun / petrify / bind) is active —
+    // see CombatManager.AttacksBlocked, the identical check for the attack slot.
+    // Edge-logged so a report shows exactly when the hold began and lifted.
+    private bool AttacksPrevented()
+    {
+        bool blocked = _conditions?.IsAttackPrevented == true;
+        if (blocked != _conditionBlockLogged)
+        {
+            _conditionBlockLogged = blocked;
+            _log?.Combat(LogCategory, blocked
+                ? "between-round casts held — AttackPrevented condition active"
+                : "between-round casts resumed — AttackPrevented condition cleared");
+        }
+        return blocked;
     }
 
     // Walk the priority list and fire the first ready candidate. Returns the spell

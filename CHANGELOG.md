@@ -1,5 +1,11 @@
 # Version history
 
+## 3.96.3
+
+- **Critical**: a between-round self-heal (Emergency/Major/Minor) sent while stunned/petrified/bound was silently swallowed by the server, but the engine still stamped its round cooldown as if it landed — stranding the heal for a full round even after the condition cleared. It now holds off entirely while the condition is already known active, same as combat attacks already did.
+- **Critical**: that hold still had a gap — a heal can be sent an instant before the game's own stun message for the SAME round arrives (the tick-driven pass that fires it runs off the damage line itself, before a stun a line later in the same burst has been parsed), and the swallowed cast's un-moved HP/MA then looked like a stale duplicate for a further 8 seconds, outlasting a typical 4-5s stun. Recognizing an AttackPrevented condition landing right after a between-round send now releases the round slot, the cast cooldown, AND that duplicate guard together, so the retry fires the instant the condition actually clears — found from a live session transcript where the first fix alone didn't stop it recurring.
+- Corrected `GAME_MECHANICS.md`'s attack-prevented note: stun/petrify/bind block non-attack self casts (heals/buffs/cures) too, not just attacks.
+
 ## 3.96.2
 
 - Route picker no longer pushes a transport-token route when buying a boat and sailing directly is shorter — a held token now steps aside for the "buy raft and sail" route instead of teleporting you to a distant town and walking back

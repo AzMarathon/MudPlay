@@ -923,6 +923,30 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void AttackPrevented_HoldsBetweenRoundHeal_ThenFiresOnceItClears()
+    {
+        // Stun refuses a between-round self-heal too, not just attacks (corrected
+        // GAME_MECHANICS.md note): a heal due while stunned must not fire into the
+        // block, and must fire immediately once the wear-off lands rather than
+        // waiting out a phantom round cooldown.
+        using CureHarness h = new();
+        h.Spells.MinorHealSpell = "grhe";
+        h.Health.MinorHealCombatTrigger = 90;
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.RecordCondition("Stun", MessageFlags.AttackPrevented,
+            "You are stunned!", "You are no longer stunned.");
+
+        h.FeedLine("You are stunned!");
+        h.State.Hp = 100;                          // due for a heal while still stunned
+        Assert.Empty(h.CastsSent);
+
+        h.FeedLine("You are no longer stunned.");  // clears — heal fires right away
+        Assert.Single(h.CastsSent);
+        Assert.Equal("grhe", h.CastsSent[0]);
+    }
+
+    [Fact]
     public void Cure_NoSpellConfigured_NoCast()
     {
         using CureHarness h = new();
