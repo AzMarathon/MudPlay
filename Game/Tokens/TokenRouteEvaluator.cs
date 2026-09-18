@@ -19,8 +19,18 @@ public readonly record struct TokenRouteCandidate(
 // unknown (null, not looked yet) is kept so a not-yet-read token still surfaces.
 public static class TokenRouteEvaluator
 {
+    // obtainableSteps: the shortest overland route with the acquirable gates SUSPENDED —
+    // i.e. how far the destination is once you BUY/obtain the gate item the direct route
+    // needs (a raft at the boatman, a door key). A token whose onward landing→destination
+    // walk is no shorter than that route is NOT worth a teleport (+ gold + a charge + a
+    // buff wipe) — buying the gate item and crossing gets there in as few steps — so it's
+    // skipped, letting the caller defer to the item-gate picker (report
+    // paradigm-20260917-233549: at the Pier a token to the Lost City was surfaced over the
+    // far shorter "buy a raft and sail"). Null when nothing acquirable is on the way
+    // (obtainable == overland), leaving the plain overland comparison unchanged.
     public static TokenRouteCandidate? Best(
         int overlandSteps,
+        int? obtainableSteps,
         IEnumerable<(TokenTeleportInfo Info, int? Charges)> heldTokens,
         Func<RoomKey, int?> stepsFromLanding,
         int minRoomsShorter)
@@ -33,6 +43,7 @@ public static class TokenRouteEvaluator
         {
             if (charges is 0) continue;                              // known depleted
             if (stepsFromLanding(info.Destination) is not { } landSteps) continue;  // landing unreachable
+            if (obtainableSteps is { } obt && landSteps >= obt) continue;   // buy-and-cross beats it → defer
             int saved = overlandSteps - landSteps;
             if (saved < minRoomsShorter) continue;
             if (best is null || saved > best.Value.RoomsSaved)
