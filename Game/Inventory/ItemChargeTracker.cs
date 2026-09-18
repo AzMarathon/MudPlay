@@ -136,6 +136,11 @@ public sealed class ItemChargeTracker : IDisposable
         {
             if (string.IsNullOrWhiteSpace(entry)) continue;
             string name = Singular(entry);                                  // strip a stack's leading count
+            // TokenTracker already unconditionally looks every held token on login (charges
+            // reset server-side, so it never trusts a cache) — queuing one here too would
+            // double the `look` traffic every session. ObserveOutbound still captures that
+            // look's reply, so token charges land in this store without a second lookup.
+            if (TokenCatalog.PlaceOf(name) is not null) continue;
             int number = _itemNumberOf(name);
             if (number <= 0 || _autoAttempted.Contains(number)) continue;   // one look per item per session
             if (RemainingFor(number) is not null) continue;                 // already known
@@ -196,6 +201,10 @@ public sealed class ItemChargeTracker : IDisposable
     // count. Debounced per item.
     private void ScheduleRelook(string name)
     {
+        // TokenTracker owns token re-looks (its own ObserveOutbound re-looks on use), so
+        // skip tokens here too — otherwise a `use token` gets looked twice, the same
+        // duplication EnsureChargesKnown avoids on login.
+        if (TokenCatalog.PlaceOf(name) is not null) return;
         int number = _itemNumberOf(name);
         if (number <= 0) return;
         if (RemainingFor(number) is null

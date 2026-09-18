@@ -1,5 +1,10 @@
 # Version history
 
+## 3.96.1
+
+- Fixed transport tokens getting `look`ed twice — the per-item charge tracker no longer duplicates TokenTracker's own token scan on login or its re-look after a use
+- bug reports addressed: paradigm-20260917-115510
+
 ## 3.96.0
 
 - New `@uses` remote command — `@uses <item>` (shorthand, best-match) reports a carried limited-use item's remaining charges; bare `@uses` lists every charged item you carry
