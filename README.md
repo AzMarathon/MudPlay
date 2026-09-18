@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.2**
-> - Route picker no longer pushes a transport-token route when buying a boat and sailing directly is shorter — a held token now steps aside for the "buy raft and sail" route instead of teleporting you to a distant town and walking back
+> **Version 3.96.3**
+> - **Critical**: a between-round self-heal sent while stunned/petrified/bound was silently swallowed by the server — it now holds off while the condition is already known active, and also recovers cleanly when a stun lands an instant after the send (same round's line burst), releasing the round slot, cast cooldown, and duplicate-cast guard together so the retry fires the moment the condition clears
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

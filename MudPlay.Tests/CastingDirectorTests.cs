@@ -923,6 +923,58 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void AttackPrevented_HoldsBetweenRoundHeal_ThenFiresOnceItClears()
+    {
+        // Stun refuses a between-round self-heal too, not just attacks (corrected
+        // GAME_MECHANICS.md note): a heal due while stunned must not fire into the
+        // block, and must fire immediately once the wear-off lands rather than
+        // waiting out a phantom round cooldown.
+        using CureHarness h = new();
+        h.Spells.MinorHealSpell = "grhe";
+        h.Health.MinorHealCombatTrigger = 90;
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.RecordCondition("Stun", MessageFlags.AttackPrevented,
+            "You are stunned!", "You are no longer stunned.");
+
+        h.FeedLine("You are stunned!");
+        h.State.Hp = 100;                          // due for a heal while still stunned
+        Assert.Empty(h.CastsSent);
+
+        h.FeedLine("You are no longer stunned.");  // clears — heal fires right away
+        Assert.Single(h.CastsSent);
+        Assert.Equal("grhe", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void SendCollidesWithLateStunApply_ReleasesRoundSlot_SoRetryFiresOnceItClears()
+    {
+        // A between-round heal can be sent an instant before the game's own stun
+        // message for the SAME round lands (the tick-driven pass that fires it runs
+        // straight off the damage line, before a stun a line later in the same burst
+        // has even been parsed — racing past the AttacksPrevented gate above it). The
+        // cast is swallowed even though nothing about the send itself looked wrong.
+        // The after-the-fact AttackPrevented apply must release the round slot instead
+        // of stranding it for the full ~5.5s cooldown.
+        using CureHarness h = new();
+        h.Spells.MinorHealSpell = "grhe";
+        h.Health.MinorHealCombatTrigger = 90;
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.RecordCondition("Stun", MessageFlags.AttackPrevented,
+            "You are stunned!", "You are no longer stunned.");
+
+        h.State.Hp = 100;                          // due — fires immediately, unstunned
+        Assert.Single(h.CastsSent);
+
+        h.FeedLine("You are stunned!");            // lands right after the send, same burst
+        h.FeedLine("You are no longer stunned.");  // clears — retry fires right away
+
+        Assert.Equal(2, h.CastsSent.Count);
+        Assert.All(h.CastsSent, c => Assert.Equal("grhe", c));
+    }
+
+    [Fact]
     public void Cure_NoSpellConfigured_NoCast()
     {
         using CureHarness h = new();

@@ -132,6 +132,10 @@ public sealed class CastingDirector : IDisposable
     // PromptScanner.PromptObserved which never matches the BBS menu). Mirrors the same
     // fix already shipped for the party poller's par/@health telepaths.
     private bool _suspended;
+    // Edge-log guard for the AttackPrevented hold below (AttacksPrevented) — mirrors
+    // CombatManager._attackBlockLogged so a report shows exactly when the hold began
+    // and lifted instead of a line per Evaluate().
+    private bool _conditionBlockLogged;
     // Reports whether the combat tick currently firing OnCombatTick was driven by a
     // server combat line (TickEngine.RecordCombatTick) rather than the 5 s timer
     // fallback. A damage-line-driven tick fires DURING the round's line burst, before
@@ -200,6 +204,14 @@ public sealed class CastingDirector : IDisposable
 
     // The between-round / combat-round cadence — one 0-energy cast per this window.
     private static readonly TimeSpan RoundWindow = TimeSpan.FromSeconds(5);
+
+    // How recent a between-round send has to be for an AttackPrevented apply to be
+    // treated as the block that swallowed IT specifically, rather than an unrelated
+    // later hit (see OnConditionApplied). Same-burst collisions land within a line
+    // or two of each other — well under a second in practice — so this stays far
+    // short of RoundWindow to avoid misfiring on a stun that lands seconds after an
+    // already-confirmed cast.
+    private static readonly TimeSpan CollisionWindow = TimeSpan.FromSeconds(2);
 
     // True while this round's single between-round slot is spent (a cast landed within
     // the current round window and no round tick has freed it since).
@@ -1079,6 +1091,38 @@ public sealed class CastingDirector : IDisposable
 
     private void OnConditionApplied(MessageRecord r)
     {
+        // A between-round cast can be swallowed by a stun/petrify/bind that applies a
+        // line LATER in the same round's burst than the send: the tick-driven pass
+        // that fires the cast runs straight off a server combat line (OnCombatTick,
+        // "before the round's prompt refreshes HP") — so it can run, and send, before
+        // a stun a line further down that same burst has even been parsed, racing
+        // right past the AttacksPrevented gate above. Recognize the after-the-fact
+        // evidence here: an AttackPrevented apply landing within CollisionWindow of
+        // our own between-round send is almost certainly the block that ate it, so
+        // release both cooldowns immediately instead of stranding the round's one
+        // cast slot until the condition happens to outlast the normal ~5.5s cooldown
+        // on its own. A false positive here just costs one extra between-round
+        // attempt, harmlessly caught by the server's own "already cast a spell this
+        // round!" pattern if the swallowed cast actually landed.
+        if (r.Flags.HasFlag(MessageFlags.AttackPrevented)
+            && SlotSpentThisRound
+            && _now() - _betweenRoundSlotUsedAt <= CollisionWindow)
+        {
+            _betweenRoundSlotUsedAt = DateTime.MinValue;
+            _cast.ReleaseBetweenRoundCooldown();
+            // A swallowed self-heal never moved Hp/Ma, so IsStaleSelfHealRepeat would
+            // otherwise read the retry as the SAME stale-pool re-evaluation its 8s
+            // guard exists to suppress (a heal that landed but whose confirm the
+            // client hasn't parsed yet) and hold it for the rest of that window —
+            // comfortably outlasting a 4-5s stun and silently eating the retry this
+            // whole fix exists to enable. This cast never landed at all, so the guard
+            // has nothing to protect here; drop it so the retry isn't mistaken for a
+            // duplicate of a cast that in fact never happened.
+            _lastSelfHealCast = null;
+            _log?.Combat(LogCategory,
+                "between-round cast released — AttackPrevented landed right after the send");
+        }
+
         // A self-cast buff confirmed via its AppliedMessage — start (or refresh) its
         // duration timer keyed to self so the recast window is honoured. Party-cast
         // confirmation rides OnLine instead.
@@ -1367,6 +1411,16 @@ public sealed class CastingDirector : IDisposable
         if (!_state.HasPromptData) return null;
         if (_state.MaxHp <= 0) return null;
         if (_state.Hp <= 0) return null;     // dead — DeathRecoveryManager owns this case
+        // Stun / petrify / bind refuse EVERY cast, not just attacks — a between-round
+        // heal sent into this window is silently swallowed (no mana spent, no confirm
+        // line), yet CastCoordinator still stamps its round cooldown as if it landed,
+        // stranding the slot for a full round even after the condition clears (an
+        // emergency heal lost its retry window and the character died mid-stunlock).
+        // Hold here instead, same as CombatManager.AttacksBlocked, so the slot is
+        // still free the instant ConditionEnded's re-evaluate fires. Corrects the
+        // GAME_MECHANICS.md note that only attacks were governed by AttackPrevented —
+        // a between-round self-heal is refused by it too.
+        if (AttacksPrevented()) return null;
         if (_cast.IsCastBlocked) return null;
         // A prior survival cast already spent a round the combat engine's attack
         // spell was owed — sit out entirely so that resume can reclaim the very
@@ -1394,6 +1448,22 @@ public sealed class CastingDirector : IDisposable
         // round doesn't send another (doomed) cast; freed at the round boundary / window.
         if (cast is not null) _betweenRoundSlotUsedAt = _now();
         return cast;
+    }
+
+    // True while an AttackPrevented condition (stun / petrify / bind) is active —
+    // see CombatManager.AttacksBlocked, the identical check for the attack slot.
+    // Edge-logged so a report shows exactly when the hold began and lifted.
+    private bool AttacksPrevented()
+    {
+        bool blocked = _conditions?.IsAttackPrevented == true;
+        if (blocked != _conditionBlockLogged)
+        {
+            _conditionBlockLogged = blocked;
+            _log?.Combat(LogCategory, blocked
+                ? "between-round casts held — AttackPrevented condition active"
+                : "between-round casts resumed — AttackPrevented condition cleared");
+        }
+        return blocked;
     }
 
     // Walk the priority list and fire the first ready candidate. Returns the spell

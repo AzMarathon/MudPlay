@@ -247,6 +247,24 @@ public sealed class CastCoordinator : IDisposable
         _log?.Debug(LogCategory, "external cast noted — cooldown started");
     }
 
+    // Release the between-round cooldown immediately, bypassing the normal
+    // CastCommandCooldown wait and without needing a combat tick. For when a
+    // between-round send is discovered to have collided with a condition that
+    // applies AFTER the send but within the same round's line burst — a stun /
+    // petrify / bind landing a line later than the cast it swallowed. Those
+    // ailment lines aren't recognized cast-failure patterns (most of the time
+    // nothing is even mid-cast when one lands, so treating every occurrence as a
+    // failure would misfire), so the caller (CastingDirector, which knows both
+    // when it just sent and what just got flagged AttackPrevented) calls this
+    // narrowly instead. Leaving the cooldown stamped would strand the round's one
+    // cast slot for the full cooldown on a cast that never actually landed.
+    public void ReleaseBetweenRoundCooldown()
+    {
+        if (_lastBetweenRoundSentAt == DateTimeOffset.MinValue) return;
+        _lastBetweenRoundSentAt = DateTimeOffset.MinValue;
+        _log?.Debug(LogCategory, "between-round cooldown released — send collided with an unrelated block");
+    }
+
     // Hook the combat-tick boundary. Clears the block latch + resets both
     // recent-cast clocks so the next round can cast immediately on either slot.
     // Subscribe by wiring TickEngine.CombatTickElapsed to this method in
