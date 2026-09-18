@@ -21,7 +21,8 @@ public sealed class ItemChargeTrackerTests : IDisposable
           { "Number": 10, "Name": "gnarled wand",        "UseCount": 10, "Retain After Uses": 0 },
           { "Number": 20, "Name": "peasant cloak",       "UseCount": 5,  "Retain After Uses": 1 },
           { "Number": 30, "Name": "nexus spear",         "UseCount": -1, "Retain After Uses": 0 },
-          { "Number": 40, "Name": "token of Silvermere", "UseCount": 0,  "Retain After Uses": 1 }
+          { "Number": 40, "Name": "token of Silvermere", "UseCount": 0,  "Retain After Uses": 1 },
+          { "Number": 41, "Name": "token of Arlysia",    "UseCount": 5,  "Retain After Uses": 1 }
         ]
         """;
 
@@ -71,6 +72,7 @@ public sealed class ItemChargeTrackerTests : IDisposable
         "peasant cloak" => 20,
         "nexus spear" => 30,
         "token of Silvermere" => 40,
+        "token of Arlysia" => 41,
         _ => 0,
     };
 
@@ -147,13 +149,28 @@ public sealed class ItemChargeTrackerTests : IDisposable
     [Fact]
     public void HeldToken_IsNotAutoLooked_TokenTrackerOwnsItsLoginLook()
     {
-        _carried.Add("token of Silvermere");
+        // token of Arlysia is a CHARGED token (UseCount 5) — without the TokenCatalog
+        // guard EnsureChargesKnown would queue it (IsLimitedUse is true), so this pins the
+        // guard: only it keeps the token out of the auto-look. TokenTracker looks it instead.
+        _carried.Add("token of Arlysia");
         _tracker.EnsureChargesKnown();
-        Assert.Empty(_sent);                      // TokenTracker's own RefreshAsync looks it instead
+        Assert.Empty(_sent);
 
-        Look("look token of Silvermere");         // that look's reply still lands here
+        Look("look token of Arlysia");            // TokenTracker's own look's reply still lands here
         Line("Uses remaining: 3");
-        Assert.Equal(3, _tracker.RemainingFor(40));
+        Assert.Equal(3, _tracker.RemainingFor(41));
+    }
+
+    [Fact]
+    public void UsingAToken_DoesNotReLook_TokenTrackerOwnsIt()
+    {
+        _carried.Add("token of Arlysia");
+        Look("look token of Arlysia"); Line("Uses remaining: 5");
+
+        _sent.Clear();
+        Use("use token of Arlysia");              // TokenTracker re-looks on use; this tracker must not
+        FireTimers();
+        Assert.Empty(_sent);
     }
 
     [Fact]

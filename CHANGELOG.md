@@ -2,7 +2,7 @@
 
 ## 3.96.1
 
-- Fixed transport tokens getting `look`ed twice on login — the new per-item charge auto-look no longer duplicates TokenTracker's own token scan
+- Fixed transport tokens getting `look`ed twice — the per-item charge tracker no longer duplicates TokenTracker's own token scan on login or its re-look after a use
 - bug reports addressed: paradigm-20260917-115510
 
 ## 3.96.0

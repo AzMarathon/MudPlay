@@ -201,6 +201,10 @@ public sealed class ItemChargeTracker : IDisposable
     // count. Debounced per item.
     private void ScheduleRelook(string name)
     {
+        // TokenTracker owns token re-looks (its own ObserveOutbound re-looks on use), so
+        // skip tokens here too — otherwise a `use token` gets looked twice, the same
+        // duplication EnsureChargesKnown avoids on login.
+        if (TokenCatalog.PlaceOf(name) is not null) return;
         int number = _itemNumberOf(name);
         if (number <= 0) return;
         if (RemainingFor(number) is null
