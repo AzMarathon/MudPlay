@@ -8772,12 +8772,27 @@ public sealed class AppServices
         }
         if (usable.Count == 0) return null;
 
-        // The overland walk this token route competes against.
+        // The overland walk this token route competes against (acquirable gates honoured —
+        // the walk the user takes as-is).
         System.Collections.Generic.IReadOnlyList<Game.Map.Direction>? overland = Bfs.FindPath(src, destination, Movement);
         if (overland is null || overland.Count == 0) return null;
 
+        // The BEST OBTAINABLE overland: the same walk with the acquirable gates suspended,
+        // i.e. how short the destination gets once you buy/obtain the gate item the direct
+        // route needs (a raft at the boatman, a door key). A token whose onward walk isn't
+        // shorter than this should step aside for the item-gate fork's "buy and cross"
+        // rather than teleport away — the same deferral EvaluateTeleport / EvaluateAvoidOverride
+        // already make (report paradigm-20260917-233549). Null when nothing acquirable is on
+        // the way (suspending changes nothing), leaving the plain comparison unchanged.
+        int? obtainableSteps;
+        using (Movement.SuspendAcquirableGates())
+        {
+            int? obt = Bfs.FindPath(src, destination, Movement)?.Count;
+            obtainableSteps = obt is { } o && o < overland.Count ? o : null;
+        }
+
         Game.Tokens.TokenRouteCandidate? best = Game.Tokens.TokenRouteEvaluator.Best(
-            overland.Count, usable,
+            overland.Count, obtainableSteps, usable,
             landing => Bfs.FindPath(landing, destination, Movement)?.Count,
             System.Math.Max(1, Settings.Current.TokenRouteMinRoomsShorter));
         if (best is not { } b) return null;

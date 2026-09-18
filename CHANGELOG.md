@@ -1,5 +1,10 @@
 # Version history
 
+## 3.96.2
+
+- Route picker no longer pushes a transport-token route when buying a boat and sailing directly is shorter — a held token now steps aside for the "buy raft and sail" route instead of teleporting you to a distant town and walking back
+- bug reports addressed: paradigm-20260917-233549
+
 ## 3.96.1
 
 - Fixed transport tokens getting `look`ed twice — the per-item charge tracker no longer duplicates TokenTracker's own token scan on login or its re-look after a use
