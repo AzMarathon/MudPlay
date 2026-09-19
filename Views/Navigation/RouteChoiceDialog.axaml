@@ -45,7 +45,14 @@
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
-        <Grid RowDefinitions="Auto,*,Auto,Auto" RowSpacing="12">
+        <!-- Row 1 (the card list) is Auto, not star: with SizeToContent="Height" a
+             star row gets pinned to the window's initial (Calculating-phase) height
+             and then absorbs the taller card content when it swaps in, so the window
+             never grows and the cards overflow onto the buttons. An Auto row always
+             measures to its content, so the window resizes to fit once the cards
+             populate. The Calculating placeholder carries its own MinHeight to keep
+             the centered look while planning runs. -->
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12">
             <TextBlock Grid.Row="0"
                        Text="{Binding Heading}"
                        VerticalAlignment="Center"
@@ -55,15 +62,17 @@
             <!-- While route planning runs on a background thread (the idle path), the
                  window is up but its options aren't computed yet — show a centered
                  "Calculating…" in place of the card list so it doesn't feel like
-                 nothing's happening; Populate swaps the cards in when planning returns. -->
-            <TextBlock Grid.Row="1"
-                       Text="Calculating…"
-                       VerticalAlignment="Center" HorizontalAlignment="Center"
-                       FontSize="12"
-                       Foreground="{StaticResource ChromeFgSecBrush}"
-                       IsVisible="{Binding IsCalculating}"/>
+                 nothing's happening; Populate swaps the cards in when planning returns.
+                 The MinHeight holds the placeholder open so the text sits centred in a
+                 stable-sized window before the cards (which drive the real height) arrive. -->
+            <Panel Grid.Row="1" MinHeight="130" IsVisible="{Binding IsCalculating}">
+                <TextBlock Text="Calculating…"
+                           VerticalAlignment="Center" HorizontalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{StaticResource ChromeFgSecBrush}"/>
+            </Panel>
 
-            <StackPanel Grid.Row="1" Spacing="10" VerticalAlignment="Center"
+            <StackPanel Grid.Row="1" Spacing="10"
                         IsVisible="{Binding ShowOptions}">
                 <TextBlock Text="Options:"
                            FontSize="11"
