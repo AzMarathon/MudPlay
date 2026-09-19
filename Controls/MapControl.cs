@@ -1390,7 +1390,14 @@ public sealed class MapControl : Control
             DrawPathPolyline(context, WalkPath, walkPen, tilePixels, cx, cy);
         }
 
-        // Pass 5: numbered waypoint markers — drawn last so they sit on top of every
+        // Trap overlay: redraw ONLY the red trapped-exit segments, on top of the
+        // travel polylines just drawn. A preview / active route running along a trap
+        // would otherwise hide it — and merely thickening the trap line isn't enough
+        // when the route pen is as wide (or wider). Re-drawing the red on top makes the
+        // trap read through the route unconditionally.
+        DrawAllExitLines(context, tilePixels, cx, cy, viewport, trapOverlay: true);
+
+        // Pass 6: numbered waypoint markers — drawn last so they sit on top of every
         // polyline and every room node fill. Red while building, green while running
         // (both numbered to match the CURRENT NAV rows), amber for Auto-Lair.
         DrawNumberedWaypoints(context, LoopBuilderWaypoints,
@@ -1425,7 +1432,10 @@ public sealed class MapControl : Control
     //   - Stub — target genuinely unplaced (dropped collision / blacklisted)
     //     or beyond the bridge distance: a short stub from the source centre
     //     to its cell edge.
-    private void DrawAllExitLines(DrawingContext ctx, double tilePixels, double cx, double cy, Rect viewport)
+    // trapOverlay: draw ONLY the red trap segments (skipping base lines, arrows, spell
+    // walls) so this can be re-run on top of the travel polylines to keep a trapped exit
+    // visible under a route. The full pass (trapOverlay false) draws everything.
+    private void DrawAllExitLines(DrawingContext ctx, double tilePixels, double cx, double cy, Rect viewport, bool trapOverlay = false)
     {
         if (Layout is null) return;
 
@@ -1511,6 +1521,7 @@ public sealed class MapControl : Control
                 bool srcTrap = IsTrapEdge(source, dir);
                 bool tgtTrap = IsTrapEdge(bCoord, Opposite(dir));
                 bool isTrap = srcTrap || tgtTrap;
+                if (trapOverlay && !isTrap) continue;   // overlay pass draws only trap segments
                 bool isAction = IsActionRequiredEdge(source, dir)
                              || IsActionRequiredEdge(bCoord, Opposite(dir));
                 bool isHidden = !isAction
@@ -1529,8 +1540,13 @@ public sealed class MapControl : Control
                     case ConnectionKind.Adjacent:
                     {
                         // Grid-adjacent — clean continuous connector.
-                        IPen basePen = isAction ? ActionPen : isHidden ? HiddenPen : ExitPen;
                         Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
+                        if (trapOverlay)
+                        {
+                            DrawTrapOverlay(ctx, srcPt, tgtPt, TrapPen, srcTrap, tgtTrap);
+                            break;
+                        }
+                        IPen basePen = isAction ? ActionPen : isHidden ? HiddenPen : ExitPen;
                         DrawExitConnector(ctx, srcPt, tgtPt, basePen, TrapPen, srcTrap, tgtTrap);
                         if (oneWay) DrawOneWayArrow(ctx, isTrap ? TrapPen : basePen, srcPt, tgtPt, tilePixels);
                         if (isSpell) DrawSpellWall(ctx, SpellWallPen, Midpoint(srcPt, tgtPt), dir, tilePixels);
@@ -1541,9 +1557,14 @@ public sealed class MapControl : Control
                         // Connected but not grid-adjacent — dashed direct
                         // line between the two room centres, angled along
                         // the real connection instead of a stub into space.
+                        Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
+                        if (trapOverlay)
+                        {
+                            DrawTrapOverlay(ctx, srcPt, tgtPt, TrapBridgePen, srcTrap, tgtTrap);
+                            break;
+                        }
                         IPen baseBridge = isAction ? ActionBridgePen
                                  : isHidden ? HiddenBridgePen : ExitBridgePen;
-                        Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
                         DrawExitConnector(ctx, srcPt, tgtPt, baseBridge, TrapBridgePen, srcTrap, tgtTrap);
                         if (oneWay) DrawOneWayArrow(ctx, isTrap ? TrapBridgePen : baseBridge, srcPt, tgtPt, tilePixels);
                         if (isSpell) DrawSpellWall(ctx, SpellWallPen, Midpoint(srcPt, tgtPt), dir, tilePixels);
@@ -1551,6 +1572,7 @@ public sealed class MapControl : Control
                     }
                     default:
                     {
+                        if (trapOverlay) break;   // stubs go to unplaced rooms — no route runs along one
                         // Target genuinely unplaced (dropped / blacklisted, a
                         // one-way cast pocket mouth, or too far to bridge) — stub
                         // to the cell edge. The spell-wall bar sits ON the cell
@@ -1590,6 +1612,18 @@ public sealed class MapControl : Control
         Point mid = Midpoint(srcPt, tgtPt);
         ctx.DrawLine(srcTrap ? trapPen : basePen, srcPt, mid);
         ctx.DrawLine(tgtTrap ? trapPen : basePen, mid, tgtPt);
+    }
+
+    // Redraw only the red trapped portion(s) of a connector — used by the trap-overlay
+    // pass to lay the trap back over a travel polyline. Mirrors DrawExitConnector's
+    // midpoint split but paints nothing for the non-trapped side, so the route stays
+    // visible everywhere except the trapped segment it crosses.
+    private static void DrawTrapOverlay(DrawingContext ctx, Point srcPt, Point tgtPt, IPen trapPen, bool srcTrap, bool tgtTrap)
+    {
+        if (srcTrap && tgtTrap) { ctx.DrawLine(trapPen, srcPt, tgtPt); return; }
+        Point mid = Midpoint(srcPt, tgtPt);
+        if (srcTrap) ctx.DrawLine(trapPen, srcPt, mid);
+        else if (tgtTrap) ctx.DrawLine(trapPen, mid, tgtPt);
     }
 
     // How a single exit connection should be rendered.
