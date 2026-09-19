@@ -1,5 +1,15 @@
 # Version history
 
+## 3.96.7
+
+- The walk-to **preview** line's default colour is now the gold of the player-position marker (the loop-builder preview line is unchanged) — reset it under Settings → General → nav-line styles to pick up the new default
+
+## 3.96.6
+
+- Clicking empty space on the navigation map now clears the selected room — the cyan crawler ring disappears and the selection goes back to none (a map drag still just pans)
+- Trapped exits stay visible under a route — a preview or active travel line running along a trap no longer masks it: the trap is re-drawn on top of the path as a **dashed** red line (same width as the route, clipped to the gap between rooms), so the trap and the route crossing it both read at once
+- The current-room and destination markers now draw on top of the route line, so a walk-to line ending at the destination no longer hides its marker — and a queued (previewed) walk-to now marks its destination room too
+
 ## 3.96.3
 
 - **Critical**: a between-round self-heal (Emergency/Major/Minor) sent while stunned/petrified/bound was silently swallowed by the server, but the engine still stamped its round cooldown as if it landed — stranding the heal for a full round even after the condition cleared. It now holds off entirely while the condition is already known active, same as combat attacks already did.

@@ -11,7 +11,7 @@ public static class NavLineDefaults
     {
         NavLineKind.Goto        => ("#1E64DC", 3.0, "Go-to (walk-to) line"),
         NavLineKind.Loop        => ("#7AB870", 3.0, "Loop line"),
-        NavLineKind.Preview     => ("#E66C5A", 3.0, "Preview line"),
+        NavLineKind.Preview     => ("#E0A000", 3.0, "Preview line"),
         NavLineKind.LoopBuilder => ("#E66C5A", 3.0, "Loop-builder preview line"),
         NavLineKind.AutoLair    => ("#DC821E", 3.0, "Auto-Lair line"),
         _                       => ("#FFFFFF", 3.0, "?"),

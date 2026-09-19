@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.3**
-> - **Critical**: a between-round self-heal sent while stunned/petrified/bound was silently swallowed by the server — it now holds off while the condition is already known active, and also recovers cleanly when a stun lands an instant after the send (same round's line burst), releasing the round slot, cast cooldown, and duplicate-cast guard together so the retry fires the moment the condition clears
+> **Version 3.96.7**
+> - The walk-to **preview** line's default colour is now the gold of the player-position marker (the loop-builder preview line is unchanged)
+> - Clicking empty space on the navigation map now clears the selected room — the cyan crawler ring disappears and the selection goes back to none (a map drag still just pans)
+> - Trapped exits stay visible under a route — the trap is re-drawn on top of the path as a **dashed** red line (same width as the route), so the trap and the route crossing it both read at once
+> - The current-room and destination markers now draw on top of the route line (a walk-to ending at the destination no longer hides its marker), and a previewed walk-to marks its destination too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
