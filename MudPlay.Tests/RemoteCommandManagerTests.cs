@@ -749,11 +749,13 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Friend",  "@health"));
         engine.DispatchForTests(Gangpath("Friend",  "@health"));
         engine.DispatchForTests(Local("Friend",     "@health"));
+        engine.DispatchForTests(Broadcast("Friend", "@health"));
 
-        Assert.Equal(3, engine.LastSentForTests.Count);
+        Assert.Equal(4, engine.LastSentForTests.Count);
         Assert.Equal("/Friend {plain}\r", Encoding.Latin1.GetString(engine.LastSentForTests[0]));
         Assert.Equal("bg {plain}\r",      Encoding.Latin1.GetString(engine.LastSentForTests[1]));
         Assert.Equal(">Friend {plain}\r", Encoding.Latin1.GetString(engine.LastSentForTests[2]));
+        Assert.Equal("-{plain}\r",        Encoding.Latin1.GetString(engine.LastSentForTests[3]));
     }
 
     [Fact]
@@ -786,6 +788,21 @@ public sealed class RemoteCommandManagerTests
 
         string wire = Encoding.Latin1.GetString(engine.LastSentForTests[0]);
         Assert.Equal("bg {hi}\r", wire);
+    }
+
+    [Fact]
+    public void Reply_BroadcastRoutesViaDashCommand()
+    {
+        var (engine, _, players) = Setup();
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
+        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus,
+            ctx => ctx.Reply("hi"));
+
+        engine.DispatchForTests(Broadcast("Friend", "@health"));
+
+        string wire = Encoding.Latin1.GetString(engine.LastSentForTests[0]);
+        // No recipient name — broadcast is realm-wide, not directed.
+        Assert.Equal("-{hi}\r", wire);
     }
 
     [Fact]
@@ -844,8 +861,12 @@ public sealed class RemoteCommandManagerTests
     }
 
     [Fact]
-    public void Broadcast_IsIgnoredEvenWithAuthorisedSender()
+    public void Broadcast_IsAccepted_UnlikeGossipYellRealmEvent()
     {
+        // Confirmed 2026-09-19 (user demonstration): on Paradigm/GreaterMUD an
+        // ordinary player CAN broadcast (`-text`) — it isn't the operator-only
+        // channel stock MajorMUD has, so unlike Gossip/Yell it's a live inbound
+        // @-command channel.
         var (engine, _, players) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
         bool fired = false;
@@ -854,7 +875,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Broadcast("Friend", "@health"));
 
-        Assert.False(fired);
+        Assert.True(fired);
     }
 
     // ===== Arg parsing =====
@@ -995,8 +1016,28 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Friend", "@health"));   // muted
         engine.DispatchForTests(Gangpath("Friend", "@health"));   // passes
         engine.DispatchForTests(Local("Friend", "@health"));      // passes
+        engine.DispatchForTests(Broadcast("Friend", "@health"));  // passes
 
-        Assert.Equal(2, fireCount);
+        Assert.Equal(3, fireCount);
+    }
+
+    [Fact]
+    public void DisableBroadcastChannel_SilencesBroadcastOnly()
+    {
+        var (engine, _, players) = Setup();
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
+        engine.DisableBroadcastChannel = true;
+
+        int fireCount = 0;
+        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus,
+            _ => fireCount++);
+
+        engine.DispatchForTests(Broadcast("Friend", "@health"));  // muted
+        engine.DispatchForTests(Telepath("Friend", "@health"));   // passes
+        engine.DispatchForTests(Gangpath("Friend", "@health"));   // passes
+        engine.DispatchForTests(Local("Friend", "@health"));      // passes
+
+        Assert.Equal(3, fireCount);
     }
 
     [Fact]

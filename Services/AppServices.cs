@@ -927,6 +927,14 @@ public sealed class AppServices
     // @timer read-only query handler. App-lifetime, like the other query handlers.
     public Game.Remote.BossTimerQueryHandler BossTimerQuery { get; private set; } = null!;
 
+    // Persisted per-set hydra-trainer kill report (who, when) — manually reported
+    // over chat via @hydra dead, unlike BossTimers' self-detected kills.
+    public HydraReportStore HydraReports { get; private set; } = null!;
+
+    // @hydra read/write query handler (dead / status). App-lifetime, like the
+    // other query handlers.
+    public Game.Remote.HydraTimerQueryHandler HydraTimerQuery { get; private set; } = null!;
+
     // @death read-only query handler — reports unrecovered deaths from the
     // recovery log. App-lifetime, like the other query handlers.
     public Game.Remote.DeathQueryHandler DeathQuery { get; private set; } = null!;
@@ -3038,6 +3046,13 @@ public sealed class AppServices
         // Cleanup-boss DEAD/ALIVE state reads the active BBS's nightly-cleanup time.
         BossTimers.SetCleanupConfig(ResolveBossCleanupConfig);
 
+        // Persisted hydra-trainer kill report — realm-wide like BossTimers, but
+        // only ever changes on a manually-reported @hydra dead, never self-detected.
+        HydraReports = new HydraReportStore(Log);
+        GameData.ActiveSetChanged += HydraReports.OnActiveSetChanged;
+        if (GameData.ActiveSet is not null)
+            HydraReports.OnActiveSetChanged(GameData.ActiveSet);
+
         // ItemNameStore — int→name index for the active Items.json so
         // the keyed-door FSM can resolve KeyItemId → in-game name and
         // send `use <name> <dir>`.
@@ -4769,6 +4784,8 @@ public sealed class AppServices
         // @timer — read-only report of the boss respawn timers being tracked. Reads
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
         BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
+        // @hydra dead / @hydra status — manually-reported trainer kill timer.
+        HydraTimerQuery = new Game.Remote.HydraTimerQueryHandler(RemoteCommands, HydraReports, Log);
         DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
         RoombaQuery = new Game.Remote.RoombaQueryHandler(RemoteCommands, GhItemLocations, GhRoomLabels, Log,
             // Paced-send scheduler: a UI-thread one-shot (same shape as the combat
@@ -9749,6 +9766,7 @@ public sealed class AppServices
         RemoteCommands.DisableTelepathChannel = dto.DisallowRemoteFromTelepaths;
         RemoteCommands.DisableGangpathChannel = dto.DisallowRemoteFromGangpaths;
         RemoteCommands.DisableLocalChannel    = dto.DisallowRemoteFromLocal;
+        RemoteCommands.DisableBroadcastChannel = dto.DisallowRemoteFromBroadcast;
         RemoteCommands.WarnOnDenial           = dto.WarnOnInvalidRemoteCommand;
         RemoteCommands.FailureMessage         = dto.RemoteCommandFailureMessage ?? string.Empty;
     }
@@ -9761,6 +9779,7 @@ public sealed class AppServices
         RemoteCommands.DisableTelepathChannel = defaults.DisallowRemoteFromTelepaths;
         RemoteCommands.DisableGangpathChannel = defaults.DisallowRemoteFromGangpaths;
         RemoteCommands.DisableLocalChannel    = defaults.DisallowRemoteFromLocal;
+        RemoteCommands.DisableBroadcastChannel = defaults.DisallowRemoteFromBroadcast;
         RemoteCommands.WarnOnDenial           = defaults.WarnOnInvalidRemoteCommand;
         RemoteCommands.FailureMessage         = defaults.RemoteCommandFailureMessage ?? string.Empty;
     }

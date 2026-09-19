@@ -277,11 +277,16 @@ public enum PlayerRemoteControls
     // @roomba.
     QueryItemLocation   = 1 << 14,
 
+    // Hydra trainer kill reports/queries — @hydra dead (records a kill) and
+    // @hydra status (reports the last one). One flag governs both verbs, same
+    // as @timer's own sync sub-verb.
+    QueryHydraTimer     = 1 << 15,
+
     // Convenience — every category above flipped on.
     All = QueryVersion | QueryExperience | QueryHealthStatus | QueryLocation
         | QueryInventory | RequestInvite | MovePlayer | ExecuteCommands
         | HangupDisconnect | AlterSettings | DivertConversations | SysopCommands
-        | QueryBossTimers | QueryDeaths | QueryItemLocation,
+        | QueryBossTimers | QueryDeaths | QueryItemLocation | QueryHydraTimer,
 }
 
 // One equipment slot's contents from a look <player> response. SlotLabel

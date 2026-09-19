@@ -25,6 +25,7 @@ public sealed class TalkSectionViewModelTests
             DisallowRemoteFromTelepaths     = true,
             DisallowRemoteFromGangpaths     = true,
             DisallowRemoteFromLocal         = true,
+            DisallowRemoteFromBroadcast     = true,
             WarnOnInvalidRemoteCommand      = false,
             RemoteCommandFailureMessage     = "nope",
         };
@@ -38,6 +39,7 @@ public sealed class TalkSectionViewModelTests
         Assert.True(back.DisallowRemoteFromTelepaths);
         Assert.True(back.DisallowRemoteFromGangpaths);
         Assert.True(back.DisallowRemoteFromLocal);
+        Assert.True(back.DisallowRemoteFromBroadcast);
         Assert.False(back.WarnOnInvalidRemoteCommand);
         Assert.Equal("nope", back.RemoteCommandFailureMessage);
     }
@@ -60,6 +62,7 @@ public sealed class TalkSectionViewModelTests
         Assert.False(dto.DisallowRemoteFromTelepaths);
         Assert.False(dto.DisallowRemoteFromGangpaths);
         Assert.False(dto.DisallowRemoteFromLocal);
+        Assert.False(dto.DisallowRemoteFromBroadcast);
         Assert.True(dto.WarnOnInvalidRemoteCommand);
         // Bare text — RemoteCommandManager wraps every reply in { } at
         // send time, so the configured failure message is the unbraced

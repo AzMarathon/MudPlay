@@ -4,10 +4,10 @@ namespace MudPlay.Models.Profile;
 // Game.Remote.RemoteCommandManager. Stored as the "Talk" entry in
 // CharacterProfile.Settings.
 //
-// Per-channel disable rows govern only the three channels
+// Per-channel disable rows govern only the four channels
 // Game.Remote.RemoteChannel accepts inbound @-commands from. Gossip / Auction /
-// Broadcast / Yell are hard-excluded engine-wide; no per-user toggle would
-// change that, so they aren't fields.
+// Yell are hard-excluded engine-wide; no per-user toggle would change that,
+// so they aren't fields.
 public sealed class TalkSettings
 {
     // Hard kill-switch above every per-channel + per-player permission. When
@@ -30,6 +30,9 @@ public sealed class TalkSettings
 
     // Drop @-commands arriving on the local say channel.
     public bool DisallowRemoteFromLocal { get; set; }
+
+    // Drop @-commands arriving on the Broadcast channel.
+    public bool DisallowRemoteFromBroadcast { get; set; }
 
     // When true, the engine sends RemoteCommandFailureMessage back to the
     // originator on per-player denial / unknown-command / party-whitelist

@@ -133,6 +133,9 @@ public sealed class RemoteCommandManager : IDisposable
     // Drop @-commands arriving on the Local say channel.
     public bool DisableLocalChannel { get; set; }
 
+    // Drop @-commands arriving on the Broadcast channel.
+    public bool DisableBroadcastChannel { get; set; }
+
     // When true, send FailureMessage back to the originator on per-player denial
     // / unknown-command / party-whitelist denial. Hard-blocks and user-disabled
     // paths (master / per-channel) stay silent regardless. Pushed from
@@ -504,10 +507,11 @@ public sealed class RemoteCommandManager : IDisposable
 
     private bool IsChannelDisabled(RemoteChannel c) => c switch
     {
-        RemoteChannel.Telepath => DisableTelepathChannel,
-        RemoteChannel.Gangpath => DisableGangpathChannel,
-        RemoteChannel.Local    => DisableLocalChannel,
-        _                      => false,
+        RemoteChannel.Telepath  => DisableTelepathChannel,
+        RemoteChannel.Gangpath  => DisableGangpathChannel,
+        RemoteChannel.Local     => DisableLocalChannel,
+        RemoteChannel.Broadcast => DisableBroadcastChannel,
+        _                       => false,
     };
 
     // Send a denial reply to the sender. specificReason — when non-null — wins
@@ -531,13 +535,16 @@ public sealed class RemoteCommandManager : IDisposable
 
     // Remote commands are accepted from every inbound chat channel EXCEPT the
     // realm-wide noise channels — Gossip (also carries auctions), Yell
-    // (shout-style noise), system-level Broadcast / RealmEvent, and our own
-    // outbound echo (TelepathOutgoing).
+    // (shout-style noise), RealmEvent, and our own outbound echo
+    // (TelepathOutgoing). Broadcast IS included: on Paradigm/GreaterMUD an
+    // ordinary player can send one (see GAME_MECHANICS.md, confirmed
+    // 2026-09-19) — it's not the operator-only channel stock MajorMUD has.
     private static RemoteChannel? MapChannel(ChatChannel c) => c switch
     {
         ChatChannel.TelepathIncoming => RemoteChannel.Telepath,
         ChatChannel.Gangpath         => RemoteChannel.Gangpath,
         ChatChannel.Local            => RemoteChannel.Local,
+        ChatChannel.Broadcast        => RemoteChannel.Broadcast,
         _                            => null,
     };
 
@@ -814,10 +821,11 @@ public sealed class RemoteCommandManager : IDisposable
         string payload = $"{{{text}}}";
         string wire = channel switch
         {
-            RemoteChannel.Telepath => $"/{given} {payload}",
-            RemoteChannel.Gangpath => $"bg {payload}",   // gang-channel speak verb is `bg`, not `gang`
-            RemoteChannel.Local    => $">{given} {payload}",   // directed say at the @-command's sender
-            _                      => payload,
+            RemoteChannel.Telepath  => $"/{given} {payload}",
+            RemoteChannel.Gangpath  => $"bg {payload}",   // gang-channel speak verb is `bg`, not `gang`
+            RemoteChannel.Local     => $">{given} {payload}",   // directed say at the @-command's sender
+            RemoteChannel.Broadcast => $"-{payload}",   // realm-wide; no recipient name to direct at
+            _                       => payload,
         };
         byte[] bytes = Encoding.Latin1.GetBytes(wire + "\r");
         LastSentForTests.Add(bytes);

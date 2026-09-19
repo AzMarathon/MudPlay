@@ -40,6 +40,12 @@ namespace MudPlay.Game.Remote;
 //     BBS-tier Roomba item-sighting log). Its own category, same as
 //     QueryBossTimers/QueryDeaths, since none of these are documented MajorMUD
 //     wiki commands — they're MudPlay-specific extensions.
+//   - QueryHydraTimer — @hydra dead (records a manually-reported trainer kill)
+//     and @hydra status (reports it back: who, how long ago). Unlike @timer,
+//     which self-detects kills from combat telemetry, this one only ever
+//     learns of a kill when a permitted player explicitly reports it over
+//     chat — for a boss/trainer whose death isn't reliably observable
+//     first-hand by everyone who needs to know. One flag governs both verbs.
 //
 // Party-coordination commands (@wait / @ok / @comeback / @forget / @share) map
 // to PlayerRemoteControls.None — they're gated by the engine's party-whitelist
@@ -89,6 +95,7 @@ public static class RemoteCommandCatalog
             ["@timer"]        = PlayerRemoteControls.QueryBossTimers,   // own permission — grant boss-timer queries separately
             ["@death"]        = PlayerRemoteControls.QueryDeaths,       // own permission — grant unrecovered-death queries separately
             ["@roomba"]       = PlayerRemoteControls.QueryItemLocation, // own permission — grant item-location queries separately
+            ["@hydra"]        = PlayerRemoteControls.QueryHydraTimer,   // own permission — @hydra dead / @hydra status
             ["@help"]         = PlayerRemoteControls.QueryVersion,
             ["@what"]         = PlayerRemoteControls.QueryInventory,
             ["@wealth"]       = PlayerRemoteControls.QueryInventory,
@@ -228,6 +235,7 @@ public static class RemoteCommandCatalog
             ["@timer"]        = new("@timer [name]", "boss respawn timers (all, or matching a name); @timer sync shares them client-to-client"),
             ["@death"]        = new("@death [all]", "unrecovered deaths from the recovery log — the latest, or all of them"),
             ["@roomba"]       = new("@roomba <item>", "where an item was last seen across gang-house rooms; @roomba sync shares the log"),
+            ["@hydra"]        = new("@hydra dead|status", "@hydra dead records a kill report; @hydra status reports who last reported one and how long ago"),
             ["@help"]         = new("@help [command]", "the commands you're allowed to use, or one command's syntax"),
             ["@what"]         = new("@what", "items on the room floor"),
             ["@wealth"]       = new("@wealth", "your coins and total value"),

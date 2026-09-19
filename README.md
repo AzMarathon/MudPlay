@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.10**
-> - Obtain-then-cross walk-to: the map route line and **Details…** now show the whole journey (to the shop, then on to the requested destination) instead of stopping at the shop the gate item is bought at
-> - Route picker window now grows to fit the cards when planning finishes, instead of staying at its "Calculating…" size and overflowing onto the buttons
+> **Version 3.97.0**
+> - New **`@hydra dead`** / **`@hydra status`** remote commands — a manually-reported kill timer for a trainer whose death isn't reliably observable first-hand by everyone who needs to know. Persisted, gated by its own remote-control permission
+> - The `@`-command engine now accepts **Broadcast** as a live channel (Paradigm/GreaterMUD players can broadcast with `-text`), not just Telepath/Gangpath/Local
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

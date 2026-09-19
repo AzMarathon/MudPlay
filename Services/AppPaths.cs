@@ -424,6 +424,12 @@ public static class AppPaths
     public static string BossTimersFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "boss-timers.json");
 
+    // Realm-wide, shared across the user's characters like boss-timers.json —
+    // the hydra trainer's death is world state, not something tied to which
+    // character happens to be reporting or asking about it.
+    public static string HydraReportFile(string setName) =>
+        Path.Combine(GameDataSetDir(setName), "hydra-report.json");
+
     // User-writable boss-catalog seed JSON in Global/ — the curated default
     // boss list (name, rooms, realm flags, respawn type); timer values are looked up
     // from game data at runtime. BossStore falls back to this when the active set has

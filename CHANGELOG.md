@@ -1,6 +1,9 @@
 # Version history
 
-## 3.96.10
+## 3.97.0
+
+- New **`@hydra dead`** / **`@hydra status`** remote commands — a manually-reported kill timer for a trainer whose death isn't reliably observable first-hand by everyone who needs to know (unlike `@timer`'s bosses, which self-detect from combat telemetry). `@hydra dead` records who reported it and when; `@hydra status` reports it back. Persisted per game-data set, survives a restart. Gated by its own **Hydra timer** remote-control permission (Players tab / batch edit), same as `@timer`/`@roomba`.
+- The `@`-command engine now accepts **Broadcast** as a live inbound/reply channel, not just Telepath/Gangpath/Local — confirmed that on Paradigm/GreaterMUD an ordinary player CAN broadcast (`-text`), unlike stock MajorMUD's operator-only convention. New **Settings → Talk → "Disallow @commands from broadcast"** toggle if you'd rather mute it.
 
 - Obtain-then-cross walk-to: the map route line and **Details…** now show the whole journey (to the shop, then on to the requested destination) instead of stopping at the shop the gate item is bought at
 - Route picker window now grows to fit the cards when planning finishes, instead of staying at its "Calculating…" size and overflowing onto the buttons

@@ -76,6 +76,9 @@
             <CheckBox Content="Disallow @commands from say (local)"
                       IsChecked="{Binding DisallowRemoteFromLocal, Mode=TwoWay}"
                       ToolTip.Tip="Drop @commands arriving via local-room say."/>
+            <CheckBox Content="Disallow @commands from broadcast"
+                      IsChecked="{Binding DisallowRemoteFromBroadcast, Mode=TwoWay}"
+                      ToolTip.Tip="Drop @commands arriving on the realm-wide broadcast channel (-text)."/>
 
             <!-- ============ Denial reply (wired) ============ -->
             <TextBlock Classes="SectionHeader" Text="Denial reply"/>

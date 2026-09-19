@@ -1174,6 +1174,12 @@ public static class BugReportBuilder
                 $"full {Game.Map.BossTimerMath.FormatHours(state.FullRemaining.TotalHours)}, "
                 + $"next {state.NextLabel} {Game.Map.BossTimerMath.FormatHours(state.NextRemaining.TotalHours)}");
 
+        // Last hydra kill report at capture — a "@hydra status looks wrong" report
+        // needs to see what this client actually has on file.
+        Kv(sb, "Last hydra report", svc.HydraReports.Current is { } hydra
+            ? $"{hydra.ReportedBy}, {Game.Map.BossTimerMath.FormatHours((DateTimeOffset.UtcNow - hydra.At).TotalHours)} ago"
+            : "(none)");
+
         return sb.ToString();
     }
 

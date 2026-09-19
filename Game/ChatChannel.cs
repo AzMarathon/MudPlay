@@ -19,7 +19,9 @@ public enum ChatChannel
     // "X gangpaths: …" — gang/guild channel.
     Gangpath,
 
-    // "Broadcast from X …" — operator broadcasts.
+    // "Broadcast from X …" — realm-wide. Operator-only on stock MajorMUD, but
+    // an ORDINARY player can send one on Paradigm/GreaterMUD realms (`-<text>`
+    // — confirmed 2026-09-19, user demonstration).
     Broadcast,
 
     // "X yells …" — room-shouted message, audible across nearby rooms.

@@ -3586,6 +3586,13 @@ fresh `@level` lands ≥ 10.)
   (`SelfNameProvider` → `PartyManager.LocalCharacterName`, given-name form) — otherwise our own
   gangpath'd `@`-command (e.g. `@timer sync`) is read back as an inbound command and bounces a
   denial at the whole gang.
+- **[CONFIRMED] 2026-09-19, user** — on **Paradigm/GreaterMUD, Broadcast is NOT operator-only.**
+  An ordinary player sends one with `-<text>` (dash precursor, no space needed), and it echoes
+  realm-wide as `Broadcast from <name> "<text>"` — the exact line `ChatRouter`'s
+  `ConversationBroadcast` pattern already classifies. This contradicts the stock-MajorMUD
+  assumption baked into `ChatChannel.Broadcast`'s original doc comment ("operator broadcasts");
+  that assumption doesn't hold on Paradigm. `RemoteCommandManager` treats Broadcast as a normal
+  inbound `@`-command channel (its own `-{reply}` wire form), same as Telepath/Gangpath/Local.
 
 ## Shop prices — buy & sell *([CONFIRMED] — extracted from the reference client)*
 
