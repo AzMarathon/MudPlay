@@ -1543,7 +1543,7 @@ public sealed class MapControl : Control
                         Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
                         if (trapOverlay)
                         {
-                            DrawTrapOverlay(ctx, srcPt, tgtPt, TrapPen, srcTrap, tgtTrap);
+                            DrawTrapOverlay(ctx, srcPt, tgtPt, TrapPen, srcTrap, tgtTrap, tilePixels);
                             break;
                         }
                         IPen basePen = isAction ? ActionPen : isHidden ? HiddenPen : ExitPen;
@@ -1560,7 +1560,7 @@ public sealed class MapControl : Control
                         Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
                         if (trapOverlay)
                         {
-                            DrawTrapOverlay(ctx, srcPt, tgtPt, TrapBridgePen, srcTrap, tgtTrap);
+                            DrawTrapOverlay(ctx, srcPt, tgtPt, TrapBridgePen, srcTrap, tgtTrap, tilePixels);
                             break;
                         }
                         IPen baseBridge = isAction ? ActionBridgePen
@@ -1617,13 +1617,26 @@ public sealed class MapControl : Control
     // Redraw only the red trapped portion(s) of a connector — used by the trap-overlay
     // pass to lay the trap back over a travel polyline. Mirrors DrawExitConnector's
     // midpoint split but paints nothing for the non-trapped side, so the route stays
-    // visible everywhere except the trapped segment it crosses.
-    private static void DrawTrapOverlay(DrawingContext ctx, Point srcPt, Point tgtPt, IPen trapPen, bool srcTrap, bool tgtTrap)
+    // visible everywhere except the trapped segment it crosses. Both ends are trimmed
+    // back to the room-node square edge so the on-top red only fills the between-squares
+    // gap (like the base exit line, which the node covers up to its edge) rather than
+    // drawing across the room squares themselves.
+    private static void DrawTrapOverlay(DrawingContext ctx, Point srcPt, Point tgtPt,
+        IPen trapPen, bool srcTrap, bool tgtTrap, double tilePixels)
     {
-        if (srcTrap && tgtTrap) { ctx.DrawLine(trapPen, srcPt, tgtPt); return; }
-        Point mid = Midpoint(srcPt, tgtPt);
-        if (srcTrap) ctx.DrawLine(trapPen, srcPt, mid);
-        else if (tgtTrap) ctx.DrawLine(trapPen, mid, tgtPt);
+        double dx = tgtPt.X - srcPt.X, dy = tgtPt.Y - srcPt.Y;
+        double len = Math.Sqrt(dx * dx + dy * dy);
+        if (len < 1e-3) return;
+        double ux = dx / len, uy = dy / len;
+        double nodeHalf = Math.Max(tilePixels * 0.45, 3.0) / 2;      // matches DrawRoomNode's node square
+        double trim = nodeHalf / Math.Max(Math.Abs(ux), Math.Abs(uy));   // centre → node-square edge
+        if (2 * trim >= len) return;                                 // squares meet — no visible gap
+        Point a = new(srcPt.X + ux * trim, srcPt.Y + uy * trim);
+        Point b = new(tgtPt.X - ux * trim, tgtPt.Y - uy * trim);
+        Point mid = Midpoint(srcPt, tgtPt);   // split at the true midpoint (sits in the gap)
+        if (srcTrap && tgtTrap) { ctx.DrawLine(trapPen, a, b); return; }
+        if (srcTrap) ctx.DrawLine(trapPen, a, mid);
+        else if (tgtTrap) ctx.DrawLine(trapPen, mid, b);
     }
 
     // How a single exit connection should be rendered.
