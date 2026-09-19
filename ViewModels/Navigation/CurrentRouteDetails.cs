@@ -29,7 +29,8 @@ public static class CurrentRouteDetails
         Func<RoomKey, IReadOnlyList<RoomDetailLink>> roomMonsterLinks,
         Action<RoomKey> onRoomClick,
         Func<RoomKey, RouteStepWarning?> roomHazard,
-        Func<int, RoomDetailLink> itemLink)
+        Func<int, RoomDetailLink> itemLink,
+        int maxHp = 0)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(itemName);
@@ -62,15 +63,23 @@ public static class CurrentRouteDetails
         // a ticket…). Walk the steps tracking the current room so each MoveStep's
         // exit can be resolved and inspected.
         var gateItemsByStep = new List<IReadOnlyList<int>>(steps.Count);
+        // Per-step trap damage of the exit the step crosses: null = crosses no trap;
+        // a value = the trap's damage (0 when the export carried no figure).
+        var trapByStep = new List<int?>(steps.Count);
         RoomKey cur = source;
         foreach (WalkStep step in steps)
         {
             IReadOnlyList<int> ids = Array.Empty<int>();
+            int? trap = null;
             if (step is MoveStep move
                 && graph.GetRoom(cur) is { } room
                 && room.Exits.TryGetValue(move.Direction, out RoomExit exit))
+            {
                 ids = ExitGateItems(exit);
+                if (exit.Hint == RoomExitHint.Trap) trap = exit.TrapDamage;
+            }
             gateItemsByStep.Add(ids);
+            trapByStep.Add(trap);
             if (step is MoveStep m) cur = m.ExpectedTarget;
             else if (step is SysGotoStep g) cur = g.LandingRoom;
         }
@@ -82,8 +91,9 @@ public static class CurrentRouteDetails
             RoomKey rk = row.Room;
             IReadOnlyList<int> gateIds = i < gateItemsByStep.Count ? gateItemsByStep[i] : Array.Empty<int>();
             RouteStepWarning? warning = MergeWarning(roomHazard(rk), gateIds, itemLink);
+            string? trapText = TrapTextFor(i < trapByStep.Count ? trapByStep[i] : null, maxHp);
             details.Add(new RouteDetailRow(
-                row, roomMonsterLinks(rk), new RelayCommand(() => onRoomClick(rk)), warning));
+                row, roomMonsterLinks(rk), new RelayCommand(() => onRoomClick(rk)), warning, trapText));
         }
 
         // The step rows each name the room a command is issued FROM, so the room the
@@ -99,6 +109,19 @@ public static class CurrentRouteDetails
             arrival, roomMonsterLinks(dest), new RelayCommand(() => onRoomClick(dest)),
             MergeWarning(roomHazard(dest), Array.Empty<int>(), itemLink)));
         return details;
+    }
+
+    // The trap note for a step that crosses a trapped exit, related to the player's HP:
+    // "trap: 36 dmg (~11% of HP)". Falls back to a plain damage figure when max HP is
+    // unknown, and to "trap (damage unknown)" for a trapped exit whose export carried no
+    // damage figure. Null when the step crosses no trap.
+    private static string? TrapTextFor(int? damage, int maxHp)
+    {
+        if (damage is not { } d) return null;
+        if (d <= 0) return "trap (damage unknown)";
+        return maxHp > 0
+            ? $"trap: {d} dmg (~{(int)Math.Round(100.0 * d / maxHp)}% of HP)"
+            : $"trap: {d} dmg";
     }
 
     // "12/431 Tower" — the map/room key plus its name (name omitted when unknown),

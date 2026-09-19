@@ -67,6 +67,25 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         ]
         """;
 
+    // 1/1(Ledge) ─N─ 1/2(Cliff) ─N(Trap, 36 damage)─ 1/3(Below): the 1/2→1/3 hop crosses
+    // a trapped exit that does 36 damage.
+    private const string TrapRooms = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Ledge", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "NPC": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Cliff", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "NPC": 0,
+            "N": "1/3 (Trap, 36 damage)", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Below", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "NPC": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
     private RoomGraphManager NewGraph() => NewGraph(Rooms);
     private RoomGraphManager NewItemGateGraph() => NewGraph(ItemGateRooms);
 
@@ -176,6 +195,38 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         Assert.False(w.HasSpell);
         Assert.Equal("needs", w.Label);
         Assert.Contains(w.Items, l => l.Text == "item#474");
+    }
+
+    [Fact]
+    public void Build_FlagsATrapCrossing_WithDamageRelativeToHp()
+    {
+        RoomGraphManager graph = NewGraph(TrapRooms);
+        var route = new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) };
+
+        IReadOnlyList<RouteDetailRow> rows = CurrentRouteDetails.Build(
+            graph, null, null, route, _ => null,
+            _ => Array.Empty<RoomDetailLink>(), _ => { }, _ => null, ItemLink, maxHp: 300);
+
+        // 1/1 → 1/2 is a plain N (no trap); the 1/2 → 1/3 hop crosses the trap, so the row
+        // departing 1/2 flags it with the damage as ~% of the 300 max HP (36/300 = 12%).
+        Assert.False(rows[0].CrossesTrap);
+        Assert.True(rows[1].CrossesTrap);
+        Assert.Equal("trap: 36 dmg (~12% of HP)", rows[1].TrapText);
+        // The arrival row (1/3) issues no outbound command, so it crosses no trap.
+        Assert.False(rows[2].CrossesTrap);
+    }
+
+    [Fact]
+    public void Build_Trap_WithoutMaxHp_ShowsPlainDamage()
+    {
+        RoomGraphManager graph = NewGraph(TrapRooms);
+        var route = new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) };
+
+        IReadOnlyList<RouteDetailRow> rows = CurrentRouteDetails.Build(
+            graph, null, null, route, _ => null,
+            _ => Array.Empty<RoomDetailLink>(), _ => { }, _ => null, ItemLink);   // maxHp defaults to 0
+
+        Assert.Equal("trap: 36 dmg", rows[1].TrapText);
     }
 
     [Fact]

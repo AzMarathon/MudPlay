@@ -187,6 +187,25 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                 </StackPanel>
+
+                                <!-- Trap sub-line: this step's movement command crosses a
+                                     trapped exit — its damage related to the player's HP.
+                                     Red to match the map's trap colour. -->
+                                <StackPanel Orientation="Horizontal"
+                                            IsVisible="{Binding CrossesTrap}"
+                                            Margin="20,0,0,2">
+                                    <TextBlock Text="⚠"
+                                               Foreground="#DC3C3C"
+                                               FontSize="11"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,4,0"/>
+                                    <TextBlock Text="{Binding TrapText}"
+                                               Foreground="#DC3C3C"
+                                               FontFamily="{StaticResource FontMono}"
+                                               FontSize="11"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+
                                 <ItemsControl ItemsSource="{Binding Monsters}"
                                               IsVisible="{Binding HasMonsters}"
                                               Margin="20,1,0,2">
