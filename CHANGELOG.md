@@ -1,5 +1,11 @@
 # Version history
 
+## 3.96.10
+
+- Obtain-then-cross walk-to: the map route line and **Details…** now show the whole journey (to the shop, then on to the requested destination) instead of stopping at the shop the gate item is bought at
+- Route picker window now grows to fit the cards when planning finishes, instead of staying at its "Calculating…" size and overflowing onto the buttons
+- bug reports addressed: paradigm-20260918-204906
+
 ## 3.96.8
 
 - The route **Details…** view now flags each step that crosses a trapped exit in red with the trap's damage related to your HP (e.g. *trap: 36 dmg (~11% of HP)*), so you can see the hit each trap on the path would land

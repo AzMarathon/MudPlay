@@ -140,6 +140,12 @@ public sealed class PathItemGiveRouter : IDisposable
     // True while a give detour is walking to the giver or waiting for the item.
     public bool DetourActive => _phase != Phase.Idle;
 
+    // The destination this detour will resume to once the item is in hand — the
+    // walk the user actually asked for, held aside while we fetch the give. Null
+    // when no detour is running. Lets the nav display draw the whole journey
+    // (current → giver → this) instead of stopping the route line at the giver.
+    public RoomKey? OnwardDestination => _phase == Phase.Idle ? null : _origDest;
+
     // New-need callback (wired to NeedsRegistry.NeedPosted). Arms a detour toward
     // the fewest-added-steps giver when the item is flagged, no engine walk is
     // driving, a give exists, and we can route both to the giver and on to the

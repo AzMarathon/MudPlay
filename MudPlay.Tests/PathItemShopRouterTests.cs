@@ -99,6 +99,21 @@ public sealed class PathItemShopRouterTests
     }
 
     [Fact]
+    public void OnwardDestination_NullWhenIdle_HeldAsideDestinationWhileDetouring()
+    {
+        var h = new Harness().WithSingleShop();
+        PathItemShopRouter r = h.Build();
+
+        Assert.Null(r.OnwardDestination);   // idle: nothing held aside
+
+        r.OnNeedPosted(PathNeed(42));
+
+        // Detour armed to the shop — the display reads the original walk-to off
+        // OnwardDestination to compose the whole journey past the shop.
+        Assert.Equal(Dest, r.OnwardDestination);
+    }
+
+    [Fact]
     public void OnNeedPosted_FeatureOff_NoDetour()
     {
         var h = new Harness().WithSingleShop();

@@ -1083,29 +1083,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             PreviewPath = null;
             return;
         }
-        IReadOnlyList<Direction>? path = _services.Bfs.FindPath(src, dest, _services.Movement);
-        if (path is null || path.Count == 0)
-        {
-            // The gate-respecting BFS finds nothing when the only route crosses an
-            // acquirable gate or an unsurvivable-without-a-counter hazard (a river,
-            // a locked door). Re-plan with those gates suspended so the armed-walk
-            // preview still draws the line Go would take — the same route the picker
-            // plans through the gate — instead of leaving the map blank.
-            using (_services.Movement.SuspendAcquirableGates())
-                path = _services.Bfs.FindPath(src, dest, _services.Movement);
-            if (path is null || path.Count == 0) { PreviewPath = null; return; }
-        }
-
-        var keys = new List<RoomKey>(path.Count + 1) { src };
-        RoomKey cur = src;
-        foreach (Direction d in path)
-        {
-            if (Graph.GetRoom(cur) is not { } room) break;
-            if (!room.Exits.TryGetValue(d, out RoomExit exit)) break;
-            cur = exit.Target;
-            keys.Add(cur);
-        }
-        PreviewPath = keys.Count >= 2 ? keys : null;
+        // RouteAsRoomKeys tries the gate-respecting BFS first, then re-plans with
+        // acquirable gates suspended — so a route that only crosses an acquirable
+        // gate or an unsurvivable-without-a-counter hazard (a river, a locked door)
+        // still draws the line Go would take instead of leaving the map blank.
+        PreviewPath = RouteAsRoomKeys(src, dest);
     }
 
     // Click handler for the queued-destination chip — discards the queued target + clears the preview line.
@@ -3523,14 +3505,85 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         IsWalking = _services.Walker.State == WalkState.Walking
                  || _services.Walker.State == WalkState.Paused;
 
-        WalkPath = IsWalking
-            ? _services.Walker.RemainingRoomKeys
-            : null;
-        // When walking, the marker is the walker's live destination; when idle it's the
-        // armed preview target (QueuedDestination) so a search-box / queued walk-to still
-        // marks where it's headed.
-        DestinationRoomKey = IsWalking ? _services.Walker.Destination : QueuedDestination;
+        if (!IsWalking)
+        {
+            WalkPath = null;
+            // Idle: mark the armed preview target (QueuedDestination) so a search-box
+            // / queued walk-to still shows where it's headed.
+            DestinationRoomKey = QueuedDestination;
+            RefreshEngineActionKind();
+            return;
+        }
+
+        IReadOnlyList<RoomKey> remaining = _services.Walker.RemainingRoomKeys;
+
+        // During a path-item detour the walker is temporarily re-pointed to a shop /
+        // giver / summon room to fetch a gate item; its live destination is that
+        // waypoint, not the walk the user asked for. Draw the whole obtain-then-cross
+        // journey — remaining leg to the waypoint, then on to the held-aside final
+        // destination — and mark the final room, so the route line and Route Details
+        // don't appear to stop at the waypoint.
+        if (_services.PathDetourOnwardDestination is { } finalDest
+            && _services.Walker.Destination is { } waypoint
+            && !finalDest.Equals(waypoint))
+        {
+            WalkPath = ComposeDetourRoute(remaining, waypoint, finalDest);
+            DestinationRoomKey = finalDest;
+        }
+        else
+        {
+            WalkPath = remaining;
+            DestinationRoomKey = _services.Walker.Destination;
+        }
         RefreshEngineActionKind();
+    }
+
+    // Stitch the walker's remaining leg (current → detour waypoint) onto a
+    // gate-suspended route from that waypoint to the held-aside final destination,
+    // so the map line + Route Details trace the whole obtain-then-cross journey
+    // rather than stopping at the shop / giver / summon room. Falls back to the
+    // bare detour leg when no onward route can be found.
+    private IReadOnlyList<RoomKey> ComposeDetourRoute(
+        IReadOnlyList<RoomKey> detourLeg, RoomKey waypoint, RoomKey finalDest)
+    {
+        if (RouteAsRoomKeys(waypoint, finalDest) is not { Count: >= 2 } onward)
+            return detourLeg;
+        if (detourLeg.Count == 0) return onward;
+
+        var full = new List<RoomKey>(detourLeg.Count + onward.Count - 1);
+        full.AddRange(detourLeg);
+        // onward[0] is the waypoint; skip it when the detour leg already ends
+        // there so the shared join room isn't duplicated.
+        int start = detourLeg[^1].Equals(onward[0]) ? 1 : 0;
+        for (int i = start; i < onward.Count; i++) full.Add(onward[i]);
+        return full;
+    }
+
+    // A route between two rooms as an inclusive RoomKey polyline. Tries the
+    // gate-respecting BFS first, then re-plans with acquirable gates suspended so a
+    // route through an item / hazard gate still draws (the same line Go would take).
+    // Null when no route exists either way, or the ends coincide.
+    private IReadOnlyList<RoomKey>? RouteAsRoomKeys(RoomKey src, RoomKey dest)
+    {
+        if (Graph is null || src.Equals(dest)) return null;
+        IReadOnlyList<Direction>? path = _services.Bfs.FindPath(src, dest, _services.Movement);
+        if (path is null || path.Count == 0)
+        {
+            using (_services.Movement.SuspendAcquirableGates())
+                path = _services.Bfs.FindPath(src, dest, _services.Movement);
+            if (path is null || path.Count == 0) return null;
+        }
+
+        var keys = new List<RoomKey>(path.Count + 1) { src };
+        RoomKey cur = src;
+        foreach (Direction d in path)
+        {
+            if (Graph.GetRoom(cur) is not { } room) break;
+            if (!room.Exits.TryGetValue(d, out RoomExit exit)) break;
+            cur = exit.Target;
+            keys.Add(cur);
+        }
+        return keys.Count >= 2 ? keys : null;
     }
 
     private void RefreshEngineActionKind()

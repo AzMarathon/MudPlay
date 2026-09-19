@@ -163,6 +163,12 @@ public sealed class PathItemShopRouter : IDisposable
     // True while a shop detour is in progress (walking to shop or buying).
     public bool DetourActive => _phase != Phase.Idle;
 
+    // The destination this detour will resume to once the item is in hand — the
+    // walk the user actually asked for, held aside while we shop. Null when no
+    // detour is running. Lets the nav display draw the whole journey (current →
+    // shop → this) instead of stopping the route line at the shop.
+    public RoomKey? OnwardDestination => _phase == Phase.Idle ? null : _origDest;
+
     // New-need callback (wired to NeedsRegistry.NeedPosted). Decides whether the
     // item warrants a shop detour and, if so, arms one toward the
     // fewest-added-steps shop. A no-op when the item isn't flagged for buy-on-

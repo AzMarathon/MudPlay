@@ -1560,6 +1560,16 @@ public sealed class AppServices
     // AutoObtainForPath flag.
     public Game.Map.PathItemSummonRouter PathItemSummonRouter { get; private set; } = null!;
 
+    // The final destination a path-item detour is currently holding aside — the
+    // walk the user asked for while a give / shop / summon router temporarily
+    // re-points the walker to fetch a gate item. Null when no detour is running.
+    // Lets the nav map + Route Details draw the whole journey (current → detour
+    // waypoint → this) instead of stopping the route line at the waypoint.
+    public Game.Map.RoomKey? PathDetourOnwardDestination =>
+        PathItemGiveRouter.OnwardDestination
+        ?? PathItemShopRouter.OnwardDestination
+        ?? PathItemSummonRouter.OnwardDestination;
+
     // Index of the active set's room-entry hazards — a room's cast-on-enter
     // Spell mapped to the item(s) that make the room safe (fish-helm negator,
     // failitem rafts, checkspell buff sources). Feeds the navigation

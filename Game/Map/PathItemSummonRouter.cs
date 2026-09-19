@@ -174,6 +174,12 @@ public sealed class PathItemSummonRouter : IDisposable
     // state what the run is fighting for.
     public string? PendingMonsterName => _phase == Phase.Idle ? null : _source.MonsterName;
 
+    // The destination this detour will resume to once the item drops — the walk
+    // the user actually asked for, held aside while we hunt the summon. Null when
+    // no detour is running. Lets the nav display draw the whole journey (current →
+    // summon room → this) instead of stopping the route line at the summon room.
+    public RoomKey? OnwardDestination => _phase == Phase.Idle ? null : _origDest;
+
     // New-need callback (wired to NeedsRegistry.NeedPosted). Arms a detour toward
     // the fewest-added-steps summon room when the item is flagged, no engine walk
     // is driving, no cheaper source exists, and we can route both to the room and
