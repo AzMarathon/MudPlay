@@ -1,5 +1,9 @@
 # Version history
 
+## 3.96.8
+
+- The route **Details…** view now flags each step that crosses a trapped exit in red with the trap's damage related to your HP (e.g. *trap: 36 dmg (~11% of HP)*), so you can see the hit each trap on the path would land
+
 ## 3.96.7
 
 - The walk-to **preview** line's default colour is now the gold of the player-position marker (the loop-builder preview line is unchanged) — reset it under Settings → General → nav-line styles to pick up the new default

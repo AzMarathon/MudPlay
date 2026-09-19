@@ -25,8 +25,13 @@ public sealed class RouteDetailRow
     // item(s) needed to cross. Null for the common unremarkable room.
     public RouteStepWarning? Warning { get; }
 
+    // Set when this row's step (a movement command) crosses a trapped exit — the
+    // pre-formatted "trap: N dmg (~X% of HP)" note. Null for a step that crosses no trap.
+    public string? TrapText { get; }
+
     public bool HasMonsters => Monsters.Count > 0;
     public bool HasWarning => Warning is not null;
+    public bool CrossesTrap => TrapText is not null;
     public bool IsAcquire => Step.IsAcquire;
     public bool IsArrival => Step.IsArrival;
 
@@ -43,11 +48,12 @@ public sealed class RouteDetailRow
 
     public RouteDetailRow(
         RouteStepRow step, IReadOnlyList<RoomDetailLink> monsters, ICommand openRoom,
-        RouteStepWarning? warning = null)
+        RouteStepWarning? warning = null, string? trapText = null)
     {
         Step = step;
         Monsters = monsters ?? Array.Empty<RoomDetailLink>();
         OpenRoom = openRoom;
         Warning = warning;
+        TrapText = trapText;
     }
 }

@@ -33,7 +33,8 @@ public static class RouteDetailsLauncher
             key => MonsterLinks(services, key, def),
             services.HighlightWhereRoom,
             key => RoomHazard(services, key),
-            id => ItemLink(services, id));
+            id => ItemLink(services, id),
+            services.PlayerState.MaxHp);
     }
 
     // The fully-wired browse VM for a polyline: rows + the persisted hit-% colour
