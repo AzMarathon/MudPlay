@@ -393,7 +393,7 @@ That shortcut is its own **selectable card**: pick it and — if you're not carr
 - **A low-percentage lair drop** — the black star key, for instance — is deliberately left alone: there's no way to promise it, so the walk won't commit you to an open-ended hunt for one.
 - **A key you can pick or bash** is left alone too: the detour only arms when the door is genuinely shut to you.
 
-A path item — key or otherwise — is fetched for you when you **consent to it for that walk**, which is what **accepting a gated route in the route picker** does: the pick itself arms the shop / give / drop acquisition for that one trip (an item flagged **Auto-obtain for path** in Game Data → Items is also fetched automatically on a sole route).
+A path item — key or otherwise — is fetched for you when you **consent to it for that walk**, which is what **accepting a gated route in the route picker** does: the pick itself arms the shop / give / drop acquisition for that one trip (an item flagged **Auto-obtain for path** in Game Data → Items is also fetched automatically on a sole route). While that fetch detour is running the map route line and **Details…** show the **whole journey** — to the shop / giver / summon room, then on to where you actually asked to go — rather than stopping at the fetch stop.
 
 The *searching* half — hunting a missing item off the floor room-by-room — is driven by the **master Auto-Search toggle**: the picker's **Search en route** card turns it on for the leg so the search actually runs, and turns it back off once the item lands. (There's no longer a separate "search rooms if item needed" setting — Auto-Search is the single switch, and the routing cards carry the per-walk consent.)
 
