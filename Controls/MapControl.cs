@@ -583,7 +583,7 @@ public sealed class MapControl : Control
     // once. A standalone trap still looks solid — the solid base line under the room nodes
     // fills the dash gaps; only a route-crossed trap (whose base is masked by the route)
     // shows the dashes.
-    private static readonly IPen   TrapOverlayPen  = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 4.0) { DashStyle = new DashStyle(new double[] { 1.5, 1.5 }, 0), LineCap = PenLineCap.Round };
+    private static readonly IPen   TrapOverlayPen  = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 4.0) { DashStyle = new DashStyle(new double[] { 2.5, 2.0 }, 0), LineCap = PenLineCap.Round };
     private static readonly IPen   ActionBridgePen = new Pen(new SolidColorBrush(Color.Parse("#8B008B")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     private static readonly IPen   HiddenBridgePen = new Pen(new SolidColorBrush(Color.Parse("#008B8B")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     // Max grid distance (Chebyshev) a gap-bridge line spans; beyond this the
