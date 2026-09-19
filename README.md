@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.5**
+> **Version 3.96.6**
 > - Clicking empty space on the navigation map now clears the selected room — the cyan crawler ring disappears and the selection goes back to none (a map drag still just pans)
-> - Trapped exits stay visible under a route — a preview or active travel line running along a trap no longer masks it: the trap is re-drawn on top of the path as a **dashed** red line, so the trap and the route crossing it both read at once
+> - Trapped exits stay visible under a route — the trap is re-drawn on top of the path as a **dashed** red line (same width as the route), so the trap and the route crossing it both read at once
+> - The current-room and destination markers now draw on top of the route line (a walk-to ending at the destination no longer hides its marker), and a previewed walk-to marks its destination too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -550,10 +550,11 @@ public sealed class MapControl : Control
 
     private static readonly IPen   TileBorderPen = new Pen(new SolidColorBrush(Color.Parse("#2A2A2A")), 1.0);
     private static readonly IPen   ExitPen       = new Pen(new SolidColorBrush(Color.Parse("#C0C0C0")), 2.0);
-    // Normal exit thickness — a route line (drawn on top in Pass 4) fully covers it, so
-    // the trap doesn't frame the route with solid red edges. Prominence + visibility
-    // under a route come from the dashed TrapOverlayPen re-drawn on top afterward.
-    private static readonly IPen   TrapPen       = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 2.0);
+    // Red for a trapped exit — same width as the walk-to / preview route lines (Nav line
+    // default 3.0). Matching widths means a route running over a trap covers the solid
+    // base exactly (no red edges poking out to frame it), while a standalone trap — base
+    // and dashed overlay the same width — reads as a uniform solid red line.
+    private static readonly IPen   TrapPen       = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 3.0);
     // Dark magenta for exits that need a command/action to cross rather than a
     // plain directional step — RoomExitHint.MultiActionHidden (an in-room lever /
     // ask-door acted on first, e.g. map 9 / room 1032's east exit on v1.11p) AND
@@ -585,7 +586,7 @@ public sealed class MapControl : Control
     // 35% route showing through. A standalone trap still looks solid: the solid base line
     // under the room nodes fills the dash gaps; only a route-crossed trap (base masked by
     // the route) shows the dashes.
-    private static readonly IPen   TrapOverlayPen  = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 4.0) { DashStyle = new DashStyle(new double[] { 3.25, 1.75 }, 0), LineCap = PenLineCap.Flat };
+    private static readonly IPen   TrapOverlayPen  = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 3.0) { DashStyle = new DashStyle(new double[] { 3.25, 1.75 }, 0), LineCap = PenLineCap.Flat };
     private static readonly IPen   ActionBridgePen = new Pen(new SolidColorBrush(Color.Parse("#8B008B")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     private static readonly IPen   HiddenBridgePen = new Pen(new SolidColorBrush(Color.Parse("#008B8B")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     // Max grid distance (Chebyshev) a gap-bridge line spans; beyond this the
@@ -1404,6 +1405,10 @@ public sealed class MapControl : Control
         // when the route pen is as wide (or wider). Re-drawing the red on top makes the
         // trap read through the route unconditionally.
         DrawAllExitLines(context, tilePixels, cx, cy, viewport, trapOverlay: true);
+
+        // Lift the current + destination markers back on top of the routes so the walk-to
+        // line ending at the destination doesn't cover its dot.
+        DrawEndpointMarkersOnTop(context, tilePixels, cx, cy, viewport);
 
         // Pass 6: numbered waypoint markers — drawn last so they sit on top of every
         // polyline and every room node fill. Red while building, green while running
@@ -2317,22 +2322,45 @@ public sealed class MapControl : Control
         }
 
         if (isCurrent || isDestination)
-        {
-            // Thick perimeter ring + centre dot — same shape for both
-            // markers so the destination reads as "the other end of the
-            // pair" rather than a different room class.
-            Rect ring = cell.Deflate(2);
-            IPen  outerPen = isCurrent ? PlayerOuterPen   : DestinationOuterPen;
-            IBrush dotFill  = isCurrent ? PlayerDotFill    : DestinationDotFill;
-            IPen   dotPen   = isCurrent ? PlayerDotPen     : DestinationDotPen;
-            ctx.DrawRectangle(null, outerPen, ring);
+            DrawEndpointMarker(ctx, cell, isCurrent);
+    }
 
-            double dotSize = Math.Max(cell.Width * 0.22, 4.0);
-            double dx = cell.X + (cell.Width  - dotSize) / 2;
-            double dy = cell.Y + (cell.Height - dotSize) / 2;
-            Rect dot = new(dx, dy, dotSize, dotSize);
-            ctx.DrawGeometry(dotFill, dotPen, new EllipseGeometry(dot));
+    // The current / destination "thick perimeter ring + centre dot" marker — same shape
+    // for both so the destination reads as "the other end of the pair", not a room class.
+    // Drawn inside DrawRoomNode (Pass 3) AND re-drawn on top of the route polylines later,
+    // because a walk-to line ends at the destination and would otherwise cover its dot.
+    private static void DrawEndpointMarker(DrawingContext ctx, Rect cell, bool current)
+    {
+        Rect ring = cell.Deflate(2);
+        IPen  outerPen = current ? PlayerOuterPen : DestinationOuterPen;
+        IBrush dotFill = current ? PlayerDotFill  : DestinationDotFill;
+        IPen   dotPen  = current ? PlayerDotPen   : DestinationDotPen;
+        ctx.DrawRectangle(null, outerPen, ring);
+
+        double dotSize = Math.Max(cell.Width * 0.22, 4.0);
+        double dx = cell.X + (cell.Width  - dotSize) / 2;
+        double dy = cell.Y + (cell.Height - dotSize) / 2;
+        Rect dot = new(dx, dy, dotSize, dotSize);
+        ctx.DrawGeometry(dotFill, dotPen, new EllipseGeometry(dot));
+    }
+
+    // Re-draw the current + destination markers on top of the route polylines so the
+    // walk-to line ending at the destination doesn't hide its centre dot (Pass 3 already
+    // drew them under the routes; this lifts them back above).
+    private void DrawEndpointMarkersOnTop(DrawingContext ctx, double tilePixels, double cx, double cy, Rect viewport)
+    {
+        if (Layout is null) return;
+        void Draw(RoomKey? key, bool current)
+        {
+            if (key is not { } k || !Layout.Positions.TryGetValue(k, out (int X, int Y) coord)) return;
+            Rect cell = ComputeCellRect(coord, tilePixels, cx, cy);
+            if (cell.Intersects(viewport)) DrawEndpointMarker(ctx, cell, current);
         }
+        Draw(CurrentRoomKey, current: true);
+        // Destination only when it's a different room than current (isCurrent wins in
+        // DrawRoomNode, so match that here).
+        if (DestinationRoomKey is { } dest && (CurrentRoomKey is not { } cur || !cur.Equals(dest)))
+            Draw(dest, current: false);
     }
 
     // Draws small filled triangles in the right corners of the node to

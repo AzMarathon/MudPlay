@@ -1048,7 +1048,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(RunStopLabel))]
     private RoomKey? _queuedDestination;
 
-    partial void OnQueuedDestinationChanged(RoomKey? value) => RefreshPreviewPath();
+    partial void OnQueuedDestinationChanged(RoomKey? value)
+    {
+        RefreshPreviewPath();
+        // Mark the preview target on the map too (the walker owns the marker while walking).
+        if (!IsWalking) DestinationRoomKey = value;
+    }
     // Drop the armed preview the instant a walk starts (the live WalkPath takes
     // over), and restore it if the walk stops with a destination still armed.
     partial void OnIsWalkingChanged(bool value) => RefreshPreviewPath();
@@ -3521,7 +3526,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         WalkPath = IsWalking
             ? _services.Walker.RemainingRoomKeys
             : null;
-        DestinationRoomKey = IsWalking ? _services.Walker.Destination : null;
+        // When walking, the marker is the walker's live destination; when idle it's the
+        // armed preview target (QueuedDestination) so a search-box / queued walk-to still
+        // marks where it's headed.
+        DestinationRoomKey = IsWalking ? _services.Walker.Destination : QueuedDestination;
         RefreshEngineActionKind();
     }
 

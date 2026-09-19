@@ -1,9 +1,10 @@
 # Version history
 
-## 3.96.5
+## 3.96.6
 
 - Clicking empty space on the navigation map now clears the selected room — the cyan crawler ring disappears and the selection goes back to none (a map drag still just pans)
-- Trapped exits stay visible under a route — a preview or active travel line running along a trap no longer masks it: the trap is thicker and re-drawn on top of the path as a **dashed** red line (clipped to the gap between rooms), so the trap and the route crossing it both read at once
+- Trapped exits stay visible under a route — a preview or active travel line running along a trap no longer masks it: the trap is re-drawn on top of the path as a **dashed** red line (same width as the route, clipped to the gap between rooms), so the trap and the route crossing it both read at once
+- The current-room and destination markers now draw on top of the route line, so a walk-to line ending at the destination no longer hides its marker — and a queued (previewed) walk-to now marks its destination room too
 
 ## 3.96.3
 
