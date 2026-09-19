@@ -578,6 +578,12 @@ public sealed class MapControl : Control
     private static readonly DashStyle BridgeDash = new(new double[] { 2, 2 }, 0);
     private static readonly IPen   ExitBridgePen   = new Pen(new SolidColorBrush(Color.Parse("#8A8A8A")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     private static readonly IPen   TrapBridgePen   = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 3.0) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
+    // Dashed red for the ON-TOP trap overlay: laid over a travel polyline, the dashes let
+    // the route line show through, so the trapped exit and the route crossing it read at
+    // once. A standalone trap still looks solid — the solid base line under the room nodes
+    // fills the dash gaps; only a route-crossed trap (whose base is masked by the route)
+    // shows the dashes.
+    private static readonly IPen   TrapOverlayPen  = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 4.0) { DashStyle = new DashStyle(new double[] { 1.5, 1.5 }, 0), LineCap = PenLineCap.Round };
     private static readonly IPen   ActionBridgePen = new Pen(new SolidColorBrush(Color.Parse("#8B008B")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     private static readonly IPen   HiddenBridgePen = new Pen(new SolidColorBrush(Color.Parse("#008B8B")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     // Max grid distance (Chebyshev) a gap-bridge line spans; beyond this the
@@ -1543,7 +1549,7 @@ public sealed class MapControl : Control
                         Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
                         if (trapOverlay)
                         {
-                            DrawTrapOverlay(ctx, srcPt, tgtPt, TrapPen, srcTrap, tgtTrap, tilePixels);
+                            DrawTrapOverlay(ctx, srcPt, tgtPt, TrapOverlayPen, srcTrap, tgtTrap, tilePixels);
                             break;
                         }
                         IPen basePen = isAction ? ActionPen : isHidden ? HiddenPen : ExitPen;

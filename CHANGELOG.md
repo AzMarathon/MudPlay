@@ -3,7 +3,7 @@
 ## 3.96.5
 
 - Clicking empty space on the navigation map now clears the selected room — the cyan crawler ring disappears and the selection goes back to none (a map drag still just pans)
-- Trapped exits stay visible under a route — a preview or active travel line running along a trap no longer masks it: the trap lines are thicker and re-drawn on top of the path, so the red reads through and flags a trap ahead
+- Trapped exits stay visible under a route — a preview or active travel line running along a trap no longer masks it: the trap is thicker and re-drawn on top of the path as a **dashed** red line (clipped to the gap between rooms), so the trap and the route crossing it both read at once
 
 ## 3.96.3
 
