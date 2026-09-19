@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.3**
-> - **Critical**: a between-round self-heal sent while stunned/petrified/bound was silently swallowed by the server — it now holds off while the condition is already known active, and also recovers cleanly when a stun lands an instant after the send (same round's line burst), releasing the round slot, cast cooldown, and duplicate-cast guard together so the retry fires the moment the condition clears
+> **Version 3.96.5**
+> - Clicking empty space on the navigation map now clears the selected room — the cyan crawler ring disappears and the selection goes back to none (a map drag still just pans)
+> - Trapped exits are drawn twice as thick so a preview or active travel line running through one no longer masks it — the red pokes out past the path line, flagging a trap ahead
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

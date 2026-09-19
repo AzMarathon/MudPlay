@@ -1,5 +1,10 @@
 # Version history
 
+## 3.96.5
+
+- Clicking empty space on the navigation map now clears the selected room — the cyan crawler ring disappears and the selection goes back to none (a map drag still just pans)
+- Trapped exits are drawn twice as thick so a preview or active travel line running through one no longer masks it — the red now pokes out past the path line, flagging a trap ahead
+
 ## 3.96.3
 
 - **Critical**: a between-round self-heal (Emergency/Major/Minor) sent while stunned/petrified/bound was silently swallowed by the server, but the engine still stamped its round cooldown as if it landed — stranding the heal for a full round even after the condition cleared. It now holds off entirely while the condition is already known active, same as combat attacks already did.

@@ -550,7 +550,10 @@ public sealed class MapControl : Control
 
     private static readonly IPen   TileBorderPen = new Pen(new SolidColorBrush(Color.Parse("#2A2A2A")), 1.0);
     private static readonly IPen   ExitPen       = new Pen(new SolidColorBrush(Color.Parse("#C0C0C0")), 2.0);
-    private static readonly IPen   TrapPen       = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 2.0);
+    // Twice the normal exit thickness so a trapped exit stays visible even when a
+    // preview / active travel polyline (drawn on top in Pass 4) runs along it — the
+    // red pokes out past the travel line on both sides instead of being masked.
+    private static readonly IPen   TrapPen       = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 4.0);
     // Dark magenta for exits that need a command/action to cross rather than a
     // plain directional step — RoomExitHint.MultiActionHidden (an in-room lever /
     // ask-door acted on first, e.g. map 9 / room 1032's east exit on v1.11p) AND
@@ -574,7 +577,7 @@ public sealed class MapControl : Control
     // hidden keep their semantic hue for recognition.
     private static readonly DashStyle BridgeDash = new(new double[] { 2, 2 }, 0);
     private static readonly IPen   ExitBridgePen   = new Pen(new SolidColorBrush(Color.Parse("#8A8A8A")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
-    private static readonly IPen   TrapBridgePen   = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
+    private static readonly IPen   TrapBridgePen   = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 3.0) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     private static readonly IPen   ActionBridgePen = new Pen(new SolidColorBrush(Color.Parse("#8B008B")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     private static readonly IPen   HiddenBridgePen = new Pen(new SolidColorBrush(Color.Parse("#008B8B")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     // Max grid distance (Chebyshev) a gap-bridge line spans; beyond this the
@@ -1199,18 +1202,28 @@ public sealed class MapControl : Control
         _isDragging = false;
         e.Pointer.Capture(null);
 
-        if (!wasDragging && TryHitTestRoom(releasePos, out RoomKey hit))
+        if (!wasDragging)
         {
-            // Move the crawler selection to the clicked room and keep
-            // the click sticky for the next 15 s by arming auto-follow
-            // suppression, instead of bouncing back to live player
-            // position on the next in-game move.
-            SuppressAutoFollow();
-            SelectedRoomKey = hit;
+            if (TryHitTestRoom(releasePos, out RoomKey hit))
+            {
+                // Move the crawler selection to the clicked room and keep
+                // the click sticky for the next 15 s by arming auto-follow
+                // suppression, instead of bouncing back to live player
+                // position on the next in-game move.
+                SuppressAutoFollow();
+                SelectedRoomKey = hit;
 
-            // Notify the host (NavigationViewModel → loop builder
-            // when LoopMode is active).
-            RoomLeftClicked?.Invoke(hit, releasePos);
+                // Notify the host (NavigationViewModel → loop builder
+                // when LoopMode is active).
+                RoomLeftClicked?.Invoke(hit, releasePos);
+            }
+            else
+            {
+                // A plain click on empty map space (no square hit) clears the
+                // selection — the cyan crawler ring disappears and SelectedRoomKey
+                // goes back to null. A drag (map pan) is excluded above.
+                SelectedRoomKey = null;
+            }
         }
         e.Handled = true;
     }
