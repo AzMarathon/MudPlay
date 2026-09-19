@@ -550,10 +550,10 @@ public sealed class MapControl : Control
 
     private static readonly IPen   TileBorderPen = new Pen(new SolidColorBrush(Color.Parse("#2A2A2A")), 1.0);
     private static readonly IPen   ExitPen       = new Pen(new SolidColorBrush(Color.Parse("#C0C0C0")), 2.0);
-    // Twice the normal exit thickness so a trapped exit stays visible even when a
-    // preview / active travel polyline (drawn on top in Pass 4) runs along it — the
-    // red pokes out past the travel line on both sides instead of being masked.
-    private static readonly IPen   TrapPen       = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 4.0);
+    // Normal exit thickness — a route line (drawn on top in Pass 4) fully covers it, so
+    // the trap doesn't frame the route with solid red edges. Prominence + visibility
+    // under a route come from the dashed TrapOverlayPen re-drawn on top afterward.
+    private static readonly IPen   TrapPen       = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 2.0);
     // Dark magenta for exits that need a command/action to cross rather than a
     // plain directional step — RoomExitHint.MultiActionHidden (an in-room lever /
     // ask-door acted on first, e.g. map 9 / room 1032's east exit on v1.11p) AND
@@ -577,13 +577,15 @@ public sealed class MapControl : Control
     // hidden keep their semantic hue for recognition.
     private static readonly DashStyle BridgeDash = new(new double[] { 2, 2 }, 0);
     private static readonly IPen   ExitBridgePen   = new Pen(new SolidColorBrush(Color.Parse("#8A8A8A")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
-    private static readonly IPen   TrapBridgePen   = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 3.0) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
+    private static readonly IPen   TrapBridgePen   = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     // Dashed red for the ON-TOP trap overlay: laid over a travel polyline, the dashes let
     // the route line show through, so the trapped exit and the route crossing it read at
-    // once. A standalone trap still looks solid — the solid base line under the room nodes
-    // fills the dash gaps; only a route-crossed trap (whose base is masked by the route)
-    // shows the dashes.
-    private static readonly IPen   TrapOverlayPen  = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 4.0) { DashStyle = new DashStyle(new double[] { 2.5, 2.0 }, 0), LineCap = PenLineCap.Round };
+    // once. Flat caps (not round) so the dash lengths are literal — round caps extend each
+    // red dash into the gap, over-reddening it. The {3.25, 1.75} pattern is ~65% red /
+    // 35% route showing through. A standalone trap still looks solid: the solid base line
+    // under the room nodes fills the dash gaps; only a route-crossed trap (base masked by
+    // the route) shows the dashes.
+    private static readonly IPen   TrapOverlayPen  = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 4.0) { DashStyle = new DashStyle(new double[] { 3.25, 1.75 }, 0), LineCap = PenLineCap.Flat };
     private static readonly IPen   ActionBridgePen = new Pen(new SolidColorBrush(Color.Parse("#8B008B")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     private static readonly IPen   HiddenBridgePen = new Pen(new SolidColorBrush(Color.Parse("#008B8B")), 1.5) { DashStyle = BridgeDash, LineCap = PenLineCap.Round };
     // Max grid distance (Chebyshev) a gap-bridge line spans; beyond this the
