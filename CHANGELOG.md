@@ -1,5 +1,9 @@
 # Version history
 
+## 3.96.7
+
+- The walk-to **preview** line's default colour is now the gold of the player-position marker (the loop-builder preview line is unchanged) — reset it under Settings → General → nav-line styles to pick up the new default
+
 ## 3.96.6
 
 - Clicking empty space on the navigation map now clears the selected room — the cyan crawler ring disappears and the selection goes back to none (a map drag still just pans)
