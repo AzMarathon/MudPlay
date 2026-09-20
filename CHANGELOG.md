@@ -1,5 +1,9 @@
 # Version history
 
+## 3.96.13
+
+- Fixed `@uses` (and the Character Info charge readout) mis-reporting a charged item as "isn't a limited-use item" when its inventory name carried stray whitespace from the word-wrapped `i` dump — game-data name lookups now normalise whitespace
+
 ## 3.96.12
 
 - Terminal right-click menu editor: added a blanket **Game Data Browser…** entry that opens the window on its last tab (previously only the per-table sections could be added, not the window itself)
