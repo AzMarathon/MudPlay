@@ -374,8 +374,19 @@ public sealed class GameDataCache
         ArgumentNullException.ThrowIfNull(name);
         JsonDocument? doc = GetRawTable(tableName);
         if (doc is null) return null;
-        return GetNameIndex(tableName, doc).TryGetValue(name, out JsonElement row) ? row : null;
+        // Normalise the lookup key: trim and collapse internal whitespace runs to a
+        // single space. Game-data names are canonical (no stray spacing), but a name
+        // passed in from an inventory parse can carry a doubled or trailing space —
+        // the game's 'i' dump is word-wrapped, so a name split across a wrap can come
+        // back as "silvery skullcap " / "silvery  skullcap". Without this, the exact
+        // match silently misses and the caller reads item 0 (e.g. @uses reporting a
+        // charged item as "isn't a limited-use item").
+        string key = NormalizeLookupName(name);
+        return GetNameIndex(tableName, doc).TryGetValue(key, out JsonElement row) ? row : null;
     }
+
+    private static string NormalizeLookupName(string name)
+        => System.Text.RegularExpressions.Regex.Replace(name.Trim(), @"\s+", " ");
 
     // Build (or return the cached) Number → row index for tableName. Ties are
     // resolved first-match-wins, matching the linear scan this replaced. Built

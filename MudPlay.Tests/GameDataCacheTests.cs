@@ -309,6 +309,27 @@ public sealed class GameDataCacheTests : IDisposable
     }
 
     [Fact]
+    public void FindRowByName_ToleratesInventoryWhitespaceNoise()
+    {
+        // Inventory names come from the game's word-wrapped 'i' dump; a name split
+        // across a wrap can arrive with a trailing / leading / doubled space. The
+        // canonical game-data name has none, so the exact match must normalise the
+        // key or a charged item silently resolves to nothing (report: @uses silvery
+        // skullcap → "isn't a limited-use item").
+        SeedSet("alpha", ("Items",
+            "[{\"Number\":401,\"Name\":\"silvery skullcap\",\"UseCount\":3}]"));
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+
+        foreach (string q in new[] { "silvery skullcap", "silvery skullcap ", " silvery skullcap", "silvery  skullcap", "SILVERY  SKULLCAP " })
+        {
+            JsonElement? row = cache.FindRowByName("Items", q);
+            Assert.True(row is not null, $"'{q}' should resolve to the skullcap row");
+            Assert.Equal(401, row!.Value.GetProperty("Number").GetInt32());
+        }
+    }
+
+    [Fact]
     public void SwitchSet_UnknownSet_StillFlipsActiveSet()
     {
         // A profile may point at a set that hasn't been imported yet —
