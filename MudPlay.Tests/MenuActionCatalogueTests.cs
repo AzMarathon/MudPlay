@@ -105,6 +105,17 @@ public class MenuActionCatalogueTests
         Assert.NotNull(MenuActionCatalogue.Find("action.getall"));
     }
 
+    // The blanket "open the Game Data window" opener must be in the pool: the
+    // per-section deep-links alone left no way to add just the window itself.
+    [Fact]
+    public void Catalogue_HasBlanketGameDataBrowserOpener()
+    {
+        MenuActionCatalogue.Entry? e = MenuActionCatalogue.Find("view.gamedata");
+        Assert.NotNull(e);
+        Assert.Equal(MenuActionCatalogue.Kind.Command, e!.EntryKind);
+        Assert.Equal("OpenGameDataBrowserCommand", e.CommandName);
+    }
+
     // The Favorites / Recent walk fly-outs are catalogue entries now (placeable
     // like anything else); the builder renders each from a live VM collection, so
     // those collections must exist on MainWindowViewModel.

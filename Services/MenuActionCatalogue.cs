@@ -156,6 +156,10 @@ public static class MenuActionCatalogue
     // menu doesn't lose them; the rest expose the remaining browser tables.
     private static readonly Entry[] _gameData =
     {
+        // The blanket "open the Game Data window" opener (on whatever tab was last
+        // shown) — the base command, alongside the per-section deep-links below.
+        // Mirrors "Settings…" vs the Settings-tab deep-links.
+        new("view.gamedata", "Game Data Browser…", Kind.Command, "Game Data", CommandName: "OpenGameDataBrowserCommand", GestureProperty: "GameDataBrowserGesture"),
         new("view.gdplayers", "Players", Kind.GameDataSection, "Game Data", Parameter: "players"),
         new("view.gdmacros", "Macros", Kind.GameDataSection, "Game Data", Parameter: "macros"),
         new("view.gdtriggers", "Triggers", Kind.GameDataSection, "Game Data", Parameter: "triggers"),

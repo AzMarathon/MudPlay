@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.11**
-> - Between-round survival casts (heal / cure / buff) no longer sit out a round waiting on the combat attack: a due top-priority cast — including the emergency heal — now fires the round it's queued on its own independent slot, instead of being held for a full ~5s round by the attack-owed alternation
+> **Version 3.96.12**
+> - Terminal right-click menu editor: added a blanket **Game Data Browser…** entry that opens the window on its last tab (previously only the per-table sections could be added, not the window itself)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
