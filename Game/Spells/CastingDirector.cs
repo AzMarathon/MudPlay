@@ -1425,10 +1425,16 @@ public sealed class CastingDirector : IDisposable
         // A prior survival cast already spent a round the combat engine's attack
         // spell was owed — sit out entirely so that resume can reclaim the very
         // next round, rather than re-firing again ourselves the instant HP dips
-        // (which it always will while nothing is fighting back). No exception for
-        // urgency: engage / attack / heal-or-buff / attack / heal-or-buff / ... is
-        // the fixed cadence regardless of how the fight is going.
-        if (_attackOwed?.Invoke() == true) return null;
+        // (which it always will while nothing is fighting back). EmergencyHeal is
+        // the one exception: a life-threatening HP state preempts the owed attack's
+        // turn instead of queuing behind it — losing the character while a scripted
+        // attack politely waits its turn is worse than a skipped swing (report
+        // paradigm-20260920-075920: AttackPrevented cleared mid-stunlock at
+        // hp=90/407, but the owed attack claimed the round first; the emergency
+        // heal didn't fire until the NEXT round tick, 3s and ~30 more HP later).
+        // Every other category still holds — this is a survival-only carve-out, not
+        // a general urgency exception.
+        if (_attackOwed?.Invoke() == true && !(healRestEnabled && IsEmergencyHealDue())) return null;
 
         // One between-round spell (heal / cure / buff / debuff / item) per combat
         // round: the game allows a single 0-energy cast per round, so a second draws
@@ -1762,6 +1768,12 @@ public sealed class CastingDirector : IDisposable
     }
 
     // ----- Self heal --------------------------------------------------
+
+    // True when HP has fallen to/below EmergencyHealTrigger and a spell is
+    // configured to answer it — the same test PickEmergencySelfHeal applies,
+    // exposed early so Evaluate's attack-owed gate can let it preempt the
+    // combat engine's queued attack-spell turn (see the urgency carve-out there).
+    private bool IsEmergencyHealDue() => PickEmergencySelfHeal(_readSpells(), _readHealth()) is not null;
 
     // Last-resort self-save. Deliberately does NOT gate on ManaClearsHealFloor
     // (unlike Major/Minor below) — an emergency spends whatever mana is left

@@ -28,6 +28,7 @@ public sealed class CastingDirectorTests
         public HealthSettings Health { get; set; } = new();
         public bool AutoHealRestEnabled { get; set; } = true;
         public bool AutoBlessEnabled { get; set; } = true;
+        public bool AttackOwed { get; set; }
 
         /// <summary>Cast-code → required mana. Empty by default, so the lookup
         /// returns null (unknown ⇒ no affordability block) and the legacy tests
@@ -49,6 +50,7 @@ public sealed class CastingDirectorTests
             Director.SetManaCostLookup(
                 code => ManaCosts.TryGetValue(code, out int c) ? c : null);
             Director.SetAutoBlessGate(() => AutoBlessEnabled);
+            Director.SetAttackOwedGate(() => AttackOwed);
         }
 
         /// <summary>Mirror PromptParser's write order so HasPromptData
@@ -708,6 +710,42 @@ public sealed class CastingDirectorTests
         h.ManaCosts["lastresort"] = 50;
 
         h.SetPrompt(hp: 15, maxHp: 100, ma: 10, maxMa: 100, inCombat: true);   // can't afford 50
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void EmergencyHeal_PreemptsAttackOwedGate_UnlikeOtherCategories()
+    {
+        // report paradigm-20260920-075920: a stunlock cleared at hp=90/407 with the
+        // combat engine's attack spell owed (a prior between-round cast claimed the
+        // round). The engine let the owed attack go out FIRST and didn't reconsider
+        // EmergencyHeal until the next round tick, 3s and ~30 more HP later. Emergency
+        // must preempt this cadence gate — every other category still queues behind it.
+        using Harness h = new();
+        h.Spells.EmergencyHealSpell = "lastresort";
+        h.Health.EmergencyHealTrigger = 48;
+        h.AttackOwed = true;
+
+        h.SetPrompt(hp: 90, maxHp: 407, inCombat: true);
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("lastresort", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void MinorHeal_StillQueuesBehindAttackOwedGate_AboveEmergencyThreshold()
+    {
+        // The urgency carve-out is scoped to EmergencyHeal only — a routine heal
+        // above the emergency trigger still waits its turn behind the owed attack,
+        // preserving the original engage/attack/heal-or-buff cadence.
+        using Harness h = new();
+        h.Spells.MinorHealSpell = "heal";
+        h.Health.MinorHealCombatTrigger = 90;
+        h.Health.EmergencyHealTrigger = 20;   // far below current HP — not an emergency
+        h.AttackOwed = true;
+
+        h.SetPrompt(hp: 60, maxHp: 100, inCombat: true);   // 60% < 90% minor trigger
 
         Assert.Empty(h.CastsSent);
     }

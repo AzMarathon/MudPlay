@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.10**
-> - Obtain-then-cross walk-to: the map route line and **Details…** now show the whole journey (to the shop, then on to the requested destination) instead of stopping at the shop the gate item is bought at
-> - Route picker window now grows to fit the cards when planning finishes, instead of staying at its "Calculating…" size and overflowing onto the buttons
+> **Version 3.96.11**
+> - Emergency self-heal now preempts a combat round the engine's attack spell was owed instead of queuing behind it — a stunlock clearing at critically low HP no longer waits out the attack's turn (and the next full round after it) before the heal fires
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
