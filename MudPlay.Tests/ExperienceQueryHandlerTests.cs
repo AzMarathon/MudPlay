@@ -38,7 +38,13 @@ public sealed class ExperienceQueryHandlerTests
         PlayerStats stats = new();
         Clock clock = new();
         SessionActivityTracker activity = new(() => clock.NowUtc);
-        _ = new ExperienceQueryHandler(engine, stats, activity);
+        // Isolated empty game-data root. The exp chart still resolves to the default
+        // (CalcExpChart(0,0) > 0), so with exp unset the banked-levels ratio reads
+        // "+0.00 lvls" — enough to pin the level-tag format here; the ratio VALUE is
+        // covered by the TimeToLevelEstimator tests.
+        GameDataCache gameData = new(System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), $"mudplay-expq-{Guid.NewGuid():N}"));
+        _ = new ExperienceQueryHandler(engine, stats, activity, gameData);
         return (engine, stats, activity, clock, players);
     }
 
@@ -138,7 +144,7 @@ public sealed class ExperienceQueryHandlerTests
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
         string reply = Assert.Single(Replies(engine));
-        Assert.Equal("Made: 16,200  Needed: 32,400 (L13)  Rate: 32,400/hr  Will level in: 60m", reply);
+        Assert.Equal("Made: 16,200  Needed: 32,400 (L13, +0.00 lvls)  Rate: 32,400/hr  Will level in: 60m", reply);
     }
 
     [Fact]
@@ -169,7 +175,7 @@ public sealed class ExperienceQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
-        Assert.Equal("Made: 6,000  Needed: 0 (L13)  Rate: 12,000/hr  Will level in: ready to level",
+        Assert.Equal("Made: 6,000  Needed: 0 (L13, +0.00 lvls)  Rate: 12,000/hr  Will level in: ready to level",
             Assert.Single(Replies(engine)));
     }
 
@@ -188,7 +194,7 @@ public sealed class ExperienceQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
-        Assert.Equal("Made: 30,000,000  Needed: 60,000,000 (L72)  Rate: 30m/hr  Will level in: 2h 0m",
+        Assert.Equal("Made: 30,000,000  Needed: 60,000,000 (L72, +0.00 lvls)  Rate: 30 m/hr  Will level in: 2h 0m",
             Assert.Single(Replies(engine)));
     }
 
@@ -199,14 +205,14 @@ public sealed class ExperienceQueryHandlerTests
     [InlineData(999, "999")]
     [InlineData(85_377, "85,377")]          // < 100k → exact, comma-grouped
     [InlineData(99_999, "99,999")]
-    [InlineData(100_000, "100k")]           // 100k–999k → whole thousands (floor)
-    [InlineData(853_777, "853k")]
-    [InlineData(999_999, "999k")]
-    [InlineData(1_000_000, "1m")]           // millions → one decimal, trailing .0 dropped
-    [InlineData(1_100_000, "1.1m")]
-    [InlineData(1_193_744, "1.2m")]
-    [InlineData(10_100_000, "10.1m")]
-    [InlineData(30_000_000, "30m")]
+    [InlineData(100_000, "100 k")]          // 100k–999k → whole thousands (floor), space before unit
+    [InlineData(853_777, "853 k")]
+    [InlineData(999_999, "999 k")]
+    [InlineData(1_000_000, "1 m")]          // millions → one decimal, trailing .0 dropped
+    [InlineData(1_100_000, "1.1 m")]
+    [InlineData(1_193_744, "1.2 m")]
+    [InlineData(10_100_000, "10.1 m")]
+    [InlineData(30_000_000, "30 m")]
     public void FormatExpRate_TiersByMagnitude(double rate, string expected)
         => Assert.Equal(expected, ExperienceQueryHandler.FormatExpRate(rate));
 

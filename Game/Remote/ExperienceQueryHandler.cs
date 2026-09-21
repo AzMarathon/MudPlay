@@ -10,9 +10,10 @@ namespace MudPlay.Game.Remote;
 //   - @exp — a MegaMUD-style session progress line: exp MADE this session (the
 //     running SessionActivityTracker total, which @reset zeroes — most parties
 //     @reset at the start of a loop, or auto-reset on loop start), exp NEEDED for
-//     the next level and which level that is, the compact exp-per-hour rate, and
-//     the time to that level at the current rate ("Made: 474,216,179  Needed:
-//     545,045,125 (L72)  Rate: 14.3m/hr  Will level in: 1d 14h 12m").
+//     the next level and which level that is (with the banked-levels ratio the
+//     status-bar TNL shows, "+N.NN lvls"), the compact exp-per-hour rate, and the
+//     time to that level at the current rate ("Made: 474,216,179  Needed: 545,045,125
+//     (L72, +2.14 lvls)  Rate: 14.3 m/hr  Will level in: 1d 14h 12m").
 //   - @level — current level, total accumulated experience, and experience still
 //     needed for the next level.
 // Both reply on the sender's channel and never touch the wire, so no wire-sender
@@ -26,19 +27,23 @@ public sealed class ExperienceQueryHandler : IDisposable
     private readonly RemoteCommandManager _engine;
     private readonly PlayerStats _stats;
     private readonly SessionActivityTracker _activity;
+    private readonly GameDataCache _gameData;
     private bool _disposed;
 
     public ExperienceQueryHandler(
         RemoteCommandManager engine,
         PlayerStats stats,
-        SessionActivityTracker activity)
+        SessionActivityTracker activity,
+        GameDataCache gameData)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(activity);
+        ArgumentNullException.ThrowIfNull(gameData);
         _engine = engine;
         _stats = stats;
         _activity = activity;
+        _gameData = gameData;
 
         Register("@exp", OnExp);
         Register("@level", OnLevel);
@@ -97,7 +102,18 @@ public sealed class ExperienceQueryHandler : IDisposable
             return;
         }
 
-        string levelTag = _stats.Level > 0 ? $" (L{_stats.Level + 1})" : string.Empty;
+        // Level tag: the next level, plus the banked-levels ratio the status-bar TNL
+        // surfaces ("+N.NN") — how many levels' worth of exp the running total already
+        // covers. Shared TimeToLevelEstimator so @exp and the TNL can't drift; the
+        // ratio is dropped when the exp chart can't be resolved (no game data).
+        string levelTag = string.Empty;
+        if (_stats.Level > 0)
+        {
+            TimeToLevelEstimator.Result est = TimeToLevelEstimator.Estimate(_stats, _gameData, rate);
+            levelTag = est.TargetLevel > 0
+                ? $" (L{_stats.Level + 1}, +{est.BankableLevelsFractional:0.00} lvls)"
+                : $" (L{_stats.Level + 1})";
+        }
         string needed = $"Needed: {_stats.ExpToNext:N0}{levelTag}";
         if (rate <= 0) { ctx.Reply($"{made}  {needed}  Rate: unknown"); return; }
 
@@ -110,15 +126,17 @@ public sealed class ExperienceQueryHandler : IDisposable
     }
 
     // Compact exp/hr for the @exp reply: exact comma-grouped below 100k, whole
-    // thousands 100k–999k ("853k"), millions with one decimal above ("1.1m",
-    // "10.1m", "30m"). ~30m/hr is the game's ceiling, so there's no need for
-    // billions/trillions tiers. Deliberately distinct from RateText.Compact (the
-    // narrow status-chip format, which abbreviates from 1k with a decimal and an
-    // uppercase M) — the chat reply keeps small rates exact and reads lowercase.
+    // thousands 100k–999k ("853 k"), millions with one decimal above ("1.1 m",
+    // "10.1 m", "30 m"). The unit is space-separated from the value so the reply
+    // reads like MegaMUD's ("14.3 m/hr"). ~30m/hr is the game's ceiling, so there's
+    // no need for billions/trillions tiers. Deliberately distinct from
+    // RateText.Compact (the narrow status-chip format, which abbreviates from 1k with
+    // a decimal and an uppercase M) — the chat reply keeps small rates exact and
+    // reads lowercase.
     internal static string FormatExpRate(double rate)
     {
         if (rate < 100_000) return rate.ToString("N0", CultureInfo.InvariantCulture);
-        if (rate < 1_000_000) return string.Create(CultureInfo.InvariantCulture, $"{(long)(rate / 1000)}k");
-        return string.Create(CultureInfo.InvariantCulture, $"{rate / 1_000_000d:0.#}m");
+        if (rate < 1_000_000) return string.Create(CultureInfo.InvariantCulture, $"{(long)(rate / 1000)} k");
+        return string.Create(CultureInfo.InvariantCulture, $"{rate / 1_000_000d:0.#} m");
     }
 }

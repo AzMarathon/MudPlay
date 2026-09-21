@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.97.1**
-> - `@exp` now replies with a MegaMUD-style session line — exp **made** this session (zeroed by `@reset` / loop-start auto-reset), exp **needed** for the next level and which level that is, the exp/hour rate, and the time to that level at the current rate — instead of only the remaining exp + rate
+> - `@exp` now replies with a MegaMUD-style session line — exp **made** this session (zeroed by `@reset` / loop-start auto-reset), exp **needed** for the next level and which level that is (with the banked-levels ratio the status-bar TNL shows, e.g. `(L72, +2.14 lvls)`), the exp/hour rate, and the time to that level at the current rate — instead of only the remaining exp + rate
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
