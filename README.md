@@ -3,6 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.96.24**
 > - Conversation window now re-scopes to the loaded character on a profile switch: it clears and re-seeds from that character's own chat log, so two characters on the same BBS (e.g. a PVE realm and a PVP realm) no longer share the same conversation view. The on-disk logs were already per-character; the in-memory view used to seed once per app run and survive every swap, leaving the previous character's chat on screen
+> - Conversation / transaction logs now write to disk on a background thread instead of rewriting the whole file inline on every line, so the Conversation window no longer stutters under heavy chat (or with several clients running) — the window's own thread is never blocked on the disk write
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -6,7 +6,9 @@ namespace MudPlay.Tests;
 
 // Pins the rolling-log primitive that backs the per-character talk.log /
 // transactions.log: the on-disk line count never exceeds the cap, content
-// persists across a reopen (a restart), and Truncate wipes the file.
+// persists across a reopen (a restart), and Truncate wipes the file. Appends
+// persist asynchronously (off the caller's thread), so a test that reads the file
+// right after appending calls Flush first to force the pending write.
 public sealed class RollingLogFileTests
 {
     private static string TempPath() =>
@@ -21,8 +23,27 @@ public sealed class RollingLogFileTests
             RollingLogFile log = new();
             log.Open(path, maxLines: 3);
             for (int i = 1; i <= 10; i++) log.Append($"line {i}");
+            log.Flush();
 
             Assert.Equal(new[] { "line 8", "line 9", "line 10" }, File.ReadAllLines(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Snapshot_IsCurrentImmediately_EvenBeforeTheDiskWrite()
+    {
+        // The in-memory tail (what the Conversation window seeds from) updates
+        // synchronously on Append; only the file write is deferred.
+        string path = TempPath();
+        try
+        {
+            RollingLogFile log = new();
+            log.Open(path, maxLines: 5);
+            log.Append("a");
+            log.Append("b");
+
+            Assert.Equal(new[] { "a", "b" }, log.Snapshot());
         }
         finally { File.Delete(path); }
     }
@@ -44,6 +65,7 @@ public sealed class RollingLogFileTests
             RollingLogFile second = new();
             second.Open(path, maxLines: 5);
             second.Append("c");
+            second.Flush();
 
             Assert.Equal(new[] { "a", "b", "c" }, File.ReadAllLines(path));
         }
@@ -61,6 +83,7 @@ public sealed class RollingLogFileTests
             RollingLogFile log = new();
             log.Open(path, maxLines: 2);
             log.Append("6");
+            log.Flush();
 
             Assert.Equal(new[] { "5", "6" }, File.ReadAllLines(path));
         }
