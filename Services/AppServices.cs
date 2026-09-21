@@ -4657,7 +4657,7 @@ public sealed class AppServices
         // PlayerStats snapshot (from `stat` / `exp`) and the session
         // exp-rate tracker. No wire output, so no sender to bind.
         ExperienceQuery = new Game.Remote.ExperienceQueryHandler(
-            RemoteCommands, PlayerStats, SessionActivity);
+            RemoteCommands, PlayerStats, SessionActivity, GameData);
 
         // Per-BBS runic-currency naming. Reads the active BBS's RunicCurrencyName
         // live (via ResolveActiveBbs) and re-reads on profile / BBS swap. Injected

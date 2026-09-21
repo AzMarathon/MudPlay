@@ -7,9 +7,13 @@ using MudPlay.Services;
 namespace MudPlay.Game.Remote;
 
 // Read-only handler for the two QueryExperience commands:
-//   - @exp — exp remaining to level, the compact exp-per-hour rate, and an
-//     estimated time-to-level ("4,500,000 EXP to level, making 1.1m/hr ~4h 10m
-//     to level").
+//   - @exp — a MegaMUD-style session progress line: exp MADE this session (the
+//     running SessionActivityTracker total, which @reset zeroes — most parties
+//     @reset at the start of a loop, or auto-reset on loop start), exp NEEDED for
+//     the next level and which level that is (with the banked-levels ratio the
+//     status-bar TNL shows, "+N.NN lvls"), the compact exp-per-hour rate, and the
+//     time to that level at the current rate ("Made: 474,216,179  Needed: 545,045,125
+//     (L72, +2.14 lvls)  Rate: 14.3 m/hr  Will level in: 1d 14h 12m").
 //   - @level — current level, total accumulated experience, and experience still
 //     needed for the next level.
 // Both reply on the sender's channel and never touch the wire, so no wire-sender
@@ -23,19 +27,23 @@ public sealed class ExperienceQueryHandler : IDisposable
     private readonly RemoteCommandManager _engine;
     private readonly PlayerStats _stats;
     private readonly SessionActivityTracker _activity;
+    private readonly GameDataCache _gameData;
     private bool _disposed;
 
     public ExperienceQueryHandler(
         RemoteCommandManager engine,
         PlayerStats stats,
-        SessionActivityTracker activity)
+        SessionActivityTracker activity,
+        GameDataCache gameData)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(activity);
+        ArgumentNullException.ThrowIfNull(gameData);
         _engine = engine;
         _stats = stats;
         _activity = activity;
+        _gameData = gameData;
 
         Register("@exp", OnExp);
         Register("@level", OnLevel);
@@ -69,51 +77,66 @@ public sealed class ExperienceQueryHandler : IDisposable
         ctx.Reply($"Level {_stats.Level}, {_stats.Exp:N0} exp, {toNext}");
     }
 
-    // @exp — "N EXP to level, making <rate>/hr ~<time> to level". Leads with the
-    // exp still needed (PlayerStats.ExpToNext), then the compact whole-session
-    // rate the Session Stats panel prints (kept in sync), then the ETA. The ETA
-    // reuses ExperienceTableCalculator.CalcTimeToLevel with ExpToNext as the
-    // "needed" figure (current exp 0), so a zero/negative remaining reads as
-    // "ready to level". Exp-to-level + ETA both need the game's exp line
-    // (LevelExpSpan is 0 until it's parsed), so before that we report only the
-    // rate and point the sender at `exp`.
+    // @exp — a MegaMUD-style progress line:
+    //   "Made: <session exp>  Needed: <exp to next> (L<next level>)  Rate: <rate>/hr
+    //    Will level in: <time>"
+    // Made is the running session total (SessionActivityTracker.ExperienceEarned,
+    // zeroed by @reset / loop-start auto-reset) and is ALWAYS shown, even before a
+    // stat/exp screen — it's the "how are we doing this session" figure. Needed /
+    // next-level / the ETA all come off the game's exp line (PlayerStats.LevelExpSpan
+    // stays 0 until it's parsed), so before that we report Made + rate and point the
+    // sender at `exp`. The ETA reuses CalcTimeToLevel with ExpToNext as the needed
+    // figure (current exp 0), so a zero/negative remaining reads "ready to level".
+    // The (L<n>) tag is the level being worked toward — the current level + 1 — and
+    // is dropped when the level isn't known yet.
     private void OnExp(RemoteCommandContext ctx)
     {
         SessionActivityStats snap = _activity.Snapshot();
         double rate = snap.ExperiencePerHour;
-        string ratePart = rate > 0 ? $"making {FormatExpRate(rate)}/hr" : "rate unknown";
+        string made = $"Made: {snap.ExperienceEarned:N0}";
+        string ratePart = rate > 0 ? $"Rate: {FormatExpRate(rate)}/hr" : "Rate: unknown";
 
         if (_stats.LevelExpSpan <= 0)
         {
-            ctx.Reply(rate > 0
-                ? $"{ratePart} (type exp for time to level)"
-                : "exp rate + time to level unknown (type exp)");
+            ctx.Reply($"{made}  {ratePart} (type exp for needed + time to level)");
             return;
         }
 
-        string toLevel = $"{_stats.ExpToNext:N0} EXP to level";
-        if (rate <= 0) { ctx.Reply($"{toLevel}, rate unknown."); return; }
+        // Level tag: the next level, plus the banked-levels ratio the status-bar TNL
+        // surfaces ("+N.NN") — how many levels' worth of exp the running total already
+        // covers. Shared TimeToLevelEstimator so @exp and the TNL can't drift; the
+        // ratio is dropped when the exp chart can't be resolved (no game data).
+        string levelTag = string.Empty;
+        if (_stats.Level > 0)
+        {
+            TimeToLevelEstimator.Result est = TimeToLevelEstimator.Estimate(_stats, _gameData, rate);
+            levelTag = est.TargetLevel > 0
+                ? $" (L{_stats.Level + 1}, +{est.BankableLevelsFractional:0.00} lvls)"
+                : $" (L{_stats.Level + 1})";
+        }
+        string needed = $"Needed: {_stats.ExpToNext:N0}{levelTag}";
+        if (rate <= 0) { ctx.Reply($"{made}  {needed}  Rate: unknown"); return; }
 
         TimeSpan? eta = ExperienceTableCalculator.CalcTimeToLevel(_stats.ExpToNext, 0, (long)rate);
-        string etaPart = eta is null ? string.Empty
-            : eta.Value <= TimeSpan.Zero ? "ready to level"
-                : $"~{ExperienceTableCalculator.FormatTimeToLevel(eta.Value)} to level";
+        string willLevel = eta is null || eta.Value <= TimeSpan.Zero
+            ? "Will level in: ready to level"
+            : $"Will level in: {ExperienceTableCalculator.FormatTimeToLevel(eta.Value)}";
 
-        ctx.Reply(etaPart.Length == 0
-            ? $"{toLevel}, {ratePart}."
-            : $"{toLevel}, {ratePart} {etaPart}.");
+        ctx.Reply($"{made}  {needed}  {ratePart}  {willLevel}");
     }
 
     // Compact exp/hr for the @exp reply: exact comma-grouped below 100k, whole
-    // thousands 100k–999k ("853k"), millions with one decimal above ("1.1m",
-    // "10.1m", "30m"). ~30m/hr is the game's ceiling, so there's no need for
-    // billions/trillions tiers. Deliberately distinct from RateText.Compact (the
-    // narrow status-chip format, which abbreviates from 1k with a decimal and an
-    // uppercase M) — the chat reply keeps small rates exact and reads lowercase.
+    // thousands 100k–999k ("853 k"), millions with one decimal above ("1.1 m",
+    // "10.1 m", "30 m"). The unit is space-separated from the value so the reply
+    // reads like MegaMUD's ("14.3 m/hr"). ~30m/hr is the game's ceiling, so there's
+    // no need for billions/trillions tiers. Deliberately distinct from
+    // RateText.Compact (the narrow status-chip format, which abbreviates from 1k with
+    // a decimal and an uppercase M) — the chat reply keeps small rates exact and
+    // reads lowercase.
     internal static string FormatExpRate(double rate)
     {
         if (rate < 100_000) return rate.ToString("N0", CultureInfo.InvariantCulture);
-        if (rate < 1_000_000) return string.Create(CultureInfo.InvariantCulture, $"{(long)(rate / 1000)}k");
-        return string.Create(CultureInfo.InvariantCulture, $"{rate / 1_000_000d:0.#}m");
+        if (rate < 1_000_000) return string.Create(CultureInfo.InvariantCulture, $"{(long)(rate / 1000)} k");
+        return string.Create(CultureInfo.InvariantCulture, $"{rate / 1_000_000d:0.#} m");
     }
 }

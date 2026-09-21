@@ -226,7 +226,7 @@ public static class RemoteCommandCatalog
         {
             ["@version"]      = new("@version", "the app name + version"),
             ["@health"]       = new("@health", "HP / MA / Kai and resting-or-meditating state"),
-            ["@exp"]          = new("@exp", "exp remaining to level, exp/hour rate, and time-to-level"),
+            ["@exp"]          = new("@exp", "session exp made, exp needed for the next level, exp/hour rate, and time-to-level"),
             ["@level"]        = new("@level", "level, current exp, and exp to next"),
             ["@status"]       = new("@status", "what you're doing (walking/looping/fighting/resting), your room, and any ailments"),
             ["@lives"]        = new("@lives", "lives remaining"),
