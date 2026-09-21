@@ -1059,6 +1059,7 @@ An engine only acts while it's on, and each has a matching Settings tab for its 
 
 - After any automated cast it **re-issues sneak in place**, so you don't walk on exposed.
 - While sneaking with **Auto-Combat off** — slipping past rooms rather than fighting them — a due buff, cure, or top-off heal is **held until you reach an empty room** (no monsters, so the cast can be followed by a clean re-sneak) instead of stripping sneak in a room you're only passing through.
+- While sneaking with **Auto-Combat *and* Backstab on**, a maintenance cast is likewise **held until you've thrown your backstab opener** (or the room is empty). `bs` has to be your first move from stealth, so letting a buff go out first would break sneak, forfeit the surprise round, *and* leave you mid-cast in a hostile room. Once the opener lands the hold lifts and buffing resumes for the rest of the fight. (Without Backstab, an engaging fight casts normally — you're trading blows either way, so there's no surprise round to protect.)
 - If a **see-hidden** monster forces a fight (with *Clear hostiles when sneak broken by see-hidden monster* on), the now-cleared room becomes that opportunity: the held casts fire there, you re-sneak, and the walk continues.
 
 Emergency survival is never held — a life-threatening heal, a flee, or an emergency hangup always fires immediately. Turn Auto-Sneak **off** and this all stops: casts simply go out on schedule, wherever you are.

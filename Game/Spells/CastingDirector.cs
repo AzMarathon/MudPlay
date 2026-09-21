@@ -1487,11 +1487,14 @@ public sealed class CastingDirector : IDisposable
                 "between-round non-heal categories held — HP unconfirmed on a damage-driven tick (prompt pending).");
 
         // Sneak-maintenance defer: hold buffs + cures for the next empty room when
-        // a stealth runner is walking combat-off through an occupied room (the
-        // gate predicate folds auto-sneak + auto-combat-off + NPC-present). Casting
-        // breaks sneak and you can't re-sneak with an NPC here, so we wait for a
-        // room we can cast in and re-sneak — the re-sneak itself happens on CastFired
-        // (StealthManager.ReSneakAfterCast). Skipped while resting / meditating: a
+        // a stealth runner passes through an occupied room (the gate predicate folds
+        // auto-sneak + NPC-present + either combat-off OR a still-owed backstab
+        // opener). Casting breaks sneak and you can't re-sneak with an NPC here, so
+        // we wait for a room we can cast in and re-sneak — the re-sneak itself
+        // happens on CastFired (StealthManager.ReSneakAfterCast). Holding through an
+        // engaging fight until the backstab opener fires keeps `bs` as the first
+        // command from stealth (a buff first forfeits the surprise round). Skipped
+        // while resting / meditating: a
         // stationary recovery has already stopped, so a due cure/buff there should
         // fire (not wait) — and it's the only place a maintenance heal casts anyway.
         // Emergency survival (emergency/major heal / flee / hangup) and combat

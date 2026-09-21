@@ -1664,6 +1664,15 @@ public sealed partial class CombatManager : IDisposable
         settings.DoBackstab && !_backstabOpenerConsumed
             && _isStealthed?.Invoke() == true && !RoomHasSeeHidden(obs);
 
+    // Parameterless view of BackstabPending against the LIVE settings + room, for
+    // callers outside the combat pass (the sneak-maintenance defer gate). While
+    // true, a stealth backstab opener is still owed here — a between-round buff /
+    // cure would break sneak and cost the surprise round, so maintenance casting
+    // holds until the opener fires (_backstabOpenerConsumed) or the room clears.
+    // False when there's no room observation yet (nothing to open on).
+    public bool IsBackstabOpenerPending() =>
+        _classifier.Current is { } obs && BackstabPending(_readSettings(), obs);
+
     // Equip the normal/alternate weapon and send the weapon attack command
     // against targetRaw. Sets CurrentTarget; SendAttack clears the spell-mode
     // bridge so the server's auto-repeat owns subsequent rounds. Shared by the
