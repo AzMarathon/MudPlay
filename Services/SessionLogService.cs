@@ -29,11 +29,14 @@ public sealed class SessionLogService : IDisposable
     private int _maxLines = 2000;
     private bool _disposed;
 
-    // The in-memory chat store is app-lifetime and never cleared on profile
-    // swap, so its persisted history is replayed once per app run — a second
-    // seed would duplicate rows. The transaction ledger, by contrast, is reset
-    // per character and re-hydrated (a full replace) on every reopen.
-    private bool _chatSeeded;
+    // Stem (<char>.<bbs>) the in-memory chat store is currently seeded for. The
+    // store is re-scoped to the loaded character on every profile CHANGE — cleared
+    // and re-seeded from that character's talk.log — so a PVE and a PVP character on
+    // the same BBS never share the Conversation window (their on-disk logs are
+    // already separate). A same-profile re-fire (BBS-pin apply, reconnect) matches
+    // the stem and is skipped, so live chat isn't wiped and re-read. Null until the
+    // first seed. The transaction ledger is likewise reset + re-hydrated per reopen.
+    private string? _chatSeededStem;
 
     public SessionLogService(
         ProfileService profile,
@@ -145,12 +148,17 @@ public sealed class SessionLogService : IDisposable
         // Replay the just-loaded disk tail into the in-memory stores the windows
         // bind to, so prior-session history shows on reconnect. Transactions
         // replace wholesale (the ledger was Reset on profile load and is per
-        // character); chat seeds once per run into the app-lifetime store.
+        // character). Chat re-scopes to the loaded character: on a genuine profile
+        // change (the stem differs) clear the store and re-seed it from THIS
+        // character's talk.log, so switching between a PVE and a PVP character no
+        // longer leaves the previous character's chat in the Conversation window. A
+        // same-profile re-fire (BBS-pin, reconnect) keeps the current view intact.
         HydrateTransactions();
-        if (!_chatSeeded)
+        if (!string.Equals(_chatSeededStem, stem, StringComparison.Ordinal))
         {
+            _chatHistory.Clear();
             HydrateChat();
-            _chatSeeded = true;
+            _chatSeededStem = stem;
         }
 
         _log.Info(
