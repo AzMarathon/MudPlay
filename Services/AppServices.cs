@@ -417,7 +417,7 @@ public sealed class AppServices
     public Game.Remote.DivertHandler Divert { get; }
 
     // Consumer of RemoteCommands for the
-    // Models.GameData.PlayerRemoteControls.DuplicatePermissions
+    // Models.GameData.PlayerRemoteControls.SysopCommands
     // category — @dupe. Copies the sender's permission set onto a
     // known player (telepath / gangpath only).
     public Game.Remote.DupeHandler Dupe { get; }

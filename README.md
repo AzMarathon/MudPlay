@@ -2,8 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.97.0**
-> - New `@dupe <player>` remote command: a player with the new "Duplicate permissions" grant can telepath or gangpath it to copy their own permissions onto another known player (added, never removed) — say, gossip, auction, broadcast, yell, and the local API are all refused
-> - New "Duplicate permissions" checkbox in the Players edit and batch dialogs; it's part of "All", so players already granted everything have it
+> - New `@dupe <player>` remote command, gated behind Elevated Commands: an Elevated player can telepath or gangpath it to copy their own permissions onto another known player (added, never removed) — say, gossip, auction, broadcast, yell, and the local API are all refused
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

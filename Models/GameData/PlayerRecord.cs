@@ -277,18 +277,11 @@ public enum PlayerRemoteControls
     // @roomba.
     QueryItemLocation   = 1 << 14,
 
-    // Copy the sender's own permissions onto another player — @dupe. Lets a
-    // trusted player bring an alt up to their own trust level without the user
-    // ticking every box by hand.
-    DuplicatePermissions = 1 << 15,
-
-    // Convenience — every category above flipped on. Profiles store a full grant
-    // by the NAME "All" (JsonStringEnumConverter), so a flag added here reaches
-    // every existing "All" player on load — intended for DuplicatePermissions.
+    // Convenience — every category above flipped on.
     All = QueryVersion | QueryExperience | QueryHealthStatus | QueryLocation
         | QueryInventory | RequestInvite | MovePlayer | ExecuteCommands
         | HangupDisconnect | AlterSettings | DivertConversations | SysopCommands
-        | QueryBossTimers | QueryDeaths | QueryItemLocation | DuplicatePermissions,
+        | QueryBossTimers | QueryDeaths | QueryItemLocation,
 }
 
 // One equipment slot's contents from a look <player> response. SlotLabel

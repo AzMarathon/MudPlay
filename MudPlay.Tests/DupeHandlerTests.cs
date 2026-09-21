@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Remote;
 using MudPlay.Models.GameData;
@@ -10,15 +9,16 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// @dupe <player> — copies the SENDER's permission set onto a known player. Accepted
-// over telepath and gangpath only; say, gossip (which also carries auctions),
-// broadcast and yell must never reach it, and the local API must not be able to
-// drive it. The copy is additive and never touches the target's other settings.
+// @dupe <player> — copies the SENDER's permission set onto a known player. Elevated
+// Commands senders only, and accepted over telepath and gangpath only; say, gossip
+// (which also carries auctions), broadcast and yell must never reach it, and the
+// local API must not be able to drive it. The copy is additive and never touches
+// the target's other settings.
 public sealed class DupeHandlerTests
 {
     private static readonly DateTime Now = new(2026, 9, 21, 0, 0, 0, DateTimeKind.Utc);
 
-    private const PlayerRemoteControls CanDupe = PlayerRemoteControls.DuplicatePermissions;
+    private const PlayerRemoteControls Elevated = PlayerRemoteControls.SysopCommands;
 
     private static LineExtractor.EmittedLine Line(string text) =>
         new(text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
@@ -89,13 +89,13 @@ public sealed class DupeHandlerTests
     public void Copy_IsAdditive_TargetKeepsWhatItAlreadyHas()
     {
         var (router, _, players) = Setup();
-        SeedPlayer(players, "Reveal", PlayerRemoteControls.QueryVersion | CanDupe);
+        SeedPlayer(players, "Reveal", PlayerRemoteControls.QueryVersion | Elevated);
         SeedPlayer(players, "Moron", PlayerRemoteControls.ExecuteCommands);
 
         router.Dispatch(Line("Reveal telepaths: @dupe Moron"));
 
         Assert.Equal(
-            PlayerRemoteControls.ExecuteCommands | PlayerRemoteControls.QueryVersion | CanDupe,
+            PlayerRemoteControls.ExecuteCommands | PlayerRemoteControls.QueryVersion | Elevated,
             Controls(players, "Moron"));
     }
 
@@ -121,7 +121,7 @@ public sealed class DupeHandlerTests
     public void TargetAlreadyHoldsEverything_RepliesAndChangesNothing()
     {
         var (router, engine, players) = Setup();
-        SeedPlayer(players, "Reveal", PlayerRemoteControls.QueryVersion | CanDupe);
+        SeedPlayer(players, "Reveal", PlayerRemoteControls.QueryVersion | Elevated);
         SeedPlayer(players, "Moron", PlayerRemoteControls.All);
 
         router.Dispatch(Line("Reveal telepaths: @dupe Moron"));
@@ -229,10 +229,10 @@ public sealed class DupeHandlerTests
     // ===== Who may use it =====
 
     [Fact]
-    public void SenderWithoutTheGrant_IsDenied_EvenWithEveryOtherPermission()
+    public void SenderWithoutElevatedCommands_IsDenied_EvenWithEveryOtherPermission()
     {
         var (router, _, players) = Setup();
-        SeedPlayer(players, "Reveal", PlayerRemoteControls.All & ~CanDupe);
+        SeedPlayer(players, "Reveal", PlayerRemoteControls.All & ~Elevated);
         SeedPlayer(players, "Moron", PlayerRemoteControls.None);
 
         router.Dispatch(Line("Reveal telepaths: @dupe Moron"));
@@ -252,15 +252,25 @@ public sealed class DupeHandlerTests
     }
 
     [Fact]
-    public void FullGrant_StoredByName_IncludesDupe_SoExistingAllPlayersKeepWorking()
+    public void Catalog_GatesDupeBehindElevatedCommands()
     {
-        // Profiles persist a full grant as the word "All"; this is what makes an
-        // existing "All" player pick up the new right without being re-granted.
-        PlayerRemoteControls stored =
-            JsonSerializer.Deserialize<PlayerRemoteControls>("\"All\"", JsonStore.Options);
+        // Rewriting other players' permissions must sit behind the same tier as
+        // @suicide, not behind an ordinary grant.
+        Assert.True(RemoteCommandCatalog.TryGetCategory("@dupe", out PlayerRemoteControls category));
+        Assert.Equal(PlayerRemoteControls.SysopCommands, category);
+    }
 
-        Assert.Equal(PlayerRemoteControls.All, stored);
-        Assert.True(stored.HasFlag(CanDupe));
+    [Fact]
+    public void ExecuteCommandsAlone_DoesNotAllowDupe()
+    {
+        // ExecuteCommands is the next-highest tier (@do); it must not be enough.
+        var (router, _, players) = Setup();
+        SeedPlayer(players, "Reveal", PlayerRemoteControls.ExecuteCommands);
+        SeedPlayer(players, "Moron", PlayerRemoteControls.None);
+
+        router.Dispatch(Line("Reveal telepaths: @dupe Moron"));
+
+        Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
     }
 
     // ===== Refusals =====

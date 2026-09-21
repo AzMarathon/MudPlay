@@ -33,17 +33,15 @@ namespace MudPlay.Game.Remote;
 //   - DivertConversations — @divert.
 //   - SysopCommands ("Elevated Commands" in the Players-tab UI) — high-trust
 //     commands beyond ordinary control: irreversible character actions
-//     (@suicide). Wider than just sysop powers.
+//     (@suicide) and rewriting other players' permissions (@dupe, which is also
+//     telepath / gangpath only — see IsPathChannelOnly). Wider than just sysop
+//     powers.
 //   - QueryBossTimers — @timer (boss respawn timers being tracked). Its own
 //     category so a user can grant boss-timer queries independently of @where.
 //   - QueryItemLocation — @roomba (last room an item was seen in, per the
 //     BBS-tier Roomba item-sighting log). Its own category, same as
 //     QueryBossTimers/QueryDeaths, since none of these are documented MajorMUD
 //     wiki commands — they're MudPlay-specific extensions.
-//   - DuplicatePermissions — @dupe (copies the sender's own permission set onto a
-//     named player). Its own category so handing out trust is granted deliberately
-//     rather than implied by any other grant, and accepted only over telepath /
-//     gangpath (see IsPathChannelOnly).
 //
 // Party-coordination commands (@wait / @ok / @comeback / @forget / @share) map
 // to PlayerRemoteControls.None — they're gated by the engine's party-whitelist
@@ -174,8 +172,10 @@ public static class RemoteCommandCatalog
             ["@relog"]        = PlayerRemoteControls.HangupDisconnect,
 
             // @dupe <player> copies the sender's permission set onto a player we
-            // already know. Handler lives in DupeHandler.cs.
-            ["@dupe"]         = PlayerRemoteControls.DuplicatePermissions,
+            // already know. It rewrites who is trusted, so it sits under Elevated
+            // Commands with @suicide rather than in a category of its own. Handler
+            // lives in DupeHandler.cs.
+            ["@dupe"]         = PlayerRemoteControls.SysopCommands,
 
             // ===== Party Response (party-whitelist gated) =====
             // None = "any active party member", per engine convention.
@@ -280,7 +280,7 @@ public static class RemoteCommandCatalog
             ["@divert"]       = new("@divert [player]", "forwards your incoming telepaths to another player; bare stops"),
             ["@hangup"]       = new("@hangup", "drops your connection and stays down (no auto-reconnect)"),
             ["@relog"]        = new("@relog", "cleanly exits, then reconnects and auto-logs back in"),
-            ["@dupe"]         = new("@dupe <player>", "copies your permissions onto that player (telepath / gangpath only; they keep any they already have)"),
+            ["@dupe"]         = new("@dupe <player>", "copies your permissions onto that player (Elevated; telepath / gangpath only; they keep any they already have)"),
             ["@wait"]         = new("@wait", "hold: automation pauses until @ok releases it"),
             ["@ok"]           = new("@ok", "releases a @wait hold"),
             ["@comeback"]     = new("@comeback [map/room]", "stranded member asks the party to come recover them"),

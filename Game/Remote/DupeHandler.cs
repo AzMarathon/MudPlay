@@ -3,13 +3,14 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Remote;
 
-// The @dupe <player> command (DuplicatePermissions category). Copies the SENDER's
-// own permission set onto the named player, so a trusted player can bring an alt up
-// to their own trust level with one telepath instead of the user ticking every box.
+// The @dupe <player> command (SysopCommands, i.e. Elevated Commands). Copies the
+// SENDER's own permission set onto the named player, so a trusted player can bring an
+// alt up to their own trust level with one telepath instead of the user ticking every
+// box. It rewrites who is trusted, which is why only Elevated senders may use it.
 //
 // The copy is additive: the target keeps anything it already holds and gains what the
 // sender has, so @dupe can never take a permission away. It copies everything the
-// sender holds, DuplicatePermissions included, so a duplicated player can duplicate
+// sender holds, Elevated Commands included, so a duplicated player can duplicate
 // onward. Only the permission grid moves; the target's party toggles and notes stay.
 //
 // Two refusals protect the user. The local character is refused because the Players
