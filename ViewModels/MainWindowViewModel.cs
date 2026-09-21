@@ -878,7 +878,11 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Every emitted line fans out through the central MessageRouter so
         // chat / combat / triggers / etc. all share one dispatch path.
-        Lines.LineEmitted += line => AppServices.Current.Router.Dispatch(line);
+        // Chat rides its own event (LineExtractor withholds it from LineEmitted so no
+        // game-state parser can be driven by player-typed text); the router takes both
+        // lanes, and itself confines chat lines to the conversation.* patterns.
+        Lines.LineEmitted     += line => AppServices.Current.Router.Dispatch(line);
+        Lines.ChatLineEmitted += line => AppServices.Current.Router.Dispatch(line);
 
         // Reactive hazard-buff re-raise: a lapse-damage prompt (the desert's
         // "you need water, soon!") mid-walk fires one `use` to re-raise, and a

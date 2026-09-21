@@ -1,5 +1,10 @@
 # Version history
 
+## 3.96.20
+
+- Player chat (gossip, auction, broadcast, telepath, gangpath, yell, say) can no longer make the client react — it is now kept out of every game-output parser, so someone quoting "You are flat on your back!" (or any condition, death, token, item, or combat line) in chat no longer latches a phantom knockdown, pauses your loop, and re-casts cure paralysis every round. Chat still feeds the Conversation window, party `@`-commands, and remote commands
+- bug reports addressed: paradigm-20260921-053754
+
 ## 3.96.19
 
 - Sneak-aware casting now holds a maintenance buff/cure through an engaging fight when Auto-Sneak and Backstab are both on, until you've thrown your backstab opener (or the room is empty) — a between-round cast breaks sneak, so firing one first forfeited the surprise round and stripped stealth in a hostile room. Once the opener lands, buffing resumes for the rest of the fight; without Backstab, an engaging fight still casts normally

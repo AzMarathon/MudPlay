@@ -31,10 +31,20 @@ public sealed partial class LineExtractor
         string Text,
         CellAttributes[] Attributes,
         DateTimeOffset Timestamp,
-        bool IsPromptLine);
+        bool IsPromptLine,
+        bool IsChat = false);
 
-    // Fired once per completed row.
+    // Fired once per completed row of SERVER OUTPUT. Player-typed chat (gossip,
+    // auction, broadcast, telepath, gangpath, yell, say — see ChatLineDetector) is
+    // withheld: this is the event every game-state parser hangs off, and chat is
+    // untrusted text that must never drive one (a broadcast quoting "You are flat
+    // on your back!" latched a phantom knockdown — report paradigm-20260921-053754).
     public event Action<EmittedLine>? LineEmitted;
+
+    // Fired once per completed CHAT row (IsChat = true), in the same order relative
+    // to LineEmitted that the lines arrived. Only chat-aware consumers subscribe
+    // (the MessageRouter feed that drives ChatRouter); everything else stays off it.
+    public event Action<EmittedLine>? ChatLineEmitted;
 
     // Holds a fragment the terminal wrapped at the right margin, awaiting its
     // continuation row(s). When set, the next completed row is stitched onto it
@@ -112,8 +122,8 @@ public sealed partial class LineExtractor
                 Text = line.Text[m.Length..],
                 Attributes = line.Attributes[m.Length..],
             };
-            LineEmitted?.Invoke(prompt);
-            LineEmitted?.Invoke(content);
+            Publish(prompt);
+            Publish(content);
             return;
         }
 
@@ -123,6 +133,19 @@ public sealed partial class LineExtractor
             line = line with { IsPromptLine = true };
         }
 
+        Publish(line);
+    }
+
+    // The single fan-out point: chat rows go ONLY to ChatLineEmitted, everything
+    // else to LineEmitted. Keeping the split here (rather than a guard in each of
+    // the ~35 LineEmitted subscribers) means a new parser is chat-proof by default.
+    private void Publish(EmittedLine line)
+    {
+        if (!line.IsPromptLine && ChatLineDetector.IsChat(line.Text))
+        {
+            ChatLineEmitted?.Invoke(line with { IsChat = true });
+            return;
+        }
         LineEmitted?.Invoke(line);
     }
 

@@ -105,7 +105,15 @@ public sealed class MessageRouter
     // the rest of the fan-out.
     public void Dispatch(LineExtractor.EmittedLine line)
     {
-        LineDispatched?.Invoke(line);
+        // A chat line (LineExtractor set IsChat) is another player's typed text — it
+        // may only reach the conversation.* patterns that exist to parse chat. Any
+        // other pattern (combat, conditions, movement, items …) and every raw
+        // LineDispatched observer (combat classifier, room-entry scan, sweep …) must
+        // not see it, or a player could quote server text in a gossip / broadcast and
+        // trigger that handler as if the server had sent it.
+        bool chatLine = line.IsChat;
+
+        if (!chatLine) LineDispatched?.Invoke(line);
 
         // Snapshot the matching set first so a handler that calls Register
         // (or disposes its own token) during dispatch doesn't mutate the
@@ -114,6 +122,7 @@ public sealed class MessageRouter
 
         foreach (Subscription sub in _subs)
         {
+            if (chatLine && !IsConversationPattern(sub.Pattern)) continue;
             if (sub.Pattern.TryMatch(line, out MatchResult result))
             {
                 hits ??= new List<(Subscription, MatchResult)>();
@@ -137,6 +146,9 @@ public sealed class MessageRouter
             sub.Handler(result);
         }
     }
+
+    private static bool IsConversationPattern(IMessagePattern pattern)
+        => pattern.Id.StartsWith(Patterns.KnownPatterns.ConversationPrefix, StringComparison.Ordinal);
 
     // Diagnostic: how many active subscriptions are registered.
     public int SubscriptionCount => _subs.Count;
