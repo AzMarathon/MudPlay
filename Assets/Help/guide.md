@@ -55,7 +55,7 @@ Settings live in four tiers — **Defaults → Global → BBS → Character** �
 
 ## Profile Management
 
-Open **Profile Management** from **File**, the **View** menu, or its toolbar button — it's the single home for your characters and your BBSes. Re-selecting the menu item (or toolbar button) toggles it closed. The window has three parts:
+Open **Profile Management** from **File**, the **View** menu, or its toolbar button — it's the single home for your characters and your BBSes. If it's already open, re-selecting the menu item (or toolbar button) brings it back to the front (handy when it's hidden behind another window, or another running client). The window has three parts:
 
 - **The current profile** (top strip) shows which character is loaded and gives you **New…**, **Save**, and **Save As…** — the same actions the File menu used to carry. A quick **Save profile** stayed on the File menu as well (**Ctrl+S**, or the floppy-disk toolbar button), and **Ctrl+P** opens this window from anywhere.
 - **BBSes** (left) — every saved board. **Add** creates a new one and takes you straight to its settings, since a fresh board has no host yet; **Edit settings…** (or a double-click on the row) reopens those settings for whichever board is selected; **Rename** retitles it (carrying its characters and your saved logins with it); **Remove** deletes it. Removing a BBS deletes **every character saved under it**, so the confirm names how many will go.
@@ -97,7 +97,7 @@ The automation engines — Auto-Combat, Auto-Heal, Auto-Nuke, navigation looping
 
 # The Interface
 
-The **terminal** is the center of MudPlay — everything the game sends, rendered as a CP437/ANSI screen, and where everything you type is sent. Around it, every other panel is a **modeless window**: open it from the **View** menu, a **toolbar** icon, its **hotkey**, or the **terminal's right-click menu**, and press that same control again to close it. The terminal always stays live while you configure or check anything.
+The **terminal** is the center of MudPlay — everything the game sends, rendered as a CP437/ANSI screen, and where everything you type is sent. Around it, every other panel is a **modeless window**: open it from the **View** menu, a **toolbar** icon, its **hotkey**, or the **terminal's right-click menu**, and press that same control again to bring it back to the front if it's already open (behind another window or minimized). Each panel closes from its own title-bar **X** (or its **Cancel** / **Save** button). The terminal always stays live while you configure or check anything.
 
 ## The terminal and status bar
 
@@ -136,7 +136,7 @@ Select a placed entry (or folder) and type a **Name** to rename it however you l
 
 ## The windows
 
-Each is modeless and toggles closed on its own key. Default hotkeys are shown; all are rebindable.
+Each is modeless; pressing its key again brings it to the front if it's already open. Default hotkeys are shown; all are rebindable.
 
 - **Navigation** (Alt+M) — the room map: where you are, your route lines, and the controls for GOTO, loops, and Auto-Lair.
 - **Backscroll** (Alt+L) — scroll back through terminal history, with search and export. See **Tools & Diagnostics** for how to use it.

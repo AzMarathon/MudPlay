@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.22**
-> - Terminal repaint is now coalesced to a frame budget instead of redrawing on every server update: ~75fps while focused, ~10fps while in the background, and not at all while minimized (a restore repaints once) — so running several clients at once no longer burns full render CPU on the windows you aren't watching. Typing, history recall, scrolling and resizing still repaint immediately
-> - Background/minimized clients also stop the 2Hz cursor-blink repaint
+> **Version 3.96.23**
+> - Re-selecting an already-open window's menu / hotkey / toolbar entry now brings it to the front (un-minimizing if needed) instead of closing it — so a window hidden behind another (or behind another running client) surfaces on a second click rather than shutting the thing you were looking for. Windows close via their own X / Cancel / Save controls. Edit windows (Settings, editors, Workshop) no longer save-and-close on a re-press; they just raise, and commit only through Save / OK
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
