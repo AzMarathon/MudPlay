@@ -115,6 +115,8 @@ public static class LocalApiActions
                 "remote commands are disabled (Settings → Talk)",
             RemoteCommandManager.LocalInvokeResult.HardBlocked =>
                 "hard-blocked — denied by any route",
+            RemoteCommandManager.LocalInvokeResult.PathChannelOnly =>
+                "telepath / gangpath only — not available through the local API",
             _ => "failed",
         };
         return new CommandOutcome(command,

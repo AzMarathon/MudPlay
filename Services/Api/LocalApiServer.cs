@@ -289,6 +289,7 @@ public sealed class LocalApiServer : IAsyncDisposable
                             command = kv.Key,
                             category = kv.Value.ToString(),
                             destructive = LocalApiActions.IsDestructive(kv.Key),
+                            pathChannelOnly = Game.Remote.RemoteCommandCatalog.IsPathChannelOnly(kv.Key),
                         })
                         .ToArray(),
                 });

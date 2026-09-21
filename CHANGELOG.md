@@ -1,5 +1,9 @@
 # Version history
 
+## 3.97.0
+
+- New `@dupe <player>` remote command, gated behind Elevated Commands: an Elevated player can telepath or gangpath it to copy their own permissions onto another known player (added, never removed) — say, gossip, auction, broadcast, yell, and the local API are all refused
+
 ## 3.96.29
 
 - Combat (Spells-first / Physical-first): the engine now climbs back to your attack spell as soon as mana recovers over its threshold, instead of swinging the weapon until an unrelated room re-display happened to force a re-decision. It still deliberately commits to the weapon on a target it already spent the spell's mana/casts on

@@ -253,6 +253,9 @@ public sealed class RemoteCommandManager : IDisposable
         // An unconditional hard-block (reroll, `@party set suicide`) — denied for
         // anyone, by any route.
         HardBlocked,
+        // A command that only means something coming from another player over
+        // telepath / gangpath (@dupe), so it can't be driven locally.
+        PathChannelOnly,
     }
 
     // Run a registered @-command from the LOCAL machine rather than from a chat
@@ -284,6 +287,13 @@ public sealed class RemoteCommandManager : IDisposable
             _log?.Log(LogSeverity.Warn, "RemoteCmd",
                 $"Local invocation of {normalised} denied — {blockReason}.");
             return LocalInvokeResult.HardBlocked;
+        }
+
+        if (RemoteCommandCatalog.IsPathChannelOnly(normalised))
+        {
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Local invocation of {normalised} refused — telepath / gangpath only.");
+            return LocalInvokeResult.PathChannelOnly;
         }
 
         if (!_handlers.TryGetValue(normalised, out Registration registration))
@@ -471,6 +481,16 @@ public sealed class RemoteCommandManager : IDisposable
                     $"Ignoring unknown command {command} from {entry.Speaker} (no reply).");
                 return;
             }
+        }
+
+        // A command that hands out trust is accepted only over the path channels.
+        // Say is room-wide, so a @dupe said aloud is dropped outright — no denial
+        // reply, which would only announce the command to the room.
+        if (channel.Value == RemoteChannel.Local && RemoteCommandCatalog.IsPathChannelOnly(command))
+        {
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Ignoring {command} from {entry.Speaker} on say — telepath / gangpath only.");
+            return;
         }
 
         // Authorisation: party-whitelist OR per-player flag.
