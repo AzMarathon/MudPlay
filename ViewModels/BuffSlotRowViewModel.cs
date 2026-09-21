@@ -112,15 +112,16 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // timer, e.g. "bless - 15s", with a trailing condition tag when set. No level
     // requirement here: the level lives in the Add-buff dropdown where it helps you
     // pick; on a configured row it only reads as confusing (it's not the recast).
-    public string HeaderText => BuffNameText + RecastText;
+    // Full "name - 15s" form for the row's hover tooltip (the row itself shows the
+    // abbreviated name + the pinned recast).
+    public string HeaderText => _resolveName(_dto.Spell) + RecastText;
 
-    // Split for the row layout: the NAME trims with an ellipsis when it's too long
-    // for the row, while the recast (+ any condition tag) is pinned to its right and
-    // stays fully visible. Rendered as one string ("holy armour - 10s") in HeaderText
-    // for tooltips, but two columns in the row so a long name like "protection from
-    // evil" no longer pushes the "- 15s" off the edge.
-    public string BuffNameText => _resolveName(_dto.Spell);
+    // The buff name for the narrow row, shortened to the form players use in game
+    // ("protection from evil" → "prot evil") so the recast pinned beside it stays
+    // visible. Still trims with an ellipsis if a name runs long even after this.
+    public string BuffNameText => AbbreviateBuffName(_resolveName(_dto.Spell));
 
+    // Recast (+ any condition tag), pinned to the right of the name and always shown.
     public string RecastText
     {
         get
@@ -130,6 +131,21 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
             if (_dto.OnlyWhenMaFull) s += " · MA full";
             return s;
         }
+    }
+
+    // Long spell words shortened to their spoken in-game form for the narrow buff
+    // row. Applied in order, case-insensitively; the full name still shows on the
+    // tooltip (HeaderText). Extend this list as more long names come up.
+    private static readonly (string From, string To)[] BuffNameAbbreviations =
+    {
+        ("protection from ", "prot "),   // "protection from evil/good" → "prot evil/good"
+    };
+
+    private static string AbbreviateBuffName(string name)
+    {
+        foreach ((string from, string to) in BuffNameAbbreviations)
+            name = name.Replace(from, to, System.StringComparison.OrdinalIgnoreCase);
+        return name;
     }
 
     public BuffSlotScope Scope => _resolveScope(Spell);
