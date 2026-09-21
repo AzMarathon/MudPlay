@@ -498,6 +498,11 @@ public sealed class TerminalControl : Control
     private void RecalculateMetrics()
     {
         _typeface = new Typeface(FontFamily);
+        // The cached glyphs were shaped against the old typeface + size; drop them so
+        // they're rebuilt at the new font. (Zoom doesn't reach here — it upscales the
+        // render bitmap and leaves RenderFontSize untouched — so a resize never
+        // needlessly clears the cache.)
+        _glyphCache.Clear();
         UpdateRenderMode();
         (_cellW, _cellH) = MeasureCell(RenderFontSize);
         RecomputeScale();
@@ -812,14 +817,7 @@ public sealed class TerminalControl : Control
                     // prompt foreground so the overlay reads inline.
                     context.FillRectangle(Brushes.Black,
                         new Rect(px, py, _cellW, _cellH));
-                    var glyph = new FormattedText(
-                        ch.ToString(),
-                        CultureInfo.InvariantCulture,
-                        FlowDirection.LeftToRight,
-                        _typeface,
-                        RenderFontSize,
-                        Brushes.LightGray);
-                    context.DrawText(glyph, new Point(px, py));
+                    context.DrawText(Glyph(ch, OverlayFgArgb, Brushes.LightGray), new Point(px, py));
                     col++;
                 }
                 // Caret tracks the END of the LIVE buffer overlay (mode 1).
@@ -894,14 +892,11 @@ public sealed class TerminalControl : Control
         // MegaMUD never does — room names + hostile-monster names came out visibly
         // heavier than the reference client on vector fonts (the MX437 bitmap has no
         // bold face, so it always looked right). Match that: bright colour, normal weight.
-        var typeface = _typeface;
         for (int i = x0; i < x1; i++)
         {
             char ch = screen[i, y].Char;
             if (ch == ' ') continue;
-            var ft = new FormattedText(ch.ToString(), CultureInfo.InvariantCulture,
-                FlowDirection.LeftToRight, typeface, RenderFontSize, fg);
-            context.DrawText(ft, new Point(x0 == i ? left : i * _cellW, top));
+            context.DrawText(Glyph(ch, fgArgb, fg), new Point(x0 == i ? left : i * _cellW, top));
         }
 
         // Underline — draw a 1px line along the bottom of the run.
@@ -923,6 +918,37 @@ public sealed class TerminalControl : Control
         IBrush brush = new ImmutableSolidColorBrush(Color.FromRgb(r, g, b));
         _brushCache[argb] = brush;
         return brush;
+    }
+
+    // Per-glyph FormattedText cache. DrawRun (and the input overlay) built a fresh
+    // FormattedText for every non-space cell on EVERY frame — the app's heaviest
+    // per-frame work (native Skia/HarfBuzz text shaping + layout), and the native
+    // memory churn diagnosed earlier. A FormattedText for a given (char, colour) at
+    // the current font + size is deterministic, so build it once and redraw the
+    // cached instance each frame. This is byte-identical rendering — same object,
+    // same DrawText, same exact per-cell position — so the pixel alignment (no colour
+    // bleed) and the bright-colour-not-bold-face rule above are preserved unchanged;
+    // only the per-frame allocation + reshaping is removed. Keyed by (char, fg ARGB);
+    // cleared when the font or size changes (RecalculateMetrics). The key space is
+    // bounded (CP437's ~256 glyphs × the fixed palette), but a hard cap guards against
+    // a pathological spread — on overflow the whole cache is dropped and refills lazily.
+    // Instance-scoped (not static) because it closes over this control's _typeface /
+    // RenderFontSize. Render is UI-thread only, so a plain Dictionary needs no lock.
+    private readonly Dictionary<(char Ch, uint Fg), FormattedText> _glyphCache = new();
+    private const int GlyphCacheCap = 8192;
+
+    // The input-overlay foreground (the buffered not-yet-sent text), as an ARGB key
+    // for the glyph cache. A fixed colour, so it shares the same cache as the grid.
+    private static readonly uint OverlayFgArgb = Colors.LightGray.ToUInt32();
+
+    private FormattedText Glyph(char ch, uint fgArgb, IBrush fg)
+    {
+        if (_glyphCache.TryGetValue((ch, fgArgb), out FormattedText? cached)) return cached;
+        if (_glyphCache.Count >= GlyphCacheCap) _glyphCache.Clear();
+        var ft = new FormattedText(ch.ToString(), CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight, _typeface, RenderFontSize, fg);
+        _glyphCache[(ch, fgArgb)] = ft;
+        return ft;
     }
 
     // ----- Input ---------------------------------------------------------
