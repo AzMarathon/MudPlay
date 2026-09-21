@@ -112,14 +112,23 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // timer, e.g. "bless - 15s", with a trailing condition tag when set. No level
     // requirement here: the level lives in the Add-buff dropdown where it helps you
     // pick; on a configured row it only reads as confusing (it's not the recast).
-    public string HeaderText
+    public string HeaderText => BuffNameText + RecastText;
+
+    // Split for the row layout: the NAME trims with an ellipsis when it's too long
+    // for the row, while the recast (+ any condition tag) is pinned to its right and
+    // stays fully visible. Rendered as one string ("holy armour - 10s") in HeaderText
+    // for tooltips, but two columns in the row so a long name like "protection from
+    // evil" no longer pushes the "- 15s" off the edge.
+    public string BuffNameText => _resolveName(_dto.Spell);
+
+    public string RecastText
     {
         get
         {
-            string label = $"{_resolveName(_dto.Spell)} - {RecastMarginSec}s";
-            if (_dto.OnlyWhenHpFull) label += " · HP full";
-            if (_dto.OnlyWhenMaFull) label += " · MA full";
-            return label;
+            string s = $" - {RecastMarginSec}s";
+            if (_dto.OnlyWhenHpFull) s += " · HP full";
+            if (_dto.OnlyWhenMaFull) s += " · MA full";
+            return s;
         }
     }
 
@@ -195,6 +204,8 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         OnPropertyChanged(nameof(Spell));
         OnPropertyChanged(nameof(RecastMarginSec));
         OnPropertyChanged(nameof(HeaderText));
+        OnPropertyChanged(nameof(BuffNameText));
+        OnPropertyChanged(nameof(RecastText));
         OnPropertyChanged(nameof(Scope));
         OnPropertyChanged(nameof(IsWholeParty));
         OnPropertyChanged(nameof(IsSingleTarget));

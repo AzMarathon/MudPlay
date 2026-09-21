@@ -28,6 +28,22 @@ public sealed class BuffSlotRowViewModelTests
         throw new Xunit.Sdk.XunitException($"no member toggle for '{given}'");
     }
 
+    // The row label splits into a NAME (trims with an ellipsis in the UI) and the
+    // recast (+ condition tag) pinned to its right, so a long name like "protection
+    // from evil" can't push the "- 15s" off the row. HeaderText stays the joined form
+    // for the tooltip.
+    [Fact]
+    public void HeaderSplit_NameAndRecastSeparate_RecastRidesWithTheTag()
+    {
+        var row = Row(new BuffSlot { Spell = "protection from evil", RecastMarginSec = 15, OnlyWhenHpFull = true });
+
+        Assert.Equal("protection from evil", row.BuffNameText);
+        Assert.StartsWith(" - 15s", row.RecastText);
+        Assert.Contains("HP full", row.RecastText);           // the tag stays with the recast, not the name
+        Assert.DoesNotContain("HP full", row.BuffNameText);
+        Assert.Equal(row.BuffNameText + row.RecastText, row.HeaderText);
+    }
+
     [Fact]
     public void MoveFlags_DefaultFalse_AndSettable()
     {

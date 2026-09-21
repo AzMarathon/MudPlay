@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.17**
-> - Help guide's remote @-commands section now includes a "Syntax examples" list showing a valid example invocation for each command shape (it previously described the commands but never showed how to type them)
+> **Version 3.96.18**
+> - Help guide's remote @-commands section now includes a "Syntax examples" list showing a valid example invocation for each command shape (it previously described the commands but never showed how to type them), and spells out that a `@goto` coordinate accepts a slash, comma, or space between map and room
+> - Buff Watchdog rows now truncate a long buff name with an ellipsis and keep the recast time pinned to its right, so a name like "protection from evil" no longer pushes the "- 15s" off the row
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
