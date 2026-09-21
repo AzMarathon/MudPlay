@@ -1400,6 +1400,8 @@ Chat is collected into one merged, timestamped stream (not per-channel tabs). Ea
 
 Each channel has its own color, and web links inside a message are clickable. Party chat isn't shown here — it has its own **Party** window.
 
+**Chat never drives the client.** Anything another player types — gossip, auction, broadcast, telepath, gangpath, yell, say — is treated as text to read, not as something the game said. A player quoting "You are flat on your back!", "You are blind.", or a combat line in chat can't make MudPlay think you were knocked down, blinded, or hit; only lines the server itself sends do. Chat still reaches this window, your chat-scoped triggers, and the party `@`-commands.
+
 **Actions / emotes** (the socials from your board's `action list` — `hug`, `wave`, `smile`, `tickle`, and so on) are pulled in too, whether you perform them, someone aims one at you, or you just witness one in the room. They show under the **SAY** chip (they're room-local, like say) with the message text in **green** — the board's own color for them.
 
 Since the obvious-exits line is also fully green, MudPlay only captures true actions: your own start with "You <verb>", and someone else's must come from a **player who's actually in your room** — so obvious exits, room-entry/exit, and party-follow movement never get mistaken for an emote.

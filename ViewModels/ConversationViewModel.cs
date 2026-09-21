@@ -158,9 +158,38 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
             return;
         }
 
-        // Removal / move / replace aren't expected from the store today,
-        // but a full rebuild is the safe fallback.
+        // Once the store is at its cap (a long-lived character's replayed talk log
+        // fills it at startup) every new entry is an Add plus a front-trim Remove.
+        // A full Rebuild per message clears the list, which resets the scroll
+        // offset — so the box jumped on every incoming line even with Auto-scroll
+        // off, and re-realized thousands of rows each time. Mirror the trim by
+        // dropping the matching leading row in place instead.
+        if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems is not null)
+        {
+            foreach (ChatLogEntry entry in e.OldItems)
+            {
+                if (TryDropLeadingRow(entry)) continue;
+                Rebuild();
+                return;
+            }
+            return;
+        }
+
+        // Move / replace aren't expected from the store, but a full rebuild is
+        // the safe fallback.
         Rebuild();
+    }
+
+    // The store sheds its OLDEST entry, and Rows are in history order, so the row
+    // for a removed entry is Rows[0] — or none at all when the entry was filtered
+    // out. False when Rows doesn't line up that way (a removal from anywhere else),
+    // leaving the caller to rebuild.
+    private bool TryDropLeadingRow(ChatLogEntry entry)
+    {
+        if (!Passes(entry)) return true;
+        if (Rows.Count == 0 || !Rows[0].Entry.Equals(entry)) return false;
+        Rows.RemoveAt(0);
+        return true;
     }
 
     partial void OnShowGossipChanged(bool value)      { Rebuild(); PersistFilters(); }

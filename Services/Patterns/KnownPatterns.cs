@@ -267,6 +267,9 @@ public static class KnownPatterns
     public const string SneakArrivalNotice   = "presence.sneak-arrival-notice";
 
     // ----- Conversation --------------------------------------------------
+    // Id prefix shared by every conversation pattern below. MessageRouter lets a
+    // chat line (EmittedLine.IsChat) reach ONLY patterns whose id starts with this.
+    public const string ConversationPrefix      = "conversation.";
     public const string ConversationGossip      = "conversation.gossip";
     public const string ConversationBroadcast   = "conversation.broadcast";
     public const string ConversationGangpath    = "conversation.gangpath";

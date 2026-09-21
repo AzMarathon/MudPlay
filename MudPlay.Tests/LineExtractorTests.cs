@@ -135,7 +135,8 @@ public sealed class LineExtractorTests
                     + "unless you have the power of luxury farming every rare item\"";
         Assert.True(body.Length > 80);
 
-        List<string> emitted = FeedThroughEmulator(body + "\r\n");
+        // Gossip is chat, so it arrives on the chat lane (LineEmitted withholds it).
+        List<string> emitted = FeedThroughEmulator(body + "\r\n", chatLane: true);
 
         Assert.Single(emitted);
         Assert.Equal(body, emitted[0]);
@@ -175,13 +176,16 @@ public sealed class LineExtractorTests
     }
 
     // Drive raw bytes through a real 80-column emulator + LineExtractor and
-    // collect the text of every non-prompt line the extractor emits.
-    private static List<string> FeedThroughEmulator(string text)
+    // collect the text of every non-prompt line the extractor emits — from the
+    // server-output lane, or the chat lane when chatLane is set.
+    private static List<string> FeedThroughEmulator(string text, bool chatLane = false)
     {
         TerminalEmulator emulator = new(80, 25);
         LineExtractor extractor = new(emulator);
         List<string> lines = new();
-        extractor.LineEmitted += l => { if (!l.IsPromptLine) lines.Add(l.Text); };
+        Action<LineExtractor.EmittedLine> collect = l => { if (!l.IsPromptLine) lines.Add(l.Text); };
+        if (chatLane) extractor.ChatLineEmitted += collect;
+        else extractor.LineEmitted += collect;
         emulator.Feed(System.Text.Encoding.Latin1.GetBytes(text));
         return lines;
     }
