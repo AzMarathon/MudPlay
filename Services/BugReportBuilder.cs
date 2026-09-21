@@ -401,7 +401,7 @@ public static class BugReportBuilder
         Kv(sb, "Guard-blocked priority", combat.GuardBlockedTarget ?? "(none)");
         // Passive neutrals the user hand-attacked that the engine has taken over killing —
         // explains why auto-combat is (or isn't) fighting a neutral the user engaged.
-        Kv(sb, "User-engaged neutrals", combat.UserEngagedInstances.Count > 0
+        Kv(sb, "User-engaged (manual + self-defense)", combat.UserEngagedInstances.Count > 0
             ? string.Join(", ", combat.UserEngagedInstances)
             : "(none)");
         Kv(sb, "Worn weapon", WornSlot(inv, "Weapon Hand") ?? "(none)");
