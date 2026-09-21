@@ -1,5 +1,10 @@
 # Version history
 
+## 3.96.22
+
+- Terminal repaint is now coalesced to a frame budget instead of redrawing on every server update: ~30fps while focused, ~10fps while in the background, and not at all while minimized (a restore repaints once) — so running several clients at once no longer burns full render CPU on the windows you aren't watching. Typing, history recall, scrolling and resizing still repaint immediately
+- Background/minimized clients also stop the 2Hz cursor-blink repaint
+
 ## 3.96.21
 
 - Player chat (gossip, auction, broadcast, telepath, gangpath, yell, say) can no longer make the client react — it is now kept out of every game-output parser, so someone quoting "You are flat on your back!" (or any condition, death, token, item, or combat line) in chat no longer latches a phantom knockdown, pauses your loop, and re-casts cure paralysis every round. Chat still feeds the Conversation window, party `@`-commands, and remote commands
