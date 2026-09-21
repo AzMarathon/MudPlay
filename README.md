@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.15**
-> - Bosses tab now re-sorts live when a timer starts or clears, so a boss that just went active floats up into the running-timers group without reopening the tab
-> - Boss kill auto-capture now matches monster names with the doubled/stray whitespace a word-wrapped "Also here:" roster or death line can leave (multi-word bosses like the Colossal Midnight Dragon were silently missed)
-> - Fixed Zanthus the Lich's tracked room (was the dark mage's room; his fight is through the yellow bone portal), so his kill actually registers a timer
+> **Version 3.96.16**
+> - Item record view now surfaces the effects of a referenced textblock action (an item that enables a room command): the spell it casts (clickable), where it teleports you, and what it summons — e.g. the yellow bone portal now shows it casts a spell, teleports to Zanthus's room, and summons him, instead of reading as having no attached effect
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

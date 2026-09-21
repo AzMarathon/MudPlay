@@ -1,5 +1,9 @@
 # Version history
 
+## 3.96.16
+
+- Item record view now surfaces the effects of a referenced textblock action (an item that enables a room command): the spell it casts (clickable), where it teleports you, and what it summons — e.g. the yellow bone portal now shows it casts a spell, teleports to Zanthus's room, and summons him, instead of reading as having no attached effect
+
 ## 3.96.15
 
 - Bosses tab now re-sorts live when a timer starts or clears, so a boss that just went active floats up into the running-timers group without reopening the tab
