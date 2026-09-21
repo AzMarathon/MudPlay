@@ -56,6 +56,11 @@ public sealed class ItemMdbViewBuilder
         List<DroppedByRow> droppedBy = new();
         List<PlacedInRow> placedIn = new();
         List<CastsSpellRow> castsSpells = new();
+        // Referenced-textblock action targets, rendered as clickable links like the
+        // drop/floor rows: a summoned monster → its Monsters record, a teleport
+        // destination → its Rooms record (+ Queue-Walk).
+        List<DroppedByRow> summons = new();
+        List<PlacedInRow> teleportsTo = new();
         bool isLight = false;
         bool isContainer = false;
 
@@ -267,7 +272,7 @@ public sealed class ItemMdbViewBuilder
             // summons a boss). Surface the meaningful ops: a cast as a clickable Casts
             // row (same as an on-use cast), a teleport / summon as an info row.
             AddReferencedActionEffects(ReadString(el, "References"), itemCastLevel,
-                otherInfo, castsSpells, CastEffect);
+                castsSpells, summons, teleportsTo, CastEffect);
 
             // Dropped By — one clickable monster link per "Monster #N(X%)" token,
             // resolved to its Monsters.Name (+ drop-rate suffix). Its own linked
@@ -289,7 +294,7 @@ public sealed class ItemMdbViewBuilder
 
             break;
         }
-        return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy, placedIn, castsSpells);
+        return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy, placedIn, castsSpells, summons, teleportsTo);
     }
 
     // Placed In: one clickable room row per "Room {map}/{room}" token in Obtained
@@ -648,7 +653,7 @@ public sealed class ItemMdbViewBuilder
     // Effects are deduped across the (often duplicated per-alias) command lines.
     private void AddReferencedActionEffects(
         string references, int itemCastLevel,
-        List<KeyValuePair<string, string>> otherInfo, List<CastsSpellRow> castsSpells,
+        List<CastsSpellRow> castsSpells, List<DroppedByRow> summons, List<PlacedInRow> teleportsTo,
         Func<int, int, string> castEffect)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -672,21 +677,23 @@ public sealed class ItemMdbViewBuilder
                             string.IsNullOrEmpty(trigger) ? "Casts (on use)" : $"Casts (on \"{trigger}\")",
                             sp, ResolveSpellName(sp), castEffect(sp, itemCastLevel)));
                     }
-                    // teleport <room> <map> — the explicit destination the action sends you to.
+                    // teleport <room> <map> — the explicit destination the action sends you
+                    // to, as a clickable room link (+ Queue-Walk), like a floor placement.
                     else if (tok[0].Equals("teleport", StringComparison.OrdinalIgnoreCase)
                         && tok.Length >= 3 && int.TryParse(tok[1], out int rm) && int.TryParse(tok[2], out int mp)
                         && seen.Add($"tp:{mp}/{rm}"))
                     {
                         string? rn = ResolveRoomName(mp, rm);
-                        otherInfo.Add(new KeyValuePair<string, string>("Teleports To",
-                            string.IsNullOrEmpty(rn) ? $"{mp}/{rm}" : $"{rn} - {mp}/{rm}"));
+                        string location = string.IsNullOrEmpty(rn) ? $"{mp}/{rm}" : $"{rn} - {mp}/{rm}";
+                        teleportsTo.Add(new PlacedInRow(location, mp, rm));
                     }
+                    // summon <monster> — a clickable link to the spawned monster's record.
                     else if (tok[0].Equals("summon", StringComparison.OrdinalIgnoreCase)
                         && tok.Length >= 2 && int.TryParse(tok[1], out int mn) && mn > 0
                         && seen.Add($"summon:{mn}"))
                     {
-                        otherInfo.Add(new KeyValuePair<string, string>("Summons",
-                            LookupMonsterName(mn) ?? mn.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                        summons.Add(new DroppedByRow(
+                            LookupMonsterName(mn) ?? mn.ToString(System.Globalization.CultureInfo.InvariantCulture), mn));
                     }
                 }
             }
@@ -747,4 +754,8 @@ public sealed record ItemMdbView(
     bool IsContainer = false,
     IReadOnlyList<DroppedByRow>? DroppedBy = null,
     IReadOnlyList<PlacedInRow>? PlacedIn = null,
-    IReadOnlyList<CastsSpellRow>? CastsSpells = null);
+    IReadOnlyList<CastsSpellRow>? CastsSpells = null,
+    // Referenced-textblock action targets: monsters the item's action summons and the
+    // rooms it teleports to, each a clickable link (reusing the drop / floor row types).
+    IReadOnlyList<DroppedByRow>? Summons = null,
+    IReadOnlyList<PlacedInRow>? TeleportsTo = null);

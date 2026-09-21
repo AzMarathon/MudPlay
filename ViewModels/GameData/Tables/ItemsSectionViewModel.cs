@@ -271,6 +271,8 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
             droppedBy:        mdb.DroppedBy,
             placedIn:         mdb.PlacedIn,
             castsSpells:      mdb.CastsSpells,
+            summons:          mdb.Summons,
+            teleportsTo:      mdb.TeleportsTo,
             editAttachedMessage:    editMsg,
             attachedMessageSummary: msgSummary);
 

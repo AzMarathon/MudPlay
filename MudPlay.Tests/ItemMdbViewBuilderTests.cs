@@ -133,8 +133,13 @@ public sealed class ItemMdbViewBuilderTests : IDisposable
         // The cast → one clickable Casts row (deduped across the two alias lines).
         Assert.Single(view.CastsSpells!);
         Assert.Contains("planar travel", view.CastsSpells![0].SpellName);
-        // teleport / summon → info rows resolved to names.
-        Assert.Contains(view.OtherInfo, kv => kv.Key == "Teleports To" && kv.Value.Contains("Zanthus's Lair") && kv.Value.Contains("17/785"));
-        Assert.Contains(view.OtherInfo, kv => kv.Key == "Summons" && kv.Value == "Zanthus the Lich");
+        // teleport → a clickable room link resolved to the room name; summon → a
+        // clickable monster link. Both deduped across the two alias lines.
+        Assert.Single(view.TeleportsTo!);
+        Assert.Contains("Zanthus's Lair", view.TeleportsTo![0].Location);
+        Assert.Contains("17/785", view.TeleportsTo![0].Location);
+        Assert.True(view.TeleportsTo![0].CanOpen);
+        Assert.Single(view.Summons!);
+        Assert.Equal("Zanthus the Lich", view.Summons![0].Label);
     }
 }

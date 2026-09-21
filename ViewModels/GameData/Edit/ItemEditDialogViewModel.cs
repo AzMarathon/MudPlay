@@ -141,6 +141,14 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     public IReadOnlyList<CastsSpellRow> CastsSpells { get; }
     public bool HasCastsSpells => CastsSpells.Count > 0;
 
+    // Referenced-textblock action targets: monsters the item's room action summons and
+    // the rooms it teleports to, each a clickable link to that record (the reverse of a
+    // drop / floor placement). Empty for an item with no such action.
+    public IReadOnlyList<DroppedByRow> Summons { get; }
+    public bool HasSummons => Summons.Count > 0;
+    public IReadOnlyList<PlacedInRow> TeleportsTo { get; }
+    public bool HasTeleportsTo => TeleportsTo.Count > 0;
+
     // Chest-contents readout (containers only) — the decoded loot table's
     // per-item drop chances plus a one-line yield summary. Empty for any item
     // that isn't a container wired to a loot textblock.
@@ -197,6 +205,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         IReadOnlyList<DroppedByRow>? droppedBy = null,
         IReadOnlyList<PlacedInRow>? placedIn = null,
         IReadOnlyList<CastsSpellRow>? castsSpells = null,
+        IReadOnlyList<DroppedByRow>? summons = null,
+        IReadOnlyList<PlacedInRow>? teleportsTo = null,
         Func<Task<string?>>? editAttachedMessage = null,
         string? attachedMessageSummary = null)
     {
@@ -215,6 +225,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         DroppedBy    = droppedBy ?? Array.Empty<DroppedByRow>();
         PlacedIn     = placedIn  ?? Array.Empty<PlacedInRow>();
         CastsSpells  = castsSpells ?? Array.Empty<CastsSpellRow>();
+        Summons      = summons ?? Array.Empty<DroppedByRow>();
+        TeleportsTo  = teleportsTo ?? Array.Empty<PlacedInRow>();
         CanBuySell   = !isLight;
         CanAutoOpen  = isContainer;
 

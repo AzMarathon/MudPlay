@@ -244,6 +244,50 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
+                            <!-- Teleports to — the room this item's action sends you to, a
+                                 clickable link to the Rooms-tab record with a Queue-Walk
+                                 action. Hidden when the action doesn't teleport. -->
+                            <ItemsControl ItemsSource="{Binding TeleportsTo}" IsVisible="{Binding HasTeleportsTo}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:PlacedInRow">
+                                        <Grid ColumnDefinitions="140,*" Margin="0,1">
+                                            <TextBlock Grid.Column="0" Classes="MdbKey" Text="Teleports To"/>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                                <Button Classes="MdbLink"
+                                                        Content="{Binding Location}"
+                                                        Command="{Binding Open}"
+                                                        IsEnabled="{Binding CanOpen}"
+                                                        HorizontalAlignment="Left"
+                                                        ToolTip.Tip="Open this room in the Game Data browser"/>
+                                                <Button Classes="MdbLink"
+                                                        Content="Queue Walking here →"
+                                                        Command="{Binding QueueWalk}"
+                                                        IsEnabled="{Binding CanOpen}"
+                                                        HorizontalAlignment="Left"
+                                                        ToolTip.Tip="Arm a walk to this room (opens the map; then click Run)"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Summons — monsters this item's action spawns, each a clickable
+                                 link to its Game Data record. Hidden when it summons nothing. -->
+                            <ItemsControl ItemsSource="{Binding Summons}" IsVisible="{Binding HasSummons}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:DroppedByRow">
+                                        <Grid ColumnDefinitions="140,*" Margin="0,1">
+                                            <TextBlock Grid.Column="0" Classes="MdbKey" Text="Summons"/>
+                                            <Button Grid.Column="1" Classes="MdbLink"
+                                                    Content="{Binding Label}"
+                                                    Command="{Binding Open}"
+                                                    HorizontalAlignment="Left"
+                                                    ToolTip.Tip="Open this monster in the Game Data browser"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
                             <!-- Bought / sold — one row per shop that trades this
                                  item. The location links to the host room's Rooms-tab
                                  record; the charm-priced buy/sell line sits beneath.
