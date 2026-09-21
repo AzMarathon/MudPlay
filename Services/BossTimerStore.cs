@@ -289,7 +289,14 @@ public sealed class BossTimerStore
 
     private static string StripArticle(string s)
     {
-        s = s.Trim().ToLowerInvariant();
+        // Lower-case AND collapse internal whitespace to a single space (Split on any
+        // whitespace, drop empties, re-join). A monster name in the "Also here:" roster
+        // or a death line is word-wrapped like the inventory dump, so a multi-word name
+        // split across a wrap boundary comes back doubled ("colossal  midnight dragon")
+        // — without collapsing, the Contains match against the single-spaced canonical
+        // boss name silently misses and the kill never marks a timer. Same wrap-noise
+        // the @uses item lookup had to normalise.
+        s = string.Join(' ', s.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         if (s.StartsWith("the ", StringComparison.Ordinal)) return s[4..];
         if (s.StartsWith("an ", StringComparison.Ordinal)) return s[3..];
         if (s.StartsWith("a ", StringComparison.Ordinal)) return s[2..];

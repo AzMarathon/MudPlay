@@ -78,11 +78,24 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
 
     private void OnTimersChanged()
     {
-        if (Dispatcher.UIThread.CheckAccess()) RefreshStatuses();
-        else Dispatcher.UIThread.Post(RefreshStatuses);
+        if (Dispatcher.UIThread.CheckAccess()) RefreshAndResort();
+        else Dispatcher.UIThread.Post(RefreshAndResort);
     }
 
     private void OnHeartbeat() => RefreshStatuses();
+
+    // A logged / changed timer flips a row's active-vs-idle status and its sort key.
+    // The grid's sort is applied when the tab opens (BossesSectionView.ApplyDefaultSort)
+    // and does NOT re-run on a row property change, so a boss that just went active
+    // would sit wherever it was alphabetically until the tab is reopened. Re-apply the
+    // sort here so it floats up into the active group live. Only on a timer change —
+    // NOT on every heartbeat, which would re-shuffle (and reset scroll/selection) each
+    // second even though the active set hasn't changed.
+    private void RefreshAndResort()
+    {
+        RefreshStatuses();
+        Rows.Refresh();
+    }
 
     private void RefreshStatuses()
     {

@@ -225,6 +225,21 @@ public sealed class BossTimerTests : IDisposable
     }
 
     [Fact]
+    public void OnMonsterDied_MultiWordNameWithWrapDoubledSpace_Matches()
+    {
+        // A multi-word monster name split across a word-wrap boundary in the death
+        // line / roster comes back with a doubled internal space; the name match must
+        // collapse it or a genuinely-killed boss never marks a timer (user report:
+        // "colossal midnight dragon" auto-capture missed — same wrap-noise as @uses).
+        SeedGameData(RealmType.ParaMud, ("colossal midnight dragon", 851, 24, 1));
+        SeedBosses(Boss("colossal midnight dragon", number: 851, rooms: "17/1772"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(false, (null, "colossal  midnight dragon")), new RoomKey(17, 1772), engagedName: null);
+        Assert.NotNull(timers.KilledAt("colossal midnight dragon"));
+    }
+
+    [Fact]
     public void OnMonsterDied_SpecificCandidateName_StartsTimer()
     {
         // Secondary path: a specific death line names the boss even without a live
