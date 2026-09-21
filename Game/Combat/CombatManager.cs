@@ -115,6 +115,11 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _bsResolveMissesSub;
     private readonly IDisposable _attackConfirmHitsSub;
     private readonly IDisposable _attackConfirmMissesSub;
+    // Self-defense: a monster swinging at us (hits / misses / we-dodge) makes the
+    // engine fight back even if the monster isn't auto-engageable on its own.
+    private readonly IDisposable _selfDefenseHitsSub;
+    private readonly IDisposable _selfDefenseMissesSub;
+    private readonly IDisposable _selfDefenseDodgesSub;
 
     // Minimum gap between safety-net `l` refreshes. Keeps a flurry of miss/hit
     // lines from spamming the server.
@@ -143,6 +148,8 @@ public sealed partial class CombatManager : IDisposable
     // — which is what makes it the right witness for a no-effect line.
     private Func<string?>? _readWornWeapon;
     private Func<bool>? _isStealthed;
+    // True while a plain walk-to (travel) drives — self-defense stands down then.
+    private Func<bool>? _selfDefenseSuppressedByTravel;
     private Func<int, bool>? _hasSeeHidden;
     private Func<bool>? _seeHiddenClearActive;
     // HealthManager's engage-to-clear signal: a room hostile is blocking a needed
@@ -729,6 +736,12 @@ public sealed partial class CombatManager : IDisposable
         _userHitsSub  = router.Subscribe(KnownPatterns.UserHits,  OnCombatLine);
         _mobHitsSub   = router.Subscribe(KnownPatterns.MobHits,   OnCombatLine);
         _mobMissesSub = router.Subscribe(KnownPatterns.MobMisses, OnCombatLine);
+        // Self-defense marking rides the same incoming-attack lines (each carries the
+        // attacker's name in group 0). Separate from OnCombatLine because that also
+        // fires on our OWN UserHits, which aren't an incoming attack.
+        _selfDefenseHitsSub   = router.Subscribe(KnownPatterns.MobHits,    OnAttackedInSelfDefense);
+        _selfDefenseMissesSub = router.Subscribe(KnownPatterns.MobMisses,  OnAttackedInSelfDefense);
+        _selfDefenseDodgesSub = router.Subscribe(KnownPatterns.UserDodges, OnAttackedInSelfDefense);
         _targetGoneSub = router.Subscribe(KnownPatterns.TargetNotHere, OnTargetNotHere);
         _weaponNoEffectSub = router.Subscribe(KnownPatterns.WeaponNoEffect, OnWeaponNoEffect);
         _weaponLandedSub   = router.Subscribe(KnownPatterns.UserHits,       OnUserWeaponLanded);
@@ -932,6 +945,17 @@ public sealed partial class CombatManager : IDisposable
         ArgumentNullException.ThrowIfNull(hasSeeHidden);
         _isStealthed = isStealthed;
         _hasSeeHidden = hasSeeHidden;
+    }
+
+    // Wire the self-defense travel gate: returns true while a PLAIN walk-to (travel
+    // to a destination) is driving — as opposed to looping / Auto-Lair (farming) or
+    // idle. While travelling, self-defense stands down so an evil character running
+    // through a hostile town keeps running past the guards instead of stopping to
+    // fight them (bad at low levels). Optional; unset ⇒ never suppressed.
+    public void SetSelfDefenseTravelGate(Func<bool> isTravellingWalkTo)
+    {
+        ArgumentNullException.ThrowIfNull(isTravellingWalkTo);
+        _selfDefenseSuppressedByTravel = isTravellingWalkTo;
     }
 
     // Wire the "backstab failed → flee" action — bound in AppServices to
@@ -3087,6 +3111,38 @@ public sealed partial class CombatManager : IDisposable
     // neutrals already engage on their own, and a Friend/Flee target the user swung at is
     // theirs to manage. Keyed by RawName to match the rest of the engine's target space,
     // and set as _currentTarget so the takeover engages this instance next round.
+    // Self-defense: a monster is swinging at us (a mob-hits / mob-misses / we-dodge
+    // line — each carries the attacker's name in group 0). When auto-combat is
+    // engaging this room (so _isEnabled: auto-combat on AND not a do-not-attack /
+    // combat-suppressed room) and the attacker's relationship lets us fight back —
+    // Friend, Enemy, or Neutral, but NOT Flee / Hangup, which have their own run /
+    // hangup response — mark its instance user-engaged so the engine takes it over,
+    // even a Friend it would normally leave alone or a neutral we never provoked.
+    // Report paradigm-20260921-132800: a hand-attacked Friend (a Friend-relationship
+    // NPC) kept hitting the player every round while the engine sat idle, because a
+    // Friend is never auto-engageable on its own and, after a buff dropped combat,
+    // nothing re-engaged it. Re-runs the room dispatch on a genuinely new mark so a
+    // stuck / idle engine picks it up immediately.
+    private void OnAttackedInSelfDefense(MatchResult match)
+    {
+        if (_disposed || !_isEnabled()) return;
+        // Running a walk-to through a hostile town (e.g. an evil character in a guarded
+        // city): keep running rather than turning to fight. Looping / Auto-Lair / idle
+        // still defend.
+        if (_selfDefenseSuppressedByTravel?.Invoke() == true) return;
+        if (match.Groups.Count == 0) return;
+        if (ResolveManualTarget(match.Groups[0]) is not { } cand) return;
+
+        MonsterRelationship rel = ResolveOverlay(cand.MonsterNumber).Relationship
+                                  ?? MonsterRelationship.Enemy;
+        if (rel is MonsterRelationship.Flee or MonsterRelationship.Hangup) return;
+
+        if (!_userEngagedInstances.Add(cand.RawName)) return;   // already engaged — nothing new
+        _log?.Combat(LogCategory,
+            $"self-defense: '{cand.RawName}' ({rel}) is attacking us — marking engaged so the engine fights back");
+        if (_classifier.Current is { } obs) OnEntitiesObserved(obs);   // re-decide now; unstick an idle engine
+    }
+
     private void MarkUserEngagedNeutral(string? target)
     {
         if (ResolveManualTarget(target) is not { } cand) return;
@@ -3800,6 +3856,9 @@ public sealed partial class CombatManager : IDisposable
         _bsResolveMissesSub.Dispose();
         _attackConfirmHitsSub.Dispose();
         _attackConfirmMissesSub.Dispose();
+        _selfDefenseHitsSub.Dispose();
+        _selfDefenseMissesSub.Dispose();
+        _selfDefenseDodgesSub.Dispose();
     }
 
     private readonly record struct EngageableCandidate(

@@ -1,5 +1,10 @@
 # Version history
 
+## 3.97.2
+
+- Self-defense: when a monster is actively attacking you, the engine now fights back even if it wouldn't normally engage it — a Friend NPC you provoked, or a passive neutral that turned hostile, no longer gets to hit you while the client sits idle. Always on with Auto-Combat, while idle / looping / Auto-Lairing. Suppressed during a walk-to (an evil character crossing a guarded town keeps running rather than fighting the guards). Monsters whose relationship is Flee or Hangup keep their run/hangup response, and a "do not attack" room is still honoured
+- bug reports addressed: paradigm-20260921-132800
+
 ## 3.97.1
 
 - `@exp` now replies with a MegaMUD-style session line — exp **made** this session (zeroed by `@reset` / loop-start auto-reset), exp **needed** for the next level and which level that is (with the banked-levels ratio the status-bar TNL shows, e.g. `(L72, +2.14 lvls)`), the exp/hour rate, and the time to that level at the current rate — instead of only the remaining exp + rate

@@ -1913,6 +1913,90 @@ public sealed class CombatManagerSpellsTests
         Assert.False(h.Combat.IsBackstabOpenerPending());
     }
 
+    // ----- self-defense engage (report paradigm-20260921-132800) --------
+
+    // A Friend NPC is never auto-engaged, but once it turns hostile and swings at us
+    // the engine fights back in self-defense.
+    [Fact]
+    public void SelfDefense_FriendAttacksUs_EngineEngagesInSelfDefense()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "big gravedigger");
+        h.SetOverlay(1, relationship: MonsterRelationship.Friend);
+
+        h.Feed("Also here: big gravedigger.");                 // Friend → not auto-engaged
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("gravedigger"));
+
+        h.Feed("The big gravedigger hits you for 12 damage!"); // it attacks us
+
+        Assert.Equal("a big gravedigger", h.LastSent);          // self-defense → engaged with the weapon
+    }
+
+    // A neutral we never provoked, swinging at us (a miss line still names it), is
+    // engaged too.
+    [Fact]
+    public void SelfDefense_NeutralSwingsAtUs_EngineEngages()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "grumpy badger");
+        h.SetOverlay(1, relationship: MonsterRelationship.Neutral);
+
+        h.Feed("Also here: grumpy badger.");                   // passive neutral → left alone
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("badger"));
+
+        h.Feed("The grumpy badger claws at you!");             // a miss still names the attacker
+
+        Assert.Equal("a grumpy badger", h.LastSent);
+    }
+
+    // Flee / Hangup relationships have their own run / hangup response, so self-defense
+    // must NOT engage them — we run, we don't stand and fight.
+    [Fact]
+    public void SelfDefense_FleeMonsterAttacksUs_NotEngaged()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "fierce dragon");
+        h.SetOverlay(1, relationship: MonsterRelationship.Flee);
+
+        h.Feed("Also here: fierce dragon.");
+        h.Feed("The fierce dragon hits you for 50 damage!");
+
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("dragon"));
+    }
+
+    // Auto-combat off (or a do-not-attack / combat-suppressed room, same _isEnabled
+    // gate) → no self-defense; we don't fight where the user said not to.
+    [Fact]
+    public void SelfDefense_AutoCombatOff_DoesNotEngage()
+    {
+        using Harness h = new();
+        h.AutoCombatEnabled = false;
+        h.AddMonster(1, "big gravedigger");
+        h.SetOverlay(1, relationship: MonsterRelationship.Friend);
+
+        h.Feed("Also here: big gravedigger.");
+        h.Feed("The big gravedigger hits you for 12 damage!");
+
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("gravedigger"));
+    }
+
+    // During a plain walk-to (travel), self-defense stands down — an evil character
+    // running through a guarded town keeps running rather than stopping to fight.
+    // Looping / Auto-Lair / idle still defend (the gate is false there).
+    [Fact]
+    public void SelfDefense_DuringWalkToTravel_DoesNotEngage()
+    {
+        using Harness h = new();
+        h.Combat.SetSelfDefenseTravelGate(() => true);   // a plain walk-to is driving
+        h.AddMonster(1, "silvermere guard");
+        h.SetOverlay(1, relationship: MonsterRelationship.Neutral);
+
+        h.Feed("Also here: silvermere guard.");
+        h.Feed("The silvermere guard hits you for 20 damage!");
+
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("guard"));
+    }
+
     // ----- room clear resets the chooser bookkeeping -------------------
 
     [Fact]

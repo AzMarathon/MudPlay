@@ -4272,6 +4272,14 @@ public sealed class AppServices
         Combat.SetBackstabHooks(
             isStealthed:  () => Stealth.IsStealthed,
             hasSeeHidden: n => SeeHidden.Has(n));
+        // Self-defense stands down only during a PLAIN walk-to (travel): the walker is
+        // driving AND we're neither looping nor Auto-Lairing. Looping and Auto-Lair are
+        // farming modes where we want to fight back; a plain destination walk (e.g. an
+        // evil character crossing a guarded town) should keep running past attackers.
+        Combat.SetSelfDefenseTravelGate(() =>
+            Walker.State != Game.Map.WalkState.Idle
+            && LoopRunner.State == Game.Map.LoopState.Idle
+            && !AutoLair.IsActive);
         // A fresh hide re-arms the surprise round for the stationary hidden opener:
         // when the FSM latches Hidden, re-open so a monster that wanders in is a
         // genuine backstab target again (no gear swap — equipping would break hide).

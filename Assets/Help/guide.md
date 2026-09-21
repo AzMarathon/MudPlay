@@ -188,6 +188,14 @@ Two things always sit above that choice: a **backstab opener** fires first when 
 
 A hand-cast **heal/buff/cure** (0 energy) is *not* an override — after it lands the engine resumes attacking right away, same as before.
 
+## Fighting back (self-defense)
+
+MudPlay normally leaves **Friend** and passive **Neutral** monsters alone. But if one turns hostile and starts swinging at you — you provoked it, or it just attacks — the engine **fights back**: any monster actively attacking you is engaged and finished, even one it would otherwise walk past. This is always on whenever **Auto-Combat** is on.
+
+Exemptions: monsters whose Game Data relationship is **Flee** or **Hangup** (you run from / hang up on those instead of standing to fight), and any room you've marked **"do not attack"** (self-defense honours that too). Everything else — Friend, Enemy, Neutral — you defend against.
+
+Self-defense is also suppressed while you're on a **walk-to** — an evil character crossing a guarded town, say, keeps running to their destination rather than stopping to fight the guards (a losing trade at low levels). It stays active when you're **idle, looping, or Auto-Lairing** (all farming/holding, where fighting back is what you want).
+
 ## Targeting
 
 When several hostiles share a room, **Target order** and **Target priority** decide who gets hit first — the highest-priority monster by default, or a "follow the party's target" mode. Per-monster priority is ranked in Game Data.
