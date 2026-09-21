@@ -182,7 +182,7 @@ public sealed class TerminalControl : Control
     // for one client and compounds when a user runs several copies at once — the
     // windows they aren't looking at keep paying full render cost for output nobody
     // is watching. Coalesce the server-output repaint to a frame budget that
-    // depends on window state: ~30 fps when focused, ~10 fps when backgrounded, and
+    // depends on window state: ~75 fps when focused, ~10 fps when backgrounded, and
     // nothing at all while minimized (a restore repaints once). Only the
     // server-output path (OnScreenUpdated) routes through here; user-driven paints
     // (typing, history recall, scroll, resize) stay immediate so input never lags.
@@ -193,8 +193,8 @@ public sealed class TerminalControl : Control
     private Window? _hostWindow;
     private bool _windowActive = true;
     private bool _windowMinimized;
-    private static readonly TimeSpan FocusedFrameGap    = TimeSpan.FromMilliseconds(33);   // ~30 fps
-    private static readonly TimeSpan BackgroundFrameGap = TimeSpan.FromMilliseconds(100);  // ~10 fps
+    private static readonly TimeSpan FocusedFrameGap    = TimeSpan.FromMilliseconds(1000.0 / 75); // ~75 fps
+    private static readonly TimeSpan BackgroundFrameGap = TimeSpan.FromMilliseconds(100);         // ~10 fps
 
     // ----- Post-Enter "pending" overlay ---------------------------------
     // Without this, hitting Enter clears the local buffer immediately,

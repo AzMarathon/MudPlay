@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.96.22**
-> - Terminal repaint is now coalesced to a frame budget instead of redrawing on every server update: ~30fps while focused, ~10fps while in the background, and not at all while minimized (a restore repaints once) — so running several clients at once no longer burns full render CPU on the windows you aren't watching. Typing, history recall, scrolling and resizing still repaint immediately
+> - Terminal repaint is now coalesced to a frame budget instead of redrawing on every server update: ~75fps while focused, ~10fps while in the background, and not at all while minimized (a restore repaints once) — so running several clients at once no longer burns full render CPU on the windows you aren't watching. Typing, history recall, scrolling and resizing still repaint immediately
 > - Background/minimized clients also stop the 2Hz cursor-blink repaint
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
