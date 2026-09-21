@@ -3961,15 +3961,23 @@ public sealed class AppServices
         // a stealth runner is walking combat-off through an occupied room, so the
         // cast (which breaks sneak) can be followed by a re-sneak instead of
         // stripping sneak in a room it's only passing through. Conditioned entirely
-        // on auto-sneak: off ⇒ this never fires and casts go out immediately. The
-        // auto-combat term matches the Combat gate's "effectively engaging here"
+        // on auto-sneak: off ⇒ this never fires and casts go out immediately. NPC
+        // presence is the hard blocker: you can't re-sneak with a monster in the room.
+        //
+        // The auto-combat term matches the Combat gate's "effectively engaging here"
         // (global AutoCombat AND not per-room-suppressed) — if combat WILL clear the
-        // room there's no sneak to preserve. NPC presence is the hard blocker: you
-        // can't re-sneak with a monster in the room.
+        // room there's normally no sneak to preserve, so the defer lifts. The ONE
+        // exception is a still-owed backstab opener: `bs` must be the first combat
+        // command from stealth or the surprise round is lost, so a between-round buff
+        // firing first (which breaks sneak) would forfeit the opener AND leave us
+        // exposed mid-cast in a hostile room. While IsBackstabOpenerPending holds we
+        // keep deferring even in an engaging fight; the moment the opener fires
+        // (_backstabOpenerConsumed) or the room clears, maintenance casting resumes.
         CastDirector.SetStealthMaintenanceDeferGate(
             () => ReadAutoModeFlag(d => d.AutoSneak)
-               && !(ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom())
-               && CombatTracker.HasRoomNpc);
+               && CombatTracker.HasRoomNpc
+               && (!(ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom())
+                   || Combat.IsBackstabOpenerPending()));
         // Suppress ALL auto-casts while the `train stats` full-screen menu has
         // character-mode input armed — otherwise a cast's letters get typed raw
         // into the character-creation form (the "bles" family-name corruption).

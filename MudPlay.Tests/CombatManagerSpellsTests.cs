@@ -1856,6 +1856,36 @@ public sealed class CombatManagerSpellsTests
         Assert.DoesNotContain("blast", h.AllSent);
     }
 
+    // The sneak-maintenance defer gate consults this so a between-round buff / cure
+    // (which breaks sneak) is held through an engaging fight until the backstab
+    // opener has fired — a buff first would forfeit the surprise round.
+    [Fact]
+    public void IsBackstabOpenerPending_TrueWhileOwed_FalseOnceConsumedOrBackstabOff()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.Sneaking = true;
+        h.AddMonster(1, "giant rat");
+
+        // Auto-combat off: the room is observed but no opener dispatches, so it's
+        // still owed — the defer gate should hold maintenance casts here.
+        h.AutoCombatEnabled = false;
+        h.Feed("Also here: giant rat.");
+        Assert.True(h.Combat.IsBackstabOpenerPending());
+
+        // Backstab disabled entirely → never pending, even sneaking with a mob here.
+        h.Settings.DoBackstab = false;
+        Assert.False(h.Combat.IsBackstabOpenerPending());
+
+        // Re-enable, let auto-combat fire the opener, and it's spent → not pending,
+        // so maintenance casting resumes for the rest of the fight.
+        h.Settings.DoBackstab = true;
+        h.AutoCombatEnabled = true;
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("bs giant rat", h.LastSent);
+        Assert.False(h.Combat.IsBackstabOpenerPending());
+    }
+
     // ----- room clear resets the chooser bookkeeping -------------------
 
     [Fact]

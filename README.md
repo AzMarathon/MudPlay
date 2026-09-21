@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.18**
-> - Help guide's remote @-commands section now includes a "Syntax examples" list showing a valid example invocation for each command shape (it previously described the commands but never showed how to type them), and spells out that a `@goto` coordinate accepts a slash, comma, or space between map and room
-> - Buff Watchdog rows now shorten a long buff name to its spoken in-game form ("protection from evil" → "prot evil") and keep the recast time pinned to its right (still trimming with an ellipsis if a name runs long), so the recast no longer gets pushed off the row; the full name stays on the row's tooltip
+> **Version 3.96.19**
+> - Sneak-aware casting now holds a maintenance buff/cure through an engaging fight when Auto-Sneak and Backstab are both on, until you've thrown your backstab opener (or the room is empty) — a between-round cast breaks sneak, so firing one first forfeited the surprise round and stripped stealth in a hostile room. Once the opener lands, buffing resumes for the rest of the fight; without Backstab, an engaging fight still casts normally
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
