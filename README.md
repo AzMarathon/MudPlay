@@ -1,12 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.29**
-> - Combat (Spells-first / Physical-first): the engine now climbs back to your attack spell as soon as mana recovers over its threshold, instead of swinging the weapon until an unrelated room re-display forced a re-decision. It still deliberately commits to the weapon on a target it already spent the spell's mana/casts on
-> - Pasting a batch of commands (e.g. a multi-line equip set) now sends each complete line as its own command instead of folding them into one 254-character input line that silently dropped the commands past the limit
-> - Resting with a Pre-rest gear set that adds max HP/MA no longer thrashes: the rest holds until your Default-equivalent pool reaches the target, so reverting to your Default set doesn't drop you straight back below the rest trigger
-> - Auto-walker no longer rams a hidden exit while dead-reckoning (blind or dark): it was trusting a stale "obvious exits" set and skipping the required search; it now searches, and the reveal is confirmed even while blind
-> - Conversation/transaction log Flush and Close now fully drain the background writer, so nothing can read a log mid-write
+> **Version 3.97.0**
+> - New `@dupe <player>` remote command: a player with the new "Duplicate permissions" grant can telepath or gangpath it to copy their own permissions onto another known player (added, never removed) — say, gossip, auction, broadcast, yell, and the local API are all refused
+> - New "Duplicate permissions" checkbox in the Players edit and batch dialogs; it's part of "All", so players already granted everything have it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

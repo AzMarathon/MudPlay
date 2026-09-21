@@ -30,7 +30,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     // so the disconnect-watcher can map the captured name back to this player.
     [ObservableProperty] private string? _accountName;
 
-    // ----- 15 remote-control checkboxes (mirror PlayerRemoteControls flags) -----
+    // ----- 16 remote-control checkboxes (mirror PlayerRemoteControls flags) -----
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryVersion;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryExperience;
@@ -47,13 +47,14 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryBossTimers;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryDeaths;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryItemLocation;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcDuplicatePermissions;
 
     // True when every remote-control checkbox is checked — drives the master toggle's IsChecked.
     public bool AllowsAll =>
         RcQueryVersion && RcQueryExperience && RcQueryHealthStatus && RcQueryLocation &&
         RcQueryInventory && RcRequestInvite && RcMovePlayer && RcExecuteCommands &&
         RcHangupDisconnect && RcAlterSettings && RcDivertConversations && RcSysopCommands &&
-        RcQueryBossTimers && RcQueryDeaths && RcQueryItemLocation;
+        RcQueryBossTimers && RcQueryDeaths && RcQueryItemLocation && RcDuplicatePermissions;
 
     // ----- Tooltips per checkbox ----------------------------------------
     // Precomputed once from RemoteCommandCatalog so the checkbox tooltip
@@ -77,6 +78,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     public string RcQueryBossTimersTip     { get; } = BuildTip(PlayerRemoteControls.QueryBossTimers);
     public string RcQueryDeathsTip         { get; } = BuildTip(PlayerRemoteControls.QueryDeaths);
     public string RcQueryItemLocationTip   { get; } = BuildTip(PlayerRemoteControls.QueryItemLocation);
+    public string RcDuplicatePermissionsTip { get; } = BuildTip(PlayerRemoteControls.DuplicatePermissions);
 
     // Build the per-category tooltip text. Lists every @-command the catalog maps to
     // category, sorted, with a clear "ticked → grants / unticked → denies" framing so the
@@ -202,6 +204,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         RcQueryBossTimers     = rc.HasFlag(PlayerRemoteControls.QueryBossTimers);
         RcQueryDeaths         = rc.HasFlag(PlayerRemoteControls.QueryDeaths);
         RcQueryItemLocation   = rc.HasFlag(PlayerRemoteControls.QueryItemLocation);
+        RcDuplicatePermissions = rc.HasFlag(PlayerRemoteControls.DuplicatePermissions);
     }
 
     // Toggle every remote-control checkbox in one shot (the "All" button).
@@ -212,7 +215,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         RcQueryVersion = RcQueryExperience = RcQueryHealthStatus = RcQueryLocation =
         RcQueryInventory = RcRequestInvite = RcMovePlayer = RcExecuteCommands =
         RcHangupDisconnect = RcAlterSettings = RcDivertConversations = RcSysopCommands =
-        RcQueryBossTimers = RcQueryDeaths = RcQueryItemLocation = target;
+        RcQueryBossTimers = RcQueryDeaths = RcQueryItemLocation = RcDuplicatePermissions = target;
     }
 
     [RelayCommand]
@@ -234,6 +237,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         if (RcQueryBossTimers)     rc |= PlayerRemoteControls.QueryBossTimers;
         if (RcQueryDeaths)         rc |= PlayerRemoteControls.QueryDeaths;
         if (RcQueryItemLocation)   rc |= PlayerRemoteControls.QueryItemLocation;
+        if (RcDuplicatePermissions) rc |= PlayerRemoteControls.DuplicatePermissions;
 
         PlayerRecord updated = _original with
         {

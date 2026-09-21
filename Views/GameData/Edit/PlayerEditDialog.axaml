@@ -63,7 +63,7 @@
                                     Padding="8,2" Margin="0,2,0,4"
                                     ToolTip.Tip="Toggle every category at once."/>
                         </Grid>
-                        <!-- ScrollViewer + tighter padding so all 15 categories
+                        <!-- ScrollViewer + tighter padding so all 16 categories
                              stay reachable even if a future addition pushes the
                              content past the dialog's natural height. -->
                         <ScrollViewer Grid.Row="1"
@@ -100,6 +100,8 @@
                                           ToolTip.Tip="{Binding RcDivertConversationsTip}"/>
                                 <CheckBox Content="Elevated Commands"    IsChecked="{Binding RcSysopCommands, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcSysopCommandsTip}"/>
+                                <CheckBox Content="Duplicate permissions" IsChecked="{Binding RcDuplicatePermissions, Mode=TwoWay}"
+                                          ToolTip.Tip="{Binding RcDuplicatePermissionsTip}"/>
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>

@@ -417,6 +417,12 @@ public sealed class AppServices
     public Game.Remote.DivertHandler Divert { get; }
 
     // Consumer of RemoteCommands for the
+    // Models.GameData.PlayerRemoteControls.DuplicatePermissions
+    // category — @dupe. Copies the sender's permission set onto a
+    // known player (telepath / gangpath only).
+    public Game.Remote.DupeHandler Dupe { get; }
+
+    // Consumer of RemoteCommands for the
     // Models.GameData.PlayerRemoteControls.QueryVersion
     // category — @help. Replies with the flat list of remote
     // commands the sender's per-player permission grant allows, split
@@ -2641,6 +2647,10 @@ public sealed class AppServices
         // them to a target while diverting. Wire-sender bound in
         // MainWindowVM after the telnet client is up.
         Divert = new Game.Remote.DivertHandler(RemoteCommands, Chat);
+        // @dupe — copies the sender's permission grid onto a known player. Refuses
+        // the local character, so it reads the live self-name like the engine's
+        // own self-echo guard does.
+        Dupe = new Game.Remote.DupeHandler(RemoteCommands, Players, () => Party.LocalCharacterName, Log);
         // @help — replies to the sender with the catalog commands their
         // per-player permission grant allows. Reply routes through the
         // engine (ctx.Reply), so no separate wire-sender to bind.

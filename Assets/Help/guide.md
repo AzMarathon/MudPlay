@@ -547,7 +547,7 @@ With party heal spells configured (Settings → Party), members watch each other
 
 ## Remote @-commands
 
-Party members can drive each other with `@`-commands sent over chat. Commands are accepted on three channels — **telepath**, **gangpath**, and **say (local)** — and the reply always comes back on the same channel it arrived on. A reply to a **say**-channel command is a **directed say** (`>Name <reply>`) aimed at whoever sent it, so in a room with several players that person knows the answer is for them. (Gossip, yell, and broadcast are ignored for `@`-commands; there's no separate "page" channel — pages count as telepaths.)
+Party members can drive each other with `@`-commands sent over chat. Commands are accepted on three channels — **telepath**, **gangpath**, and **say (local)** — and the reply always comes back on the same channel it arrived on. A reply to a **say**-channel command is a **directed say** (`>Name <reply>`) aimed at whoever sent it, so in a room with several players that person knows the answer is for them. (Gossip — which also carries auctions — yell, and broadcast are ignored for `@`-commands; there's no separate "page" channel — pages count as telepaths. `@dupe` is stricter still: telepath and gangpath only, never say.)
 
 **What's allowed** is gated per character. Every remote command belongs to a permission *category* (query health, move me, alter settings, execute commands, and so on), and you grant those categories per player in **Game Data Browser → Players** — the edit dialog's permission grid, where the high-trust ones sit under "Elevated Commands." A never-seen player has no grants, so their commands are refused.
 
@@ -573,6 +573,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@atkprio 3 Fujin` — Target Priority: attack-what-player Fujin (`1` = Default, `2` = follow-leader)
 - `@atkorder 4 Suijin` — Attack Order: attack after Suijin (`1`–`3` are the fixed orders)
 - `@divert Raijin` — forward your incoming telepaths to Raijin (bare `@divert` stops)
+- `@dupe Moron` — copy the sender's own permissions onto Moron (telepath / gangpath only)
 - `@profile 2` · `@profile backstab` — swap combat profile by number or name
 - `@kill goblin shaman` — retarget your combat onto that monster this round
 - `@trap north` — search and disarm a trap that way (`@trap stop` aborts)
@@ -639,6 +640,14 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@get-all` / `@drop-all` / `@deposit-all` — pick up everything on the ground / drop everything unworn / bank all excess coin.
 - `@invite` / `@join` — ask you to invite the sender into your party, or to join theirs.
 - `@hangup` — drops your connection and stays down (no auto-reconnect), so you can read the screen and log back in by hand. `@relog` — the opposite: cleanly exits, then reconnects and auto-logs back in. Both need the **Hangup/disconnect** grant, and both are silenced while the toolbar's *Disable hangups* toggle is on.
+
+### Hand out permissions
+
+- `@dupe <player>` — copies **the sender's own permissions** onto that player, so a trusted player can bring an alt up to their level without you ticking every box. It needs the **Duplicate permissions** grant, which is part of "All" — a player you've already granted everything has it, and one you've granted only some categories does not.
+  - **Telepath and gangpath only.** Said aloud in a room, or sent as a gossip, auction, broadcast, or yell, it's ignored outright (no reply), and the Local control API can't run it.
+  - **Additive.** The target keeps anything they already have and gains everything the sender holds — Elevated Commands and Duplicate permissions included, so a duplicated player can duplicate onward. It never takes a permission away, and it only moves the permission grid, not the target's party behaviours or notes.
+  - **Refused:** your own character, the sender themselves, and any name your client has never seen (so a typo can't pre-grant trust to a name someone registers later). The sender is told which; the reply follows the "warn on invalid/denied command" toggle.
+  - Every use is logged at Info in the program log, naming who granted what to whom.
 
 ### Party coordination — any active party member, no grant needed
 
@@ -1196,7 +1205,7 @@ Select several rows (click-drag, or Ctrl / Shift-click) on the **Monsters**, **I
 - **Opt-in per field** — a field is only touched when you set it. Enum / text / number fields (Relationship, priority, Min-to-keep, …) have a **Change** checkbox; flags and permissions are a tri-state **Leave / On / Off** (for a player permission, On = grant, Off = revoke). Anything left **Leave** / unticked keeps whatever each record already has, so batching one field never clobbers a record's other overrides.
 - **Monsters** — Relationship, attack priority, don't-backstab, kill-on-sight, the physical-attack command, and the three spell-override rungs (cast-code + Max + Mana floor).
 - **Items** — the auto flags (collect / discard / open / buy / sell / stash), cannot-be-taken, must-have-minimum, loyal, auto-obtain-for-path, and Min-to-keep / Max-to-get.
-- **Players** — the party behaviours (invite-if-seen, join-if-invited, don't-auto-delete) and all 15 remote-control permissions, with a **Set all permissions** master to grant or revoke the lot in one move.
+- **Players** — the party behaviours (invite-if-seen, join-if-invited, don't-auto-delete) and all 16 remote-control permissions, with a **Set all permissions** master to grant or revoke the lot in one move.
 - **Tier** — Monsters and Items write to the tier you pick in the dialog's **Use** dropdown (only-this-character / only-this-BBS / for-all-characters), the same as the single editor; picking **Installed defaults** instead **resets** every selected record (after one confirm). Player permissions save to the character, no tier picker.
 
 ### The item / monster override editor

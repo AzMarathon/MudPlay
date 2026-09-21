@@ -40,6 +40,10 @@ namespace MudPlay.Game.Remote;
 //     BBS-tier Roomba item-sighting log). Its own category, same as
 //     QueryBossTimers/QueryDeaths, since none of these are documented MajorMUD
 //     wiki commands — they're MudPlay-specific extensions.
+//   - DuplicatePermissions — @dupe (copies the sender's own permission set onto a
+//     named player). Its own category so handing out trust is granted deliberately
+//     rather than implied by any other grant, and accepted only over telepath /
+//     gangpath (see IsPathChannelOnly).
 //
 // Party-coordination commands (@wait / @ok / @comeback / @forget / @share) map
 // to PlayerRemoteControls.None — they're gated by the engine's party-whitelist
@@ -169,6 +173,10 @@ public static class RemoteCommandCatalog
             ["@hangup"]       = PlayerRemoteControls.HangupDisconnect,
             ["@relog"]        = PlayerRemoteControls.HangupDisconnect,
 
+            // @dupe <player> copies the sender's permission set onto a player we
+            // already know. Handler lives in DupeHandler.cs.
+            ["@dupe"]         = PlayerRemoteControls.DuplicatePermissions,
+
             // ===== Party Response (party-whitelist gated) =====
             // None = "any active party member", per engine convention.
             ["@wait"]         = PlayerRemoteControls.None,
@@ -272,6 +280,7 @@ public static class RemoteCommandCatalog
             ["@divert"]       = new("@divert [player]", "forwards your incoming telepaths to another player; bare stops"),
             ["@hangup"]       = new("@hangup", "drops your connection and stays down (no auto-reconnect)"),
             ["@relog"]        = new("@relog", "cleanly exits, then reconnects and auto-logs back in"),
+            ["@dupe"]         = new("@dupe <player>", "copies your permissions onto that player (telepath / gangpath only; they keep any they already have)"),
             ["@wait"]         = new("@wait", "hold: automation pauses until @ok releases it"),
             ["@ok"]           = new("@ok", "releases a @wait hold"),
             ["@comeback"]     = new("@comeback [map/room]", "stranded member asks the party to come recover them"),
@@ -280,6 +289,16 @@ public static class RemoteCommandCatalog
             ["@party"]        = new("@party [directive]", "bare reports solo/following/leading; with args on say, relays the directive to your character"),
             ["@share"]        = new("@share", "splits your held coin evenly across the party"),
         };
+
+    // Commands accepted ONLY over telepath and gangpath. @dupe hands out trust, so
+    // it must never ride the room-wide say channel; the engine enforces this here
+    // rather than each handler remembering to. It also keeps @dupe off the local
+    // API, which has no sender whose permissions could be copied.
+    private static readonly HashSet<string> PathChannelOnly =
+        new(StringComparer.OrdinalIgnoreCase) { "@dupe" };
+
+    public static bool IsPathChannelOnly(string command) =>
+        !string.IsNullOrEmpty(command) && PathChannelOnly.Contains(command);
 
     // Look up the required category for a command. Returns false for unknown
     // commands so the caller can decide whether to register the handler anyway
