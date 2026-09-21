@@ -1,5 +1,11 @@
 # Version history
 
+## 3.96.15
+
+- Bosses tab now re-sorts live when a timer starts or clears, so a boss that just went active floats up into the running-timers group without reopening the tab
+- Boss kill auto-capture now matches monster names with the doubled/stray whitespace a word-wrapped "Also here:" roster or death line can leave (multi-word bosses like the Colossal Midnight Dragon were silently missed)
+- Fixed Zanthus the Lich's tracked room (was the dark mage's room 17/1773; his fight is at 17/785 through the yellow bone portal), so his kill actually registers a timer
+
 ## 3.96.13
 
 - Fixed `@uses` (and the Character Info charge readout) mis-reporting a charged item as "isn't a limited-use item" when its inventory name carried stray whitespace from the word-wrapped `i` dump — game-data name lookups now normalise whitespace
