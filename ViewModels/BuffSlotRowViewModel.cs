@@ -112,15 +112,40 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // timer, e.g. "bless - 15s", with a trailing condition tag when set. No level
     // requirement here: the level lives in the Add-buff dropdown where it helps you
     // pick; on a configured row it only reads as confusing (it's not the recast).
-    public string HeaderText
+    // Full "name - 15s" form for the row's hover tooltip (the row itself shows the
+    // abbreviated name + the pinned recast).
+    public string HeaderText => _resolveName(_dto.Spell) + RecastText;
+
+    // The buff name for the narrow row, shortened to the form players use in game
+    // ("protection from evil" → "prot evil") so the recast pinned beside it stays
+    // visible. Still trims with an ellipsis if a name runs long even after this.
+    public string BuffNameText => AbbreviateBuffName(_resolveName(_dto.Spell));
+
+    // Recast (+ any condition tag), pinned to the right of the name and always shown.
+    public string RecastText
     {
         get
         {
-            string label = $"{_resolveName(_dto.Spell)} - {RecastMarginSec}s";
-            if (_dto.OnlyWhenHpFull) label += " · HP full";
-            if (_dto.OnlyWhenMaFull) label += " · MA full";
-            return label;
+            string s = $" - {RecastMarginSec}s";
+            if (_dto.OnlyWhenHpFull) s += " · HP full";
+            if (_dto.OnlyWhenMaFull) s += " · MA full";
+            return s;
         }
+    }
+
+    // Long spell words shortened to their spoken in-game form for the narrow buff
+    // row. Applied in order, case-insensitively; the full name still shows on the
+    // tooltip (HeaderText). Extend this list as more long names come up.
+    private static readonly (string From, string To)[] BuffNameAbbreviations =
+    {
+        ("protection from ", "prot "),   // "protection from evil/good" → "prot evil/good"
+    };
+
+    private static string AbbreviateBuffName(string name)
+    {
+        foreach ((string from, string to) in BuffNameAbbreviations)
+            name = name.Replace(from, to, System.StringComparison.OrdinalIgnoreCase);
+        return name;
     }
 
     public BuffSlotScope Scope => _resolveScope(Spell);
@@ -195,6 +220,8 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         OnPropertyChanged(nameof(Spell));
         OnPropertyChanged(nameof(RecastMarginSec));
         OnPropertyChanged(nameof(HeaderText));
+        OnPropertyChanged(nameof(BuffNameText));
+        OnPropertyChanged(nameof(RecastText));
         OnPropertyChanged(nameof(Scope));
         OnPropertyChanged(nameof(IsWholeParty));
         OnPropertyChanged(nameof(IsSingleTarget));

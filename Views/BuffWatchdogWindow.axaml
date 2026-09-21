@@ -54,8 +54,16 @@
                                 ToolTip.Tip="Remove this buff slot"
                                 Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).RemoveBuffCommand}"
                                 CommandParameter="{Binding}"/>
-                        <TextBlock Grid.Column="5" Text="{Binding HeaderText}" FontWeight="SemiBold" Margin="4,0,0,0"
-                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        <!-- Name (trims with an ellipsis when long) + recast (pinned, always
+                             visible). A long name like "protection from evil" used to push the
+                             "- 15s" off the row; splitting them keeps the recast on-screen. -->
+                        <Grid Grid.Column="5" ColumnDefinitions="*,Auto" Margin="4,0,0,0"
+                              ToolTip.Tip="{Binding HeaderText}">
+                            <TextBlock Grid.Column="0" Text="{Binding BuffNameText}" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Grid.Column="1" Text="{Binding RecastText}" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
                         <!-- Warning marker: this buff and another configured slot remove
                              each other via RemovesSpell whenever they can land on the
                              same character — see AppServices.BuffSlotOverwritePairs. -->

@@ -28,6 +28,29 @@ public sealed class BuffSlotRowViewModelTests
         throw new Xunit.Sdk.XunitException($"no member toggle for '{given}'");
     }
 
+    // The row label splits into a NAME (abbreviated to the in-game shorthand, and it
+    // trims with an ellipsis in the UI) and the recast (+ condition tag) pinned to its
+    // right, so a long name like "protection from evil" can't push the "- 15s" off the
+    // row. HeaderText keeps the FULL name for the tooltip.
+    [Fact]
+    public void BuffName_AbbreviatesToInGameShorthand_TooltipKeepsFullName()
+    {
+        var row = Row(new BuffSlot { Spell = "protection from evil", RecastMarginSec = 15, OnlyWhenHpFull = true });
+
+        Assert.Equal("prot evil", row.BuffNameText);            // "protection from evil" → the spoken form
+        Assert.StartsWith(" - 15s", row.RecastText);
+        Assert.Contains("HP full", row.RecastText);             // the tag stays with the recast, not the name
+        Assert.DoesNotContain("HP full", row.BuffNameText);
+        Assert.StartsWith("protection from evil - 15s", row.HeaderText);   // tooltip = full name + recast
+    }
+
+    [Fact]
+    public void BuffName_NoAbbreviationRule_LeftAsIs()
+    {
+        var row = Row(new BuffSlot { Spell = "holy armour", RecastMarginSec = 10 });
+        Assert.Equal("holy armour", row.BuffNameText);
+    }
+
     [Fact]
     public void MoveFlags_DefaultFalse_AndSettable()
     {
