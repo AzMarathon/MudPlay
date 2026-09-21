@@ -4570,3 +4570,16 @@ closed (`MovementFilter.SuspendAcquirableGatesExcept`); reachable ⇒ optional, 
 avoids every optional shortcut (so the walk takes the reliable way and any gate item the crosser already
 holds surfaces as "— you have it"), reports only genuinely-required unheld items, and offers the shortcut
 separately (`RouteChoice.ShortcutItems` / `ShortcutStepCount`) with the rooms it would save.
+
+## Searching for a hidden exit works while blind
+
+`search` / `sea <dir>` reveals a hidden exit **regardless of blindness**. Blindness suppresses only the
+descriptive room lines — room name, room description (if enabled), the `Also here:` roster, and the
+`Obvious exits:` line — it does NOT block the search itself or its outcome. The reveal carries its own
+**confirmation line that fires whether or not you can see the room**, so an engine driving a walk can rely
+on that confirmation to know the hidden exit opened, even mid-blindness.
+
+**Client use:** the auto-walker's "is this exit already revealed?" pre-check must not skip the `sea <dir>`
+just because the character is blind — the search still works and is required to unveil the exit. (It also
+must not trust a stale observed-exits set from a room it only dead-reckoned into — see RoomTracker.SetRoom
+clearing ObservedExitDirections; a stale set made the walker skip the required search and ram a wall.)

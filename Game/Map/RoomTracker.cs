@@ -735,11 +735,6 @@ public sealed class RoomTracker
         // send the cardinal move directly).
         State.OpenDoorDirections = observation.OpenDoorDirections;
 
-        // Mirror the full observed-exit set so the walker can skip a
-        // redundant `sea <dir>` when a graph-hidden exit is already
-        // showing in the live display.
-        State.ObservedExitDirections = observation.Exits;
-
         switch (State.Confidence)
         {
             case RoomConfidence.Unknown:
@@ -767,6 +762,16 @@ public sealed class RoomTracker
                 LandFromCandidateSearch(observation, when);
                 break;
         }
+
+        // Mirror the full observed-exit set so the walker can skip a redundant
+        // `sea <dir>` when a graph-hidden exit is already showing in the live
+        // display. Set AFTER the switch: the reconcile paths call SetRoom, which
+        // clears ObservedExitDirections (so a dead-reckoned / recovered room never
+        // carries a stale set) — re-applying it here binds the set to the room we
+        // actually just observed. A blind character still gets no exits here (blind
+        // room displays carry no `Obvious exits:` line), so the walker will run the
+        // real `sea` a hidden exit needs instead of skipping it on a stale value.
+        State.ObservedExitDirections = observation.Exits;
 
         // Record what we just fully processed so the next observation can tell
         // a passive redisplay of the same room from a genuine move outcome. Set
@@ -1760,6 +1765,16 @@ public sealed class RoomTracker
         State.CurrentRoom = room;
         State.Confidence = confidence;
         State.LastUpdatedAt = when;
+        // ObservedExitDirections describes the last room we actually SAW. Any room
+        // change routed through here that isn't a live observation — a blind /
+        // dark-room dead-reckon advance, an `rm` manual locate, a Lost/replay
+        // recovery — moves us somewhere we haven't seen, so the previous room's
+        // exit set is now stale and must not answer the walker's "is this exit
+        // already revealed?" pre-check. Clear it; NoteRoomObserved re-applies the
+        // fresh set right after its reconcile switch on a real display. (A stale set
+        // here made the walker skip the required `sea <dir>` and ram a hidden exit
+        // — report paradigm-20260921-145800.)
+        State.ObservedExitDirections = null;
         if (confidence == RoomConfidence.Confirmed) State.SuspectStrikes = 0;
 
         if (confidence == RoomConfidence.Confirmed && room is not null)

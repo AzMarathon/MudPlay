@@ -1035,17 +1035,7 @@ public sealed class TerminalControl : Control
                 // line as its own CR-terminated wire send.
                 string typedLine = buf.Text;
                 _ = buf.FlushBytes();
-                // A `sys goto <name>` line is gated + resync-armed by SysopGotoManager
-                // (nothing else consumes it): when it swallows the line it has already
-                // sent / refused it, so skip the normal fan-out. A non-goto line, or the
-                // command with the power off, isn't ours — it falls through untouched.
-                if (MudPlay.Services.AppServices.Current.SysopGoto.TryHandleTypedLine(typedLine))
-                {
-                    InvalidateVisual();
-                    return true;
-                }
-                foreach (string wireLine in MudPlay.Services.MacroStore.SplitTypedInput(typedLine))
-                    UserInput?.Invoke(System.Text.Encoding.Latin1.GetBytes(wireLine + "\r"));
+                SubmitTypedLine(typedLine);
                 InvalidateVisual();
                 return true;
             }
@@ -1149,10 +1139,29 @@ public sealed class TerminalControl : Control
         return true;
     }
 
+    // Submit one completed command line to the wire, exactly as the Enter flush
+    // does: a `sys goto <name>` line is claimed by SysopGotoManager (gated +
+    // resync-armed, nothing else consumes it); otherwise the line fans out on the
+    // macro separators (';' / '^M') into one CR-terminated send per command, so
+    // "sea n;sea n;n" sends three. Shared by the Enter handler and the multi-line
+    // paste path.
+    private void SubmitTypedLine(string line)
+    {
+        if (MudPlay.Services.AppServices.Current.SysopGoto.TryHandleTypedLine(line))
+            return;
+        foreach (string wireLine in MudPlay.Services.MacroStore.SplitTypedInput(line))
+            UserInput?.Invoke(System.Text.Encoding.Latin1.GetBytes(wireLine + "\r"));
+    }
+
     // Read the clipboard and feed it into the input exactly as typed text would
-    // arrive (line-mode buffers it; char-mode sends it). Newlines are folded to
-    // the ';' command separator so a multi-line paste queues several commands the
-    // Enter flush fans out, while a single-line paste just lands in the buffer.
+    // arrive. A MULTI-LINE paste in line-mode submits each complete line right away
+    // (each as its own CR-terminated send, so each gets the full per-line wire
+    // budget) and leaves only the trailing fragment — the text after the last
+    // newline — staged in the buffer to finish with Enter. Previously every line
+    // was folded into one ';'-joined string that shared a SINGLE 254-char input
+    // buffer, so pasting a batch of commands whose total ran past 254 (e.g. a
+    // 16-line equip set) silently dropped the tail commands. A single-line paste,
+    // or any paste in character-mode (full-screen forms), keeps the old behavior.
     private async System.Threading.Tasks.Task PasteFromClipboardAsync()
     {
         try
@@ -1161,6 +1170,23 @@ public sealed class TerminalControl : Control
             if (await clipboard.TryGetDataAsync() is not { } data) return;
             string? text = await data.TryGetTextAsync();
             if (string.IsNullOrEmpty(text)) return;
+
+            bool multiLine = text.Contains('\n') || text.Contains('\r');
+            if (multiLine && InputBuffer is { CharacterMode: false } buf)
+            {
+                string[] lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+                // Every line but the last was newline-terminated → a complete
+                // command; submit it now. Skip blanks so a stray double-newline in
+                // the paste doesn't fire a bare CR. The last element is the fragment
+                // after the final newline ("" when the paste ended with one).
+                for (int i = 0; i < lines.Length - 1; i++)
+                    if (lines[i].Length > 0) SubmitTypedLine(lines[i]);
+                string tail = lines[^1];
+                if (tail.Length > 0) buf.Append(tail);
+                InvalidateVisual();
+                return;
+            }
+
             string input = text.Replace("\r\n", ";").Replace('\r', ';').Replace('\n', ';');
             HandleTextCore(input);
             InvalidateVisual();

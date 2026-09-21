@@ -568,6 +568,43 @@ public sealed class HealthManagerTests
         Assert.False(h.Health.RestInFlight);
     }
 
+    // report paradigm-20260921-114318: a Pre-rest gear set that adds max HP inflates
+    // live HP, so the rest "completes" at the Default-anchored target — then reverting
+    // to Default strips that pool and drops HP back below the trigger, an endless
+    // gear-swap/rest thrash. The resting clear floor must hold until DEFAULT-equivalent
+    // HP reaches the target, so HP stays >= trigger once the boosting gear comes off.
+    [Fact]
+    public void RestClearFloor_HeldByPreRestPoolBoost_UntilDefaultEquivalentHitsTarget()
+    {
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Percentage,
+            RestIfBelowHp = 40,   // trigger = 40% of the Default basis
+            RestMaxHp = 50,       // target  = 50% of the Default basis
+        };
+        using Harness h = new(s);
+        // Default-set basis 1000 (trigger 400, target 500); a Pre-rest +100-HP ring is
+        // worn, so live max is 1100 (boost 100). Real max well above.
+        h.Health.SetRestPoolMaxProviders(
+            defaultSetMaxHp: () => 1000, defaultSetMaxMa: () => 0,
+            realMaxHp: () => 2000, realMaxMa: () => 0);
+
+        h.SetPrompt(hp: 390, maxHp: 1100);      // below trigger 400 → rest
+        Assert.Contains("rest", h.SentLines);
+        Assert.True(h.Health.RestInFlight);
+
+        // Live HP 590 clears the Default target 500 — but only because the +100 ring is
+        // on; default-equivalent is 490, still under target. Must NOT finish the rest
+        // (pre-fix it cleared here, then the revert dropped HP to 490 and re-asserted).
+        h.SetPrompt(hp: 590, maxHp: 1100);
+        Assert.True(h.HealthGateHeld);
+
+        // Live HP 600 → default-equivalent 500 = target. Finish; reverting to Default
+        // leaves HP 500, safely above the 400 trigger — no re-assert, no thrash.
+        h.SetPrompt(hp: 600, maxHp: 1100);
+        Assert.False(h.HealthGateHeld);
+    }
+
     // ----- combat-end / same-burst recovery race (successor to -103110) ---------
     // Regression for paradigm-20260912-123108: -103110's fix (above) closes the
     // gap where recovery lands as its OWN Evaluate tick while still in combat.
