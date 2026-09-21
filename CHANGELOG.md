@@ -1,5 +1,9 @@
 # Version history
 
+## 3.96.25
+
+- Terminal renderer now caches each glyph (per character + colour) instead of re-shaping a fresh FormattedText for every cell on every frame — the app's heaviest per-frame work. Cuts render CPU and the native text-shaping memory churn under heavy output and with several clients open; rendering is unchanged (same glyphs, same exact per-cell positions). The cache clears on a font or size change
+
 ## 3.96.24
 
 - Conversation window now re-scopes to the loaded character on a profile switch: it clears and re-seeds from that character's own chat log, so two characters on the same BBS (e.g. a PVE realm and a PVP realm) no longer share the same conversation view. The on-disk logs were already per-character; the in-memory view used to seed once per app run and survive every swap, leaving the previous character's chat on screen
