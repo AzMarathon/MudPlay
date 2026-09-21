@@ -52,7 +52,10 @@ public static class ItemRecordOpener
             givers:            givers,
             shopSalesForCharm: ShopsForCharm,
             droppedBy:         mdb.DroppedBy,
-            placedIn:          mdb.PlacedIn);
+            placedIn:          mdb.PlacedIn,
+            castsSpells:       mdb.CastsSpells,
+            summons:           mdb.Summons,
+            teleportsTo:       mdb.TeleportsTo);
 
         await s.Dialogs.OpenWindowAsync<ItemEditDialogViewModel, ItemEditResult>(vm);
     }

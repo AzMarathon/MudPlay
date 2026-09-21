@@ -56,6 +56,11 @@ public sealed class ItemMdbViewBuilder
         List<DroppedByRow> droppedBy = new();
         List<PlacedInRow> placedIn = new();
         List<CastsSpellRow> castsSpells = new();
+        // Referenced-textblock action targets, rendered as clickable links like the
+        // drop/floor rows: a summoned monster → its Monsters record, a teleport
+        // destination → its Rooms record (+ Queue-Walk).
+        List<DroppedByRow> summons = new();
+        List<PlacedInRow> teleportsTo = new();
         bool isLight = false;
         bool isContainer = false;
 
@@ -259,6 +264,16 @@ public sealed class ItemMdbViewBuilder
                 otherInfo.Add(new KeyValuePair<string, string>(label, value));
             }
 
+            // Referenced-textblock actions — the item's "References" can name TBInfo
+            // textblocks (e.g. "Textblock #9649") that carry a room action the item
+            // enables. Those effects live in the TBInfo Action, not on the item row, so
+            // the record surfaced none of them (the yellow bone portal read as having no
+            // attached spell even though "enter portal" casts a spell, teleports, and
+            // summons a boss). Surface the meaningful ops: a cast as a clickable Casts
+            // row (same as an on-use cast), a teleport / summon as an info row.
+            AddReferencedActionEffects(ReadString(el, "References"), itemCastLevel,
+                castsSpells, summons, teleportsTo, CastEffect);
+
             // Dropped By — one clickable monster link per "Monster #N(X%)" token,
             // resolved to its Monsters.Name (+ drop-rate suffix). Its own linked
             // list rather than a joined string so each monster is clickable.
@@ -279,7 +294,7 @@ public sealed class ItemMdbViewBuilder
 
             break;
         }
-        return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy, placedIn, castsSpells);
+        return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy, placedIn, castsSpells, summons, teleportsTo);
     }
 
     // Placed In: one clickable room row per "Room {map}/{room}" token in Obtained
@@ -630,6 +645,94 @@ public sealed class ItemMdbViewBuilder
         return string.IsNullOrEmpty(name) ? null : name;
     }
 
+    // Surface the effects of any TBInfo textblock the item's "References" names. The
+    // action is '\n'-separated command lines, each a ':'-separated op list
+    // ("enter portal:roomitem 1749 1373:message 3045:cast 310:teleport 785 17:summon 215").
+    // We render the ones a reader cares about — cast (the attached spell), teleport
+    // (where it sends you), summon (what it spawns) — and skip conditions / messages.
+    // Effects are deduped across the (often duplicated per-alias) command lines.
+    private void AddReferencedActionEffects(
+        string references, int itemCastLevel,
+        List<CastsSpellRow> castsSpells, List<DroppedByRow> summons, List<PlacedInRow> teleportsTo,
+        Func<int, int, string> castEffect)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (int tb in ExtractTextblockRefs(references))
+        {
+            if (GetTbInfoAction(tb) is not { } action) continue;
+            foreach (string rawLine in action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] parts = rawLine.Split(':', StringSplitOptions.TrimEntries);
+                string trigger = parts.Length > 0 ? parts[0] : string.Empty;
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    string[] tok = parts[i].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (tok.Length == 0) continue;
+
+                    if (tok[0].Equals("cast", StringComparison.OrdinalIgnoreCase)
+                        && tok.Length >= 2 && int.TryParse(tok[1], out int sp) && sp > 0
+                        && seen.Add($"cast:{sp}"))
+                    {
+                        castsSpells.Add(new CastsSpellRow(
+                            string.IsNullOrEmpty(trigger) ? "Casts (on use)" : $"Casts (on \"{trigger}\")",
+                            sp, ResolveSpellName(sp), castEffect(sp, itemCastLevel)));
+                    }
+                    // teleport <room> <map> — the explicit destination the action sends you
+                    // to, as a clickable room link (+ Queue-Walk), like a floor placement.
+                    else if (tok[0].Equals("teleport", StringComparison.OrdinalIgnoreCase)
+                        && tok.Length >= 3 && int.TryParse(tok[1], out int rm) && int.TryParse(tok[2], out int mp)
+                        && seen.Add($"tp:{mp}/{rm}"))
+                    {
+                        string? rn = ResolveRoomName(mp, rm);
+                        string location = string.IsNullOrEmpty(rn) ? $"{mp}/{rm}" : $"{rn} - {mp}/{rm}";
+                        teleportsTo.Add(new PlacedInRow(location, mp, rm));
+                    }
+                    // summon <monster> — a clickable link to the spawned monster's record.
+                    else if (tok[0].Equals("summon", StringComparison.OrdinalIgnoreCase)
+                        && tok.Length >= 2 && int.TryParse(tok[1], out int mn) && mn > 0
+                        && seen.Add($"summon:{mn}"))
+                    {
+                        summons.Add(new DroppedByRow(
+                            LookupMonsterName(mn) ?? mn.ToString(System.Globalization.CultureInfo.InvariantCulture), mn));
+                    }
+                }
+            }
+        }
+    }
+
+    // Extract the numeric ids of every "Textblock #N" token in a comma-separated
+    // References field (which may also carry Room / Shop / Monster tokens we ignore here).
+    private static IEnumerable<int> ExtractTextblockRefs(string references)
+    {
+        if (string.IsNullOrWhiteSpace(references)) yield break;
+        const string prefix = "Textblock #";
+        foreach (string token in references.Split(','))
+        {
+            string t = token.Trim();
+            if (!t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+            if (int.TryParse(t[prefix.Length..].Trim(), out int n) && n > 0) yield return n;
+        }
+    }
+
+    // The Action string of a TBInfo textblock by number, or null when absent/blank.
+    // TBInfo stores Number as a string ("9649") in some sets, so match either kind.
+    private string? GetTbInfoAction(int number)
+    {
+        JsonDocument? doc = _cache.GetRawTable("TBInfo");
+        if (doc is null) return null;
+        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        {
+            if (!el.TryGetProperty("Number", out JsonElement n)) continue;
+            int num = n.ValueKind == JsonValueKind.Number && n.TryGetInt32(out int vi) ? vi
+                : n.ValueKind == JsonValueKind.String && int.TryParse(n.GetString(), out int vs) ? vs
+                : 0;
+            if (num != number) continue;
+            string action = ReadString(el, "Action");
+            return string.IsNullOrWhiteSpace(action) ? null : action;
+        }
+        return null;
+    }
+
     // Classes.Number → Classes.Name; falls back to "Class N" when absent.
     private string ResolveClassName(int classId)
     {
@@ -651,4 +754,8 @@ public sealed record ItemMdbView(
     bool IsContainer = false,
     IReadOnlyList<DroppedByRow>? DroppedBy = null,
     IReadOnlyList<PlacedInRow>? PlacedIn = null,
-    IReadOnlyList<CastsSpellRow>? CastsSpells = null);
+    IReadOnlyList<CastsSpellRow>? CastsSpells = null,
+    // Referenced-textblock action targets: monsters the item's action summons and the
+    // rooms it teleports to, each a clickable link (reusing the drop / floor row types).
+    IReadOnlyList<DroppedByRow>? Summons = null,
+    IReadOnlyList<PlacedInRow>? TeleportsTo = null);
