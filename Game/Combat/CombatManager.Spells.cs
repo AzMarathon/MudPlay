@@ -656,6 +656,44 @@ public sealed partial class CombatManager
             // changed, redispatch".
         }
 
+        // Weapon→spell re-climb for the FIXED orders (SpellsFirst / PhysicalFirst).
+        // Once the attack-spell cascade lapses to the weapon (mana fell under the
+        // per-cast floor, or the cast cap was spent), _castingSpellTarget is null and
+        // the heartbeat would return just below and never look again — so mana
+        // regenerating back over the threshold went unnoticed until an unrelated room
+        // re-observation forced a fresh decision (report paradigm-20260921-074300:
+        // kept swinging ~6 rounds after mana had recovered, only re-climbing on the
+        // next room display). The Alternate* / CustomRoundCycle orders already have
+        // this edge (above); the fixed orders lacked it. Peek the chooser at a round
+        // boundary while in weapon mode; if it now picks an attack spell, switch to it.
+        // Choose already consults the per-target weapon latch (_attackSpellLatchedOff
+        // via singleTargetSpent), so a target we deliberately committed to the weapon
+        // on — the CONFIRMED "a mana regen must not flip us back mid-fight on the SAME
+        // target" mechanic — still yields the weapon here; only a fresh / non-latched
+        // target re-climbs. Peeking Choose is side-effect-safe: the cast counters and
+        // the cast-at flag are set in MarkCast (on send), not Choose.
+        if (settings.ActionOrder is CombatActionOrder.SpellsFirst or CombatActionOrder.PhysicalFirst
+            && _castingSpellTarget is null
+            && _currentTarget is { } weaponTarget
+            && _now() - _lastAlternationAdvanceAt >= AlternationAdvanceMinGap
+            && _classifier.Current is { } climbObs
+            && TargetPresent(climbObs, weaponTarget))
+        {
+            CombatSpellContext climbCtx = BuildContext(
+                settings, climbObs, weaponTarget, CountEngageable(climbObs),
+                ResolveMonsterNumber(climbObs, weaponTarget));
+            CombatSpellDecision climb = _spellChooser.Choose(settings, climbCtx);
+            if (IsAttackSpellRoundOwner(climb.Action))
+            {
+                _lastAlternationAdvanceAt = _now();
+                _log?.Combat(LogCategory,
+                    $"weapon→spell re-climb at '{weaponTarget}': chooser now picks {climb.Spell} "
+                    + $"({climb.Action}) — attack-spell resource recovered, switching off the weapon");
+                DeferRoundContinuation(settings, weaponTarget, "weapon→spell re-climb");
+                return;
+            }
+        }
+
         if (_castingSpellTarget is not { } target) return;   // weapon / idle mode — nothing to drive
 
         if (_classifier.Current is not { } obs)
@@ -914,6 +952,16 @@ public sealed partial class CombatManager
     // + the freshest room view before dispatching (report paradigm-20260905-205200:
     // every kill wasted a round re-announcing at the corpse — "You don't see X
     // here!").
+    // The chooser decisions that own the round as a SPELL (enter spell mode via the
+    // DispatchRoundAction default branch) — i.e. a switch off the weapon is warranted.
+    // Excludes WeaponAttack (the thing we're leaving), Backstab (a stealth opener, not
+    // a cascade rung), and the between-round debuffs (resolved separately, not round
+    // owners). Used by the weapon→spell re-climb.
+    private static bool IsAttackSpellRoundOwner(CombatSpellAction action) => action is
+        CombatSpellAction.NormalAttackSpell or CombatSpellAction.AlternateAttackSpell
+        or CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2
+        or CombatSpellAction.DrainSpell;
+
     private void DeferRoundContinuation(CombatSettings settings, string target, string reason)
     {
         void Dispatch()

@@ -483,6 +483,19 @@ public sealed class HealthManager : IDisposable
         => RestThresholds.Resolve(mode, triggerPct, maxPct,
             defaultMax?.Invoke() ?? 0, realMax?.Invoke() ?? 0, liveMax);
 
+    // The extra max-pool a currently-worn Pre-rest gear set adds OVER the Default
+    // loadout — the amount live HP/MA is inflated by, and the amount that will be
+    // stripped when the set reverts to Default at rest completion. Used to raise the
+    // rest clear floor so a rest doesn't "finish" on inflated pool only to drop back
+    // below the trigger the instant the boosting gear comes off. Zero when in Default
+    // gear (live == default) or when the Default basis isn't known (returns 0 → the
+    // clear floor is unchanged from the pre-fix behavior).
+    private static int PoolBoostOverDefault(int liveMax, Func<int>? defaultMax)
+    {
+        int basis = defaultMax?.Invoke() ?? 0;
+        return basis > 0 ? Math.Max(0, liveMax - basis) : 0;
+    }
+
     // A single HP / MA threshold (flee / hang trigger) resolved against the same
     // Default-set basis + real-max cap the rest gates use — so heal/run/hang anchor to
     // the loadout the user tuned rather than a Pre-rest set's altered pool.
@@ -798,7 +811,19 @@ public sealed class HealthManager : IDisposable
         // has fired (_restInFlight), switch to the target floor so the sit-down
         // holds out to a full recovery instead of standing back up the moment it
         // ticks one point above the trigger.
-        int hpClearFloor = (_restInFlight || wasActivelyResting) ? hpRestTarget : hpRestTrigger;
+        // Pool-boost compensation: while a Pre-rest gear set that adds max HP is
+        // worn, live HP is inflated by the set's extra pool over Default — but the
+        // rest target is anchored to the DEFAULT set's pool. Clearing on the inflated
+        // HP finishes the rest, then the revert to Default strips that bonus and drops
+        // HP back below the trigger → re-assert → an endless gear-swap/rest thrash
+        // (report paradigm-20260921-114318: 398↔423 forever off a +25-HP ring). Raise
+        // the resting-case clear floor by that bonus so the rest holds until
+        // DEFAULT-equivalent HP reaches the target, leaving HP at/above target once the
+        // set comes off. Bounded: target + boost ≤ liveMax (target ≤ defaultBasis,
+        // boost = liveMax − defaultBasis), so it can never strand. Zero in Default gear
+        // and when the Default basis is unknown (fail-safe → no change from before).
+        int hpBoost = PoolBoostOverDefault(_state.MaxHp, _defaultSetMaxHp);
+        int hpClearFloor = (_restInFlight || wasActivelyResting) ? hpRestTarget + hpBoost : hpRestTrigger;
 
         // Strictly below — "rest if below N" rests only when the pool is
         // under N, never AT N. (Equal-or-less traps a level-2 mystic: 1 max
@@ -824,7 +849,7 @@ public sealed class HealthManager : IDisposable
                 skipRest
                     ? "do-not-rest room — advancing instead of resting"
                     : _restInFlight || wasActivelyResting
-                        ? $"HP {_state.Hp}/{_state.MaxHp} >= rest-target={hpRestTarget}"
+                        ? $"HP {_state.Hp}/{_state.MaxHp} >= clear-floor={hpClearFloor} (rest-target={hpRestTarget}{(hpBoost > 0 ? $" + pre-rest boost {hpBoost}" : "")})"
                         : $"HP {_state.Hp}/{_state.MaxHp} recovered above rest-trigger={hpRestTrigger} before rest started");
         }
 
@@ -835,8 +860,10 @@ public sealed class HealthManager : IDisposable
         int maRestTarget  = follower
             ? Math.Min(maRestTrigger + 1, maRestMax)
             : maRestMax;
-        // See hpClearFloor above — same pre-send-vs-resting distinction for MA.
-        int maClearFloor = (_restInFlight || wasActivelyResting) ? maRestTarget : maRestTrigger;
+        // See hpClearFloor above — same pre-send-vs-resting distinction for MA, and
+        // the same Pre-rest Mana-set pool-boost compensation.
+        int maBoost = PoolBoostOverDefault(_state.MaxMa, _defaultSetMaxMa);
+        int maClearFloor = (_restInFlight || wasActivelyResting) ? maRestTarget + maBoost : maRestTrigger;
 
         // Strictly below (see HP gate above) — the mystic-at-level-2 case.
         if (!skipRest && !maMaxUnsettled && !_maGateAsserted && _state.Ma < maRestTrigger && _state.MaxMa > 0)
@@ -859,7 +886,7 @@ public sealed class HealthManager : IDisposable
                 skipRest
                     ? "do-not-rest room — advancing instead of resting"
                     : _restInFlight || wasActivelyResting
-                        ? $"MA {_state.Ma}/{_state.MaxMa} >= rest-target={maRestTarget}"
+                        ? $"MA {_state.Ma}/{_state.MaxMa} >= clear-floor={maClearFloor} (rest-target={maRestTarget}{(maBoost > 0 ? $" + pre-rest boost {maBoost}" : "")})"
                         : $"MA {_state.Ma}/{_state.MaxMa} recovered above rest-trigger={maRestTrigger} before rest started");
         }
 

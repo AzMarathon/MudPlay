@@ -31,6 +31,13 @@ public sealed class RollingLogFile
     private bool _flushRunning;
     private bool _flushAgain;
 
+    // Set (signalled) whenever no background flush is queued or running. Reset when a
+    // flush is scheduled, set again when the writer finishes. Flush() waits on it so a
+    // caller that reads the file right after Flush()/Close() can't race a background
+    // write that was still queued (production reads the in-memory Snapshot, not the
+    // file, so this only matters for direct-file readers such as the tests).
+    private readonly System.Threading.ManualResetEventSlim _idle = new(initialState: true);
+
     public bool IsOpen
     {
         get { lock (_gate) { return _path is not null; } }
@@ -110,7 +117,7 @@ public sealed class RollingLogFile
             // the slot and queue one. Only the false→true transition schedules work,
             // so there is never more than one background flush at a time.
             if (_flushRunning) _flushAgain = true;
-            else { _flushRunning = true; schedule = true; }
+            else { _flushRunning = true; _idle.Reset(); schedule = true; }
         }
         if (schedule) Task.Run(BackgroundFlush);
     }
@@ -129,6 +136,9 @@ public sealed class RollingLogFile
     // Truncate / SetMaxLines and available to callers that need the file current now.
     public void Flush()
     {
+        // Drain any queued / in-flight background flush first so no write can land
+        // after we return, then write the current tail synchronously.
+        _idle.Wait();
         lock (_writeGate)
         {
             string? path;
@@ -158,7 +168,7 @@ public sealed class RollingLogFile
                 string[] snapshot;
                 lock (_gate)
                 {
-                    if (_path is null) { _flushRunning = false; _flushAgain = false; return; }
+                    if (_path is null) { _flushRunning = false; _flushAgain = false; _idle.Set(); return; }
                     path = _path;
                     snapshot = _lines.ToArray();
                     _flushAgain = false;
@@ -166,7 +176,7 @@ public sealed class RollingLogFile
                 WriteToDisk(path, snapshot);
                 lock (_gate)
                 {
-                    if (!_flushAgain) { _flushRunning = false; return; }
+                    if (!_flushAgain) { _flushRunning = false; _idle.Set(); return; }
                 }
             }
         }

@@ -1,8 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.25**
-> - Terminal renderer now caches each glyph (per character + colour) instead of re-shaping a fresh FormattedText for every cell on every frame — the app's heaviest per-frame work. Cuts render CPU and the native text-shaping memory churn under heavy output and with several clients open; rendering is unchanged (same glyphs, same exact per-cell positions). The cache clears on a font or size change
+> **Version 3.96.29**
+> - Combat (Spells-first / Physical-first): the engine now climbs back to your attack spell as soon as mana recovers over its threshold, instead of swinging the weapon until an unrelated room re-display forced a re-decision. It still deliberately commits to the weapon on a target it already spent the spell's mana/casts on
+> - Pasting a batch of commands (e.g. a multi-line equip set) now sends each complete line as its own command instead of folding them into one 254-character input line that silently dropped the commands past the limit
+> - Resting with a Pre-rest gear set that adds max HP/MA no longer thrashes: the rest holds until your Default-equivalent pool reaches the target, so reverting to your Default set doesn't drop you straight back below the rest trigger
+> - Auto-walker no longer rams a hidden exit while dead-reckoning (blind or dark): it was trusting a stale "obvious exits" set and skipping the required search; it now searches, and the reveal is confirmed even while blind
+> - Conversation/transaction log Flush and Close now fully drain the background writer, so nothing can read a log mid-write
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

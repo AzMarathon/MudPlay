@@ -1076,6 +1076,33 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(afterFirst, h.Sent.Count);   // no second re-announce within the window
     }
 
+    // Report paradigm-20260921-074300: with SpellsFirst, once the attack-spell cascade
+    // lapsed to the weapon (mana under the per-cast floor), the heartbeat returned early
+    // in weapon mode and never re-evaluated — so a mana regen back over the floor went
+    // unnoticed until an unrelated room re-observation forced a fresh decision (kept
+    // swinging ~6 rounds after mana had recovered). The weapon→spell re-climb fixes it:
+    // at a round boundary in weapon mode it re-runs the chooser and switches back to the
+    // spell once its resource recovers. (This mob was never cast at, so the per-target
+    // weapon latch — which deliberately commits the SAME target to the weapon — is off.)
+    [Fact]
+    public void SpellsFirst_ManaRecoversInWeaponMode_ReclimbsToTheAttackSpell()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.SpellManaThresholdMode = ThresholdMode.Absolute;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 0, MinManaPerCast = 50 };
+        h.AddMonster(1, "giant rat");
+
+        h.Ma = 30;                              // below the 50 per-cast floor
+        h.Feed("Also here: giant rat.");        // engage → harm can't fire → weapon
+        Assert.DoesNotContain("harm giant rat", h.AllSent);
+
+        h.Ma = 80;                              // mana regenerates back over the floor
+        h.Tick();                               // round boundary → weapon→spell re-climb
+
+        Assert.Equal("harm giant rat", h.LastSent);
+    }
+
     // ----- manual user-attack override (report paradigm-20260814-135715) ------
 
     [Fact]

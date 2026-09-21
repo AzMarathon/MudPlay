@@ -136,6 +136,28 @@ public sealed class RoomTrackerTests : IDisposable
         Assert.Null(tracker.State.CurrentRoom);
     }
 
+    // report paradigm-20260921-145800: ObservedExitDirections (the "obvious exits" set
+    // the walker consults to skip a redundant `sea`) must describe the room we actually
+    // SAW. A real observation sets it; a room change that ISN'T a live observation — a
+    // blind/dark dead-reckon advance, an `rm` manual locate, a recovery — clears it, so
+    // the walker runs the search a hidden exit needs instead of skipping it on a stale
+    // set (which made it ram a wall and thrash).
+    [Fact]
+    public void ObservedExitDirections_SetByObservation_ClearedByDeadReckonedLocate()
+    {
+        RoomTracker tracker = NewTracker();
+
+        tracker.NoteRoomObserved(Obs("Town Gates", Direction.N, Direction.E));
+        Assert.NotNull(tracker.State.ObservedExitDirections);
+        Assert.Contains(Direction.N, tracker.State.ObservedExitDirections!);
+        Assert.Contains(Direction.E, tracker.State.ObservedExitDirections!);
+
+        // Manual locate to a room we didn't observe — the previous room's exit set is
+        // now stale and must be dropped so the walker doesn't trust it.
+        tracker.SetLocated(new RoomKey(2, 1));
+        Assert.Null(tracker.State.ObservedExitDirections);
+    }
+
     // ----- look-direction peek suppression ---------------------------
 
     [Fact]
