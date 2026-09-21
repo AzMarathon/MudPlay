@@ -560,7 +560,7 @@ Active party members get a few things for free regardless of the grid: the party
 Every remote command is the `@`-word typed into **telepath, gangpath, or say**. A **bare** command (no argument) is just the word — `@health`, `@where`, `@inv`, `@wealth`, `@stop`, `@version`. The commands that take an argument follow the **Args** column in the tables below; here's one valid example of each shape:
 
 - `@help goto` — one command's syntax and description (the `@` on the argument is optional — `@help @goto` works too)
-- `@goto arlysia` · `@goto 3/599` · `@goto ogre king` — a GOTO favorite, a `map/room` coordinate, or a boss / room by name or acronym
+- `@goto arlysia` · `@goto 3/599` · `@goto ogre king` — a GOTO favorite, a `map/room` coordinate, or a boss / room by name or acronym. A coordinate can separate the map and room with a **slash, comma, or space** — `3/599`, `3,599`, and `3 599` are all read the same. A **bare** room number is rejected (`@goto 599` → "needs a map"), because the same number is a different room on every map
 - `@loop Black Fortress` — start a saved loop by name
 - `@loop 5/10 5/11 5/12` — an ad-hoc loop from two or more `map/room` coordinates
 - `@loop last` — re-run the last loop run this session
