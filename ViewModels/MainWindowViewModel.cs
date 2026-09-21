@@ -3492,16 +3492,30 @@ public partial class MainWindowViewModel : ObservableObject
     // duplicates. Cleared by each window's Closed handler.
     private readonly Dictionary<string, PlaceholderShellWindow> _placeholders = new();
 
+    // Re-selecting an already-open window's menu / hotkey / toolbar entry brings it
+    // to the FRONT rather than toggling it closed: un-minimize first (a minimized
+    // window can't take focus) then activate. The old convention closed it, which
+    // stranded users who couldn't tell the window was already open when it sat behind
+    // another window — or another running client — and re-selecting then shut the very
+    // thing they were hunting for (reported on a fresh install with two clients open:
+    // Profile Management opened behind another window and looked like nothing happened).
+    // Closing is done through the window's own X / Cancel / Save controls.
+    private static void RaiseExisting(Avalonia.Controls.Window window)
+    {
+        if (window.WindowState == Avalonia.Controls.WindowState.Minimized)
+            window.WindowState = Avalonia.Controls.WindowState.Normal;
+        window.Activate();
+    }
+
     private void OpenPlaceholder(string id, string panelName, string phaseTag, string headline, string description)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Toggle convention: clicking the same menu / hotkey / toolbar entry
-        // a second time closes the window instead of activating it.
+        // Re-select raises the existing window — see RaiseExisting.
         if (_placeholders.TryGetValue(id, out PlaceholderShellWindow? existing))
         {
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
@@ -3522,10 +3536,10 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Toggle convention — see OpenPlaceholder.
+        // Re-select raises the existing window — see RaiseExisting.
         if (_logPane is { } existing)
         {
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
@@ -3549,11 +3563,10 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Toggle convention — see OpenPlaceholder: pressing the command while
-        // Backscroll is already open closes the window.
+        // Re-select raises the existing window — see RaiseExisting.
         if (_backscroll is { } existing)
         {
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
@@ -3604,10 +3617,10 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Toggle convention — see OpenPlaceholder.
+        // Re-select raises the existing window — see RaiseExisting.
         if (_conversation is { } existing)
         {
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
@@ -3627,7 +3640,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live PartyWindow — re-press toggles closed.
+    // Singleton handle for the live PartyWindow — re-press raises it to front.
     private PartyWindow? _partyWindow;
 
     [RelayCommand]
@@ -3636,7 +3649,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_partyWindow is { } existing) { existing.Close(); return; }
+        if (_partyWindow is { } existing) { RaiseExisting(existing); return; }
 
         PartyWindow window = new()
         {
@@ -3649,7 +3662,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live Buff Watchdog window — re-press toggles closed.
+    // Singleton handle for the live Buff Watchdog window — re-press raises it to front.
     private BuffWatchdogWindow? _buffWatchdog;
 
     [RelayCommand]
@@ -3658,7 +3671,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_buffWatchdog is { } existing) { existing.Close(); return; }
+        if (_buffWatchdog is { } existing) { RaiseExisting(existing); return; }
 
         BuffWatchdogWindow window = new()
         {
@@ -3669,8 +3682,8 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live Profile Management window — re-press toggles
-    // closed. The VM borrows the current-profile lifecycle (New / Save / Save As
+    // Singleton handle for the live Profile Management window — re-press raises it
+    // to front. The VM borrows the current-profile lifecycle (New / Save / Save As
     // / swap) from this VM so the collapsed File menu loses no capability.
     private ProfileManagerWindow? _profileManager;
 
@@ -3680,7 +3693,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_profileManager is { } existing) { existing.Close(); return; }
+        if (_profileManager is { } existing) { RaiseExisting(existing); return; }
 
         ProfileManagerWindow window = new()
         {
@@ -3951,8 +3964,8 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void OpenEvents() => OpenSettingsAt("events");
 
-    // Singleton handle to the Player Workshop window for the toggle
-    // convention (re-press closes; deep-link to a section activates).
+    // Singleton handle to the Player Workshop window. Re-press raises it to front
+    // (a deep-link also switches to the requested section first).
     private Views.CharacterWorkshop.CharacterWorkshopWindow? _workshop;
 
     [RelayCommand]
@@ -3986,10 +3999,10 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_workshop is { } existing)
         {
-            // Deep-link re-press: switch section + raise, don't toggle closed.
-            // The Workshop shell holds no window-level pending state (each
-            // editable section owns its own Save / Apply / Cancel), so a plain
-            // re-press just closes — no ApplyAndClose save path at the shell.
+            // Re-select raises the window (see RaiseExisting); a deep-link also
+            // switches to the requested section/calculator first. The Workshop shell
+            // holds no window-level pending state (each editable section owns its own
+            // Save / Apply / Cancel), so there's no save-on-toggle path to run here.
             if (existing.DataContext is ViewModels.CharacterWorkshop.CharacterWorkshopViewModel vm
                 && sectionId is not null)
             {
@@ -3998,10 +4011,8 @@ public partial class MainWindowViewModel : ObservableObject
                 if (section is not null) vm.SelectedSection = section;
                 if (calculatorId is not null && section is ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calc)
                     calc.NavigateToCalculator(calculatorId);
-                existing.Activate();
-                return;
             }
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
@@ -4043,7 +4054,7 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // Singleton-ish handle to the Quick Connect window so re-press of the
-    // menu / hotkey toggles it closed.
+    // menu / hotkey raises it to front.
     private QuickConnectWindow? _quickConnect;
 
     // File → Quick Connect. Modeless dialog; on commit the host/port becomes the connect target.
@@ -4053,7 +4064,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_quickConnect is { } existing) { existing.Close(); return; }
+        if (_quickConnect is { } existing) { RaiseExisting(existing); return; }
 
         QuickConnectViewModel vm = new();
         QuickConnectWindow window = new() { DataContext = vm };
@@ -4093,31 +4104,20 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Toggle convention with edit-window save-on-toggle policy:
-        // re-press of the same hotkey / menu while the window is open
-        // routes through ApplyAndClose (Save path). Title-bar X / Cancel
-        // button discards. For a deep-link (BBS list etc.) on a window
-        // that's already open, jump to the requested section instead of
-        // saving + closing.
+        // Re-select raises the window (see RaiseExisting); a deep-link (BBS list
+        // etc.) also jumps to the requested section first. Re-pressing no longer
+        // saves-and-closes — the Save / OK button (and title-bar X / Cancel to
+        // discard) are the explicit commit / dismiss paths.
         if (_settings is { } existing)
         {
-            if (existing.DataContext is SettingsWindowViewModel vm)
+            if (existing.DataContext is SettingsWindowViewModel vm && sectionId is not null)
             {
-                if (sectionId is not null)
-                {
-                    SettingsSectionViewModel? section = vm.Sections
-                        .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
-                    if (section is not null) vm.SelectedSection = section;
-                    if (bbsName is not null) vm.SelectBbs(bbsName);
-                    existing.Activate();
-                    return;
-                }
-                vm.ApplyAndClose();
+                SettingsSectionViewModel? section = vm.Sections
+                    .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
+                if (section is not null) vm.SelectedSection = section;
+                if (bbsName is not null) vm.SelectBbs(bbsName);
             }
-            else
-            {
-                existing.Close();
-            }
+            RaiseExisting(existing);
             return;
         }
 
@@ -4247,34 +4247,25 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_gameDataBrowser is { } existing)
         {
+            // Re-select raises the window (see RaiseExisting); a deep-link also
+            // navigates to the requested record, or switches to the requested
+            // section, first. Re-pressing no longer toggles it closed.
             MudPlay.ViewModels.GameData.GameDataBrowserViewModel? existingVm =
                 existing.DataContext as MudPlay.ViewModels.GameData.GameDataBrowserViewModel;
 
             if (rowSelector is not null && initialSectionId is not null)
             {
                 existingVm?.NavigateToRecord(initialSectionId, rowSelector);
-                existing.Activate();
-                return;
             }
-
-            if (initialSectionId is null
-                || (existingVm is not null
-                    && string.Equals(existingVm.SelectedSection?.Id, initialSectionId, StringComparison.OrdinalIgnoreCase)))
-            {
-                existing.Close();
-                return;
-            }
-
-            if (existingVm is not null)
+            else if (initialSectionId is not null && existingVm is not null
+                     && !string.Equals(existingVm.SelectedSection?.Id, initialSectionId, StringComparison.OrdinalIgnoreCase))
             {
                 MudPlay.ViewModels.GameData.GameDataSectionViewModel? target =
                     existingVm.Sections.FirstOrDefault(s => string.Equals(s.Id, initialSectionId, StringComparison.OrdinalIgnoreCase));
                 if (target is not null) existingVm.SelectedSection = target;
-                existing.Activate();
-                return;
             }
 
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
@@ -4710,7 +4701,7 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void OpenNavigation()
     {
-        if (_navigationWindow is { } existing) { existing.Close(); return; }
+        if (_navigationWindow is { } existing) { RaiseExisting(existing); return; }
         EnsureNavigationWindow();
     }
 
@@ -4725,7 +4716,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_navigationWindow is { } existing)
         {
-            existing.Activate();
+            RaiseExisting(existing);
             return existing.DataContext as ViewModels.Navigation.NavigationViewModel;
         }
 
@@ -4838,7 +4829,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             if (existing.DataContext is ViewModels.Navigation.NavigationManagerDialogViewModel evm)
                 evm.SelectTab(startOnGotoTab);
-            existing.Activate();
+            RaiseExisting(existing);
             return;
         }
 
@@ -4898,7 +4889,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_spellBook is { } existing) { existing.Close(); return; }
+        if (_spellBook is { } existing) { RaiseExisting(existing); return; }
 
         SpellBookWindow window = new()
         {
@@ -4921,7 +4912,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_monsterIntel is { } existing) { existing.Close(); return; }
+        if (_monsterIntel is { } existing) { RaiseExisting(existing); return; }
 
         var svc = AppServices.Current;
         MonsterIntelWindow window = new()
@@ -4947,7 +4938,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_sessionStats is { } existing) { existing.Close(); return; }
+        if (_sessionStats is { } existing) { RaiseExisting(existing); return; }
 
         SessionStatsWindow window = new()
         {
@@ -4979,7 +4970,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_transactionHistory is { } existing) { existing.Close(); return; }
+        if (_transactionHistory is { } existing) { RaiseExisting(existing); return; }
 
         TransactionHistoryWindow window = new()
         {
@@ -4999,7 +4990,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_playersSeen is { } existing) { existing.Close(); return; }
+        if (_playersSeen is { } existing) { RaiseExisting(existing); return; }
 
         PlayersSeenWindow window = new()
         {
@@ -5023,10 +5014,10 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Toggle convention — see OpenPlaceholder.
+        // Re-select raises the existing window — see RaiseExisting.
         if (_wireInspector is { } existing)
         {
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
@@ -5146,8 +5137,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Help → About MudPlay. A modeless, read-only window: program name + version,
     // a clickable repo link, a tab per bundled license (MIT / SIL OFL / CC BY-SA),
-    // and a community thank-you. Toggle convention — pressing the command while
-    // it's open closes it (see OpenPlaceholder).
+    // and a community thank-you. Pressing the command while it's open raises it to
+    // front (see RaiseExisting).
     [RelayCommand]
     private void OpenAbout()
     {
@@ -5156,7 +5147,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_aboutWindow is { } existing)
         {
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
@@ -5170,8 +5161,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Help / Tools → Update the Client. A modeless window that reads the update service's
     // cached verdict (or checks fresh), and — on the user's request — downloads,
-    // verifies, swaps the new build in, and relaunches. Same toggle convention —
-    // pressing the command while it's open closes it.
+    // verifies, swaps the new build in, and relaunches. Pressing the command while
+    // it's open raises it to front (see RaiseExisting).
     [RelayCommand]
     private void OpenUpdate()
     {
@@ -5180,7 +5171,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_updateWindow is { } existing)
         {
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
@@ -5198,8 +5189,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Help → Help topics. A modeless, read-only compendium: a searchable table of
     // contents (left) that drives a rendered content pane (right), covering how
-    // features work, how to use the client, and what each setting means. Same
-    // toggle convention — pressing the command while it's open closes it.
+    // features work, how to use the client, and what each setting means. Pressing
+    // the command while it's open raises it to front (see RaiseExisting).
     [RelayCommand]
     private void OpenHelpWindow()
     {
@@ -5208,7 +5199,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_helpWindow is { } existing)
         {
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
@@ -5787,7 +5778,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Open InfoDialogs are tracked per title so menu / hotkey re-press toggles them shut.
+    // Open InfoDialogs are tracked per title so menu / hotkey re-press raises the existing one.
     private readonly Dictionary<string, InfoDialog> _infoDialogs = new(StringComparer.Ordinal);
 
     private void ShowInfoDialog(string title, string body)
@@ -5795,11 +5786,11 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Toggle convention — see OpenPlaceholder. About / License /
-        // Keyboard shortcuts each get their own tracker by title.
+        // Re-select raises the existing dialog — see RaiseExisting. About /
+        // License / Keyboard shortcuts each get their own tracker by title.
         if (_infoDialogs.TryGetValue(title, out InfoDialog? existing))
         {
-            existing.Close();
+            RaiseExisting(existing);
             return;
         }
 
