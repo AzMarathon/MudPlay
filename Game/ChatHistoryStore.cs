@@ -9,12 +9,16 @@ namespace MudPlay.Game;
 // typical case — the app runs for hours, the user keeps it open across
 // midnight).
 //
-// Lifetime: app-scoped (not per-profile). Survives profile swap, connect /
-// disconnect, character switch. Cleared only on Clear or app exit.
+// Lifetime: the instance is app-scoped, but its CONTENTS are re-scoped to the
+// loaded character. SessionLogService clears + re-seeds it from the new
+// character's talk.log on every profile change, so the Conversation window shows
+// only the loaded character's chat — a PVE and a PVP character on the same BBS
+// don't share the view. A connect / disconnect / reconnect of the SAME character
+// keeps the contents. Also cleared on the window's right-click Clear, and on app exit.
 //
 // This store is the in-memory view the Conversation window binds to. Durable
 // disk persistence lives in Services.SessionLogService, which subscribes to the
-// same ChatRouter and rolls a per-character talk.log.
+// same ChatRouter and rolls a per-character <char>.<bbs>.talk.log.
 public sealed class ChatHistoryStore : IDisposable
 {
     // Upper bound on retained entries. The store is in-memory and app-lifetime,
@@ -68,11 +72,11 @@ public sealed class ChatHistoryStore : IDisposable
             _entries.RemoveAt(0);
     }
 
-    // Replay persisted history into the store at startup so the Conversation
-    // window shows prior-session chat on reconnect. Entries are inserted at the
-    // front (they predate anything live) in their given chronological order.
-    // Callers gate this to run once per app run — the store is app-lifetime and
-    // never cleared on profile swap, so a second seed would duplicate rows.
+    // Replay persisted history into the store so the Conversation window shows
+    // prior-session chat. Entries are inserted at the front (they predate anything
+    // live) in their given chronological order. Callers Clear() before re-seeding
+    // on a profile change (SessionLogService does this per character), so seeding
+    // into a non-empty store is not expected and would prepend duplicates.
     public void Seed(IReadOnlyList<ChatLogEntry> historical)
     {
         ArgumentNullException.ThrowIfNull(historical);
@@ -90,8 +94,9 @@ public sealed class ChatHistoryStore : IDisposable
             _lastDate = DateOnly.FromDateTime(historical[^1].Timestamp.LocalDateTime);
     }
 
-    // Wipe every entry. User-initiated only (no automatic clear on profile
-    // swap); intended for the Conversation window's right-click → Clear menu.
+    // Wipe every entry. Called on a profile change (SessionLogService re-scopes the
+    // view to the new character), and by the Conversation window's right-click →
+    // Clear menu. Raises a Reset so the ConversationViewModel rebuilds empty.
     public void Clear()
     {
         _entries.Clear();

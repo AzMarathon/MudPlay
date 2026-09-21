@@ -132,4 +132,28 @@ public sealed class ChatHistoryStoreTests
         Assert.Single(history.Entries);
         Assert.NotEqual(ChatChannel.DaySeparator, history.Entries[0].Channel);
     }
+
+    // The per-character re-scope SessionLogService performs on a profile swap:
+    // Clear the store, then Seed it from the NEW character's talk.log. The result
+    // must be ONLY the new character's history — the previous character's chat is
+    // gone, not merged (the reported PVE/PVP "same conversation log" bleed).
+    [Fact]
+    public void ClearThenReseed_ShowsOnlyTheNewCharactersHistory()
+    {
+        var (router, _, history) = Setup();
+        var t = new DateTimeOffset(2026, 1, 2, 12, 0, 0, TimeSpan.Zero);
+
+        // Character A is loaded: live chat lands + a seed from A's log.
+        history.Seed(new[] { new ChatLogEntry(t, ChatChannel.Gossip, "Aldo", "pve only", "pve only") });
+        router.Dispatch(Line("Aldo gossips: pve live", t.AddSeconds(1)));
+        Assert.Equal(2, history.Entries.Count);
+
+        // Swap to character B: clear, then seed from B's log.
+        history.Clear();
+        history.Seed(new[] { new ChatLogEntry(t.AddMinutes(1), ChatChannel.Broadcast, "Bric", "pvp only", "pvp only") });
+
+        Assert.Single(history.Entries);
+        Assert.Equal("pvp only", history.Entries[0].Message);
+        Assert.DoesNotContain(history.Entries, e => e.Message is "pve only" or "pve live");
+    }
 }

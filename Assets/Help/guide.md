@@ -2798,7 +2798,7 @@ Settings → Talk.
 ### Log conversations / Log transactions
 
 **Default:** both On
-**What it does:** Saves the Conversation window's chat history, and separately the Session Stats transaction history, to a log file so either survives an app restart.
+**What it does:** Saves the Conversation window's chat history, and separately the Session Stats transaction history, to a log file so either survives an app restart. Each log is **per character** — switching characters re-scopes the Conversation window to that character's own history, so two characters on one BBS (e.g. a PVE and a PVP realm) never share a chat log.
 
 ### Log line limit
 
