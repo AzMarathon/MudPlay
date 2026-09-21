@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
@@ -174,6 +175,27 @@ public sealed class TerminalControl : Control
     private DispatcherTimer? _blinkTimer;
     private Action? _onBufferChanged;
 
+    // ----- Server-output repaint throttle --------------------------------
+    // Rendering a screen update is the app's heaviest per-frame work (DrawRun
+    // shapes a FormattedText per glyph), so a burst of server output otherwise
+    // repaints the whole grid at the monitor's refresh rate. That's wasteful even
+    // for one client and compounds when a user runs several copies at once — the
+    // windows they aren't looking at keep paying full render cost for output nobody
+    // is watching. Coalesce the server-output repaint to a frame budget that
+    // depends on window state: ~75 fps when focused, ~10 fps when backgrounded, and
+    // nothing at all while minimized (a restore repaints once). Only the
+    // server-output path (OnScreenUpdated) routes through here; user-driven paints
+    // (typing, history recall, scroll, resize) stay immediate so input never lags.
+    private DispatcherTimer? _repaintTimer;
+    private bool _repaintScheduled;
+    private long _lastRepaintStamp;
+    private bool _dirtyWhileHidden;
+    private Window? _hostWindow;
+    private bool _windowActive = true;
+    private bool _windowMinimized;
+    private static readonly TimeSpan FocusedFrameGap    = TimeSpan.FromMilliseconds(1000.0 / 75); // ~75 fps
+    private static readonly TimeSpan BackgroundFrameGap = TimeSpan.FromMilliseconds(100);         // ~10 fps
+
     // ----- Post-Enter "pending" overlay ---------------------------------
     // Without this, hitting Enter clears the local buffer immediately,
     // the overlay disappears, and the user sees a half-second of empty
@@ -327,7 +349,37 @@ public sealed class TerminalControl : Control
         {
             _pendingFlushText = null;
         }
-        Dispatcher.UIThread.Post(InvalidateVisual);
+        Dispatcher.UIThread.Post(RequestServerRepaint);
+    }
+
+    // Coalesce a server-output repaint into the current frame budget. Paints
+    // immediately when the budget has already elapsed since the last paint,
+    // otherwise arms a single trailing repaint at the end of the budget (a burst
+    // collapses to one paint per frame, not one per update). Minimized: skip and
+    // remember we're dirty so the restore repaints once. Runs on the UI thread
+    // (posted), as do the window-state handlers, so the fields need no locking.
+    private void RequestServerRepaint()
+    {
+        if (_windowMinimized) { _dirtyWhileHidden = true; return; }
+
+        TimeSpan gap = _windowActive ? FocusedFrameGap : BackgroundFrameGap;
+        TimeSpan since = Stopwatch.GetElapsedTime(_lastRepaintStamp);
+        if (since >= gap)
+        {
+            RepaintNow();
+        }
+        else if (!_repaintScheduled && _repaintTimer is { } timer)
+        {
+            _repaintScheduled = true;
+            timer.Interval = gap - since;
+            timer.Start();
+        }
+    }
+
+    private void RepaintNow()
+    {
+        _lastRepaintStamp = Stopwatch.GetTimestamp();
+        InvalidateVisual();
     }
 
     // ScreenResized only fires on Emulator.Resize. Re-fit (the new cols/rows
@@ -352,11 +404,37 @@ public sealed class TerminalControl : Control
             // splash has nothing to blink, so skip the otherwise-2Hz full-screen
             // repaint — Avalonia has no partial invalidate, so each blink would
             // otherwise redraw the whole grid for no visible change.
+            // A backgrounded or minimized copy has no caret worth blinking —
+            // skip the 2 Hz full-screen repaint so idle background clients stay quiet.
+            if (!_windowActive || _windowMinimized) return;
             if (SplashActive || Emulator?.Screen.CursorVisible != true) return;
             _cursorBlinkOn = !_cursorBlinkOn;
             InvalidateVisual();
         };
         _blinkTimer.Start();
+
+        // Trailing-edge repaint timer for the server-output throttle (one-shot per
+        // burst; RequestServerRepaint arms it and the tick fires the coalesced paint).
+        _repaintTimer = new DispatcherTimer();
+        _repaintTimer.Tick += (_, _) =>
+        {
+            _repaintTimer!.Stop();
+            _repaintScheduled = false;
+            if (_windowMinimized) _dirtyWhileHidden = true;
+            else RepaintNow();
+        };
+
+        // Observe the hosting window's focus + minimize state so the throttle can
+        // pick the right frame budget (and drop paints entirely while minimized).
+        _hostWindow = TopLevel.GetTopLevel(this) as Window;
+        if (_hostWindow is { } win)
+        {
+            _windowActive = win.IsActive;
+            _windowMinimized = win.WindowState == WindowState.Minimized;
+            win.Activated += OnHostActivated;
+            win.Deactivated += OnHostDeactivated;
+            win.PropertyChanged += OnHostPropertyChanged;
+        }
         // Repaint the buffer overlay whenever the user types / backspaces
         // / flushes. Stored as a field so we can unsubscribe on detach
         // without leaking the strong handler reference into the buffer.
@@ -377,6 +455,16 @@ public sealed class TerminalControl : Control
         base.OnDetachedFromVisualTree(e);
         _blinkTimer?.Stop();
         _blinkTimer = null;
+        _repaintTimer?.Stop();
+        _repaintTimer = null;
+        _repaintScheduled = false;
+        if (_hostWindow is { } win)
+        {
+            win.Activated -= OnHostActivated;
+            win.Deactivated -= OnHostDeactivated;
+            win.PropertyChanged -= OnHostPropertyChanged;
+            _hostWindow = null;
+        }
         _scaleBitmap?.Dispose();
         _scaleBitmap = null;
         if (_onBufferChanged is not null && InputBuffer is { } buf)
@@ -385,6 +473,24 @@ public sealed class TerminalControl : Control
             _onBufferChanged = null;
         }
         MudPlay.Services.AppServices.CurrentOrNull?.TerminalInput.UnregisterTerminal();
+    }
+
+    private void OnHostActivated(object? sender, EventArgs e) => _windowActive = true;
+
+    private void OnHostDeactivated(object? sender, EventArgs e) => _windowActive = false;
+
+    private void OnHostPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property != Window.WindowStateProperty) return;
+        bool wasMinimized = _windowMinimized;
+        _windowMinimized = (WindowState)e.NewValue! == WindowState.Minimized;
+        // Restored from minimized while output arrived in the meantime — repaint
+        // once now so the grid reflects everything buffered while hidden.
+        if (wasMinimized && !_windowMinimized && _dirtyWhileHidden)
+        {
+            _dirtyWhileHidden = false;
+            RepaintNow();
+        }
     }
 
     // Rebuild the native cell metrics at RenderFontSize, then re-fit the window
