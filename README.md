@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.96.20**
+> **Version 3.96.21**
 > - Player chat (gossip, auction, broadcast, telepath, gangpath, yell, say) can no longer make the client react — it is now kept out of every game-output parser, so someone quoting "You are flat on your back!" (or any condition, death, token, item, or combat line) in chat no longer latches a phantom knockdown, pauses your loop, and re-casts cure paralysis every round. Chat still feeds the Conversation window, party `@`-commands, and remote commands
+> - Conversation window no longer jumps on every new line with Auto-scroll unchecked: once the chat history hit its 5,000-line cap (a long-lived character's replayed talk log fills it at startup) each incoming line rebuilt the entire list and threw the scroll position back; it now drops the oldest row in place
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
