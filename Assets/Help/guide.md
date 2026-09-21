@@ -591,7 +591,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 | `@health` | — | HP / MA / Kai and resting-or-meditating state |
 | `@status` | — | what you're doing (walking / looping / fighting / resting), your room, and any ailments |
 | `@lives` | — | lives remaining |
-| `@exp` | — | exp remaining to level, the compact exp/hour rate, and time-to-level (e.g. `4,500,000 EXP to level, making 1.1m/hr ~4h 10m to level`) |
+| `@exp` | — | a session-progress line: exp **made** this session (zeroed by `@reset` / loop-start auto-reset), exp **needed** for the next level and which level that is, the exp/hour rate, and the time to that level at the current rate (e.g. `Made: 474,216,179  Needed: 545,045,125 (L72)  Rate: 14.3m/hr  Will level in: 1d 14h 12m`) |
 | `@level` | — | level, current exp, and exp to next |
 | `@where` | — | room name, map/room, and exits |
 | `@path` | — | the movement engine's activity and step progress; when stopped/idle, names the last loop or auto-lair that was run (so you can help a dead player resume their circuit) |

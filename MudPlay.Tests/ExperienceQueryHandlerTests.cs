@@ -121,7 +121,7 @@ public sealed class ExperienceQueryHandlerTests
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
         string reply = Assert.Single(Replies(engine));
-        Assert.Equal("exp rate + time to level unknown (type exp)", reply);
+        Assert.Equal("Made: 0  Rate: unknown (type exp for needed + time to level)", reply);
     }
 
     [Fact]
@@ -131,13 +131,14 @@ public sealed class ExperienceQueryHandlerTests
         SeedPlayer(players, "Bob", PlayerRemoteControls.QueryExperience);
         activity.NoteExperience(16_200);
         clock.Advance(30); // 16,200 / 0.5h = 32,400/hr
+        stats.Level = 12;            // working toward L13
         stats.LevelExpSpan = 500_000;
         stats.ExpToNext = 32_400; // one hour of exp remaining → "60m" (under the 90m h/m cutover)
 
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
         string reply = Assert.Single(Replies(engine));
-        Assert.Equal("32,400 EXP to level, making 32,400/hr ~60m to level.", reply);
+        Assert.Equal("Made: 16,200  Needed: 32,400 (L13)  Rate: 32,400/hr  Will level in: 60m", reply);
     }
 
     [Fact]
@@ -152,7 +153,7 @@ public sealed class ExperienceQueryHandlerTests
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
         string reply = Assert.Single(Replies(engine));
-        Assert.Equal("making 12,000/hr (type exp for time to level)", reply);
+        Assert.Equal("Made: 6,000  Rate: 12,000/hr (type exp for needed + time to level)", reply);
     }
 
     [Fact]
@@ -162,12 +163,33 @@ public sealed class ExperienceQueryHandlerTests
         SeedPlayer(players, "Bob", PlayerRemoteControls.QueryExperience);
         activity.NoteExperience(6_000);
         clock.Advance(30);
+        stats.Level = 12;            // working toward L13
         stats.LevelExpSpan = 500_000;
         stats.ExpToNext = 0; // server clamps to 0 once past the threshold
 
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
-        Assert.Equal("0 EXP to level, making 12,000/hr ready to level.", Assert.Single(Replies(engine)));
+        Assert.Equal("Made: 6,000  Needed: 0 (L13)  Rate: 12,000/hr  Will level in: ready to level",
+            Assert.Single(Replies(engine)));
+    }
+
+    // The full MegaMUD-style line: session Made + Needed (with the level being
+    // worked toward) + a millions-tier rate + a multi-hour time to level.
+    [Fact]
+    public void Exp_FullSessionLine_MegaMudStyle()
+    {
+        var (engine, stats, activity, clock, players) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryExperience);
+        activity.NoteExperience(30_000_000);
+        clock.Advance(60); // 30,000,000 / 1h = 30m/hr
+        stats.Level = 71;                  // working toward L72
+        stats.LevelExpSpan = 500_000_000;
+        stats.ExpToNext = 60_000_000;      // 60m / 30m per hr = 2h
+
+        engine.DispatchForTests(Telepath("Bob", "@exp"));
+
+        Assert.Equal("Made: 30,000,000  Needed: 60,000,000 (L72)  Rate: 30m/hr  Will level in: 2h 0m",
+            Assert.Single(Replies(engine)));
     }
 
     // ----- @exp rate abbreviation --------------------------------------

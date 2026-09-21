@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.97.0**
-> - New `@dupe <player>` remote command, gated behind Elevated Commands: an Elevated player can telepath or gangpath it to copy their own permissions onto another known player (added, never removed) — say, gossip, auction, broadcast, yell, and the local API are all refused
+> **Version 3.97.1**
+> - `@exp` now replies with a MegaMUD-style session line — exp **made** this session (zeroed by `@reset` / loop-start auto-reset), exp **needed** for the next level and which level that is, the exp/hour rate, and the time to that level at the current rate — instead of only the remaining exp + rate
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
