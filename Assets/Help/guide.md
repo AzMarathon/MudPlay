@@ -555,6 +555,32 @@ On top of that, **Settings → Talk** has master and per-channel kill switches (
 
 Active party members get a few things for free regardless of the grid: the party-coordination signals, the health queries (`@health` / `@status` / `@lives`), `@reset`, and a bare `@party` status check.
 
+### Syntax examples
+
+Every remote command is the `@`-word typed into **telepath, gangpath, or say**. A **bare** command (no argument) is just the word — `@health`, `@where`, `@inv`, `@wealth`, `@stop`, `@version`. The commands that take an argument follow the **Args** column in the tables below; here's one valid example of each shape:
+
+- `@help goto` — one command's syntax and description (the `@` on the argument is optional — `@help @goto` works too)
+- `@goto arlysia` · `@goto 3/599` · `@goto ogre king` — a GOTO favorite, a `map/room` coordinate, or a boss / room by name or acronym
+- `@loop Black Fortress` — start a saved loop by name
+- `@loop 5/10 5/11 5/12` — an ad-hoc loop from two or more `map/room` coordinates
+- `@loop last` — re-run the last loop run this session
+- `@lair mud men` — start an Auto-Lair (a setup name or coordinates)
+- `@timer dragon` — boss timers whose name matches "dragon" (bare `@timer` lists them all)
+- `@death all` — every unrecovered death (bare `@death` gives just the latest)
+- `@have rope and grapple` · `@uses silvery skullcap` · `@token arlysia` — an item / limited-use item / transport token by name (shorthand and best-match are fine)
+- `@roomba severed head` — Roomba sightings of matching items
+- `@auto-combat off` — force an engine off (bare toggles it; `on` forces it on)
+- `@atkprio 3 Fujin` — Target Priority: attack-what-player Fujin (`1` = Default, `2` = follow-leader)
+- `@atkorder 4 Suijin` — Attack Order: attack after Suijin (`1`–`3` are the fixed orders)
+- `@divert Raijin` — forward your incoming telepaths to Raijin (bare `@divert` stops)
+- `@profile 2` · `@profile backstab` — swap combat profile by number or name
+- `@kill goblin shaman` — retarget your combat onto that monster this round
+- `@trap north` — search and disarm a trap that way (`@trap stop` aborts)
+- `@equip-backstab` — wear the saved gear set whose keyword is "backstab"
+- `@do rest` — send `rest` to the game verbatim (highest-trust)
+- `@party use chime` — relay `use chime` to the whole party (say channel only)
+- `@comeback 3/599` — ask the party to recover you (the coordinate is optional)
+
 ### Query commands — they report; nothing changes
 
 | Command | Args | Replies with |

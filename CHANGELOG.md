@@ -1,5 +1,9 @@
 # Version history
 
+## 3.96.17
+
+- Help guide's remote @-commands section now includes a "Syntax examples" list showing a valid example invocation for each command shape (it previously described the commands but never showed how to type them)
+
 ## 3.96.16
 
 - Item record view now surfaces the effects of a referenced textblock action (an item that enables a room command): the spell it casts, the room it teleports you to, and the monster it summons — each a clickable link to its record (the teleport row also offers Queue-Walk). E.g. the yellow bone portal now shows it casts a spell, teleports to Zanthus's room, and summons him, instead of reading as having no attached effect
