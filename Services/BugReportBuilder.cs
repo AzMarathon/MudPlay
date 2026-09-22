@@ -948,6 +948,18 @@ public static class BugReportBuilder
                   .Append(refused ? " (game refused)" : " (restricted)").Append('\n');
             }
 
+        // Location auto-equip (Settings → Other): items currently worn under a
+        // matched-area rule. The rules themselves ride the resolved OtherSettings
+        // JSON below; this is the live "what's owned right now" state, so a "mask
+        // didn't equip / didn't revert" report is answered from the capture.
+        var locActive = svc.LocationEquip.ActiveItemsSnapshot();
+        sb.Append("\n**Location auto-equip (active)** (").Append(locActive.Count).Append(")\n\n");
+        if (locActive.Count == 0)
+            sb.Append("_(none — not in a matched area, or the item isn't carried)_\n");
+        else
+            foreach (string item in locActive)
+                sb.Append("- ").Append(item).Append('\n');
+
         var plan = profile.CharacterPlan;
         sb.Append("\n**CP allocation plan (CharacterPlan)** (").Append(plan?.Count ?? 0).Append(")\n\n");
         sb.Append(plan is { Count: > 0 } ? Json(plan) : "_(none)_\n");

@@ -1,7 +1,10 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
@@ -68,6 +71,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Enable token routing";
             yield return "Minimum rooms saved";
             yield return "Take token even if party can't follow";
+            yield return "Location-based auto-equip";
+            yield return "Wear item in area";
+            yield return "Equip in room";
+            yield return "Feathered mask";
             foreach (StubGroup g in StubGroups)
             foreach (StubField f in g.Fields)
                 yield return f.Label;
@@ -194,6 +201,27 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     public bool IsParadigmRealm =>
         AppServices.Current.GameData.ActiveRealm == MudPlay.Game.RealmType.ParaMud;
 
+    // ----- Location-based auto-equip (Char tier) -----
+
+    // The editable rule rows. Each wears an item while inside a matched map area
+    // (room number(s) and/or room-name substring) and reverts on exit. Persisted
+    // to OtherSettings.LocationEquipRules on Apply; read live by
+    // Game.Inventory.LocationEquipManager.
+    public ObservableCollection<LocationEquipRuleViewModel> LocationEquipRules { get; } = new();
+
+    [RelayCommand]
+    private void AddLocationEquipRule()
+    {
+        LocationEquipRules.Add(new LocationEquipRuleViewModel(new LocationEquipRule(), MarkDirty));
+        MarkDirty();
+    }
+
+    [RelayCommand]
+    private void RemoveLocationEquipRule(LocationEquipRuleViewModel? row)
+    {
+        if (row is not null && LocationEquipRules.Remove(row)) MarkDirty();
+    }
+
     // ----- Inline stub catalog (un-wired fields) -----
 
     // The remaining un-wired Other-tab fields, rendered inline below the wired
@@ -261,6 +289,12 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             // carry the current Character-tier value through so Apply here
             // doesn't reset it to the compile-time default.
             RoundsToKillCap       = ReadOrDefault().RoundsToKillCap,
+            // Drop rows with no item to wear (a rule with no action does nothing);
+            // the rest persist as edited.
+            LocationEquipRules    = LocationEquipRules
+                .Select(r => r.ToModel())
+                .Where(r => r.ItemName.Length > 0)
+                .ToList(),
         };
 
         profile.Settings ??= new();
@@ -332,6 +366,11 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         EnableTokenRoutes = _globalSettings?.Current.EnableTokenRoutes ?? true;
         TokenRouteMinRoomsShorter = _globalSettings?.Current.TokenRouteMinRoomsShorter ?? 50;
         TokenUseWhenPartyIncomplete = _globalSettings?.Current.TokenUseWhenPartyIncomplete ?? false;
+
+        LocationEquipRules.Clear();
+        foreach (LocationEquipRule rule in dto.LocationEquipRules)
+            LocationEquipRules.Add(new LocationEquipRuleViewModel(rule, MarkDirty));
+
         ApplyToServices(dto);
     }
 

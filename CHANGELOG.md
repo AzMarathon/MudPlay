@@ -1,5 +1,11 @@
 # Version history
 
+## 3.102.0
+
+- New **Settings → Other → Location-based auto-equip**: wear a named item while inside a map area (matched by room number(s) and/or a room-name substring, combined via an And/Or dropdown), and revert the slot to your gear set's item on exit
+- Driven off room changes, so the walker / loop / Auto-Lair all honour it; the Equipment Manager leaves the location-owned slot alone so a While Moving / Bossing swap can't knock the item off while you're in the area
+- The item goes on only when actually carried, and re-tries each step inside the area until you're holding it
+
 ## 3.101.3
 
 - Party leader reconnect now re-invites the followers who stayed in the room: a leader-drop dissolves the party, and the followers never "re-enter the realm" to trip the usual auto-invite, so they were left un-invited. The leader now re-invites each once it sees them present (`invite` needs the target in the room), gated by auto-invite-on-reconnect

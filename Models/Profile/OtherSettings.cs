@@ -41,6 +41,12 @@ public sealed class OtherSettings
     // fires and we lose HP) ships with the HealthManager wiring.
     public int MaxTrapDisarmAttempts { get; set; } = 5;
 
+    // Location-based auto-equip rules. Each names an item to wear while inside a
+    // map area (matched by room number(s) and/or room-name substring); on leaving
+    // the area the slot reverts to the current gear set's item. Char-tier; edited
+    // in Settings → Other. Read live by Game.Inventory.LocationEquipManager.
+    public List<LocationEquipRule> LocationEquipRules { get; set; } = new();
+
     // When true, the auto-discard engine conceals each excess flagged item with
     // hide <item> instead of drop <item> — it still leaves the pack, but lands
     // out of sight on the ground. Engine hides are excluded from the Transaction

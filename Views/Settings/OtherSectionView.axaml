@@ -266,6 +266,59 @@
                  "Auto-collect logs"). All are "while I'm debugging right
                  now" affordances, not per-character preferences. -->
 
+            <!-- ============ Location-based auto-equip ============
+                 Wear an item while inside a map area, revert on the way out.
+                 Each row: a map/room-number block, an And/Or dropdown, a
+                 room-name block, then the item to wear. Empty criteria don't
+                 constrain; a rule with both filled combines them per the
+                 dropdown. Read live by LocationEquipManager off room changes,
+                 so the walker / loop / Auto-Lair all honour it, and the
+                 Equipment Manager leaves the owned slot alone while inside. -->
+            <TextBlock Classes="SectionHeader" Text="LOCATION-BASED AUTO-EQUIP"/>
+            <TextBlock Classes="HelpText" Margin="0,0,0,4"
+                       Text="Wear an item while inside a map area (matched by room number(s) and/or a room-name substring), then revert the slot when you leave. Handy for area-specific gear like a feathered mask across the Black Wastelands."/>
+
+            <Grid ColumnDefinitions="Auto,130,74,*,150,Auto" Margin="0,4,0,0">
+                <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Map/room #s" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Match" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="3" Classes="FieldLabel" Text="Room name contains" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="4" Classes="FieldLabel" Text="Wear item" FontWeight="SemiBold"/>
+            </Grid>
+
+            <ItemsControl ItemsSource="{Binding LocationEquipRules}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LocationEquipRuleViewModel">
+                        <Grid ColumnDefinitions="Auto,130,74,*,150,Auto" Margin="0,0,0,4">
+                            <CheckBox Grid.Column="0" VerticalAlignment="Center"
+                                      IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                      ToolTip.Tip="Enable this rule. Unchecked rules are kept but never fire."/>
+                            <TextBox Grid.Column="1" Margin="6,0,0,0"
+                                     Text="{Binding MapRoomNumbers, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                     PlaceholderText="16/153, 154"
+                                     ToolTip.Tip="Map/room numbers, comma- or space-separated. '16/153' matches that exact room; a bare '153' matches room 153 in any map. Leave blank to match on room name only."/>
+                            <ComboBox Grid.Column="2" Margin="6,0,0,0" HorizontalAlignment="Stretch"
+                                      ItemsSource="{x:Static vm:LocationEquipRuleViewModel.MatchModes}"
+                                      SelectedItem="{Binding Match, Mode=TwoWay}"
+                                      ToolTip.Tip="How the two criteria combine when both are filled: And = must be in the room number(s) AND the name matches; Or = either one."/>
+                            <TextBox Grid.Column="3" Margin="6,0,0,0"
+                                     Text="{Binding RoomNameContains, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                     PlaceholderText="Black Wastelands"
+                                     ToolTip.Tip="Case-insensitive substring the room title must contain. Leave blank to match on map/room number only."/>
+                            <TextBox Grid.Column="4" Margin="6,0,0,0"
+                                     Text="{Binding ItemName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                     PlaceholderText="feathered mask"
+                                     ToolTip.Tip="Item to wear while in the area (as it reads in inventory). Worn only when actually carried; the slot reverts to your gear set's item on exit."/>
+                            <Button Grid.Column="5" Margin="6,0,0,0" Content="Remove"
+                                    Command="{Binding $parent[ItemsControl].((vm:OtherSectionViewModel)DataContext).RemoveLocationEquipRuleCommand}"
+                                    CommandParameter="{Binding}"/>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Button Content="Add rule" Command="{Binding AddLocationEquipRuleCommand}"
+                    HorizontalAlignment="Left" Margin="0,4,0,0"/>
+
             <!-- ============ Inline stub catalog ============
                  Section headers stripped per user direction — the
                  catalog renders as a flat list of rows. The numeric-
