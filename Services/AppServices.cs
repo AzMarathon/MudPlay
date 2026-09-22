@@ -1452,6 +1452,13 @@ public sealed class AppServices
     // (AutoEquip).
     public Game.Inventory.EquipmentManager Equipment { get; private set; } = null!;
 
+    // Location-based auto-equip (Settings → Other). Wears a rule's item while
+    // we're inside its matched map area (room number(s) and/or room-name
+    // substring) and reverts on exit; driven off RoomTracker transitions so every
+    // movement runner honours it, and coordinated with Equipment's per-slot
+    // override so gear-set applies don't clobber the location item.
+    public Game.Inventory.LocationEquipManager LocationEquip { get; private set; } = null!;
+
     // Casting-spell profiles (Settings → Combat) — the named, quick-swap snapshots
     // of the Combat tab's spell slots. Owns the list, the active pointer, CRUD, and
     // the @profile / toolbar / chip swap, overlaying a profile's spells onto the
@@ -4955,6 +4962,16 @@ public sealed class AppServices
         // the right odd-out (see EquipmentManager.ComposePairedSlotCommands).
         Equipment.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
+
+        // Location-based auto-equip: re-evaluated on every room transition (fires
+        // regardless of who drove the move), so the walker / loop / Auto-Lair all
+        // honour it. Drops ownership on a profile swap.
+        LocationEquip = new Game.Inventory.LocationEquipManager(
+            readOther: () => Resolver.Resolve<Models.Profile.OtherSettings>("Other"),
+            equipment: Equipment,
+            log: Log);
+        RoomTracker.StateChanged += t => LocationEquip.OnRoomChanged(t.NewRoom);
+        Profile.ProfileLoaded += _ => LocationEquip.OnProfileSwapped();
 
         // Combat profiles: a full-posture quick-swap. A switch overlays the profile's
         // spell/verb/room fields onto the live Combat section the engine re-reads each

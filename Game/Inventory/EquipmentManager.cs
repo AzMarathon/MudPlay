@@ -73,6 +73,14 @@ public sealed class EquipmentManager
     private bool _thrashHolding;
     private bool _isEquipping;
 
+    // ----- location-equip slot overrides ---------------------------------
+    // Slots a Settings → Other location rule currently owns (LocationEquipManager
+    // wears an item here while we're in a matched map area). A gear-set apply
+    // SKIPS these slots (BuildApplyCommands filters them) so a WhileMoving /
+    // Bossing / rest trigger firing inside the area doesn't clobber the location
+    // item. Released on area exit (ClearSlotOverride re-asserts the set's item).
+    private readonly HashSet<EquipmentSlot> _overriddenSlots = new();
+
     // ----- unwearable-slot blocks ----------------------------------------
     // A (set, slot) the live character can't wear the configured item in — either
     // detected up front (alignment / level / class, ServerConfirmed=false) or
@@ -296,6 +304,88 @@ public sealed class EquipmentManager
             _wire.Send($"eq {oh}");
     }
 
+    // ----- location-equip slot overrides (Settings → Other) ---------------
+
+    // Take ownership of the slot `itemName` fills and wear it now (unless already
+    // worn), so a location rule's item stays on while we're in the matched area.
+    // While a slot is owned, gear-set applies skip it (see BuildApplyCommands).
+    // Returns true only when the slot was actually claimed — the item resolves to
+    // a wearable slot AND is carried or already worn. A rule whose item we don't
+    // hold returns false and claims nothing (so the normal set item stays put).
+    // Idempotent: re-owning an already-owned slot with the same worn item is a
+    // no-op, which is what the per-room re-fire inside a same-named area wants.
+    public bool SetSlotOverride(string itemName)
+    {
+        string name = itemName?.Trim() ?? "";
+        if (name.Length == 0) return false;
+        if (_resolveItemSlot?.Invoke(name) is not { } slot)
+        {
+            _log?.Debug(LogCategory, $"location-equip: '{name}' is not wearable gear — ignored");
+            return false;
+        }
+
+        InventorySnapshot snap = _getSnapshot();
+        bool worn = snap.EquippedItems.Any(
+            e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+        ISet<string>? held = HeldNames(snap);
+        bool carried = held is not null && held.Contains(name);
+        if (!worn && !carried) return false;   // not available — don't own the slot
+
+        bool newlyOwned = _overriddenSlots.Add(slot);
+        if (!worn)
+        {
+            _log?.Info(LogCategory, $"location-equip: entering area — wearing '{name}' ({slot})");
+            _wire.Send($"{Verb(slot)} {name}");
+        }
+        else if (newlyOwned)
+        {
+            _log?.Info(LogCategory, $"location-equip: '{name}' already worn — holding {slot}");
+        }
+        return true;
+    }
+
+    // Release the slot `itemName` fills and revert it to the active gear set's
+    // item (re-asserted now, since set applies were skipping it while owned). If
+    // the current set leaves that slot bare, the location item is simply removed.
+    // No-op if the slot wasn't owned.
+    public void ClearSlotOverride(string itemName)
+    {
+        string name = itemName?.Trim() ?? "";
+        if (name.Length == 0) return;
+        if (_resolveItemSlot?.Invoke(name) is not { } slot) return;
+        if (!_overriddenSlots.Remove(slot)) return;
+
+        string? setItem = CurrentSetItemFor(slot);
+        if (!string.IsNullOrEmpty(setItem)
+            && !string.Equals(setItem, name, StringComparison.OrdinalIgnoreCase))
+        {
+            _log?.Info(LogCategory,
+                $"location-equip: exited area — reverting {slot} to '{setItem}'");
+            _wire.Send($"{Verb(slot)} {setItem}");
+        }
+        else if (string.IsNullOrEmpty(setItem))
+        {
+            _log?.Info(LogCategory, $"location-equip: exited area — removing '{name}' ({slot})");
+            _wire.Send($"rem {name}");
+        }
+    }
+
+    // Drop all location ownership without touching the wire — used on a profile
+    // swap, where the new character's gear + rules are unrelated to the old.
+    public void ForgetSlotOverrides() => _overriddenSlots.Clear();
+
+    // The active gear set's configured item for a slot (null if no set is current
+    // or the set doesn't dress that slot).
+    private string? CurrentSetItemFor(EquipmentSlot slot)
+    {
+        if (CurrentSetId is null) return null;
+        EquipmentSet? set = _readEquipment().Sets
+            .FirstOrDefault(s => string.Equals(s.Id, CurrentSetId, StringComparison.Ordinal));
+        string? name = set?.Slots
+            .FirstOrDefault(e => e.Slot == slot)?.ItemName?.Trim();
+        return string.IsNullOrEmpty(name) ? null : name;
+    }
+
     // The carried-but-unworn item names for an observed inventory — the pool a
     // wear / eq can actually draw from — or null when no 'i' dump has been parsed
     // yet (availability unknown, so callers don't gate). Only meaningful after a
@@ -502,8 +592,30 @@ public sealed class EquipmentManager
     // haveInventory is false) and what an auto-fire uses.
     private List<string> BuildApplyCommands(
         EquipmentSet set, InventorySnapshot snap, bool fillFromInventory, bool armorOnly = false)
-        => PrependTwoHandOffHandConflictRems(set, snap.EquippedItems, _isTwoHanded,
+    {
+        List<string> cmds = PrependTwoHandOffHandConflictRems(set, snap.EquippedItems, _isTwoHanded,
             BuildApplyCommandsCore(set, snap, fillFromInventory, armorOnly));
+        return DropLocationOwnedSlots(set, cmds);
+    }
+
+    // Strip this set's wear/eq for any slot a location rule currently owns, so a
+    // gear-set apply firing inside a matched area leaves the location item alone.
+    // The dropped command is the set's own item for that slot — the exact string
+    // BuildWearCommands would have emitted — so removal is precise. On area exit
+    // the LocationEquipManager releases the slot and the set re-dresses it.
+    private List<string> DropLocationOwnedSlots(EquipmentSet set, List<string> cmds)
+    {
+        if (_overriddenSlots.Count == 0 || cmds.Count == 0) return cmds;
+        var drop = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (EquipmentSlotEntry e in set.Slots)
+        {
+            if (!_overriddenSlots.Contains(e.Slot)) continue;
+            string? name = e.ItemName?.Trim();
+            if (!string.IsNullOrEmpty(name)) drop.Add($"{Verb(e.Slot)} {name}");
+        }
+        if (drop.Count > 0) cmds.RemoveAll(drop.Contains);
+        return cmds;
+    }
 
     private List<string> BuildApplyCommandsCore(
         EquipmentSet set, InventorySnapshot snap, bool fillFromInventory, bool armorOnly = false)

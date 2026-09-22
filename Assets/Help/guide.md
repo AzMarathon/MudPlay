@@ -842,6 +842,18 @@ The **Target weight** dropdown next to it caps what Find Best is willing to add:
 
 It only takes effect once your inventory has been read at least once this session (so the client knows your max carry weight); Hold locks, a search order, and the current filter/criterion still apply on top of it the same as always.
 
+### Location-based auto-equip
+
+Some gear only earns its slot in one place — a **feathered mask** across the whole Black Wastelands, say. The six gear sets swap on *moments* (moving, resting, a boss room), not on *where you are*, so **Settings → Other → Location-based auto-equip** fills that gap: it wears a named item while you're inside a map area and puts your normal gear back on the way out.
+
+Add a rule and give it up to two criteria for **where**:
+
+- **Map/room #s** — `16/153` matches that exact room; a bare `154` matches room 154 in any map. Comma- or space-separate several. Leave blank to match on name alone.
+- **Room name contains** — a case-insensitive substring of the room title (e.g. `Black Wastelands`). Perfect for a whole zone that shares one room name. Leave blank to match on number alone.
+- The **Match** dropdown between them decides how they combine when you fill in **both**: **Or** (either matches) or **And** (must be in the room number(s) *and* the name matches). With only one side filled, that side is used on its own.
+
+Then name the **item to wear**. It goes on the moment you enter a matching room — **only if you're actually carrying it** — and the slot **reverts to whatever your current gear set holds there** when you leave. While you're in the area the Equipment Manager leaves that slot alone: a While Moving or Bossing swap won't knock the mask off. Because it's driven purely by room changes, it works the same whether you walked in by hand or a **loop / walk-to / Auto-Lair** carried you there. Uncheck a rule to park it without deleting it.
+
 ## CP Allocation
 
 Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you.
