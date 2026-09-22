@@ -1013,6 +1013,8 @@ public partial class MainWindowViewModel : ObservableObject
         // Quest-flag reader — parses the `abil` / `sys god … abil` replies during the
         // login completion sync.
         AppServices.Current.QuestFlagReader.AttachLineExtractor(Lines);
+        // The @quest command's dedicated on-demand reader shares the same reply shapes.
+        AppServices.Current.QuestQueryReader.AttachLineExtractor(Lines);
         // Token charge tracker — parses each held token's `look` "Uses remaining: N"
         // reply and the "You invoke the token…" use line (Paradigm transport tokens).
         AppServices.Current.Tokens.AttachLineExtractor(Lines);

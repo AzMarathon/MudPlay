@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.98.2**
-> - **Esc is now a bindable key** for both toolbar/window shortcuts and macros — a bound Esc fires its shortcut or macro, while an unbound Esc still passes through to the game as before
-> - In the keybind and macro capture dialogs, Esc now commits as the chord instead of cancelling; click **Capture** again (or Cancel) to abort a capture in progress
+> **Version 3.99.0**
+> - New `@quest` remote command (gated by a new **Query quests** per-player permission): bare `@quest` lists every quest with a marked-complete band; `@quest <name|flag>` reports one quest's marked bands by ordinal (e.g. `Good align 1, 2, 3 marked complete`)
+> - On Paradigm — or a stock board where the sender's character has sys-god access — `@quest <name|flag>` also reads the live quest flag off the game and appends its step (e.g. `Abil: 126 step 16`); on stock without sys-god it reports the marked state only
+> - Names resolve by flag number, the quest's name, the ability name (`goodquest`), or a built-in alias (`good align` / `neutral` / `evil` → 126/127/128)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
