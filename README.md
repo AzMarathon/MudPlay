@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.100.5**
-> - Unrecognized-lines report now filters out benign non-spell chatter it was flooding with: player departures (`X just left to the <dir>.`), disconnects, follow notices, other players' socials/emotes and gear swaps (`X wears/removes …!`), toll payments, empty says, `Also here:` roster rows, the suicide-password advisory, regen/illumination status labels, and the `br` broadcast-channel status (header + member list)
-> - Each filter is tightly anchored (gear swaps gated to known player names; the channel member list only right after its header) so a genuinely unknown spell/monster/proc line can never be hidden — that's still exactly what the queue surfaces
+> **Version 3.100.7**
+> - Navigation Management window now focuses its walk-to search box on open, so hitting the play/Start button and typing a destination is one motion
+> - Buff Watchdog mana-budget label is brighter, a bit larger, and spaced off the buttons and table so it reads more clearly
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

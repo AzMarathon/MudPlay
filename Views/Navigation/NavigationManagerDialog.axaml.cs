@@ -35,6 +35,9 @@ public partial class NavigationManagerDialog : Window
     public NavigationManagerDialog()
     {
         InitializeComponent();
+        // Land the cursor in the walk-to search box the moment the window opens, so
+        // hitting the toolbar's play/Start button and typing a destination is one motion.
+        Opened += (_, _) => WalkToBox.Focus();
         WireDragDrop(WalkTreeView);
         WireDragDrop(GotoTreeView);
         // DoubleTapped only routes as Bubble, so the handler must be
