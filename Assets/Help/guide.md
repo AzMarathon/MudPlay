@@ -579,7 +579,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@roomba severed head` — Roomba sightings of matching items
 - `@auto-combat off` — force an engine off (bare toggles it; `on` forces it on)
 - `@atkprio 3 Fujin` — Target Priority: attack-what-player Fujin (`1` = Default, `2` = follow-leader)
-- `@atkorder 4 Suijin` — Attack Order: attack after Suijin (`1`–`3` are the fixed orders)
+- `@atkorder 4 Suijin` — Attack Order: attack after Suijin (`1`–`3` and `5` are the fixed orders)
 - `@divert Raijin` — forward your incoming telepaths to Raijin (bare `@divert` stops)
 - `@dupe Moron` — copy the sender's own permissions onto Moron (telepath / gangpath only)
 - `@profile 2` · `@profile backstab` — swap combat profile by number or name
@@ -632,7 +632,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - The auto-engine toggles — `@auto-combat`, `@auto-nuke`, `@auto-heal` (`@auto-rest` is the same flag), `@auto-bless`, `@auto-light`, `@auto-cash`, `@auto-get`, `@auto-sneak`, `@auto-hide`, `@auto-search` — each flips that engine (bare toggles it; add `on` or `off` to force it).
 - `@auto-all` — the kill switch: `off` stops every engine, `on` restores what was running. `@settings` — reports every engine's on/off state.
 - `@atkprio` — Target Priority: bare reports it; `1` Default, `2` follow-leader, `3 <name>` attack-what-player.
-- `@atkorder` — Attack Order: bare reports it; `1` Default, `2` last-party, `3` last-room, `4 <name>` attack-after.
+- `@atkorder` — Attack Order: bare reports it; `1` Default, `2` last-party, `3` last-room, `4 <name>` attack-after, `5` not-last.
 - `@divert <player>` — forwards your incoming telepaths to another player; bare `@divert` stops.
 - `@profile <n|name>` — swaps your active combat profile (spells + verbs + room thresholds + weapons + the whole Health tab); bare `@profile` reports the roster (see **Combat profiles** under Settings → Combat).
 - `@reset` — zeroes your Session Stats counters.
@@ -2235,9 +2235,12 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 ### Attack Order
 
 **Default:** `Default`
-**Available options:** `Default`, `AttackLastParty`, `AttackLastRoom`, `AttackAfter` (shown verbatim in the dropdown).
-**What it does:** Pure timing — controls *when* you re-announce your own current target relative to other people's attacks, for coordinating who "goes" in what order. It never changes *what* you're targeting — that's Target Priority's job.
-**When you might change it:** A tank who wants to always commit their attack last, after everyone else in the party has already gone.
+**Available options:** `Default`, `AttackLastParty`, `AttackLastRoom`, `AttackAfter`, `AttackNotLast` (shown verbatim in the dropdown).
+**What it does:** Pure timing — controls *when* you re-announce your own current action relative to other people's attacks, for coordinating who "goes" in what order. It re-issues whatever you're actually doing this round — a weapon swing, a single-target attack spell, or a bare room spell — so a caster lands last just like a fighter (re-announcing a combat spell costs no mana; mana is spent once when the round fires). It never changes *what* you're targeting — that's Target Priority's job. A party member's **room attack** counts as their commit too: when someone rooms (you see *"… moves to attack everyone in the room"*, or on Paradigm *"… is poised to assault the room"*), your own room spell re-announces after theirs so you room last.
+- **AttackLastParty / AttackLastRoom** — re-announce after *every* qualifying commit, so you stay last (party members only, or anyone in the room).
+- **AttackAfter** — re-announce only after the named player commits (set the name in **Attack-after player name**).
+- **AttackNotLast** — the inverse: *hold* your pick on room entry, commit **once** right after the **first** party member announces, and never re-fire — so you slot in behind the first mover instead of chasing the last slot. Only functional in a **party of 3+**; in a party of 2 or fewer it behaves exactly like `Default`.
+**When you might change it:** A tank who wants to always commit their attack last, after everyone else in the party has already gone — or a roomer who wants their AoE to land after the party's. Pick **AttackNotLast** when you'd rather go early, right behind whoever opens.
 
 ### Attack-after player name
 

@@ -553,6 +553,23 @@ public sealed partial class CombatManager
             return;
         }
 
+        // Attack-not-last fallback: we held our own pick waiting for the first party
+        // announce, but a full round elapsed without one — engage our own pick so we
+        // never freeze (same shape as the follow fallback above).
+        if (_awaitingNotLast
+            && _isEnabled()
+            && _currentTarget is null
+            && _classifier.Current is { } notLastFallback)
+        {
+            _awaitingNotLast = false;
+            _log?.Combat(LogCategory,
+                "attack-not-last — no party announce this round; falling back to own pick");
+            _notLastDeferBypass = true;
+            try { OnEntitiesObserved(notLastFallback); }
+            finally { _notLastDeferBypass = false; }
+            return;
+        }
+
         // Deterministic interrupt-resume: the combat tick is the round
         // heartbeat, so this re-issues a weapon attack at most once per
         // round after an in-between cast (CastingDirector self-heal / buff)

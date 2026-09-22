@@ -326,6 +326,12 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.PartyCastAnnounce,
             @"^(?:\[[^\]]*\]:|:)*(?<player>\w+) moves to cast .+? upon (?<target>.+?)\.");
 
+        // Paradigm-only "already-active roomer" announce, seen on room entry when a
+        // party member is mid-room-spell. Only the announcer is captured — there is no
+        // target (a room commit hits everything). Attack-last treats it as a room commit.
+        yield return new RegexPattern(KnownPatterns.PartyRoomPoised,
+            @"^(?:\[[^\]]*\]:|:)*(?<player>\w+) is poised to assault the room!");
+
         // Guard/redirect announce — "<guard> moves to protect <protected>." A
         // guarded monster can't be attacked while a guard is present; the server
         // redirects the swing to the guard and emits this. Both names are monsters

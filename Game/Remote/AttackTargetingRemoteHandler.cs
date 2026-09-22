@@ -44,6 +44,7 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
         new(2, "Attack Last Party", false),
         new(3, "Attack Last Room", false),
         new(4, "Attack After", true),
+        new(5, "Attack Not Last", false),
     };
 
     private readonly RemoteCommandManager _engine;
@@ -131,6 +132,7 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
             2 => AttackTiming.AttackLastParty,
             3 => AttackTiming.AttackLastRoom,
             4 => AttackTiming.AttackAfter,
+            5 => AttackTiming.AttackNotLast,
             _ => AttackTiming.Default,
         };
         dto.AttackAfterPlayerName = opt.NeedsName ? name : null;
@@ -211,6 +213,7 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
         AttackTiming.AttackLastParty => 2,
         AttackTiming.AttackLastRoom => 3,
         AttackTiming.AttackAfter => 4,
+        AttackTiming.AttackNotLast => 5,
         _ => 1,
     };
 

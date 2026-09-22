@@ -127,6 +127,13 @@ public static class KnownPatterns
     // Same prefix tolerance + positional announcer/target captures as the melee form.
     public const string PartyCastAnnounce    = "combat.party-cast-announce";
 
+    // "<player> is poised to assault the room!" — PARADIGM ONLY. Shown when we ENTER
+    // a room where someone is already room-spelling (they've committed to rooming, the
+    // round hasn't fired). Stock emits no such line. The "already-active roomer"
+    // counterpart to the fresh "moves to attack everyone in the room" commit;
+    // CombatManager treats it as a room commit for attack-last (room after them).
+    public const string PartyRoomPoised      = "combat.party-room-poised";
+
     // "<guard> moves to protect <protected>." — MajorMUD guard/redirect mechanic.
     // A "guarded" monster (e.g. a brigand chief guarded by brigands) can't be
     // attacked directly while a guard is in the room: the server redirects our

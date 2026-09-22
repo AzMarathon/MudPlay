@@ -261,7 +261,7 @@ public static class RemoteCommandCatalog
             ["@stop"]         = new("@stop", "pauses your movement"),
             ["@rego"]         = new("@rego", "resumes your movement"),
             ["@atkprio"]      = new("@atkprio [1|2|3 <name>]", "Target Priority: bare reports it; 1 Default, 2 follow-leader, 3 <name> attack-what-player"),
-            ["@atkorder"]     = new("@atkorder [1-4 <name>]", "Attack Order: bare reports it; 1 Default, 2 last-party, 3 last-room, 4 <name> attack-after"),
+            ["@atkorder"]     = new("@atkorder [1-5 <name>]", "Attack Order: bare reports it; 1 Default, 2 last-party, 3 last-room, 4 <name> attack-after, 5 not-last"),
             ["@auto-all"]     = new("@auto-all [on|off]", "kill switch: off stops every engine, on restores what was running"),
             ["@auto-combat"]  = new("@auto-combat [on|off]", "toggle the auto-combat engine"),
             ["@auto-nuke"]    = new("@auto-nuke [on|off]", "toggle the auto-nuke (offensive spell) engine"),

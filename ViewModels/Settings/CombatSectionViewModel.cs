@@ -60,7 +60,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         "Do BS attacks", "Don't BS if multi-attack", "Run if BS fails",
         "Clear hostiles when seen hidden",
         "Target order", "Normal", "Reverse",
-        "Attack Order", "Attack timing", "Default", "Attack Last Party", "Attack Last Room", "Attack After",
+        "Attack Order", "Attack timing", "Default", "Attack Last Party", "Attack Last Room", "Attack After", "Attack Not Last",
         "Target Priority", "Attack what party leader attacks", "Attack what player attacks",
         "Follow leader", "Follow player", "Player name",
         "Polite mode", "Skip room", "Attack different",
@@ -179,6 +179,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             AttackTiming.AttackLastParty,
             AttackTiming.AttackLastRoom,
             AttackTiming.AttackAfter,
+            AttackTiming.AttackNotLast,
         };
 
     // Bound to the PoliteMode ComboBox SelectedItem. Default PoliteMode.Off.
