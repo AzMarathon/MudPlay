@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.99.0**
-> - New `@quest` remote command (gated by a new **Query quests** per-player permission): bare `@quest` lists every quest with a marked-complete band; `@quest <name|flag>` reports one quest's marked bands by ordinal (e.g. `Good align 1, 2, 3 marked complete`)
-> - On Paradigm — or a stock board where the sender's character has sys-god access — `@quest <name|flag>` also reads the live quest flag off the game and appends its step (e.g. `Abil: 126 step 16`); on stock without sys-god it reports the marked state only
-> - Names resolve by flag number, the quest's name, the ability name (`goodquest`), or a built-in alias (`good align` / `neutral` / `evil` → 126/127/128)
-> - `@dupe` now also copies the **Query quests** permission along with the other query/roomba categories
+> **Version 3.100.0**
+> - Conversation window now renders emoji / emotes: `:lol:` / `:)` / `:(` and a broad set of common shortcodes become Unicode emoji, and a bundled Pepe image-emote set (`:sadge:`, `:copium:`, `:monkas:`, `:prayge:`, …) renders inline as pictures
+> - New **Settings → Talk → "Show emoji / emotes in the conversation window"** toggle (default on, applies live). Only the on-screen display changes; nothing sent to the game is altered. Unicode emoji need a colour-emoji font installed; the image emotes always render
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

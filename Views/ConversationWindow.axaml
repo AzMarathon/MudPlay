@@ -198,6 +198,7 @@
                                  still render + click via ConversationMessageInlines. -->
                             <TextBlock Grid.Column="3"
                                        views:ConversationMessageInlines.Message="{Binding MessageText}"
+                                       views:ConversationMessageInlines.EmotesEnabled="{Binding DataContext.EmotesEnabled, ElementName=RowsList}"
                                        Foreground="{Binding MessageBrush}"
                                        FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
                                        FontSize="{Binding DataContext.MessageFontSize, ElementName=RowsList}"

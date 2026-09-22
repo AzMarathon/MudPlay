@@ -1,5 +1,10 @@
 # Version history
 
+## 3.100.0
+
+- Conversation window now renders emoji / emotes: `:lol:` / `:)` / `:(` and a broad set of common shortcodes become Unicode emoji, and a bundled Pepe image-emote set (`:sadge:`, `:copium:`, `:monkas:`, `:prayge:`, …) renders inline as pictures
+- New **Settings → Talk → "Show emoji / emotes in the conversation window"** toggle (default on, applies live). Only the on-screen display changes; nothing sent to the game is altered. Unicode emoji need a colour-emoji font installed; the image emotes always render
+
 ## 3.99.0
 
 - New `@quest` remote command (gated by a new **Query quests** per-player permission): bare `@quest` lists every quest with a marked-complete band; `@quest <name|flag>` reports one quest's marked bands by ordinal (e.g. `Good align 1, 2, 3 marked complete`)

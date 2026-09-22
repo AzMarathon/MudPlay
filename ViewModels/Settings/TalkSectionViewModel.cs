@@ -104,6 +104,10 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private FontFamilyOption? _selectedConvoFont;
     [ObservableProperty] private FontSizeOption? _selectedConvoFontSize;
 
+    // Emoji / emote substitution in the conversation window (":lol:" / ":)" → emoji,
+    // image emotes render inline).
+    [ObservableProperty] private bool _convoShowEmotes = true;
+
     private static IReadOnlyList<FontSizeOption> BuildConvoFontSizes()
     {
         double[] sizes = { 10, 11, 12, 13, 14, 16, 18, 20 };
@@ -202,6 +206,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
             ConvoShowYell       = existing.ConvoShowYell,
             ConvoShowRealmEvent = existing.ConvoShowRealmEvent,
             ConvoAutoScroll     = existing.ConvoAutoScroll,
+            ConvoShowEmotes     = ConvoShowEmotes,
         };
 
         profile.Settings ??= new();
@@ -252,6 +257,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
                             ?? ConvoFontOptions[0];
         SelectedConvoFontSize = ConvoFontSizeOptions.FirstOrDefault(o => o.Value == dto.ConvoFontSize)
                                 ?? ConvoFontSizeOptions.First(o => o.Value == DefaultConvoFontSize);
+        ConvoShowEmotes = dto.ConvoShowEmotes;
         foreach (ChannelColorRowViewModel row in ChannelColorRows)
         {
             ChannelColor? co = null;
@@ -318,6 +324,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
         AppServices.Current.Display.ConvoFontFamily = dto.ConvoFont ?? "";
         AppServices.Current.Display.ConvoFontSize = dto.ConvoFontSize;
         AppServices.Current.Display.ConvoChannelColors = dto.ChannelColors;
+        AppServices.Current.Display.ConvoShowEmotes = dto.ConvoShowEmotes;
     }
 
     // ----- IsDirty plumbing -----
@@ -343,6 +350,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     partial void OnLogMaxLinesChanged(int value)                      => MarkDirty();
     partial void OnSelectedConvoFontChanged(FontFamilyOption? value)  => MarkDirty();
     partial void OnSelectedConvoFontSizeChanged(FontSizeOption? value) => MarkDirty();
+    partial void OnConvoShowEmotesChanged(bool value)                 => MarkDirty();
 
     private void MarkDirty()
     {

@@ -2829,6 +2829,12 @@ Settings → Talk.
 **Default:** `2000`
 **What it does:** How many of the most recent lines each of the two logs above keeps — older lines roll off as new ones come in.
 
+### Show emoji / emotes in the conversation window
+
+**Default:** On
+**What it does:** Substitutes emoji shortcodes and emoticons in the Conversation window as you read chat — `:lol:` / `:joy:` become 😂, `:)` / `:(` / `:D` become their emoji, and a bundled set of **image emotes** (the Pepe pack — `:sadge:`, `:copium:`, `:monkas:`, `:prayge:`, `:poggies:`, and more) render as small inline pictures. Matching is case-insensitive for named codes (`:monkaS:` = `:monkas:`); classic emoticons must be surrounded by spaces, so a time like `8:00` is never touched. Unknown `:codes:` are left as typed.
+**Important notes:** Applies **live** — hit Apply and an already-open Conversation window re-renders on the spot. Unicode emoji rely on a **colour-emoji font** being installed on your system (e.g. Noto Color Emoji on Linux); the bundled image emotes always render regardless. Only the on-screen display changes — nothing you send to the game is altered.
+
 ### Font / Font size (Conversation window)
 
 **Default:** JetBrains Mono, 12pt

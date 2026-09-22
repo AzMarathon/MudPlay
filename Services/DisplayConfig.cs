@@ -76,4 +76,9 @@ public sealed partial class DisplayConfig : ObservableObject
     // default"). The window observes this and re-resolves its brush maps + rebuilds
     // its rows on a Settings -> Talk Apply, same live-effect path as the font above.
     [ObservableProperty] private Dictionary<string, Models.Profile.ChannelColor>? _convoChannelColors;
+
+    // Whether the conversation window substitutes emoji / emote shortcodes (from
+    // TalkSettings.ConvoShowEmotes). The window observes this so a Settings -> Talk
+    // Apply toggles emotes on the open window immediately, same live path as the font.
+    [ObservableProperty] private bool _convoShowEmotes = true;
 }

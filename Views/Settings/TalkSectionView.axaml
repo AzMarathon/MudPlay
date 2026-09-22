@@ -128,6 +128,15 @@
                                ToolTip.Tip="Both logs keep only their last N lines on disk (shared cap). The oldest lines roll off as new ones arrive."/>
             </Grid>
 
+            <!-- ============ Conversation emotes ============ -->
+            <TextBlock Classes="SectionHeader" Text="Conversation emotes"/>
+            <CheckBox Content="Show emoji / emotes in the conversation window"
+                      IsChecked="{Binding ConvoShowEmotes, Mode=TwoWay}"
+                      ToolTip.Tip="Substitute emoji shortcodes (:lol:) and emoticons (:) ) with emoji, and render image emotes (the bundled Pepe set) inline. Unicode emoji need a colour-emoji font installed on your system."/>
+            <TextBlock Classes="HelpText"
+                       Margin="0,0,0,4"
+                       Text="Turns :lol: / :) / :( and the bundled image emotes into pictures in the Conversation window. Unicode emoji rely on a colour-emoji font being installed."/>
+
             <!-- ============ Conversation window font ============ -->
             <TextBlock Classes="SectionHeader" Text="Conversation window font"/>
             <TextBlock Classes="HelpText"

@@ -377,7 +377,16 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         {
             ApplyColorsFromDisplay();
         }
+        else if (e.PropertyName == nameof(DisplayConfig.ConvoShowEmotes))
+        {
+            OnPropertyChanged(nameof(EmotesEnabled));
+        }
     }
+
+    // Whether the rows substitute emoji / emote shortcodes — bound by the row template's
+    // ConversationMessageInlines.EmotesEnabled attached property. Sourced from the live
+    // Display channel so a Settings -> Talk Apply re-renders the open window at once.
+    public bool EmotesEnabled => _display.ConvoShowEmotes;
 
     private static IBrush LookupBrush(Application app, string key)
         => app.TryGetResource(key, null, out object? v) && v is IBrush b ? b : Brushes.Gray;

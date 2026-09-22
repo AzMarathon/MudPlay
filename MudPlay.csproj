@@ -34,7 +34,7 @@
          (~1000+ line) rewrite/expansion of an existing one, PATCH = bug
          fixes AND ordinary enhancements to existing features (one bump per
          report handled or per enhancement). -->
-    <Version>3.99.0</Version>
+    <Version>3.100.0</Version>
 
     <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
          the Server GC (a heap + background thread per core), which on a
@@ -57,6 +57,9 @@
          via avares://, so keep the rest out of the assembly. -->
     <AvaloniaResource Remove="Assets\AppIcon\*.svg" />
     <AvaloniaResource Remove="Assets\AppIcon\*.py" />
+    <!-- The emote pack's attribution note is repo documentation, not a runtime
+         resource — only the .png emotes are loaded via avares://. -->
+    <AvaloniaResource Remove="Assets\Emotes\*.txt" />
   </ItemGroup>
 
   <ItemGroup>
