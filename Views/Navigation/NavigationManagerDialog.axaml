@@ -481,7 +481,8 @@
                                           HorizontalScrollBarVisibility="Disabled"
                                           VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="0,0,14,0">
-                                    <TextBox Classes="clearable" Text="{Binding GotoFilter, Mode=TwoWay}"
+                                    <TextBox Classes="clearable" Name="GotoFilterBox"
+                                             Text="{Binding GotoFilter, Mode=TwoWay}"
                                              PlaceholderText="Filter favourites…"
                                              FontSize="11" Margin="0,0,0,3"
                                              IsVisible="{Binding HasFavorites}"/>
