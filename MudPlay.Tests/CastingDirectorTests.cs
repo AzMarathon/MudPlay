@@ -910,6 +910,36 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void SelfCure_StuckFlag_IsThrottled_NotCastEveryRound()
+    {
+        // A stuck condition flag (a cure that can't clear the source, or a falsely-latched
+        // flag) would re-fire the cure every round and drain mana to zero — reports
+        // paradigm-20260922-063422 / -095321. The throttle caps re-casts of the same
+        // self-cure to once per SelfCureRetryWindow; a working cure clears the flag first.
+        using CureHarness h = new();
+        h.Spells.CureBlindnessSpell = "site";
+        h.RecordCondition("blind", MessageFlags.Blinded, applied: "You are blinded!");
+        h.FeedLine("You are blinded!");        // IsBlinded latches (no wear-off ever comes)
+
+        h.Director.Evaluate();
+        Assert.Contains("site", h.CastsSent);
+        int afterFirst = h.CastsSent.Count;
+
+        // Same round-ish, still blinded → throttled, no fresh cure cast.
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.Director.Evaluate();
+        Assert.Equal(afterFirst, h.CastsSent.Count);
+
+        // Past the retry window → the cure retries once (in case the first cast failed).
+        h.Now = h.Now.AddSeconds(20);
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.Director.Evaluate();
+        Assert.Equal(afterFirst + 1, h.CastsSent.Count);
+    }
+
+    [Fact]
     public void Cure_MovementPrevented_CastsCureHolds()
     {
         using CureHarness h = new();
@@ -2725,12 +2755,12 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyHeal_SelfIsLowest_CastsBareCode_NotOwnParName()
+    public void PartyHeal_SelfIsLowest_SkipsSelf_NoSingleTargetCast()
     {
-        // Live bug: the minor party-heal picked the self member and cast
-        // "mihe Raijin Par" — appending our own par-row "Given Family"
-        // name. MajorMUD self-casts take the bare code; the trailing name
-        // makes the server reject the cast. Fix: MemberTarget(self) → null.
+        // The single-target party heal never targets self: some heals can only be cast on
+        // OTHERS (e.g. anno / annointed hands) and a self-target sends a bare self-cast the
+        // game rejects (report paradigm-20260922-082041); self is covered by the self-heal
+        // slots. With only self below threshold and no AOE configured, nothing fires.
         using PartyHarness h = new();
         h.PartySettings.MinorPartyHealSpell = "mihe";
         h.PartySettings.MinorHealMemberThresholdPercent = 70;
@@ -2739,8 +2769,7 @@ public sealed class CastingDirectorTests
 
         h.Director.Evaluate();
 
-        Assert.Single(h.CastsSent);
-        Assert.Equal("mihe", h.CastsSent[0]);
+        Assert.Empty(h.CastsSent);
     }
 
     [Fact]

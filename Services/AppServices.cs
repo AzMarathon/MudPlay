@@ -1196,6 +1196,10 @@ public sealed class AppServices
     // CombatManager's drain-spell gate.
     public Game.Combat.MonsterLifeIndex MonsterLife { get; private set; } = null!;
 
+    // A spell's target-class restriction (living / undead / animals-only) by cast-code.
+    // Paired with MonsterLife to skip an attack spell the target's type makes ineffective.
+    public Game.Combat.SpellTargetTypeIndex SpellTargetType { get; private set; } = null!;
+
     // Number → max-HP lookup in the active game-data set. Feeds the look-target
     // HP-range readout (MonsterLookParser turns a wound descriptor into an
     // absolute HP window).
@@ -4386,7 +4390,8 @@ public sealed class AppServices
         // target; the index tells the chooser which mobs to skip (fall back to the
         // normal attack). Fails open when game data is silent.
         MonsterLife = new Game.Combat.MonsterLifeIndex(GameData);
-        Combat.SetDrainEligibility(MonsterLife);
+        SpellTargetType = new Game.Combat.SpellTargetTypeIndex(GameData);
+        Combat.SetDrainEligibility(MonsterLife, SpellTargetType);
 
         // Per-monster spell overrides store a Spell.Number; the engine casts the
         // Short. Wire the resolver so the chooser can substitute a numbered
@@ -6874,7 +6879,8 @@ public sealed class AppServices
         // before "You are no longer following X." — the signature of being
         // left behind — and telepaths @comeback to the leader. Enabled is
         // pushed from Settings → Other by ApplyOtherFromActiveProfile.
-        ComebackRequest = new Game.Remote.ComebackRequester(Router, RoomTracker, Log);
+        ComebackRequest = new Game.Remote.ComebackRequester(Router, RoomTracker, Log,
+            isMovementPrevented: () => Conditions.IsMovementPrevented);
 
         // Follower-side reconnect auto-rejoin. Mirrors live follower membership
         // into the profile (crash-survivable) and, on the first in-game prompt

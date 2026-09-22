@@ -1283,6 +1283,53 @@ public sealed class CombatSpellChooserTests
         Assert.Null(d.Spell);
     }
 
+    // ----- Deterministic target-class gating (TargetTypeBlockedActions) -----
+    // The monster's life-class provably excludes a spell's target-class (turn-undead vs a
+    // non-undead mob, harm vs a nonliving construct) — skipped like the level/resist blocks.
+
+    private static CombatSpellContext TargetTypeBlockedCtx(
+        params CombatSpellAction[] blocked) =>
+        new(EnemyCount: 3, TargetRawName: "shambling mound", Mana: 100, MaxMana: 100,
+            BackstabPending: false,
+            TargetTypeBlockedActions: new HashSet<CombatSpellAction>(blocked));
+
+    [Fact]
+    public void Choose_NormalAttackSpellTargetTypeBlocked_FallsToAlternate()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("harm"),      // living-only vs a nonliving mound
+            AlternateAttackSpell = Slot("flame"),
+        };
+
+        CombatSpellDecision d = sut.Choose(
+            settings, TargetTypeBlockedCtx(CombatSpellAction.NormalAttackSpell));
+        Assert.Equal(CombatSpellAction.AlternateAttackSpell, d.Action);
+        Assert.Equal("flame", d.Spell);
+    }
+
+    [Fact]
+    public void Choose_BothAttackSpellsTargetTypeBlocked_FallsToWeapon()
+    {
+        // The reported case: harm (living-only) AND turn (undead-only) both provably can't
+        // affect a non-living, non-undead mound → straight to the weapon, no reactive probe.
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("harm"),
+            AlternateAttackSpell = Slot("turn"),
+        };
+
+        CombatSpellDecision d = sut.Choose(
+            settings,
+            TargetTypeBlockedCtx(
+                CombatSpellAction.NormalAttackSpell,
+                CombatSpellAction.AlternateAttackSpell));
+        Assert.Equal(CombatSpellAction.WeaponAttack, d.Action);
+        Assert.Null(d.Spell);
+    }
+
     [Fact]
     public void ChooseDebuff_NotLevelBlocked_FiresNormally()
     {

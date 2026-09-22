@@ -704,6 +704,15 @@ public sealed partial class CombatManager : IDisposable
     private string? _refireTarget;
     private string? _refireAnnouncer;
 
+    // At-most-one attack-order re-fire per round. The single-flush coalescing above
+    // collapses a BATCH of announces (processed in one dispatcher turn) into one send,
+    // but each server announce line often arrives on its OWN turn, so the posted flush
+    // runs before the next announce and every member's announce fires its own re-fire —
+    // the triple-attack when AttackLastParty is set (report paradigm-20260922-130230).
+    // This latch, reset at the round tick, caps the re-fire at one per round regardless
+    // of how the announce burst is packeted.
+    private bool _attackOrderRefiredThisRound;
+
     public CombatManager(
         MessageRouter router,
         RoomEntityClassifier classifier,
@@ -2528,6 +2537,10 @@ public sealed partial class CombatManager : IDisposable
             _                            => false,
         };
         if (!fire) return;
+        // At most one re-fire per round — a flush that already fired this round (announces
+        // arriving on separate dispatcher turns) must not be re-scheduled by a later
+        // member's announce.
+        if (_attackOrderRefiredThisRound) return;
 
         // Coalesce the round's burst: record this as the pending re-fire and
         // flush once on the next dispatcher turn (after the whole announce
@@ -2558,6 +2571,10 @@ public sealed partial class CombatManager : IDisposable
         if (!_isEnabled()) return;
         if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase))
             return;
+
+        // Committing to the re-fire — latch it so no further announce this round fires a
+        // second one (the triple-attack guard).
+        _attackOrderRefiredThisRound = true;
 
         CombatSettings settings = _readSettings();
 
@@ -3079,8 +3096,12 @@ public sealed partial class CombatManager : IDisposable
         // The user hand-typed this round's attack (a combat spell or a swing) — don't
         // re-send our auto attack over the top of it. The override clears at the next
         // combat tick, so the engine resumes on the following round (report
-        // paradigm-20260814-135715).
-        if (_userAttackOverride)
+        // paradigm-20260814-135715). EXCEPTION: our OWN between-round cast re-engaging the
+        // weapon (bypassAttackGuard) — that Off is provably our buff/heal interrupting the
+        // swing, so re-engaging is correct regardless of the override; and during a
+        // buff-recast sequence combat stays Off so NO tick fires to clear a stale override,
+        // and honoring it here idles a full round (report paradigm-20260922-073350).
+        if (_userAttackOverride && !bypassAttackGuard)
         {
             _log?.Combat(LogCategory, "resume suppressed — user attack override holds this round");
             return false;

@@ -109,11 +109,20 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     // editor with no save and no close.
     public async void ApplyAndClose()
     {
-        if (!await Services.AppServices.Current.Confirm.ConfirmSaveAsync()) return;
-        ApplyAll();
+        // Only prompt to save when something actually changed — clicking OK on an
+        // untouched Settings window shouldn't ask "Save your changes?" (report
+        // paradigm-20260922-113233). A clean window just closes.
+        if (AnyDirty)
+        {
+            if (!await Services.AppServices.Current.Confirm.ConfirmSaveAsync()) return;
+            ApplyAll();
+        }
         IsCommitted = true;
         CloseRequested?.Invoke();
     }
+
+    // True when any section has pending edits. Gates the save-confirm prompt.
+    private bool AnyDirty => Sections.Any(s => s.IsDirty);
 
     // Discard path — drop pending edits without writing, then close. Called by
     // the Cancel button.
@@ -142,7 +151,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     [RelayCommand]
     private async Task ApplyAsync()
     {
-        // Apply button — same confirm-save semantics as OK, minus the close.
+        // Apply button — same confirm-save semantics as OK, minus the close. Nothing
+        // dirty ⇒ nothing to save, so don't prompt.
+        if (!AnyDirty) return;
         if (!await Services.AppServices.Current.Confirm.ConfirmSaveAsync()) return;
         ApplyAll();
     }

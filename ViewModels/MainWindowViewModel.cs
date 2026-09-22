@@ -3511,6 +3511,21 @@ public partial class MainWindowViewModel : ObservableObject
         window.Activate();
     }
 
+    // Re-press behavior for READ-ONLY windows (no pending Save/Cancel state — Conversation,
+    // LogPane, Backscroll, the reference/stat windows, help dialogs). If the window is
+    // already the active/foreground window, a re-press CLOSES it (the user reached for the
+    // same menu/hotkey to dismiss what's in front of them — report paradigm-20260922-091714);
+    // if it's open but buried behind another window (or another client), the re-press RAISES
+    // it instead of the old convention's confusing close. Edit windows keep RaiseExisting
+    // (raise-only) so a re-press can never discard pending edits (the Save/Cancel contract).
+    private static void RaiseOrClose(Avalonia.Controls.Window window)
+    {
+        if (window.IsActive)
+            window.Close();
+        else
+            RaiseExisting(window);
+    }
+
     private void OpenPlaceholder(string id, string panelName, string phaseTag, string headline, string description)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
@@ -3543,7 +3558,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Re-select raises the existing window — see RaiseExisting.
         if (_logPane is { } existing)
         {
-            RaiseExisting(existing);
+            RaiseOrClose(existing);
             return;
         }
 
@@ -3570,7 +3585,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Re-select raises the existing window — see RaiseExisting.
         if (_backscroll is { } existing)
         {
-            RaiseExisting(existing);
+            RaiseOrClose(existing);
             return;
         }
 
@@ -3624,7 +3639,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Re-select raises the existing window — see RaiseExisting.
         if (_conversation is { } existing)
         {
-            RaiseExisting(existing);
+            RaiseOrClose(existing);
             return;
         }
 
@@ -3653,7 +3668,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_partyWindow is { } existing) { RaiseExisting(existing); return; }
+        if (_partyWindow is { } existing) { RaiseOrClose(existing); return; }
 
         PartyWindow window = new()
         {
@@ -3675,7 +3690,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_buffWatchdog is { } existing) { RaiseExisting(existing); return; }
+        if (_buffWatchdog is { } existing) { RaiseOrClose(existing); return; }
 
         BuffWatchdogWindow window = new()
         {
@@ -4893,7 +4908,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_spellBook is { } existing) { RaiseExisting(existing); return; }
+        if (_spellBook is { } existing) { RaiseOrClose(existing); return; }
 
         SpellBookWindow window = new()
         {
@@ -4916,7 +4931,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_monsterIntel is { } existing) { RaiseExisting(existing); return; }
+        if (_monsterIntel is { } existing) { RaiseOrClose(existing); return; }
 
         var svc = AppServices.Current;
         MonsterIntelWindow window = new()
@@ -4942,7 +4957,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_sessionStats is { } existing) { RaiseExisting(existing); return; }
+        if (_sessionStats is { } existing) { RaiseOrClose(existing); return; }
 
         SessionStatsWindow window = new()
         {
@@ -4974,7 +4989,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_transactionHistory is { } existing) { RaiseExisting(existing); return; }
+        if (_transactionHistory is { } existing) { RaiseOrClose(existing); return; }
 
         TransactionHistoryWindow window = new()
         {
@@ -4994,7 +5009,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_playersSeen is { } existing) { RaiseExisting(existing); return; }
+        if (_playersSeen is { } existing) { RaiseOrClose(existing); return; }
 
         PlayersSeenWindow window = new()
         {
@@ -5021,7 +5036,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Re-select raises the existing window — see RaiseExisting.
         if (_wireInspector is { } existing)
         {
-            RaiseExisting(existing);
+            RaiseOrClose(existing);
             return;
         }
 
@@ -5151,7 +5166,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_aboutWindow is { } existing)
         {
-            RaiseExisting(existing);
+            RaiseOrClose(existing);
             return;
         }
 
@@ -5203,7 +5218,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_helpWindow is { } existing)
         {
-            RaiseExisting(existing);
+            RaiseOrClose(existing);
             return;
         }
 

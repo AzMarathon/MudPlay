@@ -12201,15 +12201,15 @@
     ]
   },
   {
-    "Id": "a0510b4a6d1fe36f",
+    "Id": "7b190cec3f3986a6",
     "Name": "mirrored shield",
     "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "Your shield flashes blindingly!",
     "TargetMessage": "{source}'s shield flashes blindingly!",
     "WitnessMessage": "{source}'s shield flashes blindingly!",
-    "AppliedMessage": "You feel fast",
-    "AppliedEndsWith": "You slow down",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
     "Links": [
       {
         "Table": "Spells",

@@ -24,8 +24,9 @@ namespace MudPlay.Game.Combat;
 // "no effect" line).
 public sealed class MonsterLifeIndex
 {
-    // MajorMUD ability code for the NonLiving flag (per GameData.AbilityNames).
+    // MajorMUD ability codes (per GameData.AbilityNames).
     private const int NonLivingAbilityCode = 109;
+    private const int AnimalAbilityCode = 78;
 
     // Number of Abil-N slots on a Monsters row.
     private const int AbilitySlots = 10;
@@ -48,6 +49,27 @@ public sealed class MonsterLifeIndex
         if (monsterNumber < 0) return true;
         return !Build().TryGetValue(monsterNumber, out MonsterLife life)
             || (!life.NonLiving && !life.Undead);
+    }
+
+    // Whether a spell with the given target-class restriction can affect this monster.
+    // Any ⇒ always. The other three are provable from data: a LivingOnly spell can't
+    // touch a NonLiving or Undead target; an UndeadOnly spell only an Undead; an
+    // AnimalsOnly spell only an Animal. A monster absent from the map carries none of the
+    // three flags, so it's normal LIVING (not undead, not an animal, not a construct) —
+    // which is exactly what the "only" restrictions need to decide. An unknown number
+    // (-1) fails OPEN (don't pre-empt; the reactive "no effect" line is the backstop).
+    public bool CanAffect(int monsterNumber, SpellTargetType targetType)
+    {
+        if (targetType == SpellTargetType.Any) return true;
+        if (monsterNumber < 0) return true;
+        bool inMap = Build().TryGetValue(monsterNumber, out MonsterLife life);
+        return targetType switch
+        {
+            SpellTargetType.LivingOnly  => !inMap || (!life.NonLiving && !life.Undead),
+            SpellTargetType.UndeadOnly  => inMap && life.Undead,
+            SpellTargetType.AnimalsOnly => inMap && life.Animal,
+            _ => true,
+        };
     }
 
     // Diagnostic reason a monster can't be drained ("nonliving" / "undead" /
@@ -76,13 +98,14 @@ public sealed class MonsterLifeIndex
                 if (numEl.ValueKind != JsonValueKind.Number) continue;
                 if (!numEl.TryGetInt32(out int number)) continue;
 
-                bool nonLiving = false;
+                bool nonLiving = false, animal = false;
                 for (int i = 0; i < AbilitySlots; i++)
                 {
                     if (!row.TryGetProperty($"Abil-{i}", out JsonElement abilEl)) continue;
                     if (abilEl.ValueKind != JsonValueKind.Number) continue;
                     if (!abilEl.TryGetInt32(out int code)) continue;
-                    if (code == NonLivingAbilityCode) { nonLiving = true; break; }
+                    if (code == NonLivingAbilityCode) nonLiving = true;
+                    else if (code == AnimalAbilityCode) animal = true;
                 }
 
                 bool undead = row.TryGetProperty("Undead", out JsonElement undeadEl)
@@ -90,8 +113,8 @@ public sealed class MonsterLifeIndex
                     && undeadEl.TryGetInt32(out int u)
                     && u != 0;
 
-                if (nonLiving || undead)
-                    map[number] = new MonsterLife(nonLiving, undead);
+                if (nonLiving || undead || animal)
+                    map[number] = new MonsterLife(nonLiving, undead, animal);
             }
         }
 
@@ -101,5 +124,5 @@ public sealed class MonsterLifeIndex
         return map;
     }
 
-    private readonly record struct MonsterLife(bool NonLiving, bool Undead);
+    private readonly record struct MonsterLife(bool NonLiving, bool Undead, bool Animal);
 }

@@ -1130,11 +1130,35 @@ public sealed class CombatManagerTests
         Assert.Equal(2, h.Sent.Count);          // exactly one coalesced re-fire
         Assert.Equal("a giant rat", h.LastSent);
 
-        // A later, separate burst still re-fires — coalescing is per-burst, not
-        // a once-per-fight cap, so we keep landing last each round.
+        // The NEXT round's burst re-fires again — the once-per-round cap resets at the
+        // round tick, so we keep landing last each round (not a once-per-fight cap).
+        h.Combat.OnCombatTick();
         h.Feed("Suijin moves to attack giant rat.");
         h.PumpUi();
         Assert.Equal(3, h.Sent.Count);
+    }
+
+    [Fact]
+    public void AttackTimingLastParty_SeparateDispatcherTurns_ReFiresOncePerRound()
+    {
+        // Production shape (report paradigm-20260922-130230): the party's announces
+        // arrive on SEPARATE dispatcher turns, so the posted coalescing flush runs before
+        // the next announce and every member's announce would fire its own re-fire — the
+        // triple attack. The once-per-round guard caps it at a single re-fire per round.
+        using Harness h = new();   // DeferUi off — each Feed flushes on its own turn
+        h.Settings.AttackTiming = AttackTiming.AttackLastParty;
+        h.Party.Members.Add(new PartyMember { Name = "Nineteen" });
+        h.Party.Members.Add(new PartyMember { Name = "Thresh" });
+        h.AddMonster(1, "obsidian demon", killable: true);
+
+        h.Feed("Also here: obsidian demon.");   // initial swing
+        Assert.Single(h.Sent);
+
+        h.Feed("Nineteen moves to attack obsidian demon.");
+        h.Feed("Thresh moves to attack obsidian demon.");
+
+        Assert.Equal(2, h.Sent.Count);          // one re-fire this round, not two
+        Assert.Equal("a obsidian demon", h.LastSent);
     }
 
     [Fact]

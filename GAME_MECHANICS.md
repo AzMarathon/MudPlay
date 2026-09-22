@@ -802,10 +802,17 @@ there** — treat as close-but-unconfirmed until a Paradigm source or capture pi
   you can cast a *different* spell that same round. The client therefore swaps the attack cascade's
   primary → alternate attack spell **immediately** on the no-effect line, the same round, rather than
   idling until the next ~5s tick (report `paradigm-20260809-162350`: `harm`→`hamm` was losing a round
-  because only the weapon fallback swung immediately while the alternate *spell* waited a tick). The
-  primary probe itself is still the unavoidable reactive detection (living-only immunity isn't
-  pre-emptable from data — see the immunity section below), and the swap is one cascade step per round
-  because the alternate's own no-effect can't arrive until it has cast next round.
+  because only the weapon fallback swung immediately while the alternate *spell* waited a tick), and the
+  swap is one cascade step per round because the alternate's own no-effect can't arrive until it has cast
+  next round. **UPDATE (2026-09-22):** the "living-only immunity isn't pre-emptable from data" claim
+  once here was WRONG — a spell's target-class restriction *is* in game data (Spells `Abil` codes 23
+  AffectsUndeadOnly / 80 AffectsAnimalsOnly / 108 AffectsLivingOnly) as is the monster's life-class
+  (NonLiving ability 109, Undead column, Animal ability 78 — see "Spell targeting: monster type tags").
+  So the client now **proactively skips** an attack spell whose target-class the monster's type excludes
+  (`turn`-undead vs a non-undead mob, `harm` vs a nonliving construct) — `SpellTargetTypeIndex` +
+  `MonsterLifeIndex.CanAffect`, gated in `CombatSpellChooser` beside the level / resist blocks. Only the
+  reactive backstop remains for spells with no target-class tag (report paradigm-20260922-082559). The
+  reactive one-step-per-round path still applies to any immunity game data can't prove.
 - **[CONFIRMED]** *(2026-08-12, user — report `paradigm-20260812-200128`, ~6th on this issue)* **The
   single-target attack-spell cascade — the authoritative rules.** With ActionOrder = *Spells first* and
   a Normal + Alternate single-target attack spell configured (e.g. Normal `lbol` MaxCasts=1 / min-mana 75,

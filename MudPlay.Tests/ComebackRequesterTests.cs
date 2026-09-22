@@ -66,7 +66,7 @@ public sealed class ComebackRequesterTests : IDisposable
         public void Dispose() => Requester.Dispose();
     }
 
-    private Harness NewHarness()
+    private Harness NewHarness(Func<bool>? isMovementPrevented = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
@@ -80,7 +80,7 @@ public sealed class ComebackRequesterTests : IDisposable
         graph.OnActiveSetChanged("alpha");
         RoomTracker tracker = new(graph);
 
-        ComebackRequester requester = new(router, tracker);
+        ComebackRequester requester = new(router, tracker, isMovementPrevented: isMovementPrevented);
         Harness h = new()
         {
             Router = router,
@@ -127,6 +127,21 @@ public sealed class ComebackRequesterTests : IDisposable
         h.Feed("You are no longer following MudPlay.");
 
         Assert.Equal("/MudPlay @comeback", h.LastWire);
+    }
+
+    [Fact]
+    public void KnockedDownThenNoLongerFollowing_SendsComeback()
+    {
+        // A knockdown / held affliction produces "You are flat on your back!", NOT one of
+        // the two movement-failure lines — so without the live movement-prevented check the
+        // break reads as deliberate. With it, a break while movement-prevented telepaths
+        // @comeback (report paradigm-20260922-085609).
+        using Harness h = NewHarness(isMovementPrevented: () => true);
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
+
+        h.Feed("You are no longer following MudPlay.");
+
+        Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
     }
 
     // ----- deliberate unfollow stays silent ---------------------------

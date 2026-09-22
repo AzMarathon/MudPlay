@@ -78,6 +78,15 @@ public sealed class CastingDirector : IDisposable
     // — the guard no longer matches and a fresh heal is free to fire.
     private static readonly TimeSpan SameSelfHealStaleGuard = TimeSpan.FromSeconds(8);
 
+    // Self-cure throttle. A condition flag (blindness / poison / disease / hold) clears
+    // only on a recognized wear-off line — casting the cure doesn't itself clear it. If
+    // the flag is STUCK (a cure that can't remove that source, or a flag falsely latched
+    // by a shared applied-line — reports paradigm-20260922-063422 / -095321), the Curing
+    // category re-fires the same cure every round and drains mana to zero. This caps the
+    // re-cast of the SAME self-cure to once per window; a cure that actually works clears
+    // the flag long before then, so the throttle only bites a stuck flag.
+    private static readonly TimeSpan SelfCureRetryWindow = TimeSpan.FromSeconds(15);
+
     // How long after arming a self-buff's pending marker an AlreadyCastThisRound /
     // fizzle rejection can still plausibly be about that send. Our recast draws its
     // rejection within the same ~5-6s round; a later one is an unrelated cast the
@@ -311,6 +320,10 @@ public sealed class CastingDirector : IDisposable
     // Last self-heal we sent — spell code, the HP + MA it was sent at, and when.
     // Feeds SameSelfHealStaleGuard so a stale re-evaluation can't double-cast it.
     private (string Spell, int Hp, int Ma, DateTime At)? _lastSelfHealCast;
+
+    // When each self-cure spell code was last cast. Feeds SelfCureRetryWindow so a stuck
+    // condition flag can't re-fire the same cure every round.
+    private readonly Dictionary<string, DateTime> _lastSelfCureAt = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _disposed;
 
@@ -755,6 +768,7 @@ public sealed class CastingDirector : IDisposable
         _pendingSelfBuffShort = null;
         _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
+        _lastSelfCureAt.Clear();
         _betweenRoundSlotUsedAt = DateTime.MinValue;
         _pausedAt = null;
     }
@@ -769,6 +783,7 @@ public sealed class CastingDirector : IDisposable
         _pendingSelfBuffShort = null;
         _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
+        _lastSelfCureAt.Clear();
         _pendingPartyCast = null;   // a cast in flight when we died never landed
         _pendingManualCast = null;
         _log?.Info(LogCategory,
@@ -1611,6 +1626,20 @@ public sealed class CastingDirector : IDisposable
                 continue;
             }
 
+            // Self-cure throttle: a stuck condition flag would otherwise re-fire the same
+            // cure every round (see SelfCureRetryWindow). Cap re-casts of the same self-cure
+            // to once per window; a working cure clears the flag well before then.
+            bool isSelfCure = category == SpellCategory.Curing && cand.Target is null;
+            if (isSelfCure
+                && _lastSelfCureAt.TryGetValue(cand.Spell, out DateTime lastCure)
+                && _now() - lastCure < SelfCureRetryWindow)
+            {
+                _log?.Combat(LogCategory,
+                    $"{category} skip spell={cand.Spell} (throttled — cast "
+                    + $"{(_now() - lastCure).TotalSeconds:0}s ago, condition flag still set)");
+                continue;
+            }
+
             if (!_cast.TryCast(cand.Spell, cand.Target)) return null;
 
             // Combat-sourced debuff landed — advance the combat engine's
@@ -1619,6 +1648,8 @@ public sealed class CastingDirector : IDisposable
 
             if (isSelfHeal)
                 _lastSelfHealCast = (cand.Spell, _state.Hp, _state.Ma, _now());
+            if (isSelfCure)
+                _lastSelfCureAt[cand.Spell] = _now();
 
             // Buff cast sent — start the recast clock immediately. A party buff
             // (targeted) arms CasterMessage confirmation so the timer starts on
@@ -2061,6 +2092,12 @@ public sealed class CastingDirector : IDisposable
             if (m.IsInvited) continue;
             if (m.HpPercent >= threshold) continue;
             below++;
+            // Never pick SELF as the single-target: some party heals can only be cast on
+            // OTHERS (e.g. anno / annointed hands) and a self-target sends a bare self-cast
+            // the game rejects (report paradigm-20260922-082041); self is covered by the
+            // self-heal slots. Self still counts toward `below` above, so a party-wide AOE
+            // heal (which legitimately covers everyone) still triggers when self is hurt.
+            if (m.IsSelf) continue;
             if (lowest is null || m.HpPercent < lowest.HpPercent)
                 lowest = m;
         }

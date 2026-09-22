@@ -97,8 +97,37 @@ public sealed class CombatProfileManager
                 $"Active combat profile pointer was stale; reset to profile 1 of {store.Profiles.Count}");
         }
         if (MigrateToFullLoadout(store)) changed = true;
+        if (MigrateActionOrderPerProfile(store)) changed = true;
         if (changed) _save();
         Changed?.Invoke();
+    }
+
+    // One-time back-fill for profiles created before the action-order / backstab /
+    // kill-all-engaged fields became per-profile: the new fields deserialize to their
+    // defaults, which wouldn't match a character whose shared values differed — so the
+    // first switch would silently flip them. Seed EVERY profile from the live (previously
+    // shared) values once, then stamp the version so a later per-profile edit sticks.
+    private bool MigrateActionOrderPerProfile(CombatProfileSettings store)
+    {
+        if (store.SchemaVersion >= CombatProfileSettings.PerProfileActionOrderVersion) return false;
+
+        CombatSettings live = _readCombat();
+        foreach (CombatSpellProfile prof in store.Profiles)
+        {
+            prof.ActionOrder = live.ActionOrder;
+            prof.CycleRoundsPhysical = live.CycleRoundsPhysical;
+            prof.CycleRoundsSpell = live.CycleRoundsSpell;
+            prof.CycleStartOnSpell = live.CycleStartOnSpell;
+            prof.DoBackstab = live.DoBackstab;
+            prof.SkipBackstabIfMultiAttack = live.SkipBackstabIfMultiAttack;
+            prof.RunIfBackstabFails = live.RunIfBackstabFails;
+            prof.ClearHostilesWhenSeenHidden = live.ClearHostilesWhenSeenHidden;
+            prof.KillAllEngaged = live.KillAllEngaged;
+        }
+        store.SchemaVersion = CombatProfileSettings.PerProfileActionOrderVersion;
+        _log?.Log(LogSeverity.Info, "CombatProfiles",
+            $"Back-filled action order / backstab / kill-all-engaged onto {store.Profiles.Count} combat profile(s) from the live (previously shared) values — now per-profile");
+        return true;
     }
 
     // One-time back-fill for profiles created before combat profiles became a full

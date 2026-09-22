@@ -162,14 +162,14 @@ public sealed class CombatSpellProfileTests
         Assert.Equal("mm", prof.NormalAttackSpell.SpellName);
 
         // Overlay onto a fresh CombatSettings — the per-profile fields land; the
-        // SHARED fields ApplyTo doesn't own (e.g. backstab) are untouched.
-        var dst = new CombatSettings { DoBackstab = true };
+        // SHARED fields ApplyTo doesn't own (targeting / display) are untouched.
+        var dst = new CombatSettings { ShowCombatRoundTotals = true };
         prof.ApplyTo(dst);
         Assert.Equal("mm", dst.NormalAttackSpell.SpellName);
         Assert.Equal("vamp", dst.DrainSpell.SpellName);
         Assert.Equal(33, dst.DrainHpTrigger);
         Assert.Equal(ThresholdMode.Absolute, dst.SpellManaThresholdMode);
-        Assert.True(dst.DoBackstab);   // shared field ApplyTo never writes
+        Assert.True(dst.ShowCombatRoundTotals);   // shared display field ApplyTo never writes
 
         // Overlay deep-copies too: editing the destination slot doesn't touch the profile.
         dst.NormalAttackSpell.SpellName = "q";
@@ -416,12 +416,20 @@ public sealed class CombatSpellProfileTests
 
         var liveHealth = new HealthSettings { RestMaxHp = 88 };
         var liveSpells = new SpellsSettings { MinorHealSpell = "mihe", PriorityCuring = 1 };
+        // The previously-shared combat values action order / backstab / kill-all-engaged
+        // must also back-fill onto every profile (else the first switch flips them).
+        var liveCombat = new CombatSettings
+        {
+            ActionOrder = CombatActionOrder.PhysicalFirst,
+            DoBackstab = true,
+            KillAllEngaged = true,
+        };
         var equip = new EquipmentSettings();
         EquipmentWeaponSync.WriteProfileWeapons(equip, new CombatSpellProfile { NormalWeapon = "long sword" });
 
         var mgr = new CombatProfileManager(
             profile: () => profile,
-            readCombat: () => new CombatSettings(),
+            readCombat: () => liveCombat,
             writeCombat: _ => { },
             readHealth: () => liveHealth,
             writeHealth: _ => { },
@@ -432,13 +440,16 @@ public sealed class CombatSpellProfileTests
 
         mgr.EnsureSeeded();
 
-        Assert.Equal(CombatProfileSettings.FullLoadoutVersion, profile.CombatProfiles.SchemaVersion);
+        Assert.Equal(CombatProfileSettings.PerProfileActionOrderVersion, profile.CombatProfiles.SchemaVersion);
         foreach (CombatSpellProfile p in profile.CombatProfiles.Profiles)
         {
             Assert.Equal(88, p.Health.RestMaxHp);          // health back-filled (not the 95 default)
             Assert.Equal("mihe", p.Spells.MinorHealSpell); // spell subset back-filled
             Assert.Equal(1, p.Spells.PriorityCuring);
             Assert.Equal("long sword", p.NormalWeapon);    // weapons back-filled from the Default set
+            Assert.Equal(CombatActionOrder.PhysicalFirst, p.ActionOrder);  // action order back-filled
+            Assert.True(p.DoBackstab);                     // backstab back-filled
+            Assert.True(p.KillAllEngaged);                 // kill-all-engaged back-filled
         }
 
         // Idempotent: a second pass (already stamped) leaves the profiles alone even

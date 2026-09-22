@@ -41,6 +41,10 @@ public sealed partial class CombatManager
     // wired the drain treats every target as eligible (fail-open; the reactive "no
     // effect" line still catches a genuine NonLiving / Undead miss).
     private MonsterLifeIndex? _monsterLife;
+    // A spell's target-class restriction (living-only / undead-only / animals-only) by
+    // cast-code. Paired with _monsterLife to skip an attack spell the target's type makes
+    // provably ineffective (turn-undead vs a non-undead mob) BEFORE the reactive probe.
+    private SpellTargetTypeIndex? _spellTargetType;
     private Func<bool>? _autoNukeGate;
 
     // Resolves a Spell.Number to its Short cast-code (the per-monster override
@@ -220,13 +224,17 @@ public sealed partial class CombatManager
             + "un-marked so it re-fires next round");
     }
 
-    // Opt into drain-life target eligibility. monsterLife reports whether each
-    // monster is drain-eligible (living AND not undead). Until called, the drain
-    // treats every target as eligible and leans on the reactive "no effect" line.
-    public void SetDrainEligibility(MonsterLifeIndex monsterLife)
+    // Opt into monster-type spell eligibility. monsterLife reports each monster's
+    // life-class (nonliving / undead / animal); spellTargetType reports each spell's
+    // target-class restriction. Together they drive the drain-eligibility gate AND the
+    // attack-spell target-type gate (skip turn-undead vs a non-undead mob, etc.). Until
+    // called, both fail open and lean on the reactive "no effect" line.
+    public void SetDrainEligibility(MonsterLifeIndex monsterLife, SpellTargetTypeIndex spellTargetType)
     {
         ArgumentNullException.ThrowIfNull(monsterLife);
+        ArgumentNullException.ThrowIfNull(spellTargetType);
         _monsterLife = monsterLife;
+        _spellTargetType = spellTargetType;
     }
 
     // Wire the Auto-Nuke auto-engine gate. When the predicate returns false, the
@@ -521,6 +529,9 @@ public sealed partial class CombatManager
 
         // New round — reset the per-round exp-line tally the AoE-wipe path reads.
         _expGainsThisRound = 0;
+
+        // New round — allow one attack-order re-fire again (the AttackLast reposition).
+        _attackOrderRefiredThisRound = false;
 
         // New round — re-arm the once-per-round attack-immunity handler so the next
         // round's "no effect" burst can drive the next cascade step.
@@ -1402,6 +1413,7 @@ public sealed partial class CombatManager
             LevelBlockedActions: LevelBlockedFor(monsterNumber, singleEff, normalEff, altEff),
             AllowNukes:          _autoNukeGate?.Invoke() ?? true,
             ResistBlockedActions: ResistBlockedFor(monsterNumber, normalEff, altEff),
+            TargetTypeBlockedActions: TargetTypeBlockedFor(monsterNumber, normalEff, altEff),
             TargetDontBackstab:  IsDontBackstab(monsterNumber),
             OverrideAttackSpell:       attackOverride,
             OverrideAttackMaxCasts:    attackCap,
@@ -1699,6 +1711,33 @@ public sealed partial class CombatManager
         }
         // Effective cast-code per rung (override when active, else the configured
         // slot) — so an override attack spell is resist-gated on its own element.
+        Check(normalCode, CombatSpellAction.NormalAttackSpell);
+        Check(altCode, CombatSpellAction.AlternateAttackSpell);
+        return blocked;
+    }
+
+    // The single-target attack-spell actions the monster's LIFE-CLASS makes provably
+    // ineffective — a configured Normal / Alternate attack spell whose target-class
+    // restriction (living-only / undead-only / animals-only) excludes this monster's type
+    // (nonliving / undead / animal / normal-living). Skipping them pre-emptively sends the
+    // cascade straight to the next rung — turn-undead vs a non-undead mob, or harm vs a
+    // nonliving construct, never wastes the reactive probe round (report
+    // paradigm-20260922-082559). Fail-open at every unknown (indexes unwired, unknown
+    // cast-code, unknown monster) so a thin data set falls back to the reactive line.
+    private IReadOnlySet<CombatSpellAction>? TargetTypeBlockedFor(
+        int monsterNumber, string? normalCode, string? altCode)
+    {
+        if (_spellTargetType is null || _monsterLife is null) return null;
+
+        HashSet<CombatSpellAction>? blocked = null;
+        void Check(string? spellCode, CombatSpellAction action)
+        {
+            if (string.IsNullOrWhiteSpace(spellCode)) return;
+            SpellTargetType targetType = _spellTargetType.TargetType(spellCode);
+            if (targetType == SpellTargetType.Any) return;              // affects all → never blocked
+            if (_monsterLife.CanAffect(monsterNumber, targetType)) return;
+            (blocked ??= new HashSet<CombatSpellAction>()).Add(action);
+        }
         Check(normalCode, CombatSpellAction.NormalAttackSpell);
         Check(altCode, CombatSpellAction.AlternateAttackSpell);
         return blocked;
