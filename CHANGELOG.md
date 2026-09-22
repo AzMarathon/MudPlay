@@ -1,5 +1,10 @@
 # Version history
 
+## 3.101.2
+
+- Auto-train: applying CP (`train stats`) is no longer level-band gated — Train Now allocates your plan at whatever class-valid trainer you're standing in, instead of walking you off to a level-matching trainer (or giving up) just to spend points
+- With **Auto-train stats** on, opening the `train stats` screen yourself now fires the CP allocation automatically — no need to press the CP-tab buttons
+
 ## 3.101.0
 
 - Combat profiles now carry the **action order** (spells-first / physical-first / custom cycle), **backstab options**, and **kill-all-engaged** per profile — a magic and a physical profile no longer share one setting; existing profiles keep their current value on upgrade

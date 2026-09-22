@@ -108,4 +108,55 @@ public sealed class TrainerCatalogSelectTests
         // Aldreth doesn't start until 12 — a quest-gated seam with no trainer.
         Assert.Null(TrainerCatalog.CheapestMarkup(All, targetLevel: 11, classNumber: 3));
     }
+
+    // ----- SelectNearestForStats — CP allocation, class-only, no level band -----
+    // `train stats` isn't level-band gated (only `train` is), so CP allocation picks by
+    // class regardless of the trainer's MinLVL/MaxLVL.
+
+    [Fact]
+    public void SelectNearestForStats_IgnoresLevelBand()
+    {
+        // Level 10 is the deliberate gap — no trainer serves it, so SelectNearest
+        // (level-band gated) returns null. CP allocation isn't band-gated, so
+        // SelectNearestForStats still picks the nearest class-ok trainer to apply stats.
+        Assert.Null(TrainerCatalog.SelectNearest(
+            All, level: 10, classNumber: 0, disabled: new HashSet<string>(), distance: _ => 5));
+
+        TrainerShop? pick = TrainerCatalog.SelectNearestForStats(
+            All, classNumber: 0, disabled: new HashSet<string>(),
+            distance: t => t.Number == Newhaven.Number ? 1 : 20);
+        Assert.Equal(Newhaven.Number, pick!.Value.Number);
+    }
+
+    [Fact]
+    public void SelectNearestForStats_RespectsClass()
+    {
+        // The class-7 Mage Trainer is never picked for a class-3 character, band or not.
+        TrainerShop? pick = TrainerCatalog.SelectNearestForStats(
+            new[] { MageTrainer }, classNumber: 3, disabled: new HashSet<string>(), distance: _ => 1);
+        Assert.Null(pick);
+    }
+
+    [Fact]
+    public void SelectNearestForStats_HonorsDisabledAndReachability()
+    {
+        // Newhaven disabled, Silvermere unreachable → nothing qualifies even though both
+        // are class-ok for CP.
+        TrainerShop? pick = TrainerCatalog.SelectNearestForStats(
+            new[] { Newhaven, Silver }, classNumber: 0,
+            disabled: new HashSet<string> { Newhaven.RowKey },
+            distance: t => t.Number == Silver.Number ? (int?)null : 3);
+        Assert.Null(pick);
+    }
+
+    [Fact]
+    public void SelectNearestForStats_StandingInAValidTrainer_PicksItInPlace()
+    {
+        // Distance 0 (you're standing in it) is the nearest — selected, so CP applies in
+        // place with no walk.
+        TrainerShop? pick = TrainerCatalog.SelectNearestForStats(
+            All, classNumber: 0, disabled: new HashSet<string>(),
+            distance: t => t.Number == Silver.Number ? 0 : 9);
+        Assert.Equal(Silver.Number, pick!.Value.Number);
+    }
 }

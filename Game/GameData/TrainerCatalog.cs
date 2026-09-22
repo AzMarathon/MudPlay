@@ -117,6 +117,36 @@ public static class TrainerCatalog
         return best;
     }
 
+    // Pick the nearest trainer for a `train stats` (CP allocation) action. Unlike a
+    // level-up `train`, applying stat points is NOT level-band gated — any trainer that
+    // isn't class-restricted against you works, at any level (confirmed mechanic, see
+    // GAME_MECHANICS). So this drops the ServesLevel filter and keeps everything else:
+    // class match, resolvable room, not-disabled, reachable. Standing IN a class-valid
+    // trainer yields distance 0, so it's selected and CP applies in place — no walk.
+    public static TrainerShop? SelectNearestForStats(
+        IReadOnlyList<TrainerShop> trainers, int classNumber,
+        IReadOnlyCollection<string> disabled, Func<TrainerShop, int?> distance)
+    {
+        ArgumentNullException.ThrowIfNull(trainers);
+        ArgumentNullException.ThrowIfNull(disabled);
+        ArgumentNullException.ThrowIfNull(distance);
+
+        TrainerShop? best = null;
+        int bestDist = int.MaxValue;
+        foreach (TrainerShop t in trainers)
+        {
+            if (!t.HasRoom) continue;
+            if (!t.ServesClass(classNumber)) continue;     // NO ServesLevel gate — stats aren't band-gated
+            if (disabled.Contains(t.RowKey)) continue;
+            if (distance(t) is { } dist && dist < bestDist)
+            {
+                best = t;
+                bestDist = dist;
+            }
+        }
+        return best;
+    }
+
     // Cheapest markup among trainers that can teach a character of classNumber up
     // to targetLevel (MinLVL <= targetLevel <= MaxLVL, class-ok). Training cost
     // rises monotonically with markup for a fixed level, so the lowest-markup
