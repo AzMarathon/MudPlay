@@ -1,5 +1,11 @@
 # Version history
 
+## 3.103.0
+
+- New **first-run setup tour**: on a fresh install (no game data, no BBS, or no character) a guided overlay auto-shows, dimming the window and spotlighting the exact menu to click for each missing step, with terse "click here → fill in → Save" cards and Back/Next
+- Only the steps you're missing show (plus a final Connect); each shows a check once done and the tour auto-advances as you finish tasks
+- Dismiss with "Skip — don't show this again" (never auto-shows again); replay any time from Help → First-time setup, or the Program Log's "Run setup tutorial" test button
+
 ## 3.102.0
 
 - New **Settings → Other → Location-based auto-equip**: wear a named item while inside a map area (matched by room number(s) and/or a room-name substring, combined via an And/Or dropdown), and revert the slot to your gear set's item on exit

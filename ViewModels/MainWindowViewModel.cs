@@ -122,6 +122,23 @@ public partial class MainWindowViewModel : ObservableObject
     // CollectionChanged, mirroring how the toolbar rebuilds from Toolbar.Layout.
     public Services.ContextMenuConfig ContextMenu => AppServices.Current.ContextMenu;
 
+    // First-run setup tour. The FirstRunTutorialOverlay in MainWindow binds to
+    // this; MainWindow's code-behind decides when to Start() it (auto on open when
+    // a prerequisite is missing and it hasn't been dismissed, or on demand from
+    // Help / the Program Log). Probes read live app state; the dismiss persists to
+    // the Global tier.
+    public FirstRunTutorialViewModel Tutorial { get; } = new(
+        hasGameData: () => AppServices.Current.GameData.AvailableSets.Count > 0,
+        hasBbs: () => System.Linq.Enumerable.Any(AppServices.Current.Bbs.ListNames()),
+        hasCharacter: () => System.Linq.Enumerable.Any(AppServices.Current.Profile.ListAll()),
+        isConnected: () => AppServices.Current.Connection.Connected,
+        persistDismiss: () =>
+        {
+            AppServices.Current.Settings.Current.FirstRunTutorialDismissed = true;
+            AppServices.Current.Settings.Save();
+            AppServices.Current.Log.Info("Tutorial", "first-run setup tour: dismissed — won't auto-show again");
+        });
+
     // Render-ready view-models for the dynamic toolbar ItemsControl. Mirrors
     // ToolbarConfig.Layout; each entry resolves through ToolbarItemCatalogue
     // and binds against the matching command on this view-model. Rebuilt

@@ -148,6 +148,14 @@ public sealed class GlobalSettings
 
     public const int LocalApiDefaultPort = 6683;
 
+    // Once true, the first-run setup tutorial (the guided overlay that walks a
+    // brand-new user through importing game data, adding a BBS + character, and
+    // connecting) never auto-shows again. Set when the user completes it or picks
+    // "Don't show again". Install-wide (Global tier). The tutorial still auto-shows
+    // when this is false AND a prerequisite is missing; Help → First-time setup
+    // re-opens it on demand regardless of this flag. Read by MainWindow on open.
+    public bool FirstRunTutorialDismissed { get; set; }
+
     // Per-tab settings deltas — keyed by tab name (Health / Combat / Talk /
     // etc.). Each value is a partial DTO for that tab containing only the
     // fields the user pinned to the Global tier. SettingsResolver merges

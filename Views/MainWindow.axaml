@@ -3,6 +3,7 @@
         xmlns:vm="using:MudPlay.ViewModels"
         xmlns:ctl="using:MudPlay.Controls"
         xmlns:svc="using:MudPlay.Services"
+        xmlns:views="using:MudPlay.Views"
         xmlns:conv="using:Avalonia.Data.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -75,12 +76,16 @@
          GlobalHotkeys.AttachMain in MainWindow.axaml.cs. -->
 
 
+    <!-- The DockPanel is the app chrome; the first-run tour overlay floats above
+         it (same Panel) so it can spotlight the menu bar. The overlay is
+         hit-test-transparent except its card, so it never blocks the terminal. -->
+    <Panel>
     <DockPanel LastChildFill="True">
 
         <!-- ============ Menu bar (chrome-styled, unchanged surface) ============ -->
         <Menu DockPanel.Dock="Top" Classes="Chrome">
 
-            <MenuItem Header="_File">
+            <MenuItem x:Name="FileMenu" Header="_File">
                 <MenuItem Header="{Binding ConnectionLabel}"
                           Command="{Binding ToggleConnectionCommand}"
                           InputGesture="{Binding ToggleConnectionGesture}"/>
@@ -621,5 +626,10 @@
         </ScrollViewer>
 
     </DockPanel>
+
+        <!-- First-run setup tour — spotlights the menu bar, non-blocking. -->
+        <views:FirstRunTutorialOverlay DataContext="{Binding Tutorial}"/>
+
+    </Panel>
 
 </Window>

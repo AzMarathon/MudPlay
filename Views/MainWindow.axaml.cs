@@ -97,6 +97,39 @@ public partial class MainWindow : Window
             // spent taking focus and only the second registered. Deferred so it wins
             // over Avalonia's default initial focus assignment.
             Dispatcher.UIThread.Post(() => Terminal.Focus());
+
+            // First-run setup tour. Register the force-show hook (Help menu + the
+            // Program Log test button reach it here), then auto-show it when a
+            // brand-new install is still missing a prerequisite and the user hasn't
+            // dismissed it.
+            if (DataContext is MainWindowViewModel mvm)
+            {
+                AppServices.Current.StartFirstRunTutorial = () =>
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        Activate();
+                        mvm.Tutorial.Start();
+                    });
+                bool dismissed = AppServices.Current.Settings.Current.FirstRunTutorialDismissed;
+                bool missing = mvm.Tutorial.AnyPrerequisiteMissing;
+                if (!dismissed && missing)
+                {
+                    AppServices.Current.Log.Info("Tutorial", "first-run setup tour: showing (a prerequisite is missing)");
+                    Dispatcher.UIThread.Post(mvm.Tutorial.Start);
+                }
+                else
+                {
+                    AppServices.Current.Log.Info("Tutorial",
+                        $"first-run setup tour: not shown ({(dismissed ? "dismissed" : "all prerequisites present")})");
+                }
+            }
+        };
+        // Returning to the main window (e.g. after adding a BBS in Profile
+        // Management) re-checks the tour's steps so a finished one shows its check
+        // and the tour advances on its own.
+        Activated += (_, _) =>
+        {
+            if (DataContext is MainWindowViewModel mvm) mvm.Tutorial.Refresh();
         };
         Closed += (_, _) =>
         {
@@ -204,6 +237,13 @@ public partial class MainWindow : Window
             Command = vm.OpenHelpWindowCommand,
             [ToolTip.TipProperty] = "Searchable guide to features, how to use the client, and what each setting means.",
         });
+        MenuItem firstRunSetup = new()
+        {
+            Header = "First-time setup…",
+            [ToolTip.TipProperty] = "Replay the guided setup tour: import game data, add a BBS + character, connect.",
+        };
+        firstRunSetup.Click += (_, _) => vm.Tutorial.Start();
+        HelpMenu.Items.Add(firstRunSetup);
         HelpMenu.Items.Add(new Separator());
 
         foreach (HelpWebsite link in vm.HelpLinks)

@@ -2,6 +2,12 @@
 
 New to MudPlay? Here's the short path from launch to playing — and where the rest of this help lives.
 
+## First-time setup tour
+
+On a brand-new install — no game data imported, no BBS, or no character yet — a **guided setup tour** pops up over the main window. It dims the screen and **spotlights the exact menu** to click for each thing you still need, with a short "click here → fill this in → Save" on a card. Use **Back / Next** to move through the steps (only the ones you're missing show, plus a final **Connect**); each step shows a check once you've done it, and finishing a task jumps the tour forward on its own.
+
+Don't want it? Click **Skip — don't show this again** and it won't return on launch. You can replay it any time from **Help → First-time setup…**. The rest of this page is the same ground at your own pace.
+
 ## What MudPlay is
 
 A Telnet terminal client for **MajorMUD / MegaMUD**-style BBS door games. It renders a faithful CP437/ANSI terminal and layers a large, tunable automation suite on top — auto-combat, healing, spellcasting, navigation and looping, party coordination, and coin/item collection. Play it as a plain terminal, or turn on as much automation as you like.
