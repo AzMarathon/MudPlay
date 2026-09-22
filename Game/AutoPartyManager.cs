@@ -897,6 +897,39 @@ public sealed class AutoPartyManager : IDisposable
         if (anyDeferred) ScheduleReformRedisplay();
     }
 
+    // Leader-side reconnect reform: a disconnect DISSOLVES our party (leadership
+    // doesn't survive a drop), so on reconnect the roster is empty and the followers we
+    // were leading are still sitting in the room we dropped in — they never left, so the
+    // grace-window auto-invite (which fires on a follower's own "entered the Realm") never
+    // triggers for them. Re-collect them the same way a party-splitting teleport does:
+    // hold the withheld `invite X` until X is OBSERVED in the room ("Also here:" / arrival),
+    // since an invite at an absent player is lost ("You don't see X here!"). Unlike
+    // NotePartySplitTeleport this is driven by the REMEMBERED follower list (the live party
+    // is empty post-dissolution) and isn't gated on SelfIsLeader — we're solo until the
+    // first invite lands. AutoInviteEnabled is checked upstream (PartyManager) before we
+    // get here. The reconnect room display's "Also here:" usually lands them immediately;
+    // the redisplay backstop covers a listing that printed before this armed.
+    public void NoteLeaderReconnectReform(IReadOnlyList<string> followerGivens)
+    {
+        if (followerGivens is null || followerGivens.Count == 0) return;
+        if (!_wire.IsBound) return;
+
+        DateTime now = NowProvider();
+        bool anyDeferred = false;
+        foreach (string name in followerGivens)
+        {
+            string given = ExtractGiven(name);
+            if (string.IsNullOrEmpty(given)) continue;
+            _reformPendingInvite.Add(given);
+            BeginReformWait(given, now);
+            anyDeferred = true;
+            _log?.Log(LogSeverity.Info, "AutoParty",
+                $"Awaiting {given}'s presence to re-invite after a leader-disconnect reform.");
+        }
+
+        if (anyDeferred) ScheduleReformRedisplay();
+    }
+
     // Schedule a single room redisplay ReformRedisplayDelay after a split-teleport
     // reform starts. This AUGMENTS the event-driven per-arrival re-invite
     // (OnTeleportArrival / OnPlayerArrival / OnRoomAlsoHere), it does not replace
@@ -955,7 +988,7 @@ public sealed class AutoPartyManager : IDisposable
         _wire.Send($"invite {given}");
         StartNag(given, now);
         _log?.Log(LogSeverity.Info, "AutoParty",
-            $"Re-inviting {given} on arrival after party-splitting teleport.");
+            $"Re-inviting {given} — now observed in the room (party reform).");
     }
 
     private void OnTeleportArrival(MatchResult match)

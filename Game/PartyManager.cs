@@ -164,6 +164,13 @@ public sealed partial class PartyManager : IDisposable
     // the probe short-circuits. Not fired when we're a follower of someone else.
     public event Action<string>? MemberReturned;
 
+    // Fires on a leader-side reconnect reform with the given names of the followers we
+    // were leading when we dropped. A leader disconnect DISSOLVES the party, and the
+    // followers stay put in the room (they never left, so no "entered the Realm" auto-
+    // invite ever fires for them) — so this drives AutoPartyManager to re-invite each once
+    // it observes them present in the room. Gated on AutoInviteEnabled at the raise site.
+    public event Action<IReadOnlyList<string>>? LeaderReconnectReformInvites;
+
     // Board-specific disconnect line support. The provider returns the active
     // BBS's raw DisconnectPattern (literal {name}/* syntax, empty/null when the
     // board uses only the standard lines); the resolver maps a captured presence
@@ -1006,6 +1013,13 @@ public sealed partial class PartyManager : IDisposable
             _recentlyDisconnected[given] = now;
             MemberDisconnected?.Invoke(given);
         }
+
+        // Proactively re-invite the co-located followers: the grace window above only
+        // auto-invites a follower who RE-ENTERS the realm, but a leader-drop leaves them
+        // standing in the room (they never left), so nothing would ever pull them back.
+        // AutoPartyManager holds the `invite X` until each is observed present.
+        if (AutoInviteEnabled)
+            LeaderReconnectReformInvites?.Invoke(followerGivens);
     }
 
     // End-of-par-block reconciliation — any member the par output omitted has
