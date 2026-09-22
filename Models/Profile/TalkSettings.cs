@@ -109,6 +109,11 @@ public sealed class TalkSettings
     public bool ConvoShowYell { get; set; } = true;
     public bool ConvoShowRealmEvent { get; set; } = true;
     public bool ConvoAutoScroll { get; set; } = true;
+
+    // Substitute emoji / emote shortcodes in the conversation window: ":lol:" and
+    // ":)" become emoji, and image emotes (the bundled Pepe set) render inline.
+    // Unicode emoji rendering needs a colour-emoji font installed on the system.
+    public bool ConvoShowEmotes { get; set; } = true;
 }
 
 // A user-picked color override for one Conversation channel: the color of its

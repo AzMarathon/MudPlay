@@ -25,6 +25,9 @@
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="Margin" Value="22,0,0,4"/>
         </Style>
+        <Style Selector="TextBlock.emoteRed">
+            <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
         <Style Selector="TextBlock.WarningText">
             <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
@@ -127,6 +130,82 @@
                                FormatString="0" Width="140" HorizontalAlignment="Left"
                                ToolTip.Tip="Both logs keep only their last N lines on disk (shared cap). The oldest lines roll off as new ones arrive."/>
             </Grid>
+
+            <!-- ============ Conversation emotes ============ -->
+            <TextBlock Classes="SectionHeader" Text="Conversation emotes"/>
+            <CheckBox Content="Show emoji / emotes in the conversation window"
+                      IsChecked="{Binding ConvoShowEmotes, Mode=TwoWay}"
+                      ToolTip.Tip="Substitute emoji shortcodes (:lol:) and emoticons (:) ) with emoji, and render image emotes (the bundled Pepe set) inline. Unicode emoji need a colour-emoji font installed on your system."/>
+            <TextBlock Classes="HelpText"
+                       Margin="0,0,0,4"
+                       Text="Turns :lol: / :) / :( and the bundled image emotes into pictures in the Conversation window. Unicode emoji rely on a colour-emoji font being installed."/>
+
+            <!-- ============ Custom emotes ============ -->
+            <TextBlock Classes="SectionHeader" Text="Custom emotes"/>
+            <TextBlock Classes="HelpText" Margin="0,0,0,4"
+                       Text="Define emoji's here, set a shortcode, image and hit add or select one in the list to change it."/>
+
+            <!-- Editor: shortcode + emoji, a preview, then Select image / Add to emoji list -->
+            <Grid ColumnDefinitions="Auto,150,Auto,*,Auto,Auto,Auto" Margin="0,4,0,0">
+                <TextBlock Grid.Column="0" Classes="FieldLabel" Text=":" VerticalAlignment="Center"/>
+                <TextBox Grid.Column="1" PlaceholderText="shortcode"
+                         Text="{Binding NewEmoteShortcode, Mode=TwoWay}"
+                         VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <TextBlock Grid.Column="2" Classes="FieldLabel" Text=":" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBox Grid.Column="3" PlaceholderText="paste an emoji — or Select image →"
+                         Text="{Binding NewEmoteEmoji, Mode=TwoWay}"
+                         IsEnabled="{Binding !HasPendingImage}"
+                         VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <Border Grid.Column="4" Width="30" Height="26" Margin="0,0,8,0"
+                        Background="#0DFFFFFF" CornerRadius="{StaticResource CornerSm}"
+                        ToolTip.Tip="Preview of the emoji / image you're adding.">
+                    <Panel>
+                        <Image Source="{Binding PendingImagePreview}" IsVisible="{Binding HasPendingImage}"
+                               Height="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding EmotePreviewText}" FontSize="18" IsVisible="{Binding !HasPendingImage}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Panel>
+                </Border>
+                <Button Grid.Column="5" Content="Select image…" Margin="0,0,4,0"
+                        Command="{Binding SelectImageCommand}"/>
+                <Button Grid.Column="6" Content="Add to emoji list"
+                        Command="{Binding AddToEmojiListCommand}"/>
+            </Grid>
+
+            <!-- Filter + list of all emotes (defaults + custom + imports). -->
+            <TextBox Margin="0,6,0,0" PlaceholderText="Filter emotes…"
+                     Text="{Binding EmoteFilter, Mode=TwoWay}"/>
+            <ListBox Margin="0,4,0,0" MinHeight="60" MaxHeight="240"
+                     ItemsSource="{Binding UserEmotes}"
+                     SelectedItem="{Binding SelectedEmoteRow, Mode=TwoWay}"
+                     BorderBrush="{StaticResource ChromeBorderSoftBrush}" BorderThickness="1"
+                     CornerRadius="{StaticResource CornerSm}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="vm:EmoteRowViewModel">
+                        <Grid ColumnDefinitions="28,180,*,Auto" Margin="2">
+                            <Image Grid.Column="0" Source="{Binding PreviewImage}" Height="20"
+                                   IsVisible="{Binding IsImage}" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="0" Text="{Binding PreviewText}" FontSize="16"
+                                       IsVisible="{Binding IsText}" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Display}"
+                                       Classes.emoteRed="{Binding IsRed}"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            <TextBlock Grid.Column="2" Text="{Binding Source}" Classes="HelpText"
+                                       Margin="0" VerticalAlignment="Center"/>
+                            <Button Grid.Column="3" Content="{Binding ActionLabel}" Padding="8,2"
+                                    Command="{Binding $parent[ListBox].DataContext.RemoveEmoteCommand}"
+                                    CommandParameter="{Binding}"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+                <Button Content="Export set…" Command="{Binding ExportEmotesCommand}"/>
+                <Button Content="Import pack / zip…" Command="{Binding ImportPackCommand}"/>
+                <Button Content="Import folder…" Command="{Binding ImportFolderCommand}"/>
+                <TextBlock Text="{Binding EmoteStatus}" Classes="HelpText" VerticalAlignment="Center"/>
+            </StackPanel>
 
             <!-- ============ Conversation window font ============ -->
             <TextBlock Classes="SectionHeader" Text="Conversation window font"/>

@@ -78,6 +78,19 @@ public partial class ConversationWindow : Window
         }
     }
 
+    // Click a picker suggestion → splice it in (the click already selected it).
+    private void OnEmoteSuggestionClicked(object? sender, PointerReleasedEventArgs e)
+    {
+        if (DataContext is not ConversationViewModel vm) return;
+        if (this.FindControl<TextBox>("InputBox") is not { } box) return;
+        if (vm.AcceptEmote(box.Text, box.CaretIndex) is { } acc)
+        {
+            vm.InputText = acc.Text;
+            box.CaretIndex = acc.Caret;
+            box.Focus();
+        }
+    }
+
     private void OnRecallSelected(object? sender, SelectionChangedEventArgs e)
     {
         // Dropdown pick fills the box, then hands focus back to the input
@@ -148,8 +161,35 @@ public partial class ConversationWindow : Window
         Dispatcher.UIThread.Post(Pin, DispatcherPriority.Loaded);
     }
 
+    // Recompute the ":" emote picker as the text / caret changes.
+    private void OnInputTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (DataContext is ConversationViewModel vm && sender is TextBox tb)
+            vm.UpdateEmotePicker(tb.Text, tb.CaretIndex);
+    }
+
     private void OnInputKeyDown(object? sender, KeyEventArgs e)
     {
+        // The ":" emote picker owns the navigation keys while open, before macro
+        // dispatch or recall get them.
+        if (DataContext is ConversationViewModel pvm && pvm.IsEmotePickerOpen && sender is TextBox pbox)
+        {
+            switch (e.Key)
+            {
+                case Key.Down: pvm.MoveEmoteSelection(1); e.Handled = true; return;
+                case Key.Up:   pvm.MoveEmoteSelection(-1); e.Handled = true; return;
+                case Key.Escape: pvm.CloseEmotePicker(); e.Handled = true; return;
+                case Key.Enter: case Key.Tab:
+                    if (pvm.AcceptEmote(pbox.Text, pbox.CaretIndex) is { } acc)
+                    {
+                        pvm.InputText = acc.Text;
+                        pbox.CaretIndex = acc.Caret;
+                    }
+                    e.Handled = true;
+                    return;
+            }
+        }
+
         // Macro lookup first — same dispatch path the terminal canvas
         // uses, so a user-bound chord (F1, numpad direction, Ctrl+letter)
         // fires its command at the wire instead of typing characters

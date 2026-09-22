@@ -1,0 +1,13 @@
+Bundled image emotes
+=====================
+
+The image emotes in this folder are a "Pepe" community emote pack sourced from an
+emoji.gg pack and supplied by the project maintainer for redistribution with
+MudPlay. They are downscaled (max 128px) copies of the originals.
+
+These render inline in the Conversation window when a message contains their
+shortcode (e.g. :sadge:, :copium:, :monkas:) and the "Show emoji / emotes in the
+conversation window" setting is on (Settings -> Talk).
+
+The built-in Unicode emoji shortcodes (:lol:, :), :( , etc.) are plain Unicode
+characters defined in code (Game/Emotes/EmoteCatalog.cs) and ship no image assets.

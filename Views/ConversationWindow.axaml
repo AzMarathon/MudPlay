@@ -92,7 +92,8 @@
                          PlaceholderText="Type a command or chat line, press Enter to send (↑ / ↓ to recall)"
                          Text="{Binding InputText, Mode=TwoWay}"
                          MaxLength="{Binding MaxInputLength}"
-                         KeyDown="OnInputKeyDown">
+                         KeyDown="OnInputKeyDown"
+                         TextChanged="OnInputTextChanged">
                     <TextBox.InnerRightContent>
                         <!-- Recall chevron lives inside the input box: it drops
                              the same newest-first history the ↑/↓ keys walk. -->
@@ -198,9 +199,11 @@
                                  still render + click via ConversationMessageInlines. -->
                             <TextBlock Grid.Column="3"
                                        views:ConversationMessageInlines.Message="{Binding MessageText}"
+                                       views:ConversationMessageInlines.EmotesEnabled="{Binding DataContext.EmotesEnabled, ElementName=RowsList}"
                                        Foreground="{Binding MessageBrush}"
                                        FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
                                        FontSize="{Binding DataContext.MessageFontSize, ElementName=RowsList}"
+                                       LineHeight="{Binding DataContext.MessageLineHeight, ElementName=RowsList}"
                                        TextWrapping="Wrap"
                                        VerticalAlignment="Center"/>
                         </Grid>
@@ -208,6 +211,34 @@
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
+
+        <!-- ":" emote picker popup, anchored above the input box. Placed after RowsList
+             and with runtime bindings so its item template's DataType doesn't pollute
+             the compiled ElementName=RowsList inference in the row template above. -->
+        <Popup PlacementTarget="{Binding #InputBox}" Placement="Bottom"
+               IsOpen="{Binding IsEmotePickerOpen}" IsLightDismissEnabled="False"
+               x:CompileBindings="False">
+            <Border Background="{StaticResource ChromeBgBrush}"
+                    BorderBrush="{StaticResource ChromeBorderSoftBrush}" BorderThickness="1"
+                    CornerRadius="{StaticResource CornerSm}" MinWidth="240" MaxHeight="200">
+                <ListBox ItemsSource="{Binding EmoteSuggestions}"
+                         SelectedIndex="{Binding SelectedEmoteIndex}"
+                         PointerReleased="OnEmoteSuggestionClicked">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="26,*" Margin="2">
+                                <Image Grid.Column="0" Source="{Binding PreviewImage}" Height="18"
+                                       IsVisible="{Binding IsImage}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Text="{Binding PreviewText}" FontSize="15"
+                                           IsVisible="{Binding IsText}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Display}"
+                                           VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </Popup>
 
     </DockPanel>
 </Window>

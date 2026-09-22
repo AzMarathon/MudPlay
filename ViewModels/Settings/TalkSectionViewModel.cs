@@ -1,9 +1,16 @@
+using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Views.Settings;
@@ -104,6 +111,278 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private FontFamilyOption? _selectedConvoFont;
     [ObservableProperty] private FontSizeOption? _selectedConvoFontSize;
 
+    // Emoji / emote substitution in the conversation window (":lol:" / ":)" → emoji,
+    // image emotes render inline).
+    [ObservableProperty] private bool _convoShowEmotes = true;
+
+    // ----- Custom emotes (STAGED; committed on Apply to the GLOBAL emote store) -----
+    // Edits build a staged copy of the global library; Apply commits it (writes disk +
+    // republishes to the conversation window) and Discard reverts. The library is shared
+    // across every character, not part of this character's profile.
+
+    public ObservableCollection<EmoteRowViewModel> UserEmotes { get; } = new();
+
+    [ObservableProperty] private string _newEmoteShortcode = "";
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(EmotePreviewText))] private string _newEmoteEmoji = "";
+    [ObservableProperty] private string? _emoteStatus;
+    [ObservableProperty] private string _emoteFilter = "";
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasPendingImage), nameof(EmotePreviewText))]
+    private Bitmap? _pendingImagePreview;
+    [ObservableProperty] private EmoteRowViewModel? _selectedEmoteRow;
+
+    private List<EmoteDraft> _stagedEmotes = new();
+    private HashSet<string> _hiddenDefaults = new(StringComparer.OrdinalIgnoreCase);
+    private string? _editingDraftId;
+    private string? _pendingImagePath;
+
+    public bool HasPendingImage => PendingImagePreview is not null;
+    public string EmotePreviewText => HasPendingImage ? "" : NewEmoteEmoji;
+
+    private static EmoteStore Store => AppServices.Current.Emotes;
+    private static string EmoteTempDir => System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mudplay-emote-import");
+
+    private static Window? HostWindow =>
+        Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } m } ? m : null;
+
+    private static Bitmap? Load(string? path)
+        => string.IsNullOrEmpty(path) ? null : Views.ConversationMessageInlines.LoadEmoteBitmap(path);
+
+    // Load the staged set from the committed global store (on section open + Discard).
+    private void HydrateEmotes()
+    {
+        EmoteSet snap = Store.Snapshot();
+        _stagedEmotes = snap.Emotes.Select(e => new EmoteDraft
+        {
+            Shortcode = e.Shortcode,
+            Emoji = e.Emoji,
+            ImageSourcePath = string.IsNullOrEmpty(e.Image) ? null : Path.Combine(Store.Dir, e.Image),
+            DisplayName = e.DisplayName,
+        }).ToList();
+        _hiddenDefaults = new HashSet<string>(snap.HiddenDefaults, StringComparer.OrdinalIgnoreCase);
+        ClearEmoteEditor();
+        RefreshEmotes();
+    }
+
+    private void ClearEmoteEditor()
+    {
+        _editingDraftId = null;
+        _pendingImagePath = null;
+        PendingImagePreview = null;
+        NewEmoteShortcode = "";
+        NewEmoteEmoji = "";
+    }
+
+    // Commit the staged library to the global store — called from Apply().
+    private void CommitEmotes() => Store.Commit(_stagedEmotes, _hiddenDefaults.ToList());
+
+    partial void OnEmoteFilterChanged(string value) => RefreshEmotes();
+
+    // Rebuild the row list: undefined imports (red) first, then staged custom, then the
+    // built-in defaults (active or hidden), filtered + alphabetical within each group.
+    private void RefreshEmotes()
+    {
+        var rows = new List<EmoteRowViewModel>();
+        var builtin = Game.Emotes.EmoteCatalog.BuiltIn.Shortcodes;
+        var stagedDefined = _stagedEmotes.Where(d => !string.IsNullOrEmpty(d.Shortcode))
+            .GroupBy(d => d.Shortcode, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (EmoteDraft d in _stagedEmotes.Where(d => string.IsNullOrEmpty(d.Shortcode)))
+            rows.Add(new EmoteRowViewModel("", isImage: true, "", Load(d.ImageSourcePath),
+                "Imported — needs a shortcode", "Remove", isRed: true, draftId: d.Id));
+
+        foreach ((string name, EmoteDraft d) in stagedDefined)
+        {
+            bool img = d.ImageSourcePath is not null;
+            string source = builtin.ContainsKey(name) ? "Custom (overrides default)" : "Custom";
+            rows.Add(new EmoteRowViewModel(name, img, img ? "" : d.Emoji ?? "", img ? Load(d.ImageSourcePath) : null,
+                source, "Remove", draftId: d.Id));
+        }
+
+        foreach ((string name, Game.Emotes.Emote e) in builtin)
+        {
+            if (stagedDefined.ContainsKey(name)) continue;   // overridden by a custom
+            bool hidden = _hiddenDefaults.Contains(name);
+            bool img = e.Kind == Game.Emotes.EmoteKind.Image;
+            rows.Add(new EmoteRowViewModel(name, img, img ? "" : e.Payload, img ? Load(e.Payload) : null,
+                hidden ? "Hidden (default)" : "Default", hidden ? "Restore" : "Remove"));
+        }
+
+        string filter = EmoteFilter.Trim();
+        IEnumerable<EmoteRowViewModel> filtered = filter.Length == 0
+            ? rows
+            : rows.Where(r => r.Shortcode.Contains(filter, StringComparison.OrdinalIgnoreCase));
+
+        UserEmotes.Clear();
+        foreach (EmoteRowViewModel r in filtered)
+            UserEmotes.Add(r);
+    }
+
+    // Click a row → load it into the editor to change it. A staged / imported row keeps
+    // its DraftId so "Add to emoji list" updates that same entry; a built-in default has
+    // none, so editing it creates a custom override.
+    partial void OnSelectedEmoteRowChanged(EmoteRowViewModel? value)
+    {
+        if (value is null) return;
+        _pendingImagePath = null;
+        PendingImagePreview = null;
+
+        if (value.DraftId is { } id && _stagedEmotes.FirstOrDefault(d => d.Id == id) is { } d)
+        {
+            _editingDraftId = d.Id;
+            NewEmoteShortcode = string.IsNullOrEmpty(d.Shortcode) ? d.SuggestedShortcode ?? "" : d.Shortcode;
+            if (d.ImageSourcePath is { } p) { _pendingImagePath = p; PendingImagePreview = Load(p); NewEmoteEmoji = ""; }
+            else NewEmoteEmoji = d.Emoji ?? "";
+        }
+        else
+        {
+            _editingDraftId = null;
+            NewEmoteShortcode = value.Shortcode;
+            NewEmoteEmoji = value.IsText ? value.PreviewText : "";   // an image default: pick a new image to override
+        }
+        EmoteStatus = "Editing — set an emoji or select an image, then Add to emoji list.";
+    }
+
+    // Pick an image for the emote being edited (staged, applied on Apply).
+    [RelayCommand]
+    private async Task SelectImageAsync()
+    {
+        if (HostWindow is not { } host) return;
+        IReadOnlyList<IStorageFile> picked = await host.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select emote image",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Images") { Patterns = new[] { "*.png", "*.gif", "*.jpg", "*.jpeg", "*.webp" } },
+                FilePickerFileTypes.All,
+            },
+        });
+        if (picked.Count == 0) return;
+        _pendingImagePath = picked[0].Path.LocalPath;
+        PendingImagePreview = Load(_pendingImagePath);
+        NewEmoteEmoji = "";
+        EmoteStatus = "Image selected — set a shortcode and Add to emoji list.";
+    }
+
+    // Commit the editor (shortcode + emoji or selected image) into the staged list.
+    [RelayCommand]
+    private void AddToEmojiList()
+    {
+        if (EmoteStore.NormalizeShortcode(NewEmoteShortcode) is not { } name)
+        { EmoteStatus = "Enter a shortcode using letters, digits, _ + or -."; return; }
+        bool hasImage = _pendingImagePath is not null;
+        bool hasEmoji = !string.IsNullOrWhiteSpace(NewEmoteEmoji);
+        if (!hasImage && !hasEmoji) { EmoteStatus = "Paste an emoji or select an image first."; return; }
+
+        EmoteDraft? target = _editingDraftId is { } id ? _stagedEmotes.FirstOrDefault(d => d.Id == id) : null;
+        target ??= _stagedEmotes.FirstOrDefault(d => string.Equals(d.Shortcode, name, StringComparison.OrdinalIgnoreCase));
+        if (target is null) { target = new EmoteDraft(); _stagedEmotes.Add(target); }
+
+        target.Shortcode = name;
+        target.SuggestedShortcode = null;
+        if (hasImage) { target.ImageSourcePath = _pendingImagePath; target.Emoji = null; }
+        else { target.Emoji = NewEmoteEmoji.Trim(); target.ImageSourcePath = null; }
+        _hiddenDefaults.Remove(name);   // defining a name un-hides any default of that name
+
+        MarkDirty();
+        ClearEmoteEditor();
+        EmoteStatus = $"Added :{name}: — Apply to save.";
+        RefreshEmotes();
+    }
+
+    // Remove an active emote (delete a custom, or hide a default) / restore a hidden one.
+    [RelayCommand]
+    private void RemoveEmote(EmoteRowViewModel? row)
+    {
+        if (row is null) return;
+        if (row.ActionLabel == "Restore")
+            _hiddenDefaults.Remove(row.Shortcode);
+        else if (row.DraftId is { } id && _stagedEmotes.FirstOrDefault(d => d.Id == id) is { } d)
+            _stagedEmotes.Remove(d);
+        else
+            _hiddenDefaults.Add(row.Shortcode);
+
+        MarkDirty();
+        ClearEmoteEditor();
+        RefreshEmotes();
+    }
+
+    [RelayCommand]
+    private async Task ExportEmotesAsync()
+    {
+        if (HostWindow is not { } host) return;
+        if (Store.Emotes.Count == 0) { EmoteStatus = "Nothing to export yet — add emotes and Apply first."; return; }
+        IStorageFile? file = await host.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export emote pack",
+            SuggestedFileName = "emotes.mudpack",
+            DefaultExtension = "mudpack",
+            FileTypeChoices = new[] { new FilePickerFileType("MudPlay emote pack") { Patterns = new[] { "*.mudpack", "*.zip" } } },
+        });
+        if (file is null) return;
+        EmoteStatus = Store.Export(file.Path.LocalPath)
+            ? $"Exported {Store.Emotes.Count} emote(s) (the last applied set)."
+            : "Export failed.";
+    }
+
+    // Import a .mudpack / zip (defined emotes, plus any loose images as undefined rows).
+    [RelayCommand]
+    private async Task ImportPackAsync()
+    {
+        if (HostWindow is not { } host) return;
+        IReadOnlyList<IStorageFile> picked = await host.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import emote pack or zip",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Emote pack / zip") { Patterns = new[] { "*.mudpack", "*.zip" } },
+                FilePickerFileTypes.All,
+            },
+        });
+        if (picked.Count == 0) return;
+        IReadOnlyList<EmoteDraft>? drafts = Store.ReadPackageDrafts(picked[0].Path.LocalPath, EmoteTempDir);
+        if (drafts is null) { EmoteStatus = "That file isn't a valid emote pack or zip."; return; }
+        StageImported(drafts);
+    }
+
+    // Import a folder of images — each becomes an undefined (red) row to name.
+    [RelayCommand]
+    private async Task ImportFolderAsync()
+    {
+        if (HostWindow is not { } host) return;
+        IReadOnlyList<IStorageFolder> folders = await host.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Import a folder of emote images",
+            AllowMultiple = false,
+        });
+        if (folders.Count == 0) return;
+        StageImported(Store.ReadFolderDrafts(folders[0].Path.LocalPath, EmoteTempDir));
+    }
+
+    private void StageImported(IReadOnlyList<EmoteDraft> drafts)
+    {
+        int defined = 0, undefined = 0;
+        foreach (EmoteDraft d in drafts)
+        {
+            if (!string.IsNullOrEmpty(d.Shortcode))
+            {
+                if (_stagedEmotes.FirstOrDefault(s => string.Equals(s.Shortcode, d.Shortcode, StringComparison.OrdinalIgnoreCase)) is { } existing)
+                    _stagedEmotes.Remove(existing);
+                _hiddenDefaults.Remove(d.Shortcode);
+                defined++;
+            }
+            else undefined++;
+            _stagedEmotes.Add(d);
+        }
+        MarkDirty();
+        RefreshEmotes();
+        EmoteStatus = undefined > 0
+            ? $"Imported {defined + undefined}; {undefined} need a shortcode (red) — click each to name it, then Apply."
+            : $"Imported {defined} emote(s) — Apply to save.";
+    }
+
     private static IReadOnlyList<FontSizeOption> BuildConvoFontSizes()
     {
         double[] sizes = { 10, 11, 12, 13, 14, 16, 18, 20 };
@@ -202,6 +481,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
             ConvoShowYell       = existing.ConvoShowYell,
             ConvoShowRealmEvent = existing.ConvoShowRealmEvent,
             ConvoAutoScroll     = existing.ConvoAutoScroll,
+            ConvoShowEmotes     = ConvoShowEmotes,
         };
 
         profile.Settings ??= new();
@@ -209,6 +489,10 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
         _profile.Save();
 
         ApplyToServices(dto);
+        // Commit the staged emote library to the global store (writes disk + republishes
+        // to the conversation window). Emotes are global, so this is separate from the
+        // per-character Talk DTO above.
+        CommitEmotes();
         ClearDirty();
     }
 
@@ -217,6 +501,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
         _suppressDirty = true;
         LoadFromProfile();
         _suppressDirty = false;
+        HydrateEmotes();   // drop staged emote edits, reload the committed set
         ClearDirty();
     }
 
@@ -252,6 +537,8 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
                             ?? ConvoFontOptions[0];
         SelectedConvoFontSize = ConvoFontSizeOptions.FirstOrDefault(o => o.Value == dto.ConvoFontSize)
                                 ?? ConvoFontSizeOptions.First(o => o.Value == DefaultConvoFontSize);
+        ConvoShowEmotes = dto.ConvoShowEmotes;
+        HydrateEmotes();
         foreach (ChannelColorRowViewModel row in ChannelColorRows)
         {
             ChannelColor? co = null;
@@ -318,6 +605,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
         AppServices.Current.Display.ConvoFontFamily = dto.ConvoFont ?? "";
         AppServices.Current.Display.ConvoFontSize = dto.ConvoFontSize;
         AppServices.Current.Display.ConvoChannelColors = dto.ChannelColors;
+        AppServices.Current.Display.ConvoShowEmotes = dto.ConvoShowEmotes;
     }
 
     // ----- IsDirty plumbing -----
@@ -343,6 +631,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     partial void OnLogMaxLinesChanged(int value)                      => MarkDirty();
     partial void OnSelectedConvoFontChanged(FontFamilyOption? value)  => MarkDirty();
     partial void OnSelectedConvoFontSizeChanged(FontSizeOption? value) => MarkDirty();
+    partial void OnConvoShowEmotesChanged(bool value)                 => MarkDirty();
 
     private void MarkDirty()
     {

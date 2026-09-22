@@ -62,6 +62,9 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // / MetaFontSize are the DIP equivalents Avalonia actually renders.
     private double _messagePointSize = DefaultMessageFontSize;
     public double MessageFontSize => _messagePointSize * PointToPixel;
+    // Fixed line height for message rows so an emoji glyph or an inline emote image
+    // doesn't make its row taller than a plain-text row (emote images are sized under it).
+    public double MessageLineHeight => MessageFontSize * 1.45;
     // Timestamp / channel-tag / speaker sit one point smaller than the message
     // body — take the point off BEFORE the DIP conversion so the gap stays a
     // true point, not ~0.75pt.
@@ -139,6 +142,77 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         // its underlying collection's events.
         ((INotifyCollectionChanged)_history.Entries).CollectionChanged += OnHistoryChanged;
         _commands.Changed += OnCommandsChanged;
+        // Re-render when the user's emote set changes (add / remove / import) so the
+        // open window reflects new emotes without a reopen.
+        MudPlay.Game.Emotes.EmoteRuntime.Changed += OnEmotesChanged;
+    }
+
+    private void OnEmotesChanged() => Rebuild();
+
+    // ----- ":" emote picker (Discord-style autocomplete in the input box) -----
+
+    public ObservableCollection<EmoteSuggestionViewModel> EmoteSuggestions { get; } = new();
+
+    [ObservableProperty] private bool _isEmotePickerOpen;
+    [ObservableProperty] private int _selectedEmoteIndex = -1;
+
+    // Recompute suggestions for the ":partial" token at the caret. Closes the picker
+    // when there's no active token or nothing matches. Driven by the input's TextChanged.
+    public void UpdateEmotePicker(string? text, int caret)
+    {
+        if (Game.Emotes.EmoteInputCompleter.FindActiveToken(text, caret) is not { } token)
+        {
+            CloseEmotePicker();
+            return;
+        }
+
+        IReadOnlyList<string> names = Game.Emotes.EmoteInputCompleter.Suggest(
+            token.Partial, Game.Emotes.EmoteRuntime.Scanner.Catalog.Shortcodes.Keys);
+        if (names.Count == 0)
+        {
+            CloseEmotePicker();
+            return;
+        }
+
+        EmoteSuggestions.Clear();
+        foreach (string name in names)
+        {
+            Game.Emotes.EmoteRuntime.Scanner.Catalog.TryGetShortcode(name, out Game.Emotes.Emote e);
+            bool isImage = e.Kind == Game.Emotes.EmoteKind.Image;
+            EmoteSuggestions.Add(new EmoteSuggestionViewModel(
+                name, isImage, isImage ? "" : e.Payload,
+                isImage ? Views.ConversationMessageInlines.LoadEmoteBitmap(e.Payload) : null));
+        }
+        SelectedEmoteIndex = 0;
+        IsEmotePickerOpen = true;
+    }
+
+    public void MoveEmoteSelection(int delta)
+    {
+        if (!IsEmotePickerOpen || EmoteSuggestions.Count == 0) return;
+        int n = EmoteSuggestions.Count;
+        SelectedEmoteIndex = ((SelectedEmoteIndex + delta) % n + n) % n;
+    }
+
+    // Splice the selected (or a named) suggestion into text as ":name: ". Returns the new
+    // text + caret, or null when there's no active token / selection.
+    public (string Text, int Caret)? AcceptEmote(string? text, int caret, string? shortcode = null)
+    {
+        if (text is null) return null;
+        if (Game.Emotes.EmoteInputCompleter.FindActiveToken(text, caret) is not { } token) return null;
+        string? name = shortcode
+            ?? (SelectedEmoteIndex >= 0 && SelectedEmoteIndex < EmoteSuggestions.Count
+                ? EmoteSuggestions[SelectedEmoteIndex].Shortcode : null);
+        if (name is null) return null;
+        CloseEmotePicker();
+        return Game.Emotes.EmoteInputCompleter.Apply(text, token, caret, name);
+    }
+
+    public void CloseEmotePicker()
+    {
+        if (EmoteSuggestions.Count > 0) EmoteSuggestions.Clear();
+        SelectedEmoteIndex = -1;
+        IsEmotePickerOpen = false;
     }
 
     private void OnHistoryChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -344,6 +418,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         RowFontFamily = ResolveFont(_app, _display.ConvoFontFamily);
         _messagePointSize = _display.ConvoFontSize > 0 ? _display.ConvoFontSize : DefaultMessageFontSize;
         OnPropertyChanged(nameof(MessageFontSize));
+        OnPropertyChanged(nameof(MessageLineHeight));
         OnPropertyChanged(nameof(MetaFontSize));
     }
 
@@ -377,7 +452,16 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         {
             ApplyColorsFromDisplay();
         }
+        else if (e.PropertyName == nameof(DisplayConfig.ConvoShowEmotes))
+        {
+            OnPropertyChanged(nameof(EmotesEnabled));
+        }
     }
+
+    // Whether the rows substitute emoji / emote shortcodes — bound by the row template's
+    // ConversationMessageInlines.EmotesEnabled attached property. Sourced from the live
+    // Display channel so a Settings -> Talk Apply re-renders the open window at once.
+    public bool EmotesEnabled => _display.ConvoShowEmotes;
 
     private static IBrush LookupBrush(Application app, string key)
         => app.TryGetResource(key, null, out object? v) && v is IBrush b ? b : Brushes.Gray;
@@ -459,5 +543,6 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         ((INotifyCollectionChanged)_history.Entries).CollectionChanged -= OnHistoryChanged;
         _commands.Changed -= OnCommandsChanged;
         _display.PropertyChanged -= OnDisplayChanged;
+        MudPlay.Game.Emotes.EmoteRuntime.Changed -= OnEmotesChanged;
     }
 }
