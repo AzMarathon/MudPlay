@@ -29,6 +29,45 @@ public partial class MainWindow : Window
     // the prompt would appear over a dying app AND swallow the save below it.
     public void MarkExitConfirmed() => _exitConfirmed = true;
 
+    // The free-floating first-run setup card (shown left of the main window).
+    private FirstRunTutorialWindow? _tutorialWindow;
+
+    // Show / hide the floating tour card as the tour activates / deactivates.
+    private void UpdateTutorialWindow(MainWindowViewModel mvm)
+    {
+        if (mvm.Tutorial.IsActive)
+        {
+            if (_tutorialWindow is null)
+            {
+                _tutorialWindow = new FirstRunTutorialWindow { DataContext = mvm.Tutorial };
+                _tutorialWindow.Closed += (_, _) => _tutorialWindow = null;
+                _tutorialWindow.Show(this);   // owned by main → closes with it
+                Activate();                   // keep keyboard focus on the terminal
+                Dispatcher.UIThread.Post(PositionTutorialWindow, DispatcherPriority.Background);
+            }
+            else
+            {
+                PositionTutorialWindow();
+            }
+        }
+        else
+        {
+            _tutorialWindow?.Close();
+            _tutorialWindow = null;
+        }
+    }
+
+    // Park the card just off the main window's left edge, top-aligned. Physical
+    // pixels (Position is screen space), so the fixed 300-DIP width is scaled.
+    private void PositionTutorialWindow()
+    {
+        if (_tutorialWindow is null) return;
+        double scaling = _tutorialWindow.DesktopScaling;
+        int w = (int)System.Math.Round(300 * scaling);
+        int gap = (int)System.Math.Round(8 * scaling);
+        _tutorialWindow.Position = new PixelPoint(Position.X - w - gap, Position.Y);
+    }
+
     public MainWindow()
     {
         InitializeComponent();
@@ -98,18 +137,34 @@ public partial class MainWindow : Window
             // over Avalonia's default initial focus assignment.
             Dispatcher.UIThread.Post(() => Terminal.Focus());
 
-            // First-run setup tour. Register the force-show hook (Help menu + the
-            // Program Log test button reach it here), then auto-show it when a
-            // brand-new install is still missing a prerequisite and the user hasn't
-            // dismissed it.
+            // First-run setup tour. The step card is a free-floating window shown
+            // to the LEFT of the main window (never over the terminal); show/hide
+            // it as the tour activates, and keep it glued to our left edge as we
+            // move. Register the force-show hook (Help = real outstanding steps,
+            // Program Log test button = demo), then auto-show when a brand-new
+            // install is still missing a prerequisite and it hasn't been dismissed.
             if (DataContext is MainWindowViewModel mvm)
             {
-                AppServices.Current.StartFirstRunTutorial = () =>
+                mvm.Tutorial.PropertyChanged += (_, ev) =>
+                {
+                    if (ev.PropertyName == nameof(FirstRunTutorialViewModel.IsActive))
+                        UpdateTutorialWindow(mvm);
+                };
+                PositionChanged += (_, _) => PositionTutorialWindow();
+
+                // Menu-open signals tick the tour's "open the … menu" checklist
+                // lines and advance the highlight.
+                FileMenu.SubmenuOpened += (_, _) => mvm.Tutorial.NotifyMenuOpened("File");
+                GameDataMenu.SubmenuOpened += (_, _) => mvm.Tutorial.NotifyMenuOpened("GameData");
+
+                AppServices.Current.StartFirstRunTutorial = demo =>
                     Dispatcher.UIThread.Post(() =>
                     {
                         Activate();
-                        mvm.Tutorial.Start();
+                        if (demo) mvm.Tutorial.StartDemo();
+                        else mvm.Tutorial.Start();
                     });
+
                 bool dismissed = AppServices.Current.Settings.Current.FirstRunTutorialDismissed;
                 bool missing = mvm.Tutorial.AnyPrerequisiteMissing;
                 if (!dismissed && missing)

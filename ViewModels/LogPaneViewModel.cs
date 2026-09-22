@@ -381,12 +381,12 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
         LogTotalCount = 0;
     }
 
-    // Force-show the first-run setup tour — a test affordance so it can be
-    // reviewed without wiping the install's profiles / BBSes / game data. Bypasses
-    // the missing-prerequisite + dismissed gates via the main window's hook.
+    // Force-show the first-run setup tour in DEMO mode — every step as if nothing
+    // is configured, so it can be walked end-to-end without wiping the install's
+    // profiles / BBSes / game data.
     [RelayCommand]
     private static void RunFirstRunTutorial()
-        => Services.AppServices.Current.StartFirstRunTutorial?.Invoke();
+        => Services.AppServices.Current.StartFirstRunTutorial?.Invoke(true);
 
     private static Dictionary<LogSeverity, IBrush> BuildSeverityBrushMap(Application app)
     {

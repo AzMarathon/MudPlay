@@ -2,9 +2,9 @@
 
 ## 3.103.0
 
-- New **first-run setup tour**: on a fresh install (no BBS, no character, or no game data) a guided panel auto-shows on the left of the terminal (not over it) and rings the exact menu to click for each missing step, with terse "click here → fill in → OK" cards and Back/Next
-- Steps in order — add a BBS (Profile Management → Add BBS → host/port → OK), add a character, import a game-data .mdb — only the ones you're missing show (plus a final Connect); each shows a check once done and the tour auto-advances as you finish tasks
-- Dismiss with "Skip — don't show this again" (never auto-shows again); replay any time from Help → First-time setup, or the Program Log's "Run setup tutorial" test button
+- New **first-run setup tour**: on a fresh install (no BBS, no character, or no game data) a guided card floats just left of the main window (never covering or shrinking the terminal) and rings the exact menu to click; each step is a checklist whose lines tick off (☑) and highlight the next click as you go
+- Steps in order — add a BBS (Profile Management → Add BBS → host/port → OK), add a character, import a game-data .mdb — only the ones you're missing show (plus a final Connect); each step advances on its own once done, or Back/Next to move manually
+- Dismiss with "Skip — don't show this again" (never auto-shows again); replay your real outstanding steps from Help → First-time setup, or walk the whole thing as a demo (as if nothing were configured) from the Program Log's "Run setup tutorial" button
 
 ## 3.102.0
 

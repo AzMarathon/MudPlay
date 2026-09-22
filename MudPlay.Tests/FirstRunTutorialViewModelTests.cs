@@ -98,6 +98,56 @@ public sealed class FirstRunTutorialViewModelTests
     }
 
     [Fact]
+    public void StartDemo_ShowsAllStepsEvenWhenFullyConfigured()
+    {
+        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        f.GameData = f.Bbs = f.Character = f.Connected = true;   // nothing missing
+        vm.StartDemo();
+        Assert.True(vm.IsActive);
+        Assert.Equal("Add a BBS", vm.CurrentTitle);       // never leads with Connect
+        Assert.Equal("Step 1 of 4", vm.StepCounterText);
+        Assert.False(vm.CurrentIsDone);                    // pretends not-done
+    }
+
+    [Fact]
+    public void StartDemo_FinishDoesNotPersistDismiss()
+    {
+        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        f.GameData = f.Bbs = f.Character = true;
+        vm.StartDemo();
+        vm.SkipCommand.Execute(null);
+        Assert.False(vm.IsActive);
+        Assert.False(f.Dismissed);   // a demo run must not suppress the real tour
+    }
+
+    [Fact]
+    public void NotifyMenuOpened_TicksMenuLine_AndAdvancesHighlight()
+    {
+        (FirstRunTutorialViewModel vm, _) = Make();   // all missing → starts at Add a BBS
+        vm.Start();
+        var before = vm.CurrentSubs;
+        Assert.False(before[0].IsDone);
+        Assert.True(before[0].IsCurrent);             // first line highlighted
+
+        vm.NotifyMenuOpened("File");
+
+        var after = vm.CurrentSubs;
+        Assert.True(after[0].IsDone);                 // "File → Profile Management" ticked
+        Assert.False(after[0].IsCurrent);
+        Assert.True(after[1].IsCurrent);              // highlight moved to the next line
+    }
+
+    [Fact]
+    public void NotifyMenuOpened_Ignored_ForUnrelatedMenu()
+    {
+        (FirstRunTutorialViewModel vm, _) = Make();
+        vm.Start();                                   // Add a BBS (its line 1 keys off "File")
+        vm.NotifyMenuOpened("GameData");
+        Assert.False(vm.CurrentSubs[0].IsDone);       // wrong menu doesn't tick it
+        Assert.True(vm.CurrentSubs[0].IsCurrent);
+    }
+
+    [Fact]
     public void Skip_DismissesPermanently()
     {
         (FirstRunTutorialViewModel vm, Flags f) = Make();

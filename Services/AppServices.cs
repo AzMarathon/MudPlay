@@ -857,11 +857,13 @@ public sealed class AppServices
     public ConnectionSnapshot Connection
         => _connectionProvider?.Invoke() ?? new ConnectionSnapshot(false, false, false);
 
-    // Force-show the first-run setup tour from anywhere (Help menu, the Program
-    // Log's test button), bypassing the missing-prerequisite + dismissed gates.
-    // MainWindow wires this on open to raise itself and Start() the overlay; null
-    // before the window exists. Invoke on the UI thread.
-    public Action? StartFirstRunTutorial { get; set; }
+    // Force-show the first-run setup tour from anywhere, bypassing the
+    // missing-prerequisite + dismissed gates. The bool is demo mode: true (the
+    // Program Log test button) shows every step as if nothing is configured;
+    // false (Help → First-time setup) replays the user's real outstanding steps.
+    // MainWindow wires this on open; null before the window exists. Invoke on the
+    // UI thread.
+    public Action<bool>? StartFirstRunTutorial { get; set; }
 
     private void ApplyLocalApiFromGlobalSettings()
         => LocalApi.ApplySettings(Settings.Current.LocalApiEnabled, Settings.Current.LocalApiPort);

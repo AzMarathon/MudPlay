@@ -4,13 +4,13 @@ New to MudPlay? Here's the short path from launch to playing — and where the r
 
 ## First-time setup tour
 
-On a brand-new install — no BBS, no character, or no game data imported yet — a **guided setup tour** appears in a panel on the **left of the terminal** (it doesn't cover it), and **rings the exact menu** to click for the current step. Short "click here → fill this in → OK" cards, with **Back / Next**. Only the steps you're missing show (plus a final **Connect**); each shows a check once done, and finishing a task jumps the tour forward on its own. The usual order:
+On a brand-new install — no BBS, no character, or no game data imported yet — a **guided setup tour** appears in a small **floating card just left of the main window** (it never covers or shrinks the terminal), and **rings the exact menu** to click. Each step is a short **checklist** — as you do each line it **ticks off (☑) and the next line highlights**, and when the step's done the tour advances on its own. **Back / Next** move between steps. Only the steps you're missing show (plus a final **Connect**). The usual order:
 
 1. **Add a BBS** — File → Profile Management → **Add BBS**. That opens Settings; fill in the host/IP + port and click **OK**.
 2. **Add a character** — back in Profile Management, add a character under your BBS, name it, and **Save**.
 3. **Import game data** — Game Data → **Import .mdb**, then pick your MajorMUD `.mdb` file. That's all it takes — it's what the automation reads from.
 
-Don't want it? Click **Skip — don't show this again** and it won't return on launch. You can replay it any time from **Help → First-time setup…**. The rest of this page is the same ground at your own pace.
+Don't want it? Click **Skip — don't show this again** and it won't return on launch. You can replay your own outstanding steps any time from **Help → First-time setup…**, or walk the whole thing as a demo (as if nothing were set up) from the **Program Log → "Run setup tutorial"** button. The rest of this page is the same ground at your own pace.
 
 ## What MudPlay is
 
