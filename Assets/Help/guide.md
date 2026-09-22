@@ -582,7 +582,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@atkprio 3 Fujin` — Target Priority: attack-what-player Fujin (`1` = Default, `2` = follow-leader)
 - `@atkorder 4 Suijin` — Attack Order: attack after Suijin (`1`–`3` and `5` are the fixed orders)
 - `@divert Raijin` — forward your incoming telepaths to Raijin (bare `@divert` stops)
-- `@dupe Moron` — copy the sender's query and roomba permissions onto Moron (Elevated; once per player; telepath / gangpath only)
+- `@dupe Moron` — copy the sender's query, roomba, and quest permissions onto Moron (Elevated; once per player; telepath / gangpath only)
 - `@profile 2` · `@profile backstab` — swap combat profile by number or name
 - `@kill goblin shaman` — retarget your combat onto that monster this round
 - `@trap north` — search and disarm a trap that way (`@trap stop` aborts)
@@ -653,8 +653,8 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 
 ### Hand out permissions
 
-- `@dupe <player>` — copies **the sender's query and roomba permissions** onto that player, so a trusted player can bring an alt up to speed without you ticking every box. It hands out trust, so it needs the **Elevated Commands** grant — the same top tier as `@suicide`. A player you've granted "All" has it; a player with every category *except* Elevated does not.
-  - **Only queries move.** The categories it can copy are Query version, experience, health/status, location, inventory, boss timers, deaths, and Query Roomba. Nothing that acts on your character (move, execute, alter settings, request invite, hangup, divert) and **never Elevated Commands** — so a duplicated player can't `@dupe` onward, and gaining anything beyond queries stays a manual step you take in the Players tab.
+- `@dupe <player>` — copies **the sender's query, roomba, and quest permissions** onto that player, so a trusted player can bring an alt up to speed without you ticking every box. It hands out trust, so it needs the **Elevated Commands** grant — the same top tier as `@suicide`. A player you've granted "All" has it; a player with every category *except* Elevated does not.
+  - **Only queries move.** The categories it can copy are Query version, experience, health/status, location, inventory, boss timers, deaths, Query Roomba, and Query quests. Nothing that acts on your character (move, execute, alter settings, request invite, hangup, divert) and **never Elevated Commands** — so a duplicated player can't `@dupe` onward, and gaining anything beyond queries stays a manual step you take in the Players tab.
   - **One use per player.** Each Elevated player can `@dupe` once. After that it's refused ("your @dupe has already been used") until **you** re-arm it: open that player in **Game Data Browser → Players**, and under **Elevated Commands** press **Reset @dupe**. The dialog shows when it was spent and who it went to. Nothing sent over chat can reset it. A refused or no-op attempt (unknown name, the target already holds everything) doesn't spend the use.
   - **Telepath and gangpath only.** Said aloud in a room, or sent as a gossip, auction, broadcast, or yell, it's ignored outright (no reply), and the Local control API can't run it.
   - **Additive.** The target keeps anything they already have and only gains; it never takes a permission away, and it only moves the permission grid, not the target's party behaviours or notes.

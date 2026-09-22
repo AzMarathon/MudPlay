@@ -4,9 +4,9 @@ using MudPlay.Services;
 namespace MudPlay.Game.Remote;
 
 // The @dupe <player> command (SysopCommands, i.e. Elevated Commands). Lets a trusted
-// player bring an alt up to speed with one telepath: it copies the sender's QUERY and
-// @roomba permissions onto the named player. It rewrites who is trusted, which is why
-// only Elevated senders may use it, and why it is fenced in three ways.
+// player bring an alt up to speed with one telepath: it copies the sender's QUERY,
+// @roomba, and @quest permissions onto the named player. It rewrites who is trusted,
+// which is why only Elevated senders may use it, and why it is fenced in three ways.
 //
 //   - Narrow. Only the categories in Shareable move. Nothing that acts on the
 //     character (move, @do, settings, invites, hangup, divert) and never Elevated
@@ -32,8 +32,9 @@ namespace MudPlay.Game.Remote;
 // RemoteCommandCatalog.IsPathChannelOnly, before this handler runs.
 public sealed class DupeHandler : IDisposable
 {
-    // The read-only query categories plus @roomba (QueryItemLocation). Widening this
-    // widens what any Elevated player can hand out without the user's say-so.
+    // The read-only query categories plus @roomba (QueryItemLocation) and @quest
+    // (QueryQuests). Widening this widens what any Elevated player can hand out
+    // without the user's say-so.
     internal const PlayerRemoteControls Shareable =
         PlayerRemoteControls.QueryVersion
         | PlayerRemoteControls.QueryExperience
@@ -42,7 +43,8 @@ public sealed class DupeHandler : IDisposable
         | PlayerRemoteControls.QueryInventory
         | PlayerRemoteControls.QueryBossTimers
         | PlayerRemoteControls.QueryDeaths
-        | PlayerRemoteControls.QueryItemLocation;
+        | PlayerRemoteControls.QueryItemLocation
+        | PlayerRemoteControls.QueryQuests;
 
     private readonly RemoteCommandManager _engine;
     private readonly PlayerDatabase _players;
@@ -117,13 +119,13 @@ public sealed class DupeHandler : IDisposable
         PlayerRemoteControls shareable = source.RemoteControls & Shareable;
         if (shareable == PlayerRemoteControls.None)
         {
-            Refuse(ctx, "you have no query or roomba permissions to copy");
+            Refuse(ctx, "you have no query, roomba, or quest permissions to copy");
             return;
         }
         PlayerRemoteControls gained = shareable & ~dest.RemoteControls;
         if (gained == PlayerRemoteControls.None)
         {
-            ctx.Reply($"{dest.GivenName} already has all your query and roomba permissions");
+            ctx.Reply($"{dest.GivenName} already has all your query, roomba, and quest permissions");
             return;
         }
 
@@ -141,7 +143,7 @@ public sealed class DupeHandler : IDisposable
         _log?.Log(LogSeverity.Info, "RemoteCmd",
             $"@dupe from {ctx.Sender} onto {dest.GivenName}: granted {gained} (now {merged}). "
             + $"{ctx.Sender}'s @dupe is spent until reset in the Players tab.");
-        ctx.Reply($"{dest.GivenName} now has your query and roomba permissions");
+        ctx.Reply($"{dest.GivenName} now has your query, roomba, and quest permissions");
     }
 
     // Failure replies obey the WarnOnDenial master gate (remote-command reply policy);

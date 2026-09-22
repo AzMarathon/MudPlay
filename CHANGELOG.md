@@ -5,6 +5,7 @@
 - New `@quest` remote command (gated by a new **Query quests** per-player permission): bare `@quest` lists every quest with a marked-complete band; `@quest <name|flag>` reports one quest's marked bands by ordinal (e.g. `Good align 1, 2, 3 marked complete`)
 - On Paradigm — or a stock board where the sender's character has sys-god access — `@quest <name|flag>` also reads the live quest flag off the game and appends its step (e.g. `Abil: 126 step 16`); on stock without sys-god it reports the marked state only
 - Names resolve by flag number, the quest's name, the ability name (`goodquest`), or a built-in alias (`good align` / `neutral` / `evil` → 126/127/128)
+- `@dupe` now also copies the **Query quests** permission along with the other query/roomba categories
 
 ## 3.98.2
 
