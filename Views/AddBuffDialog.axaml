@@ -47,8 +47,8 @@
                        Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
             <NumericUpDown Grid.Column="1" HorizontalAlignment="Left" Width="120"
                            Value="{Binding RecastMarginSec, Mode=TwoWay}"
-                           Minimum="0" Maximum="999" Increment="1" FormatString="0"
-                           ToolTip.Tip="Recast when within this many seconds of expiring. 0 = wait for actual expiry."/>
+                           Minimum="-999" Maximum="999" Increment="1" FormatString="0"
+                           ToolTip.Tip="Recast when within this many seconds of expiring. 0 = wait for actual expiry. NEGATIVE lets the buff lapse first — e.g. -30 recasts 30s AFTER it wears off (a 60s buff every 90s), to spread out mana use. The watchdog bar shows the post-expiry wait in red."/>
         </Grid>
 
         <!-- Per-slot conditions. The dark / reroll rows adapt to the picked spell. -->

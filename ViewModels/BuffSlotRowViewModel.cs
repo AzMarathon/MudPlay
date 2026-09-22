@@ -126,7 +126,9 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     {
         get
         {
-            string s = $" - {RecastMarginSec}s";
+            // Negative margin = recast that many seconds AFTER wear-off (a deliberate lapse
+            // to spread mana); show it as "+Ns after" rather than a bare "-Ns".
+            string s = RecastMarginSec < 0 ? $" - +{-RecastMarginSec}s after" : $" - {RecastMarginSec}s";
             if (_dto.OnlyWhenHpFull) s += " · HP full";
             if (_dto.OnlyWhenMaFull) s += " · MA full";
             return s;

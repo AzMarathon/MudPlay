@@ -175,7 +175,9 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         if (!CanAdd) return;
         CloseRequested?.Invoke(new AddBuffResult(
             Spell!.Trim(),
-            Math.Clamp(RecastMarginSec, 0, 999),
+            // Negative = recast AFTER wear-off (lapse |margin| seconds first), to spread
+            // out mana use; positive = recast that many seconds before expiry.
+            Math.Clamp(RecastMarginSec, -999, 999),
             OnlyWhenHpFull,
             OnlyWhenMaFull,
             IsLightSpell && OnlyWhenDark,

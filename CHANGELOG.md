@@ -1,5 +1,11 @@
 # Version history
 
+## 3.100.2
+
+- Player Workshop → Character Info: keys on the key-ring now show their remaining charges (e.g. `black serpent key - 17 Charges`), matching the readout other limited-use items already carry
+- Buff "recast (s)" now accepts **negative** values — a negative recasts the buff that many seconds *after* it wears off (e.g. `-30` on a 60s buff recasts every 90s), letting it lapse on purpose to spread out mana use
+- The Buff Watchdog bar shows the post-expiry wait as a **red** extension past the green: the reserved buffer is visible (dim red) even while the buff is up, and fills (bright red) through the wait until recast; the label reads "expired · recast in Ns"
+
 ## 3.100.0
 
 - Conversation window now renders emoji / emotes: `:lol:` / `:)` / `:(` and a broad set of common shortcodes become Unicode emoji, and a bundled Pepe image-emote set (`:sadge:`, `:copium:`, `:monkas:`, `:prayge:`, …) renders inline as pictures

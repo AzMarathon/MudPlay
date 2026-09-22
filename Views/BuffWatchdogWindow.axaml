@@ -413,9 +413,16 @@
                                                                 <Grid.ColumnDefinitions>
                                                                     <ColumnDefinition Width="{Binding FillStar}"/>
                                                                     <ColumnDefinition Width="{Binding FillRestStar}"/>
+                                                                    <ColumnDefinition Width="{Binding RedStar}"/>
+                                                                    <ColumnDefinition Width="{Binding RedRestStar}"/>
                                                                 </Grid.ColumnDefinitions>
+                                                                <!-- Green: time still up. -->
                                                                 <Border Grid.Column="0" Classes="BuffFill"
                                                                         Classes.recast="{Binding InRecastWindow}"/>
+                                                                <!-- Negative-margin lapse buffer: bright red = wait consumed,
+                                                                     dim red = reserved buffer (shown even while the buff is up). -->
+                                                                <Border Grid.Column="2" Background="{StaticResource AccentRedBrush}"/>
+                                                                <Border Grid.Column="3" Background="#40FF5555"/>
                                                             </Grid>
                                                             <Grid IsVisible="{Binding ShowRecastMarker}">
                                                                 <Grid.ColumnDefinitions>

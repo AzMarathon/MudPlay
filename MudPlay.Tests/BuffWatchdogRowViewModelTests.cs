@@ -104,4 +104,52 @@ public sealed class BuffWatchdogRowViewModelTests
         Assert.True(row.IsActive);
         Assert.Equal("2m 30s", row.TimeText);
     }
+
+    // ----- Negative recast margin (recast AFTER wear-off; red lapse bar) -----
+
+    [Fact]
+    public void NegativeMargin_StillUp_ReservedRedBufferVisible()
+    {
+        // 60s buff, margin -30 (recast 30s after expiry) → bar spans 90s. 30s in
+        // (30s remaining): green consumed 30/90, green remaining 30/90, no red YET
+        // consumed, but the reserved red buffer (30/90) IS shown so you can see it.
+        BuffWatchdogRowViewModel row = NewRow();
+        row.Update(new ActiveBuffTimer("", "mshi", T0.AddSeconds(60), -30, 60), T0.AddSeconds(30));
+
+        Assert.True(row.IsActive);
+        Assert.Equal(30.0 / 90.0, row.FillStar.Value, 3);      // green consumed
+        Assert.Equal(30.0 / 90.0, row.FillRestStar.Value, 3);  // green remaining (dark)
+        Assert.Equal(0.0, row.RedStar.Value, 3);               // no lapse consumed yet
+        Assert.Equal(30.0 / 90.0, row.RedRestStar.Value, 3);   // reserved red buffer visible
+        Assert.False(row.InRecastWindow);
+        Assert.False(row.ShowRecastMarker);
+        Assert.Equal("30s", row.TimeText);
+    }
+
+    [Fact]
+    public void NegativeMargin_Expired_RedGrows_NotYetDue()
+    {
+        // 15s past expiry (remaining -15): green fills the 60s (60/90), red fills the
+        // lapse so far (15/90); recast (remaining <= -30) not yet reached.
+        BuffWatchdogRowViewModel row = NewRow();
+        row.Update(new ActiveBuffTimer("", "mshi", T0.AddSeconds(60), -30, 60), T0.AddSeconds(75));
+
+        Assert.Equal(60.0 / 90.0, row.FillStar.Value, 3);
+        Assert.Equal(15.0 / 90.0, row.RedStar.Value, 3);
+        Assert.False(row.InRecastWindow);
+        Assert.Contains("recast in 15s", row.TimeText);
+    }
+
+    [Fact]
+    public void NegativeMargin_ReachesRecast_RedFull_Due()
+    {
+        // At |margin| past expiry (remaining -30): red fills the rest and recast is due.
+        BuffWatchdogRowViewModel row = NewRow();
+        row.Update(new ActiveBuffTimer("", "mshi", T0.AddSeconds(60), -30, 60), T0.AddSeconds(90));
+
+        Assert.Equal(60.0 / 90.0, row.FillStar.Value, 3);
+        Assert.Equal(30.0 / 90.0, row.RedStar.Value, 3);
+        Assert.Equal(0.0, row.FillRestStar.Value, 3);
+        Assert.True(row.InRecastWindow);
+    }
 }
