@@ -95,10 +95,13 @@ public static class ConversationMessageInlines
         if (seg.Kind == EmoteSegmentKind.Image && seg.Payload is { } uri
             && EmoteImages.Get(uri) is { } bmp)
         {
-            double h = host.FontSize > 0 ? host.FontSize * 1.5 : 18;
+            // Fit inside the row's line box (~font * 1.45) so an emote never grows the
+            // row taller than plain text. Square box → uniform footprint for all emotes.
+            double h = host.FontSize > 0 ? host.FontSize * 1.3 : 16;
             var img = new Image
             {
                 Source = bmp,
+                Width = h,
                 Height = h,
                 Stretch = Stretch.Uniform,
                 VerticalAlignment = VerticalAlignment.Center,

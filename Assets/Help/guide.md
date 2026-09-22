@@ -2837,15 +2837,29 @@ Settings → Talk.
 
 ### Custom emotes
 
-Under the toggle, the **Custom emotes** area lists every emote — the built-in ones **and** your own — with a filter box to find one fast. You can:
+Under the toggle, the **Custom emotes** area lists **every** emote — the built-in ones and your own — with a filter box. This is a **global, all-characters** library (not part of any one character's profile), and — like the rest of this tab — edits only take effect when you press **Apply / OK**; **Cancel** discards them.
 
-- **Define your own.** Type a **shortcode**, then either paste an **emoji** into the emoji box and click **Add emoji** (the little preview shows what it'll look like), or click **Add image…** to pick a picture file (PNG / GIF / JPG). It renders inline wherever someone types `:yourcode:`.
-- **Override a default.** Add a custom emote with the same shortcode as a built-in one — the row is tagged *"Custom (overrides default)"*. **Remove** it to fall back to the default again.
-- **Share a set.** **Export set…** writes a single `.mudemotes` package (your shortcodes + their images) you can hand to a friend; **Import pack…** merges one you were given.
+**Define your own.** Type a **shortcode**, then set its value one of two ways:
 
-Custom emotes save **immediately** (they're a personal, all-characters library — no Apply needed), and they live under your app-data **Emotes** folder.
+- **An emoji** — paste an emoji character into the emoji box (from your OS emoji keyboard). The little preview shows what it'll look like. If pasted emoji show **blank**, your system is missing a colour-emoji font (Linux: install Noto Color Emoji) — use an image emote instead.
+- **An image** — click **Select image…** and pick a picture (PNG / GIF / JPG); it's scaled to a uniform size.
 
-**The `:` picker.** In the Conversation window's input box, type `:` followed by a couple of letters and a **suggestion popup** flies out (built-ins + your own). **↑ / ↓** move the selection, **Enter** or **Tab** inserts the highlighted one, a **click** picks it, and **Esc** dismisses.
+Then click **Add to emoji list**. It renders inline wherever someone types `:yourcode:`.
+
+**Change or remove.** **Click any row** to load it into the editor (highlighted); change its emoji / image and **Add to emoji list** again. Every row has an action:
+
+- **Custom** emotes — **Remove** deletes them.
+- **Default** emotes — **Remove** *hides* them, so you can trim the built-in set; a hidden default shows *"Hidden (default)"* with a **Restore** button.
+- Adding a custom emote with a **built-in shortcode** overrides that default (tagged *"Custom (overrides default)"*).
+
+**Share a set.** **Export set…** writes a single **`.mudpack`** package (your shortcodes + their images) to hand to a friend. To import:
+
+- **Import pack / zip…** — a `.mudpack` (or any zip). Emotes with a definition come in named; any loose images without one are added as **red** rows.
+- **Import folder…** — grabs every image in a folder. Since there are no shortcode definitions, each lands as a **red** row: **click it, set a shortcode, and Add to emoji list**. The filename is suggested as a starting point.
+
+Applied emotes live under your app-data **Emotes** folder.
+
+**The `:` picker.** In the Conversation window's input box, type `:` followed by a couple of letters and a **suggestion popup** flies out (built-ins + your own). **↑ / ↓** move the selection, **Enter** or **Tab** inserts the highlighted one, a **click** picks it, and **Esc** dismisses. It works even when your line starts with the `.` say-slow precursor.
 
 ### Font / Font size (Conversation window)
 

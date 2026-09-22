@@ -203,6 +203,7 @@
                                        Foreground="{Binding MessageBrush}"
                                        FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
                                        FontSize="{Binding DataContext.MessageFontSize, ElementName=RowsList}"
+                                       LineHeight="{Binding DataContext.MessageLineHeight, ElementName=RowsList}"
                                        TextWrapping="Wrap"
                                        VerticalAlignment="Center"/>
                         </Grid>
@@ -214,7 +215,7 @@
         <!-- ":" emote picker popup, anchored above the input box. Placed after RowsList
              and with runtime bindings so its item template's DataType doesn't pollute
              the compiled ElementName=RowsList inference in the row template above. -->
-        <Popup PlacementTarget="{Binding #InputBox}" Placement="Top"
+        <Popup PlacementTarget="{Binding #InputBox}" Placement="Bottom"
                IsOpen="{Binding IsEmotePickerOpen}" IsLightDismissEnabled="False"
                x:CompileBindings="False">
             <Border Background="{StaticResource ChromeBgBrush}"

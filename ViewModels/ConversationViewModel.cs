@@ -62,6 +62,9 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // / MetaFontSize are the DIP equivalents Avalonia actually renders.
     private double _messagePointSize = DefaultMessageFontSize;
     public double MessageFontSize => _messagePointSize * PointToPixel;
+    // Fixed line height for message rows so an emoji glyph or an inline emote image
+    // doesn't make its row taller than a plain-text row (emote images are sized under it).
+    public double MessageLineHeight => MessageFontSize * 1.45;
     // Timestamp / channel-tag / speaker sit one point smaller than the message
     // body — take the point off BEFORE the DIP conversion so the gap stays a
     // true point, not ~0.75pt.
@@ -415,6 +418,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         RowFontFamily = ResolveFont(_app, _display.ConvoFontFamily);
         _messagePointSize = _display.ConvoFontSize > 0 ? _display.ConvoFontSize : DefaultMessageFontSize;
         OnPropertyChanged(nameof(MessageFontSize));
+        OnPropertyChanged(nameof(MessageLineHeight));
         OnPropertyChanged(nameof(MetaFontSize));
     }
 

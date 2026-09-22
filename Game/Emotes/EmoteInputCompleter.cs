@@ -29,7 +29,9 @@ public static class EmoteInputCompleter
             if (!IsShortcodeChar(ch)) return null;   // whitespace / other → not a token
         }
         if (colon < 0) return null;
-        if (colon > 0 && !char.IsWhiteSpace(text[colon - 1])) return null;   // must open a word
+        // Reject only when a shortcode char precedes the colon (a mid-token colon like
+        // "8:00" or "word:x"). Whitespace, or a leading say-slow "." precursor, is fine.
+        if (colon > 0 && IsShortcodeChar(text[colon - 1])) return null;
 
         return new ActiveToken(colon, text.Substring(colon + 1, caret - colon - 1));
     }

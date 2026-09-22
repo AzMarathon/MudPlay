@@ -6,30 +6,34 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// User emote persistence + the shareable export/import package. Each test uses its own
-// temp directory so it never touches the live Emotes folder.
+// The staged/committed emote library + the shareable package. Each test uses its own
+// temp directory so it never touches the live Emotes folder. (Image scaling in Commit
+// falls back to a raw copy here since Avalonia's decoder isn't initialised.)
 public sealed class EmoteStoreTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "mudplay-emotes-" + Guid.NewGuid().ToString("N"));
 
     public void Dispose()
     {
-        try { if (Directory.Exists(_dir)) Directory.Delete(_dir, recursive: true); } catch { }
+        foreach (string d in new[] { _dir, _dir + "-tmp" })
+            try { if (Directory.Exists(d)) Directory.Delete(d, recursive: true); } catch { }
     }
 
     private string TempImage(string name)
     {
-        string p = Path.Combine(_dir, name);
         Directory.CreateDirectory(_dir);
-        File.WriteAllBytes(p, new byte[] { 1, 2, 3, 4 });   // stand-in bytes; the store copies, doesn't decode
+        string p = Path.Combine(_dir, name);
+        File.WriteAllBytes(p, new byte[] { 1, 2, 3, 4 });   // stand-in bytes; Commit copies, decode falls back
         return p;
     }
 
+    private static EmoteDraft Emoji(string sc, string emoji) => new() { Shortcode = sc, Emoji = emoji };
+    private static EmoteDraft Image(string sc, string path) => new() { Shortcode = sc, ImageSourcePath = path };
+
     [Fact]
-    public void AddUnicode_PersistsAndReloads()
+    public void CommitUnicode_PersistsAndReloads()
     {
-        var store = new EmoteStore(_dir);
-        Assert.True(store.AddUnicode("boom", "💥"));
+        new EmoteStore(_dir).Commit(new[] { Emoji("boom", "💥") }, Array.Empty<string>());
 
         var reloaded = new EmoteStore(_dir);
         var e = Assert.Single(reloaded.Emotes);
@@ -38,61 +42,61 @@ public sealed class EmoteStoreTests : IDisposable
     }
 
     [Fact]
-    public void AddUnicode_RejectsBadShortcode()
+    public void CommitImage_CopiesFileIntoStore()
     {
         var store = new EmoteStore(_dir);
-        Assert.False(store.AddUnicode("has space", "💥"));
-        Assert.Empty(store.Emotes);
-    }
+        store.Commit(new[] { Image("pic", TempImage("src.png")) }, Array.Empty<string>());
 
-    [Fact]
-    public void AddImage_CopiesFileIntoStore()
-    {
-        var store = new EmoteStore(_dir);
-        Assert.True(store.AddImage("pic", TempImage("src.png")));
         var e = Assert.Single(store.Emotes);
-        Assert.Equal("pic.png", e.Image);
-        Assert.True(File.Exists(Path.Combine(_dir, "pic.png")));
+        Assert.Equal("pic", e.Shortcode);
+        Assert.False(string.IsNullOrEmpty(e.Image));
+        Assert.True(File.Exists(Path.Combine(_dir, e.Image!)));
     }
 
     [Fact]
-    public void Remove_DropsEntryAndImage()
+    public void Commit_ReplacingSet_PrunesRemovedImages()
     {
         var store = new EmoteStore(_dir);
-        store.AddImage("pic", TempImage("src.png"));
-        Assert.True(store.Remove("pic"));
+        store.Commit(new[] { Image("pic", TempImage("src.png")) }, Array.Empty<string>());
+        string img = Path.Combine(_dir, store.Emotes[0].Image!);
+        Assert.True(File.Exists(img));
+
+        store.Commit(Array.Empty<EmoteDraft>(), Array.Empty<string>());   // removed
         Assert.Empty(store.Emotes);
-        Assert.False(File.Exists(Path.Combine(_dir, "pic.png")));
+        Assert.False(File.Exists(img));
     }
 
     [Fact]
-    public void ExportImport_RoundTripsAcrossStores()
+    public void HiddenDefaults_Persist()
+    {
+        new EmoteStore(_dir).Commit(Array.Empty<EmoteDraft>(), new[] { "lol", "fire" });
+
+        var reloaded = new EmoteStore(_dir);
+        Assert.Contains("lol", reloaded.HiddenDefaults);
+        Assert.Contains("fire", reloaded.HiddenDefaults);
+    }
+
+    [Fact]
+    public void ExportThenReadPackage_RoundTrips()
     {
         var src = new EmoteStore(_dir);
-        src.AddUnicode("boom", "💥");
-        src.AddImage("pic", TempImage("src.png"));
+        src.Commit(new[] { Emoji("boom", "💥"), Image("pic", TempImage("s.png")) }, Array.Empty<string>());
 
-        string pkg = Path.Combine(_dir, "pack.mudemotes");
+        string pkg = Path.Combine(_dir, "pack.mudpack");
         Assert.True(src.Export(pkg));
 
-        string dir2 = _dir + "-b";
-        try
-        {
-            var dst = new EmoteStore(dir2);
-            Assert.Equal(2, dst.Import(pkg));
-            Assert.Contains(dst.Emotes, e => e.Shortcode == "boom" && e.Emoji == "💥");
-            Assert.Contains(dst.Emotes, e => e.Shortcode == "pic" && e.Image == "pic.png");
-            Assert.True(File.Exists(Path.Combine(dir2, "pic.png")));
-        }
-        finally { try { Directory.Delete(dir2, true); } catch { } }
+        var drafts = src.ReadPackageDrafts(pkg, _dir + "-tmp");
+        Assert.NotNull(drafts);
+        Assert.Contains(drafts!, d => d.Shortcode == "boom" && d.Emoji == "💥");
+        Assert.Contains(drafts!, d => d.Shortcode == "pic" && d.ImageSourcePath is not null);
     }
 
     [Fact]
-    public void Import_BadFile_ReturnsMinusOne()
+    public void ReadPackageDrafts_BadFile_ReturnsNull()
     {
-        var store = new EmoteStore(_dir);
+        Directory.CreateDirectory(_dir);
         string bad = Path.Combine(_dir, "notapack.txt");
         File.WriteAllText(bad, "nope");
-        Assert.Equal(-1, store.Import(bad));
+        Assert.Null(new EmoteStore(_dir).ReadPackageDrafts(bad, _dir + "-tmp"));
     }
 }

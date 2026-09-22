@@ -39,11 +39,13 @@ public sealed class EmoteCatalog
     // bundled Pepe image set. Built once.
     public static EmoteCatalog BuiltIn { get; } = BuildBuiltIn();
 
-    // A fresh catalog = the full built-in set with the given user emotes layered on
-    // top (same-named user emotes win). Used by EmoteStore to publish the live catalog.
-    public static EmoteCatalog WithUser(IEnumerable<Emote> userEmotes)
+    // A fresh catalog = the built-in set with hiddenDefaults removed, then the user
+    // emotes layered on top (same-named user emotes win, and re-add a hidden default).
+    // Used by EmoteStore to publish the live catalog.
+    public static EmoteCatalog WithUser(IEnumerable<Emote> userEmotes, IEnumerable<string> hiddenDefaults)
     {
         EmoteCatalog c = BuildBuiltIn();
+        foreach (string h in hiddenDefaults) c._shortcodes.Remove(h);
         foreach (Emote e in userEmotes) c.Upsert(e);
         return c;
     }

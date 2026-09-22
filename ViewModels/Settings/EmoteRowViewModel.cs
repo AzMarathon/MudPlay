@@ -2,32 +2,34 @@ using Avalonia.Media.Imaging;
 
 namespace MudPlay.ViewModels.Settings;
 
-// One row in the Talk tab's emote list: the shortcode, a preview (image thumbnail or
-// emoji glyph), and where it comes from. The list surfaces the built-in emotes as well
-// as the user's own, so a default can be overridden (add a custom emote of the same
-// shortcode) and a custom one removed (reverting to the default if it shadowed one).
+// One row in the Talk tab's emote list. Surfaces the built-in emotes and the user's own
+// staged set: a default can be overridden or hidden ("removed"), a hidden default
+// restored, and images imported without a definition are flagged (IsRed) for the user to
+// name. Preview is an image thumbnail or the emoji glyph. Action is "Remove" (active) or
+// "Restore" (hidden default). DraftId links a staged/imported row back to its EmoteDraft.
 public sealed class EmoteRowViewModel
 {
     public string Shortcode { get; }
-    public string Display => $":{Shortcode}:";
+    public string Display => string.IsNullOrEmpty(Shortcode) ? "(set a shortcode)" : $":{Shortcode}:";
     public bool IsImage { get; }
     public bool IsText => !IsImage;
     public string PreviewText { get; }
     public Bitmap? PreviewImage { get; }
-
-    // "Default", "Custom", or "Custom (overrides default)".
     public string Source { get; }
-    // True for user-defined emotes — only those show a Remove button.
-    public bool CanRemove { get; }
+    public string ActionLabel { get; }
+    public bool IsRed { get; }
+    public string? DraftId { get; }
 
     public EmoteRowViewModel(string shortcode, bool isImage, string previewText, Bitmap? previewImage,
-                             string source, bool canRemove)
+                             string source, string actionLabel, bool isRed = false, string? draftId = null)
     {
         Shortcode = shortcode;
         IsImage = isImage;
         PreviewText = previewText;
         PreviewImage = previewImage;
         Source = source;
-        CanRemove = canRemove;
+        ActionLabel = actionLabel;
+        IsRed = isRed;
+        DraftId = draftId;
     }
 }
