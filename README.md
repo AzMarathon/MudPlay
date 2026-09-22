@@ -1,9 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.100.7**
-> - Navigation Management window now focuses its "Filter favourites…" box on open, so hitting the play/Start button and filtering is one motion
-> - Buff Watchdog mana-budget label is brighter, a bit larger, and spaced off the buttons and table so it reads more clearly
+> **Version 3.101.0**
+> - Combat profiles now carry the **action order** (spells-first / physical-first / custom cycle), **backstab options**, and **kill-all-engaged** per profile — a magic and a physical profile no longer share one setting; existing profiles keep their current value on upgrade
+> - Combat settings tab regrouped: per-combat-profile settings at the top, shared settings (targeting, display) under a "Shared combat settings" divider at the bottom
+> - Read-only windows (Conversation, Log, Backscroll, Party, Buff Watchdog, Spell Book, and the like) now **close when you re-press their menu/hotkey while they're focused** — a buried one still raises to front; edit windows still only raise
+> - Cure spells no longer spam when a condition flag is stuck: the same self-cure is throttled to once every 15s instead of every round, so it can't drain mana to zero
+> - Fixed a Paradigm game-data slip where `mirrored shield` carried haste text, falsely flagging you "blinded" whenever any haste spell landed
+> - Party heal no longer tries to single-target-heal yourself (self is covered by the self-heal slots)
+> - `@comeback` now fires when the leader leaves while you're knocked down / held / stunned
+> - Attack resumes promptly after a between-round buff recast; fixed triple-attacking with Attack-Last-Party; the Settings OK no longer prompts to save when nothing changed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

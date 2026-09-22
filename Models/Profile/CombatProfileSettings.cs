@@ -29,4 +29,10 @@ public sealed class CombatProfileSettings
 
     // The schema version once the full-loadout back-fill has run.
     public const int FullLoadoutVersion = 1;
+
+    // Action order (spells-first / physical-first / custom cycle) became per-profile at
+    // this version. Profiles created earlier deserialize their new ActionOrder field to
+    // the enum default, which would overwrite the character's real (previously shared)
+    // action order on the first switch — so it's back-filled from the live value once.
+    public const int PerProfileActionOrderVersion = 2;
 }

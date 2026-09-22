@@ -7,8 +7,10 @@ namespace MudPlay.Models.Profile;
 // mana-mode / drain knobs, the physical attack verbs, the room-skip / flee
 // thresholds, the primary/alternate WEAPONS (+ off-hands), and the entire Health
 // tab (rest / heal / flee thresholds, meditate/shadow, pre-/post-rest commands).
-// Switching a profile swaps all of it at once. Targeting / backstab / action-order
-// stay shared across profiles on the live CombatSettings.
+// Switching a profile swaps all of it at once, INCLUDING the action order (spells-
+// first / physical-first / the custom round cycle) — a magic profile and a physical
+// profile want opposite orders, so it's per-profile (report paradigm-20260922-141201).
+// Targeting / backstab stay shared across profiles on the live CombatSettings.
 //
 // Stored per character in the top-level CharacterProfile.CombatProfiles blob
 // (like Equipment / PartyBuffs), never a tier-merged Settings section.
@@ -46,6 +48,21 @@ public sealed class CombatSpellProfile
     public int MinMonstersInRoom { get; set; }
     public int MaxMonstersInRoom { get; set; } = 20;
     public int RunDistance { get; set; } = 2;
+
+    // Action order is per-profile: a magic profile leads with spells, a physical one with
+    // the weapon. The three cycle fields only matter when ActionOrder is CustomRoundCycle.
+    public CombatActionOrder ActionOrder { get; set; } = CombatActionOrder.SpellsFirst;
+    public int CycleRoundsPhysical { get; set; } = 1;
+    public int CycleRoundsSpell { get; set; } = 1;
+    public bool CycleStartOnSpell { get; set; }
+
+    // Backstab posture + kill-all-engaged are per-profile: a physical/backstab build wants
+    // them on, a caster build wants them off (report paradigm-20260922-141201 follow-up).
+    public bool DoBackstab { get; set; }
+    public bool SkipBackstabIfMultiAttack { get; set; } = true;
+    public bool RunIfBackstabFails { get; set; }
+    public bool ClearHostilesWhenSeenHidden { get; set; }
+    public bool KillAllEngaged { get; set; }
 
     // Per-profile primary/alternate weapons + off-hands. The ACTIVE profile's weapons
     // live in the Workshop Default gear set (the live surface combat + the auto-equip
@@ -96,14 +113,23 @@ public sealed class CombatSpellProfile
             MinMonstersInRoom = src.MinMonstersInRoom,
             MaxMonstersInRoom = src.MaxMonstersInRoom,
             RunDistance = src.RunDistance,
+            ActionOrder = src.ActionOrder,
+            CycleRoundsPhysical = src.CycleRoundsPhysical,
+            CycleRoundsSpell = src.CycleRoundsSpell,
+            CycleStartOnSpell = src.CycleStartOnSpell,
+            DoBackstab = src.DoBackstab,
+            SkipBackstabIfMultiAttack = src.SkipBackstabIfMultiAttack,
+            RunIfBackstabFails = src.RunIfBackstabFails,
+            ClearHostilesWhenSeenHidden = src.ClearHostilesWhenSeenHidden,
+            KillAllEngaged = src.KillAllEngaged,
             Health = health.Clone(),
         };
     }
 
-    // Overlay this profile's Combat-tab fields (spells + verbs + room thresholds)
-    // onto a live CombatSettings, leaving targeting / backstab / action-order
-    // untouched. Health is written separately by the manager (writeHealth) and
-    // weapons flow to the Default gear set (EquipmentWeaponSync), not here.
+    // Overlay this profile's Combat-tab fields (spells + verbs + room thresholds + action
+    // order) onto a live CombatSettings, leaving targeting / backstab untouched. Health is
+    // written separately by the manager (writeHealth) and weapons flow to the Default gear
+    // set (EquipmentWeaponSync), not here.
     public void ApplyTo(CombatSettings dst)
     {
         ArgumentNullException.ThrowIfNull(dst);
@@ -124,6 +150,15 @@ public sealed class CombatSpellProfile
         dst.MinMonstersInRoom = MinMonstersInRoom;
         dst.MaxMonstersInRoom = MaxMonstersInRoom;
         dst.RunDistance = RunDistance;
+        dst.ActionOrder = ActionOrder;
+        dst.CycleRoundsPhysical = CycleRoundsPhysical;
+        dst.CycleRoundsSpell = CycleRoundsSpell;
+        dst.CycleStartOnSpell = CycleStartOnSpell;
+        dst.DoBackstab = DoBackstab;
+        dst.SkipBackstabIfMultiAttack = SkipBackstabIfMultiAttack;
+        dst.RunIfBackstabFails = RunIfBackstabFails;
+        dst.ClearHostilesWhenSeenHidden = ClearHostilesWhenSeenHidden;
+        dst.KillAllEngaged = KillAllEngaged;
     }
 
     // Overwrite just the Combat-tab fields (spells + verbs + room thresholds) from a
@@ -151,6 +186,15 @@ public sealed class CombatSpellProfile
         MinMonstersInRoom = src.MinMonstersInRoom;
         MaxMonstersInRoom = src.MaxMonstersInRoom;
         RunDistance = src.RunDistance;
+        ActionOrder = src.ActionOrder;
+        CycleRoundsPhysical = src.CycleRoundsPhysical;
+        CycleRoundsSpell = src.CycleRoundsSpell;
+        CycleStartOnSpell = src.CycleStartOnSpell;
+        DoBackstab = src.DoBackstab;
+        SkipBackstabIfMultiAttack = src.SkipBackstabIfMultiAttack;
+        RunIfBackstabFails = src.RunIfBackstabFails;
+        ClearHostilesWhenSeenHidden = src.ClearHostilesWhenSeenHidden;
+        KillAllEngaged = src.KillAllEngaged;
     }
 
     // A deep copy of the whole profile (new Id) — backs "add a copy" style flows
@@ -176,6 +220,15 @@ public sealed class CombatSpellProfile
         MinMonstersInRoom = MinMonstersInRoom,
         MaxMonstersInRoom = MaxMonstersInRoom,
         RunDistance = RunDistance,
+        ActionOrder = ActionOrder,
+        CycleRoundsPhysical = CycleRoundsPhysical,
+        CycleRoundsSpell = CycleRoundsSpell,
+        CycleStartOnSpell = CycleStartOnSpell,
+        DoBackstab = DoBackstab,
+        SkipBackstabIfMultiAttack = SkipBackstabIfMultiAttack,
+        RunIfBackstabFails = RunIfBackstabFails,
+        ClearHostilesWhenSeenHidden = ClearHostilesWhenSeenHidden,
+        KillAllEngaged = KillAllEngaged,
         NormalWeapon = NormalWeapon,
         NormalOffHand = NormalOffHand,
         AlternateWeapon = AlternateWeapon,

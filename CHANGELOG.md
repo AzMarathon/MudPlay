@@ -1,5 +1,19 @@
 # Version history
 
+## 3.101.0
+
+- Combat profiles now carry the **action order** (spells-first / physical-first / custom cycle), **backstab options**, and **kill-all-engaged** per profile — a magic and a physical profile no longer share one setting; existing profiles keep their current value on upgrade
+- Combat settings tab regrouped: per-combat-profile settings (spells, weapons, action order, backstab, room thresholds, kill-all-engaged) at the top, shared settings (targeting, display) under a "Shared combat settings" divider at the bottom
+- Read-only windows (Conversation, Log, Backscroll, Party, Buff Watchdog, Spell Book, Monster Intel, Session Stats, and the like) now **close when you re-press their menu/hotkey while they're focused** — a buried one still raises to front; edit windows still only raise (never discard edits)
+- Cure spells no longer spam when a condition flag is stuck (a cure that can't clear its source, or a falsely-latched flag): the same self-cure is throttled to once every 15s instead of every round, so it can't drain mana to zero
+- Fixed a Paradigm game-data slip where the `mirrored shield` record carried haste text, falsely flagging you "blinded" whenever any haste spell landed (the illuminate-spam cause)
+- Party heal no longer tries to cast a single-target heal on yourself (some heals, e.g. anno, are other-only) — self is covered by the self-heal slots
+- `@comeback` now fires when the party leader leaves while you're knocked down / held / stunned (movement-prevented), not just on the two movement-failure lines
+- Attack resumes promptly after a between-round buff recast instead of stalling a round on a stale user-attack override
+- Fixed triple-attacking when Attack-Last-Party is set — the round's re-fire is now capped at one
+- Settings window's OK no longer prompts to save when nothing changed
+- bug reports addressed: paradigm-20260922-063422, paradigm-20260922-073350, paradigm-20260922-082041, paradigm-20260922-085609, paradigm-20260922-091714, paradigm-20260922-095321, paradigm-20260922-113233, paradigm-20260922-130230, paradigm-20260922-141201
+
 ## 3.100.7
 
 - Navigation Management window now focuses its "Filter favourites…" box on open, so hitting the play/Start button and filtering is one motion

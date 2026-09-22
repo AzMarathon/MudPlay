@@ -6874,7 +6874,8 @@ public sealed class AppServices
         // before "You are no longer following X." — the signature of being
         // left behind — and telepaths @comeback to the leader. Enabled is
         // pushed from Settings → Other by ApplyOtherFromActiveProfile.
-        ComebackRequest = new Game.Remote.ComebackRequester(Router, RoomTracker, Log);
+        ComebackRequest = new Game.Remote.ComebackRequester(Router, RoomTracker, Log,
+            isMovementPrevented: () => Conditions.IsMovementPrevented);
 
         // Follower-side reconnect auto-rejoin. Mirrors live follower membership
         // into the profile (crash-survivable) and, on the first in-game prompt

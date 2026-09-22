@@ -457,10 +457,11 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         p.AlternateOffHand = NullIfBlank(AlternateOffHand);
     }
 
-    // Chip switch: load the active profile's PER-PROFILE combat fields into the
-    // boxes, preserving the shared fields (targeting / backstab / action-order /
-    // display). BuildDto seeds the scratch from the current boxes; ApplyTo overwrites
-    // only the per-profile fields, so LoadBoxesFrom leaves the shared boxes as-is.
+    // Chip switch: load the active profile's PER-PROFILE combat fields into the boxes
+    // (spells + verbs + room thresholds + action order), preserving the shared fields
+    // (targeting / backstab / display). BuildDto seeds the scratch from the current boxes;
+    // ApplyTo overwrites the per-profile fields, so LoadBoxesFrom updates those boxes
+    // (incl. the action-order dropdown) while the shared boxes stay as-is.
     private void OnSessionLoadPerProfile()
     {
         _suppressDirty = true;
