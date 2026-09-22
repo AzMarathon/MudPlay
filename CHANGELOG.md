@@ -1,5 +1,10 @@
 # Version history
 
+## 3.98.2
+
+- **Esc is now a bindable key** for both toolbar/window shortcuts and macros — a bound Esc fires its shortcut or macro, while an unbound Esc still passes through to the game as before
+- In the keybind and macro capture dialogs, Esc now commits as the chord instead of cancelling; click **Capture** again (or Cancel) to abort a capture in progress
+
 ## 3.98.1
 
 - `@dupe` now copies only the sender's query and roomba permissions — never Elevated or anything that acts — so a duplicated player can't `@dupe` onward or gain more without you granting it by hand

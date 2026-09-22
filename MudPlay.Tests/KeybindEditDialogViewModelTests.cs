@@ -83,4 +83,32 @@ public sealed class KeybindEditDialogViewModelTests
         Assert.False(vm.HasWarning);
         Assert.False(vm.CanSave);
     }
+
+    [Fact]
+    public void Capture_Escape_CommitsAsBinding_NotCancel()
+    {
+        // Escape used to cancel capture; now it commits as the chord like any key.
+        KeybindEditDialogViewModel vm = Editing(BuiltInAction.OpenSpellBook);
+        vm.StartCaptureCommand.Execute(null);
+        Assert.True(vm.IsCapturing);
+
+        vm.ProcessCaptureKey(Key.Escape, KeyModifiers.None, isKeyDown: true);
+        vm.ProcessCaptureKey(Key.Escape, KeyModifiers.None, isKeyDown: false);
+
+        Assert.False(vm.IsCapturing);
+        Assert.Equal(Key.Escape, vm.SelectedKey);
+        Assert.False(vm.HasError);          // Escape is a legal bind
+        Assert.True(vm.CanSave);
+    }
+
+    [Fact]
+    public void StartCapture_Toggles_AbortsCaptureOnSecondPress()
+    {
+        KeybindEditDialogViewModel vm = Editing(BuiltInAction.OpenSpellBook);
+        vm.StartCaptureCommand.Execute(null);
+        Assert.True(vm.IsCapturing);
+
+        vm.StartCaptureCommand.Execute(null);   // second press aborts the capture
+        Assert.False(vm.IsCapturing);
+    }
 }

@@ -52,6 +52,10 @@ public static class KeybindRegistry
             keys.Add((i.ToString(), Enum.Parse<Key>($"D{i}")));
 
         // Navigation cluster.
+        // Escape is bindable: no BBS / MajorMUD input needs an ESC byte, so a bound
+        // Escape fires its keybind/macro and an unbound one still passes through as
+        // 0x1B (TerminalControl). It stays out of ExcludedKeys for the same reason.
+        keys.Add(("Esc",       Key.Escape));
         keys.Add(("Space",     Key.Space));
         keys.Add(("Insert",    Key.Insert));
         keys.Add(("Home",      Key.Home));
@@ -87,7 +91,10 @@ public static class KeybindRegistry
     // user means "Ctrl+something").
     public static readonly IReadOnlySet<Key> ExcludedKeys = new HashSet<Key>
     {
-        Key.Enter, Key.Return, Key.Escape, Key.Tab, Key.Back, Key.Delete, Key.None,
+        // Escape is intentionally NOT excluded — it's bindable (see BindableKeys). A
+        // bound Escape fires its keybind/macro; an unbound one still reaches the wire
+        // as 0x1B, and no BBS input requires the user to send one.
+        Key.Enter, Key.Return, Key.Tab, Key.Back, Key.Delete, Key.None,
         Key.LeftCtrl, Key.RightCtrl, Key.LeftShift, Key.RightShift,
         Key.LeftAlt, Key.RightAlt, Key.LWin, Key.RWin, Key.CapsLock,
         Key.NumLock, Key.Scroll, Key.PrintScreen, Key.Pause,

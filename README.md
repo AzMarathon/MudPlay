@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.98.1**
-> - `@dupe` now copies only the sender's query and roomba permissions — never Elevated or anything that acts — so a duplicated player can't `@dupe` onward or gain more without you granting it by hand
-> - Each player can `@dupe` once; it then stays locked until you press the new **Reset @dupe** button under Elevated Commands in the Players edit dialog (nothing sent over chat can reset it)
-> - Every `@dupe` use and refusal is written to the program log, and the sender's record keeps who they duplicated onto and when
+> **Version 3.98.2**
+> - **Esc is now a bindable key** for both toolbar/window shortcuts and macros — a bound Esc fires its shortcut or macro, while an unbound Esc still passes through to the game as before
+> - In the keybind and macro capture dialogs, Esc now commits as the chord instead of cancelling; click **Capture** again (or Cancel) to abort a capture in progress
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

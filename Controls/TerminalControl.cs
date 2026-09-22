@@ -1091,6 +1091,23 @@ public sealed class TerminalControl : Control
             }
         }
 
+        // A bound Escape fires its shortcut, not the wire. A macro on Escape already
+        // fired above (MacroDispatcher); a built-in keybind fires via the window
+        // KeyBinding, which only sees the event if we DON'T consume it — so bail out
+        // and let it bubble. Unbound Escape falls through to MapKey → 0x1B below (the
+        // legacy passthrough; no BBS input needs an ESC byte). Modifiers are matched so
+        // Ctrl+Esc etc. resolve to their own binding.
+        if (key == Key.Escape
+            && MudPlay.Services.AppServices.Current.Keybindings.FindAction(
+                   new MudPlay.Models.Profile.KeyChord(
+                       Key.Escape,
+                       (modifiers & KeyModifiers.Control) != 0,
+                       (modifiers & KeyModifiers.Shift) != 0,
+                       (modifiers & KeyModifiers.Alt) != 0)) is not null)
+        {
+            return false;
+        }
+
         // Map special keys to escape sequences first; printable text is
         // delivered through OnTextInput instead.
         var bytes = MapKey(key, modifiers);

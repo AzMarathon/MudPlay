@@ -84,7 +84,7 @@ public sealed partial class MacroEditDialogViewModel : ObservableObject, IDialog
         {
             if (SelectedKey is null)
                 return IsCapturing
-                    ? "Press a key combination — release a non-modifier key to confirm. Esc cancels."
+                    ? "Press a key combination — release a non-modifier key to confirm. Click Capture again to abort."
                     : "Click Capture and press the keybind.";
             if (KeybindRegistry.IsForbidden(_keybindings, SelectedKey.Value, Ctrl, Shift, Alt, out string? reason))
                 return reason!;
@@ -121,26 +121,22 @@ public sealed partial class MacroEditDialogViewModel : ObservableObject, IDialog
             SelectedKey = parsed;
     }
 
-    // Toggle into capture mode — the code-behind handles the actual key events.
+    // Toggle capture mode — the code-behind handles the actual key events. A second
+    // press (or Cancel) aborts a capture in progress, since Escape no longer does
+    // (it's a bindable chord now).
     [RelayCommand]
-    private void StartCapture() => IsCapturing = true;
+    private void StartCapture() => IsCapturing = !IsCapturing;
 
     // Called from the dialog's code-behind on every KeyDown / KeyUp while capture is
     // active. Tracks modifiers as the user holds them; commits the chord on the first
-    // non-modifier key release. Escape cancels. key is the key just pressed or released,
-    // modifiers is the live modifier state from the event, isKeyDown is true for KeyDown
-    // and false for KeyUp. Returns true when capture mode handled the event and the caller
-    // should mark it handled.
+    // non-modifier key release. key is the key just pressed or released, modifiers is
+    // the live modifier state from the event, isKeyDown is true for KeyDown and false
+    // for KeyUp. Returns true when capture mode handled the event and the caller should
+    // mark it handled. Escape commits like any other key (it's bindable now); aborting
+    // a capture is the Cancel button or clicking Capture again.
     public bool ProcessCaptureKey(Key key, KeyModifiers modifiers, bool isKeyDown)
     {
         if (!IsCapturing) return false;
-
-        // Escape always cancels — never accepted as a bindable key.
-        if (key == Key.Escape)
-        {
-            IsCapturing = false;
-            return true;
-        }
 
         // Modifier keys never commit on their own — they just update
         // the modifier state for the upcoming non-modifier press.

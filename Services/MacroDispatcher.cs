@@ -43,10 +43,11 @@ public sealed class MacroDispatcher
         if (_sender is null) return false;
 
         // Never let a macro fire on a key the registry forbids from binding
-        // (Enter, Escape, the keyboard period say-precursor, …). The edit
-        // dialog already refuses these, but a chord persisted before the key
-        // was excluded would otherwise still hijack the keystroke — this
-        // keeps the invariant true at dispatch time regardless of stale data.
+        // (Enter, the keyboard period say-precursor, …). The edit dialog already
+        // refuses these, but a chord persisted before the key was excluded would
+        // otherwise still hijack the keystroke — this keeps the invariant true at
+        // dispatch time regardless of stale data. (Escape is NOT excluded — it's
+        // bindable — so a macro on Escape fires here like any other chord.)
         if (KeybindRegistry.ExcludedKeys.Contains(key)) return false;
 
         bool ctrl  = modifiers.HasFlag(KeyModifiers.Control);

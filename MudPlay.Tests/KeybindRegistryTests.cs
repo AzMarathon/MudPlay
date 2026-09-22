@@ -11,7 +11,6 @@ public sealed class KeybindRegistryTests
 
     [Theory]
     [InlineData(Key.Enter)]
-    [InlineData(Key.Escape)]
     [InlineData(Key.Tab)]
     [InlineData(Key.Back)]
     [InlineData(Key.Delete)]
@@ -22,6 +21,17 @@ public sealed class KeybindRegistryTests
         KeybindingStore store = DefaultStore();
         Assert.True(KeybindRegistry.IsForbidden(store, key, false, false, false, out _));
         Assert.True(KeybindRegistry.IsForbidden(store, key, true,  true,  true,  out _));
+    }
+
+    [Fact]
+    public void Escape_IsBindable_NotExcluded()
+    {
+        KeybindingStore store = DefaultStore();
+        Assert.DoesNotContain(Key.Escape, KeybindRegistry.ExcludedKeys);
+        Assert.Contains(KeybindRegistry.BindableKeys, b => b.Key == Key.Escape);
+        // Bare Escape isn't reserved by default, so it's a legal bind.
+        Assert.False(KeybindRegistry.IsForbidden(store, Key.Escape, false, false, false, out _));
+        Assert.NotNull(KeybindRegistry.FindBindable(Key.Escape));
     }
 
     [Fact]
