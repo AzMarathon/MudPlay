@@ -905,10 +905,19 @@ public sealed class AppServices
     // like the other probes.
     public Game.Quests.QuestFlagProbe QuestFlagReader { get; private set; } = null!;
 
+    // A SECOND, on-demand quest-flag probe dedicated to the @quest remote command, so a
+    // remote query mid-login never clobbers the daily QuestFlagSync's shared reader (both
+    // BeginCollect on the same instance would cross-clear). Line extractor attached in
+    // MainWindowViewModel alongside QuestFlagReader.
+    public Game.Quests.QuestFlagProbe QuestQueryReader { get; private set; } = null!;
+
     // Login-time quest-flag completion sync (opt-in per character): reads the flags via
     // QuestFlagReader and marks newly-complete quests. Run by MainWindowViewModel before the
     // availability dump.
     public Game.Quests.QuestFlagSyncManager QuestFlagSync { get; private set; } = null!;
+
+    // The @quest remote command handler (QueryQuests category).
+    public Game.Remote.QuestQueryHandler QuestQuery { get; private set; } = null!;
 
     // Loaded character's Models.GameData.Macro store.
     // Surfaced by the Game Data Browser → Macros tab; the
@@ -5512,6 +5521,7 @@ public sealed class AppServices
         // Quest-flag reader — sends `abil <flag>` (paradigm) / `sys god <name> abil` (stock)
         // and parses the flag values. Consumed by QuestFlagSync at login.
         QuestFlagReader = new Game.Quests.QuestFlagProbe(send: cmd => SendGameCommand(cmd), log: Log);
+        QuestQueryReader = new Game.Quests.QuestFlagProbe(send: cmd => SendGameCommand(cmd), log: Log);
 
         // Base auto-search — a room-wide `sea` reveals hidden items for the
         // auto-get engines. Armed by the persisted master toggle OR the transient
@@ -6558,6 +6568,18 @@ public sealed class AppServices
                     ? ViewModels.CharacterWorkshop.QuestTextFormatter.FallbackTitle(q)
                     : def.Name,
                 PlayerStats.Level),
+            log: Log);
+
+        QuestQuery = new Game.Remote.QuestQueryHandler(
+            RemoteCommands,
+            profile: () => Profile.Current,
+            quests: Quests,
+            probe: QuestQueryReader,
+            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            // Stock's live flag read is the same gated `sys god <name> abil` the daily
+            // sync uses — sys-god access, not the separate sys-status capability.
+            canStockRead: SysopGodLivesEnabledHere,
+            characterName: () => PlayerStats.Name,
             log: Log);
 
         AutoDeposit = new Game.Cash.AutoDepositManager(

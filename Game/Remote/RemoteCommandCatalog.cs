@@ -12,7 +12,7 @@ namespace MudPlay.Game.Remote;
 // "MudPlay grants Raijin QueryHealthStatus" produces consistent behaviour across
 // every @health-class command without per-handler ceremony.
 //
-// Categories follow the 12-checkbox grid in the Game Data Browser → Players edit
+// Categories follow the per-category checkbox grid in the Game Data Browser → Players edit
 // dialog:
 //   - QueryVersion — version / fingerprint introspection + @help.
 //   - QueryExperience — exp / level numbers.
@@ -42,6 +42,8 @@ namespace MudPlay.Game.Remote;
 //     BBS-tier Roomba item-sighting log). Its own category, same as
 //     QueryBossTimers/QueryDeaths, since none of these are documented MajorMUD
 //     wiki commands — they're MudPlay-specific extensions.
+//   - QueryQuests — @quest (marked-complete quest state + the live quest-flag step
+//     read via `abil` / `sys god … abil`). Its own category, same extension family.
 //
 // Party-coordination commands (@wait / @ok / @comeback / @forget / @share) map
 // to PlayerRemoteControls.None — they're gated by the engine's party-whitelist
@@ -91,6 +93,7 @@ public static class RemoteCommandCatalog
             ["@timer"]        = PlayerRemoteControls.QueryBossTimers,   // own permission — grant boss-timer queries separately
             ["@death"]        = PlayerRemoteControls.QueryDeaths,       // own permission — grant unrecovered-death queries separately
             ["@roomba"]       = PlayerRemoteControls.QueryItemLocation, // own permission — grant item-location queries separately
+            ["@quest"]        = PlayerRemoteControls.QueryQuests,       // own permission — grant quest-progress queries separately
             ["@help"]         = PlayerRemoteControls.QueryVersion,
             ["@what"]         = PlayerRemoteControls.QueryInventory,
             ["@wealth"]       = PlayerRemoteControls.QueryInventory,
@@ -236,6 +239,7 @@ public static class RemoteCommandCatalog
             ["@timer"]        = new("@timer [name]", "boss respawn timers (all, or matching a name); @timer sync shares them client-to-client"),
             ["@death"]        = new("@death [all]", "unrecovered deaths from the recovery log — the latest, or all of them"),
             ["@roomba"]       = new("@roomba <item>", "where an item was last seen across gang-house rooms; @roomba sync shares the log"),
+            ["@quest"]        = new("@quest [name|flag]", "quest progress: bare lists your marked-complete quests; with a name/alias/flag reports that quest's marked bands, plus the live flag step on Paradigm (or stock with sys-god)"),
             ["@help"]         = new("@help [command]", "the commands you're allowed to use, or one command's syntax"),
             ["@what"]         = new("@what", "items on the room floor"),
             ["@wealth"]       = new("@wealth", "your coins and total value"),

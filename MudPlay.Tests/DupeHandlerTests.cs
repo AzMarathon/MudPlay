@@ -11,7 +11,7 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// @dupe <player> — copies the SENDER's query and roomba permissions onto a known
+// @dupe <player> — copies the SENDER's query, roomba, and quest permissions onto a known
 // player. Elevated Commands senders only, one use per sender until the user resets it
 // in the client, and accepted over telepath and gangpath only; say, gossip (which also
 // carries auctions), broadcast and yell must never reach it, and the local API must
@@ -83,7 +83,7 @@ public sealed class DupeHandlerTests
         Assert.Equal(Shareable, Controls(players, "Moron"));
         string reply = Assert.Single(Replies(engine));
         Assert.StartsWith("/Reveal ", reply);
-        Assert.Equal("Moron now has your query and roomba permissions", Payload(reply));
+        Assert.Equal("Moron now has your query, roomba, and quest permissions", Payload(reply));
     }
 
     [Fact]
@@ -141,22 +141,23 @@ public sealed class DupeHandlerTests
         router.Dispatch(Line("Reveal telepaths: @dupe Moron"));
 
         Assert.Equal(PlayerRemoteControls.All, Controls(players, "Moron"));
-        Assert.Equal("Moron already has all your query and roomba permissions",
+        Assert.Equal("Moron already has all your query, roomba, and quest permissions",
             Payload(Assert.Single(Replies(engine))));
         Assert.False(Spent(players, "Reveal"));
     }
 
-    // ===== Safeguard: query and roomba only =====
+    // ===== Safeguard: query, roomba, and quest only =====
 
     [Fact]
-    public void Shareable_IsExactlyTheQueryAndRoombaCategories()
+    public void Shareable_IsExactlyTheQueryAndRoombaAndQuestCategories()
     {
         // Pins the mask so widening it is a deliberate, reviewed change.
         Assert.Equal(
             PlayerRemoteControls.QueryVersion | PlayerRemoteControls.QueryExperience
             | PlayerRemoteControls.QueryHealthStatus | PlayerRemoteControls.QueryLocation
             | PlayerRemoteControls.QueryInventory | PlayerRemoteControls.QueryBossTimers
-            | PlayerRemoteControls.QueryDeaths | PlayerRemoteControls.QueryItemLocation,
+            | PlayerRemoteControls.QueryDeaths | PlayerRemoteControls.QueryItemLocation
+            | PlayerRemoteControls.QueryQuests,
             Shareable);
     }
 
@@ -205,7 +206,7 @@ public sealed class DupeHandlerTests
         router.Dispatch(Line("Reveal telepaths: @dupe Moron"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
-        Assert.Equal("you have no query or roomba permissions to copy",
+        Assert.Equal("you have no query, roomba, or quest permissions to copy",
             Payload(Assert.Single(Replies(engine))));
         Assert.False(Spent(players, "Reveal"));
     }

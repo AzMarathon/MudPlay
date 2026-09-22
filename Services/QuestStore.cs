@@ -143,6 +143,30 @@ public sealed class QuestStore
             .ToList();
     }
 
+    // Ordered distinct step (band) values known for a flag across seed + overlay.
+    // Drives the ordinal band numbering in the @quest report — the Nth step in this
+    // list is band N. Empty when the flag is unknown to both layers.
+    public IReadOnlyList<int> StepsForFlag(int flag)
+    {
+        SortedSet<int> steps = new();
+        foreach ((int Flag, int Step) k in _seed.Keys) if (k.Flag == flag) steps.Add(k.Step);
+        foreach ((int Flag, int Step) k in _overlay.Keys) if (k.Flag == flag) steps.Add(k.Step);
+        return steps.ToList();
+    }
+
+    // Every named quest known across seed + overlay as (flag, resolved name) with a
+    // non-empty name — the candidate set the @quest name resolver matches against.
+    public IEnumerable<(int Flag, string Name)> NamedQuests()
+    {
+        HashSet<(int Flag, int Step)> keys = new(_seed.Keys);
+        foreach ((int Flag, int Step) k in _overlay.Keys) keys.Add(k);
+        foreach ((int Flag, int Step) k in keys)
+        {
+            string name = Resolve(k.Flag, k.Step).Name;
+            if (!string.IsNullOrWhiteSpace(name)) yield return (k.Flag, name);
+        }
+    }
+
     // The no-overlay resolution for a quest: the seed entry if one exists, else a
     // blank auto-draft. Save compares each edited def against this to decide whether
     // the def is a genuine user delta worth writing.

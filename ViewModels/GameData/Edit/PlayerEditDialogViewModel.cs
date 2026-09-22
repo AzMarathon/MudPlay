@@ -47,6 +47,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryBossTimers;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryDeaths;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryItemLocation;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryQuests;
 
     // ----- @dupe lock (shown under the Elevated Commands checkbox) -----
     // The once-only lock on this player's @dupe. Like every other edit here, a reset
@@ -81,7 +82,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         RcQueryVersion && RcQueryExperience && RcQueryHealthStatus && RcQueryLocation &&
         RcQueryInventory && RcRequestInvite && RcMovePlayer && RcExecuteCommands &&
         RcHangupDisconnect && RcAlterSettings && RcDivertConversations && RcSysopCommands &&
-        RcQueryBossTimers && RcQueryDeaths && RcQueryItemLocation;
+        RcQueryBossTimers && RcQueryDeaths && RcQueryItemLocation && RcQueryQuests;
 
     // ----- Tooltips per checkbox ----------------------------------------
     // Precomputed once from RemoteCommandCatalog so the checkbox tooltip
@@ -105,6 +106,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     public string RcQueryBossTimersTip     { get; } = BuildTip(PlayerRemoteControls.QueryBossTimers);
     public string RcQueryDeathsTip         { get; } = BuildTip(PlayerRemoteControls.QueryDeaths);
     public string RcQueryItemLocationTip   { get; } = BuildTip(PlayerRemoteControls.QueryItemLocation);
+    public string RcQueryQuestsTip         { get; } = BuildTip(PlayerRemoteControls.QueryQuests);
 
     // Build the per-category tooltip text. Lists every @-command the catalog maps to
     // category, sorted, with a clear "ticked → grants / unticked → denies" framing so the
@@ -232,6 +234,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         RcQueryBossTimers     = rc.HasFlag(PlayerRemoteControls.QueryBossTimers);
         RcQueryDeaths         = rc.HasFlag(PlayerRemoteControls.QueryDeaths);
         RcQueryItemLocation   = rc.HasFlag(PlayerRemoteControls.QueryItemLocation);
+        RcQueryQuests         = rc.HasFlag(PlayerRemoteControls.QueryQuests);
     }
 
     // Toggle every remote-control checkbox in one shot (the "All" button).
@@ -242,7 +245,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         RcQueryVersion = RcQueryExperience = RcQueryHealthStatus = RcQueryLocation =
         RcQueryInventory = RcRequestInvite = RcMovePlayer = RcExecuteCommands =
         RcHangupDisconnect = RcAlterSettings = RcDivertConversations = RcSysopCommands =
-        RcQueryBossTimers = RcQueryDeaths = RcQueryItemLocation = target;
+        RcQueryBossTimers = RcQueryDeaths = RcQueryItemLocation = RcQueryQuests = target;
     }
 
     [RelayCommand]
@@ -264,6 +267,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         if (RcQueryBossTimers)     rc |= PlayerRemoteControls.QueryBossTimers;
         if (RcQueryDeaths)         rc |= PlayerRemoteControls.QueryDeaths;
         if (RcQueryItemLocation)   rc |= PlayerRemoteControls.QueryItemLocation;
+        if (RcQueryQuests)         rc |= PlayerRemoteControls.QueryQuests;
 
         PlayerRecord updated = _original with
         {

@@ -577,11 +577,12 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@death all` — every unrecovered death (bare `@death` gives just the latest)
 - `@have rope and grapple` · `@uses silvery skullcap` · `@token arlysia` — an item / limited-use item / transport token by name (shorthand and best-match are fine)
 - `@roomba severed head` — Roomba sightings of matching items
+- `@quest good align` — quest progress: marked-complete bands, plus the live flag step on Paradigm / sys-god (bare `@quest` lists all your completed quests)
 - `@auto-combat off` — force an engine off (bare toggles it; `on` forces it on)
 - `@atkprio 3 Fujin` — Target Priority: attack-what-player Fujin (`1` = Default, `2` = follow-leader)
 - `@atkorder 4 Suijin` — Attack Order: attack after Suijin (`1`–`3` and `5` are the fixed orders)
 - `@divert Raijin` — forward your incoming telepaths to Raijin (bare `@divert` stops)
-- `@dupe Moron` — copy the sender's query and roomba permissions onto Moron (Elevated; once per player; telepath / gangpath only)
+- `@dupe Moron` — copy the sender's query, roomba, and quest permissions onto Moron (Elevated; once per player; telepath / gangpath only)
 - `@profile 2` · `@profile backstab` — swap combat profile by number or name
 - `@kill goblin shaman` — retarget your combat onto that monster this round
 - `@trap north` — search and disarm a trap that way (`@trap stop` aborts)
@@ -609,6 +610,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 | `@death` | — or `all` | unrecovered deaths from the recovery log — the most recent one, or `all` of them (each with when, status, room, and lives left) so you can help a dead player recover; own permission ("Query deaths") |
 | `@roomba` | `<item name>` | one line per matching item — total quantity across every gang-house room it was seen in during a Roomba sweep, EACH room's own quantity, and when the freshest of those sightings was scanned, in the sending client's own timezone (e.g. `total: 5x rope and grapple - seen in 15/12 (3), 15/13 (2) - last scanned 2026-08-30 09:22 MST`) — a loose query matching several similarly-named items (e.g. "head" matching every "severed head of ___") gets one line each, capped at 5 with an overflow tail — or "no record" when nothing matches at all; gated by the **Query Roomba** per-player permission (grant it on the Players tab) — a sender you haven't granted it to gets no reply. See Roomba (Player Workshop) below |
 | `@roomba sync` | — | (client-to-client) replies with your entire item-sighting log **and** labeled gang-house rooms, compressed, so the requester's client merges it straight in — no file, no Discord, no import/export; the requester adopts the reply because they asked for it, so only the *responder* needs the grant; see Roomba (Player Workshop) below; same **Query Roomba** permission |
+| `@quest` | — or `<name\|flag>` | quest progress. Bare lists every quest with a marked-complete band, grouped by flag. With a **name** (a quest's name, the ability name like `goodquest`, or a built-in alias like `good align` / `neutral` / `evil`) or a **flag number** (e.g. `126`), it reports that quest's marked bands by ordinal (`Good align 1, 2, 3 marked complete`) and — on **Paradigm**, or a **stock** board where you've granted this character **sys-god** access — appends the live flag step read off the game (`Abil: 126 step 16`). On stock without sys-god it reports the marked state only; gated by the **Query quests** per-player permission |
 | `@what` | — | items on the room floor |
 | `@wealth` | — | your coins and total value |
 | `@enc` | — | encumbrance |
@@ -651,8 +653,8 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 
 ### Hand out permissions
 
-- `@dupe <player>` — copies **the sender's query and roomba permissions** onto that player, so a trusted player can bring an alt up to speed without you ticking every box. It hands out trust, so it needs the **Elevated Commands** grant — the same top tier as `@suicide`. A player you've granted "All" has it; a player with every category *except* Elevated does not.
-  - **Only queries move.** The categories it can copy are Query version, experience, health/status, location, inventory, boss timers, deaths, and Query Roomba. Nothing that acts on your character (move, execute, alter settings, request invite, hangup, divert) and **never Elevated Commands** — so a duplicated player can't `@dupe` onward, and gaining anything beyond queries stays a manual step you take in the Players tab.
+- `@dupe <player>` — copies **the sender's query, roomba, and quest permissions** onto that player, so a trusted player can bring an alt up to speed without you ticking every box. It hands out trust, so it needs the **Elevated Commands** grant — the same top tier as `@suicide`. A player you've granted "All" has it; a player with every category *except* Elevated does not.
+  - **Only queries move.** The categories it can copy are Query version, experience, health/status, location, inventory, boss timers, deaths, Query Roomba, and Query quests. Nothing that acts on your character (move, execute, alter settings, request invite, hangup, divert) and **never Elevated Commands** — so a duplicated player can't `@dupe` onward, and gaining anything beyond queries stays a manual step you take in the Players tab.
   - **One use per player.** Each Elevated player can `@dupe` once. After that it's refused ("your @dupe has already been used") until **you** re-arm it: open that player in **Game Data Browser → Players**, and under **Elevated Commands** press **Reset @dupe**. The dialog shows when it was spent and who it went to. Nothing sent over chat can reset it. A refused or no-op attempt (unknown name, the target already holds everything) doesn't spend the use.
   - **Telepath and gangpath only.** Said aloud in a room, or sent as a gossip, auction, broadcast, or yell, it's ignored outright (no reply), and the Local control API can't run it.
   - **Additive.** The target keeps anything they already have and only gains; it never takes a permission away, and it only moves the permission grid, not the target's party behaviours or notes.
@@ -1215,7 +1217,7 @@ Select several rows (click-drag, or Ctrl / Shift-click) on the **Monsters**, **I
 - **Opt-in per field** — a field is only touched when you set it. Enum / text / number fields (Relationship, priority, Min-to-keep, …) have a **Change** checkbox; flags and permissions are a tri-state **Leave / On / Off** (for a player permission, On = grant, Off = revoke). Anything left **Leave** / unticked keeps whatever each record already has, so batching one field never clobbers a record's other overrides.
 - **Monsters** — Relationship, attack priority, don't-backstab, kill-on-sight, the physical-attack command, and the three spell-override rungs (cast-code + Max + Mana floor).
 - **Items** — the auto flags (collect / discard / open / buy / sell / stash), cannot-be-taken, must-have-minimum, loyal, auto-obtain-for-path, and Min-to-keep / Max-to-get.
-- **Players** — the party behaviours (invite-if-seen, join-if-invited, don't-auto-delete) and all 15 remote-control permissions, with a **Set all permissions** master to grant or revoke the lot in one move. Under **Elevated Commands** it also shows whether that player's one-time `@dupe` has been spent, with a **Reset @dupe** button to re-arm it.
+- **Players** — the party behaviours (invite-if-seen, join-if-invited, don't-auto-delete) and all 16 remote-control permissions, with a **Set all permissions** master to grant or revoke the lot in one move. Under **Elevated Commands** it also shows whether that player's one-time `@dupe` has been spent, with a **Reset @dupe** button to re-arm it.
 - **Tier** — Monsters and Items write to the tier you pick in the dialog's **Use** dropdown (only-this-character / only-this-BBS / for-all-characters), the same as the single editor; picking **Installed defaults** instead **resets** every selected record (after one confirm). Player permissions save to the character, no tier picker.
 
 ### The item / monster override editor

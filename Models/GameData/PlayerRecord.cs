@@ -304,11 +304,18 @@ public enum PlayerRemoteControls
     // @roomba.
     QueryItemLocation   = 1 << 14,
 
+    // Quest-progress queries — @quest. Reports the character's marked-complete
+    // quest state, and (on Paradigm, or stock with sys-god access) the live quest
+    // flag step read off the game via `abil` / `sys god … abil`. Its own category,
+    // like the other MudPlay-specific query extensions, so it can be granted apart
+    // from the rest.
+    QueryQuests         = 1 << 15,
+
     // Convenience — every category above flipped on.
     All = QueryVersion | QueryExperience | QueryHealthStatus | QueryLocation
         | QueryInventory | RequestInvite | MovePlayer | ExecuteCommands
         | HangupDisconnect | AlterSettings | DivertConversations | SysopCommands
-        | QueryBossTimers | QueryDeaths | QueryItemLocation,
+        | QueryBossTimers | QueryDeaths | QueryItemLocation | QueryQuests,
 }
 
 // One equipment slot's contents from a look <player> response. SlotLabel
