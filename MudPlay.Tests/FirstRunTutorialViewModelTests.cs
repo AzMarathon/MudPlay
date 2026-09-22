@@ -121,41 +121,43 @@ public sealed class FirstRunTutorialViewModelTests
     }
 
     [Fact]
-    public void NotifyMenuOpened_TicksMenuLine_AndAdvancesHighlight()
+    public void NotifyActionDone_TicksActionLine_AndAdvancesHighlight()
     {
         (FirstRunTutorialViewModel vm, _) = Make();   // all missing → starts at Add a BBS
         vm.Start();
         var before = vm.CurrentSubs;
         Assert.False(before[0].IsDone);
         Assert.True(before[0].IsCurrent);             // first line highlighted
+        Assert.True(vm.HighlightProfileManagement);   // and the menu item glows
 
-        vm.NotifyMenuOpened("File");
+        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
 
         var after = vm.CurrentSubs;
         Assert.True(after[0].IsDone);                 // "File → Profile Management" ticked
         Assert.False(after[0].IsCurrent);
         Assert.True(after[1].IsCurrent);              // highlight moved to the next line
+        Assert.False(vm.HighlightProfileManagement);  // menu-item highlight cleared
     }
 
     [Fact]
-    public void Demo_MenuOpen_StillTicksChecklist()
+    public void Demo_ActionClick_StillTicksChecklist()
     {
         (FirstRunTutorialViewModel vm, Flags f) = Make();
         f.GameData = f.Bbs = f.Character = true;   // fully configured — demo still walks
         vm.StartDemo();
         Assert.False(vm.CurrentSubs[0].IsDone);
-        vm.NotifyMenuOpened("File");
-        Assert.True(vm.CurrentSubs[0].IsDone);      // menu line ticks even in demo
+        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
+        Assert.True(vm.CurrentSubs[0].IsDone);      // action line ticks even in demo
         Assert.True(vm.CurrentSubs[1].IsCurrent);   // highlight advances
     }
 
     [Fact]
-    public void NotifyMenuOpened_Ignored_ForUnrelatedMenu()
+    public void NotifyActionDone_Ignored_ForUnrelatedAction()
     {
         (FirstRunTutorialViewModel vm, _) = Make();
-        vm.Start();                                   // Add a BBS (its line 1 keys off "File")
-        vm.NotifyMenuOpened("GameData");
-        Assert.False(vm.CurrentSubs[0].IsDone);       // wrong menu doesn't tick it
+        vm.Start();                                   // Add a BBS (line 1 = Profile Management)
+        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionImportMdb);
+        Assert.False(vm.CurrentSubs[0].IsDone);       // unrelated action doesn't tick it
         Assert.True(vm.CurrentSubs[0].IsCurrent);
     }
 

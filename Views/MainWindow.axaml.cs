@@ -68,6 +68,28 @@ public partial class MainWindow : Window
         _tutorialWindow.Position = new PixelPoint(Position.X - w - gap, Position.Y);
     }
 
+    // Clicking File → Profile Management ticks the tour's leading action line.
+    private void OnProfileMgmtMenuItemClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel mvm)
+            mvm.Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
+    }
+
+    // The dynamic Game Data → Import .mdb item, tracked so the tour can glow it +
+    // tick its action line (the static Profile Management item is highlighted via
+    // a XAML class binding instead).
+    private MenuItem? _importMdbMenuItem;
+
+    private void ApplyImportMdbHighlight(MainWindowViewModel mvm)
+    {
+        if (_importMdbMenuItem is null) return;
+        bool on = mvm.Tutorial.HighlightImportMdb;
+        if (on && !_importMdbMenuItem.Classes.Contains("tutTarget"))
+            _importMdbMenuItem.Classes.Add("tutTarget");
+        else if (!on)
+            _importMdbMenuItem.Classes.Remove("tutTarget");
+    }
+
     public MainWindow()
     {
         InitializeComponent();
@@ -149,16 +171,11 @@ public partial class MainWindow : Window
                 {
                     if (ev.PropertyName == nameof(FirstRunTutorialViewModel.IsActive))
                         UpdateTutorialWindow(mvm);
+                    if (ev.PropertyName is nameof(FirstRunTutorialViewModel.IsActive)
+                        or nameof(FirstRunTutorialViewModel.HighlightImportMdb))
+                        ApplyImportMdbHighlight(mvm);
                 };
                 PositionChanged += (_, _) => PositionTutorialWindow();
-
-                // Menu-open signals tick the tour's "open the … menu" checklist
-                // lines and advance the highlight. Observe IsSubMenuOpen (fires
-                // reliably for top-level items) rather than the routed event.
-                FileMenu.GetObservable(MenuItem.IsSubMenuOpenProperty).Subscribe(
-                    new AnonymousObserver<bool>(open => { if (open) mvm.Tutorial.NotifyMenuOpened("File"); }));
-                GameDataMenu.GetObservable(MenuItem.IsSubMenuOpenProperty).Subscribe(
-                    new AnonymousObserver<bool>(open => { if (open) mvm.Tutorial.NotifyMenuOpened("GameData"); }));
 
                 AppServices.Current.StartFirstRunTutorial = demo =>
                     Dispatcher.UIThread.Post(() =>
@@ -587,11 +604,15 @@ public partial class MainWindow : Window
             Command      = vm.OpenGameDataBrowserCommand,
         });
         GameDataMenu.Items.Add(new Separator());
-        GameDataMenu.Items.Add(new MenuItem
+        MenuItem importMdb = new()
         {
             Header  = "Import .mdb…",
             Command = vm.ImportMdbCommand,
-        });
+        };
+        importMdb.Click += (_, _) => vm.Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionImportMdb);
+        _importMdbMenuItem = importMdb;
+        ApplyImportMdbHighlight(vm);   // re-assert the glow after a menu rebuild
+        GameDataMenu.Items.Add(importMdb);
         GameDataMenu.Items.Add(new MenuItem
         {
             Header  = "Import loops (MegaMUD .mp)…",

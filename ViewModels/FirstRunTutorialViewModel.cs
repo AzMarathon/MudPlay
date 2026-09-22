@@ -6,10 +6,11 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace MudPlay.ViewModels;
 
-// One line of a step's checklist. Done latches its own completion signal (a menu
-// having been opened, or the step's outcome being reached) — used only for the
-// check-mark / highlight; step advancement is driven by TutorialStep.Outcome.
-internal sealed record SubStep(string Text, Func<bool> Done);
+// One line of a step's checklist. Done latches its completion signal — a specific
+// menu action having been taken (ActionKey non-null, keyed on _doneActions) or the
+// step's outcome being reached (ActionKey null). Used for the check-mark +
+// highlight; step advancement is driven by TutorialStep.Outcome.
+internal sealed record SubStep(string Text, Func<bool> Done, string? ActionKey = null);
 
 // A step of the tour: a titled checklist (Subs) pointing at a menu (TargetName),
 // considered complete when Outcome is true.
@@ -26,13 +27,17 @@ public sealed record SubStepView(string Text, bool IsDone, bool IsCurrent)
 // Drives the first-run setup tour: a short, navigable sequence that guides a
 // brand-new user through the prerequisites they're missing (add a BBS, add a
 // character, import game data) and finishes at Connect. Each step is a checklist
-// whose lines tick + highlight as the user progresses (a menu opening, then the
-// outcome being reached); a step is done — and the tour advances — when its
-// outcome is true. Pure presentation state: the prerequisite probes and the
-// "don't show again" persistence are injected, so this stays free of AppServices
-// and is unit-testable.
+// whose first line is a menu action (ticks when the user takes it) and whose
+// remaining lines reflect the outcome (the BBS / character / game-data landing).
+// A step is done — and the tour advances — when its outcome is true. Pure
+// presentation state: the prerequisite probes and the "don't show again"
+// persistence are injected, so this stays free of AppServices and unit-testable.
 public sealed partial class FirstRunTutorialViewModel : ObservableObject
 {
+    // Action keys — the menu items the tour tracks + highlights.
+    public const string ActionProfileManagement = "ProfileManagement";
+    public const string ActionImportMdb = "ImportMdb";
+
     private readonly Func<bool> _hasGameData;
     private readonly Func<bool> _hasBbs;
     private readonly Func<bool> _hasCharacter;
@@ -41,13 +46,14 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
 
     private readonly List<TutorialStep> _steps = new();
 
-    // Menus the user has opened during the tour (cumulative) — the completion
-    // signal for each step's "open the … menu" checklist line.
-    private readonly HashSet<string> _openedMenus = new(StringComparer.Ordinal);
+    // Menu actions the user has taken during the tour (cumulative) — the
+    // completion signal for each step's leading action line.
+    private readonly HashSet<string> _doneActions = new(StringComparer.Ordinal);
 
     // Demo walkthrough (the Program Log test button): show every step as if
-    // nothing is set up, nothing ticked, no auto-advance, and dismissing doesn't
-    // persist — so the tour can be reviewed end-to-end on a configured install.
+    // nothing is set up, no outcome ticked, no auto-advance, and dismissing
+    // doesn't persist — so the tour can be reviewed on a configured install. The
+    // action lines still tick on real clicks, so the checklist stays interactive.
     private bool _demoMode;
 
     [ObservableProperty] private bool _isActive;
@@ -78,7 +84,7 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
 
     // Force-show the full tour as if nothing is configured — the Program Log test
     // button, so it can be reviewed without wiping the install. All steps show, at
-    // step 1, nothing ticked.
+    // step 1, with only the action lines interactive.
     public void StartDemo()
     {
         _demoMode = true;
@@ -92,19 +98,18 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     {
         bool demo = _demoMode;
         Func<bool> never = static () => false;
-        // Menu lines always key off the real menu-open signal, so the checklist
-        // responds to clicks even during a demo. Only the OUTCOME lines (and step
-        // completion) are forced unmet in demo, so a fully-configured install can
-        // still walk every step instead of auto-completing.
-        SubStep Menu(string text, string key) => new(text, () => _openedMenus.Contains(key));
+        // Action lines key off the real click signal, so the checklist responds to
+        // clicks even in a demo; only the OUTCOME lines + step completion are forced
+        // unmet in demo, so a fully-configured install still walks every step.
+        SubStep Action(string text, string key) => new(text, () => _doneActions.Contains(key), key);
         SubStep Outcome(string text, Func<bool> pred) => new(text, demo ? never : pred);
 
-        _openedMenus.Clear();
+        _doneActions.Clear();
         _steps.Clear();
         if (demo || !_hasBbs())
             _steps.Add(new TutorialStep("Add a BBS", new[]
             {
-                Menu("File → Profile Management", "File"),
+                Action("File → Profile Management", ActionProfileManagement),
                 Outcome("Add BBS (opens Settings)", _hasBbs),
                 Outcome("Fill in the host/IP + port", _hasBbs),
                 Outcome("OK", _hasBbs),
@@ -113,7 +118,7 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
         if (demo || !_hasCharacter())
             _steps.Add(new TutorialStep("Add a character", new[]
             {
-                Menu("File → Profile Management", "File"),
+                Action("File → Profile Management", ActionProfileManagement),
                 Outcome("Add a character on your BBS", _hasCharacter),
                 Outcome("Name it, then Save", _hasCharacter),
             }, "FileMenu", demo ? never : _hasCharacter));
@@ -121,7 +126,7 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
         if (demo || !_hasGameData())
             _steps.Add(new TutorialStep("Import game data", new[]
             {
-                Menu("Game Data → Import .mdb", "GameData"),
+                Action("Game Data → Import .mdb", ActionImportMdb),
                 Outcome("Pick your MajorMUD .mdb file", _hasGameData),
             }, "GameDataMenu", demo ? never : _hasGameData));
 
@@ -139,8 +144,8 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     }
 
     // Re-check the live prerequisites (call when the user returns to the main
-    // window). Ticks completed lines and auto-advances past any step whose outcome
-    // is now reached, so finishing a task in another window moves the tour forward.
+    // window). Auto-advances past any step whose outcome is now reached, so
+    // finishing a task in another window moves the tour forward.
     public void Refresh()
     {
         if (!IsActive || _demoMode) return;
@@ -149,12 +154,13 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
         RaiseStepProperties();
     }
 
-    // A menu the user opened — the completion signal for a step's "open the … menu"
-    // line. Re-renders the checklist so that line ticks and the highlight advances.
-    public void NotifyMenuOpened(string menuKey)
+    // A tracked menu action the user took (e.g. clicking Profile Management) — the
+    // completion signal for a step's leading action line. Re-renders the checklist
+    // so that line ticks, the highlight advances, and the menu-item highlight clears.
+    public void NotifyActionDone(string actionKey)
     {
-        if (!IsActive || string.IsNullOrEmpty(menuKey)) return;
-        if (_openedMenus.Add(menuKey)) RaiseStepProperties();
+        if (!IsActive || string.IsNullOrEmpty(actionKey)) return;
+        if (_doneActions.Add(actionKey)) RaiseStepProperties();
     }
 
     private TutorialStep? CurrentStep =>
@@ -168,6 +174,21 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     public bool IsLastStep => CurrentIndex >= _steps.Count - 1;
     public string NextButtonText => IsLastStep ? "Finish" : "Next";
     public bool AllDone => _steps.Count > 0 && _steps.All(s => s.Outcome());
+
+    // The action the current (next-to-do) checklist line wants the user to take,
+    // or null when that line is an outcome line — drives which menu item glows.
+    public string? CurrentActionKey
+    {
+        get
+        {
+            if (CurrentStep is not { } step) return null;
+            SubStep sub = step.Subs[FirstNotDoneSub(step)];
+            return sub.Done() ? null : sub.ActionKey;
+        }
+    }
+
+    public bool HighlightProfileManagement => IsActive && CurrentActionKey == ActionProfileManagement;
+    public bool HighlightImportMdb => IsActive && CurrentActionKey == ActionImportMdb;
 
     // The current step's checklist, with the first not-done line flagged current.
     public IReadOnlyList<SubStepView> CurrentSubs
@@ -219,6 +240,7 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     }
 
     partial void OnCurrentIndexChanged(int value) => RaiseStepProperties();
+    partial void OnIsActiveChanged(bool value) => RaiseStepProperties();
 
     private void RaiseStepProperties()
     {
@@ -226,6 +248,9 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentTargetName));
         OnPropertyChanged(nameof(CurrentSubs));
         OnPropertyChanged(nameof(CurrentIsDone));
+        OnPropertyChanged(nameof(CurrentActionKey));
+        OnPropertyChanged(nameof(HighlightProfileManagement));
+        OnPropertyChanged(nameof(HighlightImportMdb));
         OnPropertyChanged(nameof(StepCounterText));
         OnPropertyChanged(nameof(CanPrev));
         OnPropertyChanged(nameof(IsLastStep));
