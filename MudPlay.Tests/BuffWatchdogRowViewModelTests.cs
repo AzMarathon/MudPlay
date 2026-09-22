@@ -107,20 +107,27 @@ public sealed class BuffWatchdogRowViewModelTests
 
     // ----- Negative recast margin (recast AFTER wear-off; red lapse bar) -----
 
+    // The bar is two fixed zones: green (TotalSec) + red lapse buffer (|margin|). The
+    // outer split is a fraction of the whole bar (Total/span : |margin|/span); the fills
+    // are fractions of their OWN zone. The zone split is constant while the buff is up, so
+    // the red zone can't drift as the green fill moves (the old flat 4-col layout let it).
+
     [Fact]
     public void NegativeMargin_StillUp_ReservedRedBufferVisible()
     {
-        // 60s buff, margin -30 (recast 30s after expiry) → bar spans 90s. 30s in
-        // (30s remaining): green consumed 30/90, green remaining 30/90, no red YET
-        // consumed, but the reserved red buffer (30/90) IS shown so you can see it.
+        // 60s buff, margin -30 (recast 30s after expiry) → bar spans 90s. Zones split
+        // 60/90 green : 30/90 red. 30s in (30s remaining): green half consumed, no red
+        // consumed yet, but the reserved red buffer fills its whole (fixed) zone.
         BuffWatchdogRowViewModel row = NewRow();
         row.Update(new ActiveBuffTimer("", "mshi", T0.AddSeconds(60), -30, 60), T0.AddSeconds(30));
 
         Assert.True(row.IsActive);
-        Assert.Equal(30.0 / 90.0, row.FillStar.Value, 3);      // green consumed
-        Assert.Equal(30.0 / 90.0, row.FillRestStar.Value, 3);  // green remaining (dark)
+        Assert.Equal(60.0 / 90.0, row.GreenZoneStar.Value, 3); // green zone (fixed)
+        Assert.Equal(30.0 / 90.0, row.RedZoneStar.Value, 3);   // red zone (fixed)
+        Assert.Equal(0.5, row.FillStar.Value, 3);              // 30/60 of the green zone consumed
+        Assert.Equal(0.5, row.FillRestStar.Value, 3);          // 30/60 still up
         Assert.Equal(0.0, row.RedStar.Value, 3);               // no lapse consumed yet
-        Assert.Equal(30.0 / 90.0, row.RedRestStar.Value, 3);   // reserved red buffer visible
+        Assert.Equal(1.0, row.RedRestStar.Value, 3);           // whole red zone reserved (visible)
         Assert.False(row.InRecastWindow);
         Assert.False(row.ShowRecastMarker);
         Assert.Equal("30s", row.TimeText);
@@ -129,13 +136,13 @@ public sealed class BuffWatchdogRowViewModelTests
     [Fact]
     public void NegativeMargin_Expired_RedGrows_NotYetDue()
     {
-        // 15s past expiry (remaining -15): green fills the 60s (60/90), red fills the
-        // lapse so far (15/90); recast (remaining <= -30) not yet reached.
+        // 15s past expiry (remaining -15): green zone full, red zone half consumed
+        // (15/30); recast (remaining <= -30) not yet reached.
         BuffWatchdogRowViewModel row = NewRow();
         row.Update(new ActiveBuffTimer("", "mshi", T0.AddSeconds(60), -30, 60), T0.AddSeconds(75));
 
-        Assert.Equal(60.0 / 90.0, row.FillStar.Value, 3);
-        Assert.Equal(15.0 / 90.0, row.RedStar.Value, 3);
+        Assert.Equal(1.0, row.FillStar.Value, 3);              // green zone fully consumed
+        Assert.Equal(15.0 / 30.0, row.RedStar.Value, 3);       // half the red zone
         Assert.False(row.InRecastWindow);
         Assert.Contains("recast in 15s", row.TimeText);
     }
@@ -143,13 +150,14 @@ public sealed class BuffWatchdogRowViewModelTests
     [Fact]
     public void NegativeMargin_ReachesRecast_RedFull_Due()
     {
-        // At |margin| past expiry (remaining -30): red fills the rest and recast is due.
+        // At |margin| past expiry (remaining -30): both zones full and recast is due.
         BuffWatchdogRowViewModel row = NewRow();
         row.Update(new ActiveBuffTimer("", "mshi", T0.AddSeconds(60), -30, 60), T0.AddSeconds(90));
 
-        Assert.Equal(60.0 / 90.0, row.FillStar.Value, 3);
-        Assert.Equal(30.0 / 90.0, row.RedStar.Value, 3);
+        Assert.Equal(1.0, row.FillStar.Value, 3);
         Assert.Equal(0.0, row.FillRestStar.Value, 3);
+        Assert.Equal(1.0, row.RedStar.Value, 3);               // whole red zone consumed
+        Assert.Equal(0.0, row.RedRestStar.Value, 3);
         Assert.True(row.InRecastWindow);
     }
 }
