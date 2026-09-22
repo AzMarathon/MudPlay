@@ -28,13 +28,15 @@ public sealed class MessageCandidateWatcherTests
         // Default in-game so capture tests exercise the real path; a test that
         // needs the pre-game gate passes inGame:false. seedDefaultPatterns loads the
         // real catalog for tests about shapes DefaultPatterns is supposed to cover.
-        public Harness(bool inGame = true, bool seedDefaultPatterns = false)
+        public Harness(bool inGame = true, bool seedDefaultPatterns = false,
+            Func<LineExtractor.EmittedLine, bool>? isRecognizedLine = null)
         {
             if (seedDefaultPatterns) DefaultPatterns.Seed(Router);
             Watcher = new MessageCandidateWatcher(
                 Router, Messages, Candidates, currentRoom: () => Room, log: Log,
                 isKnownRoomName: RoomNames.Contains,
-                isRecognizedByDirectParser: PartyManager.IsRosterRow);
+                isRecognizedByDirectParser: PartyManager.IsRosterRow,
+                isRecognizedLine: isRecognizedLine);
             if (inGame) Watcher.NotifyInGame();
         }
 
@@ -580,6 +582,60 @@ public sealed class MessageCandidateWatcherTests
         h.Feed(line);
 
         Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void ColourAwareRecognizedLine_IsNotStaged()
+    {
+        // The colour-aware exclusion (BBS action / emote, told apart by all-green colour
+        // plus a roster check in real life) drops the line before it's staged. Here the
+        // delegate stands in for that recognizer.
+        Harness h = new(isRecognizedLine: line => line.Text == "Fujin waves happily.");
+
+        h.Feed("Fujin waves happily.");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void BroadcastChannelList_HeaderAndMembers_NotStaged()
+    {
+        // `br` prints a header then the channel members (one per line or comma-separated).
+        // Header + member rows are all suppressed.
+        Harness h = new();
+
+        h.Feed("The following users are on channel 34433:");
+        h.Feed("Fujin");
+        h.Feed("Raijin, Suijin");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void BareName_WithoutChannelHeader_IsStillStaged()
+    {
+        // A bare capitalized name is suppressed ONLY right after the channel header — on
+        // its own it's a genuine unknown that must surface.
+        Harness h = new();
+
+        h.Feed("Grimlock");
+
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void BroadcastChannelList_GateClearsAfterANonMemberLine()
+    {
+        // The member gate is one-shot per header: a line that isn't a member row clears
+        // it (and is itself staged normally), so a later bare name isn't wrongly dropped.
+        Harness h = new();
+
+        h.Feed("The following users are on channel 34433:");   // gate on
+        h.Feed("Fujin");                                        // member — suppressed
+        h.Feed("The gnarled tree groans ominously.");           // non-member → gate off, staged
+        h.Feed("Grimlock");                                     // bare name, gate cleared → staged
+
+        Assert.Equal(2, h.Candidates.Candidates.Count);
     }
 
     [Fact]

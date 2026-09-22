@@ -72,6 +72,11 @@ public sealed class MessageCandidateWatcher : IDisposable
     private readonly Func<string, bool>? _isKnownRoomName;
     private readonly Func<string, bool>? _isRecognizedByDirectParser;
     private readonly Func<string, bool>? _isNonCasterPhysicalAction;
+    // Colour-aware exclusion: given the whole line (attributes included), true if it's a
+    // recognized non-spell line that TEXT alone can't identify — the BBS action / emote,
+    // which is told apart from a spell line only by its all-green colouring plus a
+    // known-player check. Composed in AppServices from ActionEmoteClassifier.
+    private readonly Func<LineExtractor.EmittedLine, bool>? _isRecognizedLine;
     private readonly LogService? _log;
 
     // Built from MessageStore on every CollectionChanged — trimmed text of every
@@ -140,7 +145,8 @@ public sealed class MessageCandidateWatcher : IDisposable
         MessageCandidateStore candidates, Func<RoomKey?>? currentRoom = null,
         LogService? log = null, Func<string, bool>? isKnownRoomName = null,
         Func<string, bool>? isRecognizedByDirectParser = null,
-        Func<string, bool>? isNonCasterPhysicalAction = null)
+        Func<string, bool>? isNonCasterPhysicalAction = null,
+        Func<LineExtractor.EmittedLine, bool>? isRecognizedLine = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(messages);
@@ -152,6 +158,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         _isKnownRoomName = isKnownRoomName;
         _isRecognizedByDirectParser = isRecognizedByDirectParser;
         _isNonCasterPhysicalAction = isNonCasterPhysicalAction;
+        _isRecognizedLine = isRecognizedLine;
         _log = log;
 
         _templates = new MessageTemplateIndex(messages.Messages);
@@ -324,11 +331,20 @@ public sealed class MessageCandidateWatcher : IDisposable
         // be death flavour, so stage it.
         CommitPending();
 
+        // The `br` broadcast-channel status ("The following users are on channel N:"
+        // then the members). Run first so the one-line member-list gate is maintained
+        // for every line — the members are bare player names, suppressed ONLY right
+        // after the header, and a non-member line clears the gate without being touched.
+        if (IsChannelListLine(text)) return;
+
         // Known from game data, so never a review candidate.
         if (Light.LightModel.IsRoomLightPhrase(text)) return;
         if (_knownLines.Contains(text)) return;
         if (IsKnownRoomName(text)) return;
         if (_isRecognizedByDirectParser?.Invoke(text) == true) return;
+        // Colour-aware: a BBS action / emote reads like any other sentence in plain text,
+        // so it's told apart by the wire's all-green colouring (plus a known-player check).
+        if (_isRecognizedLine?.Invoke(line) == true) return;
         if (MatchesAppliedEndsWith(text)) return;
         if (_templates.Matches(text)) return;
         if (_router.AnyPatternMatches(line)) return;
@@ -374,6 +390,22 @@ public sealed class MessageCandidateWatcher : IDisposable
             : (null, null);
         // Held rather than staged — see the death-flavour rule at the top of OnLine.
         _pending = new PendingCandidate(text, now, map, room);
+    }
+
+    // True while consuming the `br` broadcast-channel member list — set by the header,
+    // held across the member rows, cleared by the first line that isn't a member row.
+    private bool _inChannelMemberList;
+
+    // Recognizes the broadcast-channel status block. The header always matches; the
+    // member rows match ONLY while the header just set the gate, so a bare-name line can
+    // never be suppressed on its own. A non-member line clears the gate and is NOT
+    // suppressed here (it falls through to the normal exclusions).
+    private bool IsChannelListLine(string text)
+    {
+        if (BenignChatterMatcher.IsChannelListHeader(text)) { _inChannelMemberList = true; return true; }
+        if (_inChannelMemberList && BenignChatterMatcher.LooksLikeChannelMemberList(text)) return true;
+        _inChannelMemberList = false;
+        return false;
     }
 
     // A vetted line waiting to see whether an experience gain follows it (which

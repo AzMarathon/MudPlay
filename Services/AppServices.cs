@@ -3880,7 +3880,21 @@ public sealed class AppServices
                 || Inventory.IsCapturing
                 // "Uses remaining: N" off an item look — ItemChargeTracker reads it via
                 // TokenCatalog with no router pattern, so reuse that same recognizer.
-                || Game.Tokens.TokenCatalog.ParseUsesRemaining(text) >= 0,
+                || Game.Tokens.TokenCatalog.ParseUsesRemaining(text) >= 0
+                // Benign non-spell chatter no spell record will ever describe: player
+                // departures, disconnects, follow / toll / empty-say / also-here rows, the
+                // suicide-password advisory, and regen / illumination status labels.
+                || Game.BenignChatterMatcher.IsBenign(text)
+                // Another KNOWN player changing gear ("X wears / removes …!") — roster-gated
+                // so a same-shaped monster / spell line can't be suppressed.
+                || Game.BenignChatterMatcher.IsOtherPlayerGearSwap(text, IsKnownRoomPlayer),
+            // Colour-aware: a BBS action / emote is told from a spell line only by its
+            // all-green colouring plus a known-player check — the exact recognizer
+            // ChatRouter uses to file these under the SAY channel.
+            isRecognizedLine: line =>
+                Game.ActionEmoteClassifier.IsAllGreen(line)
+                && Game.ActionEmoteClassifier.Classify(line.Text, IsKnownRoomPlayer, out _)
+                   != Game.ActionEmoteClassifier.Kind.None,
             // "<Actor> <verb> an <ammo> at <target>!" reads identically whether it's
             // archery or a projectile spell, so the shape can't be a router pattern —
             // it needs to know who acted. A no-magery class settles it.
