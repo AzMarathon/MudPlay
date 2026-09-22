@@ -109,6 +109,7 @@ public sealed class AutoTrainManager : IDisposable
 
         _stats.PropertyChanged += OnStatsChanged;
         _trainer.MenuEntered += OnMenuEntered;
+        _trainer.InputMenuEntered += OnManualTrainStatsEntered;
         _trainer.MenuExited += OnMenuExited;
         _trainer.InputMenuExited += OnInputMenuExited;
     }
@@ -234,6 +235,49 @@ public sealed class AutoTrainManager : IDisposable
         StartReplay();
     }
 
+    // The user opened the in-game `train stats` screen themselves (InputMenuEntered is the
+    // realm-independent signal, armed off their outbound `train stats`). With Auto-train
+    // stats ON and an unapplied plan for the current level, drive the SAME CP replay Train
+    // Now would — the user's own `train stats` IS the trigger, no button press needed. The
+    // screen is already coming up, so we skip the send and go straight to the
+    // await-render → replay machinery (the not-at-a-trainer / prompt-returned abort still
+    // applies via IsInputMenuActive). Fails safe: checkbox off, nothing to apply, or a run
+    // already in flight → shielded, hand-allocate exactly as before. (Character creation
+    // also fires InputMenuEntered, but there's no character plan then, so TryResolveTargets
+    // short-circuits it.)
+    private void OnManualTrainStatsEntered()
+    {
+        if (_phase != Phase.Idle) return;                        // our own flow already drives it
+        if (!ReadAutoTrainerSettings().AutoTrainStats) return;   // checkbox off → hand-allocate
+        if (!TryResolveTargets(out int[] current, out int[] target)) return;
+
+        _sequence = AutoTrainSequenceBuilder.Build(current, target);
+        int session = ++_sessionId;
+        _phase = Phase.AwaitingMenu;
+        _log?.Info("AutoTrain",
+            "Auto-train stats — you opened the train-stats screen; applying the CP plan.");
+        StateChanged?.Invoke();
+        _ = AwaitMenuTimeoutAsync(session);
+        _ = AwaitRenderThenReplayAsync(session);
+    }
+
+    // The character's live AutoTrainer settings (the "AutoTrainer" profile section), or
+    // defaults when unset / malformed. Mirrors TrainerWalkManager.ReadSettings.
+    private AutoTrainerSettings ReadAutoTrainerSettings()
+    {
+        if (_profile.Current?.Settings is { } settings
+            && settings.TryGetValue("AutoTrainer", out System.Text.Json.JsonElement json))
+        {
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<AutoTrainerSettings>(json)
+                    ?? new AutoTrainerSettings();
+            }
+            catch { /* malformed settings → defaults */ }
+        }
+        return new AutoTrainerSettings();
+    }
+
     private void StartReplay()
     {
         _phase = Phase.Replaying;
@@ -355,6 +399,7 @@ public sealed class AutoTrainManager : IDisposable
     {
         _stats.PropertyChanged -= OnStatsChanged;
         _trainer.MenuEntered -= OnMenuEntered;
+        _trainer.InputMenuEntered -= OnManualTrainStatsEntered;
         _trainer.MenuExited -= OnMenuExited;
         _trainer.InputMenuExited -= OnInputMenuExited;
     }

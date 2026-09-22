@@ -1,16 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.101.0**
-> - Combat profiles now carry the **action order** (spells-first / physical-first / custom cycle), **backstab options**, and **kill-all-engaged** per profile — a magic and a physical profile no longer share one setting; existing profiles keep their current value on upgrade
-> - Combat settings tab regrouped: per-combat-profile settings at the top, shared settings (targeting, display) under a "Shared combat settings" divider at the bottom
-> - Read-only windows (Conversation, Log, Backscroll, Party, Buff Watchdog, Spell Book, and the like) now **close when you re-press their menu/hotkey while they're focused** — a buried one still raises to front; edit windows still only raise
-> - Cure spells no longer spam when a condition flag is stuck: the same self-cure is throttled to once every 15s instead of every round, so it can't drain mana to zero
-> - Fixed a Paradigm game-data slip where `mirrored shield` carried haste text, falsely flagging you "blinded" whenever any haste spell landed
-> - Party heal no longer tries to single-target-heal yourself (self is covered by the self-heal slots)
-> - `@comeback` now fires when the leader leaves while you're knocked down / held / stunned
-> - Spells-First now skips an attack spell the target's type makes useless (turn-undead vs a non-undead mob) straight to the next spell or the weapon, from game data — no wasted probe rounds
-> - Attack resumes promptly after a between-round buff recast; fixed triple-attacking with Attack-Last-Party; the Settings OK no longer prompts to save when nothing changed
+> **Version 3.101.2**
+> - Auto-train: applying CP (`train stats`) is no longer level-band gated — Train Now allocates your plan at whatever class-valid trainer you're standing in, instead of walking you off (or giving up) just to spend points
+> - With **Auto-train stats** on, opening the `train stats` screen yourself now fires the CP allocation automatically — no CP-tab button press needed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -3683,7 +3683,14 @@ in the data means "unknown," so the client prices unknown Charm at 50.
   A training room is `Shops.ShopType == 8`; its `MinLVL` / `MaxLVL` fields are the **level range it can
   train** and `ClassRest` the single class it serves (a `Classes` row, `0` = any class). The range is
   one contiguous band per shop — the schema has no way to express a gap, so a trainer never splits into
-  multiple bands. A trainer **can also stock items** (the Bard Training Room sells songsheets, the Thief
+  multiple bands.
+- **[CONFIRMED]** *(2026-09-22, user)* **The `MinLVL` / `MaxLVL` band gates `train` (level up) ONLY —
+  NOT `train stats` (CP allocation).** Applying stat points works at **any** trainer that isn't
+  class-restricted against you (a universal Training Room `ClassRest == 0`, or your own class's trainer),
+  regardless of the trainer's level band. So the auto-trainer's CP-only reconcile selects a trainer by
+  **class only** (`TrainerCatalog.SelectNearestForStats`), never the level-band `SelectNearest` — a
+  band-filtered pick would walk you across the map (or abort) to allocate stats you could apply right
+  where you stand. The `train` level-up path stays band-gated. A trainer **can also stock items** (the Bard Training Room sells songsheets, the Thief
   Training Room lockpicks) — same 20-slot stock table as a merchant — so a training room is a trainer
   *and* a merchant at once, not either/or.
 - **[CONFIRMED — verified against the 1.11p Shops table]** Each of the twenty stock slots is **five

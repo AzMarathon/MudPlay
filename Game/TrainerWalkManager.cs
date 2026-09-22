@@ -450,11 +450,14 @@ public sealed class TrainerWalkManager : IDisposable
             return;
         }
 
-        TrainerShop? target = SelectNearest(cur.Key);
+        // CP allocation is `train stats` — not level-band gated — so pick by CLASS only.
+        // A band-filtered pick would walk you across the map (or abort) when your current
+        // level's band isn't served where you stand, even though stats apply right here.
+        TrainerShop? target = SelectNearestForStats(cur.Key);
         if (target is not { } t)
         {
             _log?.Info("AutoTrain",
-                $"No reachable allowed trainer serves level {_stats.Level} to allocate CP at.");
+                "No reachable allowed class trainer to allocate CP at.");
             return;
         }
 
@@ -895,6 +898,14 @@ public sealed class TrainerWalkManager : IDisposable
     // ----- resolution / detection ----------------------------------------
 
     private TrainerShop? SelectNearest(RoomKey from) => SelectNearest(from, _stats.Level);
+
+    // CP allocation (`train stats`) selector — class-only, no level band (stats aren't
+    // band-gated, only `train` is). Standing in a class-valid trainer gives distance 0, so
+    // CP applies in place with no walk.
+    private TrainerShop? SelectNearestForStats(RoomKey from) =>
+        TrainerCatalog.SelectNearestForStats(
+            TrainerCatalog.Enumerate(_gameData), ResolveClassNumber(), ReadDisabledTrainers(),
+            t => _bfs.DistanceBetween(from, new RoomKey(t.Map, t.Room)));
 
     // Level is explicit for the chain re-target: mid-run PlayerStats.Level lags the
     // level we've actually attained, and picking the next trainer against a stale

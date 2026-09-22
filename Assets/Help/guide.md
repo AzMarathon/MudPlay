@@ -2975,8 +2975,8 @@ If you're short it collects the difference first: your stash rooms, then your ba
 
 **Where:** Player Workshop → CP Allocation tab (not this tab).
 **Default:** Off
-**What it does:** Independent of Auto-train. When on, every time a training happens (whether from Auto-train, a manual "Train Now," or a remote `@train`), MudPlay also applies your saved CP allocation plan's spending for the level you just reached.
-**Important notes:** You need a saved CP plan (from the Player Workshop's CP Allocation tab) before this checkbox will actually stay checked — MudPlay reverts it and warns you if you try to enable it with no plan saved.
+**What it does:** Independent of Auto-train. When on, every time a training happens (whether from Auto-train, a manual "Train Now," or a remote `@train`), MudPlay also applies your saved CP allocation plan's spending for the level you just reached. **It also fires the moment you open the `train stats` screen yourself** — type `train stats` at any trainer with the box checked and MudPlay applies the plan for you, no button press needed. (With it *off*, MudPlay stays out of the way and you allocate by hand.)
+**Important notes:** You need a saved CP plan (from the Player Workshop's CP Allocation tab) before this checkbox will actually stay checked — MudPlay reverts it and warns you if you try to enable it with no plan saved. Applying stats isn't level-gated like a level-up is, so "Train Now" applies your CP at whatever class-valid trainer you're standing in — it no longer walks you off to a level-band-matching one (or gives up) just to spend points.
 
 ### Levels to keep banked
 
