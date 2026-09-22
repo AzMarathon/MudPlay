@@ -106,8 +106,9 @@
                 <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding TargetMessage, Mode=TwoWay}"/>
 
                 <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="3rd party witness"
-                           ToolTip.Tip="Line YOU see when someone else casts on someone else."/>
-                <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding WitnessMessage, Mode=TwoWay}"/>
+                           ToolTip.Tip="Line(s) YOU see when someone else casts on someone else — one wording per line. A room spell fires several ambient flavor lines from one record; put each on its own line."/>
+                <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding WitnessMessage, Mode=TwoWay}"
+                           AcceptsReturn="True" TextWrapping="Wrap" MinHeight="46"/>
 
                 <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Buff/debuff applied"
                            ToolTip.Tip="Buff/debuff begin line YOU see when the effect starts on you."/>

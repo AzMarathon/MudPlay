@@ -37,7 +37,11 @@ public sealed class MessageTemplateIndex
         {
             if (Add(r.CasterMessage, seen))   indexed++;
             if (Add(r.TargetMessage, seen))   indexed++;
-            if (Add(r.WitnessMessage, seen))  indexed++;
+            // WitnessMessage can hold several wordings, one per line (a room spell's
+            // ambient set) — index each so a templated witness among them still matches.
+            if (!MessageRecord.IsBlankOrAbsent(r.WitnessMessage))
+                foreach (string wording in r.WitnessMessage.Split('\n'))
+                    if (Add(wording, seen)) indexed++;
             if (Add(r.AppliedMessage, seen))  indexed++;
             if (Add(r.AppliedEndsWith, seen)) indexed++;
         }

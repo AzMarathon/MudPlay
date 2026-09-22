@@ -205,7 +205,13 @@ public sealed class MessageCandidateWatcher : IDisposable
         {
             AddIfNotEmpty(known, r.CasterMessage);
             AddIfNotEmpty(known, r.TargetMessage);
-            AddIfNotEmpty(known, r.WitnessMessage);
+            // WitnessMessage may carry SEVERAL alternative wordings, one per line — a
+            // room spell (silvermere / darkwood) fires a whole set of ambient flavor
+            // lines from one record, none of which we could represent in a single-string
+            // slot. Split like ConfuseFumbleLine below so every wording is recognized.
+            if (!MessageRecord.IsBlankOrAbsent(r.WitnessMessage))
+                foreach (string wording in r.WitnessMessage.Split('\n'))
+                    AddIfNotEmpty(known, wording);
             AddIfNotEmpty(known, r.AppliedMessage);
             // Substring, not exact — see _appliedEndsWith. Templated wordings are
             // the template index's job; only literals land here.

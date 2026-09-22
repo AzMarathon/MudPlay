@@ -22731,13 +22731,13 @@
     ]
   },
   {
-    "Id": "d4109f96883792c3",
+    "Id": "be518dcf6b3502c9",
     "Name": "darkwood forest spell",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
+    "WitnessMessage": "A dry twig snaps loudly behind you.\nAn ominous wind blows through the trees.\nThe forest becomes strangely silent.\nA flock of birds fly overhead.\nThe leaves begin to rustle, as if some beast were about to spring forth!",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
@@ -22748,13 +22748,13 @@
     ]
   },
   {
-    "Id": "a1b5db437d06eebf",
+    "Id": "9659da50fba38d23",
     "Name": "silvermere spell",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
+    "WitnessMessage": "A dog barks off in the distance.\nThe awful sound of a drunken chorus echoes through the streets.\nChildren rush past you hopping around in youthful glee.\nA voice shouts aloud \"Read the bulletin in the Adventurer's Guild!\"",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [

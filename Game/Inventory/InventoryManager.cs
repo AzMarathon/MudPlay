@@ -95,6 +95,16 @@ public sealed partial class InventoryManager : IDisposable
     private bool _capturing;
     private readonly List<string> _captureBuffer = new();
 
+    // True while a full-'i' dump is being consumed (between "You are carrying …" and
+    // the terminating "Encumbrance:" line). The unrecognized-line watcher consults this
+    // to exclude the dump's word-wrapped continuation rows — bare item / key fragments
+    // that carry no anchor of their own and would otherwise stage as unrecognized. The
+    // watcher runs one handler ahead of this parser on each line, so it reads the flag
+    // as of the PREVIOUS line: the anchor line is matched by its own prefix, every
+    // continuation sees the flag already set, and the closing "Encumbrance:" is routed
+    // separately — so nothing after the dump is over-suppressed. Read on the UI thread.
+    public bool IsCapturing => _capturing;
+
     // Wrap-merge: the MUD wraps long lines (~78 cols), so a multi-currency
     // "You deposit 1 platinum piece, 93 gold crowns, ... copper farthin" +
     // "gs." splits across two emitted rows. Hold a non-'.'-terminated

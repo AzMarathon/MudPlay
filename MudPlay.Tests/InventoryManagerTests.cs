@@ -60,6 +60,27 @@ public sealed class InventoryManagerTests
     }
 
     [Fact]
+    public void IsCapturing_TracksTheDumpBlock_ForTheUnrecognizedLineWatcher()
+    {
+        // The watcher reads IsCapturing to exclude the dump's word-wrapped continuation
+        // rows. It must be true from the "You are carrying …" anchor through every row
+        // and go false once the terminating "Encumbrance:" line is consumed.
+        using Harness h = new();
+        Assert.False(h.Inv.IsCapturing);
+
+        h.Feed("You are carrying 8 platinum pieces, 865 gold crowns, crested war helm (Head),");
+        Assert.True(h.Inv.IsCapturing);
+        h.Feed("light plate leggings (Legs), dwarven work boots (Feet), severed head of Rastep");
+        Assert.True(h.Inv.IsCapturing);            // an anchorless continuation row
+        h.Feed("You have the following keys: 2 black serpent key, gate key.");
+        Assert.True(h.Inv.IsCapturing);
+        h.Feed("Wealth: 166500 copper farthings");
+        Assert.True(h.Inv.IsCapturing);
+        h.Feed("Encumbrance:    36/2880  -  Light  [1%]");
+        Assert.False(h.Inv.IsCapturing);           // terminator ends the block
+    }
+
+    [Fact]
     public void SoldAndDropped_FireItemEventsWithNameAndCount()
     {
         using Harness h = new();

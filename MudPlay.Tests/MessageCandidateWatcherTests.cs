@@ -565,19 +565,43 @@ public sealed class MessageCandidateWatcherTests
     // ----- Room-spell flavour must survive --------------------------------
 
     [Theory]
-    [InlineData("An ominous wind blows through the trees")]
-    [InlineData("A flock of birds fly overhead.")]
-    [InlineData("The forest becomes strangely silent.")]
-    [InlineData("The leaves begin to rustle, as if some beast were about to spring forth!")]
-    public void RoomSpellFlavour_IsStillStaged(string line)
+    [InlineData("A cold mist coils slowly around your ankles.")]
+    [InlineData("Somewhere far off, a raven caws three times.")]
+    [InlineData("The cobblestones glisten under a sudden squall.")]
+    public void RoomSpellFlavour_NotYetInCatalogue_IsStillStaged(string line)
     {
-        // These read like scenery but are room-spell triggers the catalogue doesn't
-        // have yet — surfacing them is exactly what the capture is for, so none of
-        // the new exclusions may touch them.
+        // Scenery-like room-spell triggers the catalogue doesn't have an entry for —
+        // surfacing them is exactly what the capture is for, so none of the exclusions
+        // may touch a line with no catalogue entry. (The silvermere / darkwood sets are
+        // now seeded, so their wordings are recognized instead — see the multi-witness
+        // test below; these stand-ins keep the "unknown flavor still surfaces" invariant.)
         Harness h = new(seedDefaultPatterns: true);
 
         h.Feed(line);
 
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void MultiLineWitness_EveryWording_IsRecognized()
+    {
+        // A room spell fires SEVERAL ambient flavor lines from ONE record; WitnessMessage
+        // holds them newline-separated. Every wording must be recognized (not staged),
+        // while an unrelated line still surfaces — this is what lets the seeded silvermere
+        // / darkwood sets drop out of the report.
+        Harness h = new();
+        h.Messages.Messages.Add(MakeTemplateRecord(
+            "darkwood forest spell",
+            witness: "A dry twig snaps loudly behind you.\n"
+                   + "An ominous wind blows through the trees.\n"
+                   + "The forest becomes strangely silent."));
+
+        h.Feed("A dry twig snaps loudly behind you.");
+        h.Feed("An ominous wind blows through the trees.");
+        h.Feed("The forest becomes strangely silent.");
+        Assert.Empty(h.Candidates.Candidates);
+
+        h.Feed("A wholly different, uncatalogued line appears here.");
         Assert.Single(h.Candidates.Candidates);
     }
 }
