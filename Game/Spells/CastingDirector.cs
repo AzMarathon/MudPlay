@@ -917,7 +917,8 @@ public sealed class CastingDirector : IDisposable
     {
         List<ActiveBuffTimer> list = new(_activeUntil.Count);
         foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
-            list.Add(new ActiveBuffTimer(kv.Key.Target, kv.Key.Short, kv.Value.Until, kv.Value.MarginSec, kv.Value.TotalSec));
+            list.Add(new ActiveBuffTimer(kv.Key.Target, kv.Key.Short, kv.Value.Until,
+                EffectiveMargin(kv.Key.Target, kv.Key.Short, kv.Value.MarginSec), kv.Value.TotalSec));
         return list;
     }
 
@@ -929,7 +930,7 @@ public sealed class CastingDirector : IDisposable
     {
         if (!_activeUntil.TryGetValue((targetKey, spellShort), out (DateTime Until, int MarginSec, int TotalSec) t))
             return true;
-        return (t.Until - _now()).TotalSeconds <= t.MarginSec;
+        return (t.Until - _now()).TotalSeconds <= EffectiveMargin(targetKey, spellShort, t.MarginSec);
     }
 
     // True when spell is the same self-heal we just sent AND neither pool has
@@ -1025,6 +1026,21 @@ public sealed class CastingDirector : IDisposable
                     && string.Equals(slot.Spell?.Trim(), castCode, StringComparison.OrdinalIgnoreCase))
                     return slot.RecastMarginSec;
         return DefaultRecastMarginSec;
+    }
+
+    // The margin to USE for a live timer, preferring the CURRENT slot config over the
+    // value snapshotted when the buff was cast — so editing a slot's recast margin (e.g.
+    // flipping it negative) redraws the watchdog bar and re-times the recast immediately,
+    // not only after the next cast. Timers with no matching slot (hand casts, item-cast
+    // tokens not carried as a slot's Spell) keep their cast-time margin.
+    private int EffectiveMargin(string targetKey, string spellShort, int stored)
+    {
+        if (_readPartyBuffs?.Invoke() is { } buffs)
+            foreach (Models.Profile.BuffSlot slot in buffs.Slots)
+                if (string.Equals(slot.Spell?.Trim(), spellShort, StringComparison.OrdinalIgnoreCase)
+                    && (targetKey.Length != 0 || slot.CastOnSelf))
+                    return slot.RecastMarginSec;
+        return stored;
     }
 
     // A server rejection of a between-round cast we just sent. "You have already cast
@@ -1247,11 +1263,24 @@ public sealed class CastingDirector : IDisposable
             }
         }
 
-        // Server-confirmed early wear-off — drop the self timer so the next
-        // pass re-attempts immediately rather than waiting out a stale clock.
-        if (resolved is { } shortCode && _activeUntil.Remove(("", shortCode)))
-            _log?.Combat(LogCategory,
-                $"self-buff {shortCode} wore off (wear-off line) — recast timer cleared");
+        // Server-confirmed wear-off — normally drop the self timer so the next pass
+        // re-attempts immediately rather than waiting out a stale clock. But a NEGATIVE
+        // margin deliberately defers the recast to |margin| seconds AFTER wear-off, so
+        // keep that timer: IsRecastDue still gates on (Until - now) <= margin and won't
+        // fire until the buffer elapses. Dropping it here would recast the instant the
+        // wear-off line lands, collapsing the post-expiry buffer the user configured.
+        if (resolved is { } shortCode
+            && _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec, int TotalSec) t))
+        {
+            int margin = EffectiveMargin("", shortCode, t.MarginSec);   // honor a live edit
+            if (margin < 0)
+                _log?.Combat(LogCategory,
+                    $"self-buff {shortCode} wore off — negative margin keeps the timer; recast in "
+                    + $"{Math.Max(0.0, (t.Until.AddSeconds(-margin) - _now()).TotalSeconds):0}s");
+            else if (_activeUntil.Remove(("", shortCode)))
+                _log?.Combat(LogCategory,
+                    $"self-buff {shortCode} wore off (wear-off line) — recast timer cleared");
+        }
         Evaluate();
     }
 

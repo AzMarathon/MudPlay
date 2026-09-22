@@ -34,9 +34,21 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     [ObservableProperty] private bool _isLearned;
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private bool _inRecastWindow;
-    // Elapsed fill as a fraction of the bar (left column) and the remainder (right).
-    [ObservableProperty] private GridLength _fillStar = Empty;
-    [ObservableProperty] private GridLength _fillRestStar = Full;
+    // The bar is split into two fixed ZONES by an outer grid: a green "still up" zone
+    // (TotalSec wide) and, for a NEGATIVE recast margin (recast AFTER wear-off), a red
+    // "lapse buffer" zone (|margin| wide) tacked on the end. The zone split is derived
+    // only from Total + margin, so it's CONSTANT while the buff is up — it rounds the
+    // same way every heartbeat and the red zone can't visibly drift as the green fill
+    // moves (the flat 4-column layout used to let the reserved-red sliver absorb the
+    // green columns' sub-pixel rounding remainder, so it jittered). For a normal (>= 0)
+    // margin RedZoneStar is 0 and the bar is just the green zone, exactly as before.
+    [ObservableProperty] private GridLength _greenZoneStar = Full;   // outer: TotalSec / span
+    [ObservableProperty] private GridLength _redZoneStar = Empty;    // outer: |margin| / span (0 unless negative)
+    // Fills WITHIN each zone (fractions of that zone, not the whole bar).
+    [ObservableProperty] private GridLength _fillStar = Empty;       // green: active time consumed
+    [ObservableProperty] private GridLength _fillRestStar = Full;    // dark: active time remaining
+    [ObservableProperty] private GridLength _redStar = Empty;        // bright red: lapse consumed (post-expiry)
+    [ObservableProperty] private GridLength _redRestStar = Full;     // dim red: reserved lapse buffer (always shown)
     [ObservableProperty] private bool _showRecastMarker;
     // Recast marker sits on the boundary between these two columns.
     [ObservableProperty] private GridLength _markerStar = Empty;
@@ -84,6 +96,21 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     private static GridLength Full => new(1, GridUnitType.Star);
     private static GridLength Star(double weight) => new(weight, GridUnitType.Star);
 
+    // An idle bar: the green zone is the whole bar and everything is empty (no fill, no
+    // red lapse zone, no recast marker). Shared by every not-counting branch.
+    private void SetEmptyBar()
+    {
+        GreenZoneStar = Full;
+        RedZoneStar = Empty;
+        FillStar = Empty;
+        FillRestStar = Full;
+        RedStar = Empty;
+        RedRestStar = Full;
+        ShowRecastMarker = false;
+        MarkerStar = Empty;
+        MarkerRestStar = Full;
+    }
+
     public BuffWatchdogRowViewModel(
         string castCode, bool isParty, string name, string targetText, bool isLearned,
         bool isWholeParty = false, string memberKey = "", bool wholePartyCovered = false)
@@ -111,11 +138,7 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
             IsActive = false;
             IsCovered = false;
             InRecastWindow = false;
-            FillStar = Empty;
-            FillRestStar = Full;
-            ShowRecastMarker = false;
-            MarkerStar = Empty;
-            MarkerRestStar = Full;
+            SetEmptyBar();
             TimeText = "hidden — can't target";
             return;
         }
@@ -128,11 +151,7 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
             IsActive = false;
             IsCovered = true;
             InRecastWindow = false;
-            FillStar = Empty;
-            FillRestStar = Full;
-            ShowRecastMarker = false;
-            MarkerStar = Empty;
-            MarkerRestStar = Full;
+            SetEmptyBar();
             TimeText = $"covered by {coveredBy}";
             return;
         }
@@ -142,11 +161,7 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
         {
             IsActive = false;
             InRecastWindow = false;
-            FillStar = Empty;
-            FillRestStar = Full;
-            ShowRecastMarker = false;
-            MarkerStar = Empty;
-            MarkerRestStar = Full;
+            SetEmptyBar();
             TimeText = "not up";
             return;
         }
@@ -163,31 +178,66 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
             HasOverwriteWarning = false;
             IsActive = true;
             InRecastWindow = false;
-            FillStar = Empty;
-            FillRestStar = Full;
-            ShowRecastMarker = false;
-            MarkerStar = Empty;
-            MarkerRestStar = Full;
+            SetEmptyBar();
             TimeText = "conflict";
             if (memberName is { Length: > 0 }) TargetText = memberName;
             return;
         }
 
-        double remaining = System.Math.Max(0.0, (e.Until - now).TotalSeconds);
-        double elapsed = System.Math.Clamp(e.TotalSec - remaining, 0.0, e.TotalSec);
-
         IsActive = true;
-        double fillFraction = elapsed / e.TotalSec;
-        FillStar = Star(fillFraction);
-        FillRestStar = Star(1.0 - fillFraction);
-        InRecastWindow = remaining <= e.MarginSec;   // fill has crossed the recast marker
-        // Marker only meaningful for a real lead inside the bar (margin 0 = recast at
-        // expiry, i.e. at the far right — redundant with a full bar, so hide it).
-        ShowRecastMarker = e.MarginSec > 0 && e.MarginSec < e.TotalSec;
-        double markerFraction = (double)(e.TotalSec - e.MarginSec) / e.TotalSec;
-        MarkerStar = Star(markerFraction);
-        MarkerRestStar = Star(1.0 - markerFraction);
-        TimeText = FormatRemaining(remaining);
+        double signedRemaining = (e.Until - now).TotalSeconds;   // may go negative (expired)
+        InRecastWindow = signedRemaining <= e.MarginSec;         // recast is due
+
+        if (e.MarginSec < 0)
+        {
+            // Recast happens |margin| seconds AFTER wear-off, so the bar timeline runs
+            // TotalSec (the green "still up" zone) + |margin| (the red lapse buffer). The
+            // outer zone split (Total : |margin|) is fixed for the buff's life, so the red
+            // zone's width is pinned and can't drift as the green fill moves; within each
+            // zone a fill grows. The red buffer is ALWAYS shown (dim) so you can see it
+            // while the buff is still up; a bright-red fill grows through it post-expiry.
+            double marginAbs = -e.MarginSec;
+            double span = e.TotalSec + marginAbs;               // Total + |margin|
+            GreenZoneStar = Star(e.TotalSec / span);
+            RedZoneStar   = Star(marginAbs / span);
+
+            double greenElapsed = System.Math.Clamp(e.TotalSec - signedRemaining, 0.0, e.TotalSec);
+            FillStar     = Star(greenElapsed / e.TotalSec);                  // consumed fraction of green zone
+            FillRestStar = Star((e.TotalSec - greenElapsed) / e.TotalSec);   // remaining fraction of green zone
+
+            double lapseConsumed = System.Math.Clamp(-signedRemaining, 0.0, marginAbs);
+            RedStar     = Star(lapseConsumed / marginAbs);                   // consumed fraction of red zone
+            RedRestStar = Star((marginAbs - lapseConsumed) / marginAbs);     // reserved fraction of red zone
+
+            ShowRecastMarker = false;   // the green→red boundary IS the expiry line
+            MarkerStar = Empty;
+            MarkerRestStar = Full;
+            // While up: the buff's own remaining. Past expiry: keep counting down — now
+            // toward the recast (|margin| after wear-off), kept short so the row doesn't
+            // balloon into a sentence.
+            TimeText = signedRemaining > 0
+                ? FormatRemaining(signedRemaining)
+                : $"recast {FormatRemaining(System.Math.Max(0.0, signedRemaining - e.MarginSec))}";
+        }
+        else
+        {
+            // No lapse buffer — the green zone is the whole bar.
+            GreenZoneStar = Full;
+            RedZoneStar = Empty;
+            RedStar = Empty;
+            RedRestStar = Full;
+            double remaining = System.Math.Max(0.0, signedRemaining);
+            double fillFraction = System.Math.Clamp(e.TotalSec - remaining, 0.0, e.TotalSec) / e.TotalSec;
+            FillStar = Star(fillFraction);
+            FillRestStar = Star(1.0 - fillFraction);
+            // Marker only meaningful for a real lead inside the bar (margin 0 = recast at
+            // expiry, i.e. at the far right — redundant with a full bar, so hide it).
+            ShowRecastMarker = e.MarginSec > 0 && e.MarginSec < e.TotalSec;
+            double markerFraction = (double)(e.TotalSec - e.MarginSec) / e.TotalSec;
+            MarkerStar = Star(markerFraction);
+            MarkerRestStar = Star(1.0 - markerFraction);
+            TimeText = FormatRemaining(remaining);
+        }
         if (memberName is { Length: > 0 }) TargetText = memberName;
     }
 

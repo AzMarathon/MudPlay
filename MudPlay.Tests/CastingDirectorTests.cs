@@ -1574,6 +1574,81 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void Buff_NegativeMargin_WearOff_DefersRecastByBuffer_NotImmediate()
+    {
+        // A NEGATIVE recast margin means "recast |margin|s AFTER wear-off" (to spread out
+        // mana use). Unlike the immediate-recast case above, the wear-off line must NOT
+        // drop the timer — doing so would recast the instant it lands, collapsing the
+        // buffer. The timer stays and IsRecastDue holds off until the buffer elapses.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bless";
+        h.Spells.BlessSlotRecastMargins[1] = -30;   // recast 30s AFTER it wears off
+        h.BuffInfo["bless"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.RecordCondition("bless", MessageFlags.None,
+            applied: "You are blessed!", endsWith: "Your blessing fades.");
+
+        h.Director.Evaluate();                 // first cast
+        h.FeedLine("You are blessed!");        // 300s timer, -30s margin
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+
+        // Reach natural expiry and take the wear-off line — recast must NOT fire yet.
+        h.Now = h.Now.AddSeconds(300);
+        h.FeedLine("Your blessing fades.");    // wear-off — buffer keeps the timer
+        Assert.Empty(h.CastsSent);
+
+        // 15s into the 30s buffer → still waiting.
+        h.Now = h.Now.AddSeconds(15);
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        // 30s past expiry → buffer elapsed → recast now.
+        h.Now = h.Now.AddSeconds(15);
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void Buff_MarginEditedWhileUp_ReflectsInSnapshot_WithoutRecast()
+    {
+        // Editing a slot's recast margin while the buff is already up must take effect on
+        // the LIVE timer — the watchdog snapshot (which drives the bar) reads the current
+        // config, not the value snapshotted at cast time. Flipping positive → negative
+        // redraws the red buffer immediately instead of waiting for the next cast.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bless";
+        h.Spells.BlessSlotRecastMargins[1] = 15;    // positive to start
+        h.BuffInfo["bless"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.RecordCondition("bless", MessageFlags.None,
+            applied: "You are blessed!", endsWith: "Your blessing fades.");
+
+        h.Director.Evaluate();                 // cast
+        h.FeedLine("You are blessed!");        // 300s timer, +15 margin
+        h.CastsSent.Clear();
+
+        Assert.Equal(15, h.Director.SnapshotActiveBuffs().Single(b => b.Short == "bless").MarginSec);
+
+        // Edit the slot to a negative buffer — no recast, just a config change.
+        h.Spells.BlessSlotRecastMargins[1] = -30;
+        Assert.Equal(-30, h.Director.SnapshotActiveBuffs().Single(b => b.Short == "bless").MarginSec);
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
     public void Buff_SelfPerSlotMargin_RecastsAtConfiguredLead_NotTheDefault()
     {
         // A slot with a 30s recast lead re-casts 30s before expiry — earlier than
