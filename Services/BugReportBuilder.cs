@@ -404,6 +404,10 @@ public static class BugReportBuilder
         Kv(sb, "User-engaged (manual + self-defense)", combat.UserEngagedInstances.Count > 0
             ? string.Join(", ", combat.UserEngagedInstances)
             : "(none)");
+        // Attack Order mode + whether we're currently holding our pick for a party
+        // announce — the key tells for an "attack-last / not-last not respected" report.
+        Kv(sb, "Attack Order", combat.AttackTiming);
+        Kv(sb, "Attack-order hold", combat.AwaitingAttackOrderHold ?? "(committed / none)");
         Kv(sb, "Worn weapon", WornSlot(inv, "Weapon Hand") ?? "(none)");
         Kv(sb, "Worn off-hand", WornSlot(inv, "Off-Hand") ?? "(none)");
         Kv(sb, "Using alternate weapon", combat.UsingAlternateWeapon.ToString());

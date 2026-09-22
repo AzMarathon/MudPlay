@@ -651,6 +651,18 @@ there** — treat as close-but-unconfirmed until a Paradigm source or capture pi
   attack-last coordination (waiting until every other member has committed before our own
   `*Combat Engaged*` lands) must treat the two lines as equivalent per-member announce signals —
   keying only on `moves to attack` misses every spellcaster in the party.
+- **[CONFIRMED]** *(2026-09-21, user)* **A ROOM spell announces as `<player> moves to attack everyone
+  in the room.`** — the melee "moves to attack" form with the wildcard target `everyone in the room`,
+  NOT the single-target `moves to cast … upon …` form. (Rooming is always a spell cast; physical
+  attacks can't AoE.) So it matches the `moves to attack` regex with `target = "everyone in the room"`,
+  a room-wide commit rather than a specific mob. For attack-last, treat it as that member's round
+  commit against the whole room — our target included — and never follow "everyone in the room" as a
+  literal monster (there is no such mob).
+- **[CONFIRMED]** *(2026-09-21, user)* **Paradigm-only: `<player> is poised to assault the room!`** is
+  shown when we ENTER a room where someone is ALREADY room-spelling — they've committed to rooming and
+  the combat round hasn't fired yet. **Stock does not emit this line.** It's the "already-active roomer"
+  counterpart to the fresh `moves to attack everyone in the room` commit, so attack-last should treat it
+  as a room commit too (room after a party member already poised, so ours lands last).
 - **[CONFIRMED]** **Failure signals — the reliable single-line tell.** The surprise round is a
   **single** swing, so the **first** of the player's own combat-result lines after the `bs` settles
   the outcome: it either **carries `surprise`** (landed) or **lacks it** (failed). A failure surfaces
@@ -694,17 +706,29 @@ there** — treat as close-but-unconfirmed until a Paradigm source or capture pi
 - **[CONFIRMED]** *(2026-08-05, user)* **A spell attack command AUTO-REPEATS server-side every round,
   exactly like a weapon swing — on ALL realms.** You announce the spell once (type its cast-code +
   target); the next combat tick it fires, and it keeps firing each round while the target is present
-  and mana suffices, with NO re-announcing. It stops when the target dies. So a spell attack is
-  functionally identical to a physical attack — announce once, the server owns the per-round repeat —
-  the only difference being the spell-slot gates (mana threshold + `MinManaPerCast`, `MaxCasts`,
-  `MinEnemies`). **The client must therefore announce once and NOT re-issue the spell every round**;
-  re-announcing a spell the server is already repeating double-fires the round (wasted mana on a live
-  mob; a cast at the **corpse** when the round was the kill — "re-nukes the monster that just died").
-  The client re-announces ONLY when the best action must change:
+  and mana suffices, with NO re-announcing. So a spell attack is functionally identical to a physical
+  attack — announce once, the server owns the per-round repeat — the only difference being the
+  spell-slot gates (mana threshold + `MinManaPerCast`, `MaxCasts`, `MinEnemies`). The auto-repeat stops
+  only on **`break`**, the **room clearing**, or **moving rooms** *(2026-09-21, user)*.
+- **[CONFIRMED]** *(2026-09-21, user)* **Re-announcing a spell the server is already repeating is HARMLESS
+  — it costs no mana and does NOT double-fire.** Mana is spent once per round, when the round FIRES, for
+  any combat spell — the announce itself is free. Re-typing the cast-code (e.g. `fbal`) just re-postures
+  the same auto-repeat: the server still fires it once that round (or, if mana is short that round,
+  postures without firing and tries again next round). So the client CAN safely re-announce a combat
+  spell for ordering purposes — this is how **attack-last** works for a caster: re-announcing our attack /
+  room spell after the party's commits re-posts our action so it lands last, with no extra mana cost.
+  (This corrects an earlier note that claimed re-announcing "double-fires / wastes mana" — it does not.
+  The one real hazard is a *targeting* one, not a mana one: re-announcing a **single-target** spell at a
+  mob that just died would re-aim at the corpse, so the re-announce guards on the target still being our
+  live current target. A **room spell is cast bare** — no target — so it has no corpse hazard and is
+  always safe to re-announce.)
+  The client re-announces when the best action must change, AND for attack-last ordering:
   - **Target dies** → announce at the next target.
   - **`MaxCasts` rounds elapsed** → switch to the next cascade action. Scope: **per-target** for the
     single-target slots (normal / alternate attack spell, single-target debuff); **per-room** for the
     two AoE slots (multi-attack, area debuff).
+  - **Attack-last re-fire** → re-announce our current action after a party member's round commit, so
+    ours lands last (harmless re-posture per the rule above).
 - **[CONFIRMED]** *(2026-08-11, user + fix PR #271)* **Room-wide spells are cast BARE — no target.** The
   two AoE slots (multi-attack e.g. `blad`/dancing blades, area debuff e.g. `stnk`/stinking cloud) hit the
   whole room and must be cast as the bare cast-code (`blad`, `stnk`) — NEVER `blad <mob>`. The server

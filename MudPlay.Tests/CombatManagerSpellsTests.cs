@@ -1997,6 +1997,211 @@ public sealed class CombatManagerSpellsTests
         Assert.DoesNotContain(h.AllSent, s => s.Contains("guard"));
     }
 
+    // ----- attack-last re-fire re-issues our real action --------------
+
+    [Fact]
+    public void AttackTiming_SpellBuild_RefiresTheSpell_NotWeapon()
+    {
+        // Re-announcing a combat spell costs no mana — mana is spent once per round when
+        // it fires (GAME_MECHANICS) — so under attack-last a party member's commit must
+        // re-announce our SPELL so it lands last, never revert to the physical weapon
+        // (the old bug: the re-fire hard-sent NormalAttackCommand, dropping spell mode).
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("nuke giant rat", h.LastSent);        // engaged, spell mode
+        int before = h.Sent.Count;
+
+        h.Feed("Bob moves to attack giant rat.");          // party member commits
+        Assert.True(h.Sent.Count > before);                // re-fired
+        Assert.Equal("nuke giant rat", h.LastSent);        // re-announced the SPELL
+        Assert.DoesNotContain("a giant rat", h.AllSent);   // never the weapon
+    }
+
+    [Fact]
+    public void AttackTiming_AoeBuild_RefiresTheRoomSpell_NotWeapon()
+    {
+        // A room spell re-announces bare on the re-fire, not the weapon.
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("blast", h.LastSent);                 // AoE, cast bare
+        int before = h.Sent.Count;
+
+        h.Feed("Bob moves to attack giant rat.");
+        Assert.True(h.Sent.Count > before);
+        Assert.Equal("blast", h.LastSent);                 // re-announced bare room spell
+        Assert.DoesNotContain("a giant rat", h.AllSent);
+    }
+
+    [Fact]
+    public void AttackTiming_PartyRoomAttack_RefiresOurRoomSpell()
+    {
+        // "someone rooms, we're also rooming": their room announce names the whole room
+        // ("everyone in the room"), not our mob, but it's a room-wide commit — so our
+        // room spell must re-announce to land last. The old equality guard dropped it.
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("blast", h.LastSent);
+        int before = h.Sent.Count;
+
+        h.Feed("Client moves to attack everyone in the room.");   // party room commit
+        Assert.True(h.Sent.Count > before);                       // we room last
+        Assert.Equal("blast", h.LastSent);
+    }
+
+    [Fact]
+    public void AttackTiming_ParadigmPoisedRoomer_RefiresOurRoomSpell()
+    {
+        // Paradigm shows "<player> is poised to assault the room!" for an already-active
+        // roomer as we enter — also a room commit, so we room last behind them.
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("blast", h.LastSent);
+        int before = h.Sent.Count;
+
+        h.Feed("Client is poised to assault the room!");
+        Assert.True(h.Sent.Count > before);
+        Assert.Equal("blast", h.LastSent);
+    }
+
+    [Fact]
+    public void AttackTiming_WeaponBuild_StillRefires()
+    {
+        // A weapon build (caster wired, no attack spell) still re-fires its swing on a
+        // party member's commit so our *Combat Engaged* re-lands after theirs.
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);
+        int before = h.Sent.Count;
+
+        h.Feed("Bob moves to attack giant rat.");
+        Assert.True(h.Sent.Count > before);                // re-fired the swing
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    // ----- attack-not-last: commit once, behind the first mover --------
+
+    private static void AddParty(Harness h, params string[] names)
+    {
+        h.Party.IsInParty = true;
+        foreach (string n in names) h.Party.Members.Add(new PartyMember { Name = n });
+    }
+
+    [Fact]
+    public void AttackNotLast_HoldsThenFiresOnceOnFirstPartyAnnounce()
+    {
+        // Party of 3+: hold our pick on entry, commit once right after the FIRST party
+        // announce, and never re-fire when others announce after us.
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        AddParty(h, "MudPlay", "Client", "Buddy");
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("giant rat"));   // HELD on entry
+
+        h.Feed("Client moves to attack giant rat.");                     // first commit
+        Assert.Equal("a giant rat", h.LastSent);                         // fired once
+        int after = h.Sent.Count;
+
+        h.Feed("Buddy moves to attack giant rat.");                      // later commit
+        Assert.Equal(after, h.Sent.Count);                               // did NOT re-fire
+    }
+
+    [Fact]
+    public void AttackNotLast_SpellBuild_HoldsThenCastsOnce()
+    {
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        AddParty(h, "MudPlay", "Client", "Buddy");
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("nuke"));       // held
+
+        h.Feed("Client moves to attack giant rat.");
+        Assert.Equal("nuke giant rat", h.LastSent);                     // cast once
+        int after = h.Sent.Count;
+
+        h.Feed("Buddy moves to attack giant rat.");
+        Assert.Equal(after, h.Sent.Count);                              // no re-fire
+    }
+
+    [Fact]
+    public void AttackNotLast_ReleasedByRoomAttackCommit()
+    {
+        // A party member's room attack is a valid "first commit" too.
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        AddParty(h, "MudPlay", "Client", "Buddy");
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("giant rat"));  // held
+
+        h.Feed("Client moves to attack everyone in the room.");
+        Assert.Equal("a giant rat", h.LastSent);                        // committed once
+    }
+
+    [Fact]
+    public void AttackNotLast_PartyOfTwo_BehavesLikeDefault()
+    {
+        // 2 or fewer → no hold, attack immediately on entry like Default.
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        AddParty(h, "MudPlay", "Client");
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);                        // not held
+    }
+
+    [Fact]
+    public void AttackNotLast_Solo_BehavesLikeDefault()
+    {
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);                        // not held
+    }
+
+    [Fact]
+    public void AttackNotLast_NoAnnounceForARound_FallsBackToOwnPick()
+    {
+        // Never freeze: if no party member announces within a round, engage our pick.
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        AddParty(h, "MudPlay", "Client", "Buddy");
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("giant rat"));  // held
+
+        h.Tick();                                                       // a round, no announce
+        Assert.Equal("a giant rat", h.LastSent);                        // fell back to own pick
+    }
+
     // ----- room clear resets the chooser bookkeeping -------------------
 
     [Fact]

@@ -98,6 +98,7 @@ public sealed partial class CombatManager : IDisposable
 
     private readonly IDisposable _announceSub;
     private readonly IDisposable _castAnnounceSub;
+    private readonly IDisposable _roomPoisedSub;
     private readonly IDisposable _userHitsSub;
     private readonly IDisposable _mobHitsSub;
     private readonly IDisposable _mobMissesSub;
@@ -239,6 +240,16 @@ public sealed partial class CombatManager : IDisposable
     // OnEntitiesObserved call so the defer branch doesn't re-latch and strand us
     // — the fallback's whole point is to make our OWN independent pick this round.
     private bool _followDeferBypass;
+
+    // Attack-not-last deferral (AttackTiming.AttackNotLast, party of 3+). The
+    // inverse of attack-last: hold our own room-entry pick, then commit ONCE right
+    // after the first party member's announce, and never re-fire. _awaitingNotLast
+    // latches while holding; TryReleaseNotLastHold clears it on the first party
+    // announce, and OnCombatTick clears it with a fallback to our own pick if none
+    // arrives that round. _notLastDeferBypass mirrors _followDeferBypass — set only
+    // for the re-entrant dispatch so the hold doesn't re-latch.
+    private bool _awaitingNotLast;
+    private bool _notLastDeferBypass;
 
     // Set only for the duration of ResumeEngage's re-dispatch so the "already
     // engaged, server is still swinging → don't re-send" short-circuit is bypassed.
@@ -733,6 +744,7 @@ public sealed partial class CombatManager : IDisposable
         _classifier.EntitiesObserved += OnEntitiesObserved;
         _announceSub  = router.Subscribe(KnownPatterns.PartyAttackAnnounce, OnAttackAnnounce);
         _castAnnounceSub = router.Subscribe(KnownPatterns.PartyCastAnnounce, OnCastAnnounce);
+        _roomPoisedSub = router.Subscribe(KnownPatterns.PartyRoomPoised, OnRoomPoised);
         _userHitsSub  = router.Subscribe(KnownPatterns.UserHits,  OnCombatLine);
         _mobHitsSub   = router.Subscribe(KnownPatterns.MobHits,   OnCombatLine);
         _mobMissesSub = router.Subscribe(KnownPatterns.MobMisses, OnCombatLine);
@@ -922,7 +934,13 @@ public sealed partial class CombatManager : IDisposable
         // that doesn't match CurrentTarget, or SpellAttackOwed=true with no live
         // fight, is this bug re-occurring.
         string? CastingSpellTarget,
-        bool SpellAttackOwed);
+        bool SpellAttackOwed,
+        // The configured Attack Order (AttackTiming) + the live initiative-hold state.
+        // An "attack-last / attack-not-last not respected" report needs both: the mode
+        // the user set, and whether we're currently HOLDING our pick for a party
+        // announce ("not-last" / "follow") or have already committed (null).
+        string AttackTiming,
+        string? AwaitingAttackOrderHold);
 
     // UI-thread only (router handlers + the capture both run there), so no lock.
     public DebugState Snapshot() => new(
@@ -931,7 +949,9 @@ public sealed partial class CombatManager : IDisposable
         _guardBlockedTarget, _alternationRound,
         _lastCastAction?.ToString(), _announcedSpellCode,
         _userEngagedInstances.ToArray(),
-        _castingSpellTarget, _spellAttackOwed);
+        _castingSpellTarget, _spellAttackOwed,
+        _readSettings().AttackTiming.ToString(),
+        _awaitingNotLast ? "not-last" : _awaitingFollowAnnounce ? "follow" : null);
 
     // Wire the backstab gating delegates: isStealthed reports whether the character
     // holds any stealth that opens a backstab — sneaking OR (optimistically) hidden
@@ -1217,10 +1237,11 @@ public sealed partial class CombatManager : IDisposable
     {
         CombatSettings settings = _readSettings();
 
-        // Fresh observation of the room — any pending follow-deferral from a
-        // previous observation is stale. Re-evaluated below once we know the
+        // Fresh observation of the room — any pending follow / not-last deferral from
+        // a previous observation is stale. Re-evaluated below once we know the
         // engageable set (a re-observe of the SAME room re-arms it if still apt).
         _awaitingFollowAnnounce = false;
+        if (!_notLastDeferBypass) _awaitingNotLast = false;
 
         // Prune the user-engaged-neutral overrides for instances no longer in the
         // room (killed, or we changed rooms) so the takeover can't leak onto a
@@ -1533,6 +1554,20 @@ public sealed partial class CombatManager : IDisposable
             _log?.Combat(LogCategory,
                 $"target-priority {settings.TargetPriority} — holding own pick, " +
                 $"awaiting follow announce (engageable={engageable.Count})");
+            return;
+        }
+
+        // Attack-not-last deferral: hold our own pick and wait for the first party
+        // member's announce, then engage ONCE (TryReleaseNotLastHold; OnCombatTick
+        // falls back to our own pick if none arrives that round). Only functional in
+        // a party of 3+ — a smaller party behaves like Default and never holds.
+        if (!_notLastDeferBypass && _currentTarget is null &&
+            ShouldWaitForNotLast(settings))
+        {
+            _awaitingNotLast = true;
+            _log?.Combat(LogCategory,
+                $"attack-not-last — holding own pick, awaiting first party announce " +
+                $"(engageable={engageable.Count})");
             return;
         }
 
@@ -2173,6 +2208,20 @@ public sealed partial class CombatManager : IDisposable
         if (!_isEnabled()) return;
         CombatSettings settings = _readSettings();
 
+        // AttackNotLast: if we're holding for the first party announce, this is it —
+        // engage our own pick once and stop (no follow, no re-fire).
+        if (TryReleaseNotLastHold(announcer)) return;
+
+        // A room attack's wildcard target ("everyone in the room") is not a mob —
+        // never route it through Target Priority (following it would try to engage a
+        // nonexistent monster and drop our real target). It's a room-wide commit, so
+        // it goes straight to Attack Order as that member's round commit.
+        if (IsRoomAttackAnnounce(announcedTarget))
+        {
+            HandleAttackOrderRefire(settings, announcer, announcedTarget);
+            return;
+        }
+
         // Target Priority owns WHO. If this announce is from the player we
         // follow, it switches our target (with the un-actionable failback)
         // and dispatches this round — returning true so Attack Order doesn't
@@ -2216,7 +2265,69 @@ public sealed partial class CombatManager : IDisposable
             return;
 
         if (!_isEnabled()) return;
+        if (TryReleaseNotLastHold(announcer)) return;
         HandleAttackOrderRefire(_readSettings(), announcer, announcedTarget);
+    }
+
+    // Paradigm-only "<player> is poised to assault the room!" — a party member is
+    // already mid-room-spell as we enter. It carries no target (a room commit hits
+    // everything), so route it as a room commit: attack-last re-fires our own action to
+    // land after their already-committed room. Own-name / master-off guards mirror the
+    // announce handlers.
+    private void OnRoomPoised(MatchResult match)
+    {
+        if (match.Groups.Count == 0) return;
+        string announcer = match.Groups[0];
+        if (announcer.Length == 0) return;
+
+        string? ownName = _readOwnGivenName();
+        if (ownName is { Length: > 0 } &&
+            string.Equals(announcer, ownName, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!_isEnabled()) return;
+        if (TryReleaseNotLastHold(announcer)) return;
+        HandleAttackOrderRefire(_readSettings(), announcer, RoomWildcardTarget);
+    }
+
+    // The wildcard "target" a room attack commits against. A room spell announces as
+    // "<player> moves to attack everyone in the room." (never "moves to cast … upon …"),
+    // and the Paradigm poised line is normalised onto the same token, so attack-last can
+    // recognise a room-wide commit with one comparison.
+    private const string RoomWildcardTarget = "everyone in the room";
+
+    private static bool IsRoomAttackAnnounce(string announcedTarget)
+        => string.Equals(announcedTarget, RoomWildcardTarget, StringComparison.OrdinalIgnoreCase);
+
+    // AttackNotLast: hold our own room-entry pick until the first party member
+    // announces, then commit once. Only functional in a party of 3+ — Members
+    // mirrors the par table INCLUDING the local player, so >= 3 is "at least two
+    // other people". A party of 2 or fewer behaves like Default (never holds, so
+    // OnEntitiesObserved dispatches immediately and no re-fire is scheduled).
+    private bool ShouldWaitForNotLast(CombatSettings settings)
+        => settings.AttackTiming == AttackTiming.AttackNotLast
+        && _party.IsInParty
+        && _party.Members.Count >= 3;
+
+    // Release the AttackNotLast hold on the FIRST party member's announce: engage our
+    // own pick once (bypassing the hold so it doesn't re-latch). Returns true when it
+    // consumed the announce. Only party members trip it (a stranger's swing isn't the
+    // party's turn); the hold's own party-size gate means we're always partied here.
+    private bool TryReleaseNotLastHold(string announcer)
+    {
+        if (!_awaitingNotLast) return false;
+        if (!IsPartyMember(announcer)) return false;
+
+        _awaitingNotLast = false;
+        if (_classifier.Current is { } obs)
+        {
+            _log?.Combat(LogCategory,
+                $"attack-not-last — first party announce ({announcer}); engaging our own pick once");
+            _notLastDeferBypass = true;
+            try { OnEntitiesObserved(obs); }
+            finally { _notLastDeferBypass = false; }
+        }
+        return true;
     }
 
     // True when the room-entry picker should hold our own target and wait for the
@@ -2364,10 +2475,15 @@ public sealed partial class CombatManager : IDisposable
     {
         if (_currentTarget is not { } target) return;   // nothing to re-fire at
 
-        // Only reposition against OUR priority target — ignore announces on
-        // any other monster in the room. This also makes a caster's heal/buff
-        // announce ("... upon <player>") a safe no-op on the OnCastAnnounce path.
-        if (!string.Equals(announcedTarget, target, StringComparison.OrdinalIgnoreCase))
+        // A room attack ("<player> moves to attack everyone in the room.", or the
+        // Paradigm "poised to assault the room!") commits against the WHOLE room — our
+        // target included — so it's a valid attack-last commit even though its announced
+        // "target" is the room, not our specific mob. For any other announce, reposition
+        // only against OUR priority target — ignoring announces on other monsters (this
+        // also makes a caster's heal/buff announce, "... upon <player>", a safe no-op on
+        // the OnCastAnnounce path).
+        if (!IsRoomAttackAnnounce(announcedTarget) &&
+            !string.Equals(announcedTarget, target, StringComparison.OrdinalIgnoreCase))
             return;
 
         ScheduleAttackOrderRefire(settings, announcer);
@@ -2406,7 +2522,10 @@ public sealed partial class CombatManager : IDisposable
             AttackTiming.AttackAfter     => string.Equals(GivenName(announcer),
                                                 GivenName(settings.AttackAfterPlayerName ?? string.Empty),
                                                 StringComparison.OrdinalIgnoreCase),
-            _                            => false,  // Default — own cadence
+            // AttackNotLast commits exactly once via the hold release
+            // (TryReleaseNotLastHold) and deliberately never re-fires; Default is own
+            // cadence. Both fall through to no re-fire here.
+            _                            => false,
         };
         if (!fire) return;
 
@@ -2461,6 +2580,25 @@ public sealed partial class CombatManager : IDisposable
             _awaitingBackstabResolution = true;
             _pendingBackstabSpecies = ResolveSpeciesByName(target);
             _backstabOpenerConsumed = true;
+            return;
+        }
+
+        // Re-fire through the round chooser so we re-issue the action our configured
+        // order actually calls for this round — a spells-first build re-announces its
+        // attack spell, a room build re-announces its room spell (bare), a weapon build
+        // re-swings — instead of always reverting to the physical weapon command, which
+        // used to interrupt a spells-first / rooming rotation with a wasted weapon swing.
+        // Re-announcing a combat spell is harmless: mana is spent once per round when it
+        // fires, not on the announce, so the re-post just re-orders our action to land
+        // after the party's commits (GAME_MECHANICS). DispatchRoundAction against our
+        // unchanged _currentTarget never switches the monster (its per-target cap reset
+        // is guarded on a target change); bypassRecastInterval lets the re-announce land
+        // this round rather than being absorbed by the burst guard. Falls back to the
+        // literal weapon command only when the target isn't in our room view.
+        if (_classifier.Current is { } refireObs && TryBuildCandidate(refireObs, target) is { } cand)
+        {
+            DispatchRoundAction(settings, cand, CountEngageable(refireObs), refireObs,
+                                bypassRecastInterval: true);
             return;
         }
 
@@ -3839,6 +3977,7 @@ public sealed partial class CombatManager : IDisposable
         _classifier.EntitiesObserved -= OnEntitiesObserved;
         _announceSub.Dispose();
         _castAnnounceSub.Dispose();
+        _roomPoisedSub.Dispose();
         _userHitsSub.Dispose();
         _mobHitsSub.Dispose();
         _mobMissesSub.Dispose();

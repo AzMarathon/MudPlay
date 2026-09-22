@@ -301,7 +301,7 @@
                               ItemsSource="{Binding AttackTimingOptions}"
                               SelectedItem="{Binding AttackTiming, Mode=TwoWay}"
                               Width="220" HorizontalAlignment="Left"
-                              ToolTip.Tip="When to re-fire (the 'when'). Pure timing — it re-fires our own current target and never switches the monster. Default = own cadence. Attack Last Party re-fires after every party member's announce; Attack Last Room drops the party filter (re-fire on anyone's announce); Attack After re-fires when the named player announces."/>
+                              ToolTip.Tip="When to (re-)announce our action (the 'when'). Pure timing — it re-issues our own current action (weapon swing, attack spell, or bare room spell) and never switches the monster. Default = own cadence. Attack Last Party re-fires after every party member's announce; Attack Last Room drops the party filter (re-fire on anyone's announce); Attack After re-fires when the named player announces; Attack Not Last holds our pick until the FIRST party member announces, then commits once and never re-fires (party of 3+ only — behaves like Default in a party of 2 or fewer)."/>
 
                     <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel"
                                Text="Attack-after player name"/>

@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.97.2**
-> - Self-defense: when a monster is actively attacking you, the engine now fights back even if it wouldn't normally engage it — a Friend NPC you provoked, or a passive neutral that turned hostile, no longer gets to hit you while the client sits idle. Always on with Auto-Combat, while idle / looping / Auto-Lairing. Suppressed during a walk-to (an evil character crossing a guarded town keeps running rather than fighting the guards). Monsters whose relationship is Flee or Hangup keep their run/hangup response, and a "do not attack" room is still honoured
+> **Version 3.98.0**
+> - New Attack Order option **Attack Not Last**: hold your pick on room entry, commit once right after the first party member announces, then never re-fire — you slot in behind the first mover instead of chasing the last slot (party of 3+ only; behaves like Default in a party of 2 or fewer). Available in Settings → Combat and via `@atkorder 5`
+> - Attack-last with a spells-first build no longer reverts to a physical weapon swing — it re-announces your actual attack spell instead (re-announcing costs no mana; mana is spent when the round fires), so a caster lands last just like a fighter
+> - Attack-last now respects room-vs-room: a party member's room attack ("… moves to attack everyone in the room", or Paradigm's "… is poised to assault the room") counts as their commit, so your own room spell re-announces after theirs and you room last
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

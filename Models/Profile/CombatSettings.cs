@@ -390,6 +390,14 @@ public enum AttackTiming
     // CombatSettings.AttackAfterPlayerName announces, keeping our announce
     // immediately after theirs.
     AttackAfter,
+
+    // The inverse of attack-last: hold our own pick on room entry, then commit
+    // ONCE — right after the FIRST party member's announce we see — and do NOT
+    // re-fire when anyone else announces after us. So we slot in behind the first
+    // mover instead of chasing the last slot. Only functional in a party of 3+;
+    // in a party of 2 or fewer it behaves exactly like Default (immediate own
+    // cadence, no hold, no re-fire).
+    AttackNotLast,
 }
 
 // Behavior when a non-party player is engaged with a monster we would otherwise
