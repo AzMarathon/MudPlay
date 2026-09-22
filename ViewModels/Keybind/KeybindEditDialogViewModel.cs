@@ -86,7 +86,7 @@ public sealed partial class KeybindEditDialogViewModel : ObservableObject, IDial
         {
             if (SelectedKey is null)
                 return IsCapturing
-                    ? "Press a key combination — release a non-modifier key to confirm. Esc cancels."
+                    ? "Press a key combination — release a non-modifier key to confirm. Click Capture again to abort."
                     : "Click Capture and press the keybind, or Clear to leave the action unbound.";
             if (KeybindRegistry.ExcludedKeys.Contains(SelectedKey.Value))
                 return $"'{SelectedKey.Value}' can't be bound as a keybind.";
@@ -172,8 +172,10 @@ public sealed partial class KeybindEditDialogViewModel : ObservableObject, IDial
         Alt   = chord.Alt;
     }
 
+    // Toggle capture — a second press (or the Cancel button) aborts a capture in
+    // progress, since Escape no longer does (it's a bindable chord now).
     [RelayCommand]
-    private void StartCapture() => IsCapturing = true;
+    private void StartCapture() => IsCapturing = !IsCapturing;
 
     // Wipe the chord to KeyChord.Empty — leaves the action unbound on Save.
     [RelayCommand]
@@ -185,12 +187,9 @@ public sealed partial class KeybindEditDialogViewModel : ObservableObject, IDial
     {
         if (!IsCapturing) return false;
 
-        if (key == Key.Escape)
-        {
-            IsCapturing = false;
-            return true;
-        }
-
+        // Escape is a bindable chord now, so it commits like any other key rather
+        // than cancelling capture. Aborting a capture is the Cancel button, or
+        // clicking Capture again (StartCapture toggles IsCapturing off).
         bool isModifierOnly = key is Key.LeftCtrl or Key.RightCtrl
                                   or Key.LeftShift or Key.RightShift
                                   or Key.LeftAlt or Key.RightAlt

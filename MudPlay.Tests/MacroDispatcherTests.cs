@@ -44,6 +44,22 @@ public sealed class MacroDispatcherTests
     }
 
     [Fact]
+    public void TryHandleKey_FiresMacroBoundToEscape()
+    {
+        // Escape is bindable now (no BBS input needs an ESC byte), so a macro on it
+        // fires like any other chord rather than being dropped by the excluded guard.
+        MacroStore store = new();
+        store.Macros.Add(new Macro("Escape", false, false, false, "flee", true));
+        List<byte[]> sent = new();
+        MacroDispatcher d = new(store);
+        d.SetSender(sent.Add);
+
+        Assert.True(d.TryHandleKey(Key.Escape, KeyModifiers.None));
+        Assert.Single(sent);
+        Assert.Equal("flee\r", Encoding.Latin1.GetString(sent[0]));
+    }
+
+    [Fact]
     public void TryHandleKey_FiresMultiStepMacro_OneSendPerFragment()
     {
         MacroStore store = new();
