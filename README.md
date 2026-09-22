@@ -9,6 +9,7 @@
 > - Fixed a Paradigm game-data slip where `mirrored shield` carried haste text, falsely flagging you "blinded" whenever any haste spell landed
 > - Party heal no longer tries to single-target-heal yourself (self is covered by the self-heal slots)
 > - `@comeback` now fires when the leader leaves while you're knocked down / held / stunned
+> - Spells-First now skips an attack spell the target's type makes useless (turn-undead vs a non-undead mob) straight to the next spell or the weapon, from game data — no wasted probe rounds
 > - Attack resumes promptly after a between-round buff recast; fixed triple-attacking with Attack-Last-Party; the Settings OK no longer prompts to save when nothing changed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

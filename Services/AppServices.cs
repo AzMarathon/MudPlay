@@ -1196,6 +1196,10 @@ public sealed class AppServices
     // CombatManager's drain-spell gate.
     public Game.Combat.MonsterLifeIndex MonsterLife { get; private set; } = null!;
 
+    // A spell's target-class restriction (living / undead / animals-only) by cast-code.
+    // Paired with MonsterLife to skip an attack spell the target's type makes ineffective.
+    public Game.Combat.SpellTargetTypeIndex SpellTargetType { get; private set; } = null!;
+
     // Number → max-HP lookup in the active game-data set. Feeds the look-target
     // HP-range readout (MonsterLookParser turns a wound descriptor into an
     // absolute HP window).
@@ -4386,7 +4390,8 @@ public sealed class AppServices
         // target; the index tells the chooser which mobs to skip (fall back to the
         // normal attack). Fails open when game data is silent.
         MonsterLife = new Game.Combat.MonsterLifeIndex(GameData);
-        Combat.SetDrainEligibility(MonsterLife);
+        SpellTargetType = new Game.Combat.SpellTargetTypeIndex(GameData);
+        Combat.SetDrainEligibility(MonsterLife, SpellTargetType);
 
         // Per-monster spell overrides store a Spell.Number; the engine casts the
         // Short. Wire the resolver so the chooser can substitute a numbered

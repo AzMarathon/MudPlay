@@ -450,6 +450,7 @@ public sealed class CombatSpellChooser
             && !IsImmune(ctx, CombatSpellAction.NormalAttackSpell)
             && !IsLevelBlocked(ctx, CombatSpellAction.NormalAttackSpell)
             && !IsResistBlocked(ctx, CombatSpellAction.NormalAttackSpell)
+            && !IsTargetTypeBlocked(ctx, CombatSpellAction.NormalAttackSpell)
             && CastsOk(normalOverridden ? ctx.OverrideAttackMaxCasts : normal.MaxCastsPerRoom, _normalAttackCasts)
             && (normalOverridden ? ManaOk(normalCode, ctx) : ManaOk(normal, ctx, mode)))
             return new CombatSpellDecision(CombatSpellAction.NormalAttackSpell, normalCode);
@@ -462,6 +463,7 @@ public sealed class CombatSpellChooser
             && !IsImmune(ctx, CombatSpellAction.AlternateAttackSpell)
             && !IsLevelBlocked(ctx, CombatSpellAction.AlternateAttackSpell)
             && !IsResistBlocked(ctx, CombatSpellAction.AlternateAttackSpell)
+            && !IsTargetTypeBlocked(ctx, CombatSpellAction.AlternateAttackSpell)
             && CastsOk(altOverridden ? ctx.OverrideAltAttackMaxCasts : alt.MaxCastsPerRoom, _alternateAttackCasts)
             && (altOverridden ? ManaOk(altCode, ctx) : ManaOk(alt, ctx, mode)))
             return new CombatSpellDecision(CombatSpellAction.AlternateAttackSpell, altCode);
@@ -574,6 +576,13 @@ public sealed class CombatSpellChooser
     // still deals (bonus or reduced) damage.
     private static bool IsResistBlocked(in CombatSpellContext ctx, CombatSpellAction action) =>
         ctx.ResistBlockedActions is { } set && set.Contains(action);
+
+    // The current monster's life-class provably excludes this attack spell's target-class
+    // (turn-undead vs a non-undead mob, harm vs a nonliving construct) — game data lets us
+    // skip it pre-emptively down the cascade instead of probing it reactively. Only the
+    // single-target attack slots are gated (multi/area room spells hit the whole room).
+    private static bool IsTargetTypeBlocked(in CombatSpellContext ctx, CombatSpellAction action) =>
+        ctx.TargetTypeBlockedActions is { } set && set.Contains(action);
 
     // Under the per-room cast cap. null = no limit; 0 = never cast (explicit
     // off); N = fire until N reached.
@@ -706,6 +715,10 @@ public readonly record struct CombatSpellContext(
     IReadOnlySet<CombatSpellAction>? LevelBlockedActions = null,
     bool AllowNukes = true,
     IReadOnlySet<CombatSpellAction>? ResistBlockedActions = null,
+    // Single-target attack actions whose spell's target-class (living/undead/animals-only)
+    // the current monster's type provably excludes — skipped down the cascade like the
+    // level / resist blocks. null when unwired (fail-open to the reactive "no effect" line).
+    IReadOnlySet<CombatSpellAction>? TargetTypeBlockedActions = null,
     bool TargetDontBackstab = false,
     string? OverrideAttackSpell = null,
     int? OverrideAttackMaxCasts = null,

@@ -67,6 +67,29 @@ public sealed class MonsterLifeIndexTests : IDisposable
     }
 
     [Theory]
+    // LivingOnly (harm): a normal-living mob or a living Animal, never a nonliving /
+    // undead. UndeadOnly (turn): only the undead. AnimalsOnly: only the animal. Any: all.
+    [InlineData(10, SpellTargetType.LivingOnly,  true)]   // thug — living
+    [InlineData(2,  SpellTargetType.LivingOnly,  true)]   // lashworm — living animal
+    [InlineData(5,  SpellTargetType.LivingOnly,  false)]  // acid slime — nonliving
+    [InlineData(11, SpellTargetType.LivingOnly,  false)]  // skeleton — nonliving + undead
+    [InlineData(21, SpellTargetType.LivingOnly,  false)]  // wight — undead (not living)
+    [InlineData(10, SpellTargetType.UndeadOnly,  false)]  // thug — not undead
+    [InlineData(5,  SpellTargetType.UndeadOnly,  false)]  // acid slime — nonliving, not undead
+    [InlineData(11, SpellTargetType.UndeadOnly,  true)]   // skeleton — undead
+    [InlineData(20, SpellTargetType.UndeadOnly,  true)]   // banshee — undead (255 byte)
+    [InlineData(2,  SpellTargetType.AnimalsOnly, true)]   // lashworm — animal
+    [InlineData(10, SpellTargetType.AnimalsOnly, false)]  // thug — not an animal
+    [InlineData(5,  SpellTargetType.Any,         true)]   // Any — never restricted
+    [InlineData(999, SpellTargetType.UndeadOnly, false)]  // known-absent = normal living → not undead
+    [InlineData(-1, SpellTargetType.UndeadOnly,  true)]   // unresolved → fail-open
+    public void CanAffect_ByTargetClass(int number, SpellTargetType targetType, bool expected)
+    {
+        MonsterLifeIndex sut = NewIndex();
+        Assert.Equal(expected, sut.CanAffect(number, targetType));
+    }
+
+    [Theory]
     [InlineData(11, "nonliving+undead")]
     [InlineData(5,  "nonliving")]
     [InlineData(20, "undead")]

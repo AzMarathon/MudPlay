@@ -11,8 +11,9 @@
 - `@comeback` now fires when the party leader leaves while you're knocked down / held / stunned (movement-prevented), not just on the two movement-failure lines
 - Attack resumes promptly after a between-round buff recast instead of stalling a round on a stale user-attack override
 - Fixed triple-attacking when Attack-Last-Party is set — the round's re-fire is now capped at one
+- Spells-First now skips an attack spell the target's type makes useless (turn-undead vs a non-undead mob, a living-only spell vs a nonliving construct) straight to the next spell or the weapon, from game data — no more wasting rounds probing spells that can't work
 - Settings window's OK no longer prompts to save when nothing changed
-- bug reports addressed: paradigm-20260922-063422, paradigm-20260922-073350, paradigm-20260922-082041, paradigm-20260922-085609, paradigm-20260922-091714, paradigm-20260922-095321, paradigm-20260922-113233, paradigm-20260922-130230, paradigm-20260922-141201
+- bug reports addressed: paradigm-20260922-063422, paradigm-20260922-073350, paradigm-20260922-082041, paradigm-20260922-082559, paradigm-20260922-085609, paradigm-20260922-091714, paradigm-20260922-095321, paradigm-20260922-113233, paradigm-20260922-130230, paradigm-20260922-141201
 
 ## 3.100.7
 
