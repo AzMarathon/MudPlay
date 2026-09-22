@@ -1,9 +1,16 @@
+using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Views.Settings;
@@ -107,6 +114,171 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     // Emoji / emote substitution in the conversation window (":lol:" / ":)" → emoji,
     // image emotes render inline).
     [ObservableProperty] private bool _convoShowEmotes = true;
+
+    // ----- Custom emotes (managed live via EmoteStore, not staged with Apply) -----
+    // The user's personal emote library is a Global-tier store, so add / remove /
+    // import persist immediately (like macros), independent of this tab's Apply which
+    // only governs the ConvoShowEmotes toggle above.
+
+    public ObservableCollection<EmoteRowViewModel> UserEmotes { get; } = new();
+
+    [ObservableProperty] private string _newEmoteShortcode = "";
+    [ObservableProperty] private string _newEmoteEmoji = "";
+    [ObservableProperty] private string? _emoteStatus;
+    [ObservableProperty] private string _emoteFilter = "";
+    public bool HasUserEmotes => UserEmotes.Count > 0;
+
+    private static EmoteStore Store => AppServices.Current.Emotes;
+
+    private static Window? HostWindow =>
+        Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } m } ? m : null;
+
+    // Rebuild the row list: the built-in shortcodes (so a default can be overridden)
+    // plus the user's own, custom-first then alphabetical. Each image row loads a
+    // thumbnail from the effective emote (avares built-in or a user file).
+    private void RefreshEmotes()
+    {
+        UserEmotes.Clear();
+
+        var user = new HashSet<string>(Store.Emotes.Select(e => e.Shortcode), StringComparer.OrdinalIgnoreCase);
+        var builtIn = new HashSet<string>(Game.Emotes.EmoteCatalog.BuiltIn.Shortcodes.Keys, StringComparer.OrdinalIgnoreCase);
+
+        // The live merged catalog resolves each name to its effective emote.
+        IEnumerable<KeyValuePair<string, Game.Emotes.Emote>> all =
+            Game.Emotes.EmoteRuntime.Scanner.Catalog.Shortcodes;
+
+        var rows = new List<EmoteRowViewModel>();
+        foreach ((string name, Game.Emotes.Emote e) in all)
+        {
+            bool isUser = user.Contains(name);
+            string source = isUser
+                ? (builtIn.Contains(name) ? "Custom (overrides default)" : "Custom")
+                : "Default";
+
+            bool isImage = e.Kind == Game.Emotes.EmoteKind.Image;
+            Bitmap? thumb = isImage ? Views.ConversationMessageInlines.LoadEmoteBitmap(e.Payload) : null;
+            rows.Add(new EmoteRowViewModel(name, isImage, isImage ? "" : e.Payload, thumb, source, canRemove: isUser));
+        }
+
+        string filter = EmoteFilter.Trim();
+        IEnumerable<EmoteRowViewModel> filtered = filter.Length == 0
+            ? rows
+            : rows.Where(r => r.Shortcode.Contains(filter, StringComparison.OrdinalIgnoreCase));
+
+        // Custom first (so a user's own emotes are easy to find), then alphabetical.
+        foreach (EmoteRowViewModel r in filtered
+            .OrderByDescending(r => r.CanRemove)
+            .ThenBy(r => r.Shortcode, StringComparer.OrdinalIgnoreCase))
+            UserEmotes.Add(r);
+
+        OnPropertyChanged(nameof(HasUserEmotes));
+    }
+
+    partial void OnEmoteFilterChanged(string value) => RefreshEmotes();
+
+    // Pre-fill the add-shortcode box from a row so its default can be overridden.
+    [RelayCommand]
+    private void EditEmote(EmoteRowViewModel? row)
+    {
+        if (row is null) return;
+        NewEmoteShortcode = row.Shortcode;
+        if (row.IsText) NewEmoteEmoji = row.PreviewText;
+        EmoteStatus = $"Editing :{row.Shortcode}: — set an emoji or image, then Add.";
+    }
+
+    [RelayCommand]
+    private void AddEmojiEmote()
+    {
+        if (EmoteStore.NormalizeShortcode(NewEmoteShortcode) is not { } name)
+        {
+            EmoteStatus = "Enter a shortcode using letters, digits, _ + or -.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(NewEmoteEmoji))
+        {
+            EmoteStatus = "Enter the emoji (or image) to map to that shortcode.";
+            return;
+        }
+        Store.AddUnicode(name, NewEmoteEmoji.Trim());
+        NewEmoteShortcode = "";
+        NewEmoteEmoji = "";
+        EmoteStatus = $"Added :{name}:";
+        RefreshEmotes();
+    }
+
+    [RelayCommand]
+    private async Task AddImageEmoteAsync()
+    {
+        if (EmoteStore.NormalizeShortcode(NewEmoteShortcode) is not { } name)
+        {
+            EmoteStatus = "Enter a shortcode first, then pick an image.";
+            return;
+        }
+        if (HostWindow is not { } host) return;
+        IReadOnlyList<IStorageFile> picked = await host.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = $"Image for :{name}:",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Images") { Patterns = new[] { "*.png", "*.gif", "*.jpg", "*.jpeg", "*.webp" } },
+                FilePickerFileTypes.All,
+            },
+        });
+        if (picked.Count == 0) return;
+        EmoteStatus = Store.AddImage(name, picked[0].Path.LocalPath)
+            ? $"Added image emote :{name}:"
+            : "Couldn't add that image.";
+        NewEmoteShortcode = "";
+        RefreshEmotes();
+    }
+
+    [RelayCommand]
+    private void RemoveEmote(EmoteRowViewModel? row)
+    {
+        if (row is null) return;
+        Store.Remove(row.Shortcode);
+        EmoteStatus = $"Removed :{row.Shortcode}:";
+        RefreshEmotes();
+    }
+
+    [RelayCommand]
+    private async Task ExportEmotesAsync()
+    {
+        if (HostWindow is not { } host) return;
+        if (Store.Emotes.Count == 0) { EmoteStatus = "No custom emotes to export yet."; return; }
+        IStorageFile? file = await host.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export emote pack",
+            SuggestedFileName = "emotes.mudemotes",
+            DefaultExtension = "mudemotes",
+            FileTypeChoices = new[] { new FilePickerFileType("MudPlay emote pack") { Patterns = new[] { "*.mudemotes", "*.zip" } } },
+        });
+        if (file is null) return;
+        EmoteStatus = Store.Export(file.Path.LocalPath)
+            ? $"Exported {Store.Emotes.Count} emote(s)."
+            : "Export failed.";
+    }
+
+    [RelayCommand]
+    private async Task ImportEmotesAsync()
+    {
+        if (HostWindow is not { } host) return;
+        IReadOnlyList<IStorageFile> picked = await host.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import emote pack",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("MudPlay emote pack") { Patterns = new[] { "*.mudemotes", "*.zip" } },
+                FilePickerFileTypes.All,
+            },
+        });
+        if (picked.Count == 0) return;
+        int n = Store.Import(picked[0].Path.LocalPath);
+        EmoteStatus = n >= 0 ? $"Imported {n} emote(s)." : "That file isn't a valid emote pack.";
+        RefreshEmotes();
+    }
 
     private static IReadOnlyList<FontSizeOption> BuildConvoFontSizes()
     {
@@ -258,6 +430,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
         SelectedConvoFontSize = ConvoFontSizeOptions.FirstOrDefault(o => o.Value == dto.ConvoFontSize)
                                 ?? ConvoFontSizeOptions.First(o => o.Value == DefaultConvoFontSize);
         ConvoShowEmotes = dto.ConvoShowEmotes;
+        RefreshEmotes();
         foreach (ChannelColorRowViewModel row in ChannelColorRows)
         {
             ChannelColor? co = null;

@@ -31,9 +31,22 @@ public sealed class EmoteCatalog
     public bool TryGetShortcode(string name, out Emote emote) => _shortcodes.TryGetValue(name, out emote!);
     public bool TryGetEmoticon(string literal, out Emote emote) => _emoticons.TryGetValue(literal, out emote!);
 
+    // Add / replace a word shortcode (user-defined emote). A user emote overrides a
+    // built-in one of the same name — the merged catalog is built built-in-first.
+    public void Upsert(Emote emote) => _shortcodes[emote.Shortcode] = emote;
+
     // The static built-in catalog: common Unicode word shortcodes + emoticons + the
     // bundled Pepe image set. Built once.
     public static EmoteCatalog BuiltIn { get; } = BuildBuiltIn();
+
+    // A fresh catalog = the full built-in set with the given user emotes layered on
+    // top (same-named user emotes win). Used by EmoteStore to publish the live catalog.
+    public static EmoteCatalog WithUser(IEnumerable<Emote> userEmotes)
+    {
+        EmoteCatalog c = BuildBuiltIn();
+        foreach (Emote e in userEmotes) c.Upsert(e);
+        return c;
+    }
 
     private static EmoteCatalog BuildBuiltIn()
     {

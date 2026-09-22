@@ -67,6 +67,10 @@ public static class AppPaths
     // Debug logs from DebugLogWriter.
     public static string LogsDir { get; }
 
+    // User-defined conversation emotes (Global tier): emotes.json manifest + the
+    // copied image files. Shared across characters/BBSes and exportable as a package.
+    public static string EmotesDir { get; }
+
     // App-shipped fallback defaults, alongside the executable. Read-only at
     // runtime; populated by the build pipeline.
     public static string DefaultsDir { get; }
@@ -141,6 +145,7 @@ public static class AppPaths
         DefaultProfileFile = Path.Combine(DataRoot, "Global", "default-profile.json");
         BbsDir             = Path.Combine(DataRoot, "BBS");
         LogsDir            = Path.Combine(DataRoot, "Logs");
+        EmotesDir          = Path.Combine(DataRoot, "Emotes");
 
         string exeDir = AppContext.BaseDirectory;
         DefaultsDir = Path.Combine(exeDir, "Defaults");
@@ -154,6 +159,7 @@ public static class AppPaths
         Directory.CreateDirectory(Path.GetDirectoryName(GlobalSettingsFile)!);
         Directory.CreateDirectory(BbsDir);
         Directory.CreateDirectory(LogsDir);
+        Directory.CreateDirectory(EmotesDir);
     }
 
     // One-time lift of an older install's data out of the nested "Data/" subfolder

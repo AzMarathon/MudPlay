@@ -931,6 +931,10 @@ public sealed class AppServices
     // overlay on GameDataCache.ActiveSetChanged.
     public QuestStore Quests { get; }
 
+    // User-defined conversation emotes (Global tier). Layers on the built-in emoji /
+    // Pepe set and publishes the merged scanner to EmoteRuntime for the convo window.
+    public EmoteStore Emotes { get; }
+
     // Realm-wide boss catalog (seed + per-set overlay); timer values resolve from
     // game data. Feeds the Player Workshop Bosses tab and the boss-timer feature.
     public BossStore Bosses { get; }
@@ -3039,6 +3043,7 @@ public sealed class AppServices
         // ResolveActiveBbs provider). The mechanical step + bonus data the Quest
         // Status tab shows is crawled from TBInfo at runtime, not stored here.
         Quests = new QuestStore(Profile, ResolveActiveBbs, Log);
+        Emotes = new EmoteStore(log: Log);
 
         // Boss catalog — realm-wide list (seed + per-set overlay); timer values are
         // looked up from game data at runtime. Reloads its overlay on set change.

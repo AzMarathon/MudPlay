@@ -2835,6 +2835,18 @@ Settings → Talk.
 **What it does:** Substitutes emoji shortcodes and emoticons in the Conversation window as you read chat — `:lol:` / `:joy:` become 😂, `:)` / `:(` / `:D` become their emoji, and a bundled set of **image emotes** (the Pepe pack — `:sadge:`, `:copium:`, `:monkas:`, `:prayge:`, `:poggies:`, and more) render as small inline pictures. Matching is case-insensitive for named codes (`:monkaS:` = `:monkas:`); classic emoticons must be surrounded by spaces, so a time like `8:00` is never touched. Unknown `:codes:` are left as typed.
 **Important notes:** Applies **live** — hit Apply and an already-open Conversation window re-renders on the spot. Unicode emoji rely on a **colour-emoji font** being installed on your system (e.g. Noto Color Emoji on Linux); the bundled image emotes always render regardless. Only the on-screen display changes — nothing you send to the game is altered.
 
+### Custom emotes
+
+Under the toggle, the **Custom emotes** area lists every emote — the built-in ones **and** your own — with a filter box to find one fast. You can:
+
+- **Define your own.** Type a **shortcode**, then either paste an **emoji** into the emoji box and click **Add emoji** (the little preview shows what it'll look like), or click **Add image…** to pick a picture file (PNG / GIF / JPG). It renders inline wherever someone types `:yourcode:`.
+- **Override a default.** Add a custom emote with the same shortcode as a built-in one — the row is tagged *"Custom (overrides default)"*. **Remove** it to fall back to the default again.
+- **Share a set.** **Export set…** writes a single `.mudemotes` package (your shortcodes + their images) you can hand to a friend; **Import pack…** merges one you were given.
+
+Custom emotes save **immediately** (they're a personal, all-characters library — no Apply needed), and they live under your app-data **Emotes** folder.
+
+**The `:` picker.** In the Conversation window's input box, type `:` followed by a couple of letters and a **suggestion popup** flies out (built-ins + your own). **↑ / ↓** move the selection, **Enter** or **Tab** inserts the highlighted one, a **click** picks it, and **Esc** dismisses.
+
 ### Font / Font size (Conversation window)
 
 **Default:** JetBrains Mono, 12pt

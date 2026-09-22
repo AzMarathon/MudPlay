@@ -44,6 +44,14 @@ public static class ConversationMessageInlines
     public static bool GetEmotesEnabled(TextBlock target) =>
         target.GetValue(EmotesEnabledProperty);
 
+    // Drop a cached emote bitmap so a replaced / re-imported user image reloads.
+    // Wired to EmoteStore.ConversationImageInvalidate by MainWindowViewModel.
+    public static void InvalidateEmoteImage(string path) => EmoteImages.Invalidate(path);
+
+    // Load (and cache) an emote bitmap by avares:// URI or file path — used by the
+    // emote picker for suggestion thumbnails, sharing the renderer's cache.
+    public static Bitmap? LoadEmoteBitmap(string path) => EmoteImages.Get(path);
+
     // http(s):// run of non-space characters. Trailing sentence punctuation is
     // trimmed off the match below so "see https://x.org." doesn't eat the period.
     private static readonly Regex s_url = new(
@@ -74,7 +82,7 @@ public static class ConversationMessageInlines
         {
             if (isLink) { inlines.Add(LinkInline(text)); continue; }
             if (!emotes) { inlines.Add(new Run(text)); continue; }
-            foreach (EmoteSegment seg in EmoteScanner.BuiltIn.Scan(text))
+            foreach (EmoteSegment seg in EmoteRuntime.Scanner.Scan(text))
                 inlines.Add(EmoteInline(seg, target));
         }
         target.Inlines = inlines;
@@ -109,15 +117,25 @@ public static class ConversationMessageInlines
     {
         private static readonly Dictionary<string, Bitmap?> _cache = new();
 
-        public static Bitmap? Get(string avaresUri)
+        public static Bitmap? Get(string path)
         {
-            if (_cache.TryGetValue(avaresUri, out Bitmap? cached)) return cached;
+            if (_cache.TryGetValue(path, out Bitmap? cached)) return cached;
             Bitmap? bmp = null;
-            try { bmp = new Bitmap(AssetLoader.Open(new Uri(avaresUri))); }
+            try
+            {
+                // Built-in emotes are avares:// resources; user emotes are absolute
+                // file paths under AppPaths.EmotesDir.
+                bmp = path.StartsWith("avares://", StringComparison.OrdinalIgnoreCase)
+                    ? new Bitmap(AssetLoader.Open(new Uri(path)))
+                    : new Bitmap(path);
+            }
             catch { /* missing / bad asset → null, rendered as literal text */ }
-            _cache[avaresUri] = bmp;
+            _cache[path] = bmp;
             return bmp;
         }
+
+        // Drop a cached bitmap so a re-imported / replaced user emote reloads.
+        public static void Invalidate(string path) => _cache.Remove(path);
     }
 
     // Split a message into ordered (text, isLink) segments: http/https URLs become

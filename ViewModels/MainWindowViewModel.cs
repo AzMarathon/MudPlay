@@ -1015,6 +1015,8 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.QuestFlagReader.AttachLineExtractor(Lines);
         // The @quest command's dedicated on-demand reader shares the same reply shapes.
         AppServices.Current.QuestQueryReader.AttachLineExtractor(Lines);
+        // Let a replaced / re-imported user emote image drop its cached bitmap.
+        AppServices.Current.Emotes.ConversationImageInvalidate = Views.ConversationMessageInlines.InvalidateEmoteImage;
         // Token charge tracker — parses each held token's `look` "Uses remaining: N"
         // reply and the "You invoke the token…" use line (Paradigm transport tokens).
         AppServices.Current.Tokens.AttachLineExtractor(Lines);

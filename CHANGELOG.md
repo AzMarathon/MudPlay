@@ -4,6 +4,8 @@
 
 - Conversation window now renders emoji / emotes: `:lol:` / `:)` / `:(` and a broad set of common shortcodes become Unicode emoji, and a bundled Pepe image-emote set (`:sadge:`, `:copium:`, `:monkas:`, `:prayge:`, …) renders inline as pictures
 - New **Settings → Talk → "Show emoji / emotes in the conversation window"** toggle (default on, applies live). Only the on-screen display changes; nothing sent to the game is altered. Unicode emoji need a colour-emoji font installed; the image emotes always render
+- **Custom emotes** — the Talk tab lists every emote (defaults + your own) and lets you define your own: map a shortcode to an emoji or to an image file. A default can be overridden and a custom one removed. Your set **exports as a shareable package** (`.mudemotes`) and imports one from a friend
+- **Discord-style `:` picker** in the conversation input box: type `:` plus a few letters and a suggestion popup flies out — arrow keys / click to pick, Enter or Tab to insert
 
 ## 3.99.0
 
