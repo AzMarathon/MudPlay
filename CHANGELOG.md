@@ -1,5 +1,11 @@
 # Version history
 
+## 3.98.1
+
+- `@dupe` now copies only the sender's query and roomba permissions — never Elevated or anything that acts — so a duplicated player can't `@dupe` onward or gain more without you granting it by hand
+- Each player can `@dupe` once; it then stays locked until you press the new **Reset @dupe** button under Elevated Commands in the Players edit dialog (nothing sent over chat can reset it)
+- Every `@dupe` use and refusal is written to the program log, and the sender's record keeps who they duplicated onto and when
+
 ## 3.98.0
 
 - New Attack Order option **Attack Not Last**: hold your pick on room entry, commit once right after the first party member announces, then never re-fire — you slot in behind the first mover instead of chasing the last slot (party of 3+ only; behaves like Default in a party of 2 or fewer). Available in Settings → Combat and via `@atkorder 5`

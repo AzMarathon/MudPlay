@@ -117,20 +117,39 @@ public sealed record PlayerObservation(
 // character spots them in the room. JoinPartyIfInvited auto-accepts party
 // invites from this player. DontAutoDelete skips this record during
 // stale-record cleanup. Notes is a free-form note from the edit dialog.
+//
+// DupeUsedAtUtc / DupedPlayer are the once-only lock on this player's @dupe: set
+// by the @dupe handler when they spend it (and who they duplicated onto), cleared
+// only when the user resets it in the edit dialog. null = @dupe still available.
 public readonly record struct PlayerCustomization(
     PlayerRemoteControls RemoteControls = PlayerRemoteControls.None,
     bool InviteToPartyIfSeen = false,
     bool JoinPartyIfInvited = false,
     bool DontAutoDelete = false,
-    string? Notes = null)
+    string? Notes = null,
+    DateTime? DupeUsedAtUtc = null,
+    string? DupedPlayer = null)
 {
-    // True when every field holds the default value. Drives the "don't persist" rule.
+    // True when every field holds the default value. Drives the "don't persist" rule,
+    // so the @dupe lock must count: a player whose only non-default value is a spent
+    // @dupe would otherwise be pruned and silently get their @dupe back.
     public bool IsDefault
         => RemoteControls == PlayerRemoteControls.None
         && !InviteToPartyIfSeen
         && !JoinPartyIfInvited
         && !DontAutoDelete
-        && string.IsNullOrEmpty(Notes);
+        && string.IsNullOrEmpty(Notes)
+        && DupeUsedAtUtc is null;
+
+    // The @dupe lock belongs to the engine, not to the editors. An editor works from
+    // a snapshot taken when its dialog opened, so writing its copy back would undo a
+    // @dupe that landed in the meantime without the user ever asking. Take the lock
+    // from the live customization instead; only an explicit reset clears it.
+    public PlayerCustomization KeepDupeLockFrom(PlayerCustomization live, bool reset) => this with
+    {
+        DupeUsedAtUtc = reset ? null : live.DupeUsedAtUtc,
+        DupedPlayer   = reset ? null : live.DupedPlayer,
+    };
 }
 
 // Merged display view — the observation fields + the customization fields
@@ -170,7 +189,11 @@ public sealed record PlayerRecord(
     // so the edit dialog + Players tab can display them.
     string? Version = null,
     DateTime? VersionAt = null,
-    DateTime? LastPartiedUtc = null)
+    DateTime? LastPartiedUtc = null,
+    // Mirror of PlayerCustomization.DupeUsedAtUtc / DupedPlayer (Character tier) so
+    // the edit dialog can show the @dupe lock and offer the reset.
+    DateTime? DupeUsedAtUtc = null,
+    string? DupedPlayer = null)
 {
     // Combined display name — "GivenName FamilyName", trimmed. Identical
     // contract to PlayerObservation.DisplayName so callers don't have to
@@ -205,7 +228,9 @@ public sealed record PlayerRecord(
         AccountName:         obs.AccountName,
         Version:             obs.Version,
         VersionAt:           obs.VersionAt,
-        LastPartiedUtc:      obs.LastPartiedUtc);
+        LastPartiedUtc:      obs.LastPartiedUtc,
+        DupeUsedAtUtc:       cust.DupeUsedAtUtc,
+        DupedPlayer:         cust.DupedPlayer);
 
     // Pull just the customization slice off this merged row (used by the edit dialog Save path).
     public PlayerCustomization ToCustomization() => new(
@@ -213,7 +238,9 @@ public sealed record PlayerRecord(
         InviteToPartyIfSeen: InviteToPartyIfSeen,
         JoinPartyIfInvited:  JoinPartyIfInvited,
         DontAutoDelete:      DontAutoDelete,
-        Notes:               Notes);
+        Notes:               Notes,
+        DupeUsedAtUtc:       DupeUsedAtUtc,
+        DupedPlayer:         DupedPlayer);
 }
 
 // Per-player allowed remote-command categories. Matches MegaMUD's "Allowed

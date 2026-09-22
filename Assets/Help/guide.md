@@ -581,7 +581,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@atkprio 3 Fujin` — Target Priority: attack-what-player Fujin (`1` = Default, `2` = follow-leader)
 - `@atkorder 4 Suijin` — Attack Order: attack after Suijin (`1`–`3` and `5` are the fixed orders)
 - `@divert Raijin` — forward your incoming telepaths to Raijin (bare `@divert` stops)
-- `@dupe Moron` — copy the sender's own permissions onto Moron (telepath / gangpath only)
+- `@dupe Moron` — copy the sender's query and roomba permissions onto Moron (Elevated; once per player; telepath / gangpath only)
 - `@profile 2` · `@profile backstab` — swap combat profile by number or name
 - `@kill goblin shaman` — retarget your combat onto that monster this round
 - `@trap north` — search and disarm a trap that way (`@trap stop` aborts)
@@ -651,11 +651,13 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 
 ### Hand out permissions
 
-- `@dupe <player>` — copies **the sender's own permissions** onto that player, so a trusted player can bring an alt up to their level without you ticking every box. It rewrites who is trusted, so it needs the **Elevated Commands** grant — the same top tier as `@suicide`. A player you've granted "All" has it; a player with every category *except* Elevated does not.
+- `@dupe <player>` — copies **the sender's query and roomba permissions** onto that player, so a trusted player can bring an alt up to speed without you ticking every box. It hands out trust, so it needs the **Elevated Commands** grant — the same top tier as `@suicide`. A player you've granted "All" has it; a player with every category *except* Elevated does not.
+  - **Only queries move.** The categories it can copy are Query version, experience, health/status, location, inventory, boss timers, deaths, and Query Roomba. Nothing that acts on your character (move, execute, alter settings, request invite, hangup, divert) and **never Elevated Commands** — so a duplicated player can't `@dupe` onward, and gaining anything beyond queries stays a manual step you take in the Players tab.
+  - **One use per player.** Each Elevated player can `@dupe` once. After that it's refused ("your @dupe has already been used") until **you** re-arm it: open that player in **Game Data Browser → Players**, and under **Elevated Commands** press **Reset @dupe**. The dialog shows when it was spent and who it went to. Nothing sent over chat can reset it. A refused or no-op attempt (unknown name, the target already holds everything) doesn't spend the use.
   - **Telepath and gangpath only.** Said aloud in a room, or sent as a gossip, auction, broadcast, or yell, it's ignored outright (no reply), and the Local control API can't run it.
-  - **Additive.** The target keeps anything they already have and gains everything the sender holds — Elevated Commands included, so a duplicated player can duplicate onward. It never takes a permission away, and it only moves the permission grid, not the target's party behaviours or notes.
+  - **Additive.** The target keeps anything they already have and only gains; it never takes a permission away, and it only moves the permission grid, not the target's party behaviours or notes.
   - **Refused:** your own character, the sender themselves, and any name your client has never seen (so a typo can't pre-grant trust to a name someone registers later). The sender is told which; the reply follows the "warn on invalid/denied command" toggle.
-  - Every use is logged at Info in the program log, naming who granted what to whom.
+  - **Logged.** Every use — and every refusal — is written to the program log at Info (who, onto whom, exactly what was granted), and the sender's record keeps who they duplicated onto and when.
 
 ### Party coordination — any active party member, no grant needed
 
@@ -1213,7 +1215,7 @@ Select several rows (click-drag, or Ctrl / Shift-click) on the **Monsters**, **I
 - **Opt-in per field** — a field is only touched when you set it. Enum / text / number fields (Relationship, priority, Min-to-keep, …) have a **Change** checkbox; flags and permissions are a tri-state **Leave / On / Off** (for a player permission, On = grant, Off = revoke). Anything left **Leave** / unticked keeps whatever each record already has, so batching one field never clobbers a record's other overrides.
 - **Monsters** — Relationship, attack priority, don't-backstab, kill-on-sight, the physical-attack command, and the three spell-override rungs (cast-code + Max + Mana floor).
 - **Items** — the auto flags (collect / discard / open / buy / sell / stash), cannot-be-taken, must-have-minimum, loyal, auto-obtain-for-path, and Min-to-keep / Max-to-get.
-- **Players** — the party behaviours (invite-if-seen, join-if-invited, don't-auto-delete) and all 15 remote-control permissions, with a **Set all permissions** master to grant or revoke the lot in one move.
+- **Players** — the party behaviours (invite-if-seen, join-if-invited, don't-auto-delete) and all 15 remote-control permissions, with a **Set all permissions** master to grant or revoke the lot in one move. Under **Elevated Commands** it also shows whether that player's one-time `@dupe` has been spent, with a **Reset @dupe** button to re-arm it.
 - **Tier** — Monsters and Items write to the tier you pick in the dialog's **Use** dropdown (only-this-character / only-this-BBS / for-all-characters), the same as the single editor; picking **Installed defaults** instead **resets** every selected record (after one confirm). Player permissions save to the character, no tier picker.
 
 ### The item / monster override editor
