@@ -81,6 +81,24 @@ public static partial class BenignChatterMatcher
     [GeneratedRegex(@"^(?:Regen Time|Room Illu):\s", RegexOptions.CultureInvariant)]
     private static partial Regex StatusLabelRx();
 
+    // The `br` broadcast-channel status: a header followed by the member list. The list
+    // is bare player names, indistinguishable from other text on its own, so the watcher
+    // suppresses it ONLY on the lines right after the header (stateful) — these two
+    // stateless helpers feed that gate.
+
+    // "The following users are on channel N:" — the list header.
+    public static bool IsChannelListHeader(string text) => ChannelListHeaderRx().IsMatch(text);
+
+    // A member-list row: one or more capitalized player names, comma- or space-separated,
+    // optional trailing period. Only trusted immediately after the header (see the watcher).
+    public static bool LooksLikeChannelMemberList(string text) => ChannelMemberListRx().IsMatch(text);
+
+    [GeneratedRegex(@"^The following users are on channel \d+:$", RegexOptions.CultureInvariant)]
+    private static partial Regex ChannelListHeaderRx();
+
+    [GeneratedRegex(@"^[A-Z][\w'-]*(?:,? +[A-Z][\w'-]*)*\.?$", RegexOptions.CultureInvariant)]
+    private static partial Regex ChannelMemberListRx();
+
     [GeneratedRegex(@"^(?<name>\w[\w '-]*) (?:wears|removes) .+!$", RegexOptions.CultureInvariant)]
     private static partial Regex GearSwapRx();
 }

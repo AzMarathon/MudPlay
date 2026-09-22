@@ -2,8 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.100.5**
-> - Unrecognized-lines report now filters out benign non-spell chatter it was flooding with: player departures (`X just left to the <dir>.`), disconnects, follow notices, other players' socials/emotes and gear swaps (`X wears/removes …!`), toll payments, empty says, `Also here:` roster rows, the suicide-password advisory, and regen/illumination status labels
-> - Each filter is tightly anchored (and gear swaps are gated to known player names) so a genuinely unknown spell/monster/proc line can never be hidden — that's still exactly what the queue surfaces
+> - Unrecognized-lines report now filters out benign non-spell chatter it was flooding with: player departures (`X just left to the <dir>.`), disconnects, follow notices, other players' socials/emotes and gear swaps (`X wears/removes …!`), toll payments, empty says, `Also here:` roster rows, the suicide-password advisory, regen/illumination status labels, and the `br` broadcast-channel status (header + member list)
+> - Each filter is tightly anchored (gear swaps gated to known player names; the channel member list only right after its header) so a genuinely unknown spell/monster/proc line can never be hidden — that's still exactly what the queue surfaces
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

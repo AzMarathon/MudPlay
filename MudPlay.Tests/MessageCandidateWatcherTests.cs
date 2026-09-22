@@ -598,6 +598,47 @@ public sealed class MessageCandidateWatcherTests
     }
 
     [Fact]
+    public void BroadcastChannelList_HeaderAndMembers_NotStaged()
+    {
+        // `br` prints a header then the channel members (one per line or comma-separated).
+        // Header + member rows are all suppressed.
+        Harness h = new();
+
+        h.Feed("The following users are on channel 34433:");
+        h.Feed("Fujin");
+        h.Feed("Raijin, Suijin");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void BareName_WithoutChannelHeader_IsStillStaged()
+    {
+        // A bare capitalized name is suppressed ONLY right after the channel header — on
+        // its own it's a genuine unknown that must surface.
+        Harness h = new();
+
+        h.Feed("Grimlock");
+
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void BroadcastChannelList_GateClearsAfterANonMemberLine()
+    {
+        // The member gate is one-shot per header: a line that isn't a member row clears
+        // it (and is itself staged normally), so a later bare name isn't wrongly dropped.
+        Harness h = new();
+
+        h.Feed("The following users are on channel 34433:");   // gate on
+        h.Feed("Fujin");                                        // member — suppressed
+        h.Feed("The gnarled tree groans ominously.");           // non-member → gate off, staged
+        h.Feed("Grimlock");                                     // bare name, gate cleared → staged
+
+        Assert.Equal(2, h.Candidates.Candidates.Count);
+    }
+
+    [Fact]
     public void MultiLineWitness_EveryWording_IsRecognized()
     {
         // A room spell fires SEVERAL ambient flavor lines from ONE record; WitnessMessage

@@ -331,6 +331,12 @@ public sealed class MessageCandidateWatcher : IDisposable
         // be death flavour, so stage it.
         CommitPending();
 
+        // The `br` broadcast-channel status ("The following users are on channel N:"
+        // then the members). Run first so the one-line member-list gate is maintained
+        // for every line — the members are bare player names, suppressed ONLY right
+        // after the header, and a non-member line clears the gate without being touched.
+        if (IsChannelListLine(text)) return;
+
         // Known from game data, so never a review candidate.
         if (Light.LightModel.IsRoomLightPhrase(text)) return;
         if (_knownLines.Contains(text)) return;
@@ -384,6 +390,22 @@ public sealed class MessageCandidateWatcher : IDisposable
             : (null, null);
         // Held rather than staged — see the death-flavour rule at the top of OnLine.
         _pending = new PendingCandidate(text, now, map, room);
+    }
+
+    // True while consuming the `br` broadcast-channel member list — set by the header,
+    // held across the member rows, cleared by the first line that isn't a member row.
+    private bool _inChannelMemberList;
+
+    // Recognizes the broadcast-channel status block. The header always matches; the
+    // member rows match ONLY while the header just set the gate, so a bare-name line can
+    // never be suppressed on its own. A non-member line clears the gate and is NOT
+    // suppressed here (it falls through to the normal exclusions).
+    private bool IsChannelListLine(string text)
+    {
+        if (BenignChatterMatcher.IsChannelListHeader(text)) { _inChannelMemberList = true; return true; }
+        if (_inChannelMemberList && BenignChatterMatcher.LooksLikeChannelMemberList(text)) return true;
+        _inChannelMemberList = false;
+        return false;
     }
 
     // A vetted line waiting to see whether an experience gain follows it (which
