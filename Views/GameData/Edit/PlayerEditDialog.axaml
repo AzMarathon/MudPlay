@@ -100,6 +100,16 @@
                                           ToolTip.Tip="{Binding RcDivertConversationsTip}"/>
                                 <CheckBox Content="Elevated Commands"    IsChecked="{Binding RcSysopCommands, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcSysopCommandsTip}"/>
+                                <!-- @dupe is one use per player; only this button re-arms it. -->
+                                <StackPanel Margin="26,0,0,0" Spacing="3">
+                                    <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                               Text="{Binding DupeStatusText}"/>
+                                    <Button Content="Reset @dupe"
+                                            Command="{Binding ResetDupeCommand}"
+                                            IsEnabled="{Binding DupeSpent}"
+                                            HorizontalAlignment="Left" Padding="8,2"
+                                            ToolTip.Tip="Re-arms this player's one-time @dupe. Only you can do this, here in the client; nothing sent over chat can reset it."/>
+                                </StackPanel>
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>

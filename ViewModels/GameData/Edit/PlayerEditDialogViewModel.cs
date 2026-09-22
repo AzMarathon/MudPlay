@@ -48,6 +48,34 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryDeaths;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryItemLocation;
 
+    // ----- @dupe lock (shown under the Elevated Commands checkbox) -----
+    // The once-only lock on this player's @dupe. Like every other edit here, a reset
+    // is deferred to Save (Cancel discards it); the result's ResetDupe flag tells the
+    // caller to clear the LIVE lock, which the editor never writes back itself.
+
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(DupeSpent), nameof(DupeStatusText))] private DateTime? _dupeUsedAtUtc;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(DupeStatusText))] private string? _dupedPlayer;
+
+    private bool _resetDupeRequested;
+
+    public bool DupeSpent => DupeUsedAtUtc is not null;
+
+    public string DupeStatusText => DupeUsedAtUtc is { } used
+        ? $"@dupe used {used.ToLocalTime():yyyy-MM-dd HH:mm}"
+          + (string.IsNullOrEmpty(DupedPlayer) ? "" : $" on {DupedPlayer}")
+          + " — locked until reset."
+        : "@dupe available (one use).";
+
+    // Re-arm this player's one-time @dupe. Only reachable here, in the client — nothing
+    // sent over chat can reset it.
+    [RelayCommand]
+    private void ResetDupe()
+    {
+        DupeUsedAtUtc = null;
+        DupedPlayer = null;
+        _resetDupeRequested = true;
+    }
+
     // True when every remote-control checkbox is checked — drives the master toggle's IsChecked.
     public bool AllowsAll =>
         RcQueryVersion && RcQueryExperience && RcQueryHealthStatus && RcQueryLocation &&
@@ -185,6 +213,8 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         JoinPartyIfInvited  = original.JoinPartyIfInvited;
         DontAutoDelete      = original.DontAutoDelete;
         AccountName         = original.AccountName;
+        DupeUsedAtUtc       = original.DupeUsedAtUtc;
+        DupedPlayer         = original.DupedPlayer;
 
         PlayerRemoteControls rc = original.RemoteControls;
         RcQueryVersion        = rc.HasFlag(PlayerRemoteControls.QueryVersion);
@@ -249,7 +279,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
             // that write has the value.
             AccountName         = string.IsNullOrWhiteSpace(AccountName) ? null : AccountName.Trim(),
         };
-        CloseRequested?.Invoke(new PlayerEditResult(_original.DisplayName, updated));
+        CloseRequested?.Invoke(new PlayerEditResult(_original.DisplayName, updated, _resetDupeRequested));
     }
 
     [RelayCommand]
@@ -258,5 +288,6 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
 
 // Result returned from PlayerEditDialogViewModel on Save. Carries the original display name
 // (so PlayerDatabase.EditRecord can locate the right record even if the user renamed) plus
-// the updated record.
-public sealed record PlayerEditResult(string OriginalDisplayName, PlayerRecord Updated);
+// the updated record. ResetDupe is true only when the user pressed Reset @dupe; the
+// updated record's own @dupe lock is never trusted (see PlayerCustomization.KeepDupeLockFrom).
+public sealed record PlayerEditResult(string OriginalDisplayName, PlayerRecord Updated, bool ResetDupe);

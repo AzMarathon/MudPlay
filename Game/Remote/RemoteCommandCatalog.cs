@@ -33,9 +33,9 @@ namespace MudPlay.Game.Remote;
 //   - DivertConversations — @divert.
 //   - SysopCommands ("Elevated Commands" in the Players-tab UI) — high-trust
 //     commands beyond ordinary control: irreversible character actions
-//     (@suicide) and rewriting other players' permissions (@dupe, which is also
-//     telepath / gangpath only — see IsPathChannelOnly). Wider than just sysop
-//     powers.
+//     (@suicide) and handing out trust (@dupe: copies only the sender's query and
+//     roomba permissions, once, and is also telepath / gangpath only — see
+//     IsPathChannelOnly and DupeHandler). Wider than just sysop powers.
 //   - QueryBossTimers — @timer (boss respawn timers being tracked). Its own
 //     category so a user can grant boss-timer queries independently of @where.
 //   - QueryItemLocation — @roomba (last room an item was seen in, per the
@@ -280,7 +280,7 @@ public static class RemoteCommandCatalog
             ["@divert"]       = new("@divert [player]", "forwards your incoming telepaths to another player; bare stops"),
             ["@hangup"]       = new("@hangup", "drops your connection and stays down (no auto-reconnect)"),
             ["@relog"]        = new("@relog", "cleanly exits, then reconnects and auto-logs back in"),
-            ["@dupe"]         = new("@dupe <player>", "copies your permissions onto that player (Elevated; telepath / gangpath only; they keep any they already have)"),
+            ["@dupe"]         = new("@dupe <player>", "copies your query and roomba permissions onto that player (Elevated; one use until reset in the client; telepath / gangpath only)"),
             ["@wait"]         = new("@wait", "hold: automation pauses until @ok releases it"),
             ["@ok"]           = new("@ok", "releases a @wait hold"),
             ["@comeback"]     = new("@comeback [map/room]", "stranded member asks the party to come recover them"),

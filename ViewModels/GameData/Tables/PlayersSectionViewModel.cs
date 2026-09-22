@@ -231,7 +231,11 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         // toggles follow the player across train-stats renames; the
         // dialog's OriginalDisplayName carries the given as its first
         // whitespace-delimited token and EditCustomization extracts it.
-        _db.EditCustomization(record.GivenName, result.Updated.ToCustomization());
+        // The @dupe lock is engine-owned: take it from the LIVE record (a @dupe may have
+        // landed while the dialog was open) and clear it only if the user pressed Reset.
+        PlayerCustomization live = (_db.Find(record.GivenName) ?? record).ToCustomization();
+        _db.EditCustomization(record.GivenName,
+            result.Updated.ToCustomization().KeepDupeLockFrom(live, result.ResetDupe));
         // AccountName lives on the BBS-tier observation, not the customization
         // slice, so it takes its own write path.
         _db.SetAccountName(record.GivenName, result.Updated.AccountName);
@@ -267,7 +271,12 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         if (result is null || !result.Changes.AnyFieldChosen) return;
 
         foreach (PlayerRecord record in records)
-            _db.EditCustomization(record.GivenName, result.Changes.ApplyTo(record.ToCustomization()));
+        {
+            // Fold onto the live customization, not the snapshot from before the dialog
+            // opened, so a @dupe that landed meanwhile keeps its lock.
+            PlayerRecord live = _db.Find(record.GivenName) ?? record;
+            _db.EditCustomization(record.GivenName, result.Changes.ApplyTo(live.ToCustomization()));
+        }
         Reload();
     }
 }
