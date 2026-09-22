@@ -144,7 +144,7 @@ public sealed class BuffWatchdogRowViewModelTests
         Assert.Equal(1.0, row.FillStar.Value, 3);              // green zone fully consumed
         Assert.Equal(15.0 / 30.0, row.RedStar.Value, 3);       // half the red zone
         Assert.False(row.InRecastWindow);
-        Assert.Contains("recast in 15s", row.TimeText);
+        Assert.Equal("recast 15s", row.TimeText);
     }
 
     [Fact]

@@ -1247,11 +1247,23 @@ public sealed class CastingDirector : IDisposable
             }
         }
 
-        // Server-confirmed early wear-off — drop the self timer so the next
-        // pass re-attempts immediately rather than waiting out a stale clock.
-        if (resolved is { } shortCode && _activeUntil.Remove(("", shortCode)))
-            _log?.Combat(LogCategory,
-                $"self-buff {shortCode} wore off (wear-off line) — recast timer cleared");
+        // Server-confirmed wear-off — normally drop the self timer so the next pass
+        // re-attempts immediately rather than waiting out a stale clock. But a NEGATIVE
+        // margin deliberately defers the recast to |margin| seconds AFTER wear-off, so
+        // keep that timer: IsRecastDue still gates on (Until - now) <= margin and won't
+        // fire until the buffer elapses. Dropping it here would recast the instant the
+        // wear-off line lands, collapsing the post-expiry buffer the user configured.
+        if (resolved is { } shortCode
+            && _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec, int TotalSec) t))
+        {
+            if (t.MarginSec < 0)
+                _log?.Combat(LogCategory,
+                    $"self-buff {shortCode} wore off — negative margin keeps the timer; recast in "
+                    + $"{Math.Max(0.0, (t.Until.AddSeconds(-t.MarginSec) - _now()).TotalSeconds):0}s");
+            else if (_activeUntil.Remove(("", shortCode)))
+                _log?.Combat(LogCategory,
+                    $"self-buff {shortCode} wore off (wear-off line) — recast timer cleared");
+        }
         Evaluate();
     }
 

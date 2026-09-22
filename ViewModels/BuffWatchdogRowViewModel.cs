@@ -212,9 +212,12 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
             ShowRecastMarker = false;   // the green→red boundary IS the expiry line
             MarkerStar = Empty;
             MarkerRestStar = Full;
+            // While up: the buff's own remaining. Past expiry: keep counting down — now
+            // toward the recast (|margin| after wear-off), kept short so the row doesn't
+            // balloon into a sentence.
             TimeText = signedRemaining > 0
                 ? FormatRemaining(signedRemaining)
-                : $"expired · recast in {FormatRemaining(System.Math.Max(0.0, signedRemaining - e.MarginSec))}";
+                : $"recast {FormatRemaining(System.Math.Max(0.0, signedRemaining - e.MarginSec))}";
         }
         else
         {
