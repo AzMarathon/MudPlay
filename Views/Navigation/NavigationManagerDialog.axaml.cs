@@ -35,9 +35,10 @@ public partial class NavigationManagerDialog : Window
     public NavigationManagerDialog()
     {
         InitializeComponent();
-        // Land the cursor in the walk-to search box the moment the window opens, so
-        // hitting the toolbar's play/Start button and typing a destination is one motion.
-        Opened += (_, _) => WalkToBox.Focus();
+        // Land the cursor in the Go To "Filter favourites…" box the moment the window
+        // opens (the play/Start button opens on that tab), so the user can filter right
+        // away. No-op if it's hidden because no favourites exist yet.
+        Opened += (_, _) => GotoFilterBox.Focus();
         WireDragDrop(WalkTreeView);
         WireDragDrop(GotoTreeView);
         // DoubleTapped only routes as Bubble, so the handler must be

@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.100.7**
-> - Navigation Management window now focuses its walk-to search box on open, so hitting the play/Start button and typing a destination is one motion
+> - Navigation Management window now focuses its "Filter favourites…" box on open, so hitting the play/Start button and filtering is one motion
 > - Buff Watchdog mana-budget label is brighter, a bit larger, and spaced off the buttons and table so it reads more clearly
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
