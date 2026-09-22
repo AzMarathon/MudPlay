@@ -92,9 +92,14 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     {
         bool demo = _demoMode;
         Func<bool> never = static () => false;
-        SubStep Menu(string text, string key) => new(text, demo ? never : () => _openedMenus.Contains(key));
+        // Menu lines always key off the real menu-open signal, so the checklist
+        // responds to clicks even during a demo. Only the OUTCOME lines (and step
+        // completion) are forced unmet in demo, so a fully-configured install can
+        // still walk every step instead of auto-completing.
+        SubStep Menu(string text, string key) => new(text, () => _openedMenus.Contains(key));
         SubStep Outcome(string text, Func<bool> pred) => new(text, demo ? never : pred);
 
+        _openedMenus.Clear();
         _steps.Clear();
         if (demo || !_hasBbs())
             _steps.Add(new TutorialStep("Add a BBS", new[]
@@ -148,7 +153,7 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     // line. Re-renders the checklist so that line ticks and the highlight advances.
     public void NotifyMenuOpened(string menuKey)
     {
-        if (!IsActive || _demoMode || string.IsNullOrEmpty(menuKey)) return;
+        if (!IsActive || string.IsNullOrEmpty(menuKey)) return;
         if (_openedMenus.Add(menuKey)) RaiseStepProperties();
     }
 

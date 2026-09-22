@@ -153,9 +153,12 @@ public partial class MainWindow : Window
                 PositionChanged += (_, _) => PositionTutorialWindow();
 
                 // Menu-open signals tick the tour's "open the … menu" checklist
-                // lines and advance the highlight.
-                FileMenu.SubmenuOpened += (_, _) => mvm.Tutorial.NotifyMenuOpened("File");
-                GameDataMenu.SubmenuOpened += (_, _) => mvm.Tutorial.NotifyMenuOpened("GameData");
+                // lines and advance the highlight. Observe IsSubMenuOpen (fires
+                // reliably for top-level items) rather than the routed event.
+                FileMenu.GetObservable(MenuItem.IsSubMenuOpenProperty).Subscribe(
+                    new AnonymousObserver<bool>(open => { if (open) mvm.Tutorial.NotifyMenuOpened("File"); }));
+                GameDataMenu.GetObservable(MenuItem.IsSubMenuOpenProperty).Subscribe(
+                    new AnonymousObserver<bool>(open => { if (open) mvm.Tutorial.NotifyMenuOpened("GameData"); }));
 
                 AppServices.Current.StartFirstRunTutorial = demo =>
                     Dispatcher.UIThread.Post(() =>

@@ -138,6 +138,18 @@ public sealed class FirstRunTutorialViewModelTests
     }
 
     [Fact]
+    public void Demo_MenuOpen_StillTicksChecklist()
+    {
+        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        f.GameData = f.Bbs = f.Character = true;   // fully configured — demo still walks
+        vm.StartDemo();
+        Assert.False(vm.CurrentSubs[0].IsDone);
+        vm.NotifyMenuOpened("File");
+        Assert.True(vm.CurrentSubs[0].IsDone);      // menu line ticks even in demo
+        Assert.True(vm.CurrentSubs[1].IsCurrent);   // highlight advances
+    }
+
+    [Fact]
     public void NotifyMenuOpened_Ignored_ForUnrelatedMenu()
     {
         (FirstRunTutorialViewModel vm, _) = Make();
