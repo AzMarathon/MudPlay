@@ -72,6 +72,11 @@ public sealed class MessageCandidateWatcher : IDisposable
     private readonly Func<string, bool>? _isKnownRoomName;
     private readonly Func<string, bool>? _isRecognizedByDirectParser;
     private readonly Func<string, bool>? _isNonCasterPhysicalAction;
+    // Colour-aware exclusion: given the whole line (attributes included), true if it's a
+    // recognized non-spell line that TEXT alone can't identify — the BBS action / emote,
+    // which is told apart from a spell line only by its all-green colouring plus a
+    // known-player check. Composed in AppServices from ActionEmoteClassifier.
+    private readonly Func<LineExtractor.EmittedLine, bool>? _isRecognizedLine;
     private readonly LogService? _log;
 
     // Built from MessageStore on every CollectionChanged — trimmed text of every
@@ -140,7 +145,8 @@ public sealed class MessageCandidateWatcher : IDisposable
         MessageCandidateStore candidates, Func<RoomKey?>? currentRoom = null,
         LogService? log = null, Func<string, bool>? isKnownRoomName = null,
         Func<string, bool>? isRecognizedByDirectParser = null,
-        Func<string, bool>? isNonCasterPhysicalAction = null)
+        Func<string, bool>? isNonCasterPhysicalAction = null,
+        Func<LineExtractor.EmittedLine, bool>? isRecognizedLine = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(messages);
@@ -152,6 +158,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         _isKnownRoomName = isKnownRoomName;
         _isRecognizedByDirectParser = isRecognizedByDirectParser;
         _isNonCasterPhysicalAction = isNonCasterPhysicalAction;
+        _isRecognizedLine = isRecognizedLine;
         _log = log;
 
         _templates = new MessageTemplateIndex(messages.Messages);
@@ -329,6 +336,9 @@ public sealed class MessageCandidateWatcher : IDisposable
         if (_knownLines.Contains(text)) return;
         if (IsKnownRoomName(text)) return;
         if (_isRecognizedByDirectParser?.Invoke(text) == true) return;
+        // Colour-aware: a BBS action / emote reads like any other sentence in plain text,
+        // so it's told apart by the wire's all-green colouring (plus a known-player check).
+        if (_isRecognizedLine?.Invoke(line) == true) return;
         if (MatchesAppliedEndsWith(text)) return;
         if (_templates.Matches(text)) return;
         if (_router.AnyPatternMatches(line)) return;

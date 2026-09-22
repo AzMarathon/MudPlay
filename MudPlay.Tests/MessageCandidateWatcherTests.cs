@@ -28,13 +28,15 @@ public sealed class MessageCandidateWatcherTests
         // Default in-game so capture tests exercise the real path; a test that
         // needs the pre-game gate passes inGame:false. seedDefaultPatterns loads the
         // real catalog for tests about shapes DefaultPatterns is supposed to cover.
-        public Harness(bool inGame = true, bool seedDefaultPatterns = false)
+        public Harness(bool inGame = true, bool seedDefaultPatterns = false,
+            Func<LineExtractor.EmittedLine, bool>? isRecognizedLine = null)
         {
             if (seedDefaultPatterns) DefaultPatterns.Seed(Router);
             Watcher = new MessageCandidateWatcher(
                 Router, Messages, Candidates, currentRoom: () => Room, log: Log,
                 isKnownRoomName: RoomNames.Contains,
-                isRecognizedByDirectParser: PartyManager.IsRosterRow);
+                isRecognizedByDirectParser: PartyManager.IsRosterRow,
+                isRecognizedLine: isRecognizedLine);
             if (inGame) Watcher.NotifyInGame();
         }
 
@@ -580,6 +582,19 @@ public sealed class MessageCandidateWatcherTests
         h.Feed(line);
 
         Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void ColourAwareRecognizedLine_IsNotStaged()
+    {
+        // The colour-aware exclusion (BBS action / emote, told apart by all-green colour
+        // plus a roster check in real life) drops the line before it's staged. Here the
+        // delegate stands in for that recognizer.
+        Harness h = new(isRecognizedLine: line => line.Text == "Fujin waves happily.");
+
+        h.Feed("Fujin waves happily.");
+
+        Assert.Empty(h.Candidates.Candidates);
     }
 
     [Fact]

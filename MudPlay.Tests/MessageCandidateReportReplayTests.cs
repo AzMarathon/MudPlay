@@ -43,7 +43,10 @@ public sealed class MessageCandidateReportReplayTests : IDisposable
             isRecognizedByDirectParser: text =>
                 PartyManager.IsRosterRow(text)
                 || StatParser.IsStatScreenLine(text)
-                || Game.Spells.SpellListParser.IsSpellListLine(text),
+                || Game.Spells.SpellListParser.IsSpellListLine(text)
+                || Game.BenignChatterMatcher.IsBenign(text)
+                || Game.BenignChatterMatcher.IsOtherPlayerGearSwap(
+                    text, n => n is "Client" or "Raijin" or "Suijin" or "Fujin"),
             // The report's party: Suijin the Witchunter casts nothing, Raijin the
             // Priest does. AppServices resolves this from the live roster + the
             // Classes table; here it's stated directly.
@@ -128,6 +131,19 @@ public sealed class MessageCandidateReportReplayTests : IDisposable
     [InlineData("1   2    mihe  minor healing")]
     [InlineData("2   4    bles  bless")]
     [InlineData("3   2    turn  turn undead")]
+    // Benign non-spell chatter — player movement / status / social lines no spell record
+    // describes. (Exact lines from the unrecognized-lines-20260922-014747 export.)
+    [InlineData("Miserable just left to the east.")]
+    [InlineData("Client just left to the south.")]
+    [InlineData("Durnan just disconnected!!!")]
+    [InlineData("You are following Client.")]
+    [InlineData("You just paid 5 gold crowns in toll charges.")]
+    [InlineData("You say \"\"")]
+    [InlineData("Also here: albino salamander, river ray, albino salamander, river")]
+    [InlineData("To prevent accidental suicide or reroll, these commands")]
+    [InlineData("SET SUICIDE command.")]
+    [InlineData("Client wears runed cowl!")]           // roster-gated gear swap (Client is a known player here)
+    [InlineData("Client removes jeweled turban!")]
     public void ReportedNoise_IsNoLongerCaptured(string line)
     {
         Feed(line);
