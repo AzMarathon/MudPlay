@@ -28,6 +28,37 @@ public sealed class PartyManagerTests
         return (router, party);
     }
 
+    // ===== Leader-side reconnect reform =====
+
+    [Fact]
+    public void BeginLeaderReconnectReform_FiresReInvite_WhenAutoInviteEnabled()
+    {
+        // A leader-drop dissolved the party; on reconnect we re-invite the remembered
+        // followers (who stayed put) — the co-located re-invite the passive grace window
+        // never does.
+        var (_, p) = Setup();
+        p.AutoInviteEnabled = true;
+        IReadOnlyList<string>? invited = null;
+        p.LeaderReconnectReformInvites += list => invited = list;
+
+        p.BeginLeaderReconnectReform(new[] { "Raijin", "Suijin" });
+
+        Assert.Equal(new[] { "Raijin", "Suijin" }, invited);
+    }
+
+    [Fact]
+    public void BeginLeaderReconnectReform_NoReInvite_WhenAutoInviteDisabled()
+    {
+        var (_, p) = Setup();
+        p.AutoInviteEnabled = false;
+        bool fired = false;
+        p.LeaderReconnectReformInvites += _ => fired = true;
+
+        p.BeginLeaderReconnectReform(new[] { "Raijin" });
+
+        Assert.False(fired);
+    }
+
     // ===== Single-line membership signals =====
     // Real-BBS-verified phrasings (Playpen BBS):
     //   "X started to follow you."     — X joined our party (we lead)

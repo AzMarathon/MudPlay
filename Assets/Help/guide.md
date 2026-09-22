@@ -549,6 +549,8 @@ Two things about party buffs stay worth knowing here:
 
 One character leads; the rest follow. A follower tracks the leader's movement and holds position; if the leader disconnects, the party disbands. A party is 2–6 characters.
 
+**Leader reconnect re-invites the party.** A leader-drop dissolves the party, but the followers keep sitting in the room (they've no leader to follow). When the leader reconnects, MudPlay re-invites the ones still there — waiting until it actually sees each in the room before sending `invite`, since the game drops an invite aimed at someone who isn't present. (Gated by *auto-invite on reconnect*, same as the follower-reconnect case.)
+
 ## Party healing
 
 With party heal spells configured (Settings → Party), members watch each other's health broadcasts and heal whoever drops below the minor/major thresholds — single-target, or an area heal once enough members qualify.

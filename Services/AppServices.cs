@@ -2435,6 +2435,10 @@ public sealed class AppServices
         // this to followers; a leader reforms its group on trainer exit instead.
         TrainerMenu.MenuEntered += Party.NoteTrainStatsExcursion;
         AutoParty = new Game.AutoPartyManager(Router, Players, PartyState, TrainerMenu, Log);
+        // Leader-side reconnect reform: a leader-drop dissolves the party and leaves the
+        // followers sitting in the room, so re-invite each once AutoParty observes them
+        // present (they never "re-enter the Realm" to trip the grace-window auto-invite).
+        Party.LeaderReconnectReformInvites += AutoParty.NoteLeaderReconnectReform;
         // Suicide-password observer + engine-gate consumer. Drives
         // EngineGate.IsLocked during password-entry prompts so
         // MainWindowViewModel's wrapped engine wire-senders silently

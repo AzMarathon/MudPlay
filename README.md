@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.101.2**
-> - Auto-train: applying CP (`train stats`) is no longer level-band gated — Train Now allocates your plan at whatever class-valid trainer you're standing in, instead of walking you off (or giving up) just to spend points
-> - With **Auto-train stats** on, opening the `train stats` screen yourself now fires the CP allocation automatically — no CP-tab button press needed
+> **Version 3.101.3**
+> - Party leader reconnect now re-invites the followers who stayed in the room: a leader-drop dissolves the party and the followers never "re-enter the realm" to trip the usual auto-invite, so they were left out. The leader now re-invites each once it sees them present, gated by auto-invite-on-reconnect
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

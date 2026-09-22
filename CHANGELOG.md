@@ -1,5 +1,9 @@
 # Version history
 
+## 3.101.3
+
+- Party leader reconnect now re-invites the followers who stayed in the room: a leader-drop dissolves the party, and the followers never "re-enter the realm" to trip the usual auto-invite, so they were left un-invited. The leader now re-invites each once it sees them present (`invite` needs the target in the room), gated by auto-invite-on-reconnect
+
 ## 3.101.2
 
 - Auto-train: applying CP (`train stats`) is no longer level-band gated — Train Now allocates your plan at whatever class-valid trainer you're standing in, instead of walking you off to a level-matching trainer (or giving up) just to spend points

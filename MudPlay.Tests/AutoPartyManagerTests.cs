@@ -873,6 +873,52 @@ public sealed class AutoPartyManagerTests
             b => Encoding.Latin1.GetString(b) == "invite Forged\r");
     }
 
+    // ===== Leader-side reconnect reform =====
+
+    [Fact]
+    public void LeaderReconnectReform_DefersInvite_ThenInvitesEachSeenInRoom()
+    {
+        // A leader-drop DISSOLVES the party (live roster empty), and the followers stayed
+        // put in the room. On reconnect we re-invite them from the REMEMBERED list — but
+        // deferred until each is observed present ("Also here:"), since inviting an absent
+        // player is lost.
+        var (engine, router, _, _) = Setup();
+
+        engine.NoteLeaderReconnectReform(new[] { "Raijin", "Forged" });
+        Assert.Empty(engine.LastSentForTests);   // nothing sent until they're observed
+
+        Dispatch(router, "Also here: Raijin and Forged.");
+
+        Assert.Equal(2, engine.LastSentForTests.Count);
+        Assert.Contains(engine.LastSentForTests,
+            b => Encoding.Latin1.GetString(b) == "invite Raijin\r");
+        Assert.Contains(engine.LastSentForTests,
+            b => Encoding.Latin1.GetString(b) == "invite Forged\r");
+    }
+
+    [Fact]
+    public void LeaderReconnectReform_OnlyInvitesTheOnesPresent()
+    {
+        // Raijin stayed in the room; Forged wandered off. Only the present one is invited;
+        // Forged stays pending until observed (or the reform is aborted).
+        var (engine, router, _, _) = Setup();
+        engine.NoteLeaderReconnectReform(new[] { "Raijin", "Forged" });
+
+        Dispatch(router, "Also here: Raijin.");
+
+        byte[] sent = Assert.Single(engine.LastSentForTests);
+        Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
+    }
+
+    [Fact]
+    public void LeaderReconnectReform_EmptyList_NoOp()
+    {
+        var (engine, router, _, _) = Setup();
+        engine.NoteLeaderReconnectReform(System.Array.Empty<string>());
+        Dispatch(router, "Also here: Raijin.");
+        Assert.Empty(engine.LastSentForTests);
+    }
+
     [Fact]
     public void SplitReform_StrangerFlashLine_DoesNotInvite()
     {
