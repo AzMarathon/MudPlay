@@ -31,7 +31,7 @@ public sealed class FirstRunTutorialViewModelTests
         (FirstRunTutorialViewModel vm, _) = Make();
         vm.Start();
         Assert.True(vm.IsActive);
-        Assert.Equal("Import game data", vm.CurrentTitle);
+        Assert.Equal("Add a BBS", vm.CurrentTitle);
         Assert.Equal("Step 1 of 4", vm.StepCounterText);
         Assert.False(vm.CanPrev);
     }
@@ -45,6 +45,17 @@ public sealed class FirstRunTutorialViewModelTests
         vm.Start();
         // Game data step + Connect finish only.
         Assert.Equal("Import game data", vm.CurrentTitle);
+        Assert.Equal("Step 1 of 2", vm.StepCounterText);
+    }
+
+    [Fact]
+    public void Start_OnlyBbsMissing_StartsAtBbs()
+    {
+        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        f.GameData = true;
+        f.Character = true;
+        vm.Start();
+        Assert.Equal("Add a BBS", vm.CurrentTitle);
         Assert.Equal("Step 1 of 2", vm.StepCounterText);
     }
 
@@ -66,12 +77,12 @@ public sealed class FirstRunTutorialViewModelTests
     {
         (FirstRunTutorialViewModel vm, _) = Make();
         vm.Start();
-        Assert.Equal("Import game data", vm.CurrentTitle);
-        vm.NextCommand.Execute(null);
         Assert.Equal("Add a BBS", vm.CurrentTitle);
+        vm.NextCommand.Execute(null);
+        Assert.Equal("Add a character", vm.CurrentTitle);
         Assert.True(vm.CanPrev);
         vm.PrevCommand.Execute(null);
-        Assert.Equal("Import game data", vm.CurrentTitle);
+        Assert.Equal("Add a BBS", vm.CurrentTitle);
     }
 
     [Fact]
@@ -102,23 +113,23 @@ public sealed class FirstRunTutorialViewModelTests
         (FirstRunTutorialViewModel vm, Flags f) = Make();
         vm.Start();
         Assert.False(vm.CurrentIsDone);
-        f.GameData = true;
+        f.Bbs = true;
         // Re-read via a property refresh (Refresh raises it).
         vm.Refresh();
-        // Auto-advanced past the now-done game-data step.
-        Assert.Equal("Add a BBS", vm.CurrentTitle);
+        // Auto-advanced past the now-done BBS step.
+        Assert.Equal("Add a character", vm.CurrentTitle);
     }
 
     [Fact]
     public void Refresh_AutoAdvancesPastCompletedSteps()
     {
         (FirstRunTutorialViewModel vm, Flags f) = Make();
-        vm.Start();                       // at game data (step 1 of 4)
-        f.GameData = true;
+        vm.Start();                       // at Add a BBS (step 1 of 4)
         f.Bbs = true;
+        f.Character = true;
         vm.Refresh();
-        // Both leading steps done → advanced to Add a character.
-        Assert.Equal("Add a character", vm.CurrentTitle);
+        // Both leading steps done → advanced to Import game data.
+        Assert.Equal("Import game data", vm.CurrentTitle);
     }
 
     [Fact]

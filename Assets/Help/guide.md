@@ -4,7 +4,11 @@ New to MudPlay? Here's the short path from launch to playing — and where the r
 
 ## First-time setup tour
 
-On a brand-new install — no game data imported, no BBS, or no character yet — a **guided setup tour** pops up over the main window. It dims the screen and **spotlights the exact menu** to click for each thing you still need, with a short "click here → fill this in → Save" on a card. Use **Back / Next** to move through the steps (only the ones you're missing show, plus a final **Connect**); each step shows a check once you've done it, and finishing a task jumps the tour forward on its own.
+On a brand-new install — no BBS, no character, or no game data imported yet — a **guided setup tour** appears in a panel on the **left of the terminal** (it doesn't cover it), and **rings the exact menu** to click for the current step. Short "click here → fill this in → OK" cards, with **Back / Next**. Only the steps you're missing show (plus a final **Connect**); each shows a check once done, and finishing a task jumps the tour forward on its own. The usual order:
+
+1. **Add a BBS** — File → Profile Management → **Add BBS**. That opens Settings; fill in the host/IP + port and click **OK**.
+2. **Add a character** — back in Profile Management, add a character under your BBS, name it, and **Save**.
+3. **Import game data** — Game Data → **Import .mdb**, then pick your MajorMUD `.mdb` file. That's all it takes — it's what the automation reads from.
 
 Don't want it? Click **Skip — don't show this again** and it won't return on launch. You can replay it any time from **Help → First-time setup…**. The rest of this page is the same ground at your own pace.
 

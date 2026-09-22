@@ -61,21 +61,21 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     private void BuildSteps()
     {
         _steps.Clear();
-        if (!_hasGameData())
-            _steps.Add(new TutorialStep(
-                "Import game data",
-                "Game Data → Import .mdb, then pick your MajorMUD .mdb file.",
-                "GameDataMenu", _hasGameData));
         if (!_hasBbs())
             _steps.Add(new TutorialStep(
                 "Add a BBS",
-                "File → Profile Management → BBSes → Add. Enter host + port, then Save.",
+                "File → Profile Management → Add BBS. That opens Settings — fill in the host/IP + port, then OK.",
                 "FileMenu", _hasBbs));
         if (!_hasCharacter())
             _steps.Add(new TutorialStep(
                 "Add a character",
-                "Profile Management → Characters → Add. Name it, then Save.",
+                "Back in Profile Management, add a character under your BBS — name it, then Save.",
                 "FileMenu", _hasCharacter));
+        if (!_hasGameData())
+            _steps.Add(new TutorialStep(
+                "Import game data",
+                "Game Data → Import .mdb, then pick your MajorMUD .mdb file. That's all it takes — the automation reads from it.",
+                "GameDataMenu", _hasGameData));
         _steps.Add(new TutorialStep(
             "Connect",
             "File → Connect (Alt+H) to enter the game.",
