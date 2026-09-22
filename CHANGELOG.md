@@ -1,5 +1,12 @@
 # Version history
 
+## 3.100.4
+
+- Unrecognized-lines report no longer floods with lines the client already handles: the full-`i` inventory dump (carried items, keys, wealth, and every word-wrapped continuation row) and item `Uses remaining: N` lines are recognized and excluded
+- A spell record's **3rd party witness** slot can now hold **multiple wordings, one per line** — a room spell that fires several ambient flavor lines is one record, not one-per-line; the editor field is now multi-line
+- Seeded the silvermere (#918) and darkwood-forest (#915) room-spell flavor sets, so those atmosphere lines are recognized instead of surfacing as unknown
+- bug reports addressed: unrecognized-lines-20260922-014747
+
 ## 3.100.2
 
 - Player Workshop → Character Info: keys on the key-ring now show their remaining charges (e.g. `black serpent key - 17 Charges`), matching the readout other limited-use items already carry

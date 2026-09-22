@@ -3870,7 +3870,17 @@ public sealed class AppServices
             isRecognizedByDirectParser: text =>
                 Game.PartyManager.IsRosterRow(text)
                 || Game.StatParser.IsStatScreenLine(text)
-                || Game.Spells.SpellListParser.IsSpellListLine(text),
+                || Game.Spells.SpellListParser.IsSpellListLine(text)
+                // The full-'i' inventory dump: its "You are carrying …" anchor plus every
+                // word-wrapped continuation row (items / keys / wealth), which InventoryManager
+                // consumes as a gated block with no per-row router pattern. Anchor by prefix
+                // (the flag isn't set yet on that first line — see IsCapturing) and let the
+                // live capture flag cover the rest.
+                || text.StartsWith("You are carrying ", StringComparison.Ordinal)
+                || Inventory.IsCapturing
+                // "Uses remaining: N" off an item look — ItemChargeTracker reads it via
+                // TokenCatalog with no router pattern, so reuse that same recognizer.
+                || Game.Tokens.TokenCatalog.ParseUsesRemaining(text) >= 0,
             // "<Actor> <verb> an <ammo> at <target>!" reads identically whether it's
             // archery or a projectile spell, so the shape can't be a router pattern —
             // it needs to know who acted. A no-magery class settles it.

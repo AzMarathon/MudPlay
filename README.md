@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.100.2**
-> - Player Workshop → Character Info: keys on the key-ring now show their remaining charges (e.g. `black serpent key - 17 Charges`), matching the readout other limited-use items already carry
-> - Buff "recast (s)" now accepts **negative** values — a negative recasts the buff that many seconds *after* it wears off (e.g. `-30` on a 60s buff recasts every 90s), to spread out mana use; the Buff Watchdog bar shows the post-expiry wait as a red extension past the green
+> **Version 3.100.4**
+> - Unrecognized-lines report no longer floods with lines the client already handles: the full-`i` inventory dump (carried items, keys, wealth, and every word-wrapped continuation row) and item `Uses remaining: N` lines are recognized and excluded
+> - A spell record's **3rd party witness** slot can now hold **multiple wordings, one per line** — a room spell that fires several ambient flavor lines is one record, not one-per-line; the editor field is now multi-line
+> - Seeded the silvermere (#918) and darkwood-forest (#915) room-spell flavor sets, so those atmosphere lines are recognized instead of surfacing as unknown
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

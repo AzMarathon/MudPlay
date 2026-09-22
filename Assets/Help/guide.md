@@ -1323,7 +1323,7 @@ It starts from the built-in stock list and applies to the **active game-data set
 
 The list updates live as lines come in without moving you — new rows append at the bottom and a rising occurrence count refreshes in place, so you keep your scroll position and your selected row while the game is running.
 
-Double-click a row to open the same editor Messages uses, pre-filled with the raw text, and Save it in as a real record. That editor is spell-only — type the **spell number** the line belongs to and **Add**; if that spell's record already carries message text, its empty slots fill in for you, and any slot where your captured line *differs* pops an inline **picker** so you choose per field between the record's value and the captured line.
+Double-click a row to open the same editor Messages uses, pre-filled with the raw text, and Save it in as a real record. That editor is spell-only — type the **spell number** the line belongs to and **Add**; if that spell's record already carries message text, its empty slots fill in for you, and any slot where your captured line *differs* pops an inline **picker** so you choose per field between the record's value and the captured line. The **3rd party witness** slot accepts **multiple wordings, one per line** — a room spell fires a whole set of ambient flavor lines (the silvermere / darkwood-forest atmosphere), so put each on its own line and every one is recognized from that single record.
 
 For the selected row(s) you have three actions:
 
