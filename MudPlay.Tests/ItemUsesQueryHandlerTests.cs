@@ -156,6 +156,24 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
     }
 
     [Fact]
+    public void InfiniteUseItem_WithStrayRecordedCount_ReportsNoCharges()
+    {
+        // Regression: a mis-attributed "Uses remaining: 9998" once recorded against an
+        // infinite-use item (nexus spear, UseCount -1) must not surface as charges — the
+        // game-data limited-use flag wins over any stored value ("magical rune - 9998
+        // Charges" bug).
+        _carried.Add("nexus spear");
+        Seen("nexus spear", 9998);   // stray look reply, recorded against its number
+
+        Assert.Null(_readout.RemainingForName("nexus spear"));
+
+        var (engine, players) = Engine();
+        Seed(players, "Bob");
+        engine.DispatchForTests(Telepath("Bob", "@uses nexus"));
+        Assert.Equal("nexus spear isn't a limited-use item", Reply(engine));
+    }
+
+    [Fact]
     public void NamedNonCharged_IsNotLimitedUse()
     {
         _carried.Add("healing potion");

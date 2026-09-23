@@ -1,9 +1,12 @@
 # Version history
 
-## 3.103.6
+## 3.103.7
 
 - Game Data → Classes: the exp column now shows the real class **exp modifier** (`Exp %`) — the stored MDB value is the delta above the 100% baseline, so it was reading 100 low versus the game / MMUD-Explorer (e.g. Warrior now 420%, Paladin 590%). Display only; exp math was already correct
 - `@timer` now lists **every** un-passed early-spawn window per boss, not just the soonest — on Paradigm all three (`-20%` / `-10%` / `-5%`), on Stock the single `87.5%`
+- Character query commands no longer go stale between polls: single-coin ("a gold crown") and present-tense coin pickups update `@wealth` / `@enc` live; `@exp` / `@level`'s "to next level" draws down on each kill; and your level updates the instant you **train**, not just on a stat screen
+- Carried items now **stack** instead of duplicating — auto-getting into an existing `43 black diamond` stack increments it rather than adding separate rows, so `@inv` / `@have` / `@uses` and the Character Info list stay clean
+- Charges: an infinite-use item (e.g. a magical rune) no longer shows phantom `N Charges` from a mis-recorded look — the game-data limited-use flag is now authoritative
 
 ## 3.103.4
 
