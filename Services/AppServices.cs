@@ -4351,12 +4351,16 @@ public sealed class AppServices
         Combat.SetBackstabHooks(
             isStealthed:  () => Stealth.IsStealthed,
             hasSeeHidden: n => SeeHidden.Has(n));
-        // Self-defense stands down only during a PLAIN walk-to (travel): the walker is
-        // driving AND we're neither looping nor Auto-Lairing. Looping and Auto-Lair are
-        // farming modes where we want to fight back; a plain destination walk (e.g. an
-        // evil character crossing a guarded town) should keep running past attackers.
+        // Self-defense stands down only while ACTIVELY walking a plain walk-to (travel):
+        // the walker is stepping AND we're neither looping nor Auto-Lairing. Looping and
+        // Auto-Lair are farming modes where we want to fight back; a plain destination walk
+        // (e.g. an evil character crossing a guarded town) should keep running past
+        // attackers. But a walk PAUSED for a rest / hold / wait is stationary and
+        // vulnerable — self-defense must re-arm there, so gate on `Walking`, not merely
+        // `!= Idle` (a Paused walk was wrongly still counting as travelling, so a monster
+        // attacking you mid-rest was ignored).
         Combat.SetSelfDefenseTravelGate(() =>
-            Walker.State != Game.Map.WalkState.Idle
+            Walker.State == Game.Map.WalkState.Walking
             && LoopRunner.State == Game.Map.LoopState.Idle
             && !AutoLair.IsActive);
         // A fresh hide re-arms the surprise round for the stationary hidden opener:
