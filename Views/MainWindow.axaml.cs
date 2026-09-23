@@ -167,8 +167,18 @@ public partial class MainWindow : Window
                     if (ev.PropertyName is nameof(FirstRunTutorialViewModel.IsActive)
                         or nameof(FirstRunTutorialViewModel.HighlightImportMdb))
                         ApplyImportMdbHighlight(mvm);
+                    // Publish the action the tour wants next so the Profile
+                    // Management / Settings windows can glow the right control.
+                    if (ev.PropertyName is nameof(FirstRunTutorialViewModel.IsActive)
+                        or nameof(FirstRunTutorialViewModel.CurrentActionKey))
+                        AppServices.Current.SetCurrentTourAction(
+                            mvm.Tutorial.IsActive ? mvm.Tutorial.CurrentActionKey : null);
                 };
                 PositionChanged += (_, _) => PositionTutorialWindow();
+
+                // Let other windows report deep tour steps back to the tour VM.
+                AppServices.Current.NotifyTourAction = key =>
+                    Dispatcher.UIThread.Post(() => mvm.Tutorial.NotifyActionDone(key));
 
                 AppServices.Current.StartFirstRunTutorial = demo =>
                     Dispatcher.UIThread.Post(() =>

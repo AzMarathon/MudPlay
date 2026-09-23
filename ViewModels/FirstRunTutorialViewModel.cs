@@ -34,9 +34,15 @@ public sealed record SubStepView(string Text, bool IsDone, bool IsCurrent)
 // persistence are injected, so this stays free of AppServices and unit-testable.
 public sealed partial class FirstRunTutorialViewModel : ObservableObject
 {
-    // Action keys — the menu items the tour tracks + highlights.
+    // Action keys — the controls the tour tracks + highlights, in click order.
     public const string ActionProfileManagement = "ProfileManagement";
+    public const string ActionAddBbs = "AddBbs";
+    public const string ActionBbsHostPort = "BbsHostPort";
+    public const string ActionBbsSaved = "BbsSaved";
+    public const string ActionAddCharacter = "AddCharacter";
+    public const string ActionCharacterAdded = "CharacterAdded";
     public const string ActionImportMdb = "ImportMdb";
+    public const string ActionGameDataImported = "GameDataImported";
 
     private readonly Func<bool> _hasGameData;
     private readonly Func<bool> _hasBbs;
@@ -110,24 +116,24 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
             _steps.Add(new TutorialStep("Add a BBS", new[]
             {
                 Action("File → Profile Management", ActionProfileManagement),
-                Outcome("Add BBS (opens Settings)", _hasBbs),
-                Outcome("Fill in the host/IP + port", _hasBbs),
-                Outcome("OK", _hasBbs),
+                Action("Click Add (under BBSes)", ActionAddBbs),
+                Action("Enter the host/IP + port", ActionBbsHostPort),
+                Action("Click OK", ActionBbsSaved),
             }, "FileMenu", demo ? never : _hasBbs));
 
         if (demo || !_hasCharacter())
             _steps.Add(new TutorialStep("Add a character", new[]
             {
                 Action("File → Profile Management", ActionProfileManagement),
-                Outcome("Add a character on your BBS", _hasCharacter),
-                Outcome("Name it, then Save", _hasCharacter),
+                Action("Click Add (under Characters)", ActionAddCharacter),
+                Action("Name it, then Save", ActionCharacterAdded),
             }, "FileMenu", demo ? never : _hasCharacter));
 
         if (demo || !_hasGameData())
             _steps.Add(new TutorialStep("Import game data", new[]
             {
                 Action("Game Data → Import .mdb", ActionImportMdb),
-                Outcome("Pick your MajorMUD .mdb file", _hasGameData),
+                Action("Pick your MajorMUD .mdb file", ActionGameDataImported),
             }, "GameDataMenu", demo ? never : _hasGameData));
 
         _steps.Add(new TutorialStep("Connect", new[]
@@ -143,24 +149,38 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
         return 0;
     }
 
+    // A step is complete when every checklist line is ticked (all its action
+    // signals fired) or its real outcome is reached (a fallback for real runs
+    // where the user set things up off-tour). Demo forces the outcome unmet, so a
+    // configured install walks each step by its clicks.
+    private static bool StepComplete(TutorialStep step) => step.Subs.All(s => s.Done()) || step.Outcome();
+
     // Re-check the live prerequisites (call when the user returns to the main
-    // window). Auto-advances past any step whose outcome is now reached, so
-    // finishing a task in another window moves the tour forward.
+    // window). Auto-advances past any completed step, so finishing a task in
+    // another window moves the tour forward.
     public void Refresh()
     {
         if (!IsActive || _demoMode) return;
-        while (CurrentIndex < _steps.Count - 1 && CurrentStep is { } s && s.Outcome())
-            CurrentIndex++;
+        AdvancePastCompleted();
         RaiseStepProperties();
     }
 
-    // A tracked menu action the user took (e.g. clicking Profile Management) — the
-    // completion signal for a step's leading action line. Re-renders the checklist
-    // so that line ticks, the highlight advances, and the menu-item highlight clears.
+    // A tracked action the user took (clicking Profile Management, filling the
+    // host/port, saving the BBS, …). Ticks its checklist line, advances the
+    // highlight, auto-advances the step when its last line lands, and moves the
+    // tour to the next step. Works in demo too (the action signals are real).
     public void NotifyActionDone(string actionKey)
     {
         if (!IsActive || string.IsNullOrEmpty(actionKey)) return;
-        if (_doneActions.Add(actionKey)) RaiseStepProperties();
+        if (!_doneActions.Add(actionKey)) return;
+        AdvancePastCompleted();
+        RaiseStepProperties();
+    }
+
+    private void AdvancePastCompleted()
+    {
+        while (CurrentIndex < _steps.Count - 1 && CurrentStep is { } s && StepComplete(s))
+            CurrentIndex++;
     }
 
     private TutorialStep? CurrentStep =>
@@ -168,12 +188,12 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
 
     public string CurrentTitle => CurrentStep?.Title ?? "";
     public string? CurrentTargetName => CurrentStep?.TargetName;
-    public bool CurrentIsDone => CurrentStep?.Outcome() ?? false;
+    public bool CurrentIsDone => CurrentStep is { } s && StepComplete(s);
     public string StepCounterText => _steps.Count == 0 ? "" : $"Step {CurrentIndex + 1} of {_steps.Count}";
     public bool CanPrev => CurrentIndex > 0;
     public bool IsLastStep => CurrentIndex >= _steps.Count - 1;
     public string NextButtonText => IsLastStep ? "Finish" : "Next";
-    public bool AllDone => _steps.Count > 0 && _steps.All(s => s.Outcome());
+    public bool AllDone => _steps.Count > 0 && _steps.All(StepComplete);
 
     // The action the current (next-to-do) checklist line wants the user to take,
     // or null when that line is an outcome line — drives which menu item glows.

@@ -27,6 +27,15 @@
         <Style Selector="TextBlock.CredHint.HintWarning">
             <Setter Property="Foreground" Value="#E55353"/>
         </Style>
+        <!-- First-run tour: outline the host/port fields when the tour points here. -->
+        <Style Selector="TextBox.tutTarget">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentYellowBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
+        <Style Selector="NumericUpDown.tutTarget">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentYellowBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid ColumnDefinitions="220,1,*">
@@ -102,6 +111,7 @@
                         <TextBox   Grid.Row="1" Grid.Column="1"
                                    Text="{Binding Host, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                    PlaceholderText="bbs.example.com" Width="280"
+                                   Classes.tutTarget="{Binding HighlightHostPort}"
                                    HorizontalAlignment="Left"/>
 
                         <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Port:"/>
@@ -109,6 +119,7 @@
                                        Value="{Binding Port, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                        Minimum="1" Maximum="65535" Increment="1"
                                        FormatString="0" Width="140"
+                                       Classes.tutTarget="{Binding HighlightHostPort}"
                                        HorizontalAlignment="Left"/>
                     </Grid>
 

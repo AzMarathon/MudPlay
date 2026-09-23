@@ -129,7 +129,12 @@ public partial class MainWindowViewModel : ObservableObject
     // the Global tier.
     public FirstRunTutorialViewModel Tutorial { get; } = new(
         hasGameData: () => AppServices.Current.GameData.AvailableSets.Count > 0,
-        hasBbs: () => System.Linq.Enumerable.Any(AppServices.Current.Bbs.ListNames()),
+        // A BBS only counts once it has a host — a freshly-Added record is an empty
+        // placeholder, so the tour keeps guiding through host/port + OK instead of
+        // treating the click of Add as "done".
+        hasBbs: () => System.Linq.Enumerable.Any(
+            System.Linq.Enumerable.Select(AppServices.Current.Bbs.ListNames(), AppServices.Current.Bbs.Get),
+            b => b is not null && !string.IsNullOrWhiteSpace(b.Host)),
         hasCharacter: () => System.Linq.Enumerable.Any(AppServices.Current.Profile.ListAll()),
         isConnected: () => AppServices.Current.Connection.Connected,
         persistDismiss: () =>
@@ -4658,6 +4663,7 @@ public partial class MainWindowViewModel : ObservableObject
             // Once-only per set (marker), additive, best-effort.
             NavSeedBootstrapper.SeedIfNeeded(result.FolderName, AppServices.Current.Log);
             SwitchActiveGameDataSet(result.FolderName);
+            Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionGameDataImported);
         }
         else
         {

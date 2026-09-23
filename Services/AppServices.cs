@@ -865,6 +865,24 @@ public sealed class AppServices
     // UI thread.
     public Action<bool>? StartFirstRunTutorial { get; set; }
 
+    // ----- First-run tour cross-window bridge -----------------------------
+    // The tour lives on MainWindowViewModel, but its deep steps play out in the
+    // Profile Management + Settings windows. Those windows report progress by
+    // calling NotifyTourAction("AddBbs" / "BbsHostPort" / …), and glow the right
+    // control by reading CurrentTourAction (the action the tour wants next) and
+    // subscribing to TourActionChanged. String keys only — no view-model coupling.
+    public Action<string>? NotifyTourAction { get; set; }
+
+    public string? CurrentTourAction { get; private set; }
+    public event Action? TourActionChanged;
+
+    public void SetCurrentTourAction(string? key)
+    {
+        if (string.Equals(CurrentTourAction, key, StringComparison.Ordinal)) return;
+        CurrentTourAction = key;
+        TourActionChanged?.Invoke();
+    }
+
     private void ApplyLocalApiFromGlobalSettings()
         => LocalApi.ApplySettings(Settings.Current.LocalApiEnabled, Settings.Current.LocalApiPort);
 

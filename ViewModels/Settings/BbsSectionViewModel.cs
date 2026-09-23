@@ -98,6 +98,9 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // its own count + pause; the XAML binds their IsEnabled here.
     public bool RedialTickersEnabled => !InfiniteRetries;
 
+    // First-run tour: glow the host/port fields when the tour points at them.
+    [ObservableProperty] private bool _highlightHostPort;
+
     // ----- Editable fields, populated from the selected BbsProfile -----
     [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty] private string _host = string.Empty;
@@ -279,11 +282,14 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         _profile.ProfileLoaded += onProfileLoaded;
         _profile.ProfileClosed += RefreshProfileState;
         _profile.ProfileMutated += onProfileMutated;
+        if (AppServices.CurrentOrNull is { } svcs) svcs.TourActionChanged += OnTourActionChanged;
+        OnTourActionChanged();
         OnDispose(() =>
         {
             _profile.ProfileLoaded -= onProfileLoaded;
             _profile.ProfileClosed -= RefreshProfileState;
             _profile.ProfileMutated -= onProfileMutated;
+            if (AppServices.CurrentOrNull is { } s) s.TourActionChanged -= OnTourActionChanged;
         });
         RefreshProfileState();
         LoadConfirmFromGlobalSettings();
@@ -342,6 +348,12 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 
         ResetCredentialStaging();
         ClearDirty();
+
+        // First-run tour: OK/Apply on a BBS with a host completes the "Click OK"
+        // step. Fires regardless of which section owns focus, since the Settings
+        // window applies every dirty section on OK.
+        if (!string.IsNullOrWhiteSpace(Host))
+            AppServices.CurrentOrNull?.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionBbsSaved);
     }
 
     // Drop every staged credential edit and the in-flight plaintext password.
@@ -944,8 +956,19 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         try { Password = pw; }
         finally { _suppressDirty = false; }
     }
-    partial void OnHostChanged(string value)                    { PushToCache(); Dirty(); }
-    partial void OnPortChanged(int value)                       { PushToCache(); Dirty(); }
+    partial void OnHostChanged(string value)                    { PushToCache(); Dirty(); MaybeSignalHostPort(); }
+    partial void OnPortChanged(int value)                       { PushToCache(); Dirty(); MaybeSignalHostPort(); }
+
+    private void OnTourActionChanged()
+        => HighlightHostPort = AppServices.CurrentOrNull?.CurrentTourAction == FirstRunTutorialViewModel.ActionBbsHostPort;
+
+    // First-run tour: the host/port line ticks once a host is entered (the port
+    // has a sensible default), advancing the checklist to "Click OK".
+    private void MaybeSignalHostPort()
+    {
+        if (!string.IsNullOrWhiteSpace(Host) && Port > 0)
+            AppServices.CurrentOrNull?.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionBbsHostPort);
+    }
     partial void OnMaxRedialsChanged(int value)                 { PushToCache(); Dirty(); }
     partial void OnRedialPauseSecondsChanged(int value)         { PushToCache(); Dirty(); }
     partial void OnInfiniteRetriesChanged(bool value)           { OnPropertyChanged(nameof(RedialTickersEnabled)); PushToCache(); Dirty(); }

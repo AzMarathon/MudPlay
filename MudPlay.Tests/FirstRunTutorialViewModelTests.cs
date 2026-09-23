@@ -152,6 +152,24 @@ public sealed class FirstRunTutorialViewModelTests
     }
 
     [Fact]
+    public void Demo_WalkingAllBbsActions_AutoAdvancesToCharacter()
+    {
+        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        f.GameData = f.Bbs = f.Character = true;   // demo on a configured install
+        vm.StartDemo();
+        Assert.Equal("Add a BBS", vm.CurrentTitle);
+        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
+        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionAddBbs);
+        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionBbsHostPort);
+        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionBbsSaved);
+        // All four BBS lines done → step complete → tour advances on its own.
+        Assert.Equal("Add a character", vm.CurrentTitle);
+        // Profile Management already clicked → that line pre-ticked, highlight on Add.
+        Assert.True(vm.CurrentSubs[0].IsDone);
+        Assert.True(vm.CurrentSubs[1].IsCurrent);
+    }
+
+    [Fact]
     public void NotifyActionDone_Ignored_ForUnrelatedAction()
     {
         (FirstRunTutorialViewModel vm, _) = Make();
