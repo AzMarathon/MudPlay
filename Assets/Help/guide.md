@@ -1194,10 +1194,7 @@ The window is a sidebar plus a content pane:
 - **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Incomplete Messages, Unrecognized Lines, Flavor Prefixes**. (The macro/alias/trigger editors are covered in the **Macros, aliases, and triggers** section; Flavor Prefixes has its own note below.)
 - **Imported tables** (bottom group) holds the game data: **Monsters, Items, Spells, Rooms, Lairs, Shops, Races, Classes, TextBlocks, Info, Unobtainable, Quest Flags.**
 
-Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The Filter… box matches the **visible cell text** across every column, including the friendly labels:
-
-- On the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name. You can also type an **auto-toggle word** to list only the items you've set that flag on: `get` (or `collect`), `drop` (or `discard`), `open`, `buy`, `sell`, `stash`, `keep`, `loyal`, `notake`, `path` — matching the flags shown in the **Toggles** column.
-- On the **Spells** tab it also understands ailment keywords: type `poison`, `confuse`, `blind`, or `hold` to list every spell that *applies* that effect (read from the spell's own ability codes, following the EndCast chain), not just spells with the word in their name.
+Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The box matches the **visible cell text** across every column (including the friendly labels), and several tabs accept **special filter words** on top of that — the full list is under **Filtering a table**, below.
 
 The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
 
@@ -1225,6 +1222,22 @@ It also carries a **filter sidebar** on the right — drag its left edge to resi
 - **Loot & lairs** — a **Drops an item** toggle, and Lair Exp / # Lairs / Respawn ranges.
 
 Every numeric filter is a **min / max range** — either box can be blank for no limit on that side, so `HP 500–2000` brackets a band, `AC ≤ 20` finds easy kills, and a lone minimum works like the old "at least N". Hover any label for what the stat means. **Reset** (top-right of the panel) clears every filter and the search box at once. The **Filter…** text box at the top is separate: it **finds** a specific monster within the curated list, while the sidebar decides which monsters are in it.
+
+## Filtering a table
+
+Every table's **Filter…** box (top-left) *finds* rows in the current list as you type — it's live, no Enter needed, and clearing it shows everything again. By default it matches the **visible cell text** across **every** column, including the friendly label a formatter renders — so on the Items tab `Weapon`, `Plate`, or `Feet` match the type / armour / slot columns, and `Lawful Good` matches an alignment, not just the raw code behind it. On every imported table it also matches the **Use-tier badge**, so typing `Char`, `BBS`, `Glob`, or `Def` lists just the rows owned by that tier — a fast way to see only the records you've overridden.
+
+Some tabs understand **special filter words** beyond that plain-text match:
+
+| Tab | Type… | …to show |
+|---|---|---|
+| **Items** | `get` or `collect` · `drop` or `discard` · `open` · `buy` · `sell` · `stash` · `keep` · `loyal` · `notake` · `path` | only the items you've set that **auto-toggle** on (the flags in the Toggles column). Exact-word match, so `get` filters by the flag, not by names containing "get". |
+| **Items** | `weapon`, `feet`, `plate`, … | items of that item type / worn slot / weapon or armour type (any of the formatted labels works) |
+| **Spells** | `poison` · `confuse` · `blind` · `hold` | every spell that **applies** that ailment — read from the spell's ability codes (following the EndCast chain), not just spells with the word in their name |
+| **Rooms** | `1,1` (also `1/1` or `1 1`) | the single room at that **map,room** coordinate |
+| **Any imported table** | `Def` · `Glob` · `BBS` · `Char` | rows whose current values come from that **tier** (the Use column) |
+
+Anything the box doesn't recognise as a special word falls back to the plain substring match, so names always work too. The **Monsters** tab additionally has a full **filter sidebar** — min/max stat ranges plus flag and type/alignment toggles that *curate* which monsters are listed, described just above; its Filter… box then finds a specific monster within that curated list.
 
 ## Overriding a record
 
