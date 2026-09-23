@@ -2,7 +2,7 @@
 
 ## 3.103.12
 
-- `@status` / `@path` now report **"paused"** (e.g. "paused en route to 9/1425", "paused on loop 'X'") when the navigator is paused for a rest / hold / wait, instead of always saying "walking" for a walk that isn't actually moving
+- `@status` / `@path` now report the **specific reason** the navigator is paused — "resting (low HP) en route to X", "meditating (low mana) on loop 'X'", "held", "party asked to wait", or a manual "paused" — instead of always saying "walking" for a walk that isn't actually moving
 - Combat switches to the **room (multi-target) attack** the moment a mob arrives mid-fight and the enemy count crosses your MinEnemies, rather than continuing single-target until the next damage tick
 - Combat: a between-round area-debuff drawing "already cast this round" no longer **strands the round's combat attack** — the attack slot is independent server-side, so it now fires regardless of the debuff's rejection
 - bug reports addressed: paradigm-20260923-071731, paradigm-20260923-091205, paradigm-20260923-103506

@@ -237,16 +237,23 @@ public sealed class PartyEssentialHandlers : IDisposable
         string move = MovementEnginePhrase(mv);
         if (move.Length > 0) parts.Add(move);
 
-        string? condition =
-            _readFleeing?.Invoke() == true ? "fleeing"
-            : _player.InCombat            ? "fighting"
-            : _player.Position switch
-            {
-                PlayerPosition.Resting    => "resting",
-                PlayerPosition.Meditating => "meditating",
-                _                         => null,
-            };
-        if (condition is not null) parts.Add(condition);
+        // A paused engine already spells out WHY in the move phrase ("resting (low HP)
+        // en route to X", "held on loop 'Y'", …), so appending the raw condition here
+        // would just echo it. Only add the condition sub-state when we're not reporting
+        // a pause reason.
+        if (!mv.Paused)
+        {
+            string? condition =
+                _readFleeing?.Invoke() == true ? "fleeing"
+                : _player.InCombat            ? "fighting"
+                : _player.Position switch
+                {
+                    PlayerPosition.Resting    => "resting",
+                    PlayerPosition.Meditating => "meditating",
+                    _                         => null,
+                };
+            if (condition is not null) parts.Add(condition);
+        }
 
         return parts.Count == 0 ? "idle" : string.Join(", ", parts);
     }
@@ -299,13 +306,17 @@ public sealed class PartyEssentialHandlers : IDisposable
     {
         if (mv.Sailing)
             return mv.SailingPlace is { Length: > 0 } place ? $"sailing to {place}" : "sailing";
-        // A paused walker (rest / hold / wait / manual pause) reads as paused, not
-        // "walking" — a walk that isn't actually stepping shouldn't report as moving.
+        // A paused walker (rest / hold / wait / manual pause) reads as its SPECIFIC
+        // reason, not a bare "walking" — a walk that isn't actually stepping shouldn't
+        // report as moving, and "resting (low HP)" vs "held" vs a manual "paused" each
+        // means something different to the party member asking. PauseReason carries the
+        // resolved word; fall back to "paused" when it couldn't be resolved.
+        string reason = mv.PauseReason is { Length: > 0 } r ? r : "paused";
         return mv.Kind switch
         {
-            MovementKind.Loop    => mv.Paused ? $"paused on loop '{mv.Label}'" : $"running loop '{mv.Label}'",
-            MovementKind.Lair    => mv.Paused ? "paused (auto-lair)" : "auto-lair",
-            MovementKind.Walking => mv.Paused ? $"paused en route to {mv.Label}" : $"walking to {mv.Label}",
+            MovementKind.Loop    => mv.Paused ? $"{reason} on loop '{mv.Label}'" : $"running loop '{mv.Label}'",
+            MovementKind.Lair    => mv.Paused ? $"{reason} (auto-lair)" : "auto-lair",
+            MovementKind.Walking => mv.Paused ? $"{reason} en route to {mv.Label}" : $"walking to {mv.Label}",
             _                    => string.Empty,
         };
     }

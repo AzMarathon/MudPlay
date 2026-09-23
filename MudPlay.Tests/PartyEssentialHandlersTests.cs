@@ -262,6 +262,30 @@ public sealed class PartyEssentialHandlersTests
     }
 
     [Fact]
+    public void Status_WhenPausedForRest_ReportsRestReasonNotBarePaused()
+    {
+        // A pause has a WHY — resting for HP, meditating for mana, held, a party wait,
+        // or the user's own manual pause — and each means something different to the
+        // party member asking. When PauseReason carries the specific word, the phrase
+        // uses it ("resting (low HP) on loop 'X'") rather than a generic "paused", and
+        // the condition sub-state isn't echoed a second time.
+        MovementStatus mv = new(MovementKind.Loop, "Newhaven Sewers", CurrentStep: 2, TotalSteps: 6,
+            Paused: true, PauseReason: "resting (low HP)");
+        var (engine, _, player, _, players, _) = Setup(movement: mv);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
+        player.Position = PlayerPosition.Resting;
+        player.HasPromptData = true;
+
+        engine.DispatchForTests(Telepath("Friend", "@status"));
+        string reply = LastReply(engine);
+        Assert.Contains("resting (low HP) on loop 'Newhaven Sewers'", reply);
+        Assert.DoesNotContain("running loop", reply);
+        // The move phrase already says "resting (low HP)"; the bare "resting" condition
+        // must not be appended on top of it.
+        Assert.DoesNotContain(", resting", reply);
+    }
+
+    [Fact]
     public void Status_WhenSailing_ReportsDestinationBoatRoomAndCountdown()
     {
         // Aboard a sea-captain passage: the state reads "sailing to <port>" (the

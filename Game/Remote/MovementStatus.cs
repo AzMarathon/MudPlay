@@ -50,9 +50,15 @@ public readonly record struct MovementStatus(
     MovementKind LastPathKind = MovementKind.None,
     string? LastPathName = null,
     // True when an engine is active but the WALKER is currently paused (a rest / hold /
-    // wait / manual pause) rather than stepping — so @status / @path can say "paused"
-    // instead of reporting "walking" for a walk that isn't actually moving.
-    bool Paused = false)
+    // wait / manual pause) rather than stepping — so @status / @path can say why it's
+    // stopped instead of reporting "walking" for a walk that isn't actually moving.
+    bool Paused = false,
+    // The specific reason the walker is paused, in plain words ("resting (low HP)",
+    // "meditating (low mana)", "held", "party asked to wait", "paused" for a manual pause,
+    // "fighting"). Resolved by the caller from the MovementCoordinator's gates (via
+    // NavActivity) — MovementStatus stays UI-agnostic and just carries the string. Null
+    // when not paused (or the reason couldn't be resolved), where the phrase says "paused".
+    string? PauseReason = null)
 {
     // Snapshot the running movement engine. Priority Lair → Loop → Walker mirrors
     // PartyComebackManager.SnapshotRunningEngine: the upper engines drive the
