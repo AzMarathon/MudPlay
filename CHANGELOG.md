@@ -1,5 +1,9 @@
 # Version history
 
+## 3.103.5
+
+- Game Data → Classes: the exp column now shows the real class **exp modifier** (`Exp %`) — the stored MDB value is the delta above the 100% baseline, so it was reading 100 low versus the game / MMUD-Explorer (e.g. Warrior now 420%, Paladin 590%). Display only; exp math was already correct
+
 ## 3.103.4
 
 - Conversation window: hiding the Gossip channel (or any channel) no longer breaks chat auto-scroll — a line arriving on a hidden channel trimmed the oldest visible row without re-pinning the view, so it drifted and jumped; the trim now re-pins to the newest line

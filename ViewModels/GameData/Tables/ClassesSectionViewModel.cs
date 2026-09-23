@@ -36,6 +36,13 @@ public sealed class ClassesSectionViewModel : JsonTableSectionViewModel
 
     public override string SearchKeyColumn => "Name";
 
+    public override IReadOnlyDictionary<string, string> ColumnHeaders { get; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // The column shows the class exp modifier (ExpTable + 100), not the raw field.
+            ["ExpTable"] = "Exp %",
+        };
+
     public override IEnumerable<string> SearchableLabels => new[]
     {
         Title, "class", "warrior", "mage", "priest", "rogue", "monk", "magery", "combat", "ability",
@@ -47,7 +54,19 @@ public sealed class ClassesSectionViewModel : JsonTableSectionViewModel
             ["MageryType"] = LookupEnums.FormatMagery,
             ["WeaponType"] = LookupEnums.FormatClassWeaponType,
             ["ArmourType"] = LookupEnums.FormatArmourType,
+            ["ExpTable"]   = FormatExpModifier,
         };
+
+    // The class exp modifier as the game — and the MajorMUD reference browser — show it. The raw
+    // MDB ExpTable is the class's delta ABOVE the 100% baseline, so the modifier a player reads
+    // is ExpTable + 100 (ExperienceTableCalculator.CalcExpChart adds the same 100 to the class
+    // term). Rendered with a trailing % so the column reads as the modifier, not the stored field;
+    // the raw value still drives search, and the grid's leading-number sort ignores the %.
+    internal static string? FormatExpModifier(string? raw)
+        => int.TryParse(raw, System.Globalization.NumberStyles.Integer,
+               System.Globalization.CultureInfo.InvariantCulture, out int v)
+            ? (v + 100).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%"
+            : raw;
 
     public ClassesSectionViewModel(GameDataCache cache, SettingsResolver? resolver = null) : base(cache, resolver) { }
 

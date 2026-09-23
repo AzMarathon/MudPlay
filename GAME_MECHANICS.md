@@ -1244,6 +1244,12 @@ directly for exp/hr estimation of a loop (how fast a lair refills vs how fast yo
   how many rooms it can appear in) — `1,200,000 ÷ 15 = 80,000/hr`, not `1.2M` per lap in every room.
   The regular (non-boss) lair mobs still fire per-room on the room delay.
 
+### Class/race exp modifier — the `ExpTable` field carries a −100 baseline *([CONFIRMED] 2026-09-23, user + GreaterMUD Explorer screenshots, Paradigm 1.9.1)*
+
+- The **class exp modifier** a player reads (and MMUD / GreaterMUD Explorer shows) is **`ExpTable + 100`**, not the raw MDB field: the stored `ExpTable` is the class's delta ABOVE the 100% baseline. E.g. Warrior `320` → **420%**, Thief `230` → **330%**, Paladin `490` → **590%** — a uniform +100 across every class.
+- The **race exp modifier** is added **raw** (no +100): the game's exp-chart percentage is **`(classExpTable + 100) + raceExpTable`** (`ExperienceTableCalculator.CalcExpChart`), so the 100% baseline is counted once, on the class term.
+- The Game-Data **Classes** tab renders `ExpTable` as the modifier (`+100`, with a `%`) to match this; the raw field still drives search/sort. The **Races** tab still shows the raw `ExpTable` (its raw additive delta) — the Explorer Races-view display convention isn't yet confirmed.
+
 ### ParaMUD exp-needed curve *([CONFIRMED] 2026-09-14, user)*
 
 - **The realm runs ParaMUD 1.9.1 and will never run an older version again**, so the client
