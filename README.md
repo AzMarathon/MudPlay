@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.103.8**
-> - Navigation **Recent Destinations** now records *every* user-initiated walk — walking from the terminal right-click favourites, the Navigation manager's Walk buttons, or its footer search used to not stick, while the map right-click and the Run button did; all paths now record through the one shared walk engine
+> **Version 3.103.9**
+> - CP Allocation plan now advances after you train by **any** path — the just-trained level dropped off the grid only when the client itself applied the CP, so training via `@train`, a manually-typed `train stats`, or a server-side CP spend left that level stuck on the plan; it now reconciles off your actual level + stats (a level is cleared once reached and its planned stats are met)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
