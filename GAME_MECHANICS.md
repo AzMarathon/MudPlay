@@ -3046,6 +3046,17 @@ bursts of five nudges inside 200ms, repeating every back-off. Pace on a time flo
 a gate on top of it, never as the sole trigger. This is distinct from the outbound-write **interleaving** bug
 (that was a client-side concurrency defect in `TelnetClient`, not a game rate limit).
 
+## Heal spells that can't be cast on self *([CONFIRMED] 2026-09-22, user)*
+
+A few heal spells are, by their game data, **castable only on OTHERS** — a bare self-cast is
+rejected by the engine. **`anno` / annointed hands (#744)** is the notable example (one of very
+few such spells). This is why the party-heal picker (`CastingDirector.PickPartyHeal`) **never
+single-targets self** with a party-settings heal, regardless of which spell sits in the slot: it
+can't know per-spell whether a self-cast is legal, and the caster's own dips are the Spells +
+Ailments self-heal slots' job anyway. (Self still counts toward the *AoE* member gate — an area
+heal legitimately lands on everyone including the caster.) Care point: don't use `anno` in an
+example that implies a self-cast; it's specifically one of the spells that can't.
+
 ## Spell targeting: monster type tags
 
 A spell's eligibility against a monster is a match between a **spell-side targeting tag** and a
