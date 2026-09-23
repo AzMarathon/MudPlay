@@ -245,6 +245,23 @@ public sealed class PartyEssentialHandlersTests
     }
 
     [Fact]
+    public void Status_WhenWalkPaused_ReportsPausedNotWalking()
+    {
+        // A walk paused for a rest / hold / wait isn't moving — @status must say "paused",
+        // not "walking", so a party member asking knows the leader has stopped.
+        MovementStatus mv = new(MovementKind.Walking, "5/1141", CurrentStep: 1, TotalSteps: 4, Paused: true);
+        var (engine, _, player, _, players, _) = Setup(movement: mv);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
+        player.Position = PlayerPosition.Standing;
+        player.HasPromptData = true;
+
+        engine.DispatchForTests(Telepath("Friend", "@status"));
+        string reply = LastReply(engine);
+        Assert.Contains("paused en route to 5/1141", reply);
+        Assert.DoesNotContain("walking to", reply);
+    }
+
+    [Fact]
     public void Status_WhenSailing_ReportsDestinationBoatRoomAndCountdown()
     {
         // Aboard a sea-captain passage: the state reads "sailing to <port>" (the

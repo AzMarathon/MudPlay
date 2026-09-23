@@ -299,11 +299,13 @@ public sealed class PartyEssentialHandlers : IDisposable
     {
         if (mv.Sailing)
             return mv.SailingPlace is { Length: > 0 } place ? $"sailing to {place}" : "sailing";
+        // A paused walker (rest / hold / wait / manual pause) reads as paused, not
+        // "walking" — a walk that isn't actually stepping shouldn't report as moving.
         return mv.Kind switch
         {
-            MovementKind.Loop    => $"running loop '{mv.Label}'",
-            MovementKind.Lair    => "auto-lair",
-            MovementKind.Walking => $"walking to {mv.Label}",
+            MovementKind.Loop    => mv.Paused ? $"paused on loop '{mv.Label}'" : $"running loop '{mv.Label}'",
+            MovementKind.Lair    => mv.Paused ? "paused (auto-lair)" : "auto-lair",
+            MovementKind.Walking => mv.Paused ? $"paused en route to {mv.Label}" : $"walking to {mv.Label}",
             _                    => string.Empty,
         };
     }
