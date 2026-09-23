@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
@@ -58,6 +59,7 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
         "Encum",
         "Price",
         "Currency",
+        TogglesColumn,   // our configured auto-* / carry flags for this item
     };
 
     public override string SearchKeyColumn => "Name";
@@ -187,11 +189,55 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
     private ItemOverlay? ResolveOverlay(GameDataRow row)
     {
         string? wcc = row.Get("Number");
-        if (string.IsNullOrEmpty(wcc)) return null;
+        return string.IsNullOrEmpty(wcc) ? null : ResolveOverlayByNumber(wcc);
+    }
+
+    // 4-tier merge for a raw item Number (Char → BBS → Global → seed Defaults). Shared by
+    // the flag filter (via ResolveOverlay) and the Toggles column's per-row build.
+    private ItemOverlay ResolveOverlayByNumber(string wcc)
+    {
         ItemOverlay seed = (_overlaySeed is not null && int.TryParse(wcc, out int n))
             ? _overlaySeed.GetOverlay(n)
             : new ItemOverlay();
         return _resolverRef?.ResolveGameData<ItemOverlay>("Items", wcc, seed) ?? seed;
+    }
+
+    // The Toggles column: a compact summary of the auto-* / carry flags this character
+    // has turned on for the item, resolved from the same 4-tier overlay the engines read.
+    // Null (blank cell) when the item has no overlay layer (headless tests) or no flags set.
+    protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(JsonElement element)
+    {
+        if (_resolverRef is null) return null;
+        string? wcc = ReadNumber(element);
+        if (string.IsNullOrEmpty(wcc)) return null;
+        ItemOverlay o = ResolveOverlayByNumber(wcc);
+        return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            [TogglesColumn] = FormatToggleSummary(
+                (o.AutoCollect       == true, "Collect"),
+                (o.AutoDiscard       == true, "Discard"),
+                (o.AutoOpen          == true, "Open"),
+                (o.AutoBuy           == true, "Buy"),
+                (o.AutoSell          == true, "Sell"),
+                (o.AutoStash         == true, "Stash"),
+                (o.CannotBeTaken     == true, "No-take"),
+                (o.MustHaveMinimum   == true, "Keep-min"),
+                (o.LoyalItem         == true, "Loyal"),
+                (o.AutoObtainForPath == true, "Path-get")),
+        };
+    }
+
+    // Read the item's Number as a string from the raw MDB element (numeric in the MDB, but
+    // tolerate a string kind too). null when the field is missing or an unexpected shape.
+    private static string? ReadNumber(JsonElement el)
+    {
+        if (!el.TryGetProperty("Number", out JsonElement v)) return null;
+        return v.ValueKind switch
+        {
+            JsonValueKind.Number => v.ToString(),
+            JsonValueKind.String => v.GetString(),
+            _ => null,
+        };
     }
 
     private async Task OpenEditAsync(GameDataRow? row)

@@ -22,6 +22,12 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // Trailing virtual column name shown on every grid — see GameDataRow.SourceTier.
     public const string UseColumnName = "Use";
 
+    // Column key for the per-record "Toggles" summary — a compact list of the
+    // user-settable flags this character has turned on for the row (the Monsters /
+    // Items / Players tabs each populate it from their own overlay / customization).
+    // Shared so the Columns entry and the computed-cell key can't drift apart.
+    public const string TogglesColumn = "Toggles";
+
     private Control? _view;
 
     // Data columns in display order. Search hits, sort, and the right-pane row view all key
@@ -581,6 +587,16 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         // Also match against the Use-tier short label so the user can
         // filter by tier (e.g. typing "Char" surfaces every overridden row).
         return row.SourceTier.ToShortLabel().Contains(filter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Join the labels of the enabled toggles into one compact, comma-separated cell
+    // ("Collect, Stash"); null when none are on so the grid renders it blank. Backs the
+    // shared "Toggles" column — a per-record readout of the user-settable flags this
+    // character has configured, so they're visible at a glance instead of only filterable.
+    internal static string? FormatToggleSummary(params (bool On, string Label)[] toggles)
+    {
+        string joined = string.Join(", ", toggles.Where(t => t.On).Select(t => t.Label));
+        return joined.Length == 0 ? null : joined;
     }
 }
 

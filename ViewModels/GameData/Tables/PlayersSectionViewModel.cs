@@ -26,7 +26,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Given Name", "Family Name", "Gang", "@'s", "Last Seen",
+        "Given Name", "Family Name", "Gang", "@'s", TogglesColumn, "Last Seen",
     };
 
     public override string SearchKeyColumn => "Given Name";
@@ -144,6 +144,12 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
                 // don't re-report it); blank when never seen in a gang.
                 ["Gang"]        = p.Gang ?? string.Empty,
                 ["@'s"]         = RemoteControlsLabel(p.RemoteControls),
+                // The party-behaviour toggles we've configured for this player (the @'s
+                // column already summarises the remote-control permission bitmask).
+                [TogglesColumn] = FormatToggleSummary(
+                    (p.InviteToPartyIfSeen, "Invite-if-seen"),
+                    (p.JoinPartyIfInvited,  "Join-if-invited"),
+                    (p.DontAutoDelete,      "Don't-delete")),
                 ["Last Seen"]   = p.LastSeenUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
             };
             rows.Add(GameDataRow.FromDictionary(dict, Columns));

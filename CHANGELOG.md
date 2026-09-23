@@ -1,5 +1,9 @@
 # Version history
 
+## 3.103.3
+
+- Game Data Browser: new **Toggles** column on the Monsters, Items, and Players tabs shows the flags *you've* configured for each record at a glance — monsters (kill-on-sight / no-backstab), items (collect / discard / open / buy / sell / stash, plus no-take / keep-min / loyal / path-get), players (invite-if-seen / join-if-invited / don't-delete); blank when none set
+
 ## 3.103.2
 
 - Party AoE heal no longer fires for a dip only you have: you still count toward the members-below-threshold gate (you + 1 ally low = 2 of 3 → the AoE fires), but when you're the *only* one below — under the gate — it no longer falls back to the group AoE; your self-heal slots (mihe/mahe) cover you instead

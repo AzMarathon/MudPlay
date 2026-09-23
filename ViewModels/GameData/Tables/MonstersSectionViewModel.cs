@@ -43,6 +43,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         "Number",
         "Name",
         "Relationship",  // our set Enemy/Neutral/Friend/… for this monster (4-tier overlay-resolved)
+        TogglesColumn,   // our configured per-monster flags (kill-on-sight / no-backstab)
         "RegenTime",     // "Rgn" — respawn timer
         "EXP",           // "65000 (20x)" — base reward with its multiplier (see ComputeRowCells)
         "HP",
@@ -273,6 +274,10 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         int dodge = ReadAbilValue(element, 34);   // ability code 34 = Dodge
         int mag = ReadAbilValue(element, 28);     // ability code 28 = Magical (hitmag level)
 
+        // Resolve our 4-tier overlay once — it drives both the Relationship label and
+        // the Toggles summary below (the same merge the combat engine reads).
+        MonsterOverlay overlay = ResolveMonsterOverlay(element);
+
         var cells = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             // Exp = the actual experience earned per kill = base × multiplier. Stored
@@ -301,7 +306,12 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["HasLoot"]      = HasDrop(element) ? "1" : null,
             // Our configured relationship with this monster — the same 4-tier overlay
             // the combat engine reads, so the column shows exactly how the engine treats it.
-            ["Relationship"] = ResolveRelationshipLabel(element),
+            ["Relationship"] = (overlay.Relationship ?? MonsterRelationship.Enemy).ToString(),
+            // The per-monster flags we've turned on for this species — surfaced so they're
+            // visible at a glance, not only reachable by opening the record.
+            [TogglesColumn] = FormatToggleSummary(
+                (overlay.KillOnSight  == true, "Kill-on-sight"),
+                (overlay.DontBackstab == true, "No-backstab")),
         };
         if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int Count, long SumMax, int MaxMax) lair)
             && lair.Count > 0)
@@ -313,20 +323,19 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         return cells;
     }
 
-    // Our set relationship with this monster: the MonsterOverlay merged across all four
-    // tiers (Char → BBS → Global → realm seed) — the exact resolution OpenEditAsync and
-    // the combat engine use — so the column reflects how the runtime actually treats it.
-    // An un-tagged monster defaults to Enemy (MonsterEngagement's engage-by-default rule).
-    private string ResolveRelationshipLabel(JsonElement element)
+    // Our overlay for this monster: the MonsterOverlay merged across all four tiers
+    // (Char → BBS → Global → realm seed) — the exact resolution OpenEditAsync and the
+    // combat engine use — so the Relationship + Toggles columns reflect how the runtime
+    // actually treats it. An un-tagged monster resolves to an empty overlay (Relationship
+    // then defaults to Enemy, per MonsterEngagement's engage-by-default rule).
+    private MonsterOverlay ResolveMonsterOverlay(JsonElement element)
     {
         string wcc = ReadInt(element, "Number").ToString(Inv);
         MonsterOverlay seedDefaults =
             (_overlaySeed is not null && int.TryParse(wcc, out int seedNum))
                 ? _overlaySeed.GetOverlay(seedNum)
                 : new MonsterOverlay();
-        MonsterOverlay effective =
-            _resolverRef?.ResolveGameData<MonsterOverlay>("Monsters", wcc, seedDefaults) ?? seedDefaults;
-        return (effective.Relationship ?? MonsterRelationship.Enemy).ToString();
+        return _resolverRef?.ResolveGameData<MonsterOverlay>("Monsters", wcc, seedDefaults) ?? seedDefaults;
     }
 
     // The "Exp/(Dmg+HP)" exp-per-effort metric — effective exp per (two rounds of the

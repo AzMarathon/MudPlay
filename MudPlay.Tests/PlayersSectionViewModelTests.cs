@@ -1,3 +1,5 @@
+using System.Linq;
+using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Tables;
 using Xunit;
@@ -163,6 +165,26 @@ public sealed class PlayersSectionViewModelTests
 
         Assert.Single(vm.AllRows);
         Assert.Equal("Raijin", vm.AllRows[0].Get("Given Name"));
+    }
+
+    [Fact]
+    public void TogglesColumn_ListsConfiguredBehaviourFlags_BlankWhenNone()
+    {
+        // The Toggles column surfaces the party-behaviour flags the user set for each
+        // player; a player with none configured reads blank.
+        PlayerDatabase db = new();
+        db.RecordObservation("Helper One", null, null, null, null, null, null, Now);
+        db.RecordObservation("Plain Two", null, null, null, null, null, null, Now);
+        db.EditCustomization("Helper",
+            new PlayerCustomization(InviteToPartyIfSeen: true, DontAutoDelete: true));
+
+        PlayersSectionViewModel vm = new(db, dialogs: null, profile: null);
+
+        GameDataRow helper = vm.AllRows.Single(r => r.Get("Given Name") == "Helper");
+        Assert.Equal("Invite-if-seen, Don't-delete", helper.Get("Toggles"));
+
+        GameDataRow plain = vm.AllRows.Single(r => r.Get("Given Name") == "Plain");
+        Assert.True(string.IsNullOrEmpty(plain.Get("Toggles")));
     }
 
     [Fact]
