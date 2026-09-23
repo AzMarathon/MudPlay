@@ -1,5 +1,9 @@
 # Version history
 
+## 3.103.8
+
+- Navigation **Recent Destinations** now records *every* user-initiated walk — walking from the terminal right-click favourites, the Navigation manager's Walk buttons, or its footer search used to not stick, while the map right-click and the Run button did; all paths now record through the one shared walk engine
+
 ## 3.103.7
 
 - Game Data → Classes: the exp column now shows the real class **exp modifier** (`Exp %`) — the stored MDB value is the delta above the 100% baseline, so it was reading 100 low versus the game / MMUD-Explorer (e.g. Warrior now 420%, Paladin 590%). Display only; exp math was already correct

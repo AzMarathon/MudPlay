@@ -2485,7 +2485,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // shorter gated shortcut exists (falls straight through to WalkTo when
         // it doesn't). The preview sink draws the picked route on the map while
         // the dialog decides.
-        _services.GotoHistory.Record(k);
+        // (RouteChoicePrompt.WalkAsync records the destination in the goto
+        // history — every user-initiated walk path goes through it.)
         await RouteChoicePrompt.WalkAsync(_services, k, path => PreviewPath = path);
     }
 
@@ -4128,7 +4129,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // favourites list, and the map right-click all funnel through the
             // same shared engine here; only how the walk is confirmed differs.
             QueuedDestination = null;
-            _services.GotoHistory.Record(queued);
             await RouteChoicePrompt.WalkAsync(_services, queued, path => PreviewPath = path);
             return;
         }

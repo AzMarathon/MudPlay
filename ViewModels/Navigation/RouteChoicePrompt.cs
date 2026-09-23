@@ -42,6 +42,25 @@ public static class RouteChoicePrompt
         // or fails — so a capture can re-plan and explain what the picker decided.
         services.LastRequestedWalkTo = destination;
 
+        // AND REMEMBER IT FOR THE USER, here rather than at the call sites. Two of
+        // the five user-initiated walk paths called GotoHistory.Record themselves
+        // (the map right-click and the Run button) and three did not — the
+        // terminal flyout's favourites, the navigation manager's Walk buttons and
+        // its footer search -- so whether a destination turned up under "Recent
+        // Destinations" depended on which button started the walk. Recording in
+        // the one funnel every user-initiated walk already passes through makes it
+        // uniform and keeps the next entry point from having to remember.
+        //
+        // ON REQUEST, NOT ON ARRIVAL, which is what the old call sites did: the
+        // Record ran before this method and stood whether or not the picker was
+        // declined or the route failed. Same reasoning as LastRequestedWalkTo
+        // above — you asked to go there, so it is where you were last headed.
+        //
+        // The automation engines (LoopRunner, AutoLair, DeathRecovery,
+        // TrainerWalk, the remote handlers) call Walker.WalkTo directly and never
+        // reach here, so they stay out of the history exactly as before.
+        services.GotoHistory.Record(destination);
+
         // Let the nav-map right-click menu that launched this walk close before we do
         // anything heavy.
         await Task.Yield();
