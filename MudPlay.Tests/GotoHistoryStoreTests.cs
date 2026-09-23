@@ -64,6 +64,25 @@ public sealed class GotoHistoryStoreTests
         Assert.Equal(new[] { "3/66", "2/55" }, profile.Current!.GotoHistory);
     }
 
+    // The other half of "sometimes it remembers, sometimes it doesn't": Record is
+    // a silent no-op with no profile loaded, because the history is per-character
+    // and there is nowhere to put it. Worth pinning so the quiet return does not
+    // turn into a crash or a cross-character leak later.
+    [Fact]
+    public void Record_WithNoProfileLoaded_IsIgnored()
+    {
+        ProfileService profile = BlankProfile();
+        GotoHistoryStore store = new(profile);
+        store.Record(new RoomKey(1, 100));
+        Assert.Single(store.All);
+
+        profile.Close();                       // ProfileClosed → history cleared
+        Assert.Empty(store.All);
+
+        store.Record(new RoomKey(1, 200));     // nowhere to record it
+        Assert.Empty(store.All);
+    }
+
     [Fact]
     public void Load_HydratesFromProfileHistory()
     {
