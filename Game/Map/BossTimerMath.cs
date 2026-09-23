@@ -78,6 +78,30 @@ public static class BossTimerMath
         return new BossWindowState(false, fullRem, "full", fullRem);
     }
 
+    // Every un-passed early spawn window for a live timer, soonest first, each with its
+    // remaining time — Paradigm -20% / -10% / -5% (fractions 0.80 / 0.90 / 0.95), Stock the
+    // single 87.5%. Excludes the guaranteed 100% point (FullRemaining already covers that) and
+    // any window whose moment has already passed, so the list shrinks as the timer runs down
+    // and is empty once every early point is behind us. Drives the @timer report's full list of
+    // windows (the tab renders the same points as fixed columns via EarlyFractionsInDisplayOrder).
+    public static IReadOnlyList<(string Label, TimeSpan Remaining)> EarlyWindows(
+        RealmType realm, double fullHours, TimeSpan elapsed)
+    {
+        double fullSecs = fullHours * 3600.0;
+        double elapsedSecs = elapsed.TotalSeconds;
+        if (fullSecs <= 0) return Array.Empty<(string, TimeSpan)>();
+
+        var windows = new List<(string, TimeSpan)>();
+        foreach (double f in SpawnFractions(realm))   // ascending; the trailing 1.0 is skipped
+        {
+            if (f >= 1.0) continue;
+            double pointSecs = f * fullSecs;
+            if (elapsedSecs < pointSecs)
+                windows.Add((WindowLabel(realm, f), TimeSpan.FromSeconds(pointSecs - elapsedSecs)));
+        }
+        return windows;
+    }
+
     // Hours (decimal) -> "2h14m" (or "45m" under an hour), clamped at zero. The
     // report format for @timer replies and the bug-report boss-timer capture.
     public static string FormatHours(double hours)

@@ -313,6 +313,27 @@ public sealed class InventoryManagerTests
         Assert.Equal(10, h.Inv.Snapshot.Encumbrance.CurrentWeight);
     }
 
+    // Single-coin article form ("a gold crown") and present-tense ("You pick up") were
+    // missed by the old digit-only, past-tense-only regex, so a lone-coin loot left
+    // @wealth / @enc stale until the next full `i`. Both forms now patch the snapshot.
+    [Fact]
+    public void PickupSingleCoin_ArticleAndPresentTense_UpdateWealth()
+    {
+        using Harness h = new();
+        h.Feed("You are carrying nothing.");
+        h.Feed("Wealth:    0 copper farthings");
+        h.Feed("Encumbrance:    0/2880  -  None  [0%]");
+
+        h.Feed("You picked up a gold crown.");        // single coin, article form
+        Assert.Equal(1, h.Inv.Snapshot.Currency.Gold);
+
+        h.Feed("You pick up 2 silver nobles.");         // present tense, counted
+        Assert.Equal(2, h.Inv.Snapshot.Currency.Silver);
+
+        h.Feed("You pick up a copper farthing.");       // present tense, single coin
+        Assert.Equal(1, h.Inv.Snapshot.Currency.Copper);
+    }
+
     // A BBS can rename the runic word (e.g. "quatloos"), but the coin noun stays.
     // Parsing is noun-keyed, so the renamed leading word still lands as Runic —
     // no CurrencyNaming injection needed on the parser.
@@ -1147,7 +1168,9 @@ public sealed class InventoryManagerTests
         h.Feed("You took 3 torch.");
 
         Assert.Equal(170, Weight(h));   // 50 + 3*40
-        Assert.Equal(3, Carried(h).Count(n => string.Equals(n, "torch", StringComparison.Ordinal)));
+        // Stacked into one "3 torch" entry, not three bare rows.
+        Assert.Contains("3 torch", Carried(h));
+        Assert.DoesNotContain("torch", Carried(h));
     }
 
     [Fact]
@@ -1188,6 +1211,36 @@ public sealed class InventoryManagerTests
 
         Assert.Equal(50, Weight(h));    // 170 - 3*40
         Assert.DoesNotContain("torch", Carried(h));
+    }
+
+    [Fact]
+    public void AutoGet_StacksOntoExistingStack_NoDuplicateRows()
+    {
+        // Repro: a full `i` shows "43 black diamond" (one stacked row); each auto-get then
+        // appended a separate "black diamond" row, so @inv / @have / Character Info filled
+        // with duplicates. Now the get folds into the stack, and repeated bare tokens in
+        // the dump collapse too.
+        using Harness h = new();
+        h.Feed("You are carrying 43 black diamond, torch, torch, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        Assert.Contains("43 black diamond", Carried(h));
+        Assert.Contains("2 torch", Carried(h));        // two bare tokens collapsed
+
+        h.Feed("You took black diamond.");
+        h.Feed("You took 2 black diamond.");
+        h.Feed("You took torch.");
+
+        Assert.Contains("46 black diamond", Carried(h));   // 43 + 1 + 2
+        Assert.Contains("3 torch", Carried(h));            // 2 + 1
+        // Exactly one row per distinct item — no duplicate rows.
+        Assert.Equal(1, Carried(h).Count(n => n.EndsWith("black diamond", StringComparison.Ordinal)));
+        Assert.Equal(1, Carried(h).Count(n => n.EndsWith("torch", StringComparison.Ordinal)));
+
+        // A drop decrements the stack instead of missing the count-prefixed row.
+        h.Feed("You dropped 6 black diamond.");
+        Assert.Contains("40 black diamond", Carried(h));
     }
 
     [Fact]

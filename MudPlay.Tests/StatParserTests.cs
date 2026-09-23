@@ -291,6 +291,62 @@ public sealed class StatParserTests
         Assert.Equal(0, stats.Exp);
     }
 
+    [Fact]
+    public void ExperienceGainLine_DecrementsExpToNext_KeepsToNextFresh()
+    {
+        // With a real exp-screen baseline, a live gain also draws down "to next level"
+        // and re-derives the percent, so @exp Needed / @level to-next stay current.
+        var (p, s) = Setup();
+        p.FeedTestLine("Exp: 0  Level: 2  Exp needed for next level: 100 (200) [50%]");
+        Assert.Equal(100, s.ExpToNext);
+
+        p.FeedTestLine("You gain 30 experience.");
+        Assert.Equal(70, s.ExpToNext);            // 100 - 30
+        Assert.Equal(65, s.LevelPercent);         // (200 - 70) / 200
+
+        // Never goes negative once the level's worth of exp is banked.
+        p.FeedTestLine("You gain 500 experience.");
+        Assert.Equal(0, s.ExpToNext);
+    }
+
+    // ===== Live level-up on a train-success line =====
+
+    [Fact]
+    public void TrainSuccess_Stock_SetsAttainedLevel_WithoutStatGate()
+    {
+        // Stock line carries the attained level — set it absolutely, no poll needed.
+        PlayerStats stats = new();
+        StatParser parser = new(stats);
+        parser.FeedTestLine("You hand over 1 gold crown and you receive training to attain level 5.");
+        Assert.Equal(5, stats.Level);
+        Assert.True(parser.HasParsed);
+    }
+
+    [Fact]
+    public void TrainSuccess_Paradigm_IncrementsKnownLevel_AndClearsToNext()
+    {
+        // Paradigm line has no number — infer current + 1 from the known level, and clear
+        // the old level's to-next (the new level's span isn't known until the next poll).
+        var (p, s) = Setup();
+        p.FeedTestLine("Exp: 500  Level: 3  Exp needed for next level: 40 (200) [80%]");
+        Assert.Equal(3, s.Level);
+
+        p.FeedTestLine("You hand over 350 copper farthings to train to the next level!");
+        Assert.Equal(4, s.Level);
+        Assert.Equal(0, s.ExpToNext);
+        Assert.Equal(0, s.LevelExpSpan);
+    }
+
+    [Fact]
+    public void TrainSuccess_Paradigm_WithoutKnownLevel_LeavesLevelUnset()
+    {
+        // No baseline level to infer from → don't fabricate one; a stat poll establishes it.
+        PlayerStats stats = new();
+        StatParser parser = new(stats);
+        parser.FeedTestLine("You hand over 350 copper farthings to train to the next level!");
+        Assert.Equal(0, stats.Level);
+    }
+
     // ===== Fix A: close-on-prompt-after-capture =====
 
     [Fact]

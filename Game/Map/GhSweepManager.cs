@@ -2318,13 +2318,21 @@ public sealed class GhSweepManager : IDisposable
         return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
     }
 
-    // How many of `name` a live 'i' read still shows carried. The carried list holds
-    // one entry per unit (InventoryManager decrements it a unit at a time), so this is
-    // the real held quantity — 0 means gone, a value below the manifest's count means
-    // the stack was partially reduced. Used to clamp a re-adopted carried move to what
+    // How many of `name` a live 'i' read still shows carried. Carried items are stacked
+    // into one "N name" entry per item, so sum the stack count of every matching entry
+    // (a lone item reads as a bare name = 1) — 0 means gone, a value below the manifest's
+    // count means the stack was reduced. Used to clamp a re-adopted carried move to what
     // the pack actually holds.
     private int HeldCount(string name, IReadOnlyList<string> carried)
-        => carried.Count(held => SameItem(name, held));
+    {
+        int total = 0;
+        foreach (string held in carried)
+        {
+            (int n, string heldName) = CountedCommand.SplitLeadingCount(held);
+            if (SameItem(name, heldName)) total += n;
+        }
+        return total;
+    }
 
     private bool WasObservedHidden(RoomKey room, string itemName) =>
         _hiddenByRoom.TryGetValue(room, out List<string>? hidden)

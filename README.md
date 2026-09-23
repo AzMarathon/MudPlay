@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.103.4**
-> - Conversation window: hiding the Gossip channel (or any channel) no longer breaks chat auto-scroll — a line arriving on a hidden channel trimmed the oldest visible row without re-pinning the view, so it drifted and jumped; the trim now re-pins to the newest line
+> **Version 3.103.7**
+> - Game Data → Classes: the exp column now shows the real class **exp modifier** (`Exp %`) — the stored MDB value is the delta above the 100% baseline, so it was reading 100 low versus the game / MMUD-Explorer (e.g. Warrior now 420%, Paladin 590%). Display only; exp math was already correct
+> - `@timer` now lists **every** un-passed early-spawn window per boss, not just the soonest — on Paradigm all three (`-20%` / `-10%` / `-5%`), on Stock the single `87.5%`
+> - Character query commands no longer go stale between polls: single-coin and present-tense coin pickups update `@wealth` / `@enc` live; `@exp` / `@level`'s "to next level" draws down on each kill; and your level updates the instant you **train**
+> - Carried items now **stack** instead of duplicating on auto-get, so `@inv` / `@have` / `@uses` and the Character Info list stay clean; and an infinite-use item no longer shows phantom `N Charges` from a mis-recorded look
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

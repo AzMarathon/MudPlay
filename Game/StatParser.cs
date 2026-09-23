@@ -367,6 +367,7 @@ public sealed partial class StatParser : IDisposable
     {
         OnLivesRemainingLine(text);
         OnExperienceGainLine(text);
+        OnTrainSuccessLine(text);
         TryHealthWindow(text);
         MaybeSelfArmOnHeader(text);
         if (_windowOpenedAt is null) return;
@@ -392,6 +393,8 @@ public sealed partial class StatParser : IDisposable
         OnLivesRemainingLine(line.Text);
         // Experience-gain — always-on live accrual onto the Exp total.
         OnExperienceGainLine(line.Text);
+        // Level-up — always-on live Level bump when a train-success line lands.
+        OnTrainSuccessLine(line.Text);
         // Compact `health`-command re-anchor — its own single-shot gate, checked
         // before the stat-screen scan (and before the stat gate's early-return
         // below, so a `health` poll re-anchors even with no stat window open).
@@ -591,9 +594,50 @@ public sealed partial class StatParser : IDisposable
         // Stats.Exp is a long, so the running total holds Paradigm's hundreds-of-
         // billions without the int clamp that used to pin it at int.MaxValue.
         Stats.Exp += gained;
+        // Keep the derived "to next level" fields current too, so @exp's Needed / ETA and
+        // @level's to-next don't lag behind the live Exp total until the next exp poll. Only
+        // when a real exp-screen baseline exists (LevelExpSpan > 0); the exp screen refills
+        // exact values on the next poll and on a level-up (see OnTrainSuccessLine).
+        if (Stats.LevelExpSpan > 0 && Stats.ExpToNext > 0)
+        {
+            Stats.ExpToNext = Math.Max(0, Stats.ExpToNext - gained);
+            long into = Stats.LevelExpSpan - Stats.ExpToNext;
+            Stats.LevelPercent = (int)Math.Clamp(into * 100 / Stats.LevelExpSpan, 0, 100);
+        }
         HasParsed = true;
         _log?.Log(LogSeverity.Debug, "StatParser", $"Exp += {gained} → {Stats.Exp} (gain line).");
         ExperienceGained?.Invoke(Stats.Exp);
+    }
+
+    // Always-on handler for the server's train-success line, so Stats.Level tracks a
+    // level-up the moment the character trains rather than waiting for the next stat /
+    // exp poll (nothing else wrote Level live — the auto-trainer kept its own count).
+    // Two wordings: the stock line carries the attained level ("...attain level N."),
+    // the Paradigm line carries none ("...train to the next level!") so infer current + 1
+    // when the current level is known. Mirrors KnownPatterns.TrainAttainLevel /
+    // TrainAttainNextLevel (the router copies drive auto-train); kept here because
+    // StatParser owns Stats.Level. The new level's exp span / to-next aren't known until
+    // the next exp poll, so clear the derived fields — queries then read "unknown (type
+    // exp)" rather than the old level's leftover to-next.
+    private void OnTrainSuccessLine(string text)
+    {
+        int newLevel;
+        Match stock = TrainAttainLevelRx().Match(text);
+        if (stock.Success &&
+            int.TryParse(stock.Groups[1].Value, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out int attained))
+            newLevel = attained;
+        else if (Stats.Level > 0 && TrainNextLevelRx().IsMatch(text))
+            newLevel = Stats.Level + 1;
+        else
+            return;
+
+        Stats.Level        = newLevel;
+        Stats.ExpToNext    = 0;
+        Stats.LevelExpSpan = 0;
+        Stats.LevelPercent = 0;
+        HasParsed = true;
+        _log?.Log(LogSeverity.Info, "StatParser", $"Level → {newLevel} (train-success line).");
     }
 
     // The compact `health` command re-anchors HP + power-pool ceilings with far
@@ -843,6 +887,16 @@ public sealed partial class StatParser : IDisposable
     // the total without depending on the router pipeline.
     [GeneratedRegex(@"^You gain (\d+) experience\.",
         RegexOptions.CultureInvariant)] private static partial Regex ExpGainRx();
+
+    // Train-success lines (mirror KnownPatterns.TrainAttainLevel / TrainAttainNextLevel).
+    // Stock carries the attained level in group 1; the Paradigm line carries none, so the
+    // handler infers current + 1. Mutually exclusive — the stock line says "attain level N",
+    // never "train to the next level".
+    [GeneratedRegex(@"^You hand over .+ and you receive training to attain level (\d+)",
+        RegexOptions.CultureInvariant)] private static partial Regex TrainAttainLevelRx();
+
+    [GeneratedRegex(@"^You hand over .+ to train to the next level",
+        RegexOptions.CultureInvariant)] private static partial Regex TrainNextLevelRx();
 
     // Chat-line shape — matched at line start. Any of the standard
     // MajorMUD chat verbs after a single-word speaker means the

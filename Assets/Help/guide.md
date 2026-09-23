@@ -585,7 +585,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@loop 5/10 5/11 5/12` — an ad-hoc loop from two or more `map/room` coordinates
 - `@loop last` — re-run the last loop run this session
 - `@lair mud men` — start an Auto-Lair (a setup name or coordinates)
-- `@timer dragon` — boss timers whose name matches "dragon" (bare `@timer` lists them all)
+- `@timer dragon` — boss timers whose name matches "dragon" (bare `@timer` lists them all). Each line gives the full respawn plus every un-passed early-spawn window — on Paradigm all three (`-20%` / `-10%` / `-5%`), on Stock the single `87.5%`
 - `@death all` — every unrecovered death (bare `@death` gives just the latest)
 - `@have rope and grapple` · `@uses silvery skullcap` · `@token arlysia` — an item / limited-use item / transport token by name (shorthand and best-match are fine)
 - `@roomba severed head` — Roomba sightings of matching items

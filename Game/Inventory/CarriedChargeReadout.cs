@@ -51,10 +51,13 @@ public sealed class CarriedChargeReadout : IDisposable
     // Remaining charges for a carried item by name, realm-aware. Null when unknown
     // (Paradigm: never looked) or the item isn't a limited-use item. A stacked entry's
     // leading count is stripped so it resolves (the count reflects the whole stack; the
-    // charges are the top copy's).
+    // charges are the top copy's). The game-data limited-use flag is authoritative: an
+    // infinite-use item (UseCount -1, e.g. a magical rune) never reports charges even if
+    // a stray "Uses remaining" line was once mis-recorded against its number — otherwise
+    // the readout showed phantom counts like "magical rune - 9998 Charges".
     public int? RemainingForName(string name)
     {
-        if (string.IsNullOrWhiteSpace(name)) return null;
+        if (string.IsNullOrWhiteSpace(name) || !IsLimitedUse(name)) return null;
         return OnParadigm ? _paraCharges.RemainingForName(name) : _stockCounts.RemainingFor(_itemNumberOf(Singular(name)));
     }
 

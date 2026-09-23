@@ -14,10 +14,12 @@ namespace MudPlay.Game.Remote;
 //   @timer <name>   — active timers whose boss name contains <name> (substring);
 //                     "expired" when the query matches no active timer (we don't
 //                     currently hold one).
-// One reply line per boss: "<name> - full 2h14m, next -20% 1h47m", where "next" is
-// the earliest un-passed spawn window for the realm (Paradigm -20/-10/-5/full,
-// Stock 87.5%/full). Cleanup bosses read "<name> - dead, cleanup in <t>". ASCII
-// only — the reply rides the BBS wire, where a Unicode minus degrades to '?'.
+// One reply line per boss: "<name> - full 2h14m, next -20% 1h47m, -10% 2h01m, -5% 2h08m",
+// where "next" lists every un-passed early spawn window for the realm, soonest first
+// (Paradigm -20% / -10% / -5%, Stock the single 87.5%); windows drop off the list as they
+// pass, and once all have passed the line is just "<name> - full <t>". Cleanup bosses read
+// "<name> - dead, cleanup in <t>". ASCII only — the reply rides the BBS wire, where a
+// Unicode minus degrades to '?'.
 public sealed class BossTimerQueryHandler : IDisposable
 {
     // Cap on reply lines so a @timer with many active timers can't flood the
@@ -105,7 +107,7 @@ public sealed class BossTimerQueryHandler : IDisposable
         // lands as separate lines on the reply channel. Cap the count so a @timer
         // with many active timers can't flood the channel; the last line summarises
         // the overflow (naming the keyword when one was given).
-        foreach (var t in active.Take(MaxLines)) ctx.Reply(Format(t));
+        foreach (var t in active.Take(MaxLines)) ctx.Reply(Format(t, realm));
         int extra = active.Count - MaxLines;
         if (extra > 0)
             ctx.Reply(query.Length > 0
@@ -140,18 +142,21 @@ public sealed class BossTimerQueryHandler : IDisposable
             $"answered @timer sync from {ctx.Sender} on {ctx.Channel}: {records.Count} timer(s) in {chunks.Count} line(s): {sent}");
     }
 
-    private static string Format((BossDef Def, BossWindowState State) t)
+    private string Format((BossDef Def, BossWindowState State) t, RealmType realm)
     {
         string full = BossTimerMath.FormatHours(t.State.FullRemaining.TotalHours);
         // Cleanup bosses report a DEAD state + time to the next cleanup, not a
         // percentage window.
         if (t.State.NextLabel == "cleanup")
             return $"{t.Def.Name} - dead, cleanup in {full}";
-        // When the next window IS the guaranteed spawn, the two values coincide —
-        // report just the full timer.
-        if (t.State.NextLabel == "full")
+        // Every un-passed early spawn window, soonest first — Paradigm lists all three
+        // (-20% / -10% / -5%), Stock its single 87.5%. Empty once every early point has
+        // passed, so the two values coincide and we report just the full timer.
+        var windows = _timers.EarlyWindowsFor(t.Def, realm);
+        if (windows.Count == 0)
             return $"{t.Def.Name} - full {full}";
-        string next = BossTimerMath.FormatHours(t.State.NextRemaining.TotalHours);
-        return $"{t.Def.Name} - full {full}, next {t.State.NextLabel} {next}";
+        string next = string.Join(", ",
+            windows.Select(w => $"{w.Label} {BossTimerMath.FormatHours(w.Remaining.TotalHours)}"));
+        return $"{t.Def.Name} - full {full}, next {next}";
     }
 }
