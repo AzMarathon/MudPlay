@@ -263,6 +263,12 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         if (!Passes(entry)) return true;
         if (Rows.Count == 0 || !Rows[0].Entry.Equals(entry)) return false;
         Rows.RemoveAt(0);
+        // Trimming the top row shrinks the scroll extent. When the incoming line that
+        // triggered this trim was itself filtered out (e.g. a gossip line arriving with
+        // Gossip hidden), no AddRow ran to re-pin — so an auto-scrolling view drifts off
+        // the bottom and jumps. Re-pin to the newest row here; the window ignores it
+        // unless Auto-scroll is on, so a user reading history is unaffected.
+        if (Rows.Count > 0) ScrollToRowRequested?.Invoke(Rows[^1]);
         return true;
     }
 

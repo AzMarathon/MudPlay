@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.103.3**
-> - Game Data Browser — Monsters tab now shows your per-monster combat settings as columns: **Priority**, **Kill-on-sight**, and **No Backstab** (next to the existing Relationship)
-> - Items and Players tabs gain a **Toggles** column listing the flags you've configured — items (collect / discard / open / buy / sell / stash, plus no-take / keep-min / loyal / path-get), players (invite-if-seen / join-if-invited / don't-delete, then each granted remote-control permission, collapsing to "All @-permissions" on a full grant); blank when none set, and a crowded cell trims with an ellipsis with the full list on hover
-> - Items tab filter now understands an auto-toggle word for every flag — type `get` / `collect`, `drop` / `discard`, `open`, `buy`, `sell`, `stash`, `keep`, `loyal`, `notake`, or `path` to list only the items you've set that flag on
+> **Version 3.103.4**
+> - Conversation window: hiding the Gossip channel (or any channel) no longer breaks chat auto-scroll — a line arriving on a hidden channel trimmed the oldest visible row without re-pinning the view, so it drifted and jumped; the trim now re-pins to the newest line
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
