@@ -1,0 +1,97 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="220"
+        x:Class="MudPlay.Views.FirstRunTutorialWindow"
+        x:DataType="vm:FirstRunTutorialViewModel"
+        Title="First-time setup"
+        Width="300" SizeToContent="Height"
+        CanResize="False" ShowInTaskbar="False"
+        WindowDecorations="None"
+        Background="{StaticResource ChromeBgElevBrush}">
+
+    <Window.Styles>
+        <!-- Checklist line states. Base = pending (secondary); current = the
+             next line to click (accent + semibold); done = ticked (muted). -->
+        <Style Selector="TextBlock.sub">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+        </Style>
+        <Style Selector="TextBlock.sub.subDone">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.sub.subCurrent">
+            <Setter Property="Foreground" Value="{StaticResource AccentYellowBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.subMark">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.subMark.subDone">
+            <Setter Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.subMark.subCurrent">
+            <Setter Property="Foreground" Value="{StaticResource AccentYellowBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <!-- A free-floating helper card, shown to the LEFT of the main window (see
+         MainWindow's lifecycle wiring). Chromeless so it reads as a callout, not
+         an app window; it never overlaps the terminal. Square (no transparency
+         needed for rounded corners on a decoration-less window). -->
+    <Border Background="{StaticResource ChromeBgElevBrush}"
+            BorderBrush="{StaticResource ChromeBorderBrush}"
+            BorderThickness="1" Padding="16,14">
+        <StackPanel Spacing="10">
+            <TextBlock Text="First-time setup"
+                       FontSize="11" FontWeight="SemiBold"
+                       Foreground="{StaticResource AccentYellowBrush}"/>
+            <TextBlock Text="{Binding CurrentTitle}"
+                       FontSize="16" FontWeight="Bold" TextWrapping="Wrap"
+                       Foreground="{StaticResource ChromeFgBrush}"/>
+
+            <!-- Step checklist: each line ticks (☑) once done; the next line to
+                 click is highlighted. -->
+            <ItemsControl ItemsSource="{Binding CurrentSubs}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SubStepView">
+                        <Grid ColumnDefinitions="Auto,*" Margin="0,3,0,0">
+                            <TextBlock Grid.Column="0" Text="{Binding Marker}"
+                                       Classes="subMark" FontSize="13"
+                                       Margin="0,0,8,0"
+                                       Classes.subDone="{Binding IsDone}"
+                                       Classes.subCurrent="{Binding IsCurrent}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Text}"
+                                       Classes="sub" FontSize="13" TextWrapping="Wrap"
+                                       Classes.subDone="{Binding IsDone}"
+                                       Classes.subCurrent="{Binding IsCurrent}"/>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="✓ Done — nice!"
+                       IsVisible="{Binding CurrentIsDone}"
+                       FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource AccentGreenBrush}"/>
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,4,0,0">
+                <TextBlock Grid.Column="0" Text="{Binding StepCounterText}"
+                           VerticalAlignment="Center" FontSize="11"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                <Button Grid.Column="2" Content="Back" Margin="0,0,6,0"
+                        Command="{Binding PrevCommand}"
+                        IsEnabled="{Binding CanPrev}"/>
+                <Button Grid.Column="3" Content="{Binding NextButtonText}"
+                        Command="{Binding NextCommand}"/>
+            </Grid>
+            <Button Content="Skip — don't show this again"
+                    HorizontalAlignment="Left" Padding="0" Margin="0,2,0,0"
+                    Background="Transparent" BorderThickness="0"
+                    FontSize="11"
+                    Foreground="{StaticResource ChromeFgMutedBrush}"
+                    Command="{Binding SkipCommand}"/>
+        </StackPanel>
+    </Border>
+</Window>

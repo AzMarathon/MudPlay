@@ -118,6 +118,12 @@
                         </Flyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>
+
+                <Button Content="Run setup tutorial"
+                        FontSize="11"
+                        Foreground="{StaticResource ChromeFgSecBrush}"
+                        Command="{Binding RunFirstRunTutorialCommand}"
+                        ToolTip.Tip="Force-show the first-run setup tour on the main window, for testing — bypasses the 'already set up' and 'don't show again' gates without touching your install."/>
             </StackPanel>
             </StackPanel>
         </Border>

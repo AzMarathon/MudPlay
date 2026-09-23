@@ -3,6 +3,7 @@
         xmlns:vm="using:MudPlay.ViewModels"
         xmlns:ctl="using:MudPlay.Controls"
         xmlns:svc="using:MudPlay.Services"
+        xmlns:views="using:MudPlay.Views"
         xmlns:conv="using:Avalonia.Data.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -21,6 +22,11 @@
              window's badge (idle grey / walking + looping green / lair
              amber). Living here keeps the two windows in visual sync
              without dragging a shared theme file in. -->
+        <!-- First-run tour: glow the menu item the current step points at. -->
+        <Style Selector="MenuItem.tutTarget">
+            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
+        </Style>
+
         <Style Selector="Border.EngineBadge">
             <Setter Property="CornerRadius" Value="3"/>
             <Setter Property="Padding" Value="6,1"/>
@@ -75,12 +81,16 @@
          GlobalHotkeys.AttachMain in MainWindow.axaml.cs. -->
 
 
+    <!-- The DockPanel is the app chrome; the first-run tour overlay floats above
+         it (same Panel) so it can spotlight the menu bar. The overlay is
+         hit-test-transparent except its card, so it never blocks the terminal. -->
+    <Panel>
     <DockPanel LastChildFill="True">
 
         <!-- ============ Menu bar (chrome-styled, unchanged surface) ============ -->
         <Menu DockPanel.Dock="Top" Classes="Chrome">
 
-            <MenuItem Header="_File">
+            <MenuItem x:Name="FileMenu" Header="_File">
                 <MenuItem Header="{Binding ConnectionLabel}"
                           Command="{Binding ToggleConnectionCommand}"
                           InputGesture="{Binding ToggleConnectionGesture}"/>
@@ -93,8 +103,10 @@
                 <MenuItem Header="_Save profile" InputGesture="{Binding SaveProfileGesture}"
                           Command="{Binding SaveProfileCommand}"
                           ToolTip.Tip="Write the current profile and its settings to disk"/>
-                <MenuItem Header="_Profile Management…" InputGesture="{Binding ProfileManagerGesture}"
-                          Command="{Binding OpenProfileManagerCommand}"/>
+                <MenuItem Header="_Profile Management…"
+                          InputGesture="{Binding ProfileManagerGesture}"
+                          Command="{Binding OpenProfileManagerCommand}"
+                          Classes.tutTarget="{Binding Tutorial.HighlightProfileManagement}"/>
                 <Separator/>
                 <MenuItem Header="Auto-load last profile on startup"
                           ToggleType="CheckBox"
@@ -621,5 +633,10 @@
         </ScrollViewer>
 
     </DockPanel>
+
+        <!-- First-run setup tour — spotlights the menu bar, non-blocking. -->
+        <views:FirstRunTutorialOverlay DataContext="{Binding Tutorial}"/>
+
+    </Panel>
 
 </Window>

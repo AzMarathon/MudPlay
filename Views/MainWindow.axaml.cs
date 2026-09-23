@@ -29,6 +29,60 @@ public partial class MainWindow : Window
     // the prompt would appear over a dying app AND swallow the save below it.
     public void MarkExitConfirmed() => _exitConfirmed = true;
 
+    // The free-floating first-run setup card (shown left of the main window).
+    private FirstRunTutorialWindow? _tutorialWindow;
+
+    // Show / hide the floating tour card as the tour activates / deactivates.
+    private void UpdateTutorialWindow(MainWindowViewModel mvm)
+    {
+        if (mvm.Tutorial.IsActive)
+        {
+            if (_tutorialWindow is null)
+            {
+                _tutorialWindow = new FirstRunTutorialWindow { DataContext = mvm.Tutorial };
+                _tutorialWindow.Closed += (_, _) => _tutorialWindow = null;
+                _tutorialWindow.Show(this);   // owned by main → closes with it
+                Activate();                   // keep keyboard focus on the terminal
+                Dispatcher.UIThread.Post(PositionTutorialWindow, DispatcherPriority.Background);
+            }
+            else
+            {
+                PositionTutorialWindow();
+            }
+        }
+        else
+        {
+            _tutorialWindow?.Close();
+            _tutorialWindow = null;
+        }
+    }
+
+    // Park the card just off the main window's left edge, top-aligned. Physical
+    // pixels (Position is screen space), so the fixed 300-DIP width is scaled.
+    private void PositionTutorialWindow()
+    {
+        if (_tutorialWindow is null) return;
+        double scaling = _tutorialWindow.DesktopScaling;
+        int w = (int)System.Math.Round(300 * scaling);
+        int gap = (int)System.Math.Round(8 * scaling);
+        _tutorialWindow.Position = new PixelPoint(Position.X - w - gap, Position.Y);
+    }
+
+    // The dynamic Game Data → Import .mdb item, tracked so the tour can glow it
+    // (its action line ticks from the ImportMdb command; the static Profile
+    // Management item is highlighted via a XAML class binding).
+    private MenuItem? _importMdbMenuItem;
+
+    private void ApplyImportMdbHighlight(MainWindowViewModel mvm)
+    {
+        if (_importMdbMenuItem is null) return;
+        bool on = mvm.Tutorial.HighlightImportMdb;
+        if (on && !_importMdbMenuItem.Classes.Contains("tutTarget"))
+            _importMdbMenuItem.Classes.Add("tutTarget");
+        else if (!on)
+            _importMdbMenuItem.Classes.Remove("tutTarget");
+    }
+
     public MainWindow()
     {
         InitializeComponent();
@@ -97,6 +151,63 @@ public partial class MainWindow : Window
             // spent taking focus and only the second registered. Deferred so it wins
             // over Avalonia's default initial focus assignment.
             Dispatcher.UIThread.Post(() => Terminal.Focus());
+
+            // First-run setup tour. The step card is a free-floating window shown
+            // to the LEFT of the main window (never over the terminal); show/hide
+            // it as the tour activates, and keep it glued to our left edge as we
+            // move. Register the force-show hook (Help = real outstanding steps,
+            // Program Log test button = demo), then auto-show when a brand-new
+            // install is still missing a prerequisite and it hasn't been dismissed.
+            if (DataContext is MainWindowViewModel mvm)
+            {
+                mvm.Tutorial.PropertyChanged += (_, ev) =>
+                {
+                    if (ev.PropertyName == nameof(FirstRunTutorialViewModel.IsActive))
+                        UpdateTutorialWindow(mvm);
+                    if (ev.PropertyName is nameof(FirstRunTutorialViewModel.IsActive)
+                        or nameof(FirstRunTutorialViewModel.HighlightImportMdb))
+                        ApplyImportMdbHighlight(mvm);
+                    // Publish the action the tour wants next so the Profile
+                    // Management / Settings windows can glow the right control.
+                    if (ev.PropertyName is nameof(FirstRunTutorialViewModel.IsActive)
+                        or nameof(FirstRunTutorialViewModel.CurrentActionKey))
+                        AppServices.Current.SetCurrentTourAction(
+                            mvm.Tutorial.IsActive ? mvm.Tutorial.CurrentActionKey : null);
+                };
+                PositionChanged += (_, _) => PositionTutorialWindow();
+
+                // Let other windows report deep tour steps back to the tour VM.
+                AppServices.Current.NotifyTourAction = key =>
+                    Dispatcher.UIThread.Post(() => mvm.Tutorial.NotifyActionDone(key));
+
+                AppServices.Current.StartFirstRunTutorial = demo =>
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        Activate();
+                        if (demo) mvm.Tutorial.StartDemo();
+                        else mvm.Tutorial.Start();
+                    });
+
+                bool dismissed = AppServices.Current.Settings.Current.FirstRunTutorialDismissed;
+                bool missing = mvm.Tutorial.AnyPrerequisiteMissing;
+                if (!dismissed && missing)
+                {
+                    AppServices.Current.Log.Info("Tutorial", "first-run setup tour: showing (a prerequisite is missing)");
+                    Dispatcher.UIThread.Post(mvm.Tutorial.Start);
+                }
+                else
+                {
+                    AppServices.Current.Log.Info("Tutorial",
+                        $"first-run setup tour: not shown ({(dismissed ? "dismissed" : "all prerequisites present")})");
+                }
+            }
+        };
+        // Returning to the main window (e.g. after adding a BBS in Profile
+        // Management) re-checks the tour's steps so a finished one shows its check
+        // and the tour advances on its own.
+        Activated += (_, _) =>
+        {
+            if (DataContext is MainWindowViewModel mvm) mvm.Tutorial.Refresh();
         };
         Closed += (_, _) =>
         {
@@ -204,6 +315,13 @@ public partial class MainWindow : Window
             Command = vm.OpenHelpWindowCommand,
             [ToolTip.TipProperty] = "Searchable guide to features, how to use the client, and what each setting means.",
         });
+        MenuItem firstRunSetup = new()
+        {
+            Header = "First-time setup…",
+            [ToolTip.TipProperty] = "Replay the guided setup tour: import game data, add a BBS + character, connect.",
+        };
+        firstRunSetup.Click += (_, _) => vm.Tutorial.Start();
+        HelpMenu.Items.Add(firstRunSetup);
         HelpMenu.Items.Add(new Separator());
 
         foreach (HelpWebsite link in vm.HelpLinks)
@@ -489,11 +607,14 @@ public partial class MainWindow : Window
             Command      = vm.OpenGameDataBrowserCommand,
         });
         GameDataMenu.Items.Add(new Separator());
-        GameDataMenu.Items.Add(new MenuItem
+        MenuItem importMdb = new()
         {
             Header  = "Import .mdb…",
             Command = vm.ImportMdbCommand,
-        });
+        };
+        _importMdbMenuItem = importMdb;
+        ApplyImportMdbHighlight(vm);   // re-assert the glow after a menu rebuild
+        GameDataMenu.Items.Add(importMdb);
         GameDataMenu.Items.Add(new MenuItem
         {
             Header  = "Import loops (MegaMUD .mp)…",

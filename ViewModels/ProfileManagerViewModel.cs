@@ -56,6 +56,10 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     [ObservableProperty] private bool _isProfilesEmpty = true;
     [ObservableProperty] private string _currentProfileLabel = "No character loaded";
 
+    // First-run tour: glow the Add buttons when the tour points at them.
+    [ObservableProperty] private bool _highlightAddBbs;
+    [ObservableProperty] private bool _highlightAddCharacter;
+
     public bool HasBbsSelection => SelectedBbs is not null;
     public bool HasProfileSelection => SelectedProfile is not null;
 
@@ -88,6 +92,8 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileMutated += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedHandler;
+        AppServices.Current.TourActionChanged += OnTourActionChanged;
+        OnTourActionChanged();
 
         ReloadBbses();
         // Land on the loaded character's BBS so its record is selected on open.
@@ -106,6 +112,14 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         _profile.ProfileLoaded -= OnProfileChanged;
         _profile.ProfileMutated -= OnProfileChanged;
         _profile.ProfileClosed -= OnProfileClosedHandler;
+        AppServices.Current.TourActionChanged -= OnTourActionChanged;
+    }
+
+    private void OnTourActionChanged()
+    {
+        string? a = AppServices.Current.CurrentTourAction;
+        HighlightAddBbs = a == FirstRunTutorialViewModel.ActionAddBbs;
+        HighlightAddCharacter = a == FirstRunTutorialViewModel.ActionAddCharacter;
     }
 
     private void OnProfileChanged(CharacterProfile _) { RefreshCurrentLabel(); ReloadProfiles(); }
@@ -175,6 +189,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     [RelayCommand]
     private void AddBbs()
     {
+        AppServices.Current.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionAddBbs);
         string baseName = "New BBS";
         string name = baseName;
         int n = 2;
@@ -249,6 +264,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private async Task AddProfileAsync()
     {
         if (SelectedBbs is not { } bbs) return;
+        AppServices.Current.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionAddCharacter);
         ProfileNameInputDialogViewModel vm = new("character", n => _profile.Exists(bbs, n));
         string? name = await _dialogs.OpenWindowAsync<ProfileNameInputDialogViewModel, string>(vm);
         if (string.IsNullOrWhiteSpace(name)) return;
@@ -259,6 +275,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
             return;
         }
         _profile.CreateProfile(bbs, name);
+        AppServices.Current.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionCharacterAdded);
         ReloadProfiles();
         SelectedProfile = Profiles.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal));
     }

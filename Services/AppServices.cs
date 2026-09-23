@@ -857,6 +857,32 @@ public sealed class AppServices
     public ConnectionSnapshot Connection
         => _connectionProvider?.Invoke() ?? new ConnectionSnapshot(false, false, false);
 
+    // Force-show the first-run setup tour from anywhere, bypassing the
+    // missing-prerequisite + dismissed gates. The bool is demo mode: true (the
+    // Program Log test button) shows every step as if nothing is configured;
+    // false (Help → First-time setup) replays the user's real outstanding steps.
+    // MainWindow wires this on open; null before the window exists. Invoke on the
+    // UI thread.
+    public Action<bool>? StartFirstRunTutorial { get; set; }
+
+    // ----- First-run tour cross-window bridge -----------------------------
+    // The tour lives on MainWindowViewModel, but its deep steps play out in the
+    // Profile Management + Settings windows. Those windows report progress by
+    // calling NotifyTourAction("AddBbs" / "BbsHostPort" / …), and glow the right
+    // control by reading CurrentTourAction (the action the tour wants next) and
+    // subscribing to TourActionChanged. String keys only — no view-model coupling.
+    public Action<string>? NotifyTourAction { get; set; }
+
+    public string? CurrentTourAction { get; private set; }
+    public event Action? TourActionChanged;
+
+    public void SetCurrentTourAction(string? key)
+    {
+        if (string.Equals(CurrentTourAction, key, StringComparison.Ordinal)) return;
+        CurrentTourAction = key;
+        TourActionChanged?.Invoke();
+    }
+
     private void ApplyLocalApiFromGlobalSettings()
         => LocalApi.ApplySettings(Settings.Current.LocalApiEnabled, Settings.Current.LocalApiPort);
 

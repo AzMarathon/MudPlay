@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.102.0**
-> - New **Settings → Other → Location-based auto-equip**: wear a named item while inside a map area (matched by room number(s) and/or a room-name substring, combined via an And/Or dropdown), and revert the slot to your gear set's item on exit
-> - Driven off room changes, so the walker / loop / Auto-Lair all honour it; the Equipment Manager leaves the location-owned slot alone so a While Moving / Bossing swap can't knock the item off while you're in the area
-> - The item goes on only when actually carried, and re-tries each step inside the area until you're holding it
+> **Version 3.103.0**
+> - New **first-run setup tour**: on a fresh install (no BBS, no character, or no game data) a guided card floats just left of the main window (never covering or shrinking the terminal) and walks you click-by-click — it glows the exact control to use next (menu item, Add button, host/port fields, OK) and ticks each checklist line (☑) as you do it, advancing to the next step on its own once a step is complete
+> - Steps in order — add a BBS (Profile Management → Add → host/port → OK), add a character, import a game-data .mdb — only the ones you're missing show (plus a final Connect); Back/Next move manually
+> - Dismiss with "Skip — don't show this again" (never auto-shows again); replay your real outstanding steps from Help → First-time setup, or walk the whole thing as a demo (as if nothing were configured) from the Program Log's "Run setup tutorial" button
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

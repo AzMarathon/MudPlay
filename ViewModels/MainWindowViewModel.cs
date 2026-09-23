@@ -122,6 +122,28 @@ public partial class MainWindowViewModel : ObservableObject
     // CollectionChanged, mirroring how the toolbar rebuilds from Toolbar.Layout.
     public Services.ContextMenuConfig ContextMenu => AppServices.Current.ContextMenu;
 
+    // First-run setup tour. The FirstRunTutorialOverlay in MainWindow binds to
+    // this; MainWindow's code-behind decides when to Start() it (auto on open when
+    // a prerequisite is missing and it hasn't been dismissed, or on demand from
+    // Help / the Program Log). Probes read live app state; the dismiss persists to
+    // the Global tier.
+    public FirstRunTutorialViewModel Tutorial { get; } = new(
+        hasGameData: () => AppServices.Current.GameData.AvailableSets.Count > 0,
+        // A BBS only counts once it has a host — a freshly-Added record is an empty
+        // placeholder, so the tour keeps guiding through host/port + OK instead of
+        // treating the click of Add as "done".
+        hasBbs: () => System.Linq.Enumerable.Any(
+            System.Linq.Enumerable.Select(AppServices.Current.Bbs.ListNames(), AppServices.Current.Bbs.Get),
+            b => b is not null && !string.IsNullOrWhiteSpace(b.Host)),
+        hasCharacter: () => System.Linq.Enumerable.Any(AppServices.Current.Profile.ListAll()),
+        isConnected: () => AppServices.Current.Connection.Connected,
+        persistDismiss: () =>
+        {
+            AppServices.Current.Settings.Current.FirstRunTutorialDismissed = true;
+            AppServices.Current.Settings.Save();
+            AppServices.Current.Log.Info("Tutorial", "first-run setup tour: dismissed — won't auto-show again");
+        });
+
     // Render-ready view-models for the dynamic toolbar ItemsControl. Mirrors
     // ToolbarConfig.Layout; each entry resolves through ToolbarItemCatalogue
     // and binds against the matching command on this view-model. Rebuilt
@@ -3712,6 +3734,10 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
+        // Tick the first-run tour's "open Profile Management" line — from here, so
+        // it fires however the window was opened (menu, Ctrl+P, or toolbar).
+        Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
+
         if (_profileManager is { } existing) { RaiseExisting(existing); return; }
 
         ProfileManagerWindow window = new()
@@ -4597,6 +4623,9 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
+        // Tick the first-run tour's "Import .mdb" line the moment the import runs.
+        Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionImportMdb);
+
         IReadOnlyList<IStorageFile> files = await main.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Pick a MajorMUD MDB file to import",
@@ -4634,6 +4663,7 @@ public partial class MainWindowViewModel : ObservableObject
             // Once-only per set (marker), additive, best-effort.
             NavSeedBootstrapper.SeedIfNeeded(result.FolderName, AppServices.Current.Log);
             SwitchActiveGameDataSet(result.FolderName);
+            Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionGameDataImported);
         }
         else
         {

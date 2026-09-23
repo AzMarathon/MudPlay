@@ -23,6 +23,10 @@
         <Style Selector="TextBlock.current">
             <Setter Property="FontWeight" Value="Bold"/>
         </Style>
+        <!-- First-run tour: glow the button the current step points at. -->
+        <Style Selector="Button.tutTarget">
+            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
+        </Style>
     </Window.Styles>
 
     <DockPanel LastChildFill="True">
@@ -53,6 +57,7 @@
                     <TextBlock Classes="PaneHeader" Text="BBSes"/>
                     <Grid ColumnDefinitions="*,*,*" ColumnSpacing="4" Margin="0,0,0,4">
                         <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
+                                Classes.tutTarget="{Binding HighlightAddBbs}"
                                 Command="{Binding AddBbsCommand}"/>
                         <Button Grid.Column="1" Content="Rename" HorizontalAlignment="Stretch"
                                 Command="{Binding RenameBbsCommand}" IsEnabled="{Binding HasBbsSelection}"/>
@@ -84,6 +89,7 @@
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0" Spacing="6">
                     <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="4">
                         <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
+                                Classes.tutTarget="{Binding HighlightAddCharacter}"
                                 Command="{Binding AddProfileCommand}" IsEnabled="{Binding HasBbsSelection}"/>
                         <Button Grid.Column="1" Content="Rename" HorizontalAlignment="Stretch"
                                 Command="{Binding RenameProfileCommand}" IsEnabled="{Binding HasProfileSelection}"/>
