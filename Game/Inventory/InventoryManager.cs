@@ -441,7 +441,7 @@ public sealed partial class InventoryManager : IDisposable
         Match pickedUp = PickedUpCurrencyRegex().Match(line);
         if (pickedUp.Success)
         {
-            if (int.TryParse(pickedUp.Groups[1].Value, out int amount))
+            if (TryCoinCount(pickedUp.Groups[1].Value, out int amount))
             {
                 lock (_lock) AdjustCurrency(pickedUp.Groups[2].Value, amount);
                 Changed?.Invoke();
@@ -452,7 +452,7 @@ public sealed partial class InventoryManager : IDisposable
         Match dropped = DroppedCurrencyRegex().Match(line);
         if (dropped.Success)
         {
-            if (int.TryParse(dropped.Groups[1].Value, out int amount))
+            if (TryCoinCount(dropped.Groups[1].Value, out int amount))
             {
                 lock (_lock) AdjustCurrency(dropped.Groups[2].Value, -amount);
                 Changed?.Invoke();
@@ -468,7 +468,7 @@ public sealed partial class InventoryManager : IDisposable
         Match hidden = HidCurrencyRegex().Match(line);
         if (hidden.Success)
         {
-            if (int.TryParse(hidden.Groups[1].Value, out int amount))
+            if (TryCoinCount(hidden.Groups[1].Value, out int amount))
             {
                 lock (_lock) AdjustCurrency(hidden.Groups[2].Value, -amount);
                 Changed?.Invoke();
@@ -970,6 +970,14 @@ public sealed partial class InventoryManager : IDisposable
 
     // ----- currency math (all under _lock) -----------------------------
 
+    // Coin count from a currency line's count group: a digit, or the article "a"
+    // (a single coin). Used by the pickup / drop / stash currency patches.
+    private static bool TryCoinCount(string countGroup, out int amount)
+    {
+        if (countGroup.Equals("a", StringComparison.OrdinalIgnoreCase)) { amount = 1; return true; }
+        return int.TryParse(countGroup, out amount);
+    }
+
     private void AdjustCurrency(string coinType, int amount)
     {
         long oldCoins = TotalCoins();
@@ -1181,13 +1189,18 @@ public sealed partial class InventoryManager : IDisposable
     [GeneratedRegex(@"^Encumbrance:\s+(\d+)/(\d+)\s+-\s+(\w+)\s+\[(\d+)%\]$")]
     private static partial Regex EncumbranceRegex();
 
-    [GeneratedRegex(@"^You picked up (\d+) (\w+ coins?|platinum pieces?|gold crowns?|silver nobles?|copper farthings?)\.?$")]
+    // Coin pickup / drop / stash lines. The count group is `\d+` OR the article `a`
+    // (a single coin — "You picked up a gold crown."), and the verb tense is optional
+    // ("pick up" present as well as "picked up" past), matching the forms CashManager
+    // recognises. Without both, single-coin and present-tense loots slipped past the
+    // snapshot and @wealth / @enc stayed stale until the next full `i`.
+    [GeneratedRegex(@"^You pick(?:ed)? up (\d+|a) (\w+ coins?|platinum pieces?|gold crowns?|silver nobles?|copper farthings?)\.?$")]
     private static partial Regex PickedUpCurrencyRegex();
 
-    [GeneratedRegex(@"^You dropped (\d+) (\w+ coins?|platinum pieces?|gold crowns?|silver nobles?|copper farthings?)\.?$")]
+    [GeneratedRegex(@"^You drop(?:ped)? (\d+|a) (\w+ coins?|platinum pieces?|gold crowns?|silver nobles?|copper farthings?)\.?$")]
     private static partial Regex DroppedCurrencyRegex();
 
-    [GeneratedRegex(@"^You hid (\d+) (\w+ coins?|platinum pieces?|gold crowns?|silver nobles?|copper farthings?)\.?$")]
+    [GeneratedRegex(@"^You hid (\d+|a) (\w+ coins?|platinum pieces?|gold crowns?|silver nobles?|copper farthings?)\.?$")]
     private static partial Regex HidCurrencyRegex();
 
     [GeneratedRegex(@"^You hid (.+)\.$")]

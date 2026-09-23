@@ -313,6 +313,27 @@ public sealed class InventoryManagerTests
         Assert.Equal(10, h.Inv.Snapshot.Encumbrance.CurrentWeight);
     }
 
+    // Single-coin article form ("a gold crown") and present-tense ("You pick up") were
+    // missed by the old digit-only, past-tense-only regex, so a lone-coin loot left
+    // @wealth / @enc stale until the next full `i`. Both forms now patch the snapshot.
+    [Fact]
+    public void PickupSingleCoin_ArticleAndPresentTense_UpdateWealth()
+    {
+        using Harness h = new();
+        h.Feed("You are carrying nothing.");
+        h.Feed("Wealth:    0 copper farthings");
+        h.Feed("Encumbrance:    0/2880  -  None  [0%]");
+
+        h.Feed("You picked up a gold crown.");        // single coin, article form
+        Assert.Equal(1, h.Inv.Snapshot.Currency.Gold);
+
+        h.Feed("You pick up 2 silver nobles.");         // present tense, counted
+        Assert.Equal(2, h.Inv.Snapshot.Currency.Silver);
+
+        h.Feed("You pick up a copper farthing.");       // present tense, single coin
+        Assert.Equal(1, h.Inv.Snapshot.Currency.Copper);
+    }
+
     // A BBS can rename the runic word (e.g. "quatloos"), but the coin noun stays.
     // Parsing is noun-keyed, so the renamed leading word still lands as Runic —
     // no CurrencyNaming injection needed on the parser.
