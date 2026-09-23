@@ -4,6 +4,7 @@
 
 - Game Data Browser — Monsters tab now shows your per-monster combat settings as columns: **Priority**, **Kill-on-sight**, and **No Backstab** (next to the existing Relationship)
 - Items and Players tabs gain a **Toggles** column listing the flags you've configured — items (collect / discard / open / buy / sell / stash, plus no-take / keep-min / loyal / path-get), players (invite-if-seen / join-if-invited / don't-delete, then each granted remote-control permission, collapsing to "All @-permissions" on a full grant); blank when none set, and a crowded cell trims with an ellipsis with the full list on hover
+- Items tab filter now understands an auto-toggle word for every flag — type `get` / `collect`, `drop` / `discard`, `open`, `buy`, `sell`, `stash`, `keep`, `loyal`, `notake`, or `path` to list only the items you've set that flag on
 
 ## 3.103.2
 

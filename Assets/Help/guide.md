@@ -1196,7 +1196,7 @@ The window is a sidebar plus a content pane:
 
 Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The Filter… box matches the **visible cell text** across every column, including the friendly labels:
 
-- On the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name.
+- On the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name. You can also type an **auto-toggle word** to list only the items you've set that flag on: `get` (or `collect`), `drop` (or `discard`), `open`, `buy`, `sell`, `stash`, `keep`, `loyal`, `notake`, `path` — matching the flags shown in the **Toggles** column.
 - On the **Spells** tab it also understands ailment keywords: type `poison`, `confuse`, `blind`, or `hold` to list every spell that *applies* that effect (read from the spell's own ability codes, following the EndCast chain), not just spells with the word in their name.
 
 The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.

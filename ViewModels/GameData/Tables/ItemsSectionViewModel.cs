@@ -66,8 +66,9 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
 
     public override string? FilterHint =>
         "Type text to match name, item type, worn slot, or weapon / armour type " +
-        "(e.g. \"weapon\", \"feet\", \"plate\"), or a flag keyword to show only items " +
-        "with that flag set: collect, discard, open, buy, sell, stash.";
+        "(e.g. \"weapon\", \"feet\", \"plate\"), or an auto-toggle word to show only " +
+        "items with that flag set: get / collect, drop / discard, open, buy, sell, " +
+        "stash, keep, loyal, notake, path.";
 
     public override IEnumerable<string> SearchableLabels => new[]
     {
@@ -161,18 +162,30 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
     }
 
     // Recognized flag keywords → the ItemOverlay flag they filter on. Typing one of
-    // these (exact, case-insensitive) narrows the table to items with that auto-* /
-    // stash flag set instead of the normal column / name substring match, so "collect"
-    // shows only auto-collect items, "discard" only auto-discard, and so on.
-    private static readonly IReadOnlyDictionary<string, Func<ItemOverlay, bool?>> FlagKeywords =
+    // these (exact, case-insensitive) narrows the table to items with that flag set
+    // instead of the normal column / name substring match, so "get" (or "collect")
+    // shows only auto-collect items, "drop" (or "discard") only auto-discard, and so
+    // on. Covers every user-settable flag, with the in-game verb as a synonym where one
+    // fits (get / drop). Keep this in sync with the flags rendered in the Toggles column.
+    internal static readonly IReadOnlyDictionary<string, Func<ItemOverlay, bool?>> FlagKeywords =
         new Dictionary<string, Func<ItemOverlay, bool?>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["collect"] = o => o.AutoCollect,
-            ["discard"] = o => o.AutoDiscard,
-            ["open"]    = o => o.AutoOpen,
-            ["buy"]     = o => o.AutoBuy,
-            ["sell"]    = o => o.AutoSell,
-            ["stash"]   = o => o.AutoStash,
+            ["collect"]  = o => o.AutoCollect,
+            ["get"]      = o => o.AutoCollect,
+            ["discard"]  = o => o.AutoDiscard,
+            ["drop"]     = o => o.AutoDiscard,
+            ["open"]     = o => o.AutoOpen,
+            ["buy"]      = o => o.AutoBuy,
+            ["sell"]     = o => o.AutoSell,
+            ["stash"]    = o => o.AutoStash,
+            ["keep"]     = o => o.MustHaveMinimum,
+            ["keep-min"] = o => o.MustHaveMinimum,
+            ["loyal"]    = o => o.LoyalItem,
+            ["notake"]   = o => o.CannotBeTaken,
+            ["no-take"]  = o => o.CannotBeTaken,
+            ["path"]     = o => o.AutoObtainForPath,
+            ["path-get"] = o => o.AutoObtainForPath,
+            ["obtain"]   = o => o.AutoObtainForPath,
         };
 
     protected override bool RowMatches(GameDataRow row, string filter)
