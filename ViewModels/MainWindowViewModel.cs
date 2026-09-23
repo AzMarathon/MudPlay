@@ -3729,6 +3729,10 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
+        // Tick the first-run tour's "open Profile Management" line — from here, so
+        // it fires however the window was opened (menu, Ctrl+P, or toolbar).
+        Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
+
         if (_profileManager is { } existing) { RaiseExisting(existing); return; }
 
         ProfileManagerWindow window = new()
@@ -4613,6 +4617,9 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
+
+        // Tick the first-run tour's "Import .mdb" line the moment the import runs.
+        Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionImportMdb);
 
         IReadOnlyList<IStorageFile> files = await main.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {

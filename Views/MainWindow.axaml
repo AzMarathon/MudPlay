@@ -25,7 +25,6 @@
         <!-- First-run tour: glow the menu item the current step points at. -->
         <Style Selector="MenuItem.tutTarget">
             <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
 
         <Style Selector="Border.EngineBadge">
@@ -104,11 +103,10 @@
                 <MenuItem Header="_Save profile" InputGesture="{Binding SaveProfileGesture}"
                           Command="{Binding SaveProfileCommand}"
                           ToolTip.Tip="Write the current profile and its settings to disk"/>
-                <MenuItem x:Name="ProfileMgmtMenuItem" Header="_Profile Management…"
+                <MenuItem Header="_Profile Management…"
                           InputGesture="{Binding ProfileManagerGesture}"
                           Command="{Binding OpenProfileManagerCommand}"
-                          Classes.tutTarget="{Binding Tutorial.HighlightProfileManagement}"
-                          Click="OnProfileMgmtMenuItemClick"/>
+                          Classes.tutTarget="{Binding Tutorial.HighlightProfileManagement}"/>
                 <Separator/>
                 <MenuItem Header="Auto-load last profile on startup"
                           ToggleType="CheckBox"

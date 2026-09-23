@@ -68,16 +68,9 @@ public partial class MainWindow : Window
         _tutorialWindow.Position = new PixelPoint(Position.X - w - gap, Position.Y);
     }
 
-    // Clicking File → Profile Management ticks the tour's leading action line.
-    private void OnProfileMgmtMenuItemClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (DataContext is MainWindowViewModel mvm)
-            mvm.Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
-    }
-
-    // The dynamic Game Data → Import .mdb item, tracked so the tour can glow it +
-    // tick its action line (the static Profile Management item is highlighted via
-    // a XAML class binding instead).
+    // The dynamic Game Data → Import .mdb item, tracked so the tour can glow it
+    // (its action line ticks from the ImportMdb command; the static Profile
+    // Management item is highlighted via a XAML class binding).
     private MenuItem? _importMdbMenuItem;
 
     private void ApplyImportMdbHighlight(MainWindowViewModel mvm)
@@ -609,7 +602,6 @@ public partial class MainWindow : Window
             Header  = "Import .mdb…",
             Command = vm.ImportMdbCommand,
         };
-        importMdb.Click += (_, _) => vm.Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionImportMdb);
         _importMdbMenuItem = importMdb;
         ApplyImportMdbHighlight(vm);   // re-assert the glow after a menu rebuild
         GameDataMenu.Items.Add(importMdb);
