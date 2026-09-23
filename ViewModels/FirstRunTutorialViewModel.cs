@@ -89,13 +89,15 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     }
 
     // Force-show the full tour as if nothing is configured — the Program Log test
-    // button, so it can be reviewed without wiping the install. All steps show, at
-    // step 1, with only the action lines interactive.
+    // button, so it can be reviewed without wiping the install. Every step shows
+    // and its action lines stay interactive, but it opens at the first section the
+    // user actually lacks (step 1 when they lack nothing) — same positioning as
+    // the real auto-show.
     public void StartDemo()
     {
         _demoMode = true;
         BuildSteps();
-        CurrentIndex = 0;
+        CurrentIndex = FirstUndoneIndex();
         IsActive = true;
         RaiseStepProperties();
     }
@@ -103,12 +105,11 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     private void BuildSteps()
     {
         bool demo = _demoMode;
-        Func<bool> never = static () => false;
-        // Action lines key off the real click signal, so the checklist responds to
-        // clicks even in a demo; only the OUTCOME lines + step completion are forced
-        // unmet in demo, so a fully-configured install still walks every step.
+        // Every line keys off a real signal (a click, or being connected), so the
+        // checklist responds to real actions in both the real tour and the demo.
+        // The demo shows ALL steps so the whole tour can be reviewed; the real tour
+        // shows only the ones still outstanding.
         SubStep Action(string text, string key) => new(text, () => _doneActions.Contains(key), key);
-        SubStep Outcome(string text, Func<bool> pred) => new(text, demo ? never : pred);
 
         _doneActions.Clear();
         _steps.Clear();
@@ -119,7 +120,7 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
                 Action("Click Add (under BBSes)", ActionAddBbs),
                 Action("Enter the host/IP + port", ActionBbsHostPort),
                 Action("Click OK", ActionBbsSaved),
-            }, "FileMenu", demo ? never : _hasBbs));
+            }, "FileMenu", _hasBbs));
 
         if (demo || !_hasCharacter())
             _steps.Add(new TutorialStep("Add a character", new[]
@@ -127,33 +128,36 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
                 Action("File → Profile Management", ActionProfileManagement),
                 Action("Click Add (under Characters)", ActionAddCharacter),
                 Action("Name it, then Save", ActionCharacterAdded),
-            }, "FileMenu", demo ? never : _hasCharacter));
+            }, "FileMenu", _hasCharacter));
 
         if (demo || !_hasGameData())
             _steps.Add(new TutorialStep("Import game data", new[]
             {
                 Action("Game Data → Import .mdb", ActionImportMdb),
                 Action("Pick your MajorMUD .mdb file", ActionGameDataImported),
-            }, "GameDataMenu", demo ? never : _hasGameData));
+            }, "GameDataMenu", _hasGameData));
 
         _steps.Add(new TutorialStep("Connect", new[]
         {
-            Outcome("File → Connect (Alt+H) to enter the game", _isConnected),
-        }, "FileMenu", demo ? never : _isConnected));
+            new SubStep("File → Connect (Alt+H) to enter the game", _isConnected),
+        }, "FileMenu", _isConnected));
     }
 
+    // The first outstanding SETUP step (BBS / character / game data) — where the
+    // tour opens. The Connect finish is excluded so a set-up-but-disconnected
+    // install still opens at step 1 rather than jumping to Connect.
     private int FirstUndoneIndex()
     {
-        for (int i = 0; i < _steps.Count; i++)
+        for (int i = 0; i < _steps.Count - 1; i++)
             if (!_steps[i].Outcome()) return i;
         return 0;
     }
 
-    // A step is complete when every checklist line is ticked (all its action
-    // signals fired) or its real outcome is reached (a fallback for real runs
-    // where the user set things up off-tour). Demo forces the outcome unmet, so a
-    // configured install walks each step by its clicks.
-    private static bool StepComplete(TutorialStep step) => step.Subs.All(s => s.Done()) || step.Outcome();
+    // A step is complete when every checklist line is ticked (its action signals
+    // fired), or — outside a demo — its real outcome is reached (a fallback for a
+    // real run where the user set things up off-tour). The demo ignores the
+    // outcome so a configured install still walks each step by its clicks.
+    private bool StepComplete(TutorialStep step) => step.Subs.All(s => s.Done()) || (!_demoMode && step.Outcome());
 
     // Re-check the live prerequisites (call when the user returns to the main
     // window). Auto-advances past any completed step, so finishing a task in

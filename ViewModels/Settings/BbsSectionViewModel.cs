@@ -962,10 +962,14 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     private void OnTourActionChanged()
         => HighlightHostPort = AppServices.CurrentOrNull?.CurrentTourAction == FirstRunTutorialViewModel.ActionBbsHostPort;
 
-    // First-run tour: the host/port line ticks once a host is entered (the port
-    // has a sensible default), advancing the checklist to "Click OK".
+    // First-run tour: the host/port line ticks once the USER enters a host (the
+    // port has a sensible default). Gated on _suppressDirty so loading or
+    // switching to a BBS that already has a host (a programmatic field change,
+    // not a user edit) doesn't tick it — that was skipping the step before
+    // anything was typed.
     private void MaybeSignalHostPort()
     {
+        if (_suppressDirty) return;
         if (!string.IsNullOrWhiteSpace(Host) && Port > 0)
             AppServices.CurrentOrNull?.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionBbsHostPort);
     }

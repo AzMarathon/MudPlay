@@ -110,6 +110,24 @@ public sealed class FirstRunTutorialViewModelTests
     }
 
     [Fact]
+    public void StartDemo_OpensAtFirstMissingSetupStep()
+    {
+        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        f.Bbs = true;   // has a BBS, missing character + game data
+        vm.StartDemo();
+        Assert.Equal("Add a character", vm.CurrentTitle);   // opens at what's missing
+    }
+
+    [Fact]
+    public void StartDemo_NothingMissing_OpensAtBbs()
+    {
+        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        f.Bbs = f.Character = f.GameData = true;
+        vm.StartDemo();
+        Assert.Equal("Add a BBS", vm.CurrentTitle);   // lack nothing → walk from start
+    }
+
+    [Fact]
     public void StartDemo_FinishDoesNotPersistDismiss()
     {
         (FirstRunTutorialViewModel vm, Flags f) = Make();
