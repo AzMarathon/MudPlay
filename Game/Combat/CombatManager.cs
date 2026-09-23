@@ -1536,6 +1536,36 @@ public sealed partial class CombatManager : IDisposable
             return p != 0 ? p : a.AppearanceIndex.CompareTo(b.AppearanceIndex);
         });
 
+        // Mid-fight room-attack upgrade: a mob ARRIVED and the engageable count now meets
+        // the multi-attack's MinEnemies, but we're mid-fight on a single-target spell. The
+        // "already engaged" guard just below would return without re-deciding, so the room
+        // kept getting single-target pecks until the next damage-driven tick re-chose
+        // (report paradigm-20260923-091205: "kept using the single target attack instead
+        // of shifting to room attack"). If the chooser, with the fresh count, now picks the
+        // room attack, announce the switch here for NEXT round via the same path a cap-switch
+        // uses — DeferSwitchDispatch is idempotent and next-round, so there's no same-round
+        // double-cast. Weapon-mode arrivals are still caught by the weapon→spell re-climb on
+        // the next tick; this covers the spell-mode case the guard was swallowing.
+        if (obs.Source == RoomObservationSource.Arrival
+            && CombatSpellsWired
+            && _castingSpellTarget is { } upgradeTarget
+            && _lastCastAction is not (CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2)
+            && engageable.Any(e => string.Equals(e.RawName, upgradeTarget, StringComparison.OrdinalIgnoreCase)))
+        {
+            CombatSpellContext upgradeCtx = BuildContext(
+                settings, obs, upgradeTarget, CountEngageable(obs), ResolveMonsterNumber(obs, upgradeTarget));
+            CombatSpellDecision upgrade = _spellChooser.Choose(settings, upgradeCtx);
+            if (upgrade.Action is CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2)
+            {
+                _log?.Combat(LogCategory,
+                    $"arrival room-attack upgrade at '{upgradeTarget}': a mob arrived and the chooser "
+                    + $"now picks {upgrade.Spell} ({upgrade.Action}) — announcing the switch for next round");
+                DeferSwitchDispatch(settings, upgradeTarget, "arrival room-attack upgrade",
+                    _announcedSpellCode, upgrade.Spell);
+                return;
+            }
+        }
+
         // Server auto-attacks the specific named target each round;
         // re-sending the same command mid-fight would burn a swing.
         // If the exact RawName we last sent is still in the engageable

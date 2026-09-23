@@ -312,6 +312,29 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("blast", h.LastSent);
     }
 
+    // Report paradigm-20260923-091205: engaged one mob single-target, then a 2nd mob
+    // ARRIVES mid-fight (count crosses MinEnemies=2). The "already engaged" guard used to
+    // return without re-deciding, so the room kept getting single-target pecks until the
+    // next damage tick. The arrival must announce the room-attack switch itself.
+    [Fact]
+    public void MidFightArrival_CrossesMinEnemies_SwitchesToRoomAttack()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "dark stalker");
+
+        // One mob → single-target attack spell (spell mode).
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("nuke giant rat", h.LastSent);
+
+        // Second mob arrives → count 2 ≥ MinEnemies → switch to the bare room attack now,
+        // without waiting for a damage tick.
+        h.Arrive("dark stalker");
+        Assert.Equal("blast", h.LastSent);
+    }
+
     // Simultaneous-arrival settle (report paradigm-20260811-063728 + a live report):
     // three monsters stride in on one wire flush, then the room re-displays. Engaging
     // the first arrival single-target used to strand the room below its multi-attack
