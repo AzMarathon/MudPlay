@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.103.5**
+> **Version 3.103.6**
 > - Game Data → Classes: the exp column now shows the real class **exp modifier** (`Exp %`) — the stored MDB value is the delta above the 100% baseline, so it was reading 100 low versus the game / MMUD-Explorer (e.g. Warrior now 420%, Paladin 590%). Display only; exp math was already correct
+> - `@timer` now lists **every** un-passed early-spawn window per boss, not just the soonest — on Paradigm all three (`-20%` / `-10%` / `-5%`), on Stock the single `87.5%`
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

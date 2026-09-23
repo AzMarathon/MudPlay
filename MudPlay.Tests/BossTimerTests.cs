@@ -80,6 +80,34 @@ public sealed class BossTimerTests : IDisposable
         Assert.Equal(18, Math.Round(s.FullRemaining.TotalHours));
     }
 
+    [Fact]
+    public void EarlyWindows_Paradigm_ListsAllUnpassedWindowsSoonestFirst()
+    {
+        // full = 24h. Early points at 19.2 / 21.6 / 22.8h. Fresh timer → all three,
+        // soonest first, each remaining = its point.
+        var w = BossTimerMath.EarlyWindows(RealmType.ParaMud, 24, TimeSpan.FromHours(0));
+        Assert.Equal(new[] { "-20%", "-10%", "-5%" }, w.Select(x => x.Label).ToArray());
+        Assert.Equal(new[] { 19.2, 21.6, 22.8 }, w.Select(x => Math.Round(x.Remaining.TotalHours, 1)).ToArray());
+    }
+
+    [Fact]
+    public void EarlyWindows_DropOffAsTheyPass()
+    {
+        // Past -20% (19.2h): only -10% and -5% remain.
+        var w = BossTimerMath.EarlyWindows(RealmType.ParaMud, 24, TimeSpan.FromHours(20));
+        Assert.Equal(new[] { "-10%", "-5%" }, w.Select(x => x.Label).ToArray());
+
+        // Past every early point: none left (the full timer covers the rest).
+        Assert.Empty(BossTimerMath.EarlyWindows(RealmType.ParaMud, 24, TimeSpan.FromHours(23)));
+    }
+
+    [Fact]
+    public void EarlyWindows_Stock_HasSingleWindow()
+    {
+        var w = BossTimerMath.EarlyWindows(RealmType.Stock, 24, TimeSpan.FromHours(0));
+        Assert.Equal(new[] { "87.5%" }, w.Select(x => x.Label).ToArray());
+    }
+
     // ----- BossTimerStore ----------------------------------------------------
 
     private void SeedGameData(RealmType realm, params (string Name, int Number, int Regen, int GameLimit)[] monsters)

@@ -136,6 +136,19 @@ public sealed class BossTimerStore
         return state.Expired ? null : state;
     }
 
+    // Every un-passed early spawn window for a percentage boss (Paradigm -20/-10/-5, Stock
+    // 87.5%), soonest first, for the @timer report's full window list. Empty for a cleanup
+    // boss, an untimed boss, or one past every early point — same guards as StatusFor.
+    public IReadOnlyList<(string Label, TimeSpan Remaining)> EarlyWindowsFor(BossDef def, RealmType realm)
+    {
+        ArgumentNullException.ThrowIfNull(def);
+        if (def.RespawnType == BossRespawnType.Cleanup) return Array.Empty<(string, TimeSpan)>();
+        if (KilledAt(def.Name) is not { } killed) return Array.Empty<(string, TimeSpan)>();
+        if (BossCatalog.EffectiveRegenHours(_gameData, def) is not { } hours || hours <= 0)
+            return Array.Empty<(string, TimeSpan)>();
+        return BossTimerMath.EarlyWindows(realm, hours, DateTimeOffset.UtcNow - killed);
+    }
+
     // A Cleanup boss reads DEAD once marked, until the next cleanup. True only when
     // marked and the cleanup that clears it hasn't arrived (or can't be computed —
     // no cleanup time set keeps it DEAD until manually cleared).
