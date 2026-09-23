@@ -168,23 +168,42 @@ public sealed class PlayersSectionViewModelTests
     }
 
     [Fact]
-    public void TogglesColumn_ListsConfiguredBehaviourFlags_BlankWhenNone()
+    public void TogglesColumn_ListsBehaviourFlagsThenGrantedPermissions_BlankWhenNone()
     {
-        // The Toggles column surfaces the party-behaviour flags the user set for each
-        // player; a player with none configured reads blank.
+        // The Toggles column surfaces the party-behaviour flags AND each granted
+        // remote-control permission the user set for the player, in checkbox order;
+        // a player with nothing configured reads blank.
         PlayerDatabase db = new();
         db.RecordObservation("Helper One", null, null, null, null, null, null, Now);
         db.RecordObservation("Plain Two", null, null, null, null, null, null, Now);
-        db.EditCustomization("Helper",
-            new PlayerCustomization(InviteToPartyIfSeen: true, DontAutoDelete: true));
+        db.EditCustomization("Helper", new PlayerCustomization(
+            InviteToPartyIfSeen: true, DontAutoDelete: true,
+            RemoteControls: PlayerRemoteControls.QueryHealthStatus | PlayerRemoteControls.MovePlayer));
 
         PlayersSectionViewModel vm = new(db, dialogs: null, profile: null);
 
         GameDataRow helper = vm.AllRows.Single(r => r.Get("Given Name") == "Helper");
-        Assert.Equal("Invite-if-seen, Don't-delete", helper.Get("Toggles"));
+        Assert.Equal("Invite-if-seen, Don't-delete, Query health/status, Move player",
+            helper.Get("Toggles"));
 
         GameDataRow plain = vm.AllRows.Single(r => r.Get("Given Name") == "Plain");
         Assert.True(string.IsNullOrEmpty(plain.Get("Toggles")));
+    }
+
+    [Fact]
+    public void TogglesColumn_CollapsesFullPermissionGrant()
+    {
+        // A player granted every remote-control category collapses to one entry rather
+        // than listing all sixteen.
+        PlayerDatabase db = new();
+        db.RecordObservation("Boss One", null, null, null, null, null, null, Now);
+        db.EditCustomization("Boss",
+            new PlayerCustomization(RemoteControls: PlayerRemoteControls.All));
+
+        PlayersSectionViewModel vm = new(db, dialogs: null, profile: null);
+
+        GameDataRow boss = vm.AllRows.Single(r => r.Get("Given Name") == "Boss");
+        Assert.Equal("All @-permissions", boss.Get("Toggles"));
     }
 
     [Fact]

@@ -2,7 +2,7 @@
 
 ## 3.103.3
 
-- Game Data Browser: new **Toggles** column on the Monsters, Items, and Players tabs shows the flags *you've* configured for each record at a glance — monsters (kill-on-sight / no-backstab), items (collect / discard / open / buy / sell / stash, plus no-take / keep-min / loyal / path-get), players (invite-if-seen / join-if-invited / don't-delete); blank when none set
+- Game Data Browser: new **Toggles** column on the Monsters, Items, and Players tabs shows the flags *you've* configured for each record at a glance — monsters (kill-on-sight / no-backstab), items (collect / discard / open / buy / sell / stash, plus no-take / keep-min / loyal / path-get), players (invite-if-seen / join-if-invited / don't-delete, then each granted remote-control permission, collapsing to "All @-permissions" on a full grant); blank when none set
 
 ## 3.103.2
 

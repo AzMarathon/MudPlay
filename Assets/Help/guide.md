@@ -1201,7 +1201,7 @@ Click a section to open it. Each table has its own **Filter…** box (this one f
 
 The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
 
-The **Monsters**, **Items**, and **Players** tables each carry a **Toggles** column that lists, per row, the flags *you've* turned on for it — a monster's **Kill-on-sight / No-backstab**, an item's **Collect / Discard / Open / Buy / Sell / Stash** (plus **No-take / Keep-min / Loyal / Path-get**), or a player's **Invite-if-seen / Join-if-invited / Don't-delete**. It reads blank when you've set none, so you can see at a glance which records you've customised without opening each one. (The Players tab's separate **@'s** column still summarises that player's remote-control permissions.)
+The **Monsters**, **Items**, and **Players** tables each carry a **Toggles** column that lists, per row, the flags *you've* turned on for it — a monster's **Kill-on-sight / No-backstab**, an item's **Collect / Discard / Open / Buy / Sell / Stash** (plus **No-take / Keep-min / Loyal / Path-get**), or a player's **Invite-if-seen / Join-if-invited / Don't-delete** followed by each **remote-control permission** you've granted them (a full grant collapses to *All @-permissions*). It reads blank when you've set none, so you can see at a glance which records you've customised without opening each one. (The Players tab's separate **@'s** column keeps the quick None / Some / All summary of those permissions.)
 
 The **Monsters** table carries a full column set for browsing and filtering monster stats:
 
