@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.103.9**
-> - CP Allocation plan now advances after you train by **any** path — the just-trained level dropped off the grid only when the client itself applied the CP, so training via `@train`, a manually-typed `train stats`, or a server-side CP spend left that level stuck on the plan; it now reconciles off your actual level + stats (a level is cleared once reached and its planned stats are met)
+> **Version 3.103.12**
+> - `@status` / `@path` now report **"paused"** (e.g. "paused en route to 9/1425") when the navigator is paused for a rest / hold / wait, instead of always saying "walking"
+> - Combat switches to the **room (multi-target) attack** the moment a mob arrives mid-fight and the count crosses your MinEnemies, rather than staying single-target until the next damage tick
+> - Combat: a between-round area-debuff drawing "already cast this round" no longer strands the round's combat attack — the independent attack slot fires regardless
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
