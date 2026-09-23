@@ -2,9 +2,12 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using MudPlay.ViewModels.GameData.Tables;
@@ -295,6 +298,32 @@ public partial class GameDataTableSectionView : UserControl
         TryBuildColumns();
     }
 
+    // A fixed-width Toggles cell: trims a crowded flag list with an ellipsis and carries
+    // the whole list as a hover tooltip, so multiple flags stay legible instead of being
+    // lost to column sizing. Width is an initial value — the user can drag it wider.
+    private static DataGridTemplateColumn BuildTogglesColumn(VisibleColumn vc)
+    {
+        int idx = vc.CellIndex;
+        return new DataGridTemplateColumn
+        {
+            Header             = vc.Header,
+            Width              = new DataGridLength(180),
+            CustomSortComparer = new NumericAwareCellComparer(idx),
+            CellTemplate = new FuncDataTemplate<GameDataRow>((_, _) =>
+            {
+                TextBlock tb = new()
+                {
+                    TextTrimming      = TextTrimming.CharacterEllipsis,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin            = new Thickness(12, 0, 12, 0),
+                };
+                tb.Bind(TextBlock.TextProperty, new Binding($"Cells[{idx}].Value"));
+                tb.Bind(ToolTip.TipProperty, new Binding($"Cells[{idx}].Value"));
+                return tb;
+            }),
+        };
+    }
+
     private void TryBuildColumns()
     {
         if (_columnsBuilt) return;
@@ -309,6 +338,14 @@ public partial class GameDataTableSectionView : UserControl
         // would treat EXP as "0, 1, 10, 100, 11, 2…").
         foreach (VisibleColumn vc in vm.BuildVisibleColumns())
         {
+            // The Toggles column can hold several comma-joined flags — too many to fit an
+            // auto-sized text cell — so it gets a fixed-width, ellipsis-trimmed cell with the
+            // full list on hover instead of silently clipping.
+            if (vc.Key == GameDataTableSectionViewModel.TogglesColumn)
+            {
+                RowsGrid.Columns.Add(BuildTogglesColumn(vc));
+                continue;
+            }
             RowsGrid.Columns.Add(new DataGridTextColumn
             {
                 Header             = vc.Header,

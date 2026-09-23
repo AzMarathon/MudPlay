@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
@@ -58,14 +59,16 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
         "Encum",
         "Price",
         "Currency",
+        TogglesColumn,   // our configured auto-* / carry flags for this item
     };
 
     public override string SearchKeyColumn => "Name";
 
     public override string? FilterHint =>
         "Type text to match name, item type, worn slot, or weapon / armour type " +
-        "(e.g. \"weapon\", \"feet\", \"plate\"), or a flag keyword to show only items " +
-        "with that flag set: collect, discard, open, buy, sell, stash.";
+        "(e.g. \"weapon\", \"feet\", \"plate\"), or an auto-toggle word to show only " +
+        "items with that flag set: get / collect, drop / discard, open, buy, sell, " +
+        "stash, keep, loyal, notake, path.";
 
     public override IEnumerable<string> SearchableLabels => new[]
     {
@@ -159,18 +162,30 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
     }
 
     // Recognized flag keywords → the ItemOverlay flag they filter on. Typing one of
-    // these (exact, case-insensitive) narrows the table to items with that auto-* /
-    // stash flag set instead of the normal column / name substring match, so "collect"
-    // shows only auto-collect items, "discard" only auto-discard, and so on.
-    private static readonly IReadOnlyDictionary<string, Func<ItemOverlay, bool?>> FlagKeywords =
+    // these (exact, case-insensitive) narrows the table to items with that flag set
+    // instead of the normal column / name substring match, so "get" (or "collect")
+    // shows only auto-collect items, "drop" (or "discard") only auto-discard, and so
+    // on. Covers every user-settable flag, with the in-game verb as a synonym where one
+    // fits (get / drop). Keep this in sync with the flags rendered in the Toggles column.
+    internal static readonly IReadOnlyDictionary<string, Func<ItemOverlay, bool?>> FlagKeywords =
         new Dictionary<string, Func<ItemOverlay, bool?>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["collect"] = o => o.AutoCollect,
-            ["discard"] = o => o.AutoDiscard,
-            ["open"]    = o => o.AutoOpen,
-            ["buy"]     = o => o.AutoBuy,
-            ["sell"]    = o => o.AutoSell,
-            ["stash"]   = o => o.AutoStash,
+            ["collect"]  = o => o.AutoCollect,
+            ["get"]      = o => o.AutoCollect,
+            ["discard"]  = o => o.AutoDiscard,
+            ["drop"]     = o => o.AutoDiscard,
+            ["open"]     = o => o.AutoOpen,
+            ["buy"]      = o => o.AutoBuy,
+            ["sell"]     = o => o.AutoSell,
+            ["stash"]    = o => o.AutoStash,
+            ["keep"]     = o => o.MustHaveMinimum,
+            ["keep-min"] = o => o.MustHaveMinimum,
+            ["loyal"]    = o => o.LoyalItem,
+            ["notake"]   = o => o.CannotBeTaken,
+            ["no-take"]  = o => o.CannotBeTaken,
+            ["path"]     = o => o.AutoObtainForPath,
+            ["path-get"] = o => o.AutoObtainForPath,
+            ["obtain"]   = o => o.AutoObtainForPath,
         };
 
     protected override bool RowMatches(GameDataRow row, string filter)
@@ -187,11 +202,55 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
     private ItemOverlay? ResolveOverlay(GameDataRow row)
     {
         string? wcc = row.Get("Number");
-        if (string.IsNullOrEmpty(wcc)) return null;
+        return string.IsNullOrEmpty(wcc) ? null : ResolveOverlayByNumber(wcc);
+    }
+
+    // 4-tier merge for a raw item Number (Char → BBS → Global → seed Defaults). Shared by
+    // the flag filter (via ResolveOverlay) and the Toggles column's per-row build.
+    private ItemOverlay ResolveOverlayByNumber(string wcc)
+    {
         ItemOverlay seed = (_overlaySeed is not null && int.TryParse(wcc, out int n))
             ? _overlaySeed.GetOverlay(n)
             : new ItemOverlay();
         return _resolverRef?.ResolveGameData<ItemOverlay>("Items", wcc, seed) ?? seed;
+    }
+
+    // The Toggles column: a compact summary of the auto-* / carry flags this character
+    // has turned on for the item, resolved from the same 4-tier overlay the engines read.
+    // Null (blank cell) when the item has no overlay layer (headless tests) or no flags set.
+    protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(JsonElement element)
+    {
+        if (_resolverRef is null) return null;
+        string? wcc = ReadNumber(element);
+        if (string.IsNullOrEmpty(wcc)) return null;
+        ItemOverlay o = ResolveOverlayByNumber(wcc);
+        return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            [TogglesColumn] = FormatToggleSummary(
+                (o.AutoCollect       == true, "Collect"),
+                (o.AutoDiscard       == true, "Discard"),
+                (o.AutoOpen          == true, "Open"),
+                (o.AutoBuy           == true, "Buy"),
+                (o.AutoSell          == true, "Sell"),
+                (o.AutoStash         == true, "Stash"),
+                (o.CannotBeTaken     == true, "No-take"),
+                (o.MustHaveMinimum   == true, "Keep-min"),
+                (o.LoyalItem         == true, "Loyal"),
+                (o.AutoObtainForPath == true, "Path-get")),
+        };
+    }
+
+    // Read the item's Number as a string from the raw MDB element (numeric in the MDB, but
+    // tolerate a string kind too). null when the field is missing or an unexpected shape.
+    private static string? ReadNumber(JsonElement el)
+    {
+        if (!el.TryGetProperty("Number", out JsonElement v)) return null;
+        return v.ValueKind switch
+        {
+            JsonValueKind.Number => v.ToString(),
+            JsonValueKind.String => v.GetString(),
+            _ => null,
+        };
     }
 
     private async Task OpenEditAsync(GameDataRow? row)

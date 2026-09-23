@@ -26,7 +26,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Given Name", "Family Name", "Gang", "@'s", "Last Seen",
+        "Given Name", "Family Name", "Gang", "@'s", TogglesColumn, "Last Seen",
     };
 
     public override string SearchKeyColumn => "Given Name";
@@ -144,6 +144,10 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
                 // don't re-report it); blank when never seen in a gang.
                 ["Gang"]        = p.Gang ?? string.Empty,
                 ["@'s"]         = RemoteControlsLabel(p.RemoteControls),
+                // The settings we've configured for this player: the party-behaviour
+                // toggles, then each granted remote-control permission (the @'s column
+                // keeps the quick None/Some/All glance).
+                [TogglesColumn] = FormatToggleSummary(PlayerToggles(p).ToArray()),
                 ["Last Seen"]   = p.LastSeenUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
             };
             rows.Add(GameDataRow.FromDictionary(dict, Columns));
@@ -166,6 +170,43 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         if (rc == PlayerRemoteControls.None) return "None";
         if (rc == PlayerRemoteControls.All)  return "All";
         return "Some";
+    }
+
+    // Everything we've configured for this player, in checkbox order, for the Toggles
+    // column: the three party-behaviour flags, then each granted remote-control
+    // permission (collapsed to one entry when they're all granted).
+    private static IEnumerable<(bool On, string Label)> PlayerToggles(PlayerRecord p)
+    {
+        yield return (p.InviteToPartyIfSeen, "Invite-if-seen");
+        yield return (p.JoinPartyIfInvited,  "Join-if-invited");
+        yield return (p.DontAutoDelete,      "Don't-delete");
+        foreach ((bool On, string Label) perm in PermissionToggles(p.RemoteControls))
+            yield return perm;
+    }
+
+    // The granted remote-control categories as toggle entries, using the same labels the
+    // edit dialog's permission checkboxes carry. None yields nothing; a full grant collapses
+    // to a single "All @-permissions" entry so the cell doesn't list all sixteen.
+    private static IEnumerable<(bool On, string Label)> PermissionToggles(PlayerRemoteControls rc)
+    {
+        if (rc == PlayerRemoteControls.None) yield break;
+        if (rc == PlayerRemoteControls.All) { yield return (true, "All @-permissions"); yield break; }
+        yield return (rc.HasFlag(PlayerRemoteControls.QueryVersion),        "Query version");
+        yield return (rc.HasFlag(PlayerRemoteControls.QueryExperience),     "Query experience");
+        yield return (rc.HasFlag(PlayerRemoteControls.QueryHealthStatus),   "Query health/status");
+        yield return (rc.HasFlag(PlayerRemoteControls.QueryLocation),       "Query location");
+        yield return (rc.HasFlag(PlayerRemoteControls.QueryInventory),      "Query inventory");
+        yield return (rc.HasFlag(PlayerRemoteControls.QueryBossTimers),     "Query boss timers");
+        yield return (rc.HasFlag(PlayerRemoteControls.QueryDeaths),         "Query deaths");
+        yield return (rc.HasFlag(PlayerRemoteControls.QueryItemLocation),   "Query Roomba");
+        yield return (rc.HasFlag(PlayerRemoteControls.QueryQuests),         "Query quests");
+        yield return (rc.HasFlag(PlayerRemoteControls.RequestInvite),       "Request invite");
+        yield return (rc.HasFlag(PlayerRemoteControls.MovePlayer),          "Move player");
+        yield return (rc.HasFlag(PlayerRemoteControls.ExecuteCommands),     "Execute commands");
+        yield return (rc.HasFlag(PlayerRemoteControls.HangupDisconnect),    "Hangup/disconnect");
+        yield return (rc.HasFlag(PlayerRemoteControls.AlterSettings),       "Alter settings");
+        yield return (rc.HasFlag(PlayerRemoteControls.DivertConversations), "Divert conversations");
+        yield return (rc.HasFlag(PlayerRemoteControls.SysopCommands),       "Elevated Commands");
     }
 
     private async Task AddAsync()

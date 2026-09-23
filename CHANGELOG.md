@@ -1,5 +1,11 @@
 # Version history
 
+## 3.103.3
+
+- Game Data Browser — Monsters tab now shows your per-monster combat settings as columns: **Priority**, **Kill-on-sight**, and **No Backstab** (next to the existing Relationship)
+- Items and Players tabs gain a **Toggles** column listing the flags you've configured — items (collect / discard / open / buy / sell / stash, plus no-take / keep-min / loyal / path-get), players (invite-if-seen / join-if-invited / don't-delete, then each granted remote-control permission, collapsing to "All @-permissions" on a full grant); blank when none set, and a crowded cell trims with an ellipsis with the full list on hover
+- Items tab filter now understands an auto-toggle word for every flag — type `get` / `collect`, `drop` / `discard`, `open`, `buy`, `sell`, `stash`, `keep`, `loyal`, `notake`, or `path` to list only the items you've set that flag on
+
 ## 3.103.2
 
 - Party AoE heal no longer fires for a dip only you have: you still count toward the members-below-threshold gate (you + 1 ally low = 2 of 3 → the AoE fires), but when you're the *only* one below — under the gate — it no longer falls back to the group AoE; your self-heal slots (mihe/mahe) cover you instead

@@ -26,6 +26,18 @@ public sealed class GameDataTableSectionTests : IDisposable
         catch { }
     }
 
+    [Fact]
+    public void FormatToggleSummary_JoinsEnabledInOrder_BlankWhenNone()
+    {
+        // The shared "Toggles" column backer: joins the enabled flags' labels in order,
+        // and returns null (blank cell) when nothing is on.
+        Assert.Equal("Collect, Stash", GameDataTableSectionViewModel.FormatToggleSummary(
+            (true, "Collect"), (false, "Discard"), (true, "Stash")));
+        Assert.Null(GameDataTableSectionViewModel.FormatToggleSummary(
+            (false, "Collect"), (false, "Stash")));
+        Assert.Null(GameDataTableSectionViewModel.FormatToggleSummary());
+    }
+
     private void SeedMonsters(string setName, string json) => SeedTable(setName, "Monsters", json);
 
     private void SeedTable(string setName, string tableName, string json)
