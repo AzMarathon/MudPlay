@@ -2790,6 +2790,122 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void PartyHeal_SelfOnlyBelow_NeverFiresPartyHeal_SingleAndAoeConfigured()
+    {
+        // Regression (report paradigm-20260922-203540): only SELF is below (allies
+        // full) — 1 of 3, under AoeMinMembers = 2. Party heals are for MEMBERS only,
+        // so a lone self-dip fires neither the single-target NOR the group AOE; the
+        // self-heal slots cover self. Both spells configured, neither fires.
+        using PartyHarness h = new();
+        h.PartySettings.MinorPartyHealSpell = "anno";
+        h.PartySettings.MinorPartyHealAoeSpell = "rain";
+        h.PartySettings.MinorHealMemberThresholdPercent = 95;
+        h.PartySettings.AoeMinMembers = 2;
+        PartyMember self = h.AddMember("Cidir", hpPercent: 64);
+        self.IsSelf = true;
+        h.AddMember("Nineteen", hpPercent: 100);
+        h.AddMember("Thresh", hpPercent: 100);
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyHeal_SelfOnlyBelow_NeverFiresPartyHeal_AoeOnlyConfigured()
+    {
+        // Same lone-self case, but ONLY an AOE party heal is configured. Still
+        // nothing fires — self isn't a party-spell target, so the AOE-only fallback
+        // must not fire for a lone self-dip either.
+        using PartyHarness h = new();
+        h.PartySettings.MinorPartyHealAoeSpell = "rain";
+        h.PartySettings.MinorHealMemberThresholdPercent = 95;
+        h.PartySettings.AoeMinMembers = 2;
+        PartyMember self = h.AddMember("Cidir", hpPercent: 64);
+        self.IsSelf = true;
+        h.AddMember("Nineteen", hpPercent: 100);
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyHeal_OneAllyBelow_AoeOnly_UnderGate_FiresAoeForAlly()
+    {
+        // AOE-only party heal, one ALLY below (self full), under the 2-member gate:
+        // the AOE is the only party option to reach the ally, so it fires below the
+        // gate. (Contrast the lone-self case above, which fires nothing.)
+        using PartyHarness h = new();
+        h.PartySettings.MinorPartyHealAoeSpell = "rain";
+        h.PartySettings.MinorHealMemberThresholdPercent = 95;
+        h.PartySettings.AoeMinMembers = 2;
+        PartyMember self = h.AddMember("Cidir", hpPercent: 100);
+        self.IsSelf = true;
+        h.AddMember("Nineteen", hpPercent: 80);   // one ally below
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("rain", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyHeal_SelfPlusOneAllyBelow_MeetsGate_FiresAoe()
+    {
+        // Self counts toward the AOE gate: self + one ally below = 2 of 3, hitting
+        // AoeMinMembers = 2 → the group AOE fires (it heals everyone, self included).
+        using PartyHarness h = new();
+        h.PartySettings.MinorPartyHealSpell = "anno";
+        h.PartySettings.MinorPartyHealAoeSpell = "rain";
+        h.PartySettings.MinorHealMemberThresholdPercent = 95;
+        h.PartySettings.AoeMinMembers = 2;
+        PartyMember self = h.AddMember("Cidir", hpPercent: 60);
+        self.IsSelf = true;
+        h.AddMember("Nineteen", hpPercent: 80);   // one ally below
+        h.AddMember("Thresh", hpPercent: 100);
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("rain", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void DownedAllyHeal_UsesEmergencyHealSpell_ByName()
+    {
+        // A downed ally (aided back but off-roster) gets the combat-profile
+        // EMERGENCY heal spell by name — the same big heal the caster uses on itself
+        // in a pinch — not the party heal (report paradigm-20260922-203540 follow-up).
+        using PartyHarness h = new();
+        h.Spells.EmergencyHealSpell = "mahe";
+        h.PartySettings.MajorPartyHealSpell = "grpmaj";   // the old pick — must NOT win
+        h.PartySettings.MinorPartyHealSpell = "grpmin";
+        h.AddMember("Cidir", hpPercent: 100);             // party present, healthy
+        h.Director.SetDownedAllyProvider(() => new[] { "Nineteen ByNineteen" });
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("mahe Nineteen", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void DownedAllyHeal_FallsBackToPartyHeal_WhenNoEmergencyConfigured()
+    {
+        using PartyHarness h = new();
+        // no EmergencyHealSpell configured
+        h.PartySettings.MajorPartyHealSpell = "grpmaj";
+        h.AddMember("Cidir", hpPercent: 100);
+        h.Director.SetDownedAllyProvider(() => new[] { "Nineteen ByNineteen" });
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("grpmaj Nineteen", h.CastsSent[0]);
+    }
+
+    [Fact]
     public void PartyHeal_TwoMembersBelow_FiresAoe()
     {
         using PartyHarness h = new();

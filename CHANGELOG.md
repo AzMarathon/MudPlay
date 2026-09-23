@@ -1,5 +1,11 @@
 # Version history
 
+## 3.103.2
+
+- Party AoE heal no longer fires for a dip only you have: you still count toward the members-below-threshold gate (you + 1 ally low = 2 of 3 → the AoE fires), but when you're the *only* one below — under the gate — it no longer falls back to the group AoE; your self-heal slots (mihe/mahe) cover you instead
+- Downed-ally rescue heal now casts your Emergency-heal-slot spell (the big heal) by name, instead of the party heal — still at the downed-ally priority slot
+- bug reports addressed: paradigm-20260922-203540
+
 ## 3.103.0
 
 - New **first-run setup tour**: on a fresh install (no BBS, no character, or no game data) a guided card floats just left of the main window (never covering or shrinking the terminal) and walks you click-by-click — it glows the exact control to use next (menu item, Add button, host/port fields, OK) and ticks each checklist line (☑) as you do it, advancing to the next step on its own once a step is complete
