@@ -1,5 +1,9 @@
 # Version history
 
+## 3.103.4
+
+- Conversation window: hiding the Gossip channel (or any channel) no longer breaks chat auto-scroll — a line arriving on a hidden channel trimmed the oldest visible row without re-pinning the view, so it drifted and jumped; the trim now re-pins to the newest line
+
 ## 3.103.3
 
 - Game Data Browser — Monsters tab now shows your per-monster combat settings as columns: **Priority**, **Kill-on-sight**, and **No Backstab** (next to the existing Relationship)

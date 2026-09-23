@@ -102,6 +102,33 @@ public sealed class ConversationViewModelTests
         Assert.Equal("hello", Assert.Single(vm.Rows).Entry.Message);
     }
 
+    // Bug: with Gossip hidden, an incoming gossip line is filtered out (no AddRow, so no
+    // auto-scroll re-pin), but at cap it still trims the oldest entry — and when that entry
+    // is a VISIBLE row, dropping it shrinks the list from the top with nothing re-pinning to
+    // the bottom, so the auto-scrolling view drifts and jumps. The trim must re-pin too.
+    [Fact]
+    public void StoreAtCap_FilteredAddTrimsVisibleTopRow_RepinsToNewest()
+    {
+        (MessageRouter router, ChatHistoryStore history) = NewStore();
+        // Telepath lines are shown even with Gossip hidden, so every row is visible.
+        for (int i = 0; i < StoreCap; i++)
+            router.Dispatch(Line($"Forged telepaths: msg {i}", i));
+        using ConversationViewModel vm = NewViewModel(history, new TalkSettings { ConvoShowGossip = false });
+        Assert.Equal(StoreCap, vm.Rows.Count);
+
+        int repins = 0;
+        ConversationRowViewModel? lastTarget = null;
+        vm.ScrollToRowRequested += r => { repins++; lastTarget = r; };
+
+        // Gossip line: filtered out (adds no row) but trims the oldest telepath — a visible
+        // top row. Auto-scroll must re-pin to the newest visible row.
+        router.Dispatch(Line("Forged gossips: newest", StoreCap));
+
+        Assert.Equal(StoreCap - 1, vm.Rows.Count);   // trimmed a visible row, added none
+        Assert.Equal(1, repins);                      // re-pinned exactly once, on the trim
+        Assert.Same(vm.Rows[^1], lastTarget);         // to the newest visible row
+    }
+
     [Fact]
     public void StoreBelowCap_NewEntry_JustAppends()
     {
