@@ -43,7 +43,9 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         "Number",
         "Name",
         "Relationship",  // our set Enemy/Neutral/Friend/… for this monster (4-tier overlay-resolved)
-        TogglesColumn,   // our configured per-monster flags (kill-on-sight / no-backstab)
+        "OurPriority",   // our set attack priority (First/High/Normal/Low/Last), overlay-resolved
+        "KillOnSight",   // our kill-on-sight flag (✓ when set)
+        "DontBackstab",  // our don't-backstab flag (✓ when set)
         "RegenTime",     // "Rgn" — respawn timer
         "EXP",           // "65000 (20x)" — base reward with its multiplier (see ComputeRowCells)
         "HP",
@@ -66,7 +68,10 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     public override IReadOnlyDictionary<string, string> ColumnHeaders { get; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Number"]     = "ID",
+            ["Number"]       = "ID",
+            ["OurPriority"]  = "Priority",
+            ["KillOnSight"]  = "Kill-on-sight",
+            ["DontBackstab"] = "No Backstab",
             ["RegenTime"]  = "Respawn",
             ["EXP"]        = "Exp",
             ["AcDr"]       = "AC/DR",
@@ -304,14 +309,13 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["NonLiving"]    = HasAbil(element, 109) ? "1" : null,
             ["CastsSpells"]  = HasMidSpell(element) ? "1" : null,
             ["HasLoot"]      = HasDrop(element) ? "1" : null,
-            // Our configured relationship with this monster — the same 4-tier overlay
-            // the combat engine reads, so the column shows exactly how the engine treats it.
+            // Our configured combat treatment for this monster — the same 4-tier overlay
+            // the combat engine reads, so the columns show exactly how the engine treats it.
+            // Each is its own column (like Relationship) rather than a merged blob.
             ["Relationship"] = (overlay.Relationship ?? MonsterRelationship.Enemy).ToString(),
-            // The per-monster flags we've turned on for this species — surfaced so they're
-            // visible at a glance, not only reachable by opening the record.
-            [TogglesColumn] = FormatToggleSummary(
-                (overlay.KillOnSight  == true, "Kill-on-sight"),
-                (overlay.DontBackstab == true, "No-backstab")),
+            ["OurPriority"]  = (overlay.Priority ?? MonsterAttackPriority.Normal).ToString(),
+            ["KillOnSight"]  = overlay.KillOnSight  == true ? "✓" : null,
+            ["DontBackstab"] = overlay.DontBackstab == true ? "✓" : null,
         };
         if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int Count, long SumMax, int MaxMax) lair)
             && lair.Count > 0)

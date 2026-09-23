@@ -1201,12 +1201,12 @@ Click a section to open it. Each table has its own **Filter…** box (this one f
 
 The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
 
-The **Monsters**, **Items**, and **Players** tables each carry a **Toggles** column that lists, per row, the flags *you've* turned on for it — a monster's **Kill-on-sight / No-backstab**, an item's **Collect / Discard / Open / Buy / Sell / Stash** (plus **No-take / Keep-min / Loyal / Path-get**), or a player's **Invite-if-seen / Join-if-invited / Don't-delete** followed by each **remote-control permission** you've granted them (a full grant collapses to *All @-permissions*). It reads blank when you've set none, so you can see at a glance which records you've customised without opening each one. (The Players tab's separate **@'s** column keeps the quick None / Some / All summary of those permissions.)
+The **Items** and **Players** tables carry a **Toggles** column that lists, per row, the flags *you've* turned on for it — an item's **Collect / Discard / Open / Buy / Sell / Stash** (plus **No-take / Keep-min / Loyal / Path-get**), or a player's **Invite-if-seen / Join-if-invited / Don't-delete** followed by each **remote-control permission** you've granted them (a full grant collapses to *All @-permissions*). It reads blank when you've set none; a crowded cell trims with an ellipsis — hover it for the full list, or drag the column wider. (The Players tab's separate **@'s** column keeps the quick None / Some / All summary of those permissions.) The **Monsters** table surfaces the same kind of per-record settings, but as their own columns — see its column list below.
 
 The **Monsters** table carries a full column set for browsing and filtering monster stats:
 
 - **Relationship** (right after the name) — how *your* overlay tells the engine to treat this monster: **Enemy** / **Neutral** / **Friend** / **Flee** / **Hangup**, resolved across all four tiers just like the combat engine reads it, so an un-tagged monster shows **Enemy** and any relationship you or a shipped default set shows through here without opening the record.
-- **Toggles** — the per-monster flags you've turned on: **Kill-on-sight** and **No-backstab** (blank when none).
+- **Priority** — your attack-priority for this species (**First / High / Normal / Low / Last**), resolved across all four tiers like Relationship; **Kill-on-sight** and **No Backstab** — each reads **✓** when you've set that per-monster flag, blank otherwise.
 - **Respawn** (respawn timer), **Exp** (experience per kill — base × multiplier), **HP**, **AC/DR**, **Dodge**, **Magic Res**.
 - **Acc (typ/max)** (typical/highest attack accuracy), **Damage**, **Exp Eff** (an exp-per-effort efficiency score).
 - **Lair Exp**, **# Lairs**, **Avg Lair Size**, **Biggest Lair**.
