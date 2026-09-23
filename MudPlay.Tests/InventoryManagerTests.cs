@@ -1168,7 +1168,9 @@ public sealed class InventoryManagerTests
         h.Feed("You took 3 torch.");
 
         Assert.Equal(170, Weight(h));   // 50 + 3*40
-        Assert.Equal(3, Carried(h).Count(n => string.Equals(n, "torch", StringComparison.Ordinal)));
+        // Stacked into one "3 torch" entry, not three bare rows.
+        Assert.Contains("3 torch", Carried(h));
+        Assert.DoesNotContain("torch", Carried(h));
     }
 
     [Fact]
@@ -1209,6 +1211,36 @@ public sealed class InventoryManagerTests
 
         Assert.Equal(50, Weight(h));    // 170 - 3*40
         Assert.DoesNotContain("torch", Carried(h));
+    }
+
+    [Fact]
+    public void AutoGet_StacksOntoExistingStack_NoDuplicateRows()
+    {
+        // Repro: a full `i` shows "43 black diamond" (one stacked row); each auto-get then
+        // appended a separate "black diamond" row, so @inv / @have / Character Info filled
+        // with duplicates. Now the get folds into the stack, and repeated bare tokens in
+        // the dump collapse too.
+        using Harness h = new();
+        h.Feed("You are carrying 43 black diamond, torch, torch, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        Assert.Contains("43 black diamond", Carried(h));
+        Assert.Contains("2 torch", Carried(h));        // two bare tokens collapsed
+
+        h.Feed("You took black diamond.");
+        h.Feed("You took 2 black diamond.");
+        h.Feed("You took torch.");
+
+        Assert.Contains("46 black diamond", Carried(h));   // 43 + 1 + 2
+        Assert.Contains("3 torch", Carried(h));            // 2 + 1
+        // Exactly one row per distinct item — no duplicate rows.
+        Assert.Equal(1, Carried(h).Count(n => n.EndsWith("black diamond", StringComparison.Ordinal)));
+        Assert.Equal(1, Carried(h).Count(n => n.EndsWith("torch", StringComparison.Ordinal)));
+
+        // A drop decrements the stack instead of missing the count-prefixed row.
+        h.Feed("You dropped 6 black diamond.");
+        Assert.Contains("40 black diamond", Carried(h));
     }
 
     [Fact]

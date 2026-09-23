@@ -367,7 +367,7 @@ public sealed partial class InventoryManager : IDisposable
             // returns to it.
             RemoveCarried(name);
             foreach (string old in displaced)
-                PatchCarried(list => { list.Add(old); return true; });
+                AddCarried(old);
             return;
         }
 
@@ -416,7 +416,7 @@ public sealed partial class InventoryManager : IDisposable
                 return list.RemoveAll(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)) > 0;
             });
             // A removed piece returns to the pack (unworn) until re-equipped.
-            PatchCarried(list => { list.Add(name); return true; });
+            AddCarried(name);
             return;
         }
 
@@ -434,7 +434,7 @@ public sealed partial class InventoryManager : IDisposable
                 return list.RemoveAll(e => e.Slot == "Weapon Hand") > 0;
             });
             foreach (string name in unreadied)
-                PatchCarried(list => { list.Add(name); return true; });
+                AddCarried(name);
             return;
         }
 
@@ -497,7 +497,7 @@ public sealed partial class InventoryManager : IDisposable
             if (hiddenItem.Length > 0 && !CoinNounSuffixRegex().IsMatch(hiddenItem))
             {
                 (int count, string name) = CountedCommand.SplitLeadingCount(hiddenItem);
-                for (int i = 0; i < count; i++) RemoveCarried(name);
+                RemoveCarried(name, count);
                 AdjustItemWeight(name, -count);
                 _log?.Debug(LogCategory, $"hid item={name} count={count} — carried/weight decremented");
                 ItemHidden?.Invoke(hiddenItem);
@@ -562,8 +562,7 @@ public sealed partial class InventoryManager : IDisposable
             // and "Equip all" sees an empty pack (the reported bug). Treat the
             // first purchase as the baseline.
             EnsureLoadedBaseline();
-            for (int i = 0; i < boughtCount; i++)
-                PatchCarried(list => { list.Add(boughtName); return true; });
+            AddCarried(boughtName, boughtCount);
             AdjustItemWeight(boughtName, +boughtCount);
 
             string priceTail = bought.Groups[2].Value;
@@ -596,7 +595,7 @@ public sealed partial class InventoryManager : IDisposable
             // counted line ("You sold 5 orc-head for …"); strip the count.
             (int soldCount, string soldName) =
                 CountedCommand.SplitLeadingCount(sold.Groups[1].Value.TrimEnd());
-            for (int i = 0; i < soldCount; i++) RemoveCarried(soldName);
+            RemoveCarried(soldName, soldCount);
             AdjustItemWeight(soldName, -soldCount);
             ItemSold?.Invoke(soldName, soldCount);
 
@@ -648,7 +647,7 @@ public sealed partial class InventoryManager : IDisposable
             // Paradigm batches a get into one counted line ("You took 5 orc-head.")
             // with the singular name; strip the count and apply it N times.
             (int count, string name) = CountedCommand.SplitLeadingCount(gotItem.Groups[1].Value.TrimEnd());
-            for (int i = 0; i < count; i++) PatchCarried(list => { list.Add(name); return true; });
+            AddCarried(name, count);
             AdjustItemWeight(name, +count);
             return;
         }
@@ -660,7 +659,7 @@ public sealed partial class InventoryManager : IDisposable
         if (droppedItem.Success)
         {
             (int count, string name) = CountedCommand.SplitLeadingCount(droppedItem.Groups[1].Value.TrimEnd());
-            for (int i = 0; i < count; i++) RemoveCarried(name);
+            RemoveCarried(name, count);
             AdjustItemWeight(name, -count);
             ItemDropped?.Invoke(name, count);
         }
@@ -835,7 +834,7 @@ public sealed partial class InventoryManager : IDisposable
             _percentage = percentage;
             _category = category;
             _equipped = equipped;
-            _carried = carried;
+            _carried = NormalizeStacks(carried);
             _readiedLight = readiedLight;
             _keys = keys;
             _loaded = true;
@@ -943,20 +942,80 @@ public sealed partial class InventoryManager : IDisposable
             return;
         }
 
-        if (sign > 0) PatchCarried(list => { list.Add(name); return true; });
+        if (sign > 0) AddCarried(name);
         else RemoveCarried(name);
         AdjustItemWeight(name, sign);
     }
 
-    // Drop the first carried entry matching name (case-insensitive). Only the
-    // first, so selling one of two identical items leaves the other in the pack.
-    private void RemoveCarried(string name)
+    // Index of the carried entry whose SINGULAR name equals `name`, ignoring any
+    // leading stack count ("43 black diamond" matches "black diamond"), or -1. So a
+    // get/drop of a single item finds and updates the stacked row instead of missing it.
+    private static int FindCarriedIndex(List<string> list, string name)
     {
+        for (int i = 0; i < list.Count; i++)
+            if (string.Equals(CountedCommand.SplitLeadingCount(list[i]).Name, name,
+                    StringComparison.OrdinalIgnoreCase))
+                return i;
+        return -1;
+    }
+
+    // Render a stack the way the game does in the `i` dump: a bare singular name for
+    // one, a count-prefixed singular for more ("black diamond" / "44 black diamond").
+    private static string FormatStack(string name, int count)
+        => count <= 1 ? name : $"{count} {name}";
+
+    // Collapse identical carried items into one "N name" stack, first-seen order. The
+    // `i` dump lists some items as repeated bare tokens ("torch, torch, torch") and
+    // others pre-stacked ("43 black diamond"); folding both to a single entry per item
+    // gives the add/remove patches one row to update and stops @inv / @have / the
+    // Character Info list from showing duplicate rows as auto-gets land.
+    private static List<string> NormalizeStacks(IReadOnlyList<string> items)
+    {
+        var order = new List<string>();
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (string token in items)
+        {
+            (int n, string name) = CountedCommand.SplitLeadingCount(token);
+            if (!counts.ContainsKey(name)) order.Add(name);
+            counts[name] = counts.GetValueOrDefault(name) + n;
+        }
+        var result = new List<string>(order.Count);
+        foreach (string name in order) result.Add(FormatStack(name, counts[name]));
+        return result;
+    }
+
+    // Add `count` copies of `name` to the pack, STACKING onto an existing entry (bare
+    // or count-prefixed) rather than appending duplicate rows. Auto-get / buy / receive
+    // used to `list.Add` a fresh bare row per item, so a pack that dumped "43 black
+    // diamond" grew a separate "black diamond" row per pickup — corrupting @inv / @have
+    // and the Character Info list. Gated on a loaded baseline via PatchCarried.
+    private void AddCarried(string name, int count = 1)
+    {
+        if (count <= 0) return;
         PatchCarried(list =>
         {
-            int idx = list.FindIndex(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+            int idx = FindCarriedIndex(list, name);
+            if (idx < 0) { list.Add(FormatStack(name, count)); return true; }
+            int have = CountedCommand.SplitLeadingCount(list[idx]).Count;
+            list[idx] = FormatStack(name, have + count);
+            return true;
+        });
+    }
+
+    // Remove `count` copies of `name` from the pack: decrement a stacked entry
+    // ("43 black diamond" → "42 black diamond", removing the row at zero) as readily as
+    // a bare one. Matches by singular name so a drop/sell of one finds the stack — the
+    // old exact-string match never saw a count-prefixed entry and silently no-op'd.
+    private void RemoveCarried(string name, int count = 1)
+    {
+        if (count <= 0) return;
+        PatchCarried(list =>
+        {
+            int idx = FindCarriedIndex(list, name);
             if (idx < 0) return false;
-            list.RemoveAt(idx);
+            int left = CountedCommand.SplitLeadingCount(list[idx]).Count - count;
+            if (left <= 0) list.RemoveAt(idx);
+            else list[idx] = FormatStack(name, left);
             return true;
         });
     }
