@@ -1560,7 +1560,7 @@ public sealed class CastingDirector : IDisposable
                 // AutoBless. When only one master is on, the other's categories
                 // are skipped rather than the whole loop bailing.
                 SpellCategory.EmergencyHeal   => healRestEnabled ? Wrap(PickEmergencySelfHeal(spells, health)) : null,
-                SpellCategory.DownedAllyHeal  => healRestEnabled ? PickDownedAllyHeal(partySettings) : null,
+                SpellCategory.DownedAllyHeal  => healRestEnabled ? PickDownedAllyHeal(partySettings, spells) : null,
                 SpellCategory.MinorPartyHeal  => healRestEnabled ? PickMinorPartyHeal(partySettings) : null,
                 SpellCategory.MajorPartyHeal  => healRestEnabled ? PickMajorPartyHeal(partySettings) : null,
                 SpellCategory.MinorSelfHeal   => healRestEnabled ? Wrap(PickMinorSelfHeal(spells, health)) : null,
@@ -1710,7 +1710,7 @@ public sealed class CastingDirector : IDisposable
             // Order added here doesn't matter — the queue re-sorts by each
             // category's real priority number below.
             AddSurvival(SpellCategory.EmergencyHeal, PickEmergencySelfHeal(spells, health));
-            AddSurvival(SpellCategory.DownedAllyHeal, PickDownedAllyHeal(party)?.Spell);
+            AddSurvival(SpellCategory.DownedAllyHeal, PickDownedAllyHeal(party, spells)?.Spell);
             AddSurvival(SpellCategory.MinorPartyHeal, PickMinorPartyHeal(party)?.Spell);
             AddSurvival(SpellCategory.MajorPartyHeal, PickMajorPartyHeal(party)?.Spell);
             AddSurvival(SpellCategory.MinorSelfHeal, PickMinorSelfHeal(spells, health));
@@ -2014,24 +2014,34 @@ public sealed class CastingDirector : IDisposable
 
     // ----- Downed-ally rescue heal ------------------------------------
 
-    // Top-priority name-targeted heal for a dropped ally that's been aided back
-    // to positive HP but hasn't rejoined `par` yet. Confirmed mechanic: a heal
-    // cast at such an ally by name still lands even though they're off the
-    // roster, so this keeps topping them up until they recover / rejoin. Prefers
-    // the major party-heal spell (a downed ally is by definition critical),
-    // falling back to the minor one; if neither is configured we can't heal, but
-    // the rescue engine still aids + re-invites without us.
-    private CastCandidate? PickDownedAllyHeal(PartySettings? settings)
+    // Name-targeted heal for a dropped ally that's been aided back to positive HP
+    // but hasn't rejoined `par` yet. Confirmed mechanic: a heal cast at such an ally
+    // by name still lands even though they're off the roster, so this keeps topping
+    // them up until they recover / rejoin.
+    //
+    // Spell = the Emergency heal slot's spell (a downed ally is the definition of an
+    // emergency, so it gets the same big heal the caster would use on itself in a
+    // pinch), falling back to the major then minor PARTY heal when no emergency
+    // spell is configured. Priority is unchanged — this runs in the DownedAlly slot
+    // (its own reorderable priority), NOT the Emergency-heal slot; this only decides
+    // the SPELL, not when the rescue fires.
+    private CastCandidate? PickDownedAllyHeal(PartySettings? settings, SpellsSettings spells)
     {
         if (_downedAllies is null) return null;
-        if (settings is null) return null;
         IReadOnlyList<string> allies = _downedAllies();
         if (allies.Count == 0) return null;
-        string? spell = !string.IsNullOrWhiteSpace(settings.MajorPartyHealSpell)
-            ? settings.MajorPartyHealSpell
-            : settings.MinorPartyHealSpell;
+
+        string? spell = FirstNonBlank(
+            spells.EmergencyHealSpell, settings?.MajorPartyHealSpell, settings?.MinorPartyHealSpell);
         if (string.IsNullOrWhiteSpace(spell)) return null;
         return new CastCandidate(spell, Target: GivenName(allies[0]));
+    }
+
+    private static string? FirstNonBlank(params string?[] candidates)
+    {
+        foreach (string? c in candidates)
+            if (!string.IsNullOrWhiteSpace(c)) return c;
+        return null;
     }
 
     // ----- Party heal -------------------------------------------------
@@ -2092,11 +2102,12 @@ public sealed class CastingDirector : IDisposable
             if (m.IsInvited) continue;
             if (m.HpPercent >= threshold) continue;
             below++;
-            // Never pick SELF as the single-target: some party heals can only be cast on
-            // OTHERS (e.g. anno / annointed hands) and a self-target sends a bare self-cast
-            // the game rejects (report paradigm-20260922-082041); self is covered by the
-            // self-heal slots. Self still counts toward `below` above, so a party-wide AOE
-            // heal (which legitimately covers everyone) still triggers when self is hurt.
+            // SELF counts toward the AOE member gate above (a group heal covers
+            // everyone, so self + an ally below can reach AoeMinMembers), but the
+            // party-settings heal spells are for party MEMBERS only — they are never
+            // cast AT self. The caster's own dips are the Spells + Ailments self-heal
+            // slots' (mihe / mahe / emergency) job. So self is excluded as both the
+            // single-target pick AND the fallback trigger (`lowest`, below).
             if (m.IsSelf) continue;
             if (lowest is null || m.HpPercent < lowest.HpPercent)
                 lowest = m;
@@ -2110,12 +2121,12 @@ public sealed class CastingDirector : IDisposable
         if (!string.IsNullOrWhiteSpace(singleSpell) && lowest is not null)
             return new CastCandidate(singleSpell, Target: MemberTarget(lowest));
 
-        // Below threshold but only AOE configured and below count
-        // hasn't hit AoeMinMembers — accept the AOE anyway since
-        // a single-target alternative wasn't picked. Matches the
-        // user's "I configured AOE only because that's what I have"
-        // intent.
-        if (!string.IsNullOrWhiteSpace(aoeSpell))
+        // AOE fallback below the member gate: fire the group AOE only when a genuine
+        // party MEMBER (`lowest` — never self) is below and there's no single-target
+        // to reach them individually ("all I have is the AOE"). A lone SELF dip
+        // never triggers it — self counts toward the gate but is otherwise a
+        // self-heal-slot concern, not a party spell's (report paradigm-20260922-203540).
+        if (lowest is not null && !string.IsNullOrWhiteSpace(aoeSpell))
             return new CastCandidate(aoeSpell, Target: null);
 
         return null;
