@@ -519,7 +519,48 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
             Rows.Add(NewRow(e.Level, e));
     }
 
-    private void OnStatsChanged(object? sender, PropertyChangedEventArgs e) => RefreshBaseline();
+    private void OnStatsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        RefreshBaseline();
+        ReconcileTrainedRows();
+    }
+
+    // Drop plan rows the character has already trained past: a level at or below the
+    // current level whose target stats the live raw-base baseline now meets (its CP has
+    // been allocated). The local Apply / Train-now buttons prune the plan via PlanApplied,
+    // but @train, a manually-typed `train stats`, or a server-side CP spend raise the stats
+    // WITHOUT the client's own CP-apply committing — so the just-trained level was left
+    // stuck on the grid. Reconciling off the character's real level + stats catches every
+    // path. Conservative: a row is removed only once the baseline meets ALL of its targets,
+    // so a level reached but not yet allocated (its planned raises still pending) stays.
+    private void ReconcileTrainedRows()
+    {
+        if (_suppress || !HasCharacter || Rows.Count == 0) return;
+        int level = _stats.Level;
+
+        List<CpPlanRowViewModel> fulfilled =
+            Rows.Where(r => IsRowTrained(r.ToEntry(), _baseline, level)).ToList();
+        if (fulfilled.Count == 0) return;
+
+        foreach (CpPlanRowViewModel r in fulfilled) Rows.Remove(r);
+        RecalcGrid();
+        Persist();
+    }
+
+    // A plan row is "trained past" — safe to drop from the plan — when its level is at
+    // or below the character's current level AND the raw-base baseline meets every one of
+    // its target stats (the CP for that level has actually been allocated). Both halves
+    // matter: the level guard keeps a future level whose stats happen to be met already,
+    // and the stats guard keeps a level that's been reached but not yet allocated. Pure so
+    // this prune decision (it deletes persisted plan rows) can be pinned by tests.
+    internal static bool IsRowTrained(CpPlanEntry row, CpPlanEntry baseline, int currentLevel)
+        => row.Level <= currentLevel
+           && baseline.Strength  >= row.Strength
+           && baseline.Intellect >= row.Intellect
+           && baseline.Willpower >= row.Willpower
+           && baseline.Agility   >= row.Agility
+           && baseline.Health    >= row.Health
+           && baseline.Charm     >= row.Charm;
     private void OnInventoryChanged() => RefreshBaseline();
     private void OnProfileLoaded(CharacterProfile _)
     {
