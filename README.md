@@ -1,18 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.104.0**
-> - Triggers: numbered wildcards `{1}`, `{2}`… now work in Literal patterns and responses (were silently treated as literal braces); any letters/digits/underscores is a valid wildcard name
-> - Triggers: new **Wildcards** button on the Triggers table opens a live viewer of the captured wildcards and their current values (trigger-only store, kept separate from alias/macro placeholders)
-> - `@status` / `@path` now report the **specific reason** the navigator is paused — "resting (low HP) en route to X", "meditating (low mana) on loop 'X'", "held", "party asked to wait", or a manual "paused" — instead of always saying "walking"
-> - Combat switches to the **room (multi-target) attack** the moment a mob arrives mid-fight and the count crosses your MinEnemies, rather than staying single-target until the next damage tick
-> - Combat: a between-round area-debuff drawing "already cast this round" no longer strands the round's combat attack — the independent attack slot fires regardless
-> - Combat: the room attack spell is no longer recast while it's already channeling (a kill or a roamer kept re-sending it, which the game breaks-and-restarts) — it persists until the count drops below MinEnemies, MaxCastsPerRoom is hit, or mana falls under the AoE floor
-> - Combat: re-attacks promptly after a second party heal — two heals a beat apart used to leave the second's re-attack paced out for a full round (a lost round + the mob's exp)
-> - Remote: a new destination overrides an `@stop` — after `@stop`, an `@goto` / `@loop` / `@lair` abandons the pause and starts moving, instead of waiting for a separate `@rego`
-> - Trigger seed trimmed to the six essentials — a fresh install starts with just those
-> - Workshop → Calculators: the **Monster Aggro** box no longer extends far past the others — capped to the Realm Rankings width, with the description wrapping
-> - Party (AOE) heal now strictly obeys the "N or more members" gate — it never fires for a single below-threshold member, even when no single-target party heal is set
+> **Version 3.104.1**
+> - Auto-engines return to your **defined state** when a walk-to ends — arrival, a manual stop, or a failed route — so toggles you flipped just for the trip don't stay flipped after you've stopped pathing
+> - **Self-defense re-arms while a walk is paused** for a rest / hold / wait — a monster attacking you mid-rest was ignored because a rest-pause still counted as "travelling"; it now stands down only while *actively walking*
+> - Rest self-defense now **fights a blocker that's hitting you even when the room roster is stale** — a monster that chased you in and is landing hits (keeping you in combat) with auto-combat off no longer deadlocks the rest
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
