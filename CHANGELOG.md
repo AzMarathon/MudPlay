@@ -10,6 +10,7 @@
 - Combat: a between-round area-debuff drawing "already cast this round" no longer **strands the round's combat attack** — the attack slot is independent server-side, so it now fires regardless of the debuff's rejection
 - Combat: the **room attack spell is no longer recast** while it's already channeling — a kill or a mob roaming in kept re-sending it, which the game breaks-and-restarts (a wasted `*Combat Off*` / `*Combat Engaged*`); it now persists until the count drops below MinEnemies, MaxCastsPerRoom is hit, or mana falls under the AoE floor
 - Combat: **re-attacks promptly after a second party heal** — two heals a beat apart used to leave the second's re-attack paced out for a full round (a lost round + the mob's exp); each heal now resumes the swing right away
+- Remote: **a new destination overrides an `@stop`** — after `@stop`, an `@goto` / `@loop` / `@lair` now abandons the pause and starts moving, instead of sitting gated until a separate `@rego`
 - bug reports addressed: paradigm-20260923-071731, paradigm-20260923-091205, paradigm-20260923-103506, paradigm-20260923-103938, paradigm-20260923-210406
 
 ## 3.103.9

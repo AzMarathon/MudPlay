@@ -9,6 +9,7 @@
 > - Combat: a between-round area-debuff drawing "already cast this round" no longer strands the round's combat attack — the independent attack slot fires regardless
 > - Combat: the room attack spell is no longer recast while it's already channeling (a kill or a roamer kept re-sending it, which the game breaks-and-restarts) — it persists until the count drops below MinEnemies, MaxCastsPerRoom is hit, or mana falls under the AoE floor
 > - Combat: re-attacks promptly after a second party heal — two heals a beat apart used to leave the second's re-attack paced out for a full round (a lost round + the mob's exp)
+> - Remote: a new destination overrides an `@stop` — after `@stop`, an `@goto` / `@loop` / `@lair` abandons the pause and starts moving, instead of waiting for a separate `@rego`
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
