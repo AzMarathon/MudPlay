@@ -16,6 +16,7 @@ public sealed class ManaRegenRerollerTests
         public ManaRegenRerollConfig Config = new(Threshold: 5, Cap: 3);
         public bool CanAfford = true;
         public bool UseTickMonitor;   // false = Paradigm (abil 145); true = Stock (tick)
+        public bool InCombat;
         public int AbilQueries;
         public readonly List<string> Recasts = new();
         public readonly ManaRegenReroller Reroller;
@@ -28,7 +29,8 @@ public sealed class ManaRegenRerollerTests
                 () => AbilQueries++,
                 Recasts.Add,
                 () => CanAfford,
-                () => UseTickMonitor);
+                () => UseTickMonitor,
+                inCombat: () => InCombat);
         }
 
         // Replay one abil-145 block whose spells: slice rolled `roll`, then the
@@ -63,6 +65,29 @@ public sealed class ManaRegenRerollerTests
 
         Assert.Empty(h.Recasts);
         Assert.False(h.Reroller.CycleActive);
+    }
+
+    // A mid-fight reroll is a between-round cast that turns combat off — breaking a
+    // running room spell (report paradigm-20260924-123009). Hold it until the fight
+    // ends, then resume on the heartbeat.
+    [Fact]
+    public void RerollInCombat_IsHeldUntilTheFightEnds()
+    {
+        Harness h = new() { InCombat = true };
+
+        h.Reroller.OnRollSpellLanded("flux");
+        h.FeedRoll(2);                   // 2 < 5, but we're fighting
+
+        Assert.Empty(h.Recasts);
+        Assert.True(h.Reroller.WaitingForCombat);
+        h.Reroller.OnRecoveryTick();     // still fighting
+        Assert.Empty(h.Recasts);
+
+        h.InCombat = false;
+        h.Reroller.OnRecoveryTick();
+        Assert.Equal(new[] { "flux" }, h.Recasts);
+        Assert.False(h.Reroller.WaitingForCombat);
+        Assert.Equal(1, h.Reroller.RerollsUsed);
     }
 
     [Fact]

@@ -1,5 +1,15 @@
 # Version history
 
+## 3.104.13
+
+- A walk you chose to take through a hazard ("cross unprotected") keeps that choice when a mid-walk desync re-plans it, instead of failing "all routes blocked by a room hazard"
+- A mid-fight buff or debuff that breaks a running room spell no longer leaves you standing there being hit — the room spell is re-cast on the resume
+- Mana-regen rerolls (flux / nature tap) wait for the fight to end instead of breaking combat with a recast
+- While Moving set: opt-in "Also when moving by hand" wears it for typed moves too, reverting to Default after a user-set number of seconds without a move
+- Auto-train stats applies the CP plan after a hand `train` — the CP a train awards ("You gain 15 CPs") is now counted without needing a `stat` first
+- A hidden-exit search stops the moment you've moved to another room (a move queued behind a gear swap landing mid-search) and the walk re-plans, instead of spamming `sea` in the wrong room and failing
+- bug reports addressed: paradigm-20260924-113530, paradigm-20260924-120529, paradigm-20260924-123009, paradigm-20260924-131441, paradigm-20260924-132158, paradigm-20260924-132507, paradigm-20260924-135311
+
 ## 3.104.6
 
 - Window positions and sizes are remembered for panels still open when you quit, not only ones you closed yourself

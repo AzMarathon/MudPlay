@@ -4232,7 +4232,8 @@ public sealed class AppServices
             // Stock has no `abil 145` — judge the roll from the observed passive mana
             // tick instead (fed below from RegenTracker).
             useTickMonitor: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
-            log: Log);
+            log: Log,
+            inCombat: () => PlayerState.InCombat);
         CastDirector.SetSelfBuffCastSink(OnSelfBuffCastForReroll);
         // Resume a reroll cycle suspended at the mana floor once meditation refills the
         // pool — the 1s heartbeat re-checks affordability and fires the next reroll,
@@ -6135,7 +6136,13 @@ public sealed class AppServices
             // Settle the travelling→Default combat swap so Paradigm's rapid
             // *Combat Off* / *Combat Engaged* flicker doesn't thrash movement / Default
             // gear on every brief engage; a fight that outlasts the window still gears up.
-            scheduleCombatGearSwap: cb => ScheduleOnce(TimeSpan.FromSeconds(1.5), cb));
+            scheduleCombatGearSwap: cb => ScheduleOnce(TimeSpan.FromSeconds(1.5), cb),
+            // Hand movement: a typed move only counts when no engine is running (Idle —
+            // a paused loop / walk still owns its gear), and its set comes off after the
+            // user's idle delay.
+            navIdle: () => MovementControl.State == Game.Map.MovementEngineState.Idle,
+            scheduleAfter: ScheduleOnce);
+        OutboundMovement.MoveSent += AutoEquip.OnMoveSent;
 
         // Per-game-data-set loop catalogue. Loops live
         // under the active set's Loops/ folder, so the catalogue reloads

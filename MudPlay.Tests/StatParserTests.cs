@@ -258,6 +258,19 @@ public sealed class StatParserTests
         Assert.True(parser.HasParsed);
     }
 
+    // A hand `train` awards CP ("You gain 15 CPs") that no stat poll has counted yet;
+    // Auto-train stats budgets against Stats.Cp, so the gain must land live (reports
+    // paradigm-20260924-132158 / -132507).
+    [Fact]
+    public void TrainCpGainLine_AccruesOntoCp()
+    {
+        var (p, s) = Setup();
+        s.Cp = 3;
+        p.FeedTestLine("You gain 0 additional lives.");   // not a CP line
+        p.FeedTestLine("You gain 15 CPs");
+        Assert.Equal(18, s.Cp);
+    }
+
     [Fact]
     public void ExperienceGainLine_AddsToRunningTotal()
     {

@@ -38,6 +38,10 @@ public sealed partial class OutboundMovementObserver
     private readonly LogService? _log;
     private bool _suppressNextCommand;
 
+    // A move (cardinal or text exit) just went out — typed by the user or pumped by a
+    // nav engine alike; a consumer that cares which checks whether an engine is running.
+    public event Action? MoveSent;
+
     public OutboundMovementObserver(RoomTracker tracker, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
@@ -96,6 +100,7 @@ public sealed partial class OutboundMovementObserver
             // still lands as a real move.
             _tracker.NoteMoveSentByObserver(cmd);
             _log?.Info("OutboundMovement", $"Text-exit move announced: '{cmd}'.");
+            MoveSent?.Invoke();
             return;
         }
 
@@ -112,6 +117,7 @@ public sealed partial class OutboundMovementObserver
         {
             _tracker.NoteMoveSentByObserver(d);
             _log?.Info("OutboundMovement", $"Cardinal move announced: '{cmd}' → {d}.");
+            MoveSent?.Invoke();
         }
     }
 

@@ -593,6 +593,93 @@ public sealed class AutoEquipCoordinatorTests
             () => true, () => true, log: null, now: null,
             isBossRoom: isBossRoom, isLair: isLair, isMoving: isMoving);
 
+    // ----- hand movement (report paradigm-20260924-113530) -----------------
+
+    // Build a coordinator with the hand-movement opt-in wiring: an engine-idle probe and
+    // a manual scheduler, so a test fires the idle revert itself.
+    private static AutoEquipCoordinator ManualCoord(
+        PlayerState player, EquipmentSettings cfg, List<string> applied,
+        Func<bool> navIdle, List<(TimeSpan Delay, Action Fire)> scheduled)
+        => new(player, () => cfg, () => false, () => false,
+            id => { applied.Add(id); return EquipResult.Applied; },
+            () => true, () => true, log: null, now: null,
+            navIdle: navIdle,
+            scheduleAfter: (delay, fire) =>
+            {
+                var entry = (delay, fire);
+                scheduled.Add(entry);
+                return new ActionDisposable(() => scheduled.Remove(entry));
+            });
+
+    private sealed class ActionDisposable(Action onDispose) : IDisposable
+    {
+        public void Dispose() => onDispose();
+    }
+
+    [Fact]
+    public void ManualMove_OptIn_WearsMovementSet_AndRevertsAfterTheIdleDelay()
+    {
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        cfg.WhileMovingOnManualMoves = true;
+        cfg.WhileMovingManualIdleSeconds = 7;
+        var applied = new List<string>();
+        var scheduled = new List<(TimeSpan Delay, Action Fire)>();
+        using AutoEquipCoordinator coord = ManualCoord(player, cfg, applied, () => true, scheduled);
+
+        coord.OnMoveSent();
+        coord.OnMoveSent();                               // a second typed step only re-arms
+        Assert.Equal(new[] { "move-set" }, applied);
+        Assert.Equal(TimeSpan.FromSeconds(7), Assert.Single(scheduled).Delay);
+
+        scheduled[0].Fire();                              // no typed move for 7s
+        Assert.Equal(new[] { "move-set", "default-set" }, applied);
+    }
+
+    [Fact]
+    public void ManualMove_OptOff_OrAnEngineRunning_DoesNothing()
+    {
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        var applied = new List<string>();
+        var scheduled = new List<(TimeSpan Delay, Action Fire)>();
+        bool idle = true;
+        using AutoEquipCoordinator coord = ManualCoord(player, cfg, applied, () => idle, scheduled);
+
+        coord.OnMoveSent();                               // opt-in off
+        Assert.Empty(applied);
+
+        cfg.WhileMovingOnManualMoves = true;
+        idle = false;                                     // a loop / walk owns the gear
+        coord.OnMoveSent();
+        Assert.Empty(applied);
+        Assert.Empty(scheduled);
+    }
+
+    [Fact]
+    public void ManualMove_FightTakesTheGear_IdleRevertStandsDown()
+    {
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        cfg.WhileMovingOnManualMoves = true;
+        var applied = new List<string>();
+        var scheduled = new List<(TimeSpan Delay, Action Fire)>();
+        using AutoEquipCoordinator coord = ManualCoord(player, cfg, applied, () => true, scheduled);
+
+        coord.OnMoveSent();
+        player.InCombat = true;                           // hostiles → Default for the fight
+        Assert.Equal(new[] { "move-set", "default-set" }, applied);
+
+        scheduled[0].Fire();                              // the idle revert has nothing left to do
+        Assert.Equal(new[] { "move-set", "default-set" }, applied);
+    }
+
     [Fact]
     public void Moving_WearsMovementSet_ThenCombatSwapsToDefaultAndEngages()
     {

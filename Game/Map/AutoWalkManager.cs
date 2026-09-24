@@ -339,7 +339,19 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _stepInFlight = false;
         Raise(new WalkEvent(WalkEventKind.Resumed,
             $"recovered at {recoveredAnchor}; re-planning toward {dest}", dest));
-        WalkToImmediate(dest);
+        // Keep the walk's planning flags, as the in-place replan does. A bare
+        // WalkToImmediate(dest) reverts to defaults, so a route the user chose to
+        // take through a hazard ("cross unprotected") re-planned with the hazard
+        // gate back on and failed "all routes blocked by a room hazard you can't
+        // survive" after a mid-walk desync (report paradigm-20260924-120529).
+        // Args evaluate before WalkToImmediate's Reset clears the fields.
+        WalkToImmediate(dest,
+            planThroughAcquirableGates: _activeThroughGates,
+            armItemAcquisition: _activeArmAcquisition,
+            avoidTeleports: _activeAvoidTeleports,
+            avoidTraps: _activeAvoidTraps,
+            ignoreAvoids: _activeIgnoreAvoids,
+            preferTeleportFree: _activePreferTeleportFree);
     }
 
     public void AbortFromRecoveryFailure(string detail)
@@ -1982,6 +1994,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 Raise(new WalkEvent(WalkEventKind.Failed,
                     $"hidden exit search failed: {failed.Reason}", _destination));
                 Reset();
+                return;
+
+            case HiddenSearchResult.LeftRoom left:
+                // A move already on the wire landed mid-search — we're not where the
+                // search assumed. Re-plan from here on the walk's bounded replan
+                // budget (which leans on rm first) instead of failing the walk.
+                _log?.Info("Walker",
+                    $"hidden-exit search interrupted — moved {left.SearchedIn} → {left.NowIn}; replanning");
+                _stepInFlight = false;
+                TryReplanOrFail(RoomConfidence.Confirmed);
                 return;
         }
     }
