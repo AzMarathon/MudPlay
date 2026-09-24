@@ -234,6 +234,33 @@ public sealed class PartyLevelTrackerTests
         Assert.Equal(22, h.Players.Find("Bob")!.Level);
     }
 
+    // MegaMUD answers @level as "Level: N  Needed: N  Will level in: T" — its level
+    // has to record too, or a MegaMUD party member's level is never known.
+    [Fact]
+    public void LevelReply_MegaMudShape_Records()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Bob");
+        h.Lead();
+
+        h.Reply("Bob", "{Level: 22  Needed: 1,000  Will level in: ?}");
+
+        Assert.Equal(22, h.Players.Find("Bob")!.Level);
+    }
+
+    [Theory]
+    [InlineData("{Level 12, 1,234 exp, 500 to next level}", 12, 500L, null)]
+    [InlineData("Level 12, 1,234 exp, exp-to-next unknown (type exp)", 12, null, null)]
+    [InlineData("{Level: 1  Needed: 1,000  Will level in: ?}", 1, 1000L, null)]
+    [InlineData("{Level: 30  Needed: 2,345,678  Will level in: 1 hour}", 30, 2345678L, "1 hour")]
+    public void TryParseLevelReply_ReadsBothShapes(string reply, int level, long? needed, string? eta)
+    {
+        Assert.True(Game.Remote.PartyLevelProbe.TryParseLevelReply(reply, out int l, out long? n, out string? e));
+        Assert.Equal(level, l);
+        Assert.Equal(needed, n);
+        Assert.Equal(eta, e);
+    }
+
     // ----- Route-scoped freshness warm (WarmStaleLevels) -----------------
 
     [Fact]

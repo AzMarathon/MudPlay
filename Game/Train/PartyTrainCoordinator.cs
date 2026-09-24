@@ -79,6 +79,10 @@ public sealed class PartyTrainCoordinator : IDisposable
     // Leader side.
     private readonly Dictionary<string, (PartyTrainStatus Status, DateTimeOffset At)> _reports =
         new(StringComparer.OrdinalIgnoreCase);
+    // @level readings for members that can't send @ptrain reports (another client, or
+    // an older MudPlay) — enough for the Party window's leveling line, never a vote.
+    private readonly Dictionary<string, (int Level, long? Needed, string? TheirEta, DateTimeOffset At)> _levelReplies =
+        new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset _lastAsk = DateTimeOffset.MinValue;
     private string _askedRoster = "";
     private DateTimeOffset _cooldownUntil = DateTimeOffset.MinValue;
@@ -402,12 +406,23 @@ public sealed class PartyTrainCoordinator : IDisposable
             .Where(n => SpeaksPartyTrain(_recordedVersion(n)))
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        string roster = string.Join(",", askable);
+        string roster = string.Join(",", ActiveMemberGivens().OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
         if (roster.Length == 0) return;
         if (roster == _askedRoster && _now() - _lastAsk < AskInterval) return;
         _askedRoster = roster;
         _lastAsk = _now();
         foreach (string given in askable) _send($"/{given} @ptrain ask");
+        // The rest can't report, but their @level reply still feeds the Party window.
+        foreach (string given in ActiveMemberGivens())
+            if (!SpeaksPartyTrain(_recordedVersion(given))) _send($"/{given} @level");
+    }
+
+    // A parsed @level reply from anyone (PartyLevelProbe). Kept for members that
+    // don't send @ptrain reports; a reporting member's own report wins.
+    public void NoteLevelProgress(string given, int level, long? needed, string? theirEta)
+    {
+        _levelReplies[GivenName(given)] = (level, needed, theirEta, _now());
+        RefreshTrainInfo();
     }
 
     // The first MudPlay that understands @ptrain.
@@ -431,6 +446,9 @@ public sealed class PartyTrainCoordinator : IDisposable
         foreach (string name in _reports.Keys.ToList())
             if (!present.Contains(name) || _now() - _reports[name].At > StatusFresh)
                 _reports.Remove(name);
+        foreach (string name in _levelReplies.Keys.ToList())
+            if (!present.Contains(name) || _now() - _levelReplies[name].At > StatusFresh)
+                _levelReplies.Remove(name);
     }
 
     private List<PartyTrainParticipant> Participants(out string self)
@@ -673,11 +691,17 @@ public sealed class PartyTrainCoordinator : IDisposable
                 else if (_reports.TryGetValue(GivenName(m.Name), out var r)) status = r.Status;
             }
 
+            (int Level, long? Needed, string? TheirEta, DateTimeOffset At)? reply =
+                !m.IsSelf && _levelReplies.TryGetValue(GivenName(m.Name), out var lr) ? lr : null;
+
             int level = status?.Level
+                ?? reply?.Level
                 ?? (m.IsSelf ? _selfLevel() : _recordedLevel(m.Name) ?? 0);
             if (m.KnownLevel != level) m.KnownLevel = level;
 
-            string text = status is { } st ? RowText(st, rate) : "";
+            string text = status is { } st ? RowText(st, rate)
+                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.Needed, r2.TheirEta, rate)
+                : "";
             if (m.TrainInfo != text) m.TrainInfo = text;
         }
     }
@@ -697,6 +721,20 @@ public sealed class PartyTrainCoordinator : IDisposable
             _ => "not ready",
         };
         return $"{exp} · {tnlText} · {state}";
+    }
+
+    // A non-reporting member's line from its @level reply. Its "needed" only runs to
+    // the NEXT level — MegaMUD doesn't count past it the way our banked-aware TNL
+    // does — so the line names that level. Their own "will level in" is shown only
+    // while our rate is unknown.
+    private static string LevelReplyText(int level, long? needed, string? theirEta, double ourRate)
+    {
+        if (needed is not { } n) return $"L{level} · other client";
+        if (n <= 0) return $"L{level + 1} reached · can train · other client";
+        TimeSpan? tnl = Calculators.ExperienceTableCalculator.CalcTimeToLevel(n, 0, (long)ourRate);
+        string when = tnl is { } t ? $"~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(t)}"
+            : theirEta ?? "?";
+        return $"{n:N0} to L{level + 1} · TNL {when} · other client";
     }
 
     // ----- shared -----------------------------------------------------------

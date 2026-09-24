@@ -6659,6 +6659,7 @@ public sealed class AppServices
             log: Log);
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
+        PartyLevelProbe.ProgressObserved += PartyTrain.NoteLevelProgress;
         // Level-up announcer. Built after StatParser + the ProfileLoaded
         // Hydrate wiring so its baseline seed sees freshly-hydrated stats; watches
         // StatParser.ExperienceGained to broadcast newly-trainable levels.

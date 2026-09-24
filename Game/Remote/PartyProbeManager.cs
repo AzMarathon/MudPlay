@@ -217,7 +217,11 @@ public sealed class PartyProbeManager : IDisposable
         string inner = p[1..^1].Trim();
         if (inner.Length is 0 or > 60) return false;
         if (!char.IsLetter(inner[0])) return false;
-        if (inner.StartsWith("Level ", StringComparison.OrdinalIgnoreCase)
+        // "Level" covers both @level shapes — MudPlay's "Level 12, …" and MegaMUD's
+        // "Level: 12  Needed: …", which the letter + digit rule would otherwise
+        // accept as a client version.
+        if (inner.StartsWith("Level", StringComparison.OrdinalIgnoreCase)
+            || inner.StartsWith("Made:", StringComparison.OrdinalIgnoreCase)
             || inner.StartsWith("level unknown", StringComparison.OrdinalIgnoreCase)
             || inner.StartsWith("HP=", StringComparison.OrdinalIgnoreCase)) return false;
         bool hasDigit = false;

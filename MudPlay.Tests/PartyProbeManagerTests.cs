@@ -217,6 +217,9 @@ public sealed class PartyProbeManagerTests
         // the expectation stays armed for the real @version line that follows.
         h.Reply("Bob", "{Level 12, 1,234 exp, 500 to next level}");
         Assert.Null(h.Players.Find("Bob")?.Version);
+        // MegaMUD's shape too — letter-led with digits, so only the prefix rule stops it.
+        h.Reply("Bob", "{Level: 12  Needed: 1,000  Will level in: ?}");
+        Assert.Null(h.Players.Find("Bob")?.Version);
 
         h.Reply("Bob", "{MudPlay 2.37.0}");
         Assert.Equal("MudPlay 2.37.0", h.Players.Find("Bob")!.Version);
