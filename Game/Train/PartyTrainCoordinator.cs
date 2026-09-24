@@ -71,6 +71,8 @@ public sealed class PartyTrainCoordinator : IDisposable
     private readonly Action<string> _broadcast;
     private readonly Action<IReadOnlyList<string>> _reformParty;
     private readonly Action<TimeSpan, Action> _armTimer;
+    private readonly Func<int> _selfLevel;
+    private readonly Func<string, int?> _recordedLevel;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
@@ -122,6 +124,8 @@ public sealed class PartyTrainCoordinator : IDisposable
         Action<string> broadcast,
         Action<IReadOnlyList<string>> reformParty,
         Action<TimeSpan, Action> armTimer,
+        Func<int> selfLevel,
+        Func<string, int?> recordedLevel,
         Func<DateTimeOffset>? now = null,
         LogService? log = null)
     {
@@ -143,6 +147,8 @@ public sealed class PartyTrainCoordinator : IDisposable
         _broadcast = broadcast ?? throw new ArgumentNullException(nameof(broadcast));
         _reformParty = reformParty ?? throw new ArgumentNullException(nameof(reformParty));
         _armTimer = armTimer ?? throw new ArgumentNullException(nameof(armTimer));
+        _selfLevel = selfLevel ?? throw new ArgumentNullException(nameof(selfLevel));
+        _recordedLevel = recordedLevel ?? throw new ArgumentNullException(nameof(recordedLevel));
         _now = now ?? (() => DateTimeOffset.Now);
         _log = log;
 
@@ -237,7 +243,7 @@ public sealed class PartyTrainCoordinator : IDisposable
                                       - (a.Readiness == PartyTrainReadiness.Ready ? a.CostCopper : 0));
         (string? bankName, long bank) = _largestDeposit();
         return new PartyTrainStatus(a.Readiness, a.Level, a.ClassNumber, a.LevelsToTrain, a.CostCopper,
-            cash, spare, bank, bankName, a.EtaSeconds);
+            cash, spare, bank, bankName, a.EtaSeconds, a.Exp, a.NextExp);
     }
 
     // `@ptrain ask` — the leader wants our report.
@@ -623,33 +629,50 @@ public sealed class PartyTrainCoordinator : IDisposable
         return tcs.Task;
     }
 
-    // The Party window's train line per row: each member's report, and our own on the
-    // self row, while we're leading with the toggle on. Rows with nothing fresh — and
-    // every row once we stop leading — are cleared, so a stale line never lingers.
+    // The Party window's per-row fields. The level ("L20 Druid") shows in every role
+    // from whatever we know. The line under the bars — exp, time to next level at OUR
+    // rate (a party shares the kills), ready state — shows only while we lead with
+    // the toggle on, from each member's report and our own on the self row. Rows with
+    // nothing fresh are cleared, so a stale line never lingers.
     private void RefreshTrainInfo()
     {
         bool show = Leading && Settings.AutoTrainParty;
+        double rate = show ? _expPerHour() : 0;
         foreach (PartyMember m in _party.Members)
         {
-            string text = "";
-            if (show && !string.IsNullOrEmpty(m.Name))
+            if (string.IsNullOrEmpty(m.Name)) continue;
+            PartyTrainStatus? status = null;
+            if (show)
             {
-                if (m.IsSelf) text = RowText(BuildOwnStatus());
-                else if (_reports.TryGetValue(GivenName(m.Name), out var r)) text = RowText(r.Status);
+                if (m.IsSelf) status = BuildOwnStatus();
+                else if (_reports.TryGetValue(GivenName(m.Name), out var r)) status = r.Status;
             }
+
+            int level = status?.Level
+                ?? (m.IsSelf ? _selfLevel() : _recordedLevel(m.Name) ?? 0);
+            if (m.KnownLevel != level) m.KnownLevel = level;
+
+            string text = status is { } st ? RowText(st, rate) : "";
             if (m.TrainInfo != text) m.TrainInfo = text;
         }
     }
 
-    // Compact enough for the row's bar column: "L20→22 ready · 12,345c".
-    private static string RowText(PartyTrainStatus s) => s.Readiness switch
+    // "4,120,331 xp · TNL ~1h 5m · ready +2 (12,345c)"
+    private static string RowText(PartyTrainStatus s, double ourRate)
     {
-        PartyTrainReadiness.Ready => $"L{s.Level}→{s.Level + s.LevelsToTrain} ready · {s.CostCopper:N0}c",
-        PartyTrainReadiness.Blocked => $"L{s.Level} · no party train",
-        _ => s.EtaSeconds >= 0
-            ? $"L{s.Level} · ready in ~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(TimeSpan.FromSeconds(s.EtaSeconds))}"
-            : $"L{s.Level} · not ready",
-    };
+        string exp = s.Exp > 0 ? $"{s.Exp:N0} xp" : "? xp";
+        TimeSpan? tnl = s.NextExp > 0
+            ? Calculators.ExperienceTableCalculator.CalcTimeToLevel(s.NextExp, s.Exp, (long)ourRate)
+            : null;
+        string tnlText = tnl is { } t ? $"TNL ~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(t)}" : "TNL ?";
+        string state = s.Readiness switch
+        {
+            PartyTrainReadiness.Ready => $"ready +{s.LevelsToTrain} ({s.CostCopper:N0}c)",
+            PartyTrainReadiness.Blocked => "no party train",
+            _ => "not ready",
+        };
+        return $"{exp} · {tnlText} · {state}";
+    }
 
     // ----- shared -----------------------------------------------------------
 

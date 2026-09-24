@@ -28,7 +28,7 @@ public sealed class PartyTrainPlanningTests
     public void Status_RoundTrips_IncludingABankNameWithSpaces()
     {
         PartyTrainStatus s = new(PartyTrainReadiness.Ready, 14, 5, 2, 12_345, 800, 300, 500_000,
-                                 "Bank of Godfrey", 1_800);
+                                 "Bank of Godfrey", 1_800, 4_120_331, 4_500_000);
         Assert.True(PartyTrainStatus.TryDecode(s.Encode(), out PartyTrainStatus back));
         Assert.Equal(s, back);
     }

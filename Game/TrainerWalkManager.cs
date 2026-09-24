@@ -385,8 +385,12 @@ public sealed class TrainerWalkManager : IDisposable
         int classNumber = ResolveClassNumber();
         int chart = Chart();
         int ceiling = PartyCeiling(s, level);
+        long exp = _stats.Exp;
+        long nextExp = level > 0 && chart > 0
+            ? ExperienceTableCalculator.CalcExpNeeded(level + CountBankableAbove(level) + 1, chart, _gameData.ActiveRealm)
+            : 0;
         if (level <= 0 || chart <= 0 || !TrainBudgetCalculator.WithinCeiling(level, ceiling))
-            return new(level, classNumber, 0, 0, PartyTrainReadiness.Blocked, -1);
+            return new(level, classNumber, 0, 0, PartyTrainReadiness.Blocked, -1, exp, nextExp);
 
         int keep = Math.Max(0, s.LevelsToKeep);
         int toTrain = TrainBudgetCalculator.LevelsToTrain(
@@ -395,7 +399,7 @@ public sealed class TrainerWalkManager : IDisposable
             && TrainBudgetCalculator.ShouldFire(CountBankableAbove(level), keep, s.FireAtBankedLevels);
         if (ready)
             return new(level, classNumber, toTrain, CostToTrain(level, toTrain, classNumber),
-                PartyTrainReadiness.Ready, 0);
+                PartyTrainReadiness.Ready, 0, exp, nextExp);
 
         // Ready arrives when the banked count reaches the fire threshold (floored at
         // keep + 1, as ShouldFire does) — time to reach that level's exp at the rate.
@@ -404,7 +408,7 @@ public sealed class TrainerWalkManager : IDisposable
             ExperienceTableCalculator.CalcExpNeeded(level + need, chart, _gameData.ActiveRealm),
             _stats.Exp, (long)expPerHour);
         return new(level, classNumber, 0, 0, PartyTrainReadiness.Waiting,
-            eta is { } t ? (int)Math.Min(int.MaxValue, t.TotalSeconds) : -1);
+            eta is { } t ? (int)Math.Min(int.MaxValue, t.TotalSeconds) : -1, exp, nextExp);
     }
 
     // The ceiling a party train runs under: DoNotTrainAbove, tightened to 10 below

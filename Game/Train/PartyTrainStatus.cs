@@ -22,7 +22,9 @@ public enum PartyTrainReadiness { Waiting, Ready, Blocked }
 // and keep its keep-on-hand floor. Bank/BankName is its largest single deposit —
 // a withdraw only works at a branch you hold money at, so the leader needs the
 // branch, not just a total. EtaSeconds is the projected time until it's Ready at
-// its session earn rate, -1 when unknown.
+// its session earn rate, -1 when unknown. Exp is its running exp total and NextExp
+// the total that reaches its next not-yet-reached level (0 = unknown) — the leader
+// times that gap at its OWN rate, since a party shares the kills.
 public readonly record struct PartyTrainStatus(
     PartyTrainReadiness Readiness,
     int Level,
@@ -33,7 +35,9 @@ public readonly record struct PartyTrainStatus(
     long SpareCopper,
     long BankCopper,
     string? BankName,
-    int EtaSeconds)
+    int EtaSeconds,
+    long Exp = 0,
+    long NextExp = 0)
 {
     // Compact key=value payload. `bk` goes last because a bank name has spaces in it
     // ("Bank of Godfrey") and is read as the rest of the line.
@@ -54,6 +58,8 @@ public readonly record struct PartyTrainStatus(
         Append(sb, "spare", SpareCopper);
         Append(sb, "bank", BankCopper);
         Append(sb, "eta", EtaSeconds);
+        Append(sb, "x", Exp);
+        Append(sb, "nx", NextExp);
         if (!string.IsNullOrWhiteSpace(BankName)) sb.Append(" bk=").Append(BankName.Trim());
         return sb.ToString();
     }
@@ -80,7 +86,7 @@ public readonly record struct PartyTrainStatus(
 
         PartyTrainReadiness? readiness = null;
         int level = 0, cls = 0, levels = 0, eta = -1;
-        long cost = 0, cash = 0, spare = 0, bank = 0;
+        long cost = 0, cash = 0, spare = 0, bank = 0, exp = 0, nextExp = 0;
         bool haveLevel = false;
         foreach (string token in text.Split(' ', System.StringSplitOptions.RemoveEmptyEntries))
         {
@@ -107,12 +113,14 @@ public readonly record struct PartyTrainStatus(
                 case "spare": long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out spare); break;
                 case "bank":  long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out bank); break;
                 case "eta":   int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out eta); break;
+                case "x":     long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out exp); break;
+                case "nx":    long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out nextExp); break;
             }
         }
         if (readiness is not { } r || !haveLevel || level <= 0) return false;
 
         status = new PartyTrainStatus(r, level, cls, levels, cost, cash, spare, bank,
-            string.IsNullOrWhiteSpace(bankName) ? null : bankName, eta);
+            string.IsNullOrWhiteSpace(bankName) ? null : bankName, eta, exp, nextExp);
         return true;
     }
 }

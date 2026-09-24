@@ -6650,6 +6650,10 @@ public sealed class AppServices
             armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
                 .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
                     System.Threading.Tasks.TaskScheduler.Default),
+            selfLevel: () => PlayerStats.Level,
+            // The @level probe's last reading — lets the Party window put a level in
+            // front of the class for members that don't report.
+            recordedLevel: name => Players.Find(name)?.Level,
             log: Log);
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
