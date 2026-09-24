@@ -187,6 +187,9 @@ public sealed class HealthManager : IDisposable
     private bool _forceClearForRest;
     private DateTimeOffset _restClearLastEngageAt;
     private static readonly TimeSpan RestClearReEngageInterval = TimeSpan.FromSeconds(5);
+    // Latch so the "rest-clear held despite a blocker" diagnostic logs once per held
+    // stretch, not every Evaluate tick.
+    private bool _restClearHeldLogged;
     // A gear-set swap's max-pool confirmations ("You are now wearing X") stream in over
     // several seconds AFTER the paced send finishes — EquipmentMaxPoolSync applies a
     // +MaxHP/+MaxMana delta per echo — so PlayerState.MaxHp/MaxMa, and every rest
@@ -1141,14 +1144,25 @@ public sealed class HealthManager : IDisposable
         bool autoCombatOn = _isAutoCombatEnabled?.Invoke() ?? true;
         int restClearRunTrigger = ResolveHpThreshold(s.HpThresholdMode, s.RunIfBelowHp);
         bool hpFleeWorthy = s.RunIfBelowHp > 0 && _state.Hp > 0 && _state.Hp <= restClearRunTrigger;
-        bool wantRestClear = !autoCombatOn && hostilesPresent && shouldRest
+        // A rest-blocker registers two ways, and they can fall out of sync: the room
+        // roster (hostilesPresent, from the last Also-Here) OR the live combat lines that
+        // keep us InCombat. A monster chasing us mid-walk HITS us — flipping InCombat —
+        // before, or without, a fresh room re-display lists it in the roster. Keying the
+        // clear off the roster alone let a stale-empty roster deadlock the rest: InCombat
+        // blocks the rest send, no roster hostile blocks the clear, so we sit and take
+        // hits ("stopped to rest, monster entered, didn't fight back"). Arm off EITHER
+        // signal — RequestRestClearEngage refreshes the roster when it's the InCombat
+        // side that fired, and a genuinely empty re-display clears a stale InCombat.
+        bool beingAttacked = _state.InCombat;
+        bool restBlocked = hostilesPresent || beingAttacked;
+        bool wantRestClear = !autoCombatOn && restBlocked && shouldRest
             && !hpFleeWorthy && !_fledThisCombat && !shadowRest;
         if (wantRestClear)
         {
             if (!_forceClearForRest)
                 _log?.Combat(LogCategory,
                     $"engage-to-clear — a hostile blocks rest with auto-combat off " +
-                    $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}); clearing the room to recover");
+                    $"(present={hostilesPresent} inCombat={beingAttacked} hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}); clearing the room to recover");
             // Kick the first attack (deferred past this Evaluate, like the flee post).
             // The server auto-repeats the swing so one engage carries the fight; a
             // stalled auto-repeat (interrupt / no-effect) is re-kicked once a round.
@@ -1158,12 +1172,26 @@ public sealed class HealthManager : IDisposable
                 _post(() => _requestRestClearEngage?.Invoke());
             }
             _forceClearForRest = true;
+            _restClearHeldLogged = false;
         }
         else
         {
             if (_forceClearForRest)
                 _log?.Combat(LogCategory,
                     "engage-to-clear released — blocker cleared / fleeing / auto-combat back on");
+            // Diagnostic (once per held stretch): a rest is due with combat off and a
+            // blocker IS present, yet we're NOT engaging-to-clear — record which gate
+            // suppressed it (fleeing / already fled / shadow-rest) so a capture explains
+            // the "sits there not fighting back" case instead of leaving it invisible.
+            else if (!autoCombatOn && shouldRest && restBlocked && !_restClearHeldLogged)
+            {
+                _log?.Combat(LogCategory,
+                    $"engage-to-clear held — blocker present (roster={hostilesPresent} inCombat={beingAttacked}) "
+                    + $"but suppressed: fleeWorthy={hpFleeWorthy} fled={_fledThisCombat} shadowRest={shadowRest}");
+                _restClearHeldLogged = true;
+            }
+            else if (!restBlocked || autoCombatOn || !shouldRest)
+                _restClearHeldLogged = false;   // condition gone — re-arm the once-log
             _forceClearForRest = false;
         }
 
