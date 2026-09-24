@@ -106,7 +106,7 @@
                                Foreground="{StaticResource ChromeFgBrush}"
                                FontFamily="{StaticResource FontMono}"
                                FontSize="11"
-                               ToolTip.Tip="These names are available inside Response / Notify via {name}. They populate from each match."/>
+                               ToolTip.Tip="These wildcards are available inside Response / Notify via {name} (or {1}, {2}…). They populate from each match, and are the trigger system's own — not shared with aliases or macros."/>
                 </Grid>
             </StackPanel>
 
@@ -119,10 +119,10 @@
                            FontFamily="{StaticResource FontMono}"
                            FontSize="12"
                            MinHeight="100"
-                           ToolTip.Tip="Sent to the game on match. {name} substitutes from the capture cache. Put each command on its own line — or split with ^M or ; — and every command is sent with its own Enter. Leave blank to send a bare CR."/>
+                           ToolTip.Tip="Sent to the game on match. {name} (or {1}, {2}…) substitutes from the trigger wildcard store. Put each command on its own line — or split with ^M or ; — and every command is sent with its own Enter. Leave blank to send a bare CR."/>
                 <TextBlock Grid.Row="2"
                            Classes="MutedHint"
-                           Text="{}{name} substitutes from the capture cache.  One command per line (or ^M / ;) — each is sent with its own Enter.  Blank = bare CR."/>
+                           Text="{}{name} (or {1}, {2}…) substitutes from the trigger wildcard store.  One command per line (or ^M / ;) — each is sent with its own Enter.  Blank = bare CR."/>
             </Grid>
 
             <!-- ===== Optional sidecars ===== -->

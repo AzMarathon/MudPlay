@@ -182,6 +182,23 @@ public sealed partial class CombatManager
     // is the double-cast / corpse-cast bug this rework removes.
     private string? _announcedSpellCode;
 
+    // The room/multi-attack spell (hsto) currently channeling this engagement, or
+    // null when no room spell is active. CONFIRMED game mechanic: a room-attack
+    // spell, once cast while engaged, keeps hitting EVERY monster in the room each
+    // round — survivors and mobs that roam in afterward — until a cast condition
+    // fails (count < MinEnemies, MaxCastsPerRoom hit, or mana < the AoE's floor). It
+    // is NOT re-cast to cover new arrivals, and the game has NO engine-side dedup
+    // against recasting the same room spell: a redundant send BREAKS and restarts the
+    // channel (*Combat Off* + *Combat Engaged*), wasting the round (report
+    // paradigm-20260923-103938). Unlike _announcedSpellCode / _castingSpellTarget —
+    // which a single kill clears so the round re-picks a fresh target — this marker
+    // SURVIVES a kill (the channel outlives any one mob) and clears only on a genuine
+    // end-of-fight (ClearAttackSpellCascadeState: room-clear / combat-off / death), a
+    // physical move (NotePreMove), or when a non-room action is dispatched (the
+    // channel is switched off). The post-kill re-pick reads it to re-anchor the round
+    // to a survivor instead of re-issuing the room spell.
+    private string? _roomChannelSpell;
+
     // Opt into combat-spell casting. cast is the shared CastCoordinator (so the
     // per-round cooldown is shared with every other caster); readMana reports live
     // MA / max-MA for the chooser's per-cast mana gate. Until called the engine is
@@ -476,6 +493,12 @@ public sealed partial class CombatManager
                     // cascade had already advanced by the time the kill landed).
                     _lastCastAction = decision.Action;
                     _announcedSpellCode = decision.Spell;
+                    // Record / end the room-attack channel. A multi-attack cast opens
+                    // (or continues) the channel; any other attack action switches off
+                    // it, so drop the marker — the post-kill re-pick guard keys on it.
+                    _roomChannelSpell = decision.Action is CombatSpellAction.MultiAttack
+                                                        or CombatSpellAction.MultiAttack2
+                        ? decision.Spell : null;
                     if (decision.Action == CombatSpellAction.DrainSpell)
                         _log?.Info(LogCategory,
                             $"drain-life {decision.Spell} vs {picked.RawName} — HP under trigger, overriding the round's attack");

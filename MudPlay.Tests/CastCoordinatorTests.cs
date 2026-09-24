@@ -158,14 +158,33 @@ public sealed class CastCoordinatorTests
     }
 
     [Fact]
-    public void AlreadyCastThisRound_BlocksAndFiresFailure()
+    public void AlreadyCastThisRound_OnAttackSlot_BlocksAndFiresFailure()
     {
         using Harness h = new();
+        h.Cast.TryCast("blast", bypassRoundCooldown: true);   // last send was on the attack slot
         h.Feed("You have already cast a spell this round!");
 
         Assert.True(h.Cast.IsCastBlocked);
-        Assert.Single(h.Failures);
-        Assert.Equal(CastFailureReason.AlreadyCastThisRound, h.Failures[0].Reason);
+        Assert.Contains(h.Failures, f => f.Reason == CastFailureReason.AlreadyCastThisRound);
+    }
+
+    // The attack + between-round slots are independent server-side, so a between-round cast
+    // rejected "already cast this round" must NOT block the round's combat attack (report
+    // paradigm-20260923-103506: the attack was stranded behind the debuff's retry). The
+    // failure still fires so the debuff rolls back and re-offers next round.
+    [Fact]
+    public void AlreadyCastThisRound_OnBetweenRoundSlot_DoesNotBlockAttackSlot()
+    {
+        using Harness h = new();
+        h.Cast.TryCast("isto");                               // last send was on the between-round slot
+        h.Feed("You have already cast a spell this round!");
+
+        // The failure still fires (so the debuff rolls back + re-offers next round)...
+        Assert.Contains(h.Failures, f => f.Reason == CastFailureReason.AlreadyCastThisRound);
+        // ...but the shared block latch was NOT set, so the round's combat attack (an
+        // independent attack-slot cast, which checks that latch) still goes out. Before the
+        // fix this returned false — the attack was stranded behind the debuff's rejection.
+        Assert.True(h.Cast.TryCast("hsto", bypassRoundCooldown: true));
     }
 
     [Fact]
@@ -193,6 +212,7 @@ public sealed class CastCoordinatorTests
     public void CombatTick_ClearsServerBlock()
     {
         using Harness h = new();
+        h.Cast.TryCast("blast", bypassRoundCooldown: true);   // attack slot, so the reject blocks
         h.Feed("You have already cast a spell this round!");
         Assert.True(h.Cast.IsCastBlocked);
 

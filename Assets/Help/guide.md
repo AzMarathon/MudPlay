@@ -641,6 +641,8 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 | `@stop` | — | pauses your movement |
 | `@rego` | — | resumes it |
 
+A new movement command overrides an `@stop`: after `@stop`, an `@goto` / `@loop` / `@lair` abandons the pause and starts the new movement straight away — you don't need `@rego` first (use `@rego` only to resume the *same* thing you paused).
+
 ### Change my settings
 
 - The auto-engine toggles — `@auto-combat`, `@auto-nuke`, `@auto-heal` (`@auto-rest` is the same flag), `@auto-bless`, `@auto-light`, `@auto-cash`, `@auto-get`, `@auto-sneak`, `@auto-hide`, `@auto-search` — each flips that engine (bare toggles it; add `on` or `off` to force it).
@@ -1133,25 +1135,50 @@ Beyond the engines, you can script your own automation. All three editors live i
 Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove** button, and a grid of what you've already made. **Double-click a row to edit it.** There's no separate save step — each editor's **Save** button writes to disk immediately, and the list's **Enabled** column shows a ✓ for the ones that are live.
 
 - **Macros** bind a **key chord to a command.** Click **Add**, press **Capture** and hit the key combo (release the main key to lock it in; click **Capture** again to abort), then type the **Command** to send. Split it into several lines with `^M` or `;` — each fragment fires as its own command. Macros work while you're typing in the terminal; new profiles start with the numpad pre-wired to compass movement. **Esc is a bindable key** — you can put it on a macro or a shortcut; an unbound Esc still passes through to the game as usual.
-- **Aliases** expand a **typed word into a longer command.** Give the alias a **Name** (matched on the first word you type, case-insensitive) and an **Expansion**, where `{0}` is the whole rest of the line and `{1}`, `{2}`, … are the individual words — so an alias `cast` → `c '{1}' {2}` turns `cast heal bob` into `c 'heal' bob`. Aliases only expand when you press **Enter in the Conversation window's input box**; typing in the main terminal bypasses them.
+- **Aliases** expand a **typed word into a longer command** — a shorthand you invent, so `cast heal bob` can send `c 'heal' bob`. See **Writing an alias** just below for a full walkthrough.
 - **Triggers** are **auto-responses to game text** — when a line matches, MudPlay fires a reply. Give the trigger a **Name**, then set:
   - **Location** — *Game data* (saves with the active game-data set, so it travels with the realm) or *Profile* (saves with this character).
   - **Scope** — which incoming lines it watches: *Game messages* (the default), a single chat channel (*Say / Yell / Gossip / Telepath / Gangpath / Broadcast*), *Chat (any)*, or the *System log*.
-  - **Match type** — *Literal* (type the text as it appears; `*` wildcards a span and `{name}` captures a piece) or *Regex* (full .NET regex, with `(?<name>…)` for captures).
+  - **Match type** — *Literal* (type the text as it appears; `*` wildcards a span and `{name}` — or a numbered `{1}`, `{2}` — captures a piece) or *Regex* (full .NET regex, with `(?<name>…)` for captures).
   - **Pattern** — the text or expression to match against each line. Any pieces you capture appear in the **Captures** row.
-  - **Response** — what MudPlay sends back on a match. Drop a captured value in with `{name}`.
+  - **Response** — what MudPlay sends back on a match. Drop a captured value in with `{name}` (or `{1}`, `{2}`).
 
     To send **several commands**, put each on its own line in the box (the Response box accepts Enter) — every line is sent as a separate command, each with its own Enter. `^M` and `;` do the same thing on a single line, so `north;get all;south` is three commands too.
 
     Leave the box blank to send a bare Enter.
   - **Sound** (optional) — a file picker is here, but sound playback isn't wired up yet, so it does nothing today.
 
+### Writing an alias
+
+An **alias** is a typed shortcut: the **first word** you type is the alias *name*, and MudPlay swaps the whole line for the alias's **expansion** before sending it to the game. The rest of what you typed is handed to the expansion through numbered slots, so one short word can stand in for a long or awkward command.
+
+**Make one:** Game Data Browser → **Aliases** → **Add**. Fill in two fields:
+
+- **Name** — the word you'll type. Matched on the **first word only**, **case-insensitive**, as plain text (no wildcards). A name that would collide with a game chat command (`gos`, `yell`, a `/name` telepath, …) is rejected as you type, so an alias can never hijack your own chat.
+- **Expansion** — what actually gets sent. Drop the words you typed into it with numbered slots:
+  - `{0}` — **everything** you typed after the name, as one piece.
+  - `{1}`, `{2}`, `{3}`, … — the **individual words** after the name, split on spaces.
+  - A slot you don't type stays empty (so a trailing `{2}` with nothing to fill it just vanishes).
+
+**Send several commands from one alias:** split the expansion with `;` or `^M` — each piece is sent as its own command, in order. So an alias `bs` → `sneak;backstab {1}` sends two commands.
+
+**Worked examples** (you type → what's sent):
+
+- Name `cast`, expansion `c '{1}' {2}` → `cast heal bob` sends `c 'heal' bob`.
+- Name `k`, expansion `attack {0}` → `k big ugly troll` sends `attack big ugly troll` (`{0}` keeps the whole target name together).
+- Name `gt`, expansion `gossip Heading to {0} — come along!` → `gt the docks` sends `gossip Heading to the docks — come along!`.
+- Name `bs`, expansion `sneak;backstab {1}` → `bs orc` sends `sneak` then `backstab orc`.
+
+**Where aliases expand:** only when you press **Enter in the Conversation window's input box**. Typing directly in the main terminal sends your keystrokes straight to the game, so aliases don't expand there — use the Conversation input for them. Aliases and macros are separate: a **macro** binds a *key* to a command in the terminal; an **alias** rewrites a *typed word* in the Conversation box. (Alias slots are also unrelated to trigger wildcards — see the note under the trigger examples below.)
+
 ### Writing a match pattern
 
 **Literal** patterns match the text as it appears on the line. Two shortcuts make them flexible:
 
 - `*` matches any run of characters — `You are hit by *` matches whatever follows.
-- `{name}` captures a piece for the Response — `{attacker} hits you` captures the attacker's name, and you use it back as `{attacker}`.
+- `{name}` captures a piece for the Response — `{attacker} hits you` captures the attacker's name, and you use it back as `{attacker}`. **Numbered wildcards** work too: `{1} telepaths: &@{2}` captures the sender into `{1}` and the message into `{2}`, and a Response of `/{1} @{2}` telepaths them back. Any run of letters, digits, or underscores is a valid name.
+
+These captured values are the trigger system's **wildcards**, and they belong to triggers alone — they're never shared with aliases (whose own `{1}`/`{2}` mean the tokens you typed) or macros. The **Wildcards** button at the top of the Triggers table opens a live viewer of every wildcard captured this session and what each currently holds; **Clear all** empties it. The store also clears when you close MudPlay.
 
 **Regex** patterns are full .NET regular expressions, for when a literal pattern can't say what you mean. The essentials:
 

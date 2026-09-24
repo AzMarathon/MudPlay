@@ -1,5 +1,21 @@
 # Version history
 
+## 3.104.0
+
+- Triggers: numbered wildcards `{1}`, `{2}`… now work in Literal patterns and responses (were silently treated as literal braces, so the trigger never matched); any letters/digits/underscores is a valid wildcard name
+- Triggers: new **Wildcards** button on the Triggers table opens a live viewer of the captured wildcards and their current values, with Clear all
+- Triggers: the wildcard store is the trigger system's own — documented and kept separate from alias/macro placeholders
+- `@status` / `@path` now report the **specific reason** the navigator is paused — "resting (low HP) en route to X", "meditating (low mana) on loop 'X'", "held", "party asked to wait", or a manual "paused" — instead of always saying "walking" for a walk that isn't actually moving
+- Combat switches to the **room (multi-target) attack** the moment a mob arrives mid-fight and the enemy count crosses your MinEnemies, rather than continuing single-target until the next damage tick
+- Combat: a between-round area-debuff drawing "already cast this round" no longer **strands the round's combat attack** — the attack slot is independent server-side, so it now fires regardless of the debuff's rejection
+- Combat: the **room attack spell is no longer recast** while it's already channeling — a kill or a mob roaming in kept re-sending it, which the game breaks-and-restarts (a wasted `*Combat Off*` / `*Combat Engaged*`); it now persists until the count drops below MinEnemies, MaxCastsPerRoom is hit, or mana falls under the AoE floor
+- Combat: **re-attacks promptly after a second party heal** — two heals a beat apart used to leave the second's re-attack paced out for a full round (a lost round + the mob's exp); each heal now resumes the swing right away
+- Remote: **a new destination overrides an `@stop`** — after `@stop`, an `@goto` / `@loop` / `@lair` now abandons the pause and starts moving, instead of sitting gated until a separate `@rego`
+- Trigger seed trimmed to the six essentials (low-lives x3, slaver-leader surrender, FUgram cancel, teleport `par`) — a fresh install starts with just these
+- Workshop → Calculators: the **Monster Aggro** box no longer runs far past the other calculators — its width is capped to the Realm Rankings table's edge and the description wraps there
+- Party (AOE) heal now **strictly obeys the "N or more members" gate** — it never fires for a single below-threshold member even when no single-target party heal is configured; below the count the single-target heals the individual, and with none set nothing party-side fires until N members are below
+- bug reports addressed: paradigm-20260923-071731, paradigm-20260923-091205, paradigm-20260923-103506, paradigm-20260923-103938, paradigm-20260923-210406
+
 ## 3.103.9
 
 - CP Allocation plan now advances after you train by **any** path — the just-trained level dropped off the grid only when the client itself applied the CP, so training via `@train`, a manually-typed `train stats`, or a server-side CP spend left that level stuck on the plan; it now reconciles off your actual level + stats (a level is cleared once reached and its planned stats are met)

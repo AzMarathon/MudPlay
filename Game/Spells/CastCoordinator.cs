@@ -83,6 +83,10 @@ public sealed class CastCoordinator : IDisposable
     private DateTimeOffset _lastBetweenRoundSentAt = DateTimeOffset.MinValue;
     private DateTimeOffset _castBlockedSince = DateTimeOffset.MinValue;
     private bool _castBlocked;
+    // Which slot the most recent send used — true = attack slot (bypassRoundCooldown),
+    // false = between-round slot. Lets an "already cast this round" rejection block only the
+    // slot it actually applies to (the two are independent server-side).
+    private bool _lastCastWasAttackSlot;
     private bool _disposed;
 
     // Fires after a cast command was successfully written to the wire. Carries the
@@ -231,6 +235,7 @@ public sealed class CastCoordinator : IDisposable
             : $"{spell} {target.Trim()}";
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         if (bypassRoundCooldown) _lastAttackSentAt = now; else _lastBetweenRoundSentAt = now;
+        _lastCastWasAttackSlot = bypassRoundCooldown;
         _lastSpellSent = spell;
         _log?.Info(LogCategory, $"cast spell={spell} target={target ?? "<self>"}");
         CastSent?.Invoke(line);
@@ -244,6 +249,7 @@ public sealed class CastCoordinator : IDisposable
     public void NotifyExternalCastSent()
     {
         _lastBetweenRoundSentAt = DateTimeOffset.Now;
+        _lastCastWasAttackSlot = false;   // external casts are between-round (item-cast buff, `c X`)
         _log?.Debug(LogCategory, "external cast noted — cooldown started");
     }
 
@@ -291,8 +297,27 @@ public sealed class CastCoordinator : IDisposable
     private void OnNoMana(MatchResult _) =>
         BlockAndLog(CastFailureReason.NotEnoughMana, "insufficient-mana");
 
-    private void OnAlreadyThisRound(MatchResult _) =>
-        BlockAndLog(CastFailureReason.AlreadyCastThisRound, "already-cast-this-round");
+    // "You have already cast a spell this round!" is SLOT-SPECIFIC. The attack slot and the
+    // between-round slot are independent server-side (confirmed — see the class doc), so a
+    // rejected BETWEEN-ROUND cast (e.g. an area-debuff colliding with a self-buff that already
+    // took the round's between-round slot) does NOT spend the attack slot. Blocking the shared
+    // latch there stranded the round's combat attack behind the debuff's retry — report
+    // paradigm-20260923-103506: "ISTO fired before the spell round was up, and it waited until
+    // it could retry ISTO before casting HSTO". Block only when the rejected cast was on the
+    // ATTACK slot; a between-round rejection still fires CastFailed (so the debuff rolls back and
+    // re-offers next round) but leaves the attack slot free to fire this round.
+    private void OnAlreadyThisRound(MatchResult _)
+    {
+        if (_lastCastWasAttackSlot)
+        {
+            BlockAndLog(CastFailureReason.AlreadyCastThisRound, "already-cast-this-round");
+            return;
+        }
+        _log?.Info(LogCategory,
+            $"cast failed reason=AlreadyCastThisRound (between-round slot; attack slot unaffected) "
+            + $"spell={_lastSpellSent ?? "<unknown>"}");
+        CastFailed?.Invoke(CastFailureReason.AlreadyCastThisRound, "already-cast-this-round-between", _lastSpellSent);
+    }
 
     private void OnInterrupted(MatchResult _) =>
         BlockAndLog(CastFailureReason.Interrupted, "concentration-lost");

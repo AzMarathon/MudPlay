@@ -514,10 +514,20 @@ public sealed partial class CombatManager : IDisposable
     // paradigm-20260813-081016: "why did it spam turn like that", triggered
     // by a single legitimate mihe self-heal interrupt). Set to the stamp just
     // resumed for; compared, not cleared, so a genuinely NEW interrupt (a
-    // fresh NoteBetweenRoundCast stamp) still resumes exactly once. The
-    // weapon-resume branch needs no equivalent guard — a physical swing
-    // doesn't itself cause an Off, so it can't retrigger itself this way.
+    // fresh NoteBetweenRoundCast stamp) still resumes exactly once.
     private DateTimeOffset _lastSpellResumeForBetweenRoundCastAt = DateTimeOffset.MinValue;
+
+    // Weapon-mode twin of the above. A physical swing doesn't itself cause an Off,
+    // so the weapon resume can't self-retrigger — but it used to lean on ResumePacing
+    // alone, which is a wall-clock (2.5s) gate that also blocks a DISTINCT second
+    // between-round cast landing inside the window. Two party heals a beat apart (two
+    // members hurt in adjacent rounds) then left the second heal's re-attack paced
+    // out for a full round — combat sat Off, a round + the mob's exp lost, until the
+    // NEXT cast fell past the window and drove the resume (report
+    // paradigm-20260923-210406). Stamp it per interrupt so each distinct between-round
+    // cast resumes the weapon exactly once, bypassing ResumePacing (the mob-swing /
+    // tick resumes still honour it for spin control).
+    private DateTimeOffset _lastWeaponResumeForBetweenRoundCastAt = DateTimeOffset.MinValue;
 
     // How recent a between-round cast must be for the next *Combat Off* to count
     // as that cast's interrupt. Generous enough to cover send→Off network
@@ -1536,6 +1546,36 @@ public sealed partial class CombatManager : IDisposable
             return p != 0 ? p : a.AppearanceIndex.CompareTo(b.AppearanceIndex);
         });
 
+        // Mid-fight room-attack upgrade: a mob ARRIVED and the engageable count now meets
+        // the multi-attack's MinEnemies, but we're mid-fight on a single-target spell. The
+        // "already engaged" guard just below would return without re-deciding, so the room
+        // kept getting single-target pecks until the next damage-driven tick re-chose
+        // (report paradigm-20260923-091205: "kept using the single target attack instead
+        // of shifting to room attack"). If the chooser, with the fresh count, now picks the
+        // room attack, announce the switch here for NEXT round via the same path a cap-switch
+        // uses — DeferSwitchDispatch is idempotent and next-round, so there's no same-round
+        // double-cast. Weapon-mode arrivals are still caught by the weapon→spell re-climb on
+        // the next tick; this covers the spell-mode case the guard was swallowing.
+        if (obs.Source == RoomObservationSource.Arrival
+            && CombatSpellsWired
+            && _castingSpellTarget is { } upgradeTarget
+            && _lastCastAction is not (CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2)
+            && engageable.Any(e => string.Equals(e.RawName, upgradeTarget, StringComparison.OrdinalIgnoreCase)))
+        {
+            CombatSpellContext upgradeCtx = BuildContext(
+                settings, obs, upgradeTarget, CountEngageable(obs), ResolveMonsterNumber(obs, upgradeTarget));
+            CombatSpellDecision upgrade = _spellChooser.Choose(settings, upgradeCtx);
+            if (upgrade.Action is CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2)
+            {
+                _log?.Combat(LogCategory,
+                    $"arrival room-attack upgrade at '{upgradeTarget}': a mob arrived and the chooser "
+                    + $"now picks {upgrade.Spell} ({upgrade.Action}) — announcing the switch for next round");
+                DeferSwitchDispatch(settings, upgradeTarget, "arrival room-attack upgrade",
+                    _announcedSpellCode, upgrade.Spell);
+                return;
+            }
+        }
+
         // Server auto-attacks the specific named target each round;
         // re-sending the same command mid-fight would burn a swing.
         // If the exact RawName we last sent is still in the engageable
@@ -1548,6 +1588,43 @@ public sealed partial class CombatManager : IDisposable
                                               StringComparison.OrdinalIgnoreCase)))
         {
             return;
+        }
+
+        // Room-attack channel persists across a kill. When a room/multi-attack spell
+        // (hsto) is on record for this engagement (_roomChannelSpell) but the round's
+        // target was just cleared by a kill (_currentTarget null — the guard above
+        // couldn't catch it), the AoE is STILL hitting every survivor and roamer each
+        // round; re-issuing it would break+restart the channel (no engine-side dedup —
+        // report paradigm-20260923-103938). If the chooser, peeked against the fresh
+        // roster, would STILL pick that same room spell, re-anchor the round to a
+        // surviving mob so the per-round heartbeat keeps driving the channel (tally, no
+        // send) and return without dispatching. If it now picks something else — the
+        // count fell below MinEnemies, MaxCastsPerRoom is spent, or mana dropped under
+        // the AoE floor — the channel is over: clear the marker and fall through so the
+        // normal chain switches off the room spell. The chooser peek is side-effect
+        // free (counters advance in MarkCast, not Choose), so it can't over-tally.
+        if (CombatSpellsWired
+            && _currentTarget is null
+            && _roomChannelSpell is { } channelSpell
+            && engageable.Count > 0)
+        {
+            EngageableCandidate anchor = engageable[0];   // highest-priority survivor
+            CombatSpellContext channelCtx = BuildContext(
+                settings, obs, anchor.RawName, engageable.Count,
+                ResolveMonsterNumber(obs, anchor.RawName));
+            CombatSpellDecision still = _spellChooser.Choose(settings, channelCtx);
+            if (still.Action is CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2
+                && string.Equals(still.Spell, channelSpell, StringComparison.OrdinalIgnoreCase))
+            {
+                _currentTarget = anchor.RawName;
+                _castingSpellTarget = anchor.RawName;
+                _log?.Combat(LogCategory,
+                    $"room-attack channel '{channelSpell}' still live — re-anchoring to "
+                    + $"{anchor.RawName} without recast (the AoE already covers the room; "
+                    + "recasting would break/restart it)");
+                return;
+            }
+            _roomChannelSpell = null;   // conditions lapsed — channel over, let the chain switch off it
         }
 
         // Target-Priority follow deferral: when we're partied in a multi-mob room
@@ -1815,6 +1892,7 @@ public sealed partial class CombatManager : IDisposable
     {
         _castingSpellTarget = null;
         _lastCastAction = null;
+        _roomChannelSpell = null;   // end-of-fight ends any room-attack channel
         _alternationRound = 0;
         _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
         _lastAttackTallyAt = DateTimeOffset.MinValue;
@@ -1934,6 +2012,9 @@ public sealed partial class CombatManager : IDisposable
     // not), so unlike PrepBackstabForMove it is not gated on DoBackstab.
     public void NotePreMove()
     {
+        // Leaving the room ends the room-attack channel — the next room re-earns its
+        // own first cast (and re-derives the marker).
+        _roomChannelSpell = null;
         _spellChooser.ResetForNewRoom();
         // Leaving the room ends our commitment to it — the next room re-earns
         // the "Kill all engaged" hold by meeting the engage window again.
@@ -3091,7 +3172,8 @@ public sealed partial class CombatManager : IDisposable
     // cancelled it, and skipping the resume would idle a full round (the reported
     // heal-then-stall). ResumePacing still stands, so we never double-fire with
     // the tick resume in the same round.
-    private bool TryResumeEngage(RoomEntitiesObservation live, bool bypassAttackGuard = false)
+    private bool TryResumeEngage(RoomEntitiesObservation live, bool bypassAttackGuard = false,
+        bool bypassPacing = false)
     {
         // The user hand-typed this round's attack (a combat spell or a swing) — don't
         // re-send our auto attack over the top of it. The override clears at the next
@@ -3114,7 +3196,11 @@ public sealed partial class CombatManager : IDisposable
         // double-send). Skip while a real attack is still this recent — unless a
         // between-round cast is what produced this Off (see bypassAttackGuard).
         if (!bypassAttackGuard && now - _lastAttackSentAt < ResumeAfterAttackGuard) return false;
-        if (now - _lastInterruptResumeAt < ResumePacing) return false;
+        // A distinct between-round-cast resume (bypassPacing) is guarded once-per-cast
+        // by its own stamp, so it must not be paced out by a prior resume. Still stamp
+        // _lastInterruptResumeAt below so the paced mob-swing / tick resumes stay
+        // deduped against it and can't double this one in the same round.
+        if (!bypassPacing && now - _lastInterruptResumeAt < ResumePacing) return false;
         _lastInterruptResumeAt = now;
         DeferResumeEngage(live);
         return true;
@@ -3602,6 +3688,7 @@ public sealed partial class CombatManager : IDisposable
 
             if (!suppressBetweenRoundResume
                 && DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
+                && _betweenRoundCastAt != _lastWeaponResumeForBetweenRoundCastAt
                 && _castingSpellTarget is null
                 && _classifier.Current is { } live
                 && HasEngageable(live))
@@ -3613,8 +3700,15 @@ public sealed partial class CombatManager : IDisposable
                         "deferring re-engage to the death→re-observe path");
                 else
                 {
+                    // Stamp this interrupt as resumed BEFORE dispatching so a later Off
+                    // for the SAME cast can't re-fire, and let this distinct cast bypass
+                    // ResumePacing — a second party heal a beat after the first must still
+                    // re-attack, not sit paced out for a round.
+                    _lastWeaponResumeForBetweenRoundCastAt = _betweenRoundCastAt;
                     _log?.Combat(LogCategory, "between-round-cast resume → re-engaging weapon attack");
-                    TryResumeEngage(live, bypassAttackGuard: _lastAttackSentAt <= _betweenRoundCastAt);
+                    TryResumeEngage(live,
+                        bypassAttackGuard: _lastAttackSentAt <= _betweenRoundCastAt,
+                        bypassPacing: true);
                 }
             }
 
@@ -3873,6 +3967,7 @@ public sealed partial class CombatManager : IDisposable
         // swing, so the tick heartbeat must stop re-casting for this target.
         _castingSpellTarget = null;
         _lastCastAction = null;
+        _roomChannelSpell = null;   // switched off the room spell onto the weapon
         string verb = string.IsNullOrWhiteSpace(command) ? "a" : command.Trim();
         string line = $"{verb} {target}";
         if (priority is { } prio)
@@ -3892,6 +3987,7 @@ public sealed partial class CombatManager : IDisposable
         _combatOff = false;
         _castingSpellTarget = null;
         _lastCastAction = null;
+        _roomChannelSpell = null;   // switched off the room spell onto the weapon
         string verb = string.IsNullOrWhiteSpace(command) ? "a" : command.Trim();
         string line = $"{verb} {target}";
         _log?.Combat(LogCategory,

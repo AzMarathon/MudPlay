@@ -312,6 +312,82 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("blast", h.LastSent);
     }
 
+    // Report paradigm-20260923-091205: engaged one mob single-target, then a 2nd mob
+    // ARRIVES mid-fight (count crosses MinEnemies=2). The "already engaged" guard used to
+    // return without re-deciding, so the room kept getting single-target pecks until the
+    // next damage tick. The arrival must announce the room-attack switch itself.
+    [Fact]
+    public void MidFightArrival_CrossesMinEnemies_SwitchesToRoomAttack()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "dark stalker");
+
+        // One mob → single-target attack spell (spell mode).
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("nuke giant rat", h.LastSent);
+
+        // Second mob arrives → count 2 ≥ MinEnemies → switch to the bare room attack now,
+        // without waiting for a damage tick.
+        h.Arrive("dark stalker");
+        Assert.Equal("blast", h.LastSent);
+    }
+
+    // Report paradigm-20260923-103938: a room-attack spell (hsto) is a persistent room
+    // channel — once cast while engaged it hits every monster each round, survivors and
+    // roamers alike, and must NOT be recast (the engine has no dedup, so a redundant send
+    // breaks+restarts it: *Combat Off* + *Combat Engaged*). After the primary target dies
+    // and the room re-displays with survivors still ≥ MinEnemies, the round must re-anchor
+    // WITHOUT re-issuing the room spell.
+    [Fact]
+    public void RoomChannel_SurvivesKill_DoesNotRecastWhileConditionsHold()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "dark stalker");
+        h.AddMonster(3, "muckworm");
+
+        // Three mobs → the room attack casts ONCE; the primary target is the first mob.
+        h.Feed("Also here: giant rat, dark stalker, muckworm.");
+        Assert.Equal("blast", h.LastSent);
+        Assert.Single(h.AllSent, s => s == "blast");
+
+        // The primary dies; the room re-displays with two survivors (still ≥ MinEnemies).
+        // The channel is still hitting them — the re-pick must re-anchor, not re-cast.
+        h.Combat.NoteMonsterDied("giant rat");
+        h.Feed("Also here: dark stalker, muckworm.");
+        Assert.Single(h.AllSent, s => s == "blast");   // still exactly one blast — no recast
+
+        // A mob roams in — the channel already covers it, so still no recast.
+        h.Arrive("giant rat");
+        h.Feed("Also here: dark stalker, muckworm, giant rat.");
+        Assert.Single(h.AllSent, s => s == "blast");
+    }
+
+    // The channel ends the moment a cast condition fails. Kill down below MinEnemies and
+    // the room attack is over — the round falls through to the normal single-target chain.
+    [Fact]
+    public void RoomChannel_EndsWhenCountFallsBelowMinEnemies_SwitchesToSingle()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "dark stalker");
+
+        h.Feed("Also here: giant rat, dark stalker.");
+        Assert.Equal("blast", h.LastSent);
+
+        // Down to one survivor (< MinEnemies) → channel over → single-target attack.
+        h.Combat.NoteMonsterDied("giant rat");
+        h.Feed("Also here: dark stalker.");
+        Assert.Equal("nuke dark stalker", h.LastSent);
+    }
+
     // Simultaneous-arrival settle (report paradigm-20260811-063728 + a live report):
     // three monsters stride in on one wire flush, then the room re-displays. Engaging
     // the first arrival single-target used to strand the room below its multi-attack
@@ -602,6 +678,37 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Equal(sentBeforeReObserve + 1, h.Sent.Count);
         Assert.Equal("lbol thin leprous outcast", h.LastSent);
+    }
+
+    // Report paradigm-20260923-210406: two party heals a beat apart (two members hurt in
+    // adjacent rounds) each drop *Combat Off* on a weapon build. The first heal's resume
+    // re-attacks; the SECOND used to be paced out by ResumePacing (2.5s wall-clock),
+    // leaving combat off for a full round — a lost round + the mob's exp — until the next
+    // cast fell past the window. Each distinct between-round cast must resume the weapon.
+    [Fact]
+    public void WeaponResume_SecondBetweenRoundCastWithinPacing_StillReAttacks()
+    {
+        using Harness h = new();   // no attack spells → weapon mode
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);
+        int afterEngage = h.Sent.Count;
+
+        // First party heal → *Combat Off* → weapon resume re-attacks.
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.True(h.Sent.Count > afterEngage, "first heal should re-attack");
+        Assert.Equal("a giant rat", h.LastSent);
+        int afterFirstResume = h.Sent.Count;
+
+        // Second party heal a beat later — well within ResumePacing (2.5s), distinct
+        // cast stamp — must ALSO re-attack, not sit paced out for the round.
+        System.Threading.Thread.Sleep(2);   // distinct _betweenRoundCastAt, still << 2.5s
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.True(h.Sent.Count > afterFirstResume, "second heal within the pacing window must still re-attack");
+        Assert.Equal("a giant rat", h.LastSent);
     }
 
     // Report paradigm-20260820-063541 ("LBOL cast twice"): a between-round survival

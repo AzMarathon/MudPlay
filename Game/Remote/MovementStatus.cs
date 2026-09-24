@@ -48,7 +48,17 @@ public readonly record struct MovementStatus(
     // session); LastPathName is the loop / auto-lair name (may be null for an
     // ad-hoc / unnamed auto-lair run).
     MovementKind LastPathKind = MovementKind.None,
-    string? LastPathName = null)
+    string? LastPathName = null,
+    // True when an engine is active but the WALKER is currently paused (a rest / hold /
+    // wait / manual pause) rather than stepping — so @status / @path can say why it's
+    // stopped instead of reporting "walking" for a walk that isn't actually moving.
+    bool Paused = false,
+    // The specific reason the walker is paused, in plain words ("resting (low HP)",
+    // "meditating (low mana)", "held", "party asked to wait", "paused" for a manual pause,
+    // "fighting"). Resolved by the caller from the MovementCoordinator's gates (via
+    // NavActivity) — MovementStatus stays UI-agnostic and just carries the string. Null
+    // when not paused (or the reason couldn't be resolved), where the phrase says "paused".
+    string? PauseReason = null)
 {
     // Snapshot the running movement engine. Priority Lair → Loop → Walker mirrors
     // PartyComebackManager.SnapshotRunningEngine: the upper engines drive the
@@ -71,17 +81,22 @@ public readonly record struct MovementStatus(
         DateTimeOffset sailEta = walker.SailingArrivalEta;
         string? sailPlace = walker.SailingDestinationName;
 
+        // Every engine ultimately steps through the walker, so a Paused walker means the
+        // active engine (walk / loop / lair) is halted for a rest / hold / wait, not
+        // stepping — surfaced so the reply says "paused" rather than "walking".
+        bool paused = walker.State == WalkState.Paused;
+
         if (autoLair.IsActive)
             return new MovementStatus(MovementKind.Lair, "auto-lair",
-                walker.CurrentStepIndex, walker.StepCount, sailing, sailEta, sailPlace);
+                walker.CurrentStepIndex, walker.StepCount, sailing, sailEta, sailPlace, Paused: paused);
 
         if (loopRunner.State is not LoopState.Idle && loopRunner.CurrentLoop is { } loop)
             return new MovementStatus(MovementKind.Loop, loop.Name,
-                loopRunner.CurrentIndex, loopRunner.StepCount, sailing, sailEta, sailPlace);
+                loopRunner.CurrentIndex, loopRunner.StepCount, sailing, sailEta, sailPlace, Paused: paused);
 
         if (walker.State is not WalkState.Idle && walker.Destination is { } dest)
             return new MovementStatus(MovementKind.Walking, $"{dest.Map}/{dest.Room}",
-                walker.CurrentStepIndex, walker.StepCount, sailing, sailEta, sailPlace);
+                walker.CurrentStepIndex, walker.StepCount, sailing, sailEta, sailPlace, Paused: paused);
 
         // Nothing moving us now — carry the last-run PATH (loop or auto-lair,
         // whichever ran most recently) so @path can point a party member at what

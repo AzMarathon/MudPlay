@@ -4,13 +4,14 @@ namespace MudPlay.Models.GameData;
 // on CharacterProfile. Loaded into TriggerEngine on profile load; the
 // engine subscribes to LineExtractor, ChatRouter, and LogService —
 // filtering each emitted line by Scope, matching with MatchType + Pattern,
-// capturing {name} placeholders into TriggerEngine.Variables, then
-// dispatching Response + the optional SoundFile.
+// capturing {name} / {1} placeholders into the trigger-wildcard store
+// (TriggerEngine.Variables — trigger-only, not shared with aliases/macros),
+// then dispatching Response + the optional SoundFile.
 //
 // Scope selects which subset of incoming lines this trigger considers.
-// MatchType is Literal (with * wildcards and {name} captures) or full
+// MatchType is Literal (with * wildcards and {name} / {1} captures) or full
 // regex; Pattern is in the syntax MatchType indicates. Response is sent to
-// the game on match — variable substitution via {name} is applied first,
+// the game on match — wildcard substitution via {name} is applied first,
 // multi-step via ^M or ; (same syntax as macros); a blank string is valid
 // and sends a bare carriage return. SoundFile is an optional path fired on
 // match (currently a no-op + log until sound playback lands).
@@ -39,11 +40,11 @@ public sealed record Trigger(
 public enum TriggerMatchType
 {
     // Substring / wildcard match. * matches any run of characters (no
-    // capture). {name} matches a run of characters and binds it to name in
-    // the shared variable cache.
+    // capture). {name} (or {1}, {2}…) matches a run of characters and binds it
+    // to that name in the trigger-wildcard store.
     Literal,
     // Full PCRE-flavoured regex (.NET). Named groups (?<name>…) populate
-    // {name} in the shared variable cache.
+    // {name} in the trigger-wildcard store.
     Regex,
 }
 

@@ -2399,7 +2399,7 @@ public sealed class AppServices
             readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             readCurrentRoom: () => RoomTracker?.State.CurrentRoom,
             readRoomEntities: () => RoomClassifier?.Current?.Entities,
-            readMovement: () => Game.Remote.MovementStatus.Capture(Walker, LoopRunner, AutoLair),
+            readMovement: ReadMovementStatus,
             readDraggedBy: () => Dragged.DraggedBy,
             readAilments: () => Conditions?.ActiveFlags ?? Models.GameData.MessageFlags.None,
             // HealthManager is built later in OnGameDataLoaded; the lambda reads it
@@ -7291,6 +7291,43 @@ public sealed class AppServices
         Models.Profile.GeneralSettings general =
             ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General");
         return selector(general.AutoMode);
+    }
+
+    // @status / @path movement snapshot with the specific pause reason attached.
+    // Capture() flags THAT the walker is paused; the plain-English WHY (resting,
+    // meditating, held, party wait, a manual pause) lives in the MovementCoordinator
+    // gates, which are a ViewModel-tier concern the Game.Remote snapshot mustn't reach
+    // into — so we resolve it here (via NavActivity, the same mapping the Navigation top
+    // bar uses) and fold it onto the snapshot. Only meaningful when Paused; otherwise
+    // the snapshot passes through unchanged.
+    private Game.Remote.MovementStatus ReadMovementStatus()
+    {
+        Game.Remote.MovementStatus mv =
+            Game.Remote.MovementStatus.Capture(Walker, LoopRunner, AutoLair);
+        if (!mv.Paused)
+            return mv;
+
+        (string text, ViewModels.Navigation.NavActivityKind kind) =
+            ViewModels.Navigation.NavActivity.Describe(
+                MovementCoordinator.AssertedGates,
+                MovementCoordinator.IsPaused,
+                Conditions.IsMovementPrevented);
+
+        // Map the top-bar activity to the reason word the reply folds in. A manual
+        // user pause is "paused"; mid-fight is "fighting"; every recovery / hold beat
+        // carries its own detail after "Waiting — " (resting (low HP), meditating
+        // (low mana), held, party asked to wait, …). Moving/None leave it null so the
+        // phrase falls back to a bare "paused".
+        string? reason = kind switch
+        {
+            ViewModels.Navigation.NavActivityKind.Paused => "paused",
+            ViewModels.Navigation.NavActivityKind.Fighting => "fighting",
+            ViewModels.Navigation.NavActivityKind.Waiting =>
+                ViewModels.Navigation.NavActivity.HoldSuffix(text, kind),
+            _ => null,
+        };
+
+        return mv with { PauseReason = reason };
     }
 
     // Live read of the master auto-combat toggle — the same GeneralSettings

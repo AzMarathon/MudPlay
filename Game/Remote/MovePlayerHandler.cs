@@ -465,7 +465,16 @@ public sealed class MovePlayerHandler : IDisposable
     // goto. Mirrors the Navigation UI's pattern via the shared EngineSupersede
     // helper.
     private void StopConflictingEngines(string sender, SupersedeKeep keep)
-        => EngineSupersede.StopOthers(
+    {
+        EngineSupersede.StopOthers(
             _walker, _loopRunner, _autoLair,
             keep, $"superseded by remote @ from {sender}");
+
+        // A new explicit destination (@goto / @loop / @lair) supersedes a standing
+        // @stop pause — the sender asked to move somewhere new, so abandon the hold
+        // rather than leaving the fresh walk gated behind the UserGate until a
+        // separate @rego. Runs AFTER StopOthers so an auto-lair pause is already gone
+        // with its stopped engine; only a walker/loop UserGate is left to lift.
+        if (_controller.IsUserPaused) _controller.Resume();
+    }
 }

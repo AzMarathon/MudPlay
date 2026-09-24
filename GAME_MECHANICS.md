@@ -592,6 +592,33 @@ there** — treat as close-but-unconfirmed until a Paradigm source or capture pi
   collision needs Paradigm + a dark room + a stale target — but it is the reason a speculative
   `break` is worse than a no-op there. Send one only when an attack actually went out.
 
+### Room-attack spells are a persistent room channel *([CONFIRMED] 2026-09-23, user — report `paradigm-20260923-103938`)*
+
+- A **room / multi-target attack spell** (e.g. `hsto` hellstorm — cast bare, no target) is a
+  **persistent channel**, not a one-shot. Once cast while engaged, it auto-fires at **every**
+  monster in the room **each combat round** — the survivors of any kill **and** monsters that
+  **roam in afterward** — until you stop meeting the conditions to cast it. It is the same
+  server-side auto-repeat a single-target attack spell / weapon swing gets: announce **once**,
+  the server owns the repeat.
+- **You do NOT recast it to include new arrivals** — the running channel already hits them next
+  round.
+- **The game has no engine-side collision guard against recasting the same room attack.** If the
+  client re-sends the same room spell while it is already channeling, the engine **breaks the
+  current one and starts a fresh one** — visible as a `*Combat Off*` immediately followed by a
+  `*Combat Engaged*`. That wastes the round and interrupts the AoE. (Contrast: re-sending a
+  **between-round** spell — Energy 0 — shows only the `*Combat Off*` half.)
+- **When the channel ends:** you keep casting the room spell until a cast condition fails — the
+  room drops **below MinEnemies**, you hit **MaxCastsPerRoom**, or mana falls **below the AoE
+  slot's per-cast floor**. At that point re-evaluate the rest of the spell/combat chain normally
+  (single-target attack spell → weapon, etc.).
+- **Client handling:** `CombatManager._roomChannelSpell` records the active room-attack spell for
+  the engagement. It **survives a kill** (unlike `_castingSpellTarget`/`_announcedSpellCode`, which
+  a kill clears to re-pick a target) and clears only on a genuine end-of-fight
+  (`ClearAttackSpellCascadeState`), a physical move (`NotePreMove`), or a switch to a non-room
+  action. The post-kill re-pick in `OnEntitiesObserved` re-anchors the round to a surviving mob
+  **without recasting** when the chooser — peeked against the fresh roster — would still pick that
+  same room spell; the per-round heartbeat then keeps driving it (tally, no send).
+
 ### Attack-prevented states *([CONFIRMED] 2026-09-03, user; corrected 2026-09-17, user)*
 
 - Some status effects — a **stun**, **petrification/petrify**, a leg/body **bind** — leave the

@@ -2831,23 +2831,25 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyHeal_OneAllyBelow_AoeOnly_UnderGate_FiresAoeForAlly()
+    public void PartyHeal_OneAllyBelow_AoeOnly_UnderGate_FiresNothing()
     {
-        // AOE-only party heal, one ALLY below (self full), under the 2-member gate:
-        // the AOE is the only party option to reach the ally, so it fires below the
-        // gate. (Contrast the lone-self case above, which fires nothing.)
+        // AOE-only party heal, one ALLY below (self full), UNDER the 2-member gate.
+        // The "use party healing when N or more members meet threshold" picker is a
+        // HARD gate (N is 2–6): the group AOE never fires below the count, even when
+        // it's the only party heal configured. With no single-target to reach the lone
+        // ally and the gate unmet, nothing party-side fires (user directive — "2 means
+        // two or more, full stop"; supersedes the old under-gate AOE fallback).
         using PartyHarness h = new();
         h.PartySettings.MinorPartyHealAoeSpell = "rain";
         h.PartySettings.MinorHealMemberThresholdPercent = 95;
         h.PartySettings.AoeMinMembers = 2;
         PartyMember self = h.AddMember("Cidir", hpPercent: 100);
         self.IsSelf = true;
-        h.AddMember("Nineteen", hpPercent: 80);   // one ally below
+        h.AddMember("Nineteen", hpPercent: 80);   // one ally below — under the gate
 
         h.Director.Evaluate();
 
-        Assert.Single(h.CastsSent);
-        Assert.Equal("rain", h.CastsSent[0]);
+        Assert.Empty(h.CastsSent);
     }
 
     [Fact]
@@ -2869,6 +2871,29 @@ public sealed class CastingDirectorTests
 
         Assert.Single(h.CastsSent);
         Assert.Equal("rain", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyHeal_OneAllyBelow_SingleAndAoeConfigured_FiresSingle_NotAoe()
+    {
+        // The reported case: single (mahe) AND AOE (mrai) both set, one ally below,
+        // self full — under the 2-member gate. The single-target heals the lone ally;
+        // the AOE must NOT fire below the count.
+        using PartyHarness h = new();
+        h.PartySettings.MajorPartyHealSpell = "mahe";
+        h.PartySettings.MajorPartyHealAoeSpell = "mrai";
+        h.PartySettings.MajorHealMemberThresholdPercent = 75;
+        h.PartySettings.AoeMinMembers = 2;
+        PartyMember self = h.AddMember("Cidir", hpPercent: 100);
+        self.IsSelf = true;
+        h.AddMember("Nineteen", hpPercent: 60);   // one ally below 75
+        h.AddMember("Thresh", hpPercent: 100);
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.StartsWith("mahe", h.CastsSent[0]);   // single-target the ally, never the AOE mrai
+        Assert.DoesNotContain(h.CastsSent, c => c.Contains("mrai"));
     }
 
     [Fact]
