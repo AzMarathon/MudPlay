@@ -180,6 +180,15 @@
                                                FontSize="10"
                                                Foreground="{StaticResource ChromeFgBrush}"/>
                                 </Grid>
+                                <!-- Auto-train party line — the member's last readiness
+                                     report (leader side); hidden with no fresh report. -->
+                                <TextBlock Text="{Binding TrainInfo}"
+                                           IsVisible="{Binding HasTrainInfo}"
+                                           ToolTip.Tip="{Binding TrainInfo}"
+                                           TextTrimming="CharacterEllipsis"
+                                           FontFamily="{StaticResource FontMono}"
+                                           FontSize="10"
+                                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
                             </StackPanel>
 
                             <!-- (4) Status-flag chips. Each chip self-collapses when the

@@ -27,8 +27,8 @@ namespace MudPlay.Game.Train;
 //   Leader side (toggle on, leading, a loop / auto-lair running):
 //     * asks the party for reports when the roster changes and every few minutes;
 //     * feeds its own report plus every fresh member report to PartyTrainQuorum —
-//       majority rules, the leader one vote like everyone else, power-levelers and
-//       long stragglers not waited for;
+//       go once the set number of members is ready, the leader counting as one
+//       like everyone else, power-levelers not waited for;
 //     * on Fire: plans the money (PartyTrainFundingPlanner), the stops
 //       (PartyTrainItineraryPlanner — members first, leader last), pauses the engine
 //       (TrainerWalkManager.BeginPartyTrip), walks the party round, trains itself
@@ -77,7 +77,6 @@ public sealed class PartyTrainCoordinator : IDisposable
     // Leader side.
     private readonly Dictionary<string, (PartyTrainStatus Status, DateTimeOffset At)> _reports =
         new(StringComparer.OrdinalIgnoreCase);
-    private DateTimeOffset? _majoritySince;
     private DateTimeOffset _lastAsk = DateTimeOffset.MinValue;
     private string _askedRoster = "";
     private DateTimeOffset _cooldownUntil = DateTimeOffset.MinValue;
@@ -156,7 +155,6 @@ public sealed class PartyTrainCoordinator : IDisposable
 
     public bool TripRunning => _tripRunning;
     public string LastDecision => _lastReason;
-    public DateTimeOffset? MajoritySince => _majoritySince;
     public DateTimeOffset? CooldownUntil => _cooldownUntil > _now() ? _cooldownUntil : null;
     public string? PendingDoneFor => _pendingDone?.Leader;
 
@@ -205,6 +203,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         if (_disposed) return;
         NoteAwaitedPresence();
         FlushPendingDone();
+        RefreshTrainInfo();
     }
 
     // ----- member side ------------------------------------------------------
@@ -317,6 +316,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         string given = GivenName(sender);
         _reports[given] = (status, _now());
         _log?.Info(LogCategory, $"{given}: {Describe(status)}.");
+        RefreshTrainInfo();
     }
 
     // `@ptrain done <levels>` — a member at the current stop has trained and is back.
@@ -356,12 +356,13 @@ public sealed class PartyTrainCoordinator : IDisposable
         AutoTrainerSettings s = Settings;
         if (!s.AutoTrainParty || !Leading)
         {
-            _majoritySince = null;
+            RefreshTrainInfo();
             return;
         }
 
         MaybeAsk();
         DropStaleReports();
+        RefreshTrainInfo();
         if (_now() < _cooldownUntil) return;
         // Same gate as the solo armed run: auto-train detours a running grind, it
         // doesn't pull an idle party off somewhere.
@@ -369,12 +370,7 @@ public sealed class PartyTrainCoordinator : IDisposable
 
         List<PartyTrainParticipant> participants = Participants(out _);
         PartyTrainDecision decision = PartyTrainQuorum.Decide(
-            participants, TimeSpan.FromMinutes(Math.Max(0, s.PartyMaxWaitMinutes)),
-            Math.Max(0, s.PartyLevelGap),
-            _majoritySince is { } since ? _now() - since : null);
-
-        if (decision.HasMajority) _majoritySince ??= _now();
-        else _majoritySince = null;
+            participants, Math.Max(0, s.PartyLevelGap), s.PartyMinReady);
 
         if (decision.Reason != _lastReason)
         {
@@ -419,7 +415,6 @@ public sealed class PartyTrainCoordinator : IDisposable
     private async Task RunTripAsync(PartyTrainDecision decision, List<PartyTrainParticipant> participants)
     {
         _tripRunning = true;
-        _majoritySince = null;
         bool started = false;
         try
         {
@@ -552,6 +547,7 @@ public sealed class PartyTrainCoordinator : IDisposable
             _trainer.EndPartyTrip("all stops done.");
             started = false;
             foreach (string name in trainees) _reports.Remove(name);
+            RefreshTrainInfo();
         }
         catch (Exception ex)
         {
@@ -626,6 +622,34 @@ public sealed class PartyTrainCoordinator : IDisposable
         _armTimer(delay, () => tcs.TrySetResult(true));
         return tcs.Task;
     }
+
+    // The Party window's train line per row: each member's report, and our own on the
+    // self row, while we're leading with the toggle on. Rows with nothing fresh — and
+    // every row once we stop leading — are cleared, so a stale line never lingers.
+    private void RefreshTrainInfo()
+    {
+        bool show = Leading && Settings.AutoTrainParty;
+        foreach (PartyMember m in _party.Members)
+        {
+            string text = "";
+            if (show && !string.IsNullOrEmpty(m.Name))
+            {
+                if (m.IsSelf) text = RowText(BuildOwnStatus());
+                else if (_reports.TryGetValue(GivenName(m.Name), out var r)) text = RowText(r.Status);
+            }
+            if (m.TrainInfo != text) m.TrainInfo = text;
+        }
+    }
+
+    // Compact enough for the row's bar column: "L20→22 ready · 12,345c".
+    private static string RowText(PartyTrainStatus s) => s.Readiness switch
+    {
+        PartyTrainReadiness.Ready => $"L{s.Level}→{s.Level + s.LevelsToTrain} ready · {s.CostCopper:N0}c",
+        PartyTrainReadiness.Blocked => $"L{s.Level} · no party train",
+        _ => s.EtaSeconds >= 0
+            ? $"L{s.Level} · ready in ~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(TimeSpan.FromSeconds(s.EtaSeconds))}"
+            : $"L{s.Level} · not ready",
+    };
 
     // ----- shared -----------------------------------------------------------
 

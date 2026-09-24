@@ -82,13 +82,13 @@
                  box on the CP Allocation tab; these shape how the leader runs it. -->
             <TextBlock Classes="SectionHeader" Text="PARTY (Auto-train party on the CP Allocation tab)"/>
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <TextBlock Text="Once most are ready, wait up to" VerticalAlignment="Center"/>
+                <TextBlock Text="Go once at least" VerticalAlignment="Center"/>
                 <NumericUpDown MinWidth="110" VerticalAlignment="Center"
-                               Minimum="0" Maximum="240" Increment="1"
+                               Minimum="1" Maximum="6" Increment="1"
                                FormatString="0"
-                               Value="{Binding PartyMaxWaitMinutes, Mode=TwoWay}"
-                               ToolTip.Tip="Leader only. When a majority of the party is ready to train, hold the trip at most this long for the rest. A member projected to take longer than this (from its exp/hour) isn't waited for at all. 0 = go as soon as a majority is ready."/>
-                <TextBlock Text="minutes for the rest" VerticalAlignment="Center"/>
+                               Value="{Binding PartyMinReady, Mode=TwoWay}"
+                               ToolTip.Tip="Leader only. How many party members must be ready to train before the trip goes — you count as one. Whoever isn't ready yet stays banked and follows along. If everyone who counts is ready, the trip goes even when that's fewer than this."/>
+                <TextBlock Text="party members are ready to train" VerticalAlignment="Center"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" VerticalAlignment="Center">
                 <TextBlock Text="Don't wait for anyone more than" VerticalAlignment="Center"/>
@@ -96,7 +96,7 @@
                                Minimum="0" Maximum="200" Increment="1"
                                FormatString="0"
                                Value="{Binding PartyLevelGap, Mode=TwoWay}"
-                               ToolTip.Tip="Leader only. A member who isn't ready and is more than this many levels above the rest of the party (a power-leveler, the leader included) is never waited for or counted toward the majority. 0 = no level-gap rule."/>
+                               ToolTip.Tip="Leader only. A member who isn't ready and is more than this many levels above the rest of the party (a power-leveler, the leader included) is never waited for. 0 = no level-gap rule."/>
                 <TextBlock Text="levels above the party" VerticalAlignment="Center"/>
             </StackPanel>
             <CheckBox Content="Leave the level 11 train to a solo trip" Margin="0,8,0,0"

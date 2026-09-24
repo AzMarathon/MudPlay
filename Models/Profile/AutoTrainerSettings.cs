@@ -60,10 +60,10 @@ public sealed class AutoTrainerSettings
     // character in a party never auto-trains (the solo run is solo-only).
     public bool AutoTrainParty { get; set; }
 
-    // Once a majority of the party is ready, the longest the leader holds the trip
-    // for the rest. A straggler whose projected time to be ready is past this isn't
-    // waited for at all.
-    public int PartyMaxWaitMinutes { get; set; } = 10;
+    // How many party members (the leader counting as one) must be ready before the
+    // leader goes; whoever isn't ready then sits the trip out. A party where everyone
+    // who counts is ready goes even when that's fewer than this.
+    public int PartyMinReady { get; set; } = 2;
 
     // A member who isn't ready and sits more than this many levels above the rest
     // of the party (a power-leveler) is never waited for. 0 = no gap rule.

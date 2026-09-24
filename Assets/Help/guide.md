@@ -3074,14 +3074,15 @@ If you're short it collects the difference first: your stash rooms, then your ba
 **Default:** Off
 **What it does:** Makes auto-training work in a party. Every member who wants it ticks the box on their own client:
 - **As a member**, you don't walk off to train. Instead your client tells the leader where you stand — *ready* once your own settings above (levels stacked, levels to keep banked, do-not-train-above) say you'd make a trip, or *waiting*, with a rough time until you will be from your exp/hour. At the trainer you train when the leader says so, never walking on to another trainer by yourself, and let the leader know once you're back in the party.
-- **As the leader**, with a Loop or Auto-Lair running, MudPlay collects everyone's report plus your own and decides when to go — **majority rules**, and you're one vote like everyone else:
+- **As the leader**, with a Loop or Auto-Lair running, MudPlay collects everyone's report plus your own and decides when to go — once a set **number of party members** is ready (2 by default), and you count as one member like everyone else:
   - everyone ready → go;
-  - most of the party ready → go as soon as nobody left is worth waiting for: a member who won't be ready within the max wait isn't waited for at all, and once the majority has waited the max wait, the trip goes regardless;
+  - at least that many ready → go; anyone not ready yet keeps their levels banked and just follows along;
   - otherwise keep grinding.
 
   Then it walks the whole party round: every member who's ready trains first — at the trainer that serves the most of them, then the next, when you're spread across level bands — and you train **last**, at the final stop, because your train disbands the party. It re-invites everyone standing with you (so leave **Re-invite lost party members** on in Settings → Party — it also re-invites each member as they come back from their own train) and holds the loop until they're back, then carries on grinding.
 
-**The leader doesn't have to be training.** A high-level leader power-leveling the party still escorts everyone to the trainer and back — the trip goes whenever the majority is ready.
+**Seeing where everyone stands.** While you lead with the box on, the Party window shows a train line under each member's bars from their last report — `L20→22 ready · 12,345c` (ready, the levels this trip would take them to, and the fee), `L18 · ready in ~25m`, or `L10 · no party train` — and your own on your row. A member with no line hasn't reported (box off, or another client).
+**The leader doesn't have to be training.** A high-level leader power-leveling the party still escorts everyone to the trainer and back — the trip goes whenever enough members are ready.
 **Money.** Each member reports its purse and its biggest bank deposit. If someone is short, members with coin to spare give it to them before anyone walks (only what they can spare above their own fee and keep-on-hand amount). If the party's spare coin can't cover everyone, the trip first stops at a bank and short members withdraw their own fee; anyone who still can't pay sits the trip out.
 **Who isn't waited for:** members with the box off, members on another client, and anyone who hasn't reported in the last few minutes. They just follow the leader there and back.
 **Important notes:** Orders are only taken from your current party leader, and only while your own box is on — nobody can make your character train, give or withdraw otherwise. After a trip, the leader waits a few minutes before deciding again.
@@ -3090,8 +3091,8 @@ If you're short it collects the difference first: your stash rooms, then your ba
 
 These shape how the **leader** runs an Auto-train party trip (the level-11 rule applies to everyone).
 
-- **Once most are ready, wait up to N minutes for the rest** — default `10`. How long a ready majority holds for the others; `0` goes as soon as a majority is ready.
-- **Don't wait for anyone more than N levels above the party** — default `5`, `0` = off. A member who isn't ready and is this far above the rest of the party (a power-leveler — the leader included) is never waited for and doesn't count toward the majority.
+- **Go once at least N party members are ready to train** — default `2`, range 1–6. The leader counts as one. Members who don't report, or are skipped by the level gap, don't count — and if everyone who does count is ready, the trip goes even when that's fewer than N.
+- **Don't wait for anyone more than N levels above the party** — default `5`, `0` = off. A member who isn't ready and is this far above the rest of the party (a power-leveler — the leader included) is never waited for.
 - **Leave the level 11 train to a solo trip** — default on. Party trips train no higher than level 10; the step to 11 is a solo effort, so take it on your own.
 
 ### Discovered trainers table
@@ -3582,7 +3583,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Lair marker override respawn / Skip (parked, unused) | null / false | int? seconds / bool | `LairMarker.OverrideRespawnSeconds` / `.Skip` | Models/Profile/LairMarker.cs |
 | Auto-train / Auto-train stats | false / false | bool | `AutoTrain` / `AutoTrainStats` | Models/Profile/AutoTrainerSettings.cs |
 | Auto-train party | false | bool | `AutoTrainParty` | Models/Profile/AutoTrainerSettings.cs |
-| Party max wait / level gap / leave level 11 solo | 10 / 5 / true | 0–240 min / 0–200 / bool | `PartyMaxWaitMinutes` / `PartyLevelGap` / `PartySkipLevel11` | Models/Profile/AutoTrainerSettings.cs |
+| Party members ready / level gap / leave level 11 solo | 2 / 5 / true | 1–6 / 0–200 / bool | `PartyMinReady` / `PartyLevelGap` / `PartySkipLevel11` | Models/Profile/AutoTrainerSettings.cs |
 | Levels to keep banked / Do not train above level | 0 / 0 | ≥0 (UI 0–60 / 0–200) | `LevelsToKeep` / `DoNotTrainAbove` | Models/Profile/AutoTrainerSettings.cs |
 | Announce level-ups / channel | false / Gangpath | bool / Gangpath,Gossip,Yell,Say | `AnnounceLevelUps` / `AnnounceChannel` | Models/Profile/AutoTrainerSettings.cs |
 | Discovered trainers "Use?" | all allowed | bool per trainer (disabled-list) | `DisabledTrainers` | Models/Profile/AutoTrainerSettings.cs |

@@ -9,7 +9,8 @@ namespace MudPlay.Game;
 // captured at party-join time so the UI can show both the absolute number and
 // the current percentage (H:690 94%).
 //
-// Ownership: PartyManager is the sole writer of every observable field below —
+// Ownership: PartyManager is the sole writer of every observable field below
+// (TrainInfo excepted — see its comment) —
 // the IL-scan test enforces it. Consumers (PartyWindow VM, automation engines)
 // bind to these properties and never call the setters.
 //
@@ -66,6 +67,17 @@ public sealed partial class PartyMember : ObservableObject
     [field: Owner(typeof(PartyManager))]
     [NotifyPropertyChangedFor(nameof(MaRichDisplay))]
     private bool _isKai;
+
+    // Party auto-train line under the bars — this member's last `@ptrain` report as
+    // the leader holds it (level, ready / time-to-ready, fee). Empty when there's no
+    // fresh report. The one field here not owned by PartyManager: it's the train
+    // coordinator's view of the member, not the par table's.
+    [ObservableProperty]
+    [field: Owner(typeof(Train.PartyTrainCoordinator))]
+    [NotifyPropertyChangedFor(nameof(HasTrainInfo))]
+    private string _trainInfo = string.Empty;
+
+    public bool HasTrainInfo => TrainInfo.Length > 0;
 
     // PartyWindow display string for HP. When BaselineHp is known (the on-join
     // `@health` exchange completed and we captured this member's max), shows

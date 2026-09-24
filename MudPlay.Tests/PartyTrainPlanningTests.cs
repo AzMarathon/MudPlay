@@ -10,12 +10,10 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // The pure planning core behind party auto-train: the status wire codec, the
-// majority-rules quorum, the party funding plan, the multi-trainer itinerary, and the
+// member-count quorum, the party funding plan, the multi-trainer itinerary, and the
 // coin selection a member uses to cover someone's shortfall.
 public sealed class PartyTrainPlanningTests
 {
-    private static readonly TimeSpan TenMinutes = TimeSpan.FromMinutes(10);
-
     private static PartyTrainStatus Status(
         PartyTrainReadiness r, int level, int eta = -1, int cls = 1, int levels = 1) =>
         new(r, level, cls, levels, 0, 0, 0, 0, null, eta);
@@ -52,59 +50,44 @@ public sealed class PartyTrainPlanningTests
     {
         PartyTrainDecision d = PartyTrainQuorum.Decide(
             [P("Lead", PartyTrainReadiness.Ready, 20, leader: true), P("Ann", PartyTrainReadiness.Ready, 19)],
-            TenMinutes, levelGap: 5, waitedSinceMajority: null);
+            levelGap: 5, minReady: 2);
         Assert.Equal(PartyTrainVerdict.Fire, d.Verdict);
         Assert.Equal(["Lead", "Ann"], d.Trainees);
     }
 
     [Fact]
-    public void Quorum_MajorityReady_HoldsForAStragglerDueInsideTheMaxWait()
+    public void Quorum_EnoughMembersReady_GoesWithoutTheRest()
     {
         PartyTrainDecision d = PartyTrainQuorum.Decide(
             [P("Lead", PartyTrainReadiness.Ready, 20, leader: true),
              P("Ann", PartyTrainReadiness.Ready, 20),
-             P("Bob", PartyTrainReadiness.Waiting, 20, eta: 120)],
-            TenMinutes, levelGap: 5, waitedSinceMajority: TimeSpan.FromMinutes(1));
+             P("Bob", PartyTrainReadiness.Waiting, 20, eta: 60)],
+            levelGap: 5, minReady: 2);
+        Assert.Equal(PartyTrainVerdict.Fire, d.Verdict);
+        Assert.Equal(["Lead", "Ann"], d.Trainees);
+        Assert.Contains("Bob", d.Skipped);
+    }
+
+    [Fact]
+    public void Quorum_FewerReadyThanTheSetting_Waits()
+    {
+        PartyTrainDecision d = PartyTrainQuorum.Decide(
+            [P("Lead", PartyTrainReadiness.Ready, 20, leader: true),
+             P("Ann", PartyTrainReadiness.Ready, 20),
+             P("Bob", PartyTrainReadiness.Waiting, 20, eta: 60)],
+            levelGap: 5, minReady: 3);
         Assert.Equal(PartyTrainVerdict.Wait, d.Verdict);
         Assert.Equal(["Bob"], d.WaitingOn);
-        Assert.True(d.HasMajority);   // the max-wait clock runs from here
     }
 
+    // A party smaller than the setting would otherwise never go.
     [Fact]
-    public void Quorum_MajorityReady_GoesWithoutAStragglerWhoWontLevelInTime()
+    public void Quorum_EveryoneReady_FiresEvenBelowTheSetting()
     {
         PartyTrainDecision d = PartyTrainQuorum.Decide(
-            [P("Lead", PartyTrainReadiness.Ready, 20, leader: true),
-             P("Ann", PartyTrainReadiness.Ready, 20),
-             P("Bob", PartyTrainReadiness.Waiting, 20, eta: 7_200)],
-            TenMinutes, levelGap: 5, waitedSinceMajority: TimeSpan.Zero);
+            [P("Lead", PartyTrainReadiness.Ready, 20, leader: true), P("Ann", PartyTrainReadiness.Ready, 20)],
+            levelGap: 5, minReady: 4);
         Assert.Equal(PartyTrainVerdict.Fire, d.Verdict);
-        Assert.Equal(["Lead", "Ann"], d.Trainees);
-        Assert.Contains("Bob", d.Skipped);
-    }
-
-    [Fact]
-    public void Quorum_MaxWaitElapsed_FiresEvenForADueStraggler()
-    {
-        PartyTrainDecision d = PartyTrainQuorum.Decide(
-            [P("Lead", PartyTrainReadiness.Ready, 20, leader: true),
-             P("Ann", PartyTrainReadiness.Ready, 20),
-             P("Bob", PartyTrainReadiness.Waiting, 20, eta: 60)],
-            TenMinutes, levelGap: 5, waitedSinceMajority: TenMinutes);
-        Assert.Equal(PartyTrainVerdict.Fire, d.Verdict);
-        Assert.Contains("Bob", d.Skipped);
-    }
-
-    [Fact]
-    public void Quorum_WithoutAMajority_Waits()
-    {
-        PartyTrainDecision d = PartyTrainQuorum.Decide(
-            [P("Lead", PartyTrainReadiness.Waiting, 20, eta: 60, leader: true),
-             P("Ann", PartyTrainReadiness.Ready, 20),
-             P("Bob", PartyTrainReadiness.Waiting, 20, eta: 60)],
-            TenMinutes, levelGap: 5, waitedSinceMajority: null);
-        Assert.Equal(PartyTrainVerdict.Wait, d.Verdict);
-        Assert.False(d.HasMajority);
     }
 
     // ----- party ceiling --------------------------------------------------
@@ -132,7 +115,7 @@ public sealed class PartyTrainPlanningTests
         PartyTrainDecision d = PartyTrainQuorum.Decide(
             [P("Lead", PartyTrainReadiness.Waiting, 50, eta: 36_000, leader: true),
              P("Ann", PartyTrainReadiness.Ready, 20)],
-            TenMinutes, levelGap: 5, waitedSinceMajority: null);
+            levelGap: 5, minReady: 2);
         Assert.Equal(PartyTrainVerdict.Fire, d.Verdict);
         Assert.Equal(["Ann"], d.Trainees);
         Assert.Contains("Lead", d.Skipped);
@@ -144,7 +127,7 @@ public sealed class PartyTrainPlanningTests
         PartyTrainDecision d = PartyTrainQuorum.Decide(
             [P("Lead", PartyTrainReadiness.Ready, 20, leader: true),
              P("Ann", PartyTrainReadiness.Blocked, 10)],
-            TenMinutes, levelGap: 5, waitedSinceMajority: null);
+            levelGap: 5, minReady: 2);
         Assert.Equal(PartyTrainVerdict.Fire, d.Verdict);
         Assert.Equal(["Lead"], d.Trainees);
     }
@@ -154,7 +137,7 @@ public sealed class PartyTrainPlanningTests
     {
         PartyTrainDecision d = PartyTrainQuorum.Decide(
             [P("Lead", PartyTrainReadiness.Waiting, 20, leader: true), P("Ann", PartyTrainReadiness.Waiting, 20)],
-            TenMinutes, levelGap: 5, waitedSinceMajority: null);
+            levelGap: 5, minReady: 2);
         Assert.Equal(PartyTrainVerdict.Idle, d.Verdict);
     }
 

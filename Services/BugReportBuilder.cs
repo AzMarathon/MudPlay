@@ -288,9 +288,7 @@ public static class BugReportBuilder
             ? "running" + (svc.TrainerWalk.PartyTripActive ? " (engine paused)" : "")
             : "idle");
         Kv(sb, "Party train — last decision", ptrain.LastDecision.Length > 0 ? ptrain.LastDecision : "(none)");
-        Kv(sb, "Party train — majority ready since", ptrain.MajoritySince is { } ms
-            ? ms.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
-            : "(no majority)");
+        Kv(sb, "Party train — members needed ready", svc.TrainerWalk.CurrentSettings.PartyMinReady.ToString());
         Kv(sb, "Party train — cooldown until", ptrain.CooldownUntil is { } cd
             ? cd.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
             : "(none)");
