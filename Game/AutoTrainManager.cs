@@ -77,6 +77,12 @@ public sealed class AutoTrainManager : IDisposable
     // round-trip.
     public event Action? PlanCommitted;
 
+    // The plan level a replay started off the user's own `train stats` is applying,
+    // readable while PlanCommitted fires (null for any other run). The row-clearing
+    // subscriber only clears for its own runs otherwise, so without this a plan
+    // applied by hand left its row on the CP Allocation tab.
+    public int? ManualApplyLevel { get; private set; }
+
     // Raised after a semi-manual ApplyTargets run (the CP-Alloc "Apply this level"
     // button): true when a follow-up `stat` shows the raw stats reached the applied
     // targets, false on abort (not at a trainer) or mismatch. The auto/TrainNow path
@@ -134,6 +140,7 @@ public sealed class AutoTrainManager : IDisposable
         _sequence = AutoTrainSequenceBuilder.Build(current, target);
         int session = ++_sessionId;
         _phase = Phase.AwaitingMenu;
+        ManualApplyLevel = null;
         _log?.Info("AutoTrain", "Sent `train stats` — awaiting trainer screen.");
         _wire.Send("train stats");
         StateChanged?.Invoke();
@@ -159,6 +166,7 @@ public sealed class AutoTrainManager : IDisposable
         _sequence = AutoTrainSequenceBuilder.Build(current, target);
         int session = ++_sessionId;
         _phase = Phase.AwaitingMenu;
+        ManualApplyLevel = null;
         _log?.Info("AutoTrain", "Apply this level — sent `train stats`.");
         _wire.Send("train stats");
         StateChanged?.Invoke();
@@ -263,6 +271,7 @@ public sealed class AutoTrainManager : IDisposable
         _sequence = AutoTrainSequenceBuilder.Build(current, target);
         int session = ++_sessionId;
         _phase = Phase.AwaitingMenu;
+        ManualApplyLevel = _stats.Level;
         _log?.Info("AutoTrain",
             "Auto-train stats — you opened the train-stats screen; applying the CP plan.");
         StateChanged?.Invoke();
@@ -303,6 +312,7 @@ public sealed class AutoTrainManager : IDisposable
         if (_phase == Phase.AwaitingMenu)
         {
             _phase = Phase.Idle;
+            ManualApplyLevel = null;
             _log?.Info("AutoTrain", "Trainer screen didn't open (not at a trainer?) — aborted.");
             ReportExplicitApplyAborted();
             StateChanged?.Invoke();
@@ -334,6 +344,7 @@ public sealed class AutoTrainManager : IDisposable
         // CP raises + SAVE are on the wire — let "plan committed" subscribers
         // (the plan-grid cleanup) react now, ahead of the menu-exit round-trip.
         PlanCommitted?.Invoke();
+        ManualApplyLevel = null;
 
         // An explicit "apply this level" run confirms via `stat` then reports so the
         // CP-Alloc button clears its row only on verified success.

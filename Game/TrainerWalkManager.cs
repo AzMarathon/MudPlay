@@ -880,6 +880,13 @@ public sealed class TrainerWalkManager : IDisposable
     // The run itself still finishes on the idle transition in OnAutoTrainStateChanged.
     private void OnCpPlanCommitted()
     {
+        // The user's own `train stats` applied the plan (no run of ours in flight):
+        // that level's row is just as fulfilled as after Train Now.
+        if (_phase == Phase.Idle && _autoTrain.ManualApplyLevel is { } manualLevel)
+        {
+            RemoveFulfilledPlanRows(manualLevel);
+            return;
+        }
         if (_phase != Phase.ApplyingCp || _cpApplied) return;
         _cpApplied = true;
         RemoveFulfilledPlanRows(_cpTargetLevel);
