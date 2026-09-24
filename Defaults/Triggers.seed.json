@@ -20,16 +20,6 @@
     "Location": "GameData"
   },
   {
-    "Name": "Cancel FUgram",
-    "Enabled": true,
-    "Scope": "GameMessages",
-    "MatchType": "Literal",
-    "Pattern": "Would you like to forward your /P to an FUgram?",
-    "Response": "n",
-    "SoundFile": null,
-    "Location": "GameData"
-  },
-  {
     "Name": "low on lives",
     "Enabled": true,
     "Scope": "GameMessages",
@@ -46,6 +36,26 @@
     "MatchType": "Literal",
     "Pattern": "The slaver leader whimpers and drops his weapon, calling for mercy!",
     "Response": "ask dying slaver leader keep",
+    "SoundFile": null,
+    "Location": "GameData"
+  },
+  {
+    "Name": "Cancel FUgram",
+    "Enabled": true,
+    "Scope": "GameMessages",
+    "MatchType": "Literal",
+    "Pattern": "Would you like to forward your /P to an FUgram?",
+    "Response": "n",
+    "SoundFile": null,
+    "Location": "GameData"
+  },
+  {
+    "Name": "teleport",
+    "Enabled": true,
+    "Scope": "GameMessages",
+    "MatchType": "Literal",
+    "Pattern": "You find yourself...elsewhere.",
+    "Response": "par",
     "SoundFile": null,
     "Location": "GameData"
   }
