@@ -11,6 +11,7 @@
 > - Combat: re-attacks promptly after a second party heal — two heals a beat apart used to leave the second's re-attack paced out for a full round (a lost round + the mob's exp)
 > - Remote: a new destination overrides an `@stop` — after `@stop`, an `@goto` / `@loop` / `@lair` abandons the pause and starts moving, instead of waiting for a separate `@rego`
 > - Trigger seed trimmed to the six essentials — a fresh install starts with just those
+> - Workshop → Calculators: the **Monster Aggro** box no longer extends far past the others — capped to the Realm Rankings width, with the description wrapping
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

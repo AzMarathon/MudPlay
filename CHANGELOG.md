@@ -12,6 +12,7 @@
 - Combat: **re-attacks promptly after a second party heal** — two heals a beat apart used to leave the second's re-attack paced out for a full round (a lost round + the mob's exp); each heal now resumes the swing right away
 - Remote: **a new destination overrides an `@stop`** — after `@stop`, an `@goto` / `@loop` / `@lair` now abandons the pause and starts moving, instead of sitting gated until a separate `@rego`
 - Trigger seed trimmed to the six essentials (low-lives x3, slaver-leader surrender, FUgram cancel, teleport `par`) — a fresh install starts with just these
+- Workshop → Calculators: the **Monster Aggro** box no longer runs far past the other calculators — its width is capped to the Realm Rankings table's edge and the description wraps there
 - bug reports addressed: paradigm-20260923-071731, paradigm-20260923-091205, paradigm-20260923-103506, paradigm-20260923-103938, paradigm-20260923-210406
 
 ## 3.103.9

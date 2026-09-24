@@ -292,9 +292,11 @@
 
                 <!-- ===== Monster Aggro ===== -->
                 <!-- MinWidth (not a fixed Width) so it collapses to the shared 560 like
-                     the others, but expands wider to fit the Stock table's extra columns
-                     (same opt-out as Realm Rankings). -->
-                <Expander x:Name="MonsterAggroCalc" MinWidth="560" HorizontalAlignment="Left"
+                     the others, and expands to fit the Stock table's extra columns. Both
+                     aggro tables are ~600 wide; MaxWidth caps the expander at the Realm
+                     Rankings table's width so the long descriptions WRAP there instead of
+                     running the panel far past the other calculators' right edge. -->
+                <Expander x:Name="MonsterAggroCalc" MinWidth="560" MaxWidth="720" HorizontalAlignment="Left"
                           IsExpanded="{Binding MonsterAggroExpanded, Mode=TwoWay}">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Monster Aggro"/>
