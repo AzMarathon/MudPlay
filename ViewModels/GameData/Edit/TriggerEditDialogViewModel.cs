@@ -20,8 +20,10 @@ namespace MudPlay.ViewModels.GameData.Edit;
 // TriggerEngine Add / Replace happens in the caller — this dialog only shapes the record.
 public sealed partial class TriggerEditDialogViewModel : ObservableObject, Services.IDialogViewModel<Trigger>
 {
-    // Regex matching {name} placeholders in a Literal pattern. Same syntax used for substitution.
-    private static readonly Regex _literalPlaceholder = new(@"\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\}", RegexOptions.Compiled);
+    // Regex matching {name} placeholders in a Literal pattern. Same grammar the
+    // engine uses — a name is any run of letters/digits/underscores, so numeric
+    // wildcards like {1} / {2} are recognised too.
+    private static readonly Regex _literalPlaceholder = new(@"\{(?<name>[A-Za-z0-9_]+)\}", RegexOptions.Compiled);
 
     // Regex matching (?<name>…) named groups inside a Regex pattern.
     private static readonly Regex _regexNamedGroup = new(@"\(\?<(?<name>[A-Za-z_][A-Za-z0-9_]*)>", RegexOptions.Compiled);
@@ -99,10 +101,10 @@ public sealed partial class TriggerEditDialogViewModel : ObservableObject, Servi
     {
         TriggerMatchType.Literal =>
             "Literal — type the text as it appears. " +
-            "Use * to wildcard a span. Use {name} to capture into the shared variable cache.",
+            "Use * to wildcard a span. Use {name} (or {1}, {2}…) to capture into the trigger wildcard store.",
         TriggerMatchType.Regex =>
             "Regex — full .NET regex. " +
-            "Use (?<name>…) named groups to capture into the shared variable cache.",
+            "Use (?<name>…) named groups to capture into the trigger wildcard store.",
         _ => string.Empty,
     };
 

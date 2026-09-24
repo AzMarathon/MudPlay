@@ -49,4 +49,11 @@ public interface IEditableTableSectionViewModel
     ICommand? SimulateCommand => null;
     string? SimulateLabel => null;
     bool ShowSimulate => false;
+
+    // Optional action rendered next to Add / Remove (to their right). Only the
+    // Triggers tab uses it — a "Wildcards" button that opens the live viewer of
+    // the trigger-wildcard store. Every other section leaves it null and the
+    // button stays hidden. WildcardsLabel supplies the button text.
+    ICommand? WildcardsCommand => null;
+    string? WildcardsLabel => null;
 }

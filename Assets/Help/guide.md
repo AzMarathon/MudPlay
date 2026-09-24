@@ -1137,9 +1137,9 @@ Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove*
 - **Triggers** are **auto-responses to game text** — when a line matches, MudPlay fires a reply. Give the trigger a **Name**, then set:
   - **Location** — *Game data* (saves with the active game-data set, so it travels with the realm) or *Profile* (saves with this character).
   - **Scope** — which incoming lines it watches: *Game messages* (the default), a single chat channel (*Say / Yell / Gossip / Telepath / Gangpath / Broadcast*), *Chat (any)*, or the *System log*.
-  - **Match type** — *Literal* (type the text as it appears; `*` wildcards a span and `{name}` captures a piece) or *Regex* (full .NET regex, with `(?<name>…)` for captures).
+  - **Match type** — *Literal* (type the text as it appears; `*` wildcards a span and `{name}` — or a numbered `{1}`, `{2}` — captures a piece) or *Regex* (full .NET regex, with `(?<name>…)` for captures).
   - **Pattern** — the text or expression to match against each line. Any pieces you capture appear in the **Captures** row.
-  - **Response** — what MudPlay sends back on a match. Drop a captured value in with `{name}`.
+  - **Response** — what MudPlay sends back on a match. Drop a captured value in with `{name}` (or `{1}`, `{2}`).
 
     To send **several commands**, put each on its own line in the box (the Response box accepts Enter) — every line is sent as a separate command, each with its own Enter. `^M` and `;` do the same thing on a single line, so `north;get all;south` is three commands too.
 
@@ -1151,7 +1151,9 @@ Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove*
 **Literal** patterns match the text as it appears on the line. Two shortcuts make them flexible:
 
 - `*` matches any run of characters — `You are hit by *` matches whatever follows.
-- `{name}` captures a piece for the Response — `{attacker} hits you` captures the attacker's name, and you use it back as `{attacker}`.
+- `{name}` captures a piece for the Response — `{attacker} hits you` captures the attacker's name, and you use it back as `{attacker}`. **Numbered wildcards** work too: `{1} telepaths: &@{2}` captures the sender into `{1}` and the message into `{2}`, and a Response of `/{1} @{2}` telepaths them back. Any run of letters, digits, or underscores is a valid name.
+
+These captured values are the trigger system's **wildcards**, and they belong to triggers alone — they're never shared with aliases (whose own `{1}`/`{2}` mean the tokens you typed) or macros. The **Wildcards** button at the top of the Triggers table opens a live viewer of every wildcard captured this session and what each currently holds; **Clear all** empties it. The store also clears when you close MudPlay.
 
 **Regex** patterns are full .NET regular expressions, for when a literal pattern can't say what you mean. The essentials:
 

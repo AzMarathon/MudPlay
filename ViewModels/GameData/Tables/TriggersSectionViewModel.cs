@@ -45,10 +45,13 @@ public sealed class TriggersSectionViewModel : GameDataTableSectionViewModel, IE
     public IRelayCommand<GameDataRow?> OpenEditAsyncCommand { get; }
     public IRelayCommand AddAsyncCommand { get; }
     public IAsyncRelayCommand RemoveSelectedCommand { get; }
+    public IAsyncRelayCommand OpenWildcardsCommand { get; }
 
     ICommand IEditableTableSectionViewModel.OpenEditCommand => OpenEditAsyncCommand;
     ICommand? IEditableTableSectionViewModel.AddCommand     => AddAsyncCommand;
     ICommand? IEditableTableSectionViewModel.RemoveCommand  => RemoveSelectedCommand;
+    ICommand? IEditableTableSectionViewModel.WildcardsCommand => OpenWildcardsCommand;
+    string? IEditableTableSectionViewModel.WildcardsLabel     => "Wildcards";
 
     private readonly NotifyCollectionChangedEventHandler _handler;
 
@@ -63,6 +66,7 @@ public sealed class TriggersSectionViewModel : GameDataTableSectionViewModel, IE
         OpenEditAsyncCommand  = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
         AddAsyncCommand       = new AsyncRelayCommand(AddAsync);
         RemoveSelectedCommand = new AsyncRelayCommand(RemoveSelectedAsync, () => SelectedRow is not null);
+        OpenWildcardsCommand  = new AsyncRelayCommand(OpenWildcardsAsync);
 
         PropertyChanged += (_, e) =>
         {
@@ -133,6 +137,22 @@ public sealed class TriggersSectionViewModel : GameDataTableSectionViewModel, IE
             if (_rowToTrigger.TryGetValue(row, out Trigger? t)) targets.Add(t);
         }
         foreach (Trigger t in targets) _engine.Remove(t);
+    }
+
+    // Single-instance guard for the modeless wildcards viewer — a second click
+    // while it's open would stack a duplicate window.
+    private bool _wildcardsOpen;
+
+    private async Task OpenWildcardsAsync()
+    {
+        if (_dialogs is null || _wildcardsOpen) return;
+        _wildcardsOpen = true;
+        try
+        {
+            TriggerWildcardsViewModel vm = new(_engine);
+            await _dialogs.OpenWindowAsync<TriggerWildcardsViewModel, bool>(vm);
+        }
+        finally { _wildcardsOpen = false; }
     }
 
     private async Task OpenEditAsync(GameDataRow? row)

@@ -20,11 +20,17 @@ namespace MudPlay.Services;
 // small recency queue so the GameMessages path can dedupe them — every line
 // goes through LineExtractor, including those ChatRouter already classified.
 //
-// Variables are app-session-scoped (in-memory, wiped on app close — same
-// lifetime as ChatHistoryStore) so a trigger that captures a value on one
-// character can be read by a trigger or alias on another within the same
-// session. The substitution syntax is {name} in both patterns (capture into the
-// cache) and Response / Notify text (read from the cache).
+// Wildcards (captured values) are app-session-scoped (in-memory, wiped on app
+// close — same lifetime as ChatHistoryStore) so a trigger that captures a value
+// on one character can be read by another trigger on a different character within
+// the same session. This store belongs to the TRIGGER system alone — it is NOT
+// shared with aliases (which compute their own positional {0}/{1} tokens per
+// expansion), macros, or events. Keeping the namespace isolated is deliberate:
+// {1} in a trigger pattern captures the first match span into THIS store; {1} in
+// an alias means the first typed token, a different thing entirely. The
+// substitution syntax is {name} in both patterns (capture) and Response / Notify
+// text (read); a name is any run of letters, digits, and underscores, so {1},
+// {who}, and {tgt2} are all valid wildcards.
 public sealed class TriggerEngine
 {
     // Recent-classification queue depth — enough to cover bursts without
@@ -57,9 +63,15 @@ public sealed class TriggerEngine
     // The loaded character's triggers — empty when no profile is active.
     public ObservableCollection<Trigger> Triggers { get; } = new();
 
-    // App-session-scoped named-variable store. Populated by pattern captures;
-    // read during Response / Notify interpolation.
+    // App-session-scoped trigger-wildcard store. Populated by pattern captures;
+    // read during Response / Notify interpolation. Trigger-only — see the class
+    // comment on why this namespace stays isolated from aliases / macros / events.
     public Dictionary<string, string> Variables { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    // Raised whenever a capture writes the wildcard store (or ClearWildcards
+    // empties it) so a live viewer can refresh. Fires on the UI thread — every
+    // dispatch path is already marshalled there upstream.
+    public event Action? WildcardsChanged;
 
     public TriggerEngine(ProfileService profile)
     {
@@ -162,6 +174,16 @@ public sealed class TriggerEngine
         JsonStore.Save(AppPaths.TriggersFile(_activeSet), gd);
     }
 
+    // Empty the wildcard store — the viewer's "Clear" affordance. Fires
+    // WildcardsChanged only when there was something to clear so an already-empty
+    // store doesn't churn the viewer.
+    public void ClearWildcards()
+    {
+        if (Variables.Count == 0) return;
+        Variables.Clear();
+        WildcardsChanged?.Invoke();
+    }
+
     // ----- Dispatch -----------------------------------------------------
 
     private void OnLineEmitted(LineExtractor.EmittedLine line)
@@ -205,6 +227,11 @@ public sealed class TriggerEngine
             Dispatcher.UIThread.Post(() => DispatchScope(TriggerScope.SystemLog, entry.Message));
     }
 
+    // Test hook — drives the full match → capture → interpolate → send path for a
+    // given scope against the live Triggers collection, exactly as the production
+    // subscriptions do. Lets a test verify the end-to-end wildcard flow.
+    internal void DispatchForTests(TriggerScope scope, string text) => DispatchScope(scope, text);
+
     private void DispatchScope(TriggerScope scope, string text)
     {
         foreach (Trigger t in Triggers)
@@ -223,15 +250,31 @@ public sealed class TriggerEngine
         Match m = regex.Match(text);
         if (!m.Success) return;
 
-        // Push named captures into the shared variable cache. Skip the
-        // implicit Group[0] (full match) and any unnamed numbered groups
-        // — only {name} placeholders / (?<name>…) named groups bind.
+        // Push captures into the trigger-wildcard store. A Literal pattern emits
+        // only the whole-match group plus named captures (no unnamed groups), so
+        // every group past index 0 is a user wildcard — numeric names ({1}, {2})
+        // included. A Regex pattern can carry unnamed (...) groups, whose Name is
+        // their number, so there skip any digit-named group and bind only the
+        // user's (?<name>…) captures.
+        bool literal = t.MatchType == TriggerMatchType.Literal;
+        bool changed = false;
+        int index = -1;
         foreach (Group g in m.Groups)
         {
+            index++;
+            if (index == 0) continue;   // whole-match group, never a wildcard
             if (!g.Success) continue;
-            if (string.IsNullOrEmpty(g.Name) || char.IsDigit(g.Name[0])) continue;
-            Variables[g.Name] = g.Value;
+            string gname = g.Name;
+            if (!literal && (gname.Length == 0 || char.IsDigit(gname[0]))) continue;
+            Variables[gname] = g.Value;
+            changed = true;
         }
+        if (changed) WildcardsChanged?.Invoke();
+
+        // A matched-but-not-sent trigger (undefined wildcard in the Response) is
+        // the common "my trigger didn't work" report, so log the match at Debug
+        // either way — the send path logs its own outcome via the response.
+        _log?.Log(LogSeverity.Debug, LogSource, $"'{t.Name}' matched: {text}");
 
         // Substitute + send the Response. Empty Response → bare CR.
         if (!TryInterpolate(t.Response, t.Name, out string responseOut)) return;
@@ -313,11 +356,14 @@ public sealed class TriggerEngine
         return true;
     }
 
+    // A wildcard name is any non-empty run of letters, digits, and underscores.
+    // Digit-first names are allowed on purpose so {1} / {2} work as numbered
+    // wildcards. A brace pair holding anything else — {HP=10/20}, {a b} — isn't a
+    // name and stays literal.
     private static bool IsValidName(string s)
     {
         if (s.Length == 0) return false;
-        if (!char.IsLetter(s[0]) && s[0] != '_') return false;
-        for (int i = 1; i < s.Length; i++)
+        for (int i = 0; i < s.Length; i++)
             if (!char.IsLetterOrDigit(s[i]) && s[i] != '_') return false;
         return true;
     }
@@ -363,6 +409,11 @@ public sealed class TriggerEngine
             char c = literal[i];
             if (c == '{' && TryReadName(literal, i, out string name, out int next))
             {
+                // Emit the user's name verbatim as the group name — {who}→(?<who>…),
+                // {1}→(?<1>…). .NET accepts a numeric group name; the trigger push
+                // loop reads it back by skipping only the whole-match group. Other
+                // consumers of this helper (ChatRouter / PartyManager) read the group
+                // by its exact name, so the name must stay unmangled.
                 sb.Append("(?<").Append(name).Append(">.+)");
                 i = next;
                 continue;

@@ -101,6 +101,9 @@ public partial class App : Application
                 MudPlay.ViewModels.GameData.Edit.TriggerEditDialogViewModel,
                 MudPlay.Views.GameData.Edit.TriggerEditDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.GameData.Edit.TriggerWildcardsViewModel,
+                MudPlay.Views.GameData.Edit.TriggerWildcardsDialog>();
+            AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.GameData.Edit.AliasEditDialogViewModel,
                 MudPlay.Views.GameData.Edit.AliasEditDialog>();
 

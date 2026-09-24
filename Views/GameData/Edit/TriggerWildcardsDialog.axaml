@@ -1,0 +1,68 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.GameData.Edit"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="520"
+        x:Class="MudPlay.Views.GameData.Edit.TriggerWildcardsDialog"
+        x:DataType="vm:TriggerWildcardsViewModel"
+        Title="Trigger wildcards"
+        Width="460" Height="520"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.MutedHint">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+
+            <!-- Explains the scope: these are the trigger system's own captures. -->
+            <TextBlock Grid.Row="0" Classes="MutedHint"
+                       Text="Wildcards captured this session by your triggers — the values behind {name} / {1} / {2} in trigger patterns. This store belongs to the trigger system alone; it is not shared with aliases or macros. It clears when the app closes."/>
+
+            <!-- The live capture table. Read-only; updates as triggers fire. -->
+            <Grid Grid.Row="1">
+                <DataGrid ItemsSource="{Binding Wildcards}"
+                          IsVisible="{Binding HasWildcards}"
+                          IsReadOnly="True"
+                          AutoGenerateColumns="False"
+                          CanUserSortColumns="True"
+                          CanUserResizeColumns="True"
+                          GridLinesVisibility="Horizontal"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Wildcard" Width="140"
+                                            Binding="{Binding Name}"
+                                            FontFamily="{StaticResource FontMono}"/>
+                        <DataGridTextColumn Header="Current value" Width="*"
+                                            Binding="{Binding Value}"
+                                            FontFamily="{StaticResource FontMono}"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Empty state — no captures yet. -->
+                <TextBlock Classes="MutedHint"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           IsVisible="{Binding !HasWildcards}"
+                           Text="No wildcards captured yet. When a trigger with a {name} or {1} placeholder matches, its captured value appears here."/>
+            </Grid>
+
+            <!-- Clear (left) discards every captured value; Close dismisses. -->
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" Content="Clear all"
+                        Command="{Binding ClearCommand}"
+                        IsEnabled="{Binding HasWildcards}"
+                        ToolTip.Tip="Discard every captured wildcard value. Triggers repopulate them as they match again."/>
+                <Button Grid.Column="2" Content="Close"
+                        Command="{Binding CloseCommand}"
+                        IsCancel="True" MinWidth="80"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

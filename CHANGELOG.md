@@ -1,7 +1,10 @@
 # Version history
 
-## 3.103.12
+## 3.104.0
 
+- Triggers: numbered wildcards `{1}`, `{2}`… now work in Literal patterns and responses (were silently treated as literal braces, so the trigger never matched); any letters/digits/underscores is a valid wildcard name
+- Triggers: new **Wildcards** button on the Triggers table opens a live viewer of the captured wildcards and their current values, with Clear all
+- Triggers: the wildcard store is the trigger system's own — documented and kept separate from alias/macro placeholders
 - `@status` / `@path` now report the **specific reason** the navigator is paused — "resting (low HP) en route to X", "meditating (low mana) on loop 'X'", "held", "party asked to wait", or a manual "paused" — instead of always saying "walking" for a walk that isn't actually moving
 - Combat switches to the **room (multi-target) attack** the moment a mob arrives mid-fight and the enemy count crosses your MinEnemies, rather than continuing single-target until the next damage tick
 - Combat: a between-round area-debuff drawing "already cast this round" no longer **strands the round's combat attack** — the attack slot is independent server-side, so it now fires regardless of the debuff's rejection

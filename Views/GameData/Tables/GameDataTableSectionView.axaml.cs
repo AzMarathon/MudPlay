@@ -225,6 +225,12 @@ public partial class GameDataTableSectionView : UserControl
             DismissButton.Content   = editable.DismissLabel ?? "Dismiss";
             DismissButton.IsVisible = true;
         }
+        if (editable.WildcardsCommand is { } wildcards)
+        {
+            WildcardsButton.Command   = wildcards;
+            WildcardsButton.Content   = editable.WildcardsLabel ?? "Wildcards";
+            WildcardsButton.IsVisible = true;
+        }
         if (editable.ExportCommand is { } export)
         {
             ExportButton.Command   = export;
