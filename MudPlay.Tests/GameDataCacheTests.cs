@@ -261,6 +261,53 @@ public sealed class GameDataCacheTests : IDisposable
     }
 
     [Fact]
+    public void EvictTable_LeavesHeldRowsReadable()
+    {
+        // A background build can still be walking rows it got before another thread
+        // evicted the table; eviction must not pull the buffer out from under it.
+        SeedSet("alpha", ("Monsters", """[{"Number":7,"Name":"orc"}]"""));
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        JsonElement? row = cache.FindRowByNumber("Monsters", 7);
+
+        cache.EvictTable("Monsters");
+
+        Assert.Equal("orc", row!.Value.GetProperty("Name").GetString());
+    }
+
+    [Fact]
+    public void EvictIdle_DropsOnlyTablesNotReadWithinTheWindow()
+    {
+        SeedSet("alpha", ("Monsters", "[]"), ("Rooms", "[]"));
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        _ = cache.GetRawTable("Monsters");
+        _ = cache.GetRawTable("Rooms");
+
+        cache.EvictIdle(TimeSpan.FromHours(1));
+        Assert.Equal(2, cache.LoadedTables.Count);
+
+        cache.EvictIdle(TimeSpan.Zero);
+        Assert.Empty(cache.LoadedTables);
+        Assert.NotNull(cache.GetRawTable("Rooms"));   // a later read re-parses
+    }
+
+    [Fact]
+    public async Task EvictIdle_DropsAnUnclaimedPrewarm()
+    {
+        string dir = SeedSet("beta", ("Rooms", "[{\"Name\":\"Old\"}]"));
+        GameDataCache cache = NewCache();
+        await cache.PrewarmAsync("beta", new[] { "Rooms" });
+
+        cache.EvictIdle(TimeSpan.Zero);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), "[{\"Name\":\"New\"}]");
+        cache.SwitchSet("beta");
+
+        // Read fresh from disk — the dropped prewarm was not claimed.
+        Assert.Equal("New", cache.GetRawTable("Rooms")!.RootElement[0].GetProperty("Name").GetString());
+    }
+
+    [Fact]
     public void EvictAll_ClearsEveryLoadedTable()
     {
         SeedSet("alpha",
