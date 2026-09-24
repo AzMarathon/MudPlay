@@ -257,6 +257,9 @@ public sealed class CastingDirector : IDisposable
     private Func<string, IReadOnlyCollection<string>>? _removesShortsFor;
     private Func<string, bool>? _isPartyWideBuff;
 
+    // The due-queue text LogDueQueue last wrote, so an unchanged queue isn't re-logged.
+    private string? _lastLoggedQueue;
+
     // The last buff we SUCCESSFULLY cast (identity known independent of any shared
     // condition message) and when. A wear-off arriving within ClobberWindow of a cast
     // that removes other buffs is that victim's wear-off, not the caster's.
@@ -1686,7 +1689,10 @@ public sealed class CastingDirector : IDisposable
     // slot)`. Read-only: the heal/party/cure pickers don't mutate state, and buffs are
     // enumerated directly (so PickSelfBuff's mana-regen-reroll consumption is untouched).
     // Debuffs are omitted — they're the combat engine's decision and re-peeking it here
-    // is not guaranteed side-effect-free. Only logged when the queue is non-empty.
+    // is not guaranteed side-effect-free. Only logged when the queue is non-empty AND
+    // differs from the last one logged: it's evaluated every tick, and an unchanged
+    // queue re-logged ~once a second filled the log ring on its own, pushing a whole
+    // walk's worth of navigation history out of the bug report's log tail.
     private void LogDueQueue(SpellsSettings spells, HealthSettings health, PartySettings? party,
         bool healRestEnabled, bool blessEnabled)
     {
@@ -1737,8 +1743,14 @@ public sealed class CastingDirector : IDisposable
             }
         }
 
-        if (q.Count == 0) return;
+        if (q.Count == 0)
+        {
+            _lastLoggedQueue = null;
+            return;
+        }
         string ordered = string.Join(", ", q.OrderBy(x => x.Prio).ThenBy(x => x.Slot).Select(x => x.Text));
+        if (ordered == _lastLoggedQueue) return;
+        _lastLoggedQueue = ordered;
         _log.Combat(LogCategory, $"{{spells queued={ordered}}}");
     }
 

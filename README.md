@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.104.14**
-> - Lower memory per running client: the raw Rooms table no longer stays loaded all session, and any game-data table unread for 5 minutes is released (re-read on demand)
-> - Released game-data buffers go back to the system instead of sitting parked in a shared pool, and the runtime now compacts its large-object heap when it fragments
+> **Version 3.104.16**
+> - Pyramid climb re-anchors on the room you're actually in across the door-maze floor, instead of falling a step behind and bashing a door that can't be bashed
+> - The Golden Spire Secret Library's down exit is opened with `move rug` instead of being searched for 20 times
+> - The combat log no longer repeats an unchanged spell queue every second, so a bug report's log reaches back far enough to show the walk
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -29,6 +29,12 @@ public sealed class PyramidSolverTests : IDisposable
             "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 12, "Room Number": 2085, "Name": "Great Pyramid",
             "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 12, "Room Number": 2006, "Name": "Great Pyramid",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 12, "Room Number": 2005, "Name": "Great Pyramid",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
             "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
         ]
         """;
@@ -327,6 +333,49 @@ public sealed class PyramidSolverTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
         // Leader already holds the key, so no forced consolidation was sent.
         Assert.DoesNotContain(h.SentText, t => t.StartsWith("@party give golden lion key", StringComparison.Ordinal));
+    }
+
+    // ----- F3 position resync ----------------------------------------
+
+    [Fact]
+    public void F3_DoorDecision_ResyncsToTheTrackedRoomInsteadOfBashingTheWrongDoor()
+    {
+        using Harness h = NewHarness(leaderName: "MudPlay");
+        LocateFirepit(h);
+        h.Solver.TryBegin(new RoomKey(12, 2085));
+        DriveUntilFloor(h, "F3");
+        Assert.Equal("AwaitingDoor", h.Solver.PhaseName);   // step 1: door east from 2002
+
+        // The tracker says we're already at 2006 (step 4 — the bashable west door).
+        // Without the resync the solver answers step 1's look with `bash east`.
+        h.Tracker.SetLocated(new RoomKey(12, 2006));
+        var westOpen = new RoomObservation("Great Pyramid", AllDirs, new HashSet<Direction> { Direction.W });
+        h.Solver.OnRoomObserved(westOpen);    // step 1's look → resync to step 4, which looks again
+        h.Solver.OnRoomObserved(westOpen);    // step 4's look → west is open → move
+
+        Assert.DoesNotContain("bash east", h.SentText);
+        Assert.Equal("w", h.SentText[^1]);
+    }
+
+    [Fact]
+    public void F3_InTheFloatingKeyRoom_DrivesItsOwnStep()
+    {
+        // Report case: the party is in 2005 (the floating-key room) while the solver
+        // is on another step. It re-anchors on 2005's step (20, door east back to
+        // 2032) instead of working the wrong door; 2005's other doors are 1000-picklock.
+        using Harness h = NewHarness(leaderName: "MudPlay");
+        LocateFirepit(h);
+        h.Solver.TryBegin(new RoomKey(12, 2085));
+        DriveUntilFloor(h, "F3");
+
+        h.Tracker.SetLocated(new RoomKey(12, 2005));
+        var eastOpen = new RoomObservation("Great Pyramid", AllDirs, new HashSet<Direction> { Direction.E });
+        h.Solver.OnRoomObserved(eastOpen);
+
+        Assert.Equal(20, h.Solver.ScriptStep);
+        Assert.Equal(new RoomKey(12, 2005), h.Solver.ExpectedRoom);
+        h.Solver.OnRoomObserved(eastOpen);
+        Assert.Equal("e", h.SentText[^1]);
     }
 
     // One iteration of the run loop (same dispatch as RunToEnd) — used to pump a

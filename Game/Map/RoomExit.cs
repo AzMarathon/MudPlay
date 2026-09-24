@@ -313,9 +313,14 @@ public readonly partial record struct RoomExit(
                 return;
             }
 
-            // "Hidden, Needs N Actions" → multi-action.
-            if (raw.Contains("Needs", StringComparison.OrdinalIgnoreCase)
-             && raw.Contains("Action", StringComparison.OrdinalIgnoreCase))
+            // "Hidden, Needs N Actions" → multi-action. "Hidden/Unknown" is the
+            // import's label for a hidden exit whose opener it couldn't classify —
+            // in the data it's revealed by an Action cell on the same room (the
+            // Secret Library's `move rug`), never by a search, so treat it as
+            // action-gated and let the graph's action pass attach the commands.
+            if ((raw.Contains("Needs", StringComparison.OrdinalIgnoreCase)
+                 && raw.Contains("Action", StringComparison.OrdinalIgnoreCase))
+             || after.StartsWith("Unknown", StringComparison.OrdinalIgnoreCase))
             {
                 hint = RoomExitHint.MultiActionHidden;
                 return;

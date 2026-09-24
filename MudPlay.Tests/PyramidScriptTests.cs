@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using MudPlay.Game.Map;
 using Xunit;
@@ -76,6 +77,17 @@ public sealed class PyramidScriptTests
         Assert.False(doorKinds[13].Bashable);  // step 14
         Assert.False(doorKinds[20].Bashable);  // step 21
         Assert.Equal(PyramidStepKind.KeyDoor, doorKinds[21].Kind);  // step 22
+    }
+
+    [Fact]
+    public void F3_FromRooms_AlignWithTheScript()
+    {
+        IReadOnlyList<int> from = PyramidScript.FromRooms(PyramidFloor.F3)!;
+        Assert.Equal(PyramidScript.Steps(PyramidFloor.F3).Count, from.Count);
+        Assert.Equal(2002, from[0]);                                  // floor entry
+        Assert.Equal(2051, from[^1]);                                 // stars sphinx
+        Assert.All(from, r => Assert.Equal(PyramidFloor.F3, PyramidScript.FloorOf(12, r)));
+        Assert.Null(PyramidScript.FromRooms(PyramidFloor.F4));
     }
 
     [Fact]

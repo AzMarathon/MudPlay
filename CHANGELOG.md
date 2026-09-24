@@ -1,5 +1,12 @@
 # Version history
 
+## 3.104.16
+
+- Pyramid climb re-anchors on the room you're actually in across the door-maze floor, instead of falling a step behind and bashing a door that can't be bashed
+- The Golden Spire Secret Library's down exit is opened with `move rug` instead of being searched for 20 times
+- The combat log no longer repeats an unchanged spell queue every second, so a bug report's log reaches back far enough to show the walk
+- bug reports addressed: paradigm-20260924-151919, paradigm-20260924-154558
+
 ## 3.104.14
 
 - Lower memory per running client: the raw Rooms table no longer stays loaded all session, and any game-data table unread for 5 minutes is released (re-read on demand)
