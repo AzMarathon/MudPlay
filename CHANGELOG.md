@@ -1,5 +1,10 @@
 # Version history
 
+## 3.105.2
+
+- Auto-combat engages a monster that walks in on the server's generic arrival line (`… moves into the from the northeast.`, `… just arrived from nowhere.`) — a dark room never re-displayed it to catch up
+- A monster leaving on the generic `just left …` line is dropped from the room, so the engine stops swinging at it
+
 ## 3.105.1
 
 - Monster Intel's **Est. Rounds to Kill** now defaults to **Fastest of all my attacks** — whichever of your melee attacks (Backstab excluded) or attack spells kills each monster soonest — instead of the Normal melee swing, so a caster's monsters no longer vanish behind the rounds cap when its spells kill them in a couple of casts (a saved specific pick is kept; the picker gains a leading "Fastest of all my attacks" radio)

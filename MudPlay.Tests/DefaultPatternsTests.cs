@@ -196,6 +196,70 @@ public sealed class DefaultPatternsTests
     }
 
     [Fact]
+    public void RoomEntryArrivalRegex_MatchesTheServersGenericForms()
+    {
+        IMessagePattern p = PatternById(KnownPatterns.RoomEntryArrival);
+
+        // THE STOCK TYPO: the compass arrival omits the word "room", while its two
+        // vertical siblings carry it. That one string is what a monster prints when
+        // it pursues you or wanders in, so missing it meant auto-combat never
+        // learned the mob was in the room — unrecoverable in a dark room, which
+        // never re-displays an "Also here:" to fix the roster.
+        Assert.True(p.TryMatch(Line("bugbear captain moves into the from the northeast."),
+                               out MatchResult r));
+        Assert.Equal("bugbear captain", r.Groups[0]);
+        Assert.Equal("northeast",       r.Groups[1]);
+
+        // The complete forms, unchanged.
+        Assert.True(p.TryMatch(Line("bugbear captain moves into the room from above."), out _));
+        Assert.True(p.TryMatch(Line("bugbear captain moves into the room from below."), out _));
+        Assert.True(p.TryMatch(Line("bugbear captain moves into the room from nowhere."), out _));
+        // A monster's OWN entrance sentence, which always matched.
+        Assert.True(p.TryMatch(Line("A tall elite orc guard strides in from the east!"), out _));
+
+        // The spawn path's other wording, with no "in"/"into" at all.
+        Assert.True(p.TryMatch(Line("bugbear captain just arrived from nowhere."), out r));
+        Assert.Equal("bugbear captain", r.Groups[0]);
+        Assert.Equal("nowhere",         r.Groups[1]);
+
+        // ...and that branch demands a REAL direction, because "<name> just
+        // arrived from <somewhere>" is a shape ordinary chat produces.
+        Assert.False(p.TryMatch(Line("Bob just arrived from the store."), out _));
+        Assert.False(p.TryMatch(Line("Bob just arrived from downtown."), out _));
+        // SneakArrivalNotice owns the sneak line.
+        Assert.False(p.TryMatch(Line("You notice Bob sneaking in from the east."), out _));
+    }
+
+    [Fact]
+    public void RoomEntryDepartureRegex_MatchesTheServersGenericForms()
+    {
+        IMessagePattern p = PatternById(KnownPatterns.RoomEntryDeparture);
+
+        // The mirror of the arrival: a monster with no departure sentence of its
+        // own leaves with "just left", which carries neither "out" nor "the room",
+        // so nothing dropped it from the roster and the engine kept swinging at a
+        // monster that had walked away.
+        Assert.True(p.TryMatch(Line("bugbear captain just left to the northeast."),
+                               out MatchResult r));
+        Assert.Equal("bugbear captain", r.Groups[0]);
+        Assert.Equal("northeast",       r.Groups[1]);
+
+        // The vertical pair spells the direction as an adverb, with no "to the".
+        Assert.True(p.TryMatch(Line("bugbear captain just left upwards."), out r));
+        Assert.Equal("upwards", r.Groups[1]);
+        Assert.True(p.TryMatch(Line("bugbear captain just left downwards."), out _));
+
+        // The two shapes confirmed from real logs, unchanged.
+        Assert.True(p.TryMatch(Line("The orc rogue walks out of the room to the above!"), out _));
+        Assert.True(p.TryMatch(Line("dark goblin archer exits the room to the northeast."), out _));
+        Assert.True(p.TryMatch(Line("The kobold scurries out to the west."), out _));
+
+        // Chat that shares the shape stays out.
+        Assert.False(p.TryMatch(Line("Bob says: I just left to the store."), out _));
+        Assert.False(p.TryMatch(Line("Bob gossips: I just left downtown."), out _));
+    }
+
+    [Fact]
     public void RoomSpawnArrivalRegex_MatchesDirectionlessSpawn_NotDirectionalOrTitle()
     {
         IMessagePattern p = PatternById(KnownPatterns.RoomSpawnArrival);

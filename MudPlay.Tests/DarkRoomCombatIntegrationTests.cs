@@ -34,6 +34,12 @@ public sealed class DarkRoomCombatIntegrationTests
         public RoomEntityClassifier Classifier { get; }
         public CombatManager Combat { get; }
         public DarkRoomCombatWatcher Watcher { get; }
+        // The roster keepers for the wire's own arrival / departure notices. In
+        // production AppServices wires both beside the dark watcher; a dark room's
+        // roster leans on them the same way a lit one does, because a monster that
+        // walks in or out says so whether or not you can see it.
+        public RoomEntryWatcher Entry { get; }
+        public RoomDepartureWatcher Departure { get; }
         public List<byte[]> Sent { get; } = new();
         public Dictionary<int, MonsterOverlay> Overlays { get; } = new();
         public CombatSettings Settings { get; set; } = new()
@@ -71,6 +77,8 @@ public sealed class DarkRoomCombatIntegrationTests
                 Router, Tracker, Classifier,
                 currentTarget: () => Combat.CurrentTarget,
                 log: Log);
+            Entry = new RoomEntryWatcher(Router, Classifier, Log);
+            Departure = new RoomDepartureWatcher(Router, Classifier, Log);
         }
 
         public void EnterDarkRoom() => Tracker.NoteDarkRoomEntered();
@@ -105,12 +113,54 @@ public sealed class DarkRoomCombatIntegrationTests
 
         public void Dispose()
         {
+            Departure.Dispose();
+            Entry.Dispose();
             Watcher.Dispose();
             Combat.Dispose();
             Classifier.Dispose();
             try { Directory.Delete(_root, recursive: true); }
             catch { /* best-effort */ }
         }
+    }
+
+    [Fact]
+    public void CompassArrival_InDark_SpinsUsIntoCombat()
+    {
+        // Reported with a capture: a bugbear captain pursued the player into a dark
+        // tunnel and swung every round while the client sat idle — "you can see it
+        // sits there until I die".
+        //
+        // The mob announced itself with the server's generic compass arrival, and
+        // that one string omits the word "room" (a stock typo the server reproduces
+        // deliberately), so RoomEntryArrival did not match it and nothing added the
+        // mob to the roster. A lit room recovers on its next "Also here:"; a dark
+        // room never re-displays one.
+        using Harness h = new();
+        h.AddMonster(963, "bugbear captain");
+        h.EnterDarkRoom();
+
+        h.Feed("bugbear captain moves into the from the northeast.");
+
+        Assert.Equal("a bugbear captain", h.LastSent);
+        Assert.Equal("bugbear captain", h.Combat.CurrentTarget);
+    }
+
+    [Fact]
+    public void CompassDeparture_InDark_DropsTheTarget()
+    {
+        // The mirror: it walks away with "just left to the <dir>.", which carried
+        // neither "out" nor "the room", so nothing retracted it and the engine kept
+        // swinging at a monster the server then answered for with "You do not see
+        // bugbear captain here!".
+        using Harness h = new();
+        h.AddMonster(963, "bugbear captain");
+        h.EnterDarkRoom();
+        h.Feed("bugbear captain moves into the from the northeast.");
+        Assert.Equal("bugbear captain", h.Combat.CurrentTarget);
+
+        h.Feed("bugbear captain just left to the southwest.");
+
+        Assert.Null(h.Combat.CurrentTarget);
     }
 
     [Fact]
