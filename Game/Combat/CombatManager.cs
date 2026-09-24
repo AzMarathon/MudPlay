@@ -514,10 +514,20 @@ public sealed partial class CombatManager : IDisposable
     // paradigm-20260813-081016: "why did it spam turn like that", triggered
     // by a single legitimate mihe self-heal interrupt). Set to the stamp just
     // resumed for; compared, not cleared, so a genuinely NEW interrupt (a
-    // fresh NoteBetweenRoundCast stamp) still resumes exactly once. The
-    // weapon-resume branch needs no equivalent guard — a physical swing
-    // doesn't itself cause an Off, so it can't retrigger itself this way.
+    // fresh NoteBetweenRoundCast stamp) still resumes exactly once.
     private DateTimeOffset _lastSpellResumeForBetweenRoundCastAt = DateTimeOffset.MinValue;
+
+    // Weapon-mode twin of the above. A physical swing doesn't itself cause an Off,
+    // so the weapon resume can't self-retrigger — but it used to lean on ResumePacing
+    // alone, which is a wall-clock (2.5s) gate that also blocks a DISTINCT second
+    // between-round cast landing inside the window. Two party heals a beat apart (two
+    // members hurt in adjacent rounds) then left the second heal's re-attack paced
+    // out for a full round — combat sat Off, a round + the mob's exp lost, until the
+    // NEXT cast fell past the window and drove the resume (report
+    // paradigm-20260923-210406). Stamp it per interrupt so each distinct between-round
+    // cast resumes the weapon exactly once, bypassing ResumePacing (the mob-swing /
+    // tick resumes still honour it for spin control).
+    private DateTimeOffset _lastWeaponResumeForBetweenRoundCastAt = DateTimeOffset.MinValue;
 
     // How recent a between-round cast must be for the next *Combat Off* to count
     // as that cast's interrupt. Generous enough to cover send→Off network
@@ -3162,7 +3172,8 @@ public sealed partial class CombatManager : IDisposable
     // cancelled it, and skipping the resume would idle a full round (the reported
     // heal-then-stall). ResumePacing still stands, so we never double-fire with
     // the tick resume in the same round.
-    private bool TryResumeEngage(RoomEntitiesObservation live, bool bypassAttackGuard = false)
+    private bool TryResumeEngage(RoomEntitiesObservation live, bool bypassAttackGuard = false,
+        bool bypassPacing = false)
     {
         // The user hand-typed this round's attack (a combat spell or a swing) — don't
         // re-send our auto attack over the top of it. The override clears at the next
@@ -3185,7 +3196,11 @@ public sealed partial class CombatManager : IDisposable
         // double-send). Skip while a real attack is still this recent — unless a
         // between-round cast is what produced this Off (see bypassAttackGuard).
         if (!bypassAttackGuard && now - _lastAttackSentAt < ResumeAfterAttackGuard) return false;
-        if (now - _lastInterruptResumeAt < ResumePacing) return false;
+        // A distinct between-round-cast resume (bypassPacing) is guarded once-per-cast
+        // by its own stamp, so it must not be paced out by a prior resume. Still stamp
+        // _lastInterruptResumeAt below so the paced mob-swing / tick resumes stay
+        // deduped against it and can't double this one in the same round.
+        if (!bypassPacing && now - _lastInterruptResumeAt < ResumePacing) return false;
         _lastInterruptResumeAt = now;
         DeferResumeEngage(live);
         return true;
@@ -3673,6 +3688,7 @@ public sealed partial class CombatManager : IDisposable
 
             if (!suppressBetweenRoundResume
                 && DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
+                && _betweenRoundCastAt != _lastWeaponResumeForBetweenRoundCastAt
                 && _castingSpellTarget is null
                 && _classifier.Current is { } live
                 && HasEngageable(live))
@@ -3684,8 +3700,15 @@ public sealed partial class CombatManager : IDisposable
                         "deferring re-engage to the death→re-observe path");
                 else
                 {
+                    // Stamp this interrupt as resumed BEFORE dispatching so a later Off
+                    // for the SAME cast can't re-fire, and let this distinct cast bypass
+                    // ResumePacing — a second party heal a beat after the first must still
+                    // re-attack, not sit paced out for a round.
+                    _lastWeaponResumeForBetweenRoundCastAt = _betweenRoundCastAt;
                     _log?.Combat(LogCategory, "between-round-cast resume → re-engaging weapon attack");
-                    TryResumeEngage(live, bypassAttackGuard: _lastAttackSentAt <= _betweenRoundCastAt);
+                    TryResumeEngage(live,
+                        bypassAttackGuard: _lastAttackSentAt <= _betweenRoundCastAt,
+                        bypassPacing: true);
                 }
             }
 

@@ -680,6 +680,37 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("lbol thin leprous outcast", h.LastSent);
     }
 
+    // Report paradigm-20260923-210406: two party heals a beat apart (two members hurt in
+    // adjacent rounds) each drop *Combat Off* on a weapon build. The first heal's resume
+    // re-attacks; the SECOND used to be paced out by ResumePacing (2.5s wall-clock),
+    // leaving combat off for a full round — a lost round + the mob's exp — until the next
+    // cast fell past the window. Each distinct between-round cast must resume the weapon.
+    [Fact]
+    public void WeaponResume_SecondBetweenRoundCastWithinPacing_StillReAttacks()
+    {
+        using Harness h = new();   // no attack spells → weapon mode
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);
+        int afterEngage = h.Sent.Count;
+
+        // First party heal → *Combat Off* → weapon resume re-attacks.
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.True(h.Sent.Count > afterEngage, "first heal should re-attack");
+        Assert.Equal("a giant rat", h.LastSent);
+        int afterFirstResume = h.Sent.Count;
+
+        // Second party heal a beat later — well within ResumePacing (2.5s), distinct
+        // cast stamp — must ALSO re-attack, not sit paced out for the round.
+        System.Threading.Thread.Sleep(2);   // distinct _betweenRoundCastAt, still << 2.5s
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.True(h.Sent.Count > afterFirstResume, "second heal within the pacing window must still re-attack");
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
     // Report paradigm-20260820-063541 ("LBOL cast twice"): a between-round survival
     // cast interrupts an attack spell (lbol, MaxCasts=1) mid-round and drops *Combat
     // Off*. The heartbeat can't tally the interrupted round (OnCombatTick bails while
