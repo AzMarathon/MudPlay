@@ -120,6 +120,28 @@ public sealed class HiddenExitRevealManagerTests : IDisposable
         Assert.IsType<HiddenSearchResult.Revealed>(result);
     }
 
+    // Report paradigm-20260924-135311: a move queued behind a gear swap landed while
+    // the walker was searching, and every retry after that searched the wrong room
+    // (19 more `sea d` below the room with the exit). A confirmed move to another room
+    // ends the search as LeftRoom — no further `sea` — so the walker can re-plan.
+    [Fact]
+    public void Reveal_LeftTheRoomMidSearch_StopsWithLeftRoom()
+    {
+        Harness h = new(_root) { MaxAttempts = 20 };
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        HiddenSearchResult? result = null;
+        h.Mgr.Enqueue(Direction.N, "walker", r => result = r);
+        Assert.Single(h.Sent);
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+
+        HiddenSearchResult.LeftRoom left = Assert.IsType<HiddenSearchResult.LeftRoom>(result);
+        Assert.Equal(new RoomKey(1, 1), left.SearchedIn);
+        Assert.Equal(new RoomKey(1, 2), left.NowIn);
+        Assert.Single(h.Sent);                          // no retry in the wrong room
+        Assert.False(h.Mgr.IsBusy);
+    }
+
     [Fact]
     public void Reveal_RetriesUpToCap_ThenFails()
     {

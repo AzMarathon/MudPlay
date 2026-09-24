@@ -368,6 +368,7 @@ public sealed partial class StatParser : IDisposable
         OnLivesRemainingLine(text);
         OnExperienceGainLine(text);
         OnTrainSuccessLine(text);
+        OnCpGainLine(text);
         TryHealthWindow(text);
         MaybeSelfArmOnHeader(text);
         if (_windowOpenedAt is null) return;
@@ -395,6 +396,8 @@ public sealed partial class StatParser : IDisposable
         OnExperienceGainLine(line.Text);
         // Level-up — always-on live Level bump when a train-success line lands.
         OnTrainSuccessLine(line.Text);
+        // CP awarded by that train — always-on live accrual onto Cp.
+        OnCpGainLine(line.Text);
         // Compact `health`-command re-anchor — its own single-shot gate, checked
         // before the stat-screen scan (and before the stat gate's early-return
         // below, so a `health` poll re-anchors even with no stat window open).
@@ -638,6 +641,23 @@ public sealed partial class StatParser : IDisposable
         Stats.LevelPercent = 0;
         HasParsed = true;
         _log?.Log(LogSeverity.Info, "StatParser", $"Level → {newLevel} (train-success line).");
+    }
+
+    // Always-on handler for the CP a train awards ("You gain 15 CPs", right after the
+    // train-success line). Stats.Cp otherwise only moved on a `stat` poll, so a hand
+    // `train` followed by `train stats` budgeted the CP plan against the PRE-train CP:
+    // nothing looked affordable and Auto-train stats silently did nothing until the
+    // user typed `stat` (reports paradigm-20260924-132158 / -132507). StatParser owns
+    // Stats.Cp, so the accrual lives here; the next stat poll still re-anchors it.
+    private void OnCpGainLine(string text)
+    {
+        Match m = CpGainRx().Match(text);
+        if (!m.Success) return;
+        if (!int.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out int gained) || gained <= 0) return;
+        Stats.Cp += gained;
+        HasParsed = true;
+        _log?.Log(LogSeverity.Info, "StatParser", $"Cp += {gained} → {Stats.Cp} (train CP-gain line).");
     }
 
     // The compact `health` command re-anchors HP + power-pool ceilings with far
@@ -897,6 +917,10 @@ public sealed partial class StatParser : IDisposable
 
     [GeneratedRegex(@"^You hand over .+ to train to the next level",
         RegexOptions.CultureInvariant)] private static partial Regex TrainNextLevelRx();
+
+    // The CP a train awards, as printed after the train-success line: "You gain 15 CPs".
+    [GeneratedRegex(@"^You gain (\d+) CPs?\b",
+        RegexOptions.CultureInvariant)] private static partial Regex CpGainRx();
 
     // Chat-line shape — matched at line start. Any of the standard
     // MajorMUD chat verbs after a single-word speaker means the

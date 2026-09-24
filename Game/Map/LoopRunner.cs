@@ -1433,6 +1433,13 @@ public sealed class LoopRunner : IRecoverableEngine
             case HiddenSearchResult.Failed failed:
                 FailStep($"hidden reveal failed: {failed.Reason}");
                 return;
+
+            case HiddenSearchResult.LeftRoom left:
+                // A move already on the wire landed mid-search — re-sync and re-route
+                // from where we actually are rather than failing the lap.
+                _stepInFlight = false;
+                EnterRecovery($"step {_index + 1} hidden-exit search interrupted — moved {left.SearchedIn} → {left.NowIn}");
+                return;
         }
     }
 

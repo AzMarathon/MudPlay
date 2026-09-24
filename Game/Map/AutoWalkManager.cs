@@ -1995,6 +1995,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     $"hidden exit search failed: {failed.Reason}", _destination));
                 Reset();
                 return;
+
+            case HiddenSearchResult.LeftRoom left:
+                // A move already on the wire landed mid-search — we're not where the
+                // search assumed. Re-plan from here on the walk's bounded replan
+                // budget (which leans on rm first) instead of failing the walk.
+                _log?.Info("Walker",
+                    $"hidden-exit search interrupted — moved {left.SearchedIn} → {left.NowIn}; replanning");
+                _stepInFlight = false;
+                TryReplanOrFail(RoomConfidence.Confirmed);
+                return;
         }
     }
 

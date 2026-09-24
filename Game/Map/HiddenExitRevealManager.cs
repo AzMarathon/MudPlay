@@ -29,6 +29,9 @@ public sealed class HiddenExitRevealManager : IDisposable
     private readonly Queue<HiddenRequest> _queue = new();
     private HiddenRequest? _current;
     private int _attempts;
+    // The room the in-flight search started in (null when unknown). A confirmed move
+    // to another room ends the search — see HiddenSearchResult.LeftRoom.
+    private RoomKey? _searchRoom;
 
     // Direction of the in-flight request, or null when idle.
     public string? CurrentDirection => _current is { } cur
@@ -169,6 +172,7 @@ public sealed class HiddenExitRevealManager : IDisposable
         if (_queue.Count == 0) return;
         _current = _queue.Dequeue();
         _attempts = 0;
+        _searchRoom = _tracker.State.CurrentRoom?.Key;
         SendSea();
     }
 
@@ -185,11 +189,24 @@ public sealed class HiddenExitRevealManager : IDisposable
     {
         if (_current is not { } cur) return;
 
+        // We're somewhere else now (report paradigm-20260924-135311: a queued move
+        // landed mid-search and 19 more `sea d` went out below the room that had the
+        // exit). Stop, before the success check can match an exit in the WRONG room.
+        Room? room = transition.NewRoom;
+        if (_searchRoom is { } searched && room is not null && room.Key != searched
+            && transition.NewConfidence == RoomConfidence.Confirmed)
+        {
+            _log?.Info("Hidden",
+                $"reveal {DirectionShort(cur.Direction)} abandoned — left {searched} for {room.Key} mid-search.");
+            cur.Reply(new HiddenSearchResult.LeftRoom(searched, room.Key));
+            Reset();
+            return;
+        }
+
         // Check if the searched direction now appears in the
         // tracker's current room. The trigger is broad — any state
         // change while we're in-flight prompts a re-check, including
         // a "same room redisplay after sea".
-        Room? room = transition.NewRoom;
         if (room is not null && room.Exits.ContainsKey(cur.Direction))
         {
             _log?.Info("Hidden",
@@ -214,6 +231,7 @@ public sealed class HiddenExitRevealManager : IDisposable
     {
         _current = null;
         _attempts = 0;
+        _searchRoom = null;
         TryStartNext();
     }
 
