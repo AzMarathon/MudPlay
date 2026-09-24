@@ -103,6 +103,21 @@ public sealed class PartyTrainPlanningTests
     public void SpeaksPartyTrain_ReadsTheRecordedVersionReply(string? version, bool expected) =>
         Assert.Equal(expected, PartyTrainCoordinator.SpeaksPartyTrain(version));
 
+    // An other-client member is re-asked @level only once its projected level-up
+    // (needed at OUR rate) plus the buffer has passed — never on a timer.
+    [Fact]
+    public void LevelReask_OnlyAfterTheProjectedLevelUpPlusBuffer()
+    {
+        DateTimeOffset read = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
+        // 60,000 needed at 60,000/hr → due at 1h + 3m buffer.
+        Assert.False(PartyTrainCoordinator.LevelReaskDue(60_000, read, 60_000, read.AddMinutes(62)));
+        Assert.True(PartyTrainCoordinator.LevelReaskDue(60_000, read, 60_000, read.AddMinutes(63)));
+        // No rate, no "needed", or already able to train → never re-asked.
+        Assert.False(PartyTrainCoordinator.LevelReaskDue(60_000, read, 0, read.AddDays(1)));
+        Assert.False(PartyTrainCoordinator.LevelReaskDue(null, read, 60_000, read.AddDays(1)));
+        Assert.False(PartyTrainCoordinator.LevelReaskDue(0, read, 60_000, read.AddDays(1)));
+    }
+
     // ----- party ceiling --------------------------------------------------
 
     [Theory]
@@ -132,6 +147,17 @@ public sealed class PartyTrainPlanningTests
         Assert.Equal(PartyTrainVerdict.Fire, d.Verdict);
         Assert.Equal(["Ann"], d.Trainees);
         Assert.Contains("Lead", d.Skipped);
+    }
+
+    [Fact]
+    public void Quorum_OffMembersDontCount_AndTheOffStateRoundTrips()
+    {
+        PartyTrainDecision d = PartyTrainQuorum.Decide(
+            [P("Lead", PartyTrainReadiness.Ready, 20, leader: true), P("Ann", PartyTrainReadiness.Off, 20)],
+            levelGap: 5, minReady: 2);
+        Assert.Equal(PartyTrainVerdict.Fire, d.Verdict);   // Ann opted out, so everyone left is ready
+        Assert.True(PartyTrainStatus.TryDecode(Status(PartyTrainReadiness.Off, 20).Encode(), out PartyTrainStatus back));
+        Assert.Equal(PartyTrainReadiness.Off, back.Readiness);
     }
 
     [Fact]

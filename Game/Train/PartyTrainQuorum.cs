@@ -31,7 +31,7 @@ public readonly record struct PartyTrainDecision(
 // member like everyone else — a power-leveling leader who won't level for hours must
 // not stall the trip, so the leader escorts the party even when it isn't training:
 //
-//   * Blocked members (nothing party-trainable) don't count at all.
+//   * Blocked members (nothing party-trainable) and Off ones don't count at all.
 //   * A NOT-ready member more than LevelGap levels above the party's (lower) median
 //     is a power-leveler: excluded, so it can't hold the "everyone ready" case.
 //   * Everyone left ready → fire, even when that's fewer than minReady (a party
@@ -48,7 +48,7 @@ public static class PartyTrainQuorum
         System.ArgumentNullException.ThrowIfNull(participants);
 
         List<PartyTrainParticipant> live = participants
-            .Where(p => p.Status.Readiness != PartyTrainReadiness.Blocked)
+            .Where(p => p.Status.Readiness is not (PartyTrainReadiness.Blocked or PartyTrainReadiness.Off))
             .ToList();
         if (live.Count == 0)
             return Decision(PartyTrainVerdict.Idle, [], [], [], "no one has anything to party-train");

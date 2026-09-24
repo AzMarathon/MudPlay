@@ -927,9 +927,11 @@ public sealed class TrainerWalkManager : IDisposable
         int keep = Math.Max(0, s.LevelsToKeep);
         if (!IsBusy && EngineActive && s.AutoTrain
             && DateTimeOffset.Now >= _fundingRetryAt
-            && CanStartRun?.Invoke() != false
             && TrainBudgetCalculator.ShouldFire(CountBankableAbove(_stats.Level), keep, s.FireAtBankedLevels)
-            && TrainBudgetCalculator.WithinCeiling(_stats.Level, Math.Max(0, s.DoNotTrainAbove)))
+            && TrainBudgetCalculator.WithinCeiling(_stats.Level, Math.Max(0, s.DoNotTrainAbove))
+            // Last: in a party the gate also notes who to re-invite, so only ask it
+            // once a run is otherwise going.
+            && CanStartRun?.Invoke() != false)
             // Armed auto-train: detour + loop-train down to the reserve, applying
             // CP per the Auto-train-stats toggle. Suppressed once the level ceiling
             // is reached.

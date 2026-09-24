@@ -6602,14 +6602,6 @@ public sealed class AppServices
         Walker.Event += e => TrainFunding.OnWalkEvent(e.Kind);
         // Shortfall wording comes from the live session earn rate + lap time, which
         // live out here rather than in the train coordinator.
-        // Bank the excess on the way back into the circuit. AutoDeposit's own check
-        // decides whether there's anything worth a trip, against the user's
-        // keep-on-hand floor — this just gives it the prompt to look.
-        TrainerWalk.AfterTrainRun = () => AutoDeposit.OnInventoryChanged();
-        // Solo-only: training drops you out of and back into the realm, which
-        // disbands a party server-side, so an armed run must not fire in a group —
-        // a party trains through PartyTrain below instead.
-        TrainerWalk.CanStartRun = () => !PartyState.IsInParty;
         TrainerWalk.DescribeShortfall = shortfall =>
             Game.Train.TrainFundingForecast.Describe(
                 shortfall,
@@ -6652,6 +6644,9 @@ public sealed class AppServices
             armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
                 .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
                     System.Threading.Tasks.TaskScheduler.Default),
+            // Outside a trip nothing is telepathed mid-fight — a line at the wrong
+            // moment costs a round.
+            inCombat: () => PlayerState.InCombat,
             selfLevel: () => PlayerStats.Level,
             // The @level probe's last reading — lets the Party window put a level in
             // front of the class for members that don't report.
@@ -6660,6 +6655,20 @@ public sealed class AppServices
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
         PartyLevelProbe.ProgressObserved += PartyTrain.NoteLevelProgress;
+        // After a run that trained: re-form a party a solo-fallback train disbanded,
+        // then bank the excess on the way back into the circuit. AutoDeposit's own
+        // check decides whether there's anything worth a trip, against the user's
+        // keep-on-hand floor — this just gives it the prompt to look.
+        TrainerWalk.AfterTrainRun = () =>
+        {
+            PartyTrain.AfterSoloRun();
+            AutoDeposit.OnInventoryChanged();
+        };
+        // Training drops you out of and back into the realm, which disbands a party
+        // server-side, so the solo run stays out of a group — a party trains through
+        // PartyTrain instead. The exception is a leader with Auto-train party on
+        // and nobody to train with: it trains by its solo settings and re-forms.
+        TrainerWalk.CanStartRun = () => PartyTrain.AllowSoloRun();
         // Level-up announcer. Built after StatParser + the ProfileLoaded
         // Hydrate wiring so its baseline seed sees freshly-hydrated stats; watches
         // StatParser.ExperienceGained to broadcast newly-trainable levels.

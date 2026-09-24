@@ -293,6 +293,10 @@ public static class BugReportBuilder
             ? cd.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
             : "(none)");
         Kv(sb, "Party train — done owed to", ptrain.PendingDoneFor ?? "(none)");
+        Kv(sb, "Party train — partners (MudPlay, feature on)", ptrain.HasPartners ? "yes — party trips" : "none — solo settings when leading");
+        Kv(sb, "Party train — asked this membership", ptrain.AskedMembers.Count == 0
+            ? "(none)" : string.Join(", ", ptrain.AskedMembers));
+        Kv(sb, "Party train — reporting to", ptrain.ReportingTo ?? "(no leader has asked)");
         var reports = ptrain.Reports;
         Kv(sb, "Party train — member reports", reports.Count == 0
             ? "(none)"

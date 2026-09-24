@@ -10,7 +10,8 @@ namespace MudPlay.Game.Train;
 //             funding plan's problem, not the member's readiness.
 //   Blocked — nothing it could train in party mode: at its level ceiling, or the
 //             only next step is the solo level-11 trainer. Never waited for.
-public enum PartyTrainReadiness { Waiting, Ready, Blocked }
+//   Off     — it switched Auto-train party off. Not a party-train partner at all.
+public enum PartyTrainReadiness { Waiting, Ready, Blocked, Off }
 
 // One member's party-train report, sent to the leader as `@ptrain st <payload>`.
 // The member computes every figure from its OWN client (its settings, purse, bank
@@ -48,6 +49,7 @@ public readonly record struct PartyTrainStatus(
         {
             PartyTrainReadiness.Ready   => 'r',
             PartyTrainReadiness.Blocked => 'b',
+            PartyTrainReadiness.Off     => 'o',
             _                           => 'w',
         });
         Append(sb, "l", Level);
@@ -101,6 +103,7 @@ public readonly record struct PartyTrainStatus(
                     {
                         "r" => PartyTrainReadiness.Ready,
                         "b" => PartyTrainReadiness.Blocked,
+                        "o" => PartyTrainReadiness.Off,
                         "w" => PartyTrainReadiness.Waiting,
                         _   => null,
                     };

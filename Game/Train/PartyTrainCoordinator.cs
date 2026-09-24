@@ -44,11 +44,14 @@ public sealed class PartyTrainCoordinator : IDisposable
     public const string LogCategory = "PartyTrain";
 
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(15);
-    // A report older than this is dropped — its member stopped reporting (toggle
-    // off, left, crashed) and must not hold or shape a trip.
-    private static readonly TimeSpan StatusFresh = TimeSpan.FromMinutes(12);
-    // The leader re-asks this often so reports stay inside StatusFresh.
-    private static readonly TimeSpan AskInterval = TimeSpan.FromMinutes(5);
+    // Wire economy: every telepath a leader sends at the wrong moment costs it a
+    // little exp/hour, so the handshake is kept to the minimum. A member is asked ONCE
+    // per time it joins (and only after JoinGrace, so the join-time @version probe
+    // has said whether it's worth asking); after that it pushes its own changes. The
+    // only repeat is a member on another client, re-asked @level once its projected
+    // time to level plus AskBuffer has passed. Nothing goes out mid-combat.
+    private static readonly TimeSpan JoinGrace = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan AskBuffer = TimeSpan.FromMinutes(3);
     // A member's train is a realm excursion plus a re-invite; past this the trip
     // goes on without its `done`.
     private static readonly TimeSpan MemberTrainTimeout = TimeSpan.FromSeconds(150);
@@ -71,6 +74,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     private readonly Func<string, string?> _recordedVersion;
     private readonly Action<IReadOnlyList<string>> _reformParty;
     private readonly Action<TimeSpan, Action> _armTimer;
+    private readonly Func<bool> _inCombat;
     private readonly Func<int> _selfLevel;
     private readonly Func<string, int?> _recordedLevel;
     private readonly Func<DateTimeOffset> _now;
@@ -83,8 +87,13 @@ public sealed class PartyTrainCoordinator : IDisposable
     // an older MudPlay) — enough for the Party window's leveling line, never a vote.
     private readonly Dictionary<string, (int Level, long? Needed, string? TheirEta, DateTimeOffset At)> _levelReplies =
         new(StringComparer.OrdinalIgnoreCase);
-    private DateTimeOffset _lastAsk = DateTimeOffset.MinValue;
-    private string _askedRoster = "";
+    // Members already asked this membership, and when each was first seen in it.
+    private readonly Dictionary<string, DateTimeOffset> _asked = new(StringComparer.OrdinalIgnoreCase);
+    // How long an asked member has to answer before it's taken as not taking part.
+    private static readonly TimeSpan ReplyWindow = TimeSpan.FromSeconds(30);
+    // Followers to re-invite after a solo-fallback train (see AllowSoloRun).
+    private IReadOnlyList<string> _soloReform = [];
+    private readonly Dictionary<string, DateTimeOffset> _joinedAt = new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset _cooldownUntil = DateTimeOffset.MinValue;
     private bool _tripRunning;
     private string _lastReason = "";
@@ -103,6 +112,10 @@ public sealed class PartyTrainCoordinator : IDisposable
 
     private string _lastSentKey = "";
     private PendingDone? _pendingDone;
+    // The leader that asked us for reports; we only ever report to it, and only while
+    // we're following it. A leader that never asks (toggle off, not using the feature)
+    // is never sent anything.
+    private string? _reportTo;
 
     // Our own client may not register the drop a train causes; past this with no drop
     // seen and still apparently following, the `done` goes anyway — the leader also
@@ -128,6 +141,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         Func<string, string?> recordedVersion,
         Action<IReadOnlyList<string>> reformParty,
         Action<TimeSpan, Action> armTimer,
+        Func<bool> inCombat,
         Func<int> selfLevel,
         Func<string, int?> recordedLevel,
         Func<DateTimeOffset>? now = null,
@@ -151,6 +165,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         _recordedVersion = recordedVersion ?? throw new ArgumentNullException(nameof(recordedVersion));
         _reformParty = reformParty ?? throw new ArgumentNullException(nameof(reformParty));
         _armTimer = armTimer ?? throw new ArgumentNullException(nameof(armTimer));
+        _inCombat = inCombat ?? throw new ArgumentNullException(nameof(inCombat));
         _selfLevel = selfLevel ?? throw new ArgumentNullException(nameof(selfLevel));
         _recordedLevel = recordedLevel ?? throw new ArgumentNullException(nameof(recordedLevel));
         _now = now ?? (() => DateTimeOffset.Now);
@@ -167,6 +182,9 @@ public sealed class PartyTrainCoordinator : IDisposable
     public string LastDecision => _lastReason;
     public DateTimeOffset? CooldownUntil => _cooldownUntil > _now() ? _cooldownUntil : null;
     public string? PendingDoneFor => _pendingDone?.Leader;
+    public IReadOnlyList<string> AskedMembers => _asked.Keys.ToList();
+    public bool HasPartners => Leading && Settings.AutoTrainParty && Partners().Any();
+    public string? ReportingTo => _reportTo;
 
     public IReadOnlyList<(string Name, PartyTrainStatus Status, DateTimeOffset At)> Reports =>
         _reports.Select(kv => (kv.Key, kv.Value.Status, kv.Value.At)).ToList();
@@ -203,6 +221,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         if (!Following)
         {
             _lastSentKey = "";
+            _reportTo = null;
             if (_pendingDone is { } p) p.SawDrop = true;
         }
         FlushPendingDone();
@@ -221,13 +240,27 @@ public sealed class PartyTrainCoordinator : IDisposable
     private void MemberTick()
     {
         FlushPendingDone();
-        if (!Settings.AutoTrainParty || !Following) return;
-        // A leader on another client never reads a report; one on MudPlay asks for it.
-        if (!SpeaksPartyTrain(_recordedVersion(GivenName(_party.LeaderName!)))) return;
+        if (!Following || _inCombat()) return;
+        string leader = GivenName(_party.LeaderName!);
+        if (!string.Equals(_reportTo, leader, StringComparison.OrdinalIgnoreCase)) return;
+        if (!Settings.AutoTrainParty)
+        {
+            // Opting out after reporting: tell the leader once, or it would keep
+            // counting our last report for as long as we stay in the party.
+            if (_lastSentKey.Length > 0)
+            {
+                SendStatus(BuildOwnStatus() with
+                {
+                    Readiness = PartyTrainReadiness.Off, LevelsToTrain = 0, CostCopper = 0,
+                });
+                _lastSentKey = "";
+            }
+            return;
+        }
         PartyTrainStatus status = BuildOwnStatus();
         // Report on a change that matters to the leader — readiness, level, how far a
         // trip would take us — not on every ETA or purse tick.
-        string key = $"{GivenName(_party.LeaderName!)}|{status.Readiness}|{status.Level}|{status.LevelsToTrain}";
+        string key = $"{leader}|{status.Readiness}|{status.Level}|{status.LevelsToTrain}";
         if (key == _lastSentKey) return;
         SendStatus(status);
     }
@@ -252,11 +285,15 @@ public sealed class PartyTrainCoordinator : IDisposable
             cash, spare, bank, bankName, a.EtaSeconds, a.Exp, a.NextExp);
     }
 
-    // `@ptrain ask` — the leader wants our report.
+    // `@ptrain ask` — the leader wants our reports from now on. Remembered even with
+    // our toggle off, so switching it on later reports without being asked again. The
+    // reply itself goes out on the next tick outside combat.
     public void ReceiveAsk(string sender)
     {
-        if (!Settings.AutoTrainParty || !IsLeader(sender)) return;
-        SendStatus(BuildOwnStatus());
+        if (!IsLeader(sender)) return;
+        _reportTo = GivenName(sender);
+        _lastSentKey = "";
+        MemberTick();
     }
 
     // `@ptrain train <target>` — train here, up to the leader's target for us.
@@ -319,7 +356,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     // `@ptrain st <payload>` — a member's report.
     public void ReceiveStatus(string sender, string payload)
     {
-        if (!Leading || !Settings.AutoTrainParty) return;
+        if (!Leading) return;
         if (!PartyTrainStatus.TryDecode(payload, out PartyTrainStatus status))
         {
             _log?.Info(LogCategory, $"Unreadable report from {sender}: \"{payload}\"");
@@ -380,6 +417,10 @@ public sealed class PartyTrainCoordinator : IDisposable
         // doesn't pull an idle party off somewhere.
         if (_trainer.IsBusy || !_trainer.EngineActive) return;
 
+        // A party trip needs a partner — another member on MudPlay with the feature
+        // on. Alone, the leader trains by its own solo settings (AllowSoloRun).
+        if (!Partners().Any()) return;
+
         List<PartyTrainParticipant> participants = Participants(out _);
         PartyTrainDecision decision = PartyTrainQuorum.Decide(
             participants, Math.Max(0, s.PartyLevelGap), s.PartyMinReady);
@@ -396,33 +437,44 @@ public sealed class PartyTrainCoordinator : IDisposable
             _ = RunTripAsync(decision, participants);
     }
 
-    // Asks only members that can answer: the on-join @version probe already told us
-    // who runs another client (or a MudPlay too old to know @ptrain), and telepathing
-    // them would only be noise in their terminal. A member not probed yet still gets
-    // asked — it may well be on MudPlay.
+    // At most one ask per member per membership (see JoinGrace): `@ptrain ask` to a
+    // member the join-time @version probe shows can speak it (or that hasn't been
+    // probed — it may be on MudPlay), `@level` to the rest when we hold no reading for
+    // them. The single repeat: an other-client member once its projected level-up has
+    // passed, since it can't push the change itself.
     private void MaybeAsk()
     {
-        List<string> askable = ActiveMemberGivens()
-            .Where(n => SpeaksPartyTrain(_recordedVersion(n)))
-            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        string roster = string.Join(",", ActiveMemberGivens().OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
-        if (roster.Length == 0) return;
-        if (roster == _askedRoster && _now() - _lastAsk < AskInterval) return;
-        _askedRoster = roster;
-        _lastAsk = _now();
-        foreach (string given in askable) _send($"/{given} @ptrain ask");
-        // The rest can't report, but their @level reply still feeds the Party window.
+        if (_inCombat()) return;
         foreach (string given in ActiveMemberGivens())
-            if (!SpeaksPartyTrain(_recordedVersion(given))) _send($"/{given} @level");
+        {
+            if (!_joinedAt.TryGetValue(given, out DateTimeOffset joined)) _joinedAt[given] = joined = _now();
+            if (_now() - joined < JoinGrace) continue;
+
+            if (SpeaksPartyTrain(_recordedVersion(given)))
+            {
+                if (!_reports.ContainsKey(given) && _asked.TryAdd(given, _now()))
+                    _send($"/{given} @ptrain ask");
+            }
+            else if (!_levelReplies.TryGetValue(given, out var reading))
+            {
+                if (_asked.TryAdd(given, _now())) _send($"/{given} @level");
+            }
+            else if (LevelReaskDue(reading.Needed, reading.At, _expPerHour(), _now()))
+            {
+                _levelReplies.Remove(given);   // the reply re-adds it; no reply → no repeat
+                _send($"/{given} @level");
+            }
+        }
     }
 
-    // A parsed @level reply from anyone (PartyLevelProbe). Kept for members that
-    // don't send @ptrain reports; a reporting member's own report wins.
-    public void NoteLevelProgress(string given, int level, long? needed, string? theirEta)
+    // An other-client member's @level reading is worth refreshing once its projected
+    // level-up (exp to next level at OUR rate — the party shares the kills) plus a
+    // buffer has passed. No projection (no rate, no "needed", already there) → never.
+    public static bool LevelReaskDue(long? needed, DateTimeOffset readAt, double ourRate, DateTimeOffset now)
     {
-        _levelReplies[GivenName(given)] = (level, needed, theirEta, _now());
-        RefreshTrainInfo();
+        if (needed is not { } n || n <= 0) return false;
+        return Calculators.ExperienceTableCalculator.CalcTimeToLevel(n, 0, (long)ourRate) is { } tnl
+            && now >= readAt + tnl + AskBuffer;
     }
 
     // The first MudPlay that understands @ptrain.
@@ -440,15 +492,65 @@ public sealed class PartyTrainCoordinator : IDisposable
         return Version.TryParse(number, out Version? v) && v >= PartyTrainSince;
     }
 
+    // A parsed @level reply from anyone (PartyLevelProbe) — the join-time probe's
+    // reply included, which often saves us asking at all. Shown for members that
+    // don't send @ptrain reports; a reporting member's own report wins.
+    public void NoteLevelProgress(string given, int level, long? needed, string? theirEta)
+    {
+        _levelReplies[GivenName(given)] = (level, needed, theirEta, _now());
+        RefreshTrainInfo();
+    }
+
+    // Readings belong to a membership: a member that leaves drops its report, reading
+    // and ask record, and is asked afresh if it comes back.
     private void DropStaleReports()
     {
         HashSet<string> present = new(ActiveMemberGivens(), StringComparer.OrdinalIgnoreCase);
-        foreach (string name in _reports.Keys.ToList())
-            if (!present.Contains(name) || _now() - _reports[name].At > StatusFresh)
-                _reports.Remove(name);
-        foreach (string name in _levelReplies.Keys.ToList())
-            if (!present.Contains(name) || _now() - _levelReplies[name].At > StatusFresh)
-                _levelReplies.Remove(name);
+        foreach (string name in _joinedAt.Keys.ToList())
+        {
+            if (present.Contains(name)) continue;
+            _joinedAt.Remove(name);
+            _asked.Remove(name);
+            _reports.Remove(name);
+            _levelReplies.Remove(name);
+        }
+    }
+
+    // Members taking part: on MudPlay, feature on, still in the party.
+    private IEnumerable<string> Partners() =>
+        ActiveMemberGivens().Where(n => _reports.TryGetValue(n, out var r) && r.Status.Readiness != PartyTrainReadiness.Off);
+
+    // Whether every member present has had its say: reported, known to be on another
+    // client, or asked and silent past ReplyWindow. Until then the solo fallback
+    // holds off — replies land a few seconds after the party forms.
+    private bool PartnersSettled() => ActiveMemberGivens().All(n =>
+        _reports.ContainsKey(n)
+        || !SpeaksPartyTrain(_recordedVersion(n))
+        || (_asked.TryGetValue(n, out DateTimeOffset at) && _now() - at >= ReplyWindow));
+
+    // Gate for the SOLO armed run while in a party. Leading with Auto-train party on
+    // and nobody to train with, the leader trains by its own solo settings — the
+    // members just follow — and the party is re-formed afterwards (AfterSoloRun), since
+    // the leader's train disbands it. Following, or with the toggle off, the solo run
+    // stays out of a party as before.
+    public bool AllowSoloRun()
+    {
+        if (!_party.IsInParty) return true;
+        if (!Leading || !Settings.AutoTrainParty || _tripRunning) return false;
+        if (!PartnersSettled() || Partners().Any()) return false;
+        _soloReform = ActiveMemberGivens().ToList();
+        return true;
+    }
+
+    // After a train run that trained something: re-collect the party a solo-fallback
+    // train disbanded. A no-op for any other run.
+    public void AfterSoloRun()
+    {
+        if (_soloReform.Count == 0) return;
+        IReadOnlyList<string> followers = _soloReform;
+        _soloReform = [];
+        _log?.Info(LogCategory, $"Solo train done — re-inviting {string.Join(", ", followers)}.");
+        _reformParty(followers);
     }
 
     private List<PartyTrainParticipant> Participants(out string self)
@@ -464,6 +566,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     private async Task RunTripAsync(PartyTrainDecision decision, List<PartyTrainParticipant> participants)
     {
         _tripRunning = true;
+        _soloReform = [];   // this trip re-forms the party itself
         bool started = false;
         try
         {
@@ -595,6 +698,9 @@ public sealed class PartyTrainCoordinator : IDisposable
 
             _trainer.EndPartyTrip("all stops done.");
             started = false;
+            // A member that trained left and rejoined, so it's asked afresh; one that
+            // didn't keeps its ask record and only counts again once it pushes a
+            // change — no retrying the same failed trip every cooldown.
             foreach (string name in trainees) _reports.Remove(name);
             RefreshTrainInfo();
         }
@@ -685,10 +791,15 @@ public sealed class PartyTrainCoordinator : IDisposable
         {
             if (string.IsNullOrEmpty(m.Name)) continue;
             PartyTrainStatus? status = null;
+            TimeSpan age = TimeSpan.Zero;
             if (show)
             {
                 if (m.IsSelf) status = BuildOwnStatus();
-                else if (_reports.TryGetValue(GivenName(m.Name), out var r)) status = r.Status;
+                else if (_reports.TryGetValue(GivenName(m.Name), out var r))
+                {
+                    status = r.Status;
+                    age = _now() - r.At;
+                }
             }
 
             (int Level, long? Needed, string? TheirEta, DateTimeOffset At)? reply =
@@ -699,25 +810,28 @@ public sealed class PartyTrainCoordinator : IDisposable
                 ?? (m.IsSelf ? _selfLevel() : _recordedLevel(m.Name) ?? 0);
             if (m.KnownLevel != level) m.KnownLevel = level;
 
-            string text = status is { } st ? RowText(st, rate)
-                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.Needed, r2.TheirEta, rate)
+            string text = status is { } st ? RowText(st, rate, age)
+                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.Needed, r2.TheirEta, rate, _now() - r2.At)
                 : "";
             if (m.TrainInfo != text) m.TrainInfo = text;
         }
     }
 
-    // "4,120,331 xp · TNL ~1h 5m · ready +2 (12,345c)"
-    private static string RowText(PartyTrainStatus s, double ourRate)
+    // "4,120,331 xp · TNL ~1h 5m · ready +2 (12,345c)". Readings aren't refreshed on a
+    // timer (the member pushes its own changes), so the TNL counts down from when the
+    // report arrived — age — at our current rate.
+    private static string RowText(PartyTrainStatus s, double ourRate, TimeSpan age)
     {
         string exp = s.Exp > 0 ? $"{s.Exp:N0} xp" : "? xp";
         TimeSpan? tnl = s.NextExp > 0
             ? Calculators.ExperienceTableCalculator.CalcTimeToLevel(s.NextExp, s.Exp, (long)ourRate)
             : null;
-        string tnlText = tnl is { } t ? $"TNL ~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(t)}" : "TNL ?";
+        string tnlText = $"TNL {CountDown(tnl, age) ?? "?"}";
         string state = s.Readiness switch
         {
             PartyTrainReadiness.Ready => $"ready +{s.LevelsToTrain} ({s.CostCopper:N0}c)",
             PartyTrainReadiness.Blocked => "no party train",
+            PartyTrainReadiness.Off => "party train off",
             _ => "not ready",
         };
         return $"{exp} · {tnlText} · {state}";
@@ -727,14 +841,22 @@ public sealed class PartyTrainCoordinator : IDisposable
     // the NEXT level — MegaMUD doesn't count past it the way our banked-aware TNL
     // does — so the line names that level. Their own "will level in" is shown only
     // while our rate is unknown.
-    private static string LevelReplyText(int level, long? needed, string? theirEta, double ourRate)
+    private static string LevelReplyText(int level, long? needed, string? theirEta, double ourRate, TimeSpan age)
     {
         if (needed is not { } n) return $"L{level} · other client";
         if (n <= 0) return $"L{level + 1} reached · can train · other client";
         TimeSpan? tnl = Calculators.ExperienceTableCalculator.CalcTimeToLevel(n, 0, (long)ourRate);
-        string when = tnl is { } t ? $"~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(t)}"
-            : theirEta ?? "?";
+        string when = CountDown(tnl, age) ?? theirEta ?? "?";
         return $"{n:N0} to L{level + 1} · TNL {when} · other client";
+    }
+
+    // A projected time to level, less the time since it was read: "~1h 5m", or "due"
+    // once it has run out (the next report / re-ask replaces it). Null = no projection.
+    private static string? CountDown(TimeSpan? tnl, TimeSpan age)
+    {
+        if (tnl is not { } t) return null;
+        TimeSpan left = t - age;
+        return left <= TimeSpan.Zero ? "due" : $"~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(left)}";
     }
 
     // ----- shared -----------------------------------------------------------
@@ -774,6 +896,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     {
         PartyTrainReadiness.Ready => $"ready, level {s.Level} +{s.LevelsToTrain} for {s.CostCopper:N0} copper",
         PartyTrainReadiness.Blocked => $"nothing to party-train at level {s.Level}",
+        PartyTrainReadiness.Off => "switched Auto-train party off",
         _ => s.EtaSeconds >= 0
             ? $"waiting, level {s.Level}, ready in ~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(TimeSpan.FromSeconds(s.EtaSeconds))}"
             : $"waiting, level {s.Level}",
