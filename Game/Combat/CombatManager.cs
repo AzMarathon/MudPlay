@@ -1037,7 +1037,21 @@ public sealed partial class CombatManager : IDisposable
     {
         if (_disposed) return;
         if (_restClearActive?.Invoke() != true) return;
-        if (_classifier.Current is { } obs) OnEntitiesObserved(obs);
+        if (_classifier.Current is not { } obs)
+        {
+            TrySendRoomRefresh("rest-clear: no room view yet");
+            return;
+        }
+        // HealthManager arms the clear off EITHER a roster hostile OR being kept
+        // InCombat by live combat lines. When it's the InCombat side (a chasing mob
+        // hitting us that the last room view doesn't list), the current roster has no
+        // target to engage — force a re-display so the server hands us the true roster;
+        // the resulting observation drives the engage. If the room is genuinely empty,
+        // that same re-display clears the stale InCombat that armed us, so this can't spin.
+        if (HasEngageable(obs))
+            OnEntitiesObserved(obs);
+        else
+            TrySendRoomRefresh("rest-clear: roster has no hostile, refreshing to find the blocker");
     }
 
     // Wire the ShadowRest combat hold: shadowRestHolding reports whether

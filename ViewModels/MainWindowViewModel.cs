@@ -450,16 +450,25 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _walkerState = AppServices.Current.Walker.State;
             RefreshEngineActionChip();
-            // A go-to walk arriving ends Sprint Mode (restoring the engines it
-            // silenced). Only a STANDALONE walk-to counts — during a loop or
-            // auto-lair the walker also fires Finished on each sub-path, and those
-            // are ended by the lap-boundary / pre-lair hooks instead. Guard on the
-            // live engine state, not cached flags, to avoid a stale-field race.
-            if (e.Kind == Game.Map.WalkEventKind.Finished
-                && IsSprintModeActive
+            // A standalone walk-to ending — arrival (Finished), a manual Stop, or a
+            // Failed route — settles the live auto-engines back into the character's
+            // base modes, the same way loop-start does, so the toggles you flipped for
+            // the trip return to their defined state once you've stopped pathing. Only a
+            // STANDALONE walk-to counts: during a loop or auto-lair the walker also fires
+            // these on each sub-path, and those are handled by the lap-boundary / pre-lair
+            // hooks instead. Guard on the live engine state, not cached flags, to avoid a
+            // stale-field race.
+            if ((e.Kind == Game.Map.WalkEventKind.Finished
+                 || e.Kind == Game.Map.WalkEventKind.Stopped
+                 || e.Kind == Game.Map.WalkEventKind.Failed)
                 && AppServices.Current.LoopRunner.State == Game.Map.LoopState.Idle
                 && !AppServices.Current.AutoLair.IsActive)
-                IsSprintModeActive = false;
+            {
+                // End Sprint first (restoring the engines it silenced), then let the base
+                // modes get the final word — same ordering as the loop-start reconcile.
+                if (IsSprintModeActive) IsSprintModeActive = false;
+                ReconcileAutoModeToBase("walk-to end");
+            }
         });
 
     private void OnLoopRunnerEngineEvent(Game.Map.LoopEvent e)

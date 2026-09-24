@@ -780,6 +780,38 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
+    public void RestClear_ArmsOffInCombat_WhenRosterStale_CombatOff()
+    {
+        // Chased into a rest mid-walk with combat off: a monster is HITTING us (InCombat)
+        // but the last room view hasn't listed it (HostilesPresent false — a stale roster).
+        // InCombat blocks the rest send and a stale roster would block the clear — the
+        // deadlock. The clear must arm off InCombat and poke the engage so we fight the
+        // blocker instead of sitting (RequestRestClearEngage refreshes the roster to find it).
+        using Harness h = new() { AutoCombatEnabled = false, HostilesPresent = false };
+        h.State.InCombat = true;      // combat lines keep us in combat (being attacked)
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 50;              // below the rest trigger, above the 20% flee trigger
+
+        Assert.True(h.Health.ForceClearForRest);
+        Assert.True(h.RestClearEngageCount > 0);
+    }
+
+    [Fact]
+    public void RestClear_DoesNotArm_NoBlocker_CombatOff()
+    {
+        // Combat off, rest due, but nothing is attacking us — no roster hostile AND not
+        // InCombat. The clear must NOT arm (there's nothing to fight); we just rest.
+        using Harness h = new() { AutoCombatEnabled = false, HostilesPresent = false };
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 50;
+
+        Assert.False(h.Health.ForceClearForRest);
+        Assert.Equal(0, h.RestClearEngageCount);
+    }
+
+    [Fact]
     public void EquipmentApplying_HoldsRest_ThenRestsWhenSwapDone()
     {
         // A pre-rest gear swap streams paced wear/rem, each of which stands the

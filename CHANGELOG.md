@@ -1,5 +1,11 @@
 # Version history
 
+## 3.104.1
+
+- Auto-engines return to your **defined state** when a walk-to ends — arrival, a manual stop, or a failed route — the same way loop-start already reconciles them, so toggles you flipped just for the trip don't stay flipped after you've stopped pathing
+- **Self-defense re-arms while a walk is paused** for a rest / hold / wait: it used to stay suppressed on any non-idle walk (a rest-pause still counted as "travelling"), so a monster attacking you mid-rest was ignored; it now stands down only while *actively walking*, so you still run past town guards while moving but defend once you stop
+- Rest self-defense now **fights a blocker that's hitting you even when the room roster is stale** — a monster that chased you in and is landing hits (keeping you in combat) with auto-combat off no longer deadlocks the rest (in-combat blocked the rest, an empty roster blocked the clear); the engine re-checks the room and engages it
+
 ## 3.104.0
 
 - Triggers: numbered wildcards `{1}`, `{2}`… now work in Literal patterns and responses (were silently treated as literal braces, so the trigger never matched); any letters/digits/underscores is a valid wildcard name
