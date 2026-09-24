@@ -1,5 +1,10 @@
 # Version history
 
+## 3.104.4
+
+- Game Data Browser: drag the column headers on Monsters, Items and Spells to rearrange them; the order is saved per character with the visible columns
+- A trigger saved at the game-data location now shows up in every other open client straight away, not only after a restart
+
 ## 3.104.2
 
 - Inventory **Tab-complete now matches stacked items** — a stack prints as `2 padded helm` (Stock and Paradigm alike) and the count was read as its first word, so `pad` / `padded` never found it and Tab did nothing

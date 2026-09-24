@@ -93,6 +93,18 @@ public partial class GameDataTableSectionView : UserControl
             RefreshBatchEditButton();
         };
 
+        // A header dragged to a new spot: hand the section the data columns in their
+        // new display order to save (the Use badge carries no Tag and is skipped).
+        RowsGrid.ColumnReordered += (_, _) =>
+        {
+            if (DataContext is not GameDataTableSectionViewModel vm) return;
+            vm.SetColumnOrder(RowsGrid.Columns
+                .OrderBy(c => c.DisplayIndex)
+                .Select(c => c.Tag as string)
+                .OfType<string>()
+                .ToList());
+        };
+
         // Deferred so the read runs AFTER the DataGrid has applied the
         // sort the user just requested (Sorting fires pre-apply).
         RowsGrid.Sorting += (_, _) =>
@@ -313,6 +325,7 @@ public partial class GameDataTableSectionView : UserControl
         return new DataGridTemplateColumn
         {
             Header             = vc.Header,
+            Tag                = vc.Key,
             Width              = new DataGridLength(180),
             CustomSortComparer = new NumericAwareCellComparer(idx),
             CellTemplate = new FuncDataTemplate<GameDataRow>((_, _) =>
@@ -336,6 +349,7 @@ public partial class GameDataTableSectionView : UserControl
         if (DataContext is not GameDataTableSectionViewModel vm) return;
 
         RowsGrid.Columns.Clear();
+        RowsGrid.CanUserReorderColumns = vm.AllowColumnReorder;
         // Build only the columns the picker has visible, each bound to its cell's
         // index on the row (GameDataRow.Cells is materialised in ValueColumns order,
         // so a hidden/shown column never misaligns a cell from its header). The VM
@@ -355,6 +369,7 @@ public partial class GameDataTableSectionView : UserControl
             RowsGrid.Columns.Add(new DataGridTextColumn
             {
                 Header             = vc.Header,
+                Tag                = vc.Key,
                 Binding            = new Binding($"Cells[{vc.CellIndex}].Value"),
                 Width              = DataGridLength.Auto,
                 CustomSortComparer = new NumericAwareCellComparer(vc.CellIndex),
@@ -373,6 +388,8 @@ public partial class GameDataTableSectionView : UserControl
                 Header  = GameDataTableSectionViewModel.UseColumnName,
                 Binding = new Binding(nameof(GameDataRow.UseLabel)),
                 Width   = DataGridLength.Auto,
+                // The tier badge isn't a data column — it stays the trailing column.
+                CanUserReorder = false,
             });
         }
 

@@ -122,7 +122,8 @@
 
             <!-- Tabular row grid. Columns are populated in code-behind from
                  the VM's Columns list so they auto-size and align with their
-                 headers. -->
+                 headers. Header drag-to-reorder is switched on per section in
+                 code-behind (AllowColumnReorder). -->
             <DataGrid Grid.Row="3"
                       x:Name="RowsGrid"
                       ItemsSource="{Binding FilteredRows}"

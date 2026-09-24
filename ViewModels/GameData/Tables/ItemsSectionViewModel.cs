@@ -41,6 +41,9 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
 
     protected override string TableName => "Items";
 
+    // Wide record table — the user arranges its columns by dragging the headers.
+    public override bool AllowColumnReorder => true;
+
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
         "Number",
