@@ -1,5 +1,10 @@
 # Version history
 
+## 3.104.6
+
+- Window positions and sizes are remembered for panels still open when you quit, not only ones you closed yourself
+- A window maximized at exit restores to its real size and position when you un-maximize it
+
 ## 3.104.5
 
 - Game Data Browser: drag the column headers on Monsters, Items and Spells to rearrange them; the order is saved per character with the visible columns

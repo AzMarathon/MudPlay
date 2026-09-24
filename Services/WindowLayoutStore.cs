@@ -96,8 +96,34 @@ public sealed class WindowLayoutStore
     }
 
     // Take a snapshot of every known window's bounds — used by ProfileSaving.
+    //
+    // CAPTURE THE STILL-OPEN WINDOWS FIRST. Bounds were only ever recorded in
+    // the Closing handler, which is one event too late for the save that
+    // matters: the profile is written from MainWindow's OWN Closing handler
+    // (Views/MainWindow.axaml.cs), and Closing fires BEFORE the window closes,
+    // so at that instant not one child window has closed and none of their
+    // Closing handlers has run. The save therefore persisted whatever was
+    // captured the last time each panel happened to be closed individually —
+    // then the children tore down, updated the dictionary, and the process
+    // exited without another save.
+    //
+    // The symptom is per-window, which is what made it look arbitrary: a panel
+    // you close yourself before quitting is remembered, and one you leave open
+    // is frozen at an ancient position or has no entry at all — in which case
+    // RestoreOnto returns early and the window manager places it (CenterOwner)
+    // wherever the main window happens to be. Reported as MudPlay putting
+    // "my windows in random locations when I reopen the application".
+    //
+    // Live capture belongs here rather than on PositionChanged: this runs on
+    // every save path — exit, Ctrl+S, and the save a profile SWITCH does before
+    // ProfileClosed clears the map — and it costs one dictionary write per open
+    // window instead of one per pixel of every drag.
     public Dictionary<string, WindowBounds> Snapshot()
-        => new(_bounds, StringComparer.OrdinalIgnoreCase);
+    {
+        foreach ((string id, Window window) in _open.ToArray())
+            CaptureFrom(window, id);
+        return new(_bounds, StringComparer.OrdinalIgnoreCase);
+    }
 
     // Replace the in-memory map with whatever a freshly-loaded profile carries,
     // then move any already-open window onto that profile's saved layout.
@@ -130,22 +156,25 @@ public sealed class WindowLayoutStore
             window.Height = layout.Height;
         }
 
-        if (layout.Maximized)
-        {
-            window.WindowState = WindowState.Maximized;
-            return;
-        }
-        window.WindowState = WindowState.Normal;
-
+        // POSITION FIRST, THEN THE STATE. A maximized layout used to return
+        // before the position was ever applied, so restoring the window DOWN
+        // dropped it wherever the window manager felt like — and the position
+        // also decides which monitor it maximizes onto.
+        //
         // X+Y both zero is the "never positioned" sentinel — let the WM place it
         // (CenterOwner) rather than pinning to the desktop origin.
-        if (layout.X == 0 && layout.Y == 0) return;
+        if (layout.X != 0 || layout.Y != 0)
+        {
+            PixelPoint resolved = ResolvePosition(window, layout);
+            // Tell the snap manager this is our reposition, not a user drag, so a
+            // profile-load re-layout of the main window doesn't haul the cluster.
+            _snap?.ExpectMove(id, resolved);
+            window.Position = resolved;
+        }
 
-        PixelPoint resolved = ResolvePosition(window, layout);
-        // Tell the snap manager this is our reposition, not a user drag, so a
-        // profile-load re-layout of the main window doesn't haul the cluster.
-        _snap?.ExpectMove(id, resolved);
-        window.Position = resolved;
+        window.WindowState = layout.Maximized
+            ? WindowState.Maximized
+            : WindowState.Normal;
     }
 
     // Turn a saved position into an on-screen one. Honour a position still
@@ -212,29 +241,70 @@ public sealed class WindowLayoutStore
 
     private void CaptureFrom(Window window, string id)
     {
+        _bounds.TryGetValue(id, out WindowBounds? previous);
+        WindowBounds? captured = BoundsToPersist(
+            window.WindowState, window.Position, window.Width, window.Height, previous);
+        if (captured is not null) _bounds[id] = captured;
+    }
+
+    // Whether a window's current geometry is worth remembering, and as what.
+    // Null means "keep the last good bounds". Pure so the two guards below can
+    // be tested without a live Window — the window plumbing itself is Avalonia
+    // UI and is not unit-tested (see WindowSnapManagerTests).
+    internal static WindowBounds? BoundsToPersist(
+        WindowState state, PixelPoint pos, double width, double height,
+        WindowBounds? previous = null)
+    {
         // A minimized window reports a bogus off-screen position (Windows parks
         // minimized windows at ~(-32000,-32000)), so capturing here would overwrite
         // the real "where I left it" with garbage that ResolvePosition then treats as
         // off-screen and re-anchors next to main — the panes "lose their memory" after
         // a Win+D (show-desktop) minimize-all followed by a client restart (report
         // paradigm-20260827-081318). Skip the capture and keep the last good bounds.
-        if (window.WindowState == WindowState.Minimized)
-            return;
+        if (state == WindowState.Minimized)
+            return null;
+
+        // A MAXIMIZED WINDOW REPORTS ITS MAXIMIZED FRAME, which is not the size
+        // to restore it to. Recording it meant a window maximized at exit came
+        // back maximized (right) but carrying the whole screen as its NORMAL
+        // size, so un-maximizing left it screen-sized instead of the size the
+        // user had actually chosen.
+        //
+        // The geometry already stored IS that size — written by a capture taken
+        // while the window was Normal, or inherited from the profile, and
+        // nothing else overwrites it — so a maximized capture keeps it and
+        // changes only the flag. That needs no PositionChanged tracking and has
+        // no race with the platform's own maximize, which updates WindowState
+        // and the frame in an order we do not control.
+        //
+        // With nothing remembered yet (maximized before this window was ever
+        // captured Normal) the maximized frame is all there is; the next
+        // capture taken Normal replaces it.
+        if (state == WindowState.Maximized && previous is not null)
+        {
+            return new WindowBounds
+            {
+                X = previous.X,
+                Y = previous.Y,
+                Width = previous.Width,
+                Height = previous.Height,
+                Maximized = true,
+            };
+        }
 
         // Don't capture transient zero / collapsing sizes — those usually
         // happen during the teardown rather than reflecting where the
         // user actually left the window.
-        if (window.Width < MinPersistedWidth || window.Height < MinPersistedHeight)
-            return;
+        if (width < MinPersistedWidth || height < MinPersistedHeight)
+            return null;
 
-        PixelPoint pos = window.Position;
-        _bounds[id] = new WindowBounds
+        return new WindowBounds
         {
             X = pos.X,
             Y = pos.Y,
-            Width = window.Width,
-            Height = window.Height,
-            Maximized = window.WindowState == WindowState.Maximized,
+            Width = width,
+            Height = height,
+            Maximized = state == WindowState.Maximized,
         };
     }
 
