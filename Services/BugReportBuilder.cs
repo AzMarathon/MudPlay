@@ -277,6 +277,10 @@ public static class BugReportBuilder
             ? "(none)"
             : string.Join(", ", givenUp.Select(kv => $"{kv.Key} ({kv.Value} fails)")));
         Kv(sb, "Probe stats on partying (@level/@version)", svc.PartyProbe.Enabled ? "on" : "off");
+        // Telepath pacing: a queue that won't drain, or a climbing given-up count,
+        // is the "my telepath never arrived" report.
+        Kv(sb, "Telepaths queued / awaiting ack", $"{svc.Telepaths.Queued} / {svc.Telepaths.InFlight}");
+        Kv(sb, "Telepaths resent / given up (throttle)", $"{svc.Telepaths.Resends} / {svc.Telepaths.GivenUp}");
 
         // Party auto-train. "The party never went to train" / "we left someone
         // behind" hinges on each side's own report, what the leader heard, and why

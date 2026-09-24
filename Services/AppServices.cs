@@ -384,6 +384,10 @@ public sealed class AppServices
     // panic / kill broadcasts.
     public Game.Remote.PartyBroadcaster PartyBroadcaster { get; }
 
+    // Paces every outgoing telepath and resends the ones the server's throttle
+    // refused ("--- Telepath Not Sent ---"). Sits in front of the socket write.
+    public Game.Remote.TelepathPacer Telepaths { get; }
+
     // Live mirror of the per-character game-menu commands
     // (GameCommands.EntryCommand /
     // GameCommands.ExitCommand). Hydrated from the
@@ -2429,6 +2433,11 @@ public sealed class AppServices
         // loop start); the broadcaster's also the canonical spot for the
         // panic / kill broadcasts.
         PartyBroadcaster = new Game.Remote.PartyBroadcaster(PartyState);
+        Telepaths = new Game.Remote.TelepathPacer(
+            armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
+                .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+                    System.Threading.Tasks.TaskScheduler.Default),
+            log: Log);
         // Auto-party flag consumer — invites flagged players when they
         // appear in our room, accepts invites from flagged players.
         // Wire-sender is bound by MainWindowViewModel once the telnet

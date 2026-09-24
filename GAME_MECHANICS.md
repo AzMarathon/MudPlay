@@ -3588,6 +3588,15 @@ fresh `@level` lands ≥ 10.)
   that makes the client **reject the leader's fresh re-invite**: both the `@join` handler and the
   invite auto-accept no-op on "already following `<leader>`", so the follower never rejoins (report
   `stock-20260801-002423`).
+- **[CONFIRMED]** *(2026-09-24, user)* **Telepaths are throttled, and each one is acknowledged in
+  send order.** Every telepath gets exactly one reply line, in the order they went out:
+  `--- Telepath Sent to <Name> ---` (delivered) or `--- Telepath Not Sent ---` (it didn't reach its
+  target because of throttling). So three telepaths fired in a burst answered by one "Sent to" and
+  then two "Not Sent" means the first arrived and the 2nd and 3rd were dropped and must be resent.
+  Pacing telepaths (and party/game-entry chatter) about **100 ms** apart avoids the throttle. The ack
+  may be glued after the prompt (`[HP=32/MA=27]:--- Telepath Sent to Raijin ---`); the name is the
+  full player name even when the telepath used an abbreviation (`/raij`). Seen in report
+  `stock-20260924-011014`, where a party-join probe burst lost `@level` + `@version`.
 - **[CONFIRMED]** *(2026-09-23, user)* **The level-11 trainer is a solo effort** — the step from 10
   to 11 is only easily auto-trainable running solo, so party auto-train stops members at level 10 by
   default (Auto-Trainer → *Leave the level 11 train to a solo trip*).
