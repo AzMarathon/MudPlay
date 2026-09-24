@@ -1,9 +1,21 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.104.17**
-> - A party member who rerolled (same name, new class) no longer keeps their old character's title and level — the old high title was routing the party around level gates the new character clears
-> - An `@level` reply now always takes effect: a stored title that can't match the reported level is dropped instead of outranking it
+> **Version 3.105.0**
+> - Auto-train party — a new CP Allocation checkbox that makes auto-train work in a group: members tell the leader when their own auto-train settings say they're ready, and the leader takes the party to train together; needs two or more members on MudPlay with it on (a lone leader uses its solo Auto-train and re-invites the party), and keeps telepaths to one ask per member join plus their own change reports
+> - The leader goes once a set number of party members (it counts as one) is ready; the rest stay banked and follow, and a power-leveler well above the party is never waited for
+> - Party trips visit the trainer serving the most members first, chain across level bands, and train the leader last, then re-invite everyone and resume the loop
+> - Short members are covered by party members' spare coin, or withdraw their own fee at a bank stop on the way
+> - New Settings → Auto-Trainer Party options: members needed ready, level gap, and leave the level-11 train to a solo trip
+> - Party window shows each member's level before their class, and — leading with Auto-train party — their exp, time to level at your exp/hour and train readiness under their bars
+> - MegaMUD party members' @level replies are now read — their level was never recorded — and, leading with Auto-train party, their exp to next level and time at your rate show under their bars
+> - Auto-login presses Enter at a bulletin pager's (N)onstop, (Q)uit, or (C)ontinue? prompt whenever it appears — no menu-nav step needed
+> - A member's MudPlay version is recorded from any {MudPlay …} / {MegaMud …} reply, and a stale older-MudPlay record no longer writes them off as another client
+> - Telepaths are paced 100 ms apart, and any the server refuses (--- Telepath Not Sent ---) are resent, so a party-join burst no longer loses probes
+> - Party window: Level 1 - Druid under each name in a larger font; your own exp updates on every kill, and members' exp is estimated from your gains between their reports
+> - A reporting member still waiting 10 minutes past its projected ready time gets one "ready yet?" ask
+> - @level / @exp replies over telepath or directed say (.@level) update the member's line
+> - Combat no longer keeps swinging at a monster a party member killed: an attack the server reads back as You say "…" (talk-slow off) drops the target and re-looks the room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
