@@ -37,6 +37,9 @@ public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditabl
 
     protected override string TableName => "Spells";
 
+    // Wide record table — the user arranges its columns by dragging the headers.
+    public override bool AllowColumnReorder => true;
+
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
         "Number",

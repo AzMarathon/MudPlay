@@ -35,6 +35,9 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
     protected override string TableName => "Monsters";
 
+    // Wide record table — the user arranges its columns by dragging the headers.
+    public override bool AllowColumnReorder => true;
+
     // The monster table's columns, in display order. Several are synthesised in
     // ComputeRowCells (AcDr, Dodge, Mag, Damage, Efficiency, Accuracy, EXP, Lairs)
     // rather than being raw MDB fields — see there for how each is derived.

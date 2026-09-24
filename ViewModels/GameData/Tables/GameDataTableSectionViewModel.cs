@@ -75,6 +75,15 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // Stable key the layout persists under. Title is unique per tab.
     protected virtual string ColumnLayoutKey => Title;
 
+    // Let the user drag column headers into their own order. The order persists with
+    // the visible set: the saved layout list is kept in display order, so one list
+    // carries both "which columns" and "in what order". Off by default; the big record
+    // tables (Monsters / Items / Spells) turn it on.
+    public virtual bool AllowColumnReorder => false;
+
+    // The saved display order (visible keys, first to last); empty = canonical order.
+    private List<string> _order = new();
+
     // Raised when the visible set changes (a toggle or a reset) so the view rebuilds
     // the DataGrid's columns.
     public event Action? ColumnsChanged;
@@ -101,6 +110,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
 
     private void BuildColumnChoices()
     {
+        _order = LoadSavedOrder();
         HashSet<string> saved    = LoadSavedVisible();
         HashSet<string> defaults = new(Columns, StringComparer.OrdinalIgnoreCase);
         bool haveSaved = saved.Count > 0;
@@ -126,15 +136,19 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     private string HeaderLabel(string key)
         => ColumnHeaders is { } h && h.TryGetValue(key, out string? friendly) ? friendly : key;
 
-    // Columns to render, in canonical order, each paired with its index into the
-    // row's Cells (materialised in ValueColumns order). Drives the view's grid build.
+    // Columns to render, each paired with its index into the row's Cells (materialised
+    // in ValueColumns order, so display order never misaligns a cell). Saved order
+    // first; a visible column the saved order doesn't name (just switched on, or new
+    // in this version) follows at the end in canonical order. Drives the grid build.
     public IReadOnlyList<VisibleColumn> BuildVisibleColumns()
     {
         List<VisibleColumn> result = new();
         IReadOnlyList<string> value = ValueColumns;
-        foreach (TableColumnChoice c in ColumnChoices)
+        IEnumerable<TableColumnChoice> ordered = ColumnChoices.Where(c => c.IsVisible);
+        if (AllowColumnReorder && _order.Count > 0)
+            ordered = ordered.OrderBy(c => IndexOfColumn(_order, c.Key) is var i and >= 0 ? i : int.MaxValue);
+        foreach (TableColumnChoice c in ordered)
         {
-            if (!c.IsVisible) continue;
             int idx = IndexOfColumn(value, c.Key);
             if (idx >= 0) result.Add(new VisibleColumn(c.Key, idx, HeaderLabel(c.Key)));
         }
@@ -146,6 +160,16 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         for (int i = 0; i < list.Count; i++)
             if (string.Equals(list[i], key, StringComparison.OrdinalIgnoreCase)) return i;
         return -1;
+    }
+
+    // The user dragged a header: keys are the data columns in their new display order.
+    // Saved at once; no rebuild — the grid already shows the new order.
+    public void SetColumnOrder(IReadOnlyList<string> keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        if (!AllowColumnReorder) return;
+        _order = keys.ToList();
+        PersistVisible();
     }
 
     private void OnColumnToggled()
@@ -169,6 +193,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
                 if (!c.Pinned) c.IsVisible = defaults.Contains(c.Key);
         }
         finally { _bulkUpdating = false; }
+        _order = new();
         ClearSavedVisible();
         ColumnsChanged?.Invoke();
     }
@@ -176,6 +201,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     private void OnProfileLoadedReloadColumns(Models.Profile.CharacterProfile _)
     {
         if (_columnChoices is null) return;
+        _order = LoadSavedOrder();
         HashSet<string> saved    = LoadSavedVisible();
         HashSet<string> defaults = new(Columns, StringComparer.OrdinalIgnoreCase);
         bool haveSaved = saved.Count > 0;
@@ -200,12 +226,23 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         return set;
     }
 
+    private List<string> LoadSavedOrder()
+    {
+        if (AppServices.Current?.Profile.Current?.TableColumnLayouts is { } map
+            && map.TryGetValue(ColumnLayoutKey, out List<string>? cols) && cols is not null)
+            return cols.ToList();
+        return new List<string>();
+    }
+
+    // Saved in display order (see AllowColumnReorder) — a toggle keeps the order the
+    // user arranged rather than snapping back to canonical.
     private void PersistVisible()
     {
         if (AppServices.Current?.Profile is not { Current: { } profile } profileService) return;
         List<string> visible = _columnChoices is null
             ? new List<string>()
-            : _columnChoices.Where(c => c.IsVisible).Select(c => c.Key).ToList();
+            : BuildVisibleColumns().Select(c => c.Key).ToList();
+        _order = visible;
         (profile.TableColumnLayouts ??= new())[ColumnLayoutKey] = visible;
         profileService.Save();
     }

@@ -52,6 +52,17 @@ public sealed class TriggerEngine
     // write.
     private string? _activeSet;
 
+    // Game-data triggers live in one file per set, shared by every client running on
+    // this machine — but each client only read it when its set loaded, so a trigger one
+    // client moved to (or edited at) the game-data location never reached another open
+    // client until it restarted. The watcher reloads the game-data slice when another
+    // process rewrites the file. _syncedText is the file content we last loaded or
+    // wrote, so our own save (or a no-op rewrite) doesn't bounce back as a reload.
+    private System.IO.FileSystemWatcher? _setFileWatcher;
+    private string? _syncedText;
+    private int _reloadGeneration;
+    private static readonly TimeSpan ExternalReloadDebounce = TimeSpan.FromMilliseconds(300);
+
     // Compiled-regex cache, keyed by (match type, raw pattern). Built lazily as
     // triggers fire.
     private readonly Dictionary<(TriggerMatchType Kind, string Pattern), Regex?> _regexCache = new();
@@ -171,7 +182,9 @@ public sealed class TriggerEngine
         List<Trigger> gd = Triggers
             .Where(t => t.Location == TriggerLocation.GameData)
             .ToList();
-        JsonStore.Save(AppPaths.TriggersFile(_activeSet), gd);
+        string path = AppPaths.TriggersFile(_activeSet);
+        JsonStore.Save(path, gd);
+        _syncedText = ReadTextOrNull(path);
     }
 
     // Empty the wildcard store — the viewer's "Clear" affordance. Fires
@@ -471,8 +484,75 @@ public sealed class TriggerEngine
     {
         _activeSet = string.IsNullOrWhiteSpace(newSet) ? null : newSet;
         DropTriggersByLocation(TriggerLocation.GameData);
+        WatchPerSetFile(_activeSet);
         if (_activeSet is null) return;
         LoadPerSetTriggers(_activeSet);
+    }
+
+    // Watch the active set's triggers file for another client's writes. Watches the
+    // directory rather than the file: the save lands as a temp file renamed over the
+    // target, which a plain file watch can miss.
+    private void WatchPerSetFile(string? setName)
+    {
+        _setFileWatcher?.Dispose();
+        _setFileWatcher = null;
+        if (setName is null) return;
+
+        string path = AppPaths.TriggersFile(setName);
+        string? dir = System.IO.Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(dir)) return;
+        try
+        {
+            System.IO.Directory.CreateDirectory(dir);
+            System.IO.FileSystemWatcher w = new(dir)
+            {
+                NotifyFilter = System.IO.NotifyFilters.FileName | System.IO.NotifyFilters.LastWrite
+                             | System.IO.NotifyFilters.Size,
+            };
+            string file = System.IO.Path.GetFileName(path);
+            w.Changed += (_, e) => { if (e.Name == file) ScheduleExternalReload(setName); };
+            w.Created += (_, e) => { if (e.Name == file) ScheduleExternalReload(setName); };
+            w.Renamed += (_, e) => { if (e.Name == file) ScheduleExternalReload(setName); };
+            w.EnableRaisingEvents = true;
+            _setFileWatcher = w;
+        }
+        catch (Exception ex)
+        {
+            // Watching is a convenience — without it the file still loads on the next
+            // set switch or restart, exactly as before.
+            _log?.Log(LogSeverity.Warn, LogSource, $"Can't watch '{path}' for other clients' edits: {ex.Message}");
+        }
+    }
+
+    // Watcher events arrive on a pool thread, several per save; coalesce them and
+    // reload on the UI thread (the live collection is bound to the Triggers tab).
+    private void ScheduleExternalReload(string setName)
+    {
+        int generation = Interlocked.Increment(ref _reloadGeneration);
+        _ = Task.Delay(ExternalReloadDebounce).ContinueWith(_ =>
+        {
+            if (generation != Volatile.Read(ref _reloadGeneration)) return;
+            Dispatcher.UIThread.Post(() => ReloadIfChangedExternally(setName));
+        }, TaskScheduler.Default);
+    }
+
+    private void ReloadIfChangedExternally(string setName)
+    {
+        if (!string.Equals(_activeSet, setName, StringComparison.Ordinal)) return;
+        string path = AppPaths.TriggersFile(setName);
+        string? text = ReadTextOrNull(path);
+        if (text is null || text == _syncedText) return;   // our own save, or nothing new
+        DropTriggersByLocation(TriggerLocation.GameData);
+        AppendFromFile(path, TriggerLocation.GameData);
+        _log?.Log(LogSeverity.Info, LogSource,
+            $"Game-data triggers for '{setName}' changed in another client — reloaded.");
+    }
+
+    private static string? ReadTextOrNull(string path)
+    {
+        try { return System.IO.File.Exists(path) ? System.IO.File.ReadAllText(path) : null; }
+        catch (System.IO.IOException) { return null; }   // mid-rename; the next event re-reads
+        catch (UnauthorizedAccessException) { return null; }
     }
 
     // Read the active set's triggers.json. Falls back to the universal seed when
@@ -594,6 +674,10 @@ public sealed class TriggerEngine
         try
         {
             List<Trigger>? loaded = JsonStore.Load<List<Trigger>>(path);
+            if (forceLocation == TriggerLocation.GameData
+                && _activeSet is { } set
+                && string.Equals(path, AppPaths.TriggersFile(set), StringComparison.Ordinal))
+                _syncedText = ReadTextOrNull(path);
             if (loaded is null) return;
             foreach (Trigger t in loaded)
                 Triggers.Add(t with { Location = forceLocation });
