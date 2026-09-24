@@ -6673,6 +6673,15 @@ public sealed class AppServices
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
         PartyLevelProbe.ProgressObserved += PartyTrain.NoteLevelProgress;
+        // A member's "I can now train to level: N", on any channel they announce on.
+        Chat.EntryClassified += entry =>
+        {
+            if (entry.Channel is Game.ChatChannel.Local or Game.ChatChannel.TelepathIncoming
+                    or Game.ChatChannel.Gangpath or Game.ChatChannel.Gossip or Game.ChatChannel.Yell
+                && !string.IsNullOrEmpty(entry.Speaker)
+                && Game.Train.PartyTrainCoordinator.TryParseTrainableAnnounce(entry.Message, out int level))
+                PartyTrain.NoteTrainableAnnounce(entry.Speaker, level);
+        };
         PlayerStats.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Game.PlayerStats.Exp)) PartyTrain.OnOwnExpChanged();

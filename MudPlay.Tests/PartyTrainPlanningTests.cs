@@ -90,6 +90,22 @@ public sealed class PartyTrainPlanningTests
         Assert.Equal(PartyTrainVerdict.Fire, d.Verdict);
     }
 
+    // ----- level-up announcements ----------------------------------------------
+
+    [Theory]
+    [InlineData("I can now train to level: 2", 2)]
+    [InlineData("\"I can now train to level: 14\"", 14)]   // a say body, quotes kept
+    [InlineData("i can now train to level: 7.", 7)]
+    [InlineData("I can now train to level: 1", 0)]          // nothing below it to train from
+    [InlineData("I can now train to level: soon", 0)]
+    [InlineData("anyone want to train to level: 5", 0)]
+    public void TrainableAnnounce_ReadsTheLevelUpAnnouncersLine(string message, int expected)
+    {
+        bool ok = PartyTrainCoordinator.TryParseTrainableAnnounce(message, out int level);
+        Assert.Equal(expected > 0, ok);
+        if (ok) Assert.Equal(expected, level);
+    }
+
     // ----- who can be asked -------------------------------------------------
 
     [Theory]

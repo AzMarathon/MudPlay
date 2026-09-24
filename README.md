@@ -16,6 +16,8 @@
 > - A reporting member still waiting 10 minutes past its projected ready time gets one "ready yet?" ask
 > - @level / @exp replies over telepath or directed say (.@level) update the member's line
 > - Combat no longer keeps swinging at a monster a party member killed: an attack the server reads back as You say "…" (talk-slow off) drops the target and re-looks the room
+> - A member's `I can now train to level: N` announcement shows as `can train LN` on their Party-window line — display only, for members that won't be auto-trained
+> - Following with Auto-train party on, the Party window shows the train lines too — your own status, and the others' from their `@level` / `@exp` replies at your exp/hour
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

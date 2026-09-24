@@ -98,6 +98,8 @@ public sealed class PartyTrainCoordinator : IDisposable
     private readonly Dictionary<string, DateTimeOffset> _asked = new(StringComparer.OrdinalIgnoreCase);
     // How long an asked member has to answer before it's taken as not taking part.
     private static readonly TimeSpan ReplyWindow = TimeSpan.FromSeconds(30);
+    // The highest level each member has announced as trainable (NoteTrainableAnnounce).
+    private readonly Dictionary<string, int> _announced = new(StringComparer.OrdinalIgnoreCase);
     // Followers to re-invite after a solo-fallback train (see AllowSoloRun).
     private IReadOnlyList<string> _soloReform = [];
     private readonly Dictionary<string, DateTimeOffset> _joinedAt = new(StringComparer.OrdinalIgnoreCase);
@@ -575,6 +577,34 @@ public sealed class PartyTrainCoordinator : IDisposable
         RefreshTrainInfo();
     }
 
+    // A member's "I can now train to level: N" (LevelUpAnnouncer, on whatever channel
+    // they picked) — shown on its Party-window line as "can train LN" until its level
+    // reaches N. Display only, never a vote: whether a member goes on a party trip is
+    // its own @ptrain report, which its client pushes (against its own gates) right
+    // behind the announcement. The point is the members that announce but won't
+    // auto-train — Auto-train party off, waiting on their own gates, another client —
+    // whose line would otherwise read "not ready" or an estimate.
+    public void NoteTrainableAnnounce(string sender, int level)
+    {
+        if (!_party.IsInParty || level <= 1) return;
+        string name = GivenName(sender);
+        if (!ActiveMemberGivens().Contains(name, StringComparer.OrdinalIgnoreCase)) return;
+        if (_announced.TryGetValue(name, out int prior) && prior >= level) return;
+        _announced[name] = level;
+        _log?.Info(LogCategory, $"{name} announced level {level} is trainable.");
+        RefreshTrainInfo();
+    }
+
+    // "I can now train to level: N", as LevelUpAnnouncer words it — the say / gossip /
+    // gangpath / yell / telepath message body, quotes tolerated.
+    public static bool TryParseTrainableAnnounce(string message, out int level)
+    {
+        level = 0;
+        string m = message.Trim().Trim('"').Trim();
+        if (!m.StartsWith(LevelUpAnnouncer.AnnounceText, StringComparison.OrdinalIgnoreCase)) return false;
+        return int.TryParse(m[LevelUpAnnouncer.AnnounceText.Length..].Trim().TrimEnd('.', '!'), out level) && level > 1;
+    }
+
     // Readings belong to a membership: a member that leaves drops its report, reading
     // and ask record, and is asked afresh if it comes back.
     private void DropStaleReports()
@@ -587,6 +617,7 @@ public sealed class PartyTrainCoordinator : IDisposable
             _asked.Remove(name);
             _reports.Remove(name);
             _levelReplies.Remove(name);
+            _announced.Remove(name);
         }
     }
 
@@ -863,7 +894,10 @@ public sealed class PartyTrainCoordinator : IDisposable
 
     private void RefreshTrainInfo()
     {
-        bool show = Leading && Settings.AutoTrainParty;
+        // Following too: our own row is the status we'd report, and the others' come
+        // from their @level / @exp replies at our (shared) exp/hour. Only the leader
+        // holds members' reports.
+        bool show = _party.IsInParty && Settings.AutoTrainParty;
         double rate = show ? _expPerHour() : 0;
         foreach (PartyMember m in _party.Members)
         {
@@ -888,8 +922,14 @@ public sealed class PartyTrainCoordinator : IDisposable
                 ?? (m.IsSelf ? _selfLevel() : _recordedLevel(m.Name) ?? 0);
             if (m.KnownLevel != level) m.KnownLevel = level;
 
-            string text = status is { } st ? RowText(st, rate, gain)
-                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.Needed, r2.TheirEta, rate, Math.Max(0, _selfExp() - r2.OurExpAt))
+            // An announced trainable level stands until they're seen at it (trained).
+            int? canTrain = show && !m.IsSelf && _announced.TryGetValue(GivenName(m.Name), out int a) && a > level
+                ? a : null;
+
+            string text = status is { } st ? RowText(st, rate, gain, canTrain)
+                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.Needed, r2.TheirEta, rate, Math.Max(0, _selfExp() - r2.OurExpAt),
+                    canTrain, otherClient: !Speaks(GivenName(m.Name)))
+                : canTrain is { } c ? $"can train L{c}"
                 : "";
             if (m.TrainInfo != text) m.TrainInfo = text;
         }
@@ -898,7 +938,10 @@ public sealed class PartyTrainCoordinator : IDisposable
     // "4,120,331 xp · TNL ~1h 5m · ready +2 (12,345c)". Readings aren't refreshed on a
     // timer (the member pushes its own changes), so between reports the exp is the
     // report plus the exp WE've gained since (gain), and the TNL is worked from that.
-    private static string RowText(PartyTrainStatus s, double ourRate, long gain)
+    // A member that announced a trainable level (canTrain) but isn't going to the
+    // trainer with us — off, blocked, or not yet past its own gates — says so ahead of
+    // its state: "can train L2 · party train off".
+    private static string RowText(PartyTrainStatus s, double ourRate, long gain, int? canTrain = null)
     {
         long exp = s.Exp > 0 ? s.Exp + gain : 0;
         string expText = exp > 0 ? $"{exp:N0} xp" : "? xp";
@@ -910,20 +953,27 @@ public sealed class PartyTrainCoordinator : IDisposable
             PartyTrainReadiness.Off => "party train off",
             _ => "not ready",
         };
+        if (canTrain is { } c && s.Readiness != PartyTrainReadiness.Ready) state = $"can train L{c} · {state}";
         return $"{expText} · {tnlText} · {state}";
     }
 
-    // A non-reporting member's line from its @level reply. Its "needed" only runs to
-    // the NEXT level — MegaMUD doesn't count past it the way our banked-aware TNL
-    // does — so the line names that level. Their own "will level in" is shown only
-    // while our rate is unknown.
-    private static string LevelReplyText(int level, long? needed, string? theirEta, double ourRate, long gain)
+    // A line from a member's @level / @exp reply — a member that doesn't report, or
+    // anyone on a follower's screen (reports only go to the leader). Its "needed" only
+    // runs to the NEXT level — MegaMUD doesn't count past it the way our banked-aware
+    // TNL does — so the line names that level. Their own "will level in" is shown only
+    // while our rate is unknown. An announced trainable level (canTrain) outranks the
+    // reading, which predates it. otherClient tags a member on another client (or an
+    // older MudPlay), which is why it can't report.
+    private static string LevelReplyText(int level, long? needed, string? theirEta, double ourRate, long gain,
+        int? canTrain = null, bool otherClient = true)
     {
-        if (needed is not { } n) return $"L{level} · other client";
-        if (n <= 0) return $"L{level + 1} reached · can train · other client";
+        string tag = otherClient ? " · other client" : "";
+        if (canTrain is { } c) return $"can train L{c}{tag}";
+        if (needed is not { } n) return $"L{level}{tag}";
+        if (n <= 0) return $"L{level + 1} reached · can train{tag}";
         long left = Math.Max(0, n - gain);
         string when = Remaining(left, ourRate) ?? theirEta ?? "?";
-        return $"{left:N0} to L{level + 1} · TNL {when} · other client";
+        return $"{left:N0} to L{level + 1} · TNL {when}{tag}";
     }
 
     // Exp still to go, as a time at our rate: "~1h 5m", "due" once the estimate says
