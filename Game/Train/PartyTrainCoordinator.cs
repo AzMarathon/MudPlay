@@ -20,9 +20,10 @@ namespace MudPlay.Game.Train;
 //       and whenever the leader asks (`@ptrain ask`) — every figure computed from its
 //       own settings, purse, bank and earn rate;
 //     * obeys the leader's trip orders — `give` (cover a party member's fee),
-//       `with` (withdraw its own fee at the bank stop), `train` (train here, never
-//       walking on) — and reports `done` once it's back in the party, since a
-//       follower's train drops it until the leader re-invites.
+//       `with` (withdraw its own fee at the bank stop), `train` (train at the
+//       leader's trainer, walking in first if a fight shut it out) — and reports
+//       `done` once it's back in the party, since a follower's train drops it until
+//       the leader re-invites.
 //
 //   Leader side (toggle on, leading, a loop / auto-lair running):
 //     * asks the party for reports when the roster changes and every few minutes;
@@ -37,8 +38,9 @@ namespace MudPlay.Game.Train;
 // Members that never report — toggle off, another client — are simply not waited
 // for: they follow the leader there and back like any other walk.
 //
-// Orders are obeyed only from the current party leader, and only while this
-// character's own toggle is on, so a member's consent is its own setting.
+// Orders are obeyed only from the party leader (the train order also from the one
+// we were following when the follow broke), and only while this character's own
+// toggle is on, so a member's consent is its own setting.
 public sealed class PartyTrainCoordinator : IDisposable
 {
     public const string LogCategory = "PartyTrain";
@@ -125,6 +127,9 @@ public sealed class PartyTrainCoordinator : IDisposable
     // we're following it. A leader that never asks (toggle off, not using the feature)
     // is never sent anything.
     private string? _reportTo;
+    // The leader we last followed, kept through a follow that breaks (see ReceiveTrain);
+    // dropped once we lead a party of our own.
+    private string? _lastLeader;
 
     // Our own client may not register the drop a train causes; past this with no drop
     // seen and still apparently following, the `done` goes anyway — the leader also
@@ -229,6 +234,8 @@ public sealed class PartyTrainCoordinator : IDisposable
     private void OnPartyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_disposed) return;
+        if (Following) _lastLeader = GivenName(_party.LeaderName!);
+        else if (Leading) _lastLeader = null;
         if (!Following)
         {
             _lastSentKey = "";
@@ -307,19 +314,40 @@ public sealed class PartyTrainCoordinator : IDisposable
         MemberTick();
     }
 
-    // `@ptrain train <target>` — train here, up to the leader's target for us.
-    public void ReceiveTrain(string sender, int targetLevel)
+    // `@ptrain train <target> [m/r]` — train at the leader's trainer, up to its target
+    // for us. A member that isn't in the trainer's room walks there first: a room that
+    // can't be entered mid-fight shuts a fighting follower out, and the follow breaks.
+    // That's also why the order is taken from the leader we last followed, not only
+    // the one we're following now.
+    public void ReceiveTrain(string sender, int targetLevel, RoomKey? trainerRoom = null)
     {
-        if (!Settings.AutoTrainParty || !IsLeader(sender)) return;
+        if (!Settings.AutoTrainParty) return;
         string leader = GivenName(sender);
+        if (!IsLeader(sender) && !string.Equals(leader, _lastLeader, StringComparison.OrdinalIgnoreCase)) return;
         _log?.Info(LogCategory, $"{leader} says train (target level {targetLevel}).");
+        if (trainerRoom is { } room && _currentRoom() is { } here && here != room)
+        {
+            _log?.Info(LogCategory, $"Not at the trainer ({here.Map}/{here.Room}) — walking to {room.Map}/{room.Room} first.");
+            _ = WalkThenTrainAsync(leader, targetLevel, room);
+            return;
+        }
+        TrainAndReport(leader, targetLevel);
+    }
+
+    private async Task WalkThenTrainAsync(string leader, int targetLevel, RoomKey room)
+    {
+        if (!await WalkAsync(room))
+            _log?.Info(LogCategory, $"Couldn't reach the trainer at {room.Map}/{room.Room} — trying where we stand.");
+        TrainAndReport(leader, targetLevel);
+    }
+
+    private void TrainAndReport(string leader, int targetLevel) =>
         _trainer.TrainForParty(targetLevel, (levels, report) =>
         {
             _log?.Info(LogCategory, $"Party train finished: {report}");
             _pendingDone = new PendingDone(leader, levels, _now());
             FlushPendingDone();
         });
-    }
 
     // `@ptrain give <copper> <recipient>` — cover part of someone's fee from our spare.
     public void ReceiveGive(string sender, long copper, string recipient)
@@ -737,6 +765,7 @@ public sealed class PartyTrainCoordinator : IDisposable
                 return;
             }
             started = true;
+            List<string> setOut = ActiveMemberGivens().ToList();
             _log?.Info(LogCategory,
                 $"Party train trip: training {string.Join(", ", trainees)} across {stops.Count} stop(s)"
                 + (bankRoom is { } br ? $", via the bank at {br.Map}/{br.Room}" : "") + ".");
@@ -789,12 +818,16 @@ public sealed class PartyTrainCoordinator : IDisposable
                 _log?.Info(LogCategory, $"At {stop.Trainer.Name} — training {string.Join(", ", atStop)}.");
 
                 if (stop.Members.Count > 0)
-                    await TrainMembersAsync(stop.Members, members);
+                    await TrainMembersAsync(stop.Members, members, room);
 
                 if (stop.LeaderTrains && leader is { } l)
                 {
-                    // Our train disbands the party, so note who to pull back first.
-                    List<string> followers = ActiveMemberGivens().ToList();
+                    // Our train disbands the party, so note who to pull back first —
+                    // everyone who set out, not just who's in the roster now: a member
+                    // shut out of the trainer's room mid-fight is left in an [Invited]
+                    // slot, and still has to be collected.
+                    List<string> followers = ActiveMemberGivens()
+                        .Union(setOut, StringComparer.OrdinalIgnoreCase).ToList();
                     (int levels, string report) = await TrainSelfAsync(l.TargetLevel);
                     _log?.Info(LogCategory, $"Leader train: {report}");
                     if (levels > 0 && followers.Count > 0) _reformParty(followers);
@@ -824,7 +857,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         }
     }
 
-    private async Task TrainMembersAsync(IReadOnlyList<string> names, List<PartyTrainee> members)
+    private async Task TrainMembersAsync(IReadOnlyList<string> names, List<PartyTrainee> members, RoomKey room)
     {
         _awaitingDone = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
         _seenGone.Clear();
@@ -833,7 +866,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         foreach (string name in names)
         {
             int target = members.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)).TargetLevel;
-            _send($"/{name} @ptrain train {target}");
+            _send($"/{name} @ptrain train {target} {room.Map}/{room.Room}");
         }
         _armTimer(MemberTrainTimeout, () => done.TrySetResult(false));
         if (!await done.Task && _awaitingDone is { Count: > 0 } missing)
@@ -885,9 +918,10 @@ public sealed class PartyTrainCoordinator : IDisposable
 
     // The Party window's per-row fields. The level ("L20 Druid") shows in every role
     // from whatever we know. The line under the bars — exp, time to next level at OUR
-    // rate (a party shares the kills), ready state — shows only while we lead with
-    // the toggle on, from each member's report and our own on the self row. Rows with
-    // nothing fresh are cleared, so a stale line never lingers.
+    // rate (a party shares the kills), ready state — shows while we're in a party with
+    // the toggle on: members' reports when leading, @level / @exp readings otherwise,
+    // and our own status on the self row. Rows with nothing fresh are cleared, so a
+    // stale line never lingers.
     // Our own exp moved ("You gain N experience.") — redraw now rather than on the
     // next tick, so the self row's exp and TNL track every kill.
     public void OnOwnExpChanged() => RefreshTrainInfo();

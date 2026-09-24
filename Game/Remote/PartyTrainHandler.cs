@@ -10,7 +10,8 @@ namespace MudPlay.Game.Remote;
 //
 //   st <payload>            member → leader: a PartyTrainStatus report
 //   ask                     leader → member: send your report
-//   train <target>          leader → member: train here, up to level <target>
+//   train <target> [m/r]    leader → member: train at trainer room m/r (walking there
+//                           first if it isn't in it), up to level <target>
 //   give <copper> <name>    leader → member: cover <copper> of <name>'s fee
 //   with <copper>           leader → member: withdraw your fee at this bank
 //   done <levels>           member → leader: trained and back in the party
@@ -57,7 +58,11 @@ public sealed class PartyTrainHandler : IDisposable
                 _coordinator.ReceiveAsk(ctx.Sender);
                 break;
             case "train" when a.Count >= 2 && TryInt(a[1], out long target):
-                _coordinator.ReceiveTrain(ctx.Sender, (int)Math.Clamp(target, 0, int.MaxValue));
+                // Optional trainer room ("train 2 1/2147") so a member that didn't make
+                // it in can walk there itself.
+                Game.Map.RoomKey? room = a.Count >= 3 && Game.Map.RoomKey.TryParseWire(a[2], out Game.Map.RoomKey k)
+                    ? k : null;
+                _coordinator.ReceiveTrain(ctx.Sender, (int)Math.Clamp(target, 0, int.MaxValue), room);
                 break;
             case "give" when a.Count >= 3 && TryInt(a[1], out long copper) && copper > 0:
                 _coordinator.ReceiveGive(ctx.Sender, copper, a[2]);

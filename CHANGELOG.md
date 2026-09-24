@@ -18,7 +18,9 @@
 - Combat no longer keeps swinging at a monster a party member killed: an attack the server reads back as `You say "…"` (talk-slow off) drops the target and re-looks the room
 - A member's `I can now train to level: N` announcement shows as `can train LN` on their Party-window line — display only, for members that won't be auto-trained
 - Following with Auto-train party on, the Party window shows the train lines too — your own status, and the others' from their `@level` / `@exp` replies at your exp/hour
-- bug reports addressed: stock-20260924-011014, stock-20260924-013525
+- A member shut out of a combat-restricted trainer room walks in and trains once its fight ends, instead of reporting "done 0" where it stood; the leader re-invites everyone who set out
+- The `@join` nag isn't cancelled by a member's automatic `@where`, and a member left in a quiet `[Invited]` slot is re-invited and nagged when seen
+- bug reports addressed: stock-20260924-011014, stock-20260924-013525, stock-20260924-145334, stock-20260924-145545, stock-20260924-145644
 
 ## 3.104.17
 

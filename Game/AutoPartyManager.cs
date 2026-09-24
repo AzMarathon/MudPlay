@@ -404,6 +404,10 @@ public sealed class AutoPartyManager : IDisposable
         // @join chase before the first nag even fires.
         if (IsBracedPayload(body)) return;
 
+        // An @-command is their client asking us something (a follower whose party
+        // broke probes @where to find its leader), not an answer to the @join.
+        if (body.StartsWith('@')) return;
+
         // Non-braced free text is the human replying — treat as a decline and
         // stop chasing.
         CancelNag(sender, reason: $"replied '{body}' (not {{Ok}})");
@@ -515,11 +519,15 @@ public sealed class AutoPartyManager : IDisposable
 
     private void TryAutoInvite(string given)
     {
-        // Already in our party? Nothing to do.
+        // Already in our party? Nothing to do — except a pending [Invited] row with no
+        // nag running: that invite has gone quiet (a follow that broke into an
+        // [Invited] slot, a nag already cut off), and they're standing right here, so
+        // it's re-sent and chased like a fresh one (cooldown below still applies).
         foreach (PartyMember m in _party.Members)
         {
-            if (string.Equals(ExtractGiven(m.Name), given, StringComparison.OrdinalIgnoreCase))
-                return;
+            if (!string.Equals(ExtractGiven(m.Name), given, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!m.IsInvited || _activeNags.ContainsKey(given)) return;
+            break;
         }
 
         // Follower gate — inviting people is only meaningful when we're
