@@ -7,6 +7,7 @@
 > - `@status` / `@path` now report the **specific reason** the navigator is paused — "resting (low HP) en route to X", "meditating (low mana) on loop 'X'", "held", "party asked to wait", or a manual "paused" — instead of always saying "walking"
 > - Combat switches to the **room (multi-target) attack** the moment a mob arrives mid-fight and the count crosses your MinEnemies, rather than staying single-target until the next damage tick
 > - Combat: a between-round area-debuff drawing "already cast this round" no longer strands the round's combat attack — the independent attack slot fires regardless
+> - Combat: the room attack spell is no longer recast while it's already channeling (a kill or a roamer kept re-sending it, which the game breaks-and-restarts) — it persists until the count drops below MinEnemies, MaxCastsPerRoom is hit, or mana falls under the AoE floor
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

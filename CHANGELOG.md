@@ -8,7 +8,8 @@
 - `@status` / `@path` now report the **specific reason** the navigator is paused — "resting (low HP) en route to X", "meditating (low mana) on loop 'X'", "held", "party asked to wait", or a manual "paused" — instead of always saying "walking" for a walk that isn't actually moving
 - Combat switches to the **room (multi-target) attack** the moment a mob arrives mid-fight and the enemy count crosses your MinEnemies, rather than continuing single-target until the next damage tick
 - Combat: a between-round area-debuff drawing "already cast this round" no longer **strands the round's combat attack** — the attack slot is independent server-side, so it now fires regardless of the debuff's rejection
-- bug reports addressed: paradigm-20260923-071731, paradigm-20260923-091205, paradigm-20260923-103506
+- Combat: the **room attack spell is no longer recast** while it's already channeling — a kill or a mob roaming in kept re-sending it, which the game breaks-and-restarts (a wasted `*Combat Off*` / `*Combat Engaged*`); it now persists until the count drops below MinEnemies, MaxCastsPerRoom is hit, or mana falls under the AoE floor
+- bug reports addressed: paradigm-20260923-071731, paradigm-20260923-091205, paradigm-20260923-103506, paradigm-20260923-103938
 
 ## 3.103.9
 

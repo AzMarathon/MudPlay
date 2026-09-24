@@ -1580,6 +1580,43 @@ public sealed partial class CombatManager : IDisposable
             return;
         }
 
+        // Room-attack channel persists across a kill. When a room/multi-attack spell
+        // (hsto) is on record for this engagement (_roomChannelSpell) but the round's
+        // target was just cleared by a kill (_currentTarget null — the guard above
+        // couldn't catch it), the AoE is STILL hitting every survivor and roamer each
+        // round; re-issuing it would break+restart the channel (no engine-side dedup —
+        // report paradigm-20260923-103938). If the chooser, peeked against the fresh
+        // roster, would STILL pick that same room spell, re-anchor the round to a
+        // surviving mob so the per-round heartbeat keeps driving the channel (tally, no
+        // send) and return without dispatching. If it now picks something else — the
+        // count fell below MinEnemies, MaxCastsPerRoom is spent, or mana dropped under
+        // the AoE floor — the channel is over: clear the marker and fall through so the
+        // normal chain switches off the room spell. The chooser peek is side-effect
+        // free (counters advance in MarkCast, not Choose), so it can't over-tally.
+        if (CombatSpellsWired
+            && _currentTarget is null
+            && _roomChannelSpell is { } channelSpell
+            && engageable.Count > 0)
+        {
+            EngageableCandidate anchor = engageable[0];   // highest-priority survivor
+            CombatSpellContext channelCtx = BuildContext(
+                settings, obs, anchor.RawName, engageable.Count,
+                ResolveMonsterNumber(obs, anchor.RawName));
+            CombatSpellDecision still = _spellChooser.Choose(settings, channelCtx);
+            if (still.Action is CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2
+                && string.Equals(still.Spell, channelSpell, StringComparison.OrdinalIgnoreCase))
+            {
+                _currentTarget = anchor.RawName;
+                _castingSpellTarget = anchor.RawName;
+                _log?.Combat(LogCategory,
+                    $"room-attack channel '{channelSpell}' still live — re-anchoring to "
+                    + $"{anchor.RawName} without recast (the AoE already covers the room; "
+                    + "recasting would break/restart it)");
+                return;
+            }
+            _roomChannelSpell = null;   // conditions lapsed — channel over, let the chain switch off it
+        }
+
         // Target-Priority follow deferral: when we're partied in a multi-mob room
         // and configured to follow the leader's / a member's target, hold our own
         // pick and wait for that player's announce (TryFollowTargetPriority engages
@@ -1845,6 +1882,7 @@ public sealed partial class CombatManager : IDisposable
     {
         _castingSpellTarget = null;
         _lastCastAction = null;
+        _roomChannelSpell = null;   // end-of-fight ends any room-attack channel
         _alternationRound = 0;
         _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
         _lastAttackTallyAt = DateTimeOffset.MinValue;
@@ -1964,6 +2002,9 @@ public sealed partial class CombatManager : IDisposable
     // not), so unlike PrepBackstabForMove it is not gated on DoBackstab.
     public void NotePreMove()
     {
+        // Leaving the room ends the room-attack channel — the next room re-earns its
+        // own first cast (and re-derives the marker).
+        _roomChannelSpell = null;
         _spellChooser.ResetForNewRoom();
         // Leaving the room ends our commitment to it — the next room re-earns
         // the "Kill all engaged" hold by meeting the engage window again.
@@ -3903,6 +3944,7 @@ public sealed partial class CombatManager : IDisposable
         // swing, so the tick heartbeat must stop re-casting for this target.
         _castingSpellTarget = null;
         _lastCastAction = null;
+        _roomChannelSpell = null;   // switched off the room spell onto the weapon
         string verb = string.IsNullOrWhiteSpace(command) ? "a" : command.Trim();
         string line = $"{verb} {target}";
         if (priority is { } prio)
@@ -3922,6 +3964,7 @@ public sealed partial class CombatManager : IDisposable
         _combatOff = false;
         _castingSpellTarget = null;
         _lastCastAction = null;
+        _roomChannelSpell = null;   // switched off the room spell onto the weapon
         string verb = string.IsNullOrWhiteSpace(command) ? "a" : command.Trim();
         string line = $"{verb} {target}";
         _log?.Combat(LogCategory,
