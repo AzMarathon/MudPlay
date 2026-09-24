@@ -102,7 +102,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(SnapshotCurrentCommand))]
     [NotifyCanExecuteChangedFor(nameof(ApplyNowCommand))]
     [NotifyPropertyChangedFor(nameof(ShowCombatSwapOption))]
-    [NotifyPropertyChangedFor(nameof(ShowLairSwapOption))]
+    [NotifyPropertyChangedFor(nameof(ShowMovementOptions))]
     private EquipmentSetRowViewModel? _selectedSetRow;
 
     // Transient one-line result of the last Apply Now press.
@@ -150,13 +150,19 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     // seeing monsters). Only meaningful for the While Moving set. Persisted on change.
     [ObservableProperty] private bool _swapToDefaultBeforeLairs;
 
+    // "Also when moving by hand" + its idle delay — mirror
+    // EquipmentSettings.WhileMovingOnManualMoves / WhileMovingManualIdleSeconds. Movement
+    // set only; persisted on change.
+    [ObservableProperty] private bool _whileMovingOnManualMoves;
+    [ObservableProperty] private int _whileMovingManualIdleSeconds = 10;
+
     // Contextual per-set behavior toggles: the combat-swap option belongs to the
     // resting sets (it governs a rest-interrupting fight); the lair-swap option belongs
-    // to the movement set. Each shows only when its set is selected. Refreshed from
-    // OnSelectedSetRowChanged.
+    // and the hand-movement options to the movement set. Each shows only when its set
+    // is selected. Refreshed from OnSelectedSetRowChanged.
     public bool ShowCombatSwapOption =>
         SelectedSet is { Trigger: EquipTriggerType.PreRestHp or EquipTriggerType.PreRestMana };
-    public bool ShowLairSwapOption => SelectedSet is { Trigger: EquipTriggerType.WhileMoving };
+    public bool ShowMovementOptions => SelectedSet is { Trigger: EquipTriggerType.WhileMoving };
 
     // True when the bonuses panel has at least one non-zero stat row.
     [ObservableProperty] private bool _hasBonuses;
@@ -300,6 +306,23 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         _profile.Save();
     }
 
+    partial void OnWhileMovingOnManualMovesChanged(bool value)
+    {
+        if (_suppress) return;
+        if (_profile.Current?.Equipment is not { } cfg) return;
+        cfg.WhileMovingOnManualMoves = value;
+        _profile.Save();
+    }
+
+    partial void OnWhileMovingManualIdleSecondsChanged(int value)
+    {
+        if (value < 1) { WhileMovingManualIdleSeconds = 1; return; }   // re-enters clamped
+        if (_suppress) return;
+        if (_profile.Current?.Equipment is not { } cfg) return;
+        cfg.WhileMovingManualIdleSeconds = value;
+        _profile.Save();
+    }
+
     // Hand the selected set to the engine to walk the character into it.
     [RelayCommand(CanExecute = nameof(HasSet))]
     private void ApplyNow()
@@ -434,6 +457,8 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
             SetRows.Clear();
             DontSwapToDefaultOnCombat = true;
             SwapToDefaultBeforeLairs = false;
+            WhileMovingOnManualMoves = false;
+            WhileMovingManualIdleSeconds = 10;
             if (_profile.Current is { } p)
             {
                 EquipmentSettings cfg = p.Equipment ??= new EquipmentSettings();
@@ -442,6 +467,8 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
                     SetRows.Add(new EquipmentSetRowViewModel(s));
                 DontSwapToDefaultOnCombat = !cfg.SwapToDefaultOnCombat;
                 SwapToDefaultBeforeLairs = cfg.SwapToDefaultBeforeLairs;
+                WhileMovingOnManualMoves = cfg.WhileMovingOnManualMoves;
+                WhileMovingManualIdleSeconds = Math.Max(1, cfg.WhileMovingManualIdleSeconds);
             }
             SelectedSetRow = SetRows.FirstOrDefault();
         }

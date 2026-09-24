@@ -123,6 +123,16 @@ public sealed class AutoEquipCoordinator : IDisposable
     private readonly Func<Action, IDisposable>? _scheduleCombatGearSwap;
     private IDisposable? _pendingMovingCombatSwap;
 
+    // Hand movement (EquipmentSettings.WhileMovingOnManualMoves). _navIdle says no nav
+    // engine is running at all — the only time a move counts as typed by hand (an
+    // engine's own steps pass the same outbound observer). A typed move has no
+    // arrival, so the set comes off after the user-set idle delay with no further
+    // typed move; _scheduleAfter arms that revert (null = never reverts, tests aside).
+    private readonly Func<bool>? _navIdle;
+    private readonly Func<TimeSpan, Action, IDisposable>? _scheduleAfter;
+    private bool _inManualMovementSet;
+    private IDisposable? _manualIdleRevert;
+
     public AutoEquipCoordinator(
         PlayerState player,
         Func<EquipmentSettings> readEquipment,
@@ -136,7 +146,9 @@ public sealed class AutoEquipCoordinator : IDisposable
         Func<Game.Map.RoomKey, bool>? isBossRoom = null,
         Func<Game.Map.RoomKey, bool>? isLair = null,
         Func<bool>? isMoving = null,
-        Func<Action, IDisposable>? scheduleCombatGearSwap = null)
+        Func<Action, IDisposable>? scheduleCombatGearSwap = null,
+        Func<bool>? navIdle = null,
+        Func<TimeSpan, Action, IDisposable>? scheduleAfter = null)
     {
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(readEquipment);
@@ -156,6 +168,8 @@ public sealed class AutoEquipCoordinator : IDisposable
         _isLair = isLair;
         _isMoving = isMoving;
         _scheduleCombatGearSwap = scheduleCombatGearSwap;
+        _navIdle = navIdle;
+        _scheduleAfter = scheduleAfter;
         _log = log;
         _now = now ?? (() => DateTimeOffset.Now);
 
@@ -336,6 +350,8 @@ public sealed class AutoEquipCoordinator : IDisposable
     // owns gear there). Idempotent: re-entry while already in the set does nothing.
     public void OnMovementStarted()
     {
+        // A nav engine takes over from hand movement — its own stop owns the revert now.
+        EndManualMovement();
         if (_inMovementSet) return;
         // We deliberately swapped to Default for a lair (swap-before-lairs) and this is
         // the loop resuming the step once the swap gate cleared — re-wearing the movement
@@ -368,6 +384,57 @@ public sealed class AutoEquipCoordinator : IDisposable
         // walked 4 rooms into a monster room in Pre-rest). Fire is diff-based, so this
         // no-ops when we're already in Default.
         Fire(EquipTriggerType.Default);
+    }
+
+    // A move just went out (OutboundMovementObserver.MoveSent). With the opt-in on and
+    // no nav engine running, it was typed by hand: wear the While Moving set under the
+    // same rules the engine path uses (not fighting / resting / in a boss room), and
+    // (re)arm the idle revert. An engine's own steps land here too and are ignored —
+    // OnMovementStarted / Stopped own that gear.
+    public void OnMoveSent()
+    {
+        EquipmentSettings cfg = _readEquipment();
+        if (!cfg.WhileMovingOnManualMoves) { EndManualMovement(); return; }
+        if (_navIdle?.Invoke() != true) return;
+        if (!MovementSetActive()) return;
+        if (_player.InCombat || IsRestPosture(_player.Position) || CurrentRoomIsBoss()) return;
+
+        ArmManualIdleRevert(TimeSpan.FromSeconds(Math.Max(1, cfg.WhileMovingManualIdleSeconds)));
+        if (_inMovementSet) return;   // already wearing it (this burst, or a fight ended mid-burst)
+        _inMovementSet = true;
+        _inManualMovementSet = true;
+        _log?.Info(EquipmentManager.LogCategory, "moving by hand — wearing the While Moving set");
+        Fire(EquipTriggerType.WhileMoving);
+    }
+
+    private void ArmManualIdleRevert(TimeSpan delay)
+    {
+        _manualIdleRevert?.Dispose();
+        _manualIdleRevert = _scheduleAfter?.Invoke(delay, OnManualMovementIdle);
+    }
+
+    // No typed move for the idle delay: take the hand-movement set off — unless a fight,
+    // a rest or a boss room has claimed the gear since (their own handlers own it), or a
+    // nav engine started (OnMovementStarted already handed over).
+    private void OnManualMovementIdle()
+    {
+        _manualIdleRevert = null;
+        if (!_inManualMovementSet) return;
+        _inManualMovementSet = false;
+        if (!_inMovementSet) return;
+        if (_navIdle?.Invoke() != true) return;
+        _inMovementSet = false;
+        if (_player.InCombat || _hpGateAsserted() || _maGateAsserted() || CurrentRoomIsBoss()) return;
+        _log?.Info(EquipmentManager.LogCategory,
+            $"no move typed for {Math.Max(1, _readEquipment().WhileMovingManualIdleSeconds)}s — reverting the While Moving set to Default");
+        Fire(EquipTriggerType.Default);
+    }
+
+    private void EndManualMovement()
+    {
+        _manualIdleRevert?.Dispose();
+        _manualIdleRevert = null;
+        _inManualMovementSet = false;
     }
 
     // The nav engine went fully idle — a walk-to reached its destination, or a loop /
@@ -613,6 +680,7 @@ public sealed class AutoEquipCoordinator : IDisposable
     public void Dispose()
     {
         CancelPendingMovingCombatSwap();
+        EndManualMovement();
         _player.PropertyChanged -= OnPlayerChanged;
     }
 }

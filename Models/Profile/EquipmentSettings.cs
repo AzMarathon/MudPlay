@@ -26,4 +26,15 @@ public sealed class EquipmentSettings
     // Manager as the "Swap to default before entering lairs" checkbox, shown only
     // when the movement set is selected.
     public bool SwapToDefaultBeforeLairs { get; set; }
+
+    // Opt-in: also wear the While Moving set when moving BY HAND (typed moves with no
+    // loop / Auto-Lair / walk-to running), not only when a nav engine travels. A typed
+    // move has no "arrived" moment, so the set comes off once no typed move has gone
+    // out for WhileMovingManualIdleSeconds. Surfaced beside the lair option in the
+    // Equipment Manager, shown only when the movement set is selected.
+    public bool WhileMovingOnManualMoves { get; set; }
+
+    // Seconds without a typed move before a hand-moving While Moving set reverts to
+    // Default. Clamped to 1+ where it's read.
+    public int WhileMovingManualIdleSeconds { get; set; } = 10;
 }

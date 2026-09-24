@@ -1,11 +1,12 @@
 # Version history
 
-## 3.104.8
+## 3.104.9
 
 - A walk you chose to take through a hazard ("cross unprotected") keeps that choice when a mid-walk desync re-plans it, instead of failing "all routes blocked by a room hazard"
 - A mid-fight buff that breaks a running room spell no longer leaves the fight unattacked — the room spell is re-cast on the resume
 - Mana-regen rerolls (flux / nature tap) wait for the fight to end instead of breaking combat with a recast
-- bug reports addressed: paradigm-20260924-120529, paradigm-20260924-123009
+- While Moving set: opt-in "Also when moving by hand" wears it for typed moves too, reverting to Default after a user-set number of seconds without a move
+- bug reports addressed: paradigm-20260924-113530, paradigm-20260924-120529, paradigm-20260924-123009
 
 ## 3.104.6
 
