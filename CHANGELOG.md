@@ -1,5 +1,10 @@
 # Version history
 
+## 3.105.1
+
+- Monster Intel's **Est. Rounds to Kill** now defaults to **Fastest of all my attacks** — whichever of your melee attacks (Backstab excluded) or attack spells kills each monster soonest — instead of the Normal melee swing, so a caster's monsters no longer vanish behind the rounds cap when its spells kill them in a couple of casts (a saved specific pick is kept; the picker gains a leading "Fastest of all my attacks" radio)
+- The rounds-to-kill cap now says how many monsters it is **hiding** (an amber note beside "Max Rnds to Kill"), so a low value can't silently shrink the list; the monster count also refreshes when you switch the rounds attack
+
 ## 3.105.0
 
 - **Auto-train party** — a new CP Allocation checkbox that makes auto-train work in a group: members tell the leader when their own auto-train settings say they're ready, and the leader takes the party to train together; needs two or more members on MudPlay with it on (a lone leader uses its solo Auto-train and re-invites the party), and keeps telepaths to one ask per member join plus their own change reports
