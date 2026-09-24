@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.104.6**
-> - Window positions and sizes are remembered for panels still open when you quit, not only ones you closed yourself
-> - A window maximized at exit restores to its real size and position when you un-maximize it
+> **Version 3.104.8**
+> - A walk you chose to take through a hazard ("cross unprotected") keeps that choice when a mid-walk desync re-plans it, instead of failing "all routes blocked by a room hazard"
+> - A mid-fight buff that breaks a running room spell no longer leaves the fight unattacked — the room spell is re-cast on the resume
+> - Mana-regen rerolls (flux / nature tap) wait for the fight to end instead of breaking combat with a recast
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

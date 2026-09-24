@@ -212,7 +212,7 @@ When several hostiles share a room, **Target order** and **Target priority** dec
 
 ## Fighting a crowd
 
-Against several enemies MudPlay uses your **multi-attack** and **area-debuff** spell slots to hit the whole room, falling back to single-target attacks once the room thins below a slot's minimum-enemies setting. Those room spells are gated by **Auto-Nuke**; single-target attack spells aren't "nukes" and stay available regardless.
+Against several enemies MudPlay uses your **multi-attack** and **area-debuff** spell slots to hit the whole room, falling back to single-target attacks once the room thins below a slot's minimum-enemies setting. A room spell keeps hitting everything in the room from round to round, through kills and new arrivals, so it isn't recast while its conditions hold — until something breaks it: a spell cast between rounds (a mid-fight heal or buff) turns combat off, and the room spell is then re-cast. Those room spells are gated by **Auto-Nuke**; single-target attack spells aren't "nukes" and stay available regardless.
 
 ## Backing off
 
@@ -1575,7 +1575,7 @@ A mana-regen roll spell (nature tap, mana flux, profane link, and kin) rolls a r
 - **Max rerolls** — how many times to chase a better roll before accepting what landed.
 - **Reroll infinite** — a checkbox just below Max rerolls: keep re-casting until the roll clears the threshold, no cap (ticking it greys out Max rerolls).
 
-Each reroll re-casts the spell, so it costs mana; if you run out mid-cycle the reroller **pauses rather than giving up** — it waits while you meditate back up, then resumes, so it spends its full budget instead of settling for a bad roll.
+Each reroll re-casts the spell, so it costs mana; if you run out mid-cycle the reroller **pauses rather than giving up** — it waits while you meditate back up, then resumes, so it spends its full budget instead of settling for a bad roll. It also **holds its rerolls during a fight**: every reroll is a cast between rounds, which turns combat off (and breaks a running room spell), so a roll that lands mid-fight is rerolled once the fight ends instead.
 
 Rerolling works on **Paradigm** (reading the roll back from `abil 145`); on Stock, with no `abil 145`, it judges the roll from the observed passive mana tick. **Raising the cap / threshold (or ticking infinite) also re-checks the roll spell that's already up** — if its last roll now falls short, it rerolls right away. (A mana-regen roll spell is a self-only cast, so the caster always gets the roll whenever it fires.)
 

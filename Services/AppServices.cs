@@ -4232,7 +4232,8 @@ public sealed class AppServices
             // Stock has no `abil 145` — judge the roll from the observed passive mana
             // tick instead (fed below from RegenTracker).
             useTickMonitor: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
-            log: Log);
+            log: Log,
+            inCombat: () => PlayerState.InCombat);
         CastDirector.SetSelfBuffCastSink(OnSelfBuffCastForReroll);
         // Resume a reroll cycle suspended at the mana floor once meditation refills the
         // pool — the 1s heartbeat re-checks affordability and fires the next reroll,

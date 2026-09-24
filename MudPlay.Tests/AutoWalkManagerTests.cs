@@ -1916,6 +1916,25 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains("a required item to go obtain (obsidian key)", failed.Detail);
     }
 
+    // A walk the user chose to take THROUGH a gate/hazard keeps that choice when a
+    // mid-walk desync recovery re-plans it — the resume used to re-plan with default
+    // flags, put the gate back, and fail "all routes blocked" (report
+    // paradigm-20260924-120529, a "cross unprotected" hazard walk).
+    [Fact]
+    public void ResumeAfterRecovery_KeepsTheWalksThroughGatesChoice()
+    {
+        (AutoWalkManager walker, List<WalkEvent> events) = NewItemGatedWalker(nameResolver: null);
+        walker.SetWireSender(_ => { });
+
+        Assert.True(walker.WalkTo(new RoomKey(1, 2),
+            planThroughAcquirableGates: true, armItemAcquisition: false));
+        walker.PauseForRecovery("tracker desync");
+        walker.ResumeAfterRecovery(new RoomKey(1, 1));
+
+        Assert.DoesNotContain(events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Equal(WalkState.Walking, walker.State);
+    }
+
     [Fact]
     public void BlockedRoute_ItemGate_FallsBackToGeneric_WhenNoResolver()
     {

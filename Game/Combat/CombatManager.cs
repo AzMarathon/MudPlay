@@ -3141,6 +3141,18 @@ public sealed partial class CombatManager : IDisposable
         _combatOff = false;
         _log?.Combat(LogCategory, "combat resumed after interrupt — re-engaging room");
 
+        // The interrupt's *Combat Off* ended any room-attack channel: a between-round
+        // cast (a mid-fight buff like `flux`) breaks the running room spell, which is
+        // why we're resuming at all. A room spell otherwise outlives its kills with no
+        // Off, so the post-kill "channel still live — re-anchor without recast" rule
+        // must not survive this — it re-anchored onto a mob the dead channel was no
+        // longer hitting and never re-attacked (report paradigm-20260924-123009).
+        if (_roomChannelSpell is { } broken)
+        {
+            _log?.Combat(LogCategory, $"room-attack channel '{broken}' ended by the interrupt — re-dispatching");
+            _roomChannelSpell = null;
+        }
+
         // Do NOT clear _currentTarget here. A heal / bless / buff interrupt mid-fight
         // is not a new engagement; dropping the target made DispatchRoundAction treat
         // the same mob as brand-new and run its new-target reset — zeroing the custom

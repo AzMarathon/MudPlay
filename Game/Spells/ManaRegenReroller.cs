@@ -75,6 +75,11 @@ public sealed class ManaRegenReroller : IDisposable
     // the observed passive mana TICK (an MP jump on the statline) instead. The
     // threshold then means the desired tick, not the rolled percent.
     private readonly Func<bool> _useTickMonitor;
+    // A reroll is a between-round cast, and a between-round cast mid-fight turns combat
+    // OFF — it breaks a running room spell and costs the round's attack (report
+    // paradigm-20260924-123009: rerolled flux twice while an obsidian golem went
+    // unattacked). So a reroll decided mid-fight is held until combat ends.
+    private readonly Func<bool> _inCombat;
     private readonly LogService? _log;
 
     private string? _activeShort;
@@ -87,6 +92,8 @@ public sealed class ManaRegenReroller : IDisposable
     // so it uses its full cap instead of surrendering at the floor (report
     // paradigm-20260901-114223 — gave up at 3/20 when it ran out of mana).
     private bool _waitingForMana;
+    // True when a cycle's next reroll is held until the fight ends (see _inCombat).
+    private bool _waitingForCombat;
     private bool _disposed;
 
     public ManaRegenReroller(
@@ -96,7 +103,8 @@ public sealed class ManaRegenReroller : IDisposable
         Action<string> recast,
         Func<bool> canAffordReroll,
         Func<bool> useTickMonitor,
-        LogService? log = null)
+        LogService? log = null,
+        Func<bool>? inCombat = null)
     {
         ArgumentNullException.ThrowIfNull(parser);
         _parser = parser;
@@ -105,6 +113,7 @@ public sealed class ManaRegenReroller : IDisposable
         _recast = recast;
         _canAffordReroll = canAffordReroll;
         _useTickMonitor = useTickMonitor;
+        _inCombat = inCombat ?? (() => false);
         _log = log;
         _parser.BreakdownParsed += OnBreakdown;
     }
@@ -121,6 +130,9 @@ public sealed class ManaRegenReroller : IDisposable
     // before the next reroll. For the bug report, so a paused reroll reads as
     // "waiting for mana" rather than looking stalled. For diagnostics / tests.
     public bool WaitingForMana => _waitingForMana;
+
+    // True while a cycle's next reroll is held for the current fight to end.
+    public bool WaitingForCombat => _waitingForCombat;
 
     // The roll quality last judged — the abil-145 spells value (Paradigm) or the
     // observed tick (Stock). Null until the first roll is evaluated. For the bug
@@ -209,18 +221,25 @@ public sealed class ManaRegenReroller : IDisposable
     // loop), so it takes the round's cast slot cleanly rather than racing a swing.
     public void OnRecoveryTick()
     {
-        if (!_waitingForMana) return;
-        if (_activeShort is not { } shortCode) { _waitingForMana = false; return; }
+        if (!_waitingForMana && !_waitingForCombat) return;
+        if (_activeShort is not { } shortCode) { _waitingForMana = _waitingForCombat = false; return; }
 
         ManaRegenRerollConfig cfg = _readConfig();
         if (cfg.Threshold is null) { Reset(); return; }     // rerolling disabled meanwhile
         if (!cfg.Unlimited && _rerollsUsed >= cfg.Cap) { Reset(); return; }   // defensive: nothing left to spend
-        if (!_canAffordReroll()) return;                    // still under the floor — keep waiting
+        if (_inCombat()) return;                            // still fighting — keep holding
+        if (!_canAffordReroll())                            // still under the floor — keep waiting
+        {
+            _waitingForCombat = false;
+            _waitingForMana = true;
+            return;
+        }
 
-        _waitingForMana = false;
+        string why = _waitingForCombat ? "the fight ended" : "mana recovery";
+        _waitingForMana = _waitingForCombat = false;
         _rerollsUsed++;
         _log?.Info(LogCategory,
-            $"resuming reroll spell={shortCode} after mana recovery — attempt {_rerollsUsed}/{CapLabel(cfg)}");
+            $"resuming reroll spell={shortCode} after {why} — attempt {_rerollsUsed}/{CapLabel(cfg)}");
         _recast(shortCode);
     }
 
@@ -256,6 +275,17 @@ public sealed class ManaRegenReroller : IDisposable
                 $"reroll cap reached spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
                 $"cap={cfg.Cap} — accepting");
             Reset();
+            return;
+        }
+
+        if (_inCombat())
+        {
+            _awaitingAbil = false;
+            _awaitingTick = false;
+            _waitingForCombat = true;
+            _log?.Info(LogCategory,
+                $"reroll held for combat spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
+                $"— a mid-fight recast would break combat; rerolling once the fight ends");
             return;
         }
 
@@ -329,6 +359,7 @@ public sealed class ManaRegenReroller : IDisposable
         _awaitingAbil = false;
         _awaitingTick = false;
         _waitingForMana = false;
+        _waitingForCombat = false;
     }
 
     public void Dispose()

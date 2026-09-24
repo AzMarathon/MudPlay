@@ -368,6 +368,37 @@ public sealed class CombatManagerSpellsTests
         Assert.Single(h.AllSent, s => s == "blast");
     }
 
+    // Report paradigm-20260924-123009: a between-round cast (a mid-fight buff) BREAKS the
+    // running room spell — its *Combat Off* is the channel ending. After a kill had
+    // dropped the target, the interrupt's resume found the channel still recorded,
+    // re-anchored "without recast" onto a survivor nothing was hitting, and never
+    // attacked. The resume must re-dispatch the room attack instead. (Driven straight
+    // through ResumeEngage: in production the re-engage lands after a timer-driven
+    // arrival settle the harness doesn't run.)
+    [Fact]
+    public void RoomChannel_EndedByInterrupt_ResumeReDispatchesTheRoomAttack()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "dark stalker");
+        h.AddMonster(3, "muckworm");
+
+        h.Feed("Also here: giant rat, dark stalker, muckworm.");
+        Assert.Single(h.AllSent, s => s == "blast");
+
+        // A kill dropped the target while the channel was on record; then the buff's
+        // *Combat Off* interrupted and the engine resumes.
+        h.Feed("You gain 10 experience.");
+        Assert.Null(h.Combat.CurrentTarget);
+        typeof(CombatManager)
+            .GetMethod("ResumeEngage", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(h.Combat, new object[] { h.Classifier.Current! });
+
+        Assert.Equal(2, h.AllSent.Count(s => s == "blast"));   // re-cast — the channel was broken
+    }
+
     // The channel ends the moment a cast condition fails. Kill down below MinEnemies and
     // the room attack is over — the round falls through to the normal single-target chain.
     [Fact]
