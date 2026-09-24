@@ -10,11 +10,11 @@ namespace MudPlay.Services;
 // (the terminal, the Conversation window) owns its own instance, the same way
 // CommandHistoryNavigator is one-per-widget over the one shared CommandHistory.
 //
-// Caret-aware: completion always targets the word immediately BEFORE the
+// Caret-aware: completion always targets the word(s) immediately BEFORE the
 // caret and preserves whatever text follows it untouched. The terminal's
 // LocalInputBuffer has no mid-line cursor (append/backspace-from-the-end
 // only), so it always calls in with caretIndex == text.Length, which
-// collapses to "complete the trailing word" — but the Conversation window's
+// collapses to "complete the trailing words" — but the Conversation window's
 // TextBox supports moving the cursor mid-line like any normal text box, and
 // completing based on the trailing word regardless of caret position would
 // silently edit the wrong word there.
@@ -70,29 +70,37 @@ public sealed class InventoryAutoCompleter
             return Produce(_candidates[_index]);
         }
 
-        // The word immediately before the caret — search backward from just
-        // before it for the nearest space, ignoring anything past the caret.
-        int searchEnd = caretIndex - 1;
-        int sep = searchEnd >= 0 ? text.LastIndexOf(' ', searchEnd) : -1;
-        string prefix = text[(sep + 1)..caretIndex];
-        if (prefix.Length == 0)
+        // Nothing to complete when the caret is at the start or right after a
+        // space: an empty word would match every item.
+        if (caretIndex == 0 || text[caretIndex - 1] == ' ')
         {
             _lastProduced = null;
             return null;
         }
 
-        IReadOnlyList<string> candidates = MatchingCompletions(prefix, snapshot);
-        if (candidates.Count == 0)
+        // Try the longest run of words ending at the caret first, then shorter
+        // ones down to the single trailing word. Item names are multi-word, so
+        // "padded h" has to be matched as a whole against "padded helm" — looking
+        // at "h" alone would never find it, since no item LEADS with "h". The
+        // single-word run is the fallback, which is what lets "drop holy" still
+        // resolve "holy" once "drop holy" matches nothing.
+        for (int start = 0; start < caretIndex; start++)
         {
-            _lastProduced = null;
-            return null;
+            bool wordStart = text[start] != ' ' && (start == 0 || text[start - 1] == ' ');
+            if (!wordStart) continue;
+
+            IReadOnlyList<string> candidates = MatchingCompletions(text[start..caretIndex], snapshot);
+            if (candidates.Count == 0) continue;
+
+            _stem = text[..start];
+            _tail = text[caretIndex..];
+            _candidates = candidates;
+            _index = 0;
+            return Produce(candidates[0]);
         }
 
-        _stem = text[..(sep + 1)];
-        _tail = text[caretIndex..];
-        _candidates = candidates;
-        _index = 0;
-        return Produce(candidates[0]);
+        _lastProduced = null;
+        return null;
     }
 
     private Completion Produce(string candidate)
@@ -102,33 +110,36 @@ public sealed class InventoryAutoCompleter
         return c;
     }
 
-    // For every carried, worn, and key-ring item name, check only its FIRST
-    // meaningful word (skipping a leading "a"/"an") against prefix
-    // (case-insensitive — the same convention InventorySnapshot.Has uses),
-    // and if it starts with prefix take that word plus every word after it in
-    // the same name. Matching any word ANYWHERE in the name used to mean
-    // typing "e" surfaced "bronze emblem" (via its second word "emblem")
-    // ahead of items that actually start with "e" like "emerald-tipped
-    // crozier" — surprising and not what a short prefix is trying to narrow
-    // down to. Reaching "bronze emblem" now takes typing "bro" or "bronze",
-    // its real leading word.
+    // For every carried, worn, and key-ring item, check whether what's typed is
+    // a prefix of its name — starting at the name's first meaningful word, i.e.
+    // after a leading stack count ("43 black diamond") and a leading "a"/"an"
+    // (case-insensitive — the same convention InventorySnapshot.Has uses) — and
+    // if so complete to that whole name. The count and article are not part of
+    // what you'd type after a verb, and skipping only the article used to leave
+    // every stacked item unmatchable: its leading "word" was the number.
+    // Matching any word ANYWHERE in the name used to mean typing "e" surfaced
+    // "bronze emblem" (via its second word "emblem") ahead of items that
+    // actually start with "e" like "emerald-tipped crozier" — surprising and
+    // not what a short prefix is trying to narrow down to. Reaching "bronze
+    // emblem" takes typing "bro" or "bronze", its real leading word.
     //
     // Completing "drop holy" against "holy medallion" must still produce
     // "drop holy medallion", not "drop holy" — the matched word is already
     // what's typed, so completing to itself would silently leave the line
     // unchanged and look like Tab did nothing. Distinct completions,
     // first-seen order.
-    private static IReadOnlyList<string> MatchingCompletions(string prefix, InventorySnapshot snapshot)
+    private static IReadOnlyList<string> MatchingCompletions(string typed, InventorySnapshot snapshot)
     {
         List<string> matches = new();
 
-        void Scan(string name)
+        void Scan(string entry)
         {
-            string[] words = name.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+            string[] words = CountedCommand.SplitLeadingCount(entry).Name
+                .Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
             if (words.Length == 0) return;
             int start = words.Length > 1 && IsArticle(words[0]) ? 1 : 0;
-            if (!words[start].StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase)) return;
             string completion = string.Join(' ', words, start, words.Length - start);
+            if (!completion.StartsWith(typed, System.StringComparison.OrdinalIgnoreCase)) return;
             if (!matches.Contains(completion, System.StringComparer.OrdinalIgnoreCase))
                 matches.Add(completion);
         }
