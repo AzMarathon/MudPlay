@@ -332,7 +332,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         {
             if (room is { } key)
                 segments.Add(new QuestStepSegmentViewModel(
-                    segText, new RelayCommand(() => WalkTo(key)), QuestStepLinkKind.Walk));
+                    segText, new AsyncRelayCommand(() => WalkToAsync(key)), QuestStepLinkKind.Walk));
             else if (command is { } cmd)
                 segments.Add(new QuestStepSegmentViewModel(
                     segText, new RelayCommand(() => SendStepCommand(cmd)), QuestStepLinkKind.Send));
@@ -343,13 +343,14 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     }
 
     // Walk to a quest step's map/room. Stop whatever movement engine is running
-    // first (mirrors the Navigation window's walk-to hand-off), then dispatch to
-    // the walker; a destination outside the active graph surfaces via the walker's
-    // own WalkEvent.Failed path, so no pre-check is needed here.
-    private static void WalkTo(RoomKey room)
+    // first, then hand off to the shared route picker — the same entry point every
+    // other user-started walk uses. A straight Walker.WalkTo skipped route planning,
+    // so a room past a hazard just failed "blocked" instead of offering the obtain-
+    // the-counter / cross-unprotected routes.
+    private static async Task WalkToAsync(RoomKey room)
     {
         AppServices.Current.MovementControl.Stop();
-        AppServices.Current.Walker.WalkTo(room);
+        await Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
     }
 
     // Type a quest-step's `'command'` at the game exactly as if the user typed it in

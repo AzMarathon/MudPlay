@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.104.4**
+> **Version 3.104.5**
 > - Game Data Browser: drag the column headers on Monsters, Items and Spells to rearrange them; the order is saved per character with the visible columns
 > - A trigger saved at the game-data location now shows up in every other open client straight away, not only after a restart
+> - Quest Status map/room links go through the route picker, so a room past a hazard offers its routes (obtain the counter / cross unprotected) instead of failing "all routes blocked"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -989,7 +989,7 @@ Encumbrance isn't applied on top — the Stealth value already carries it.
 
 A journal of the realm's quests. Expand a card for its requirements, reward, and step checklist; tick every step (or the **Complete** box) to fold its permanent bonus into your character.
 
-Inside a step, two kinds of token are **clickable**: a `(map/room)` coordinate (cyan) walks you there, and a single-quoted `'command'` (green) is typed at the game for you, exactly as if you'd entered it in the terminal — so annotate a step with `'ask jorah transport'` and clicking it sends that line.
+Inside a step, two kinds of token are **clickable**: a `(map/room)` coordinate (cyan) walks you there — through the same route picker as the map, so a room past a hazard, gate, or teleport offers its route choices instead of just failing — and a single-quoted `'command'` (green) is typed at the game for you, exactly as if you'd entered it in the terminal — so annotate a step with `'ask jorah transport'` and clicking it sends that line.
 
 **Edit Quests…** lets you name, hide, or annotate them — and for the handful of quests that are class-locked in a way the crawler can't see (Magebane, Tarl), its **Restrict to classes** dropdown (a checklist of every class) pins the quest to the ticked class(es), so any other class is marked *Cannot complete*.
 
