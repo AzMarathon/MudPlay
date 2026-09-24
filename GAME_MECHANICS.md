@@ -3588,6 +3588,9 @@ fresh `@level` lands ≥ 10.)
   that makes the client **reject the leader's fresh re-invite**: both the `@join` handler and the
   invite auto-accept no-op on "already following `<leader>`", so the follower never rejoins (report
   `stock-20260801-002423`).
+- **[CONFIRMED]** *(2026-09-23, user)* **The level-11 trainer is a solo effort** — the step from 10
+  to 11 is only easily auto-trainable running solo, so party auto-train stops members at level 10 by
+  default (Auto-Trainer → *Leave the level 11 train to a solo trip*).
 - **[CONFIRMED]** When a **non-leader party member dies**, they leave the active party — but in the
   leader's `par` the name shows as an **invited** (pending) slot **indistinguishable from a genuine
   pending invite**. So a member death is recognized **not** from `par` but from the room line

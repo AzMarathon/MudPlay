@@ -67,6 +67,13 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     // Channel the level-up announce is sent on (enabled only with AnnounceLevelUps).
     [ObservableProperty] private AnnounceChannel _announceChannel;
 
+    // Party auto-train: how long a ready majority holds for the rest, the level gap
+    // past which a not-ready member (a power-leveler) isn't waited for (0 = off), and
+    // whether the level-10 → 11 step is left to a solo trip.
+    [ObservableProperty] private int _partyMaxWaitMinutes;
+    [ObservableProperty] private int _partyLevelGap;
+    [ObservableProperty] private bool _partySkipLevel11;
+
     // Channel choices for the announce dropdown.
     public IReadOnlyList<AnnounceChannel> AnnounceChannels { get; } =
         (AnnounceChannel[])Enum.GetValues(typeof(AnnounceChannel));
@@ -84,6 +91,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         "announce level-ups", "announce channel", "levels to keep", "keep banked", "buffer",
         "do not train above", "level ceiling", "max level", "stop at level",
         "levels stacked", "train once stacked", "fire at banked levels", "batch training",
+        "party", "party train", "auto-train party", "max wait", "power level", "level gap", "level 11",
     };
 
     public AutoTrainerSectionViewModel()
@@ -124,7 +132,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
             .OrderBy(k => k, StringComparer.Ordinal)
             .ToList();
 
-        // Auto-train / Auto-train stats are owned by the CP Allocation tab and are
+        // Auto-train / Auto-train stats / Auto-train party are owned by the CP Allocation tab and are
         // NOT edited here. This tab still writes the whole DTO, so their persisted
         // values have to be carried forward from disk rather than from anything this
         // view-model holds — otherwise an Apply here would silently revert a toggle
@@ -135,6 +143,10 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         {
             AutoTrain = persisted.AutoTrain,
             AutoTrainStats = persisted.AutoTrainStats,
+            AutoTrainParty = persisted.AutoTrainParty,
+            PartyMaxWaitMinutes = Math.Max(0, PartyMaxWaitMinutes),
+            PartyLevelGap = Math.Max(0, PartyLevelGap),
+            PartySkipLevel11 = PartySkipLevel11,
             FireAtBankedLevels = Math.Max(0, FireAtBankedLevels),
             LevelsToKeep = Math.Max(0, LevelsToKeep),
             DoNotTrainAbove = Math.Max(0, DoNotTrainAbove),
@@ -178,6 +190,9 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         DoNotTrainAbove = Math.Max(0, dto.DoNotTrainAbove);
         AnnounceLevelUps = dto.AnnounceLevelUps;
         AnnounceChannel = dto.AnnounceChannel;
+        PartyMaxWaitMinutes = Math.Max(0, dto.PartyMaxWaitMinutes);
+        PartyLevelGap = Math.Max(0, dto.PartyLevelGap);
+        PartySkipLevel11 = dto.PartySkipLevel11;
         RebuildTrainers(dto.DisabledTrainers);
     }
 
@@ -257,6 +272,19 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
 
     partial void OnAnnounceLevelUpsChanged(bool value) => MarkDirty();
     partial void OnAnnounceChannelChanged(AnnounceChannel value) => MarkDirty();
+    partial void OnPartySkipLevel11Changed(bool value) => MarkDirty();
+
+    partial void OnPartyMaxWaitMinutesChanged(int value)
+    {
+        if (value < 0) { PartyMaxWaitMinutes = 0; return; }   // re-enters with 0, marks dirty there
+        MarkDirty();
+    }
+
+    partial void OnPartyLevelGapChanged(int value)
+    {
+        if (value < 0) { PartyLevelGap = 0; return; }   // re-enters with 0, marks dirty there
+        MarkDirty();
+    }
 
     partial void OnLevelsToKeepChanged(int value)
     {

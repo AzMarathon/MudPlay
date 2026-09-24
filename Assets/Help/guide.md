@@ -680,6 +680,7 @@ A new movement command overrides an `@stop`: after `@stop`, an `@goto` / `@loop`
 - `@wait` — hold: automation pauses until you `@ok` (which releases it).
 - `@comeback` (optionally `<map/room>`) — a stranded member asks the party to come recover them; `@forget` calls that recovery off.
 - `@share` — splits your held coin evenly across the party.
+- `@ptrain` — the **Auto-train party** handshake between MudPlay clients (readiness reports, and the leader's give / withdraw / train orders during a party training trip). You never type it; a client only acts on it while its own *Auto-train party* box is on, and only on orders from its current leader. See **Auto-train party** under Settings → Auto-Trainer.
 - `@party` — bare, it reports whether you're solo / following / leading. Sent on **say** *with* arguments, it relays whatever follows verbatim to your character as if you typed it (the party version of `@do`) — `@party rest`, `@party use chime`, and so on. The directive form only works on the say channel, and Settings → Talk can disallow it.
 - `@panic` — the party-wide bail-out (MegaMUD parity). A **leader** whose HP crosses its **"hang if below"** floor says a bare `@panic` on say and then escapes (hangs up, or breaks + `sys goto <wimpy>` per the Health tab) — warning the whole party to get out. It's opt-in on both sides via two **Settings → Party** checkboxes: **Use @panic while leading** (whether you send it) and **Ignore @panics** (whether a received one makes *you* bail). Both default off. A received `@panic` makes you escape exactly as your own low-HP emergency would; it still respects the *Disable hangups* master switch for the carrier-drop (you'll `sys goto` wimpy if configured, but never be force-disconnected by someone else's panic).
 
@@ -870,7 +871,7 @@ Then name the **item to wear**. It goes on the moment you enter a matching room 
 
 Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you.
 
-Two checkboxes here are the ONLY place the automation switches live: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan). They sit next to the plan they act on; Settings → Auto-Trainer holds the behaviour knobs (when to make the trip, what to keep banked, where to stop).
+Three checkboxes here are the ONLY place the automation switches live: **Auto-train** (level up at trainers), **Auto-train stats** (apply this plan) and **Auto-train party** (train together with your party — see Settings → Auto-Trainer). They sit next to the plan they act on; Settings → Auto-Trainer holds the behaviour knobs (when to make the trip, what to keep banked, where to stop).
 
 **Hover a stat's column header** to see everything that stat drives, one effect per line: the derived stat's **current value for your character**, its marginal rate (e.g. *~6 AGL → +1*, *+3 per 4*), and — where it's a discrete breakpoint — **the very next value of that stat where it ticks up** (`next at N`). That's the point of it: spend to a real breakpoint instead of guessing that every 5th or 10th point is a good stopping place.
 
@@ -3019,14 +3020,14 @@ Settings → Auto-Lair. This tab tunes the scheduler that loops between "lairs" 
 
 Settings → Auto-Trainer. Controls *how* auto-training behaves once it runs — when to make the trip, how many levels to hold back, where to stop, and whether to announce.
 
-**The on/off switches are not here.** **Auto-train** and **Auto-train stats** live on the Player Workshop's **CP Allocation** tab, beside the plan they act on. They used to appear in both places, which was confusing and worse than cosmetic: this tab saves every setting on it at once, so pressing Apply here could quietly undo a toggle you had just flipped on the CP tab.
+**The on/off switches are not here.** **Auto-train**, **Auto-train stats** and **Auto-train party** live on the Player Workshop's **CP Allocation** tab, beside the plan they act on. They used to appear in both places, which was confusing and worse than cosmetic: this tab saves every setting on it at once, so pressing Apply here could quietly undo a toggle you had just flipped on the CP tab.
 
 ### Auto-train
 
 **Where:** Player Workshop → CP Allocation tab (not this tab).
 **Default:** Off
 **What it does:** The master auto-leveling switch. When on, and you're running a Loop or Auto-Lair, the moment your banked experience makes a new level trainable, MudPlay automatically pauses, detours to an allowed trainer, trains every level you can, then resumes what it was doing.
-**Solo only:** training briefly drops you out of and back into the realm, which disbands a party server-side — so an armed Auto-train never fires while you're grouped. Train between groups, or with "Train Now."
+**Solo only:** training briefly drops you out of and back into the realm, which disbands a party server-side — so an armed Auto-train never fires while you're grouped. To train while grouped, turn on **Auto-train party** (below); otherwise train between groups, or with "Train Now."
 **It checks it can pay first.** Before walking anywhere, MudPlay prices the whole run — including the second trainer when your banked levels span two level bands, since each charges its own markup — and compares it to the coin you're carrying.
 
 If you're short it collects the difference first: your stash rooms, then your bank, or a combination, picking the bank branch nearest the trainer rather than nearest you. Pick up enough coin along the way and it abandons the errand and heads straight for the trainer. If everything you can reach still falls short, nothing is walked: it logs how far short you are and roughly how many laps of your loop will close the gap, and stays armed.
@@ -3066,6 +3067,32 @@ If you're short it collects the difference first: your stash rooms, then your ba
 **Available channel options:** `Gangpath`, `Gossip`, `Yell`, `Say`
 **What it does:** When on, the moment you become able to train a new level, MudPlay sends a short message on the chosen chat channel (`I can now train to level: N`) — handy for letting a static party know it's time to regroup at a trainer.
 **Important notes:** Deliberately doesn't spam on login — only a genuine in-session level-up crossing announces, never a backlog of levels you were already eligible for when you connected.
+
+### Auto-train party
+
+**Where:** Player Workshop → CP Allocation tab (not this tab).
+**Default:** Off
+**What it does:** Makes auto-training work in a party. Every member who wants it ticks the box on their own client:
+- **As a member**, you don't walk off to train. Instead your client tells the leader where you stand — *ready* once your own settings above (levels stacked, levels to keep banked, do-not-train-above) say you'd make a trip, or *waiting*, with a rough time until you will be from your exp/hour. At the trainer you train when the leader says so, never walking on to another trainer by yourself, and let the leader know once you're back in the party.
+- **As the leader**, with a Loop or Auto-Lair running, MudPlay collects everyone's report plus your own and decides when to go — **majority rules**, and you're one vote like everyone else:
+  - everyone ready → go;
+  - most of the party ready → go as soon as nobody left is worth waiting for: a member who won't be ready within the max wait isn't waited for at all, and once the majority has waited the max wait, the trip goes regardless;
+  - otherwise keep grinding.
+
+  Then it walks the whole party round: every member who's ready trains first — at the trainer that serves the most of them, then the next, when you're spread across level bands — and you train **last**, at the final stop, because your train disbands the party. It re-invites everyone standing with you (so leave **Re-invite lost party members** on in Settings → Party — it also re-invites each member as they come back from their own train) and holds the loop until they're back, then carries on grinding.
+
+**The leader doesn't have to be training.** A high-level leader power-leveling the party still escorts everyone to the trainer and back — the trip goes whenever the majority is ready.
+**Money.** Each member reports its purse and its biggest bank deposit. If someone is short, members with coin to spare give it to them before anyone walks (only what they can spare above their own fee and keep-on-hand amount). If the party's spare coin can't cover everyone, the trip first stops at a bank and short members withdraw their own fee; anyone who still can't pay sits the trip out.
+**Who isn't waited for:** members with the box off, members on another client, and anyone who hasn't reported in the last few minutes. They just follow the leader there and back.
+**Important notes:** Orders are only taken from your current party leader, and only while your own box is on — nobody can make your character train, give or withdraw otherwise. After a trip, the leader waits a few minutes before deciding again.
+
+### Party options
+
+These shape how the **leader** runs an Auto-train party trip (the level-11 rule applies to everyone).
+
+- **Once most are ready, wait up to N minutes for the rest** — default `10`. How long a ready majority holds for the others; `0` goes as soon as a majority is ready.
+- **Don't wait for anyone more than N levels above the party** — default `5`, `0` = off. A member who isn't ready and is this far above the rest of the party (a power-leveler — the leader included) is never waited for and doesn't count toward the majority.
+- **Leave the level 11 train to a solo trip** — default on. Party trips train no higher than level 10; the step to 11 is a solo effort, so take it on your own.
 
 ### Discovered trainers table
 
@@ -3554,6 +3581,8 @@ This section is a compact, technical lookup table for every setting documented a
 | Flat / per-encumbrance seconds per hop | 1.5 / 0.7-0.7-0.7-1.7-1.7 | 0.1–60 each | `FlatSecondsPerHop` / `HopTimesByEncumbrance.*` | Models/Profile/AutoLairSettings.cs |
 | Lair marker override respawn / Skip (parked, unused) | null / false | int? seconds / bool | `LairMarker.OverrideRespawnSeconds` / `.Skip` | Models/Profile/LairMarker.cs |
 | Auto-train / Auto-train stats | false / false | bool | `AutoTrain` / `AutoTrainStats` | Models/Profile/AutoTrainerSettings.cs |
+| Auto-train party | false | bool | `AutoTrainParty` | Models/Profile/AutoTrainerSettings.cs |
+| Party max wait / level gap / leave level 11 solo | 10 / 5 / true | 0–240 min / 0–200 / bool | `PartyMaxWaitMinutes` / `PartyLevelGap` / `PartySkipLevel11` | Models/Profile/AutoTrainerSettings.cs |
 | Levels to keep banked / Do not train above level | 0 / 0 | ≥0 (UI 0–60 / 0–200) | `LevelsToKeep` / `DoNotTrainAbove` | Models/Profile/AutoTrainerSettings.cs |
 | Announce level-ups / channel | false / Gangpath | bool / Gangpath,Gossip,Yell,Say | `AnnounceLevelUps` / `AnnounceChannel` | Models/Profile/AutoTrainerSettings.cs |
 | Discovered trainers "Use?" | all allowed | bool per trainer (disabled-list) | `DisabledTrainers` | Models/Profile/AutoTrainerSettings.cs |

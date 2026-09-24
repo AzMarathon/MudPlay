@@ -41,6 +41,8 @@
                       ToolTip.Tip="Automatically walk to a trainer and level up when banked exp crosses a level during a loop / Auto-Lair. Mirrors Settings → Auto-Trainer."/>
             <CheckBox Content="Auto-train stats (apply CP plan)" IsChecked="{Binding AutoTrainStatsOn, Mode=TwoWay}"
                       ToolTip.Tip="After a train, apply this CP plan via the train-stats screen. Independent of Auto-train; needs a saved plan."/>
+            <CheckBox Content="Auto-train party" IsChecked="{Binding AutoTrainPartyOn, Mode=TwoWay}"
+                      ToolTip.Tip="Train as a party. As a member, tell your leader when your own auto-train settings say you're ready and follow its orders at the trainer; as the leader, take everyone who's ready to train together (majority rules). Party options are in Settings → Auto-Trainer. Off, a character in a party never auto-trains."/>
         </StackPanel>
 
         <!-- Editable per-level grid. Stat cells are editable; CP columns recompute.

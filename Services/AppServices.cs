@@ -616,6 +616,11 @@ public sealed class AppServices
     // member's request, applying the CP plan when Auto-train-stats is on.
     public Game.Remote.TrainHandler TrainRemote { get; }
 
+    // Party auto-train: member readiness reports, the leader's quorum + trip, and the
+    // @ptrain handshake that carries them between MudPlay clients.
+    public Game.Train.PartyTrainCoordinator PartyTrain { get; }
+    public Game.Remote.PartyTrainHandler PartyTrainRemote { get; }
+
     // @equip-<set> handler — a permitted party member asks us to
     // wear one of our saved gear sets. The set keyword is the suffix after
     // @equip-; routed via RemoteCommands's prefix handler
@@ -6602,7 +6607,8 @@ public sealed class AppServices
         // keep-on-hand floor — this just gives it the prompt to look.
         TrainerWalk.AfterTrainRun = () => AutoDeposit.OnInventoryChanged();
         // Solo-only: training drops you out of and back into the realm, which
-        // disbands a party server-side, so an armed run must not fire in a group.
+        // disbands a party server-side, so an armed run must not fire in a group —
+        // a party trains through PartyTrain below instead.
         TrainerWalk.CanStartRun = () => !PartyState.IsInParty;
         TrainerWalk.DescribeShortfall = shortfall =>
             Game.Train.TrainFundingForecast.Describe(
@@ -6615,6 +6621,38 @@ public sealed class AppServices
 
         // @train remote: trains in place (no walk) via the coordinator.
         TrainRemote = new Game.Remote.TrainHandler(RemoteCommands, TrainerWalk);
+
+        PartyTrain = new Game.Train.PartyTrainCoordinator(
+            PartyState, TrainerWalk,
+            expPerHour: () => SessionActivity.Snapshot().ExperiencePerHour,
+            holdings: () => Inventory.IsLoaded ? Inventory.Snapshot.Currency : null,
+            keepOnHandCopper: () =>
+            {
+                Models.Profile.CashSettings cash = ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+                return cash.KeepOnHandWealth * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
+            },
+            largestDeposit: () => BankBalance.LastKnown
+                .OrderByDescending(kv => kv.Value)
+                .Select(kv => ((string?)kv.Key, kv.Value))
+                .FirstOrDefault(),
+            runicName: () => Currency.RunicName,
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
+            distance: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            trainers: () => Game.GameData.TrainerCatalog.Enumerate(GameData),
+            nearestBankBranch: NearestBankBranch,
+            walkTo: key => Walker.WalkTo(key, planThroughAcquirableGates: true),
+            send: cmd => SendGameCommand(cmd),
+            broadcast: cmd => PartyBroadcaster.Broadcast(cmd, skipInvited: true),
+            // The leader's own train disbands the party; this is the same re-collect
+            // a leader reconnect uses — re-invite the followers standing with us and
+            // hold the resumed loop until they're back.
+            reformParty: givens => Party.BeginLeaderReconnectReform(givens),
+            armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
+                .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+                    System.Threading.Tasks.TaskScheduler.Default),
+            log: Log);
+        Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
+        PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
         // Level-up announcer. Built after StatParser + the ProfileLoaded
         // Hydrate wiring so its baseline seed sees freshly-hydrated stats; watches
         // StatParser.ExperienceGained to broadcast newly-trainable levels.
@@ -9062,6 +9100,24 @@ public sealed class AppServices
         if (PathItemBankRoom() is { } bank && RoomGraph.GetRoom(bank)?.Name is { Length: > 0 } bankName)
             return $"{basePhrase} (withdraw {amount} at {bankName} first)";
         return $"{basePhrase} — short {amount}, set a bank in Settings → Cash";
+    }
+
+    // The branch of a named bank nearest from, or null when none is reachable — a
+    // withdraw only pays out at a branch of the bank holding the deposit.
+    private Game.Map.RoomKey? NearestBankBranch(string bankName, Game.Map.RoomKey from)
+    {
+        Game.Map.RoomKey? best = null;
+        int bestDist = int.MaxValue;
+        foreach (Game.GameData.BankShop b in Game.GameData.BankCatalog.Enumerate(GameData))
+        {
+            if (!string.Equals(b.Name, bankName, StringComparison.OrdinalIgnoreCase)) continue;
+            if (Bfs.DistanceBetween(from, b.Key, Movement) is { } d && d < bestDist)
+            {
+                best = b.Key;
+                bestDist = d;
+            }
+        }
+        return best;
     }
 
     // The bank name (= its shop name, what `bank` lists) hosting a room, via the

@@ -246,13 +246,14 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     // reconnect) reseeds these via ProfileSaving so every surface stays agreed.
     [ObservableProperty] private bool _autoTrainOn;
     [ObservableProperty] private bool _autoTrainStatsOn;
+    [ObservableProperty] private bool _autoTrainPartyOn;
     private bool _suppressToggleWriteback;
 
     private void SeedAutoTrainToggles()
     {
         AutoTrainerSettings dto = ReadAutoTrainer();
         _suppressToggleWriteback = true;
-        try { AutoTrainOn = dto.AutoTrain; AutoTrainStatsOn = dto.AutoTrainStats; }
+        try { AutoTrainOn = dto.AutoTrain; AutoTrainStatsOn = dto.AutoTrainStats; AutoTrainPartyOn = dto.AutoTrainParty; }
         finally { _suppressToggleWriteback = false; }
     }
 
@@ -271,6 +272,12 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     {
         if (_suppressToggleWriteback) return;
         _profile.UpdateSection<AutoTrainerSettings>("AutoTrainer", dto => dto.AutoTrain = value);
+    }
+
+    partial void OnAutoTrainPartyOnChanged(bool value)
+    {
+        if (_suppressToggleWriteback) return;
+        _profile.UpdateSection<AutoTrainerSettings>("AutoTrainer", dto => dto.AutoTrainParty = value);
     }
 
     partial void OnAutoTrainStatsOnChanged(bool value)
