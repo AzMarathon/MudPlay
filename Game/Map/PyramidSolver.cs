@@ -146,6 +146,13 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     public string FloorName => _floor.ToString();
     public string PhaseName => _phase.ToString();
     public int StepsDriven => _totalSteps;
+    public int ScriptStep => _stepIndex + 1;
+    public int ScriptSteps => PyramidScript.Steps(_floor).Count;
+    // The room the current step is scripted to start from (F3 only), to set against
+    // the tracker's room in a report.
+    public RoomKey? ExpectedRoom => PyramidScript.FromRooms(_floor) is { } from && _stepIndex < from.Count
+        ? new RoomKey(PyramidScript.PyramidMap, from[_stepIndex])
+        : null;
     public bool Enabled => _enabled();
 
     public PyramidSolver(
@@ -356,6 +363,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _blockedTicks = 0;
         if (_heldMembers.Count == 0) _holdTicks = 0;
 
+        ResyncToTrackedRoom();
+
         if (++_totalSteps > MaxTotalSteps)
         {
             FailSolve("step budget exhausted");
@@ -394,6 +403,40 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
                 DriveKeyDoor(step.Dir);
                 break;
         }
+    }
+
+    // Re-anchor the script on the tracker's confirmed room, on floors that carry a
+    // per-step room table (F3). Steps advance on a settle timer without confirming the
+    // move landed, so a door move that didn't go through (or went through when the
+    // solver thought it hadn't) leaves the index off by one. Only acts on a Confirmed
+    // room that the script visits; a pending move or an off-path room leaves the index
+    // alone. Where the room recurs (2032), the occurrence nearest the current index
+    // wins, earlier on a tie — being back at an already-driven step's room means that
+    // step's move didn't land. Returns true when the index moved.
+    private bool ResyncToTrackedRoom()
+    {
+        if (PyramidScript.FromRooms(_floor) is not { } from) return false;
+        RoomState st = _tracker.State;
+        if (st.Confidence != RoomConfidence.Confirmed || st.CurrentRoom is not { } cur
+            || cur.Key.Map != PyramidScript.PyramidMap)
+            return false;
+
+        int room = cur.Key.Room;
+        if (_stepIndex < from.Count && from[_stepIndex] == room) return false;
+
+        int best = -1;
+        for (int i = 0; i < from.Count; i++)
+        {
+            if (from[i] != room) continue;
+            if (best < 0 || Math.Abs(i - _stepIndex) < Math.Abs(best - _stepIndex)) best = i;
+        }
+        if (best < 0) return false;
+
+        string expected = _stepIndex < from.Count ? $"12/{from[_stepIndex]}" : "the floor's end";
+        _log?.Log(LogSeverity.Info, LogSource,
+            $"{_floor} step {_stepIndex + 1} expected {expected} but the tracker has us at 12/{room} — resuming at step {best + 1}");
+        _stepIndex = best;
+        return true;
     }
 
     // Consume the current step and drive the next.
@@ -540,6 +583,15 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
 
     private void ContinueDoor(RoomObservation obs)
     {
+        // The look just rendered where we really are — if that isn't this door's
+        // room, re-drive from the step that is, rather than bash the wrong door.
+        if (ResyncToTrackedRoom())
+        {
+            _phase = Phase.Climbing;
+            DriveCurrent();
+            return;
+        }
+
         if (obs.OpenDoorDirections?.Contains(_doorDir) == true)
         {
             _log?.Debug(LogSource, $"door {_doorDir.ToLongName()} open → move");

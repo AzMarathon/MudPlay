@@ -102,6 +102,24 @@ public static class PyramidScript
     private const string F5Raw =
         "n,w,w,s,e";
 
+    // The room each F3 step is taken FROM, in script order (the stars sphinx last, at
+    // 2051) — traced move-for-move through the game data, identical on stock and
+    // Paradigm. Every pyramid room renders as "Great Pyramid", so this is the only way
+    // to check the tracker's room number against where the script thinks it is: a
+    // door move that didn't land (door shut again, a bash that stalled) otherwise
+    // leaves the solver a step behind, bashing a 1000-picklock door that isn't on its
+    // route. 2032 appears twice (in via its W door, back out via its S door).
+    private static readonly int[] F3FromRooms =
+    {
+        2002, 2003, 2004, 2006, 2013, 2012, 2011, 2014, 2015, 2016, 2017, 2018, 2023,
+        2022, 2021, 2020, 2024, 2031, 2032, 2005, 2032, 2034, 2048, 2049, 2050, 2051,
+    };
+
+    // Per-step source rooms for a floor, index-aligned with Steps(floor), or null when
+    // the floor isn't position-checked (only F3, the door maze, is).
+    public static IReadOnlyList<int>? FromRooms(PyramidFloor floor)
+        => floor == PyramidFloor.F3 ? F3FromRooms : null;
+
     private static readonly Dictionary<PyramidFloor, IReadOnlyList<PyramidStep>> _steps = new()
     {
         [PyramidFloor.F1] = Parse(PyramidFloor.F1, F1Raw),

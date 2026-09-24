@@ -1389,6 +1389,8 @@ public static class BugReportBuilder
         Kv(sb, "Phase", pyr.PhaseName);
         Kv(sb, "Goal", pyr.Goal is { } pg ? $"{pg.Map}/{pg.Room}" : "(none)");
         Kv(sb, "Steps driven", pyr.StepsDriven.ToString());
+        Kv(sb, "Script step", $"{pyr.ScriptStep} of {pyr.ScriptSteps}"
+            + (pyr.ExpectedRoom is { } er ? $" (scripted from {er.Map}/{er.Room})" : ""));
 
         return sb.ToString();
     }

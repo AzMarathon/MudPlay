@@ -1147,6 +1147,37 @@ public sealed class RoomGraphManagerTests : IDisposable
     }
 
     [Fact]
+    public void HiddenUnknown_WithSameRoomAction_IsActionGatedNotSearched()
+    {
+        // The Secret Library's D exit imports as "(Hidden/Unknown)" and is opened by
+        // `move rug` from an Action cell in its E slot. It must not be walked as a
+        // `sea d` search — the search never reveals it.
+        const string json = """
+            [
+              { "Map Number": 12, "Room Number": 2248, "Name": "Golden Spire, Secret Library",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+                "N": "0", "S": "0",
+                "E": "Action [on the D exit of this room]: move rug, pull rug",
+                "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+                "D": "12/2255 (Hidden/Unknown)" },
+              { "Map Number": 12, "Room Number": 2255, "Name": "Under the Palace Library",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        SeedRooms("alpha", json);
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+
+        Assert.True(graph.GetRoom(new RoomKey(12, 2248))!.Exits.TryGetValue(Direction.D, out RoomExit down));
+        Assert.Equal(RoomExitHint.MultiActionHidden, down.Hint);
+        Assert.Equal(new[] { "move rug", "pull rug" }, down.MultiAction!.Actions.Single().Commands);
+    }
+
+    [Fact]
     public void MultiActionHidden_WithItemModifier_CapturesRequiredItemId()
     {
         // 2/687's N exit is a properly-modeled hidden exit; its S-slot action

@@ -3145,7 +3145,7 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 ### Enable the Great Pyramid climb solver / Enable the asylum (random-teleport maze) solver
 
 **Default:** both On
-**What it does:** Two Global-tier toggles for automated navigation through two of MajorMUD's notoriously tricky areas — the Great Pyramid's climbing puzzle and the Warped Asylum's random-teleport maze. On means walking to a destination inside either area drives the puzzle-solving automatically; off means a walk there just fails like any other unreachable spot, and you navigate manually.
+**What it does:** Two Global-tier toggles for automated navigation through two of MajorMUD's notoriously tricky areas — the Great Pyramid's climbing puzzle and the Warped Asylum's random-teleport maze. On means walking to a destination inside either area drives the puzzle-solving automatically; off means a walk there just fails like any other unreachable spot, and you navigate manually. On the pyramid's door-maze floor the climb checks each step against the room MudPlay has you in, so a door move that didn't go through (or a climb started partway across the floor) picks up from where you actually are instead of working the wrong door.
 **Important notes:** These apply to every character on the install, not just the current one.
 
 ### Paradigm transport tokens (route offering + rooms-saved threshold)
