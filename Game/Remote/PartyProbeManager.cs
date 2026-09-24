@@ -122,19 +122,42 @@ public sealed class PartyProbeManager : IDisposable
         {
             if (item is not PartyMember m) continue;
             m.PropertyChanged += OnMemberPropertyChanged;
+            ReconcileClass(m);
             TryProbeOnJoin(m);
         }
     }
 
     // An invited row becomes a real party member only when it flips
     // IsInvited true→false (acceptance), which arrives as a PropertyChanged
-    // rather than a collection change — probe on that edge too.
+    // rather than a collection change — probe on that edge too. The roster's
+    // class usually lands after the row itself (the next `par`), so reconcile
+    // the record on that edge as well.
     private void OnMemberPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(PartyMember.IsInvited)) return;
         if (sender is not PartyMember m) return;
+        if (e.PropertyName == nameof(PartyMember.Class))
+        {
+            ReconcileClass(m);
+            return;
+        }
+        if (e.PropertyName != nameof(PartyMember.IsInvited)) return;
         if (m.IsInvited) return;
         TryProbeOnJoin(m);
+    }
+
+    // A member whose roster class differs from their record is a different
+    // character under the same name: PlayerDatabase drops the old character's
+    // title / level, and they're probed again now even if we partied with the old
+    // one earlier today — the planner would otherwise gate routes on the old
+    // character's level until tomorrow. Runs whether or not probing is enabled;
+    // only the re-probe honours Enabled.
+    private void ReconcileClass(PartyMember m)
+    {
+        if (m.IsSelf || string.IsNullOrEmpty(m.Name) || string.IsNullOrEmpty(m.Class)) return;
+        if (_players.RecordPartyClass(m.Name, m.Class) is not { } oldClass) return;
+        _log?.Info("PartyProbe",
+            $"{GivenName(m.Name)} is now a {m.Class} (record was a {oldClass}) — dropped the old character's title and level.");
+        if (!m.IsInvited) TryProbeOnJoin(m);
     }
 
     private void TryProbeOnJoin(PartyMember m)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using MudPlay.Game;
 using MudPlay.Game.Remote;
+using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using Xunit;
@@ -66,6 +67,42 @@ public sealed class PartyProbeManagerTests
         Assert.Contains("/Bob @version\r", h.WireText);
         // The join is stamped so a same-day rejoin won't re-probe.
         Assert.Equal(h.Now, h.Players.GetLastPartiedUtc("Bob"));
+    }
+
+    [Fact]
+    public void SameNameNewClass_DropsOldTitleAndLevel_AndReprobesToday()
+    {
+        // Report stock-20260924-133615: the record was a level-1 Priest titled
+        // "Curate" (probed earlier today); the name now belongs to a Mage. The old
+        // title band kept the party's level window at 1–14, shutting a 1–3 gate.
+        var h = new Harness();
+        h.Players.RecordObservation("Raijin", "Priest", "Human", "Neutral", "Curate", null, null, h.Now);
+        h.Players.RecordLevel("Raijin", 1, h.Now);
+        h.Players.RecordPartied("Raijin", h.Now);
+
+        PartyMember m = h.AddMember("Raijin");     // joins with no class yet — same day, no probe
+        Assert.Empty(h.Wire);
+        m.Class = "Mage";                           // the next `par` fills it in
+
+        PlayerRecord rec = h.Players.Find("Raijin")!;
+        Assert.Equal("Mage", rec.Class);
+        Assert.Null(rec.Title);
+        Assert.Null(rec.Level);
+        Assert.Contains("/Raijin @level\r", h.WireText);
+    }
+
+    [Fact]
+    public void SameClassOnRoster_KeepsTheRecord()
+    {
+        var h = new Harness();
+        h.Players.RecordObservation("Bob", "Priest", null, null, "Curate", null, null, h.Now);
+        h.Players.RecordPartied("Bob", h.Now);
+
+        PartyMember m = h.AddMember("Bob");
+        m.Class = "priest";
+
+        Assert.Equal("Curate", h.Players.Find("Bob")!.Title);
+        Assert.Empty(h.Wire);
     }
 
     [Fact]

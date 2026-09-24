@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.104.16**
-> - Pyramid climb re-anchors on the room you're actually in across the door-maze floor, instead of falling a step behind and bashing a door that can't be bashed
-> - The Golden Spire Secret Library's down exit is opened with `move rug` instead of being searched for 20 times
-> - The combat log no longer repeats an unchanged spell queue every second, so a bug report's log reaches back far enough to show the walk
+> **Version 3.104.17**
+> - A party member who rerolled (same name, new class) no longer keeps their old character's title and level — the old high title was routing the party around level gates the new character clears
+> - An `@level` reply now always takes effect: a stored title that can't match the reported level is dropped instead of outranking it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

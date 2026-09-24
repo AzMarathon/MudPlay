@@ -319,7 +319,8 @@ public sealed class PlayerDatabase
     // unknown (we only get a level reply from someone we asked, so they're
     // real), otherwise updates the existing row's Level and bumps LastSeenUtc —
     // answering a telepath proves presence. Every other field is left
-    // untouched. Saves the BBS observation file.
+    // untouched, except a title the reported level contradicts (see below).
+    // Saves the BBS observation file.
     public void RecordLevel(string name, int level, DateTime nowUtc)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -329,7 +330,17 @@ public sealed class PlayerDatabase
 
         if (_observations.TryGetValue(given, out PlayerObservation? existing))
         {
-            _observations[given] = existing with { Level = level, LevelAt = nowUtc, LastSeenUtc = nowUtc };
+            // A stored who title whose level band excludes the level they just
+            // reported can't be their current title — it belonged to an earlier
+            // character under this name (a reroll). Left in place, its band would
+            // outrank this reading (PartyLevelEstimate treats a band above the exact
+            // level as "trained since"), so an @level answer would change nothing.
+            // The next who records their real title.
+            string? title = existing.Title;
+            if (Game.GameData.ClassTitleTable.LookupLevelRange(title) is { } band
+                && (level < band.MinLevel || level > band.MaxLevel))
+                title = null;
+            _observations[given] = existing with { Level = level, LevelAt = nowUtc, LastSeenUtc = nowUtc, Title = title };
         }
         else
         {
@@ -390,6 +401,43 @@ public sealed class PlayerDatabase
         Rebuild();
         SaveObservations();
         ObservationRecorded?.Invoke(given);
+    }
+
+    // Reconcile a party member's live class (from the `par` roster) with their
+    // record. A name showing a different class than the one on file is a different
+    // character now holding that name (a new character after a deletion, a reroll),
+    // so everything learned about the old one — its who title and the level band it
+    // implies, an exact @level reading, race, alignment, gear — would describe the
+    // wrong character. The title band in particular outranks a lower exact level
+    // (PartyLevelEstimate), so an old high title kept routing the party around
+    // gates the new character clears. Those fields are dropped and LastPartiedUtc
+    // cleared so the party probe re-asks today. Customization, gang and client
+    // version are left alone. Returns the replaced class when the record changed
+    // identity, else null (unknown player, first class seen, or same class).
+    public string? RecordPartyClass(string name, string klass)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (string.IsNullOrWhiteSpace(klass)) return null;
+        (string given, _) = PlayerObservation.SplitName(name);
+        if (string.IsNullOrEmpty(given)) return null;
+        if (!_observations.TryGetValue(given, out PlayerObservation? existing)) return null;
+
+        string live = klass.Trim();
+        if (string.Equals(existing.Class, live, StringComparison.OrdinalIgnoreCase)) return null;
+
+        string? replaced = string.IsNullOrWhiteSpace(existing.Class) ? null : existing.Class;
+        _observations[given] = replaced is null
+            ? existing with { Class = live }
+            : existing with
+            {
+                Class = live, Race = null, Alignment = null, Title = null,
+                Level = null, LevelAt = null, Equipment = null, LastPartiedUtc = null,
+            };
+
+        Rebuild();
+        SaveObservations();
+        ObservationRecorded?.Invoke(given);
+        return replaced;
     }
 
     // ----- Party-day tracking (BBS tier) --------------------------------

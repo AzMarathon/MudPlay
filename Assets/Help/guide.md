@@ -2754,6 +2754,7 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 
 **Default:** On
 **What it does:** The first time you party with a given player on a given day, MudPlay quietly asks for their level and client version to record on their player profile.
+**Important notes:** If a player's name turns up on a different class than their profile remembers (they rerolled or remade the character), MudPlay drops the old character's title, level, race and gear from the profile and asks again straight away, even if you already partied with them today. A level reply that the stored title can't match (a level-1 answer against a level 10-14 title) also replaces that title, so an `@level` answer, asked automatically or by hand, always takes effect for party route planning.
 
 ### Max. monsters when partying
 
