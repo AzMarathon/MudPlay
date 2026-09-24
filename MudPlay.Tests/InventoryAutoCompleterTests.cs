@@ -135,6 +135,71 @@ public sealed class InventoryAutoCompleterTests
         Assert.Equal("drop bronze emblem", NextAtEnd(ac, "drop bro", snap));
     }
 
+    // Regression: a stacked item prints as "<count> <name>" in the `i` dump on
+    // both servers ("2 padded helm"), and the count was being read as the item's
+    // leading word, so no typed word could ever match the stack and Tab did
+    // nothing. The completion is the bare name — the count isn't part of what
+    // follows a verb.
+    [Fact]
+    public void StackedItems_MatchPastTheLeadingCount_AndCompleteToTheBareName()
+    {
+        InventoryAutoCompleter ac = new();
+        InventorySnapshot snap = Snap(carried: new[] { "2 padded boots", "5 padded helm", "padded vest" });
+
+        string? first = NextAtEnd(ac, "drop pad", snap);
+        Assert.Equal("drop padded boots", first);
+        string? second = NextAtEnd(ac, first!, snap);
+        Assert.Equal("drop padded helm", second);
+        Assert.Equal("drop padded vest", NextAtEnd(ac, second!, snap));
+    }
+
+    [Fact]
+    public void StackedKeyRingEntries_AreMatchedPastTheCountToo()
+    {
+        InventoryAutoCompleter ac = new();
+        InventorySnapshot snap = Snap(keys: new[] { "3 black star key" });
+        Assert.Equal("drop black star key", NextAtEnd(ac, "drop bla", snap));
+    }
+
+    // The same item worn and carried as a stack is one completion, not two —
+    // otherwise Tab would appear to stick on the first press of a two-entry cycle.
+    [Fact]
+    public void AnItemWornAndStackedInThePack_IsOneCandidate()
+    {
+        InventoryAutoCompleter ac = new();
+        InventorySnapshot snap = Snap(
+            carried: new[] { "3 padded helm", "padded vest" },
+            equipped: new[] { new EquippedItem("padded helm", "Head") });
+
+        string? first = NextAtEnd(ac, "padded", snap);
+        Assert.Equal("padded helm", first);
+        Assert.Equal("padded vest", NextAtEnd(ac, first!, snap));
+    }
+
+    // Regression: item names are multi-word, so once the first word is typed the
+    // next word narrows it — "padded h" must reach "padded helm". Matching only
+    // the last typed word ("h") looked for an item LEADING with "h" instead.
+    [Fact]
+    public void TypingMoreThanOneWord_MatchesTheItemNameAsAWhole()
+    {
+        InventoryAutoCompleter ac = new();
+        InventorySnapshot snap = Snap(carried: new[] { "padded boots", "padded helm", "padded vest" });
+
+        Assert.Equal("padded helm", NextAtEnd(ac, "padded h", snap));
+        Assert.Equal("drop padded vest", NextAtEnd(ac, "drop padded v", snap));
+        Assert.Null(NextAtEnd(ac, "drop padded z", snap));
+    }
+
+    // A count the user types themselves (Paradigm batches: "drop 5 padded helm")
+    // sits before the item name and must be left alone, not swallowed.
+    [Fact]
+    public void ACountTypedBeforeTheName_IsPreserved()
+    {
+        InventoryAutoCompleter ac = new();
+        InventorySnapshot snap = Snap(carried: new[] { "5 padded helm" });
+        Assert.Equal("drop 5 padded helm", NextAtEnd(ac, "drop 5 padded h", snap));
+    }
+
     [Fact]
     public void EmptyTrailingWord_IsNoOp()
     {

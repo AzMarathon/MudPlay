@@ -1,5 +1,10 @@
 # Version history
 
+## 3.104.2
+
+- Inventory **Tab-complete now matches stacked items** — a stack prints as `2 padded helm` (Stock and Paradigm alike) and the count was read as its first word, so `pad` / `padded` never found it and Tab did nothing
+- Tab-complete matches a **multi-word** name as you type it — `padded h` → `padded helm` (it only looked for an item *starting* with `h`)
+
 ## 3.104.1
 
 - Auto-engines return to your **defined state** when a walk-to ends — arrival, a manual stop, or a failed route — the same way loop-start already reconciles them, so toggles you flipped just for the trip don't stay flipped after you've stopped pathing
