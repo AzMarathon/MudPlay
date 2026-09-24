@@ -6642,7 +6642,9 @@ public sealed class AppServices
             nearestBankBranch: NearestBankBranch,
             walkTo: key => Walker.WalkTo(key, planThroughAcquirableGates: true),
             send: cmd => SendGameCommand(cmd),
-            broadcast: cmd => PartyBroadcaster.Broadcast(cmd, skipInvited: true),
+            // The on-join @version probe's reading — who's on MudPlay (and new enough
+            // to speak @ptrain) and who isn't worth asking.
+            recordedVersion: name => Players.Find(name)?.Version,
             // The leader's own train disbands the party; this is the same re-collect
             // a leader reconnect uses — re-invite the followers standing with us and
             // hold the resumed loop until they're back.

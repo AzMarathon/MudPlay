@@ -90,6 +90,19 @@ public sealed class PartyTrainPlanningTests
         Assert.Equal(PartyTrainVerdict.Fire, d.Verdict);
     }
 
+    // ----- who can be asked -------------------------------------------------
+
+    [Theory]
+    [InlineData(null, true)]               // never probed — may be on MudPlay
+    [InlineData("MudPlay 3.105.0", true)]
+    [InlineData("MudPlay 3.110.2", true)]
+    [InlineData("MudPlay 3.105.1+abc1234", true)]
+    [InlineData("MudPlay 3.104.2", false)] // predates @ptrain
+    [InlineData("MegaMud 1.03u", false)]   // another client
+    [InlineData("MudPlay", false)]         // no parseable version
+    public void SpeaksPartyTrain_ReadsTheRecordedVersionReply(string? version, bool expected) =>
+        Assert.Equal(expected, PartyTrainCoordinator.SpeaksPartyTrain(version));
+
     // ----- party ceiling --------------------------------------------------
 
     [Theory]

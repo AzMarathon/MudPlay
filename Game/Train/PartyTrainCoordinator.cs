@@ -68,7 +68,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     private readonly Func<string, RoomKey, RoomKey?> _nearestBankBranch;
     private readonly Func<RoomKey, bool> _walkTo;
     private readonly Action<string> _send;
-    private readonly Action<string> _broadcast;
+    private readonly Func<string, string?> _recordedVersion;
     private readonly Action<IReadOnlyList<string>> _reformParty;
     private readonly Action<TimeSpan, Action> _armTimer;
     private readonly Func<int> _selfLevel;
@@ -121,7 +121,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         Func<string, RoomKey, RoomKey?> nearestBankBranch,
         Func<RoomKey, bool> walkTo,
         Action<string> send,
-        Action<string> broadcast,
+        Func<string, string?> recordedVersion,
         Action<IReadOnlyList<string>> reformParty,
         Action<TimeSpan, Action> armTimer,
         Func<int> selfLevel,
@@ -144,7 +144,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         _nearestBankBranch = nearestBankBranch ?? throw new ArgumentNullException(nameof(nearestBankBranch));
         _walkTo = walkTo ?? throw new ArgumentNullException(nameof(walkTo));
         _send = send ?? throw new ArgumentNullException(nameof(send));
-        _broadcast = broadcast ?? throw new ArgumentNullException(nameof(broadcast));
+        _recordedVersion = recordedVersion ?? throw new ArgumentNullException(nameof(recordedVersion));
         _reformParty = reformParty ?? throw new ArgumentNullException(nameof(reformParty));
         _armTimer = armTimer ?? throw new ArgumentNullException(nameof(armTimer));
         _selfLevel = selfLevel ?? throw new ArgumentNullException(nameof(selfLevel));
@@ -218,6 +218,8 @@ public sealed class PartyTrainCoordinator : IDisposable
     {
         FlushPendingDone();
         if (!Settings.AutoTrainParty || !Following) return;
+        // A leader on another client never reads a report; one on MudPlay asks for it.
+        if (!SpeaksPartyTrain(_recordedVersion(GivenName(_party.LeaderName!)))) return;
         PartyTrainStatus status = BuildOwnStatus();
         // Report on a change that matters to the leader — readiness, level, how far a
         // trip would take us — not on every ETA or purse tick.
@@ -390,14 +392,37 @@ public sealed class PartyTrainCoordinator : IDisposable
             _ = RunTripAsync(decision, participants);
     }
 
+    // Asks only members that can answer: the on-join @version probe already told us
+    // who runs another client (or a MudPlay too old to know @ptrain), and telepathing
+    // them would only be noise in their terminal. A member not probed yet still gets
+    // asked — it may well be on MudPlay.
     private void MaybeAsk()
     {
-        string roster = string.Join(",", ActiveMemberGivens().OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        List<string> askable = ActiveMemberGivens()
+            .Where(n => SpeaksPartyTrain(_recordedVersion(n)))
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        string roster = string.Join(",", askable);
         if (roster.Length == 0) return;
         if (roster == _askedRoster && _now() - _lastAsk < AskInterval) return;
         _askedRoster = roster;
         _lastAsk = _now();
-        _broadcast("@ptrain ask");
+        foreach (string given in askable) _send($"/{given} @ptrain ask");
+    }
+
+    // The first MudPlay that understands @ptrain.
+    private static readonly Version PartyTrainSince = new(3, 105, 0);
+
+    // Whether a player's recorded @version reply ("MudPlay 3.105.0", "MegaMud 1.03u")
+    // says it can take part. Unknown (never probed) → assume yes.
+    public static bool SpeaksPartyTrain(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version)) return true;
+        string[] parts = version.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2 || !string.Equals(parts[0], "MudPlay", StringComparison.OrdinalIgnoreCase)) return false;
+        // Leading dotted number only — tolerates a build suffix ("3.105.0+abc1234").
+        string number = new(parts[1].TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+        return Version.TryParse(number, out Version? v) && v >= PartyTrainSince;
     }
 
     private void DropStaleReports()
