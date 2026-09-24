@@ -3588,6 +3588,12 @@ fresh `@level` lands ≥ 10.)
   that makes the client **reject the leader's fresh re-invite**: both the `@join` handler and the
   invite auto-accept no-op on "already following `<leader>`", so the follower never rejoins (report
   `stock-20260801-002423`).
+- **[CONFIRMED]** *(2026-09-24, user)* **An attack at a monster that isn't in the room answers per
+  the "talk slow" setting.** With talk slow **off**, the unrecognised command is spoken:
+  `a kobold thief` → `You say "a kobold thief"`. With talk slow **on** it's
+  `Your command had no effect.` — whether or not anyone else is in the room. Both mean the target is gone — typically a monster a
+  party member killed, whose death gives us no exp line and so is never seen (report
+  `stock-20260924-013525`).
 - **[CONFIRMED]** *(2026-09-24, user)* **Telepaths are throttled, and each one is acknowledged in
   send order.** Every telepath gets exactly one reply line, in the order they went out:
   `--- Telepath Sent to <Name> ---` (delivered) or `--- Telepath Not Sent ---` (it didn't reach its

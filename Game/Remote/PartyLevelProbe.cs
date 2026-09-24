@@ -86,7 +86,7 @@ public sealed partial class PartyLevelProbe : IDisposable
     // tolerates the brace-wrap the engine adds at SendReply time, so a reply
     // from another MudPlay client ("{Level 12, …}") parses too — without it a
     // peer-to-peer @level round-trip never recorded.
-    [GeneratedRegex(@"^\{?Level (\d+), [\d,]+ exp\b(?:, ([\d,]+) to next level)?",
+    [GeneratedRegex(@"^\{?Level (\d+), ([\d,]+) exp\b(?:, ([\d,]+) to next level)?",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex LevelReply();
 
@@ -98,11 +98,19 @@ public sealed partial class PartyLevelProbe : IDisposable
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex MegaMudLevelReply();
 
+    // An @exp reply — MudPlay's "Made: N  Needed: N (L2, +0.38 lvls)  Rate: … Will level
+    // in: 35m" or MegaMUD's "Made: N  Needed: N  Rate: ? k/hr  Will level in: ?". Its
+    // Needed is exp to the next level; MudPlay's "(L<n>)" tag names that level.
+    [GeneratedRegex(@"^\{?Made:\s*[\d,]+\s+Needed:\s*([\d,]+)(?:\s*\(L(\d+)[^)]*\))?.*?(?:Will level in:\s*([^}]*?))?\s*\}?\s*$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex ExpReply();
+
     // Raised for every parsed level reply (probe in flight or not): the member's
     // given name, level, exp still needed for the next level (null when the reply
-    // didn't carry it) and the sender's own "will level in" text (MegaMUD only; null
-    // otherwise or when it's "?"). Feeds the Party window's leveling line.
-    public event Action<string, int, long?, string?>? ProgressObserved;
+    // didn't carry it), the sender's own "will level in" text (MegaMUD only; null
+    // otherwise or when it's "?") and its total exp (MudPlay's reply only). Feeds the
+    // Party window's leveling line.
+    public event Action<string, int, long?, string?, long?>? ProgressObserved;
 
     [GeneratedRegex(@"^\{?level unknown\b",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
@@ -174,11 +182,22 @@ public sealed partial class PartyLevelProbe : IDisposable
 
     private void OnChatEntry(ChatLogEntry entry)
     {
-        if (entry.Channel != ChatChannel.TelepathIncoming) return;
+        // Telepath, or a DIRECTED say — `.@level` asks over say and the reply comes back
+        // `Raijin says (to you) "{Level 1, …}"`. Either way it's the speaker's own level.
+        bool directedSay = entry.Channel == ChatChannel.Local && entry.DirectedTo is not null;
+        if (entry.Channel != ChatChannel.TelepathIncoming && !directedSay) return;
         if (string.IsNullOrEmpty(entry.Speaker)) return;
         if (string.IsNullOrEmpty(entry.Message)) return;
 
-        bool known = TryParseLevelReply(entry.Message, out int level, out long? needed, out string? willLevelIn);
+        // An @exp reply isn't a level reading for the probe, but its exp-to-next still
+        // feeds the Party window (level 0 = not stated).
+        if (TryParseExpReply(entry.Message, out int expLevel, out long expNeeded, out string? expEta))
+        {
+            ProgressObserved?.Invoke(GivenName(entry.Speaker), expLevel, expNeeded, expEta, null);
+            return;
+        }
+
+        bool known = TryParseLevelReply(entry.Message, out int level, out long? needed, out string? willLevelIn, out long? totalExp);
         bool unknown = !known && LevelUnknownReply().IsMatch(entry.Message);
         if (!known && !unknown) return;
 
@@ -194,7 +213,7 @@ public sealed partial class PartyLevelProbe : IDisposable
         {
             _recordLevel?.Invoke(given, level);
             _log?.Info("PartyLevel", $"recorded {given} = level {level}");
-            ProgressObserved?.Invoke(given, level, needed, willLevelIn);
+            ProgressObserved?.Invoke(given, level, needed, willLevelIn, totalExp);
         }
 
         // Pending-query bookkeeping only applies while a probe is awaiting
@@ -236,16 +255,19 @@ public sealed partial class PartyLevelProbe : IDisposable
 
     // Both reply shapes: MudPlay's "Level N, X exp, Y to next level" and MegaMUD's
     // "Level: N  Needed: Y  Will level in: T".
-    internal static bool TryParseLevelReply(string message, out int level, out long? needed, out string? willLevelIn)
+    internal static bool TryParseLevelReply(
+        string message, out int level, out long? needed, out string? willLevelIn, out long? totalExp)
     {
         needed = null;
         willLevelIn = null;
+        totalExp = null;
         string text = message.Trim();
         Match m = LevelReply().Match(text);
         if (m.Success)
         {
             level = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
-            if (m.Groups[2].Success) needed = ParseCount(m.Groups[2].Value);
+            totalExp = ParseCount(m.Groups[2].Value);
+            if (m.Groups[3].Success) needed = ParseCount(m.Groups[3].Value);
             return true;
         }
         m = MegaMudLevelReply().Match(text);
@@ -259,6 +281,22 @@ public sealed partial class PartyLevelProbe : IDisposable
         }
         level = 0;
         return false;
+    }
+
+    internal static bool TryParseExpReply(string message, out int level, out long needed, out string? willLevelIn)
+    {
+        level = 0;
+        needed = 0;
+        willLevelIn = null;
+        Match m = ExpReply().Match(message.Trim());
+        if (!m.Success || ParseCount(m.Groups[1].Value) is not { } n) return false;
+        needed = n;
+        // "(L2, …)" is the level being worked toward, so the member is one below it.
+        if (m.Groups[2].Success && int.TryParse(m.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int next))
+            level = Math.Max(0, next - 1);
+        string eta = m.Groups[3].Success ? m.Groups[3].Value.Trim() : "";
+        willLevelIn = eta.Length == 0 || eta == "?" ? null : eta;
+        return true;
     }
 
     private static long? ParseCount(string text) =>

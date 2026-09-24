@@ -3656,6 +3656,14 @@ public sealed class AppServices
             currentTarget: () => Combat.CurrentTarget,
             log: Log);
 
+        // Our own say echo ("You say \"…\"") only reaches the chat router — it's chat
+        // by shape — so the combat engine hears about an attack the server read as a
+        // say from here.
+        Chat.EntryClassified += e =>
+        {
+            if (e.Channel == Game.ChatChannel.Local && e.Speaker is null) Combat.NoteOwnSay(e.Message);
+        };
+
         // Subscribes to RoomTracker.StateChanged HERE — before Walker / LoopRunner
         // below — so on a synchronous dark-room advance it asserts the settle gate
         // (flipping the engines to Paused) before their own StateChanged handlers
@@ -6657,6 +6665,7 @@ public sealed class AppServices
             // moment costs a round.
             inCombat: () => PlayerState.InCombat,
             selfLevel: () => PlayerStats.Level,
+            selfExp: () => PlayerStats.Exp,
             // The @level probe's last reading — lets the Party window put a level in
             // front of the class for members that don't report.
             recordedLevel: name => Players.Find(name)?.Level,
@@ -6664,6 +6673,10 @@ public sealed class AppServices
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
         PartyLevelProbe.ProgressObserved += PartyTrain.NoteLevelProgress;
+        PlayerStats.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Game.PlayerStats.Exp)) PartyTrain.OnOwnExpChanged();
+        };
         // After a run that trained: re-form a party a solo-fallback train disbanded,
         // then bank the excess on the way back into the circuit. AutoDeposit's own
         // check decides whether there's anything worth a trip, against the user's

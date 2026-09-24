@@ -103,6 +103,25 @@ public sealed class PartyTrainPlanningTests
     public void SpeaksPartyTrain_ReadsTheRecordedVersionReply(string? version, bool expected) =>
         Assert.Equal(expected, PartyTrainCoordinator.SpeaksPartyTrain(version));
 
+    // A waiting member that hasn't pushed by its projected ready time + 10 minutes gets
+    // one "ready yet?" ask; ready / blocked / off members never do.
+    [Fact]
+    public void ReadyAsk_DueTenMinutesPastTheProjectedReadyTime()
+    {
+        DateTimeOffset at = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
+        PartyTrainStatus waiting = Status(PartyTrainReadiness.Waiting, 20, eta: 1_800);   // ready in 30m
+        Assert.False(PartyTrainCoordinator.ReadyAskDue(waiting, at, 0, at.AddMinutes(39)));
+        Assert.True(PartyTrainCoordinator.ReadyAskDue(waiting, at, 0, at.AddMinutes(40)));
+
+        // No own estimate → its time to next level at our rate: 6,000 to go at 60,000/hr = 6m.
+        PartyTrainStatus noEta = waiting with { EtaSeconds = -1, Exp = 4_000, NextExp = 10_000 };
+        Assert.True(PartyTrainCoordinator.ReadyAskDue(noEta, at, 60_000, at.AddMinutes(16)));
+        Assert.False(PartyTrainCoordinator.ReadyAskDue(noEta, at, 0, at.AddDays(1)));   // no projection
+
+        Assert.False(PartyTrainCoordinator.ReadyAskDue(
+            Status(PartyTrainReadiness.Ready, 20), at, 60_000, at.AddDays(1)));
+    }
+
     // A stale older-MudPlay record (not confirmed today) may have updated since —
     // still worth the one ask. Today's confirmation, or another client, is trusted.
     [Fact]
@@ -121,9 +140,9 @@ public sealed class PartyTrainPlanningTests
     public void LevelReask_OnlyAfterTheProjectedLevelUpPlusBuffer()
     {
         DateTimeOffset read = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
-        // 60,000 needed at 60,000/hr → due at 1h + 3m buffer.
-        Assert.False(PartyTrainCoordinator.LevelReaskDue(60_000, read, 60_000, read.AddMinutes(62)));
-        Assert.True(PartyTrainCoordinator.LevelReaskDue(60_000, read, 60_000, read.AddMinutes(63)));
+        // 60,000 needed at 60,000/hr → due at 1h + the 10m buffer.
+        Assert.False(PartyTrainCoordinator.LevelReaskDue(60_000, read, 60_000, read.AddMinutes(69)));
+        Assert.True(PartyTrainCoordinator.LevelReaskDue(60_000, read, 60_000, read.AddMinutes(70)));
         // No rate, no "needed", or already able to train → never re-asked.
         Assert.False(PartyTrainCoordinator.LevelReaskDue(60_000, read, 0, read.AddDays(1)));
         Assert.False(PartyTrainCoordinator.LevelReaskDue(null, read, 60_000, read.AddDays(1)));

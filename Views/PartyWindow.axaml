@@ -135,7 +135,7 @@
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{StaticResource ChromeFgBrush}"/>
                                 <TextBlock Text="{Binding ClassDisplay}"
-                                           FontSize="9"
+                                           FontSize="11"
                                            Foreground="{StaticResource ChromeFgMutedBrush}"
                                            IsVisible="{Binding ClassDisplay, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                             </StackPanel>
@@ -195,7 +195,7 @@
                                        ToolTip.Tip="{Binding TrainInfo}"
                                        TextTrimming="CharacterEllipsis"
                                        FontFamily="{StaticResource FontMono}"
-                                       FontSize="10"
+                                       FontSize="11"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
                             <!-- (4) Status-flag chips. Each chip self-collapses when the

@@ -82,7 +82,7 @@ public sealed partial class PartyMember : ObservableObject
 
     public bool HasTrainInfo => TrainInfo.Length > 0;
 
-    // Best-known level (0 = unknown) for the "L20 Druid" subtitle: the member's own
+    // Best-known level (0 = unknown) for the "Level 20 - Druid" subtitle: the member's own
     // @ptrain report, else the last @level reading, else our own stats on the self
     // row. Owned by the train coordinator for the same reason as TrainInfo.
     [ObservableProperty]
@@ -91,7 +91,7 @@ public sealed partial class PartyMember : ObservableObject
     private int _knownLevel;
 
     public string ClassDisplay => KnownLevel > 0
-        ? (Class.Length > 0 ? $"L{KnownLevel} {Class}" : $"L{KnownLevel}")
+        ? (Class.Length > 0 ? $"Level {KnownLevel} - {Class}" : $"Level {KnownLevel}")
         : Class;
 
     // PartyWindow display string for HP. When BaselineHp is known (the on-join

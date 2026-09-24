@@ -48,10 +48,12 @@ public sealed class PartyTrainCoordinator : IDisposable
     // little exp/hour, so the handshake is kept to the minimum. A member is asked ONCE
     // per time it joins (and only after JoinGrace, so the join-time @version probe
     // has said whether it's worth asking); after that it pushes its own changes. The
-    // only repeat is a member on another client, re-asked @level once its projected
-    // time to level plus AskBuffer has passed. Nothing goes out mid-combat.
+    // repeats are one "ready yet?" `@ptrain ask` to a reporting member still waiting
+    // AskBuffer past its projected ready time (its own push usually comes first — this
+    // only covers one that didn't), and one `@level` to a member on another client
+    // AskBuffer past its projected level-up. Nothing goes out mid-combat.
     private static readonly TimeSpan JoinGrace = TimeSpan.FromSeconds(20);
-    private static readonly TimeSpan AskBuffer = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan AskBuffer = TimeSpan.FromMinutes(10);
     // A member's train is a realm excursion plus a re-invite; past this the trip
     // goes on without its `done`.
     private static readonly TimeSpan MemberTrainTimeout = TimeSpan.FromSeconds(150);
@@ -76,16 +78,21 @@ public sealed class PartyTrainCoordinator : IDisposable
     private readonly Action<TimeSpan, Action> _armTimer;
     private readonly Func<bool> _inCombat;
     private readonly Func<int> _selfLevel;
+    private readonly Func<long> _selfExp;
     private readonly Func<string, int?> _recordedLevel;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
     // Leader side.
-    private readonly Dictionary<string, (PartyTrainStatus Status, DateTimeOffset At)> _reports =
+    // OurExpAt is our own exp when the reading arrived: a party member gains what we
+    // gain from a kill, so the member's exp is shown as its report plus our gains since
+    // — an estimate (a split, or a member out of the room, opens gaps). ReAsked marks
+    // the one "ready yet?" ask spent on this report.
+    private readonly Dictionary<string, (PartyTrainStatus Status, DateTimeOffset At, long OurExpAt, bool ReAsked)> _reports =
         new(StringComparer.OrdinalIgnoreCase);
     // @level readings for members that can't send @ptrain reports (another client, or
     // an older MudPlay) — enough for the Party window's leveling line, never a vote.
-    private readonly Dictionary<string, (int Level, long? Needed, string? TheirEta, DateTimeOffset At)> _levelReplies =
+    private readonly Dictionary<string, (int Level, long? Needed, string? TheirEta, DateTimeOffset At, long OurExpAt)> _levelReplies =
         new(StringComparer.OrdinalIgnoreCase);
     // Members already asked this membership, and when each was first seen in it.
     private readonly Dictionary<string, DateTimeOffset> _asked = new(StringComparer.OrdinalIgnoreCase);
@@ -143,6 +150,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         Action<TimeSpan, Action> armTimer,
         Func<bool> inCombat,
         Func<int> selfLevel,
+        Func<long> selfExp,
         Func<string, int?> recordedLevel,
         Func<DateTimeOffset>? now = null,
         LogService? log = null)
@@ -167,6 +175,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         _armTimer = armTimer ?? throw new ArgumentNullException(nameof(armTimer));
         _inCombat = inCombat ?? throw new ArgumentNullException(nameof(inCombat));
         _selfLevel = selfLevel ?? throw new ArgumentNullException(nameof(selfLevel));
+        _selfExp = selfExp ?? throw new ArgumentNullException(nameof(selfExp));
         _recordedLevel = recordedLevel ?? throw new ArgumentNullException(nameof(recordedLevel));
         _now = now ?? (() => DateTimeOffset.Now);
         _log = log;
@@ -363,7 +372,7 @@ public sealed class PartyTrainCoordinator : IDisposable
             return;
         }
         string given = GivenName(sender);
-        _reports[given] = (status, _now());
+        _reports[given] = (status, _now(), _selfExp(), false);
         _log?.Info(LogCategory, $"{given}: {Describe(status)}.");
         RefreshTrainInfo();
     }
@@ -452,8 +461,15 @@ public sealed class PartyTrainCoordinator : IDisposable
 
             if (Speaks(given))
             {
-                if (!_reports.ContainsKey(given) && _asked.TryAdd(given, _now()))
+                if (!_reports.TryGetValue(given, out var report))
+                {
+                    if (_asked.TryAdd(given, _now())) _send($"/{given} @ptrain ask");
+                }
+                else if (!report.ReAsked && ReadyAskDue(report.Status, report.At, _expPerHour(), _now()))
+                {
+                    _reports[given] = report with { ReAsked = true };
                     _send($"/{given} @ptrain ask");
+                }
             }
             else if (!_levelReplies.TryGetValue(given, out var reading))
             {
@@ -465,6 +481,19 @@ public sealed class PartyTrainCoordinator : IDisposable
                 _send($"/{given} @level");
             }
         }
+    }
+
+    // A reporting member that's still waiting, AskBuffer past when it was projected to
+    // be ready, gets one "ready yet?" ask — its own push should have come by then, so
+    // this only catches one that didn't. The projection is its own time-to-ready, else
+    // its time to next level at OUR rate. Ready / blocked / off members aren't asked.
+    public static bool ReadyAskDue(PartyTrainStatus s, DateTimeOffset reportedAt, double ourRate, DateTimeOffset now)
+    {
+        if (s.Readiness != PartyTrainReadiness.Waiting) return false;
+        TimeSpan? projected = s.EtaSeconds >= 0
+            ? TimeSpan.FromSeconds(s.EtaSeconds)
+            : s.NextExp > 0 ? Calculators.ExperienceTableCalculator.CalcTimeToLevel(s.NextExp, s.Exp, (long)ourRate) : null;
+        return projected is { } p && now >= reportedAt + p + AskBuffer;
     }
 
     // An other-client member's @level reading is worth refreshing once its projected
@@ -512,11 +541,37 @@ public sealed class PartyTrainCoordinator : IDisposable
     }
 
     // A parsed @level reply from anyone (PartyLevelProbe) — the join-time probe's
-    // reply included, which often saves us asking at all. Shown for members that
-    // don't send @ptrain reports; a reporting member's own report wins.
-    public void NoteLevelProgress(string given, int level, long? needed, string? theirEta)
+    // reply, or one the user asked for by hand. Shown as-is for members that don't
+    // send @ptrain reports. For a member that does, it's a fresher exp reading than
+    // the report the row is estimating from, so it re-anchors that estimate: the
+    // report's exp becomes the reply's total (MudPlay's reply carries it; a reply with
+    // only "needed" is read against the report's next-level mark), counted from now.
+    public void NoteLevelProgress(string given, int level, long? needed, string? theirEta, long? totalExp)
     {
-        _levelReplies[GivenName(given)] = (level, needed, theirEta, _now());
+        string name = GivenName(given);
+        // An @exp reply doesn't always state the level — keep the one we know.
+        if (level <= 0)
+            level = _levelReplies.TryGetValue(name, out var prior) ? prior.Level
+                : _reports.TryGetValue(name, out var rep) ? rep.Status.Level
+                : _recordedLevel(name) ?? 0;
+        _levelReplies[name] = (level, needed, theirEta, _now(), _selfExp());
+
+        if (_reports.TryGetValue(name, out var report))
+        {
+            PartyTrainStatus st = report.Status;
+            long? exp = totalExp
+                ?? (needed is { } n && st.NextExp > 0 ? st.NextExp - n : null);
+            if (exp is { } e && e > 0)
+            {
+                st = st with
+                {
+                    Exp = e,
+                    Level = level > 0 ? level : st.Level,
+                    NextExp = st.NextExp > e ? st.NextExp : needed is { } n2 ? e + n2 : st.NextExp,
+                };
+                _reports[name] = report with { Status = st, OurExpAt = _selfExp() };
+            }
+        }
         RefreshTrainInfo();
     }
 
@@ -802,6 +857,10 @@ public sealed class PartyTrainCoordinator : IDisposable
     // rate (a party shares the kills), ready state — shows only while we lead with
     // the toggle on, from each member's report and our own on the self row. Rows with
     // nothing fresh are cleared, so a stale line never lingers.
+    // Our own exp moved ("You gain N experience.") — redraw now rather than on the
+    // next tick, so the self row's exp and TNL track every kill.
+    public void OnOwnExpChanged() => RefreshTrainInfo();
+
     private void RefreshTrainInfo()
     {
         bool show = Leading && Settings.AutoTrainParty;
@@ -810,18 +869,18 @@ public sealed class PartyTrainCoordinator : IDisposable
         {
             if (string.IsNullOrEmpty(m.Name)) continue;
             PartyTrainStatus? status = null;
-            TimeSpan age = TimeSpan.Zero;
+            long gain = 0;
             if (show)
             {
                 if (m.IsSelf) status = BuildOwnStatus();
                 else if (_reports.TryGetValue(GivenName(m.Name), out var r))
                 {
                     status = r.Status;
-                    age = _now() - r.At;
+                    gain = Math.Max(0, _selfExp() - r.OurExpAt);
                 }
             }
 
-            (int Level, long? Needed, string? TheirEta, DateTimeOffset At)? reply =
+            (int Level, long? Needed, string? TheirEta, DateTimeOffset At, long OurExpAt)? reply =
                 !m.IsSelf && _levelReplies.TryGetValue(GivenName(m.Name), out var lr) ? lr : null;
 
             int level = status?.Level
@@ -829,23 +888,21 @@ public sealed class PartyTrainCoordinator : IDisposable
                 ?? (m.IsSelf ? _selfLevel() : _recordedLevel(m.Name) ?? 0);
             if (m.KnownLevel != level) m.KnownLevel = level;
 
-            string text = status is { } st ? RowText(st, rate, age)
-                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.Needed, r2.TheirEta, rate, _now() - r2.At)
+            string text = status is { } st ? RowText(st, rate, gain)
+                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.Needed, r2.TheirEta, rate, Math.Max(0, _selfExp() - r2.OurExpAt))
                 : "";
             if (m.TrainInfo != text) m.TrainInfo = text;
         }
     }
 
     // "4,120,331 xp · TNL ~1h 5m · ready +2 (12,345c)". Readings aren't refreshed on a
-    // timer (the member pushes its own changes), so the TNL counts down from when the
-    // report arrived — age — at our current rate.
-    private static string RowText(PartyTrainStatus s, double ourRate, TimeSpan age)
+    // timer (the member pushes its own changes), so between reports the exp is the
+    // report plus the exp WE've gained since (gain), and the TNL is worked from that.
+    private static string RowText(PartyTrainStatus s, double ourRate, long gain)
     {
-        string exp = s.Exp > 0 ? $"{s.Exp:N0} xp" : "? xp";
-        TimeSpan? tnl = s.NextExp > 0
-            ? Calculators.ExperienceTableCalculator.CalcTimeToLevel(s.NextExp, s.Exp, (long)ourRate)
-            : null;
-        string tnlText = $"TNL {CountDown(tnl, age) ?? "?"}";
+        long exp = s.Exp > 0 ? s.Exp + gain : 0;
+        string expText = exp > 0 ? $"{exp:N0} xp" : "? xp";
+        string tnlText = $"TNL {Remaining(s.NextExp > 0 && exp > 0 ? s.NextExp - exp : null, ourRate) ?? "?"}";
         string state = s.Readiness switch
         {
             PartyTrainReadiness.Ready => $"ready +{s.LevelsToTrain} ({s.CostCopper:N0}c)",
@@ -853,29 +910,31 @@ public sealed class PartyTrainCoordinator : IDisposable
             PartyTrainReadiness.Off => "party train off",
             _ => "not ready",
         };
-        return $"{exp} · {tnlText} · {state}";
+        return $"{expText} · {tnlText} · {state}";
     }
 
     // A non-reporting member's line from its @level reply. Its "needed" only runs to
     // the NEXT level — MegaMUD doesn't count past it the way our banked-aware TNL
     // does — so the line names that level. Their own "will level in" is shown only
     // while our rate is unknown.
-    private static string LevelReplyText(int level, long? needed, string? theirEta, double ourRate, TimeSpan age)
+    private static string LevelReplyText(int level, long? needed, string? theirEta, double ourRate, long gain)
     {
         if (needed is not { } n) return $"L{level} · other client";
         if (n <= 0) return $"L{level + 1} reached · can train · other client";
-        TimeSpan? tnl = Calculators.ExperienceTableCalculator.CalcTimeToLevel(n, 0, (long)ourRate);
-        string when = CountDown(tnl, age) ?? theirEta ?? "?";
-        return $"{n:N0} to L{level + 1} · TNL {when} · other client";
+        long left = Math.Max(0, n - gain);
+        string when = Remaining(left, ourRate) ?? theirEta ?? "?";
+        return $"{left:N0} to L{level + 1} · TNL {when} · other client";
     }
 
-    // A projected time to level, less the time since it was read: "~1h 5m", or "due"
-    // once it has run out (the next report / re-ask replaces it). Null = no projection.
-    private static string? CountDown(TimeSpan? tnl, TimeSpan age)
+    // Exp still to go, as a time at our rate: "~1h 5m", "due" once the estimate says
+    // it's reached (the next report / re-ask settles it), null with no rate or figure.
+    private static string? Remaining(long? expLeft, double ourRate)
     {
-        if (tnl is not { } t) return null;
-        TimeSpan left = t - age;
-        return left <= TimeSpan.Zero ? "due" : $"~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(left)}";
+        if (expLeft is not { } left) return null;
+        if (left <= 0) return "due";
+        return Calculators.ExperienceTableCalculator.CalcTimeToLevel(left, 0, (long)ourRate) is { } t
+            ? $"~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(t)}"
+            : null;
     }
 
     // ----- shared -----------------------------------------------------------

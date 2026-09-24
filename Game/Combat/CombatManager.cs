@@ -2970,7 +2970,27 @@ public sealed partial class CombatManager : IDisposable
     // line was missed, the mob fled, or a partymate killed it between our send
     // and the server's resolve. Drop the current target and refresh the room so
     // the next observation picks a fresh target.
-    private void OnTargetNotHere(MatchResult _)
+    private void OnTargetNotHere(MatchResult _) => DropMissingTarget("target-not-here");
+
+    // Our attack came back as speech: `a kobold thief` answered with `You say "a kobold
+    // thief"`. With no monster of that name in the room and talk-slow off, the server
+    // reads the attack as a say (with talk-slow on it's "Your command had no effect.",
+    // handled by OnCommandNoEffect) — report stock-20260924-013525. The same meaning as "You don't see X
+    // here!", and the usual cause is a monster a PARTY MEMBER killed — no exp for us,
+    // so no death was seen and it stayed on the roster, re-picked and re-"said" after
+    // every kill. Matched against the exact line we just sent, so ordinary talk (ours
+    // or a macro's) can't trip it.
+    private static readonly TimeSpan AttackEchoWindow = TimeSpan.FromSeconds(5);
+
+    public void NoteOwnSay(string message)
+    {
+        if (_lastAttackCommand is not { Length: > 0 } attack) return;
+        if (!string.Equals(message.Trim(), attack, StringComparison.OrdinalIgnoreCase)) return;
+        if (DateTimeOffset.Now - _lastAttackSentAt > AttackEchoWindow) return;
+        DropMissingTarget("attack-read-as-say");
+    }
+
+    private void DropMissingTarget(string reason)
     {
         if (!_isEnabled()) return;
         if (_wireSender is null) return;
@@ -2978,7 +2998,7 @@ public sealed partial class CombatManager : IDisposable
 
         string gone = _currentTarget;
         _log?.Combat(LogCategory,
-            $"target-not-here — dropping target={gone} + refreshing room");
+            $"{reason} — dropping target={gone} + refreshing room");
         _currentTarget = null;
         // The server says the named target isn't here — a guarded priority we were
         // chasing is genuinely gone, so end the redirect chase (breaks the retry
@@ -3003,7 +3023,7 @@ public sealed partial class CombatManager : IDisposable
         // Force a refresh (debounce shared with OnCombatLine so a
         // simultaneous miss-line + target-not-here doesn't double-send).
         // Bare CR — same rationale as OnCombatLine.
-        TrySendRoomRefresh("target-not-here");
+        TrySendRoomRefresh(reason);
     }
 
     // "Your command had no effect." — a generic failure the server emits when the
