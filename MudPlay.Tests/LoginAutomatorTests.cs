@@ -47,6 +47,40 @@ public sealed class LoginAutomatorTests
         Assert.Equal("G\r", sentVal);
     }
 
+    // A bulletin pager mid-login gets Enter and the step keeps waiting — once per
+    // prompt, and the step still matches when its own text arrives.
+    [Fact]
+    public async Task PagerPrompt_SendsEnter_AndKeepsWaitingOnTheStep()
+    {
+        AutomationStep s = new("Main Menu:", "G");
+        (LoginAutomator a, var sent) = Build(steps: s);
+        a.Start();
+
+        a.Feed(Ascii("News...\r\n(N)onstop, (Q)uit, or (C)ontinue? "));
+        await Task.Delay(20);
+        Assert.Equal(new[] { "\r" }, sent.ToArray());
+
+        a.Feed(Ascii("more news\r\n"));   // no second prompt → no second Enter
+        await Task.Delay(20);
+        Assert.Single(sent);
+
+        a.Feed(Ascii("Main Menu: "));
+        await Task.Delay(20);
+        Assert.Equal(new[] { "\r", "G\r" }, sent.ToArray());
+    }
+
+    // A step authored for the pager text answers it itself; no extra Enter.
+    [Fact]
+    public async Task PagerPrompt_AnAuthoredStepForItWins()
+    {
+        AutomationStep s = new("(C)ontinue?", "N");
+        (LoginAutomator a, var sent) = Build(steps: s);
+        a.Start();
+        a.Feed(Ascii("(N)onstop, (Q)uit, or (C)ontinue? "));
+        await Task.Delay(20);
+        Assert.Equal(new[] { "N\r" }, sent.ToArray());
+    }
+
     [Fact]
     public async Task StepAdvanced_FiresOncePerMatchedStep()
     {
