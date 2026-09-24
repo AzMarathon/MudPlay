@@ -71,7 +71,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     private readonly Func<string, RoomKey, RoomKey?> _nearestBankBranch;
     private readonly Func<RoomKey, bool> _walkTo;
     private readonly Action<string> _send;
-    private readonly Func<string, string?> _recordedVersion;
+    private readonly Func<string, (string? Version, DateTime? AtUtc)> _recordedVersion;
     private readonly Action<IReadOnlyList<string>> _reformParty;
     private readonly Action<TimeSpan, Action> _armTimer;
     private readonly Func<bool> _inCombat;
@@ -138,7 +138,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         Func<string, RoomKey, RoomKey?> nearestBankBranch,
         Func<RoomKey, bool> walkTo,
         Action<string> send,
-        Func<string, string?> recordedVersion,
+        Func<string, (string? Version, DateTime? AtUtc)> recordedVersion,
         Action<IReadOnlyList<string>> reformParty,
         Action<TimeSpan, Action> armTimer,
         Func<bool> inCombat,
@@ -450,7 +450,7 @@ public sealed class PartyTrainCoordinator : IDisposable
             if (!_joinedAt.TryGetValue(given, out DateTimeOffset joined)) _joinedAt[given] = joined = _now();
             if (_now() - joined < JoinGrace) continue;
 
-            if (SpeaksPartyTrain(_recordedVersion(given)))
+            if (Speaks(given))
             {
                 if (!_reports.ContainsKey(given) && _asked.TryAdd(given, _now()))
                     _send($"/{given} @ptrain ask");
@@ -475,6 +475,25 @@ public sealed class PartyTrainCoordinator : IDisposable
         if (needed is not { } n || n <= 0) return false;
         return Calculators.ExperienceTableCalculator.CalcTimeToLevel(n, 0, (long)ourRate) is { } tnl
             && now >= readAt + tnl + AskBuffer;
+    }
+
+    private bool Speaks(string given)
+    {
+        (string? version, DateTime? atUtc) = _recordedVersion(given);
+        return SpeaksPartyTrain(version, atUtc, _now().UtcDateTime);
+    }
+
+    // As below, but an OLDER-MudPlay record that wasn't confirmed today counts as
+    // unknown: MudPlay updates itself, and the once-a-day join probe can miss (its
+    // telepath not delivered), leaving yesterday's version standing all day. Asking
+    // costs one telepath; wrongly writing the member off costs the feature.
+    public static bool SpeaksPartyTrain(string? version, DateTime? recordedAtUtc, DateTime nowUtc)
+    {
+        if (SpeaksPartyTrain(version)) return true;
+        bool olderMudPlay = version is not null
+            && version.StartsWith(AppInfo.DisplayName + " ", StringComparison.OrdinalIgnoreCase);
+        bool confirmedToday = recordedAtUtc is { } at && at.ToLocalTime().Date == nowUtc.ToLocalTime().Date;
+        return olderMudPlay && !confirmedToday;
     }
 
     // The first MudPlay that understands @ptrain.
@@ -525,7 +544,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     // holds off — replies land a few seconds after the party forms.
     private bool PartnersSettled() => ActiveMemberGivens().All(n =>
         _reports.ContainsKey(n)
-        || !SpeaksPartyTrain(_recordedVersion(n))
+        || !Speaks(n)
         || (_asked.TryGetValue(n, out DateTimeOffset at) && _now() - at >= ReplyWindow));
 
     // Gate for the SOLO armed run while in a party. Leading with Auto-train party on

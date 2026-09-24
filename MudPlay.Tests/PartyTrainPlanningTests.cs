@@ -103,6 +103,18 @@ public sealed class PartyTrainPlanningTests
     public void SpeaksPartyTrain_ReadsTheRecordedVersionReply(string? version, bool expected) =>
         Assert.Equal(expected, PartyTrainCoordinator.SpeaksPartyTrain(version));
 
+    // A stale older-MudPlay record (not confirmed today) may have updated since —
+    // still worth the one ask. Today's confirmation, or another client, is trusted.
+    [Fact]
+    public void SpeaksPartyTrain_DistrustsAnOldMudPlayRecordFromAnotherDay()
+    {
+        DateTime now = new(2026, 9, 24, 18, 0, 0, DateTimeKind.Utc);
+        Assert.True(PartyTrainCoordinator.SpeaksPartyTrain("MudPlay 3.74.0", now.AddDays(-2), now));
+        Assert.True(PartyTrainCoordinator.SpeaksPartyTrain("MudPlay 3.74.0", null, now));
+        Assert.False(PartyTrainCoordinator.SpeaksPartyTrain("MudPlay 3.74.0", now.AddMinutes(-5), now));
+        Assert.False(PartyTrainCoordinator.SpeaksPartyTrain("MegaMud 1.03u", now.AddDays(-2), now));
+    }
+
     // An other-client member is re-asked @level only once its projected level-up
     // (needed at OUR rate) plus the buffer has passed — never on a timer.
     [Fact]

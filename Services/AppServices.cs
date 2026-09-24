@@ -6636,7 +6636,7 @@ public sealed class AppServices
             send: cmd => SendGameCommand(cmd),
             // The on-join @version probe's reading — who's on MudPlay (and new enough
             // to speak @ptrain) and who isn't worth asking.
-            recordedVersion: name => Players.Find(name)?.Version,
+            recordedVersion: name => Players.Find(name) is { } p ? (p.Version, p.VersionAt) : (null, null),
             // The leader's own train disbands the party; this is the same re-collect
             // a leader reconnect uses — re-invite the followers standing with us and
             // hold the resumed loop until they're back.

@@ -225,6 +225,20 @@ public sealed class PartyProbeManagerTests
         Assert.Equal("MudPlay 2.37.0", h.Players.Find("Bob")!.Version);
     }
 
+    // Outside a probe window only a reply that can only be a client version is
+    // taken — the join probe's telepath may never have been delivered.
+    [Fact]
+    public void UnsolicitedReply_KnownClientVersion_Records_OtherShapesIgnored()
+    {
+        var h = new Harness();
+        h.Reply("Bob", "{Docks 1/520}");
+        Assert.Null(h.Players.Find("Bob")?.Version);
+        h.Reply("Bob", "{MudPlay 3.105.0}");
+        Assert.Equal("MudPlay 3.105.0", h.Players.Find("Bob")!.Version);
+        h.Reply("Bob", "{MegaMud 1.03u}");
+        Assert.Equal("MegaMud 1.03u", h.Players.Find("Bob")!.Version);
+    }
+
     [Fact]
     public void VersionReply_AfterWindow_Ignored()
     {
@@ -232,7 +246,8 @@ public sealed class PartyProbeManagerTests
         h.AddMember("Bob");
 
         h.Now += TimeSpan.FromMinutes(1);   // past the version window
-        h.Reply("Bob", "{MudPlay 2.37.0}");
+        // Version-shaped but not a known client — only a probe window vouches for it.
+        h.Reply("Bob", "{Zmud 7.21}");
 
         Assert.Null(h.Players.Find("Bob")?.Version);
     }
@@ -241,8 +256,9 @@ public sealed class PartyProbeManagerTests
     public void UnexpectedVersionLine_Ignored()
     {
         var h = new Harness();
-        // No probe sent to Carol — a version-shaped line from her isn't recorded.
-        h.Reply("Carol", "{MudPlay 2.37.0}");
+        // No probe sent to Carol — a version-shaped line from an unknown client isn't
+        // recorded (a known client's is; see UnsolicitedReply_KnownClientVersion…).
+        h.Reply("Carol", "{Zmud 7.21}");
         Assert.Null(h.Players.Find("Carol")?.Version);
     }
 
