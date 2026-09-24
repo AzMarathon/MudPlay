@@ -13,6 +13,7 @@
 - Remote: **a new destination overrides an `@stop`** — after `@stop`, an `@goto` / `@loop` / `@lair` now abandons the pause and starts moving, instead of sitting gated until a separate `@rego`
 - Trigger seed trimmed to the six essentials (low-lives x3, slaver-leader surrender, FUgram cancel, teleport `par`) — a fresh install starts with just these
 - Workshop → Calculators: the **Monster Aggro** box no longer runs far past the other calculators — its width is capped to the Realm Rankings table's edge and the description wraps there
+- Party (AOE) heal now **strictly obeys the "N or more members" gate** — it never fires for a single below-threshold member even when no single-target party heal is configured; below the count the single-target heals the individual, and with none set nothing party-side fires until N members are below
 - bug reports addressed: paradigm-20260923-071731, paradigm-20260923-091205, paradigm-20260923-103506, paradigm-20260923-103938, paradigm-20260923-210406
 
 ## 3.103.9

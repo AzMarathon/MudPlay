@@ -2114,20 +2114,20 @@ public sealed class CastingDirector : IDisposable
         }
         if (below == 0) return null;
 
+        // The party AOE heal is HARD-gated by the member count: it fires ONLY when
+        // AoeMinMembers or more members are below the threshold. AoeMinMembers is the
+        // "use party healing spells when N or more members meet threshold" picker,
+        // itself bounded 2–6, so "2" means two-or-more, full stop — the AOE never fires
+        // for a lone below-member, even when no single-target spell is configured to
+        // reach them (report: mrai firing at one member below). Below the count, the
+        // single-target slot heals the individual dip; with no single-target set,
+        // nothing party-side fires until the count is met.
         int aoeMin = Math.Max(2, settings.AoeMinMembers);
         if (below >= aoeMin && !string.IsNullOrWhiteSpace(aoeSpell))
             return new CastCandidate(aoeSpell, Target: null);
 
         if (!string.IsNullOrWhiteSpace(singleSpell) && lowest is not null)
             return new CastCandidate(singleSpell, Target: MemberTarget(lowest));
-
-        // AOE fallback below the member gate: fire the group AOE only when a genuine
-        // party MEMBER (`lowest` — never self) is below and there's no single-target
-        // to reach them individually ("all I have is the AOE"). A lone SELF dip
-        // never triggers it — self counts toward the gate but is otherwise a
-        // self-heal-slot concern, not a party spell's (report paradigm-20260922-203540).
-        if (lowest is not null && !string.IsNullOrWhiteSpace(aoeSpell))
-            return new CastCandidate(aoeSpell, Target: null);
 
         return null;
     }
