@@ -20,6 +20,7 @@
 > - Following with Auto-train party on, the Party window shows the train lines too — your own status, and the others' from their `@level` / `@exp` replies at your exp/hour
 > - A member shut out of a combat-restricted trainer room walks in and trains once its fight ends, instead of reporting "done 0" where it stood; the leader re-invites everyone who set out
 > - The `@join` nag isn't cancelled by a member's automatic `@where`, and a member left in a quiet `[Invited]` slot is re-invited and nagged when seen
+> - A hand `train stats` with nothing in the CP plan to apply (e.g. before the `train` that earns the level's CP) says so in the Program log
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

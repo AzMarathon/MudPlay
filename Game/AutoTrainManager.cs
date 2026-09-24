@@ -249,7 +249,16 @@ public sealed class AutoTrainManager : IDisposable
     {
         if (_phase != Phase.Idle) return;                        // our own flow already drives it
         if (!ReadAutoTrainerSettings().AutoTrainStats) return;   // checkbox off → hand-allocate
-        if (!TryResolveTargets(out int[] current, out int[] target)) return;
+        if (!TryResolveTargets(out int[] current, out int[] target))
+        {
+            // Say why, or a report of "the plan didn't fire" reads as a bug — usually it's
+            // a `train stats` before the `train` that earns this level's CP.
+            if (_profile.Current?.CharacterPlan is { Count: > 0 })
+                _log?.Info("AutoTrain",
+                    $"Auto-train stats — nothing in the CP plan to apply at level {_stats.Level} with {_stats.Cp} CP "
+                    + "(no row for this level, or it's already applied); allocate by hand, or `train` first.");
+            return;
+        }
 
         _sequence = AutoTrainSequenceBuilder.Build(current, target);
         int session = ++_sessionId;
