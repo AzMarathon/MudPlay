@@ -24,7 +24,17 @@ namespace MudPlay.Services;
 // Memory hygiene: once a per-tab consumer has converted the raw JsonDocument into
 // typed model collections it calls EvictTable to drop the raw bytes — savings on
 // large data sets land in the 150–170 MB range. EvictAll wipes everything
-// without changing the active set.
+// without changing the active set. A table nobody has read for IdleEvictAfter is
+// dropped by a background sweep too, so a table some consumer loads and never
+// evicts (Rooms is ~56 MB parsed) doesn't sit in memory for the whole session;
+// the next read simply re-parses it.
+//
+// Evicting only DROPS the reference, it never disposes. JsonDocument.Parse rents
+// its metadata buffer from ArrayPool.Shared, and Dispose hands it back — the pool
+// then keeps those multi-MB buffers parked for the life of the process. Dropped
+// instead, the document is ordinary garbage, and a reader still holding one of its
+// JsonElements (a background build mid-scan, a cached row) stays valid rather than
+// hitting a disposed buffer. That's what makes eviction safe from any thread.
 //
 // Wiring: AppServices constructs the cache and subscribes it to
 // ProfileService.ProfileLoaded + ProfileService.BbsPinApplied so the pinned BBS's
@@ -56,8 +66,20 @@ public sealed class GameDataCache
     // here unclaimed instead of contaminating _tables for whatever set actually
     // ends up active. Guarded by the same _tables lock; never touched by SwitchSet
     // / EvictAll, which only ever own the live set's cache (ReloadActiveSet does
-    // purge this set's stale entries after a re-import — see there).
+    // purge this set's stale entries after a re-import — see there, and EvictIdle
+    // drops a guess nobody claimed).
     private readonly Dictionary<(string Set, string Table), JsonDocument> _prewarmed = new();
+
+    // Environment.TickCount64 of each cached table's last GetRawTable read (and of
+    // each prewarm's parse), for the idle sweep. Guarded by the _tables lock.
+    private readonly Dictionary<string, long> _lastRead = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(string Set, string Table), long> _prewarmedAt = new();
+
+    // Long enough that anything read per combat round / tick / room entry never ages
+    // out; short enough that a startup-only table is gone within minutes of its build.
+    public static readonly TimeSpan IdleEvictAfter = TimeSpan.FromMinutes(5);
+
+    private readonly Timer? _idleSweep;
 
     // Root the cache walks (AppPaths.GameDataRoot). Captured at construction.
     public string GameDataRoot { get; }
@@ -112,9 +134,14 @@ public sealed class GameDataCache
     // leave it null.
     public LogService? Log { get; set; }
 
-    public GameDataCache() : this(AppPaths.GameDataRoot) { }
+    public GameDataCache() : this(AppPaths.GameDataRoot)
+    {
+        _idleSweep = new Timer(_ => EvictIdle(IdleEvictAfter), null,
+            TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+    }
 
-    // Test seam — lets tests point at an isolated root.
+    // Test seam — lets tests point at an isolated root. No idle sweep; tests call
+    // EvictIdle directly.
     internal GameDataCache(string gameDataRoot)
     {
         GameDataRoot = gameDataRoot;
@@ -203,8 +230,8 @@ public sealed class GameDataCache
                          .Where(k => string.Equals(k.Set, ActiveSet, StringComparison.OrdinalIgnoreCase))
                          .ToList())
             {
-                _prewarmed[key].Dispose();
                 _prewarmed.Remove(key);
+                _prewarmedAt.Remove(key);
             }
         }
         Log?.Log(LogSeverity.Info, "GameData", $"Re-ingested game data set '{ActiveSet}'.");
@@ -224,14 +251,20 @@ public sealed class GameDataCache
         JsonDocument? result = null;
         lock (_tables)
         {
-            if (_tables.TryGetValue(tableName, out JsonDocument? cached)) return cached;
+            if (_tables.TryGetValue(tableName, out JsonDocument? cached))
+            {
+                _lastRead[tableName] = Environment.TickCount64;
+                return cached;
+            }
             if (_failedTables.Contains(tableName)) return null;
 
             // A PrewarmAsync call already parsed this table for the set that's now
             // active, ahead of the switch — claim it instead of re-reading the file.
             if (_prewarmed.Remove((ActiveSet, tableName), out JsonDocument? warmed))
             {
+                _prewarmedAt.Remove((ActiveSet, tableName));
                 _tables[tableName] = warmed;
+                _lastRead[tableName] = Environment.TickCount64;
                 Log?.Log(LogSeverity.Debug, "GameData",
                     $"'{tableName}' claimed from background prewarm for '{ActiveSet}'.");
                 return warmed;
@@ -249,6 +282,9 @@ public sealed class GameDataCache
             {
                 result = JsonDocument.Parse(bytes);
                 _tables[tableName] = result;
+                _lastRead[tableName] = Environment.TickCount64;
+                Log?.Log(LogSeverity.Debug, "GameData",
+                    $"'{tableName}' loaded for '{ActiveSet}' ({bytes.Length / 1024} KB).");
             }
             catch (JsonException ex)
             {
@@ -280,8 +316,8 @@ public sealed class GameDataCache
     // connect handshake that follows, instead of serially in front of both.
     //
     // Speculative and best-effort: if setName never becomes active (auto-load off, or
-    // the guess was wrong), the parsed documents just sit in _prewarmed unclaimed until
-    // the process exits. GetRawTable claims a match by exact (setName, tableName); a
+    // the guess was wrong), the parsed documents sit in _prewarmed unclaimed until the
+    // idle sweep drops them. GetRawTable claims a match by exact (setName, tableName); a
     // read/parse failure here is silently dropped — the real GetRawTable call a moment
     // later hits the same failure through its normal (unprewarmed) path and reports it
     // there instead of duplicating that handling on a background thread nobody's
@@ -313,11 +349,9 @@ public sealed class GameDataCache
                 lock (_tables)
                 {
                     if (_tables.ContainsKey(tableName) || _prewarmed.ContainsKey((setName, tableName)))
-                    {
-                        doc.Dispose();
                         return;
-                    }
                     _prewarmed[(setName, tableName)] = doc;
+                    _prewarmedAt[(setName, tableName)] = Environment.TickCount64;
                 }
             })));
     }
@@ -354,7 +388,7 @@ public sealed class GameDataCache
     // null when the table isn't in the active set or no row matches. Mirrors
     // FindNameByNumber but hands back the whole JsonElement so a caller can
     // read arbitrary fields (Abil-N / NegateSpell-N / Action …), not just Name.
-    // The returned JsonElement stays valid until the next SwitchSet / EvictTable.
+    // The returned JsonElement stays valid for as long as the caller holds it.
     // Backs the room-hazard index's Spells / Items / TBInfo record reads.
     public JsonElement? FindRowByNumber(string tableName, int number)
     {
@@ -404,7 +438,7 @@ public sealed class GameDataCache
                 if (numEl.ValueKind != JsonValueKind.Number) continue;
                 if (numEl.TryGetInt32(out int n)) index.TryAdd(n, row);
             }
-            _numberIndex[tableName] = index;
+            if (IsCurrent(tableName, doc)) _numberIndex[tableName] = index;
             return index;
         }
     }
@@ -426,10 +460,16 @@ public sealed class GameDataCache
                 string? name = nameEl.GetString();
                 if (name is not null) index.TryAdd(name, row);
             }
-            _nameIndex[tableName] = index;
+            if (IsCurrent(tableName, doc)) _nameIndex[tableName] = index;
             return index;
         }
     }
+
+    // An eviction (the idle sweep runs on a timer thread) can land between a caller's
+    // GetRawTable and its index build. Caching that index would pin the evicted
+    // document behind a table the cache no longer holds, so it's only served once.
+    private bool IsCurrent(string tableName, JsonDocument doc)
+        => _tables.TryGetValue(tableName, out JsonDocument? cached) && ReferenceEquals(cached, doc);
 
     // Drop the cached JsonDocument for one table. Used by per-tab consumers after
     // they've folded the raw JSON into typed model collections.
@@ -441,10 +481,36 @@ public sealed class GameDataCache
             _failedTables.Remove(tableName);
             _numberIndex.Remove(tableName);
             _nameIndex.Remove(tableName);
-            if (!_tables.Remove(tableName, out JsonDocument? doc)) return false;
-            doc.Dispose();
-            return true;
+            _lastRead.Remove(tableName);
+            return _tables.Remove(tableName);
         }
+    }
+
+    // Drop every cached table (and unclaimed prewarm) not read within idle. Runs off
+    // the production idle-sweep timer; safe from any thread because eviction never
+    // disposes (see the class comment).
+    internal void EvictIdle(TimeSpan idle)
+    {
+        long cutoff = Environment.TickCount64 - (long)idle.TotalMilliseconds;
+        List<string> dropped = new();
+        lock (_tables)
+        {
+            foreach ((string table, long at) in _lastRead.ToList())
+            {
+                if (at > cutoff) continue;
+                if (EvictTable(table)) dropped.Add(table);
+            }
+            foreach (((string Set, string Table) key, long at) in _prewarmedAt.ToList())
+            {
+                if (at > cutoff) continue;
+                _prewarmed.Remove(key);
+                _prewarmedAt.Remove(key);
+                dropped.Add($"{key.Table} (unclaimed prewarm, '{key.Set}')");
+            }
+        }
+        if (dropped.Count > 0)
+            Log?.Log(LogSeverity.Debug, "GameData",
+                $"Dropped {string.Join(", ", dropped)} — unread for {idle.TotalMinutes:0.#} min.");
     }
 
     // Drop every cached table. Called implicitly by SwitchSet and Reload; callers
@@ -455,11 +521,11 @@ public sealed class GameDataCache
     {
         lock (_tables)
         {
-            foreach (JsonDocument doc in _tables.Values) doc.Dispose();
             _tables.Clear();
             _failedTables.Clear();
             _numberIndex.Clear();
             _nameIndex.Clear();
+            _lastRead.Clear();
         }
     }
 

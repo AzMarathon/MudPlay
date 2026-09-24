@@ -34,7 +34,7 @@
          (~1000+ line) rewrite/expansion of an existing one, PATCH = bug
          fixes AND ordinary enhancements to existing features (one bump per
          report handled or per enhancement). -->
-    <Version>3.104.13</Version>
+    <Version>3.104.14</Version>
 
     <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
          the Server GC (a heap + background thread per core), which on a
@@ -44,6 +44,14 @@
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Game-data parses and index builds leave the large-object heap full of
+         multi-MB holes that the GC otherwise never compacts, so committed memory
+         stays near the startup peak long after the live heap has shrunk. 5 lets
+         the GC compact the LOH once fragmentation gets significant. -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Embed everything under Assets/ (fonts + bundled third-party license

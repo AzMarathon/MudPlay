@@ -1,5 +1,10 @@
 # Version history
 
+## 3.104.14
+
+- Lower memory per running client: the raw Rooms table no longer stays loaded all session, and any game-data table unread for 5 minutes is released (re-read on demand)
+- Released game-data buffers go back to the system instead of sitting parked in a shared pool, and the runtime now compacts its large-object heap when it fragments
+
 ## 3.104.13
 
 - A walk you chose to take through a hazard ("cross unprotected") keeps that choice when a mid-walk desync re-plans it, instead of failing "all routes blocked by a room hazard"

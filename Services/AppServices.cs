@@ -3900,8 +3900,11 @@ public sealed class AppServices
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key, log: Log,
             // A room-display title line is not a server message — the room-display
             // parser reads it directly and registers no router pattern, so exclude
-            // any line that's a known room name in the active set (O(1) name index).
-            isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null,
+            // any line that's a known room name in the active set. Asks the room graph's
+            // name index, not the raw Rooms table — a raw lookup here re-parses and pins
+            // the set's largest JSON document for the whole session after the graph
+            // build evicted it.
+            isKnownRoomName: text => RoomGraph.FindByName(text).Count > 0,
             // Stateful block parsers read the wire directly and register no router
             // pattern, so AnyPatternMatches can't speak for the lines they consume.
             // Each contributes its OWN matcher here rather than have the shapes
