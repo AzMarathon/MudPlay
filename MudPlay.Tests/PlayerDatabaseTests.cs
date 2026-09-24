@@ -328,6 +328,45 @@ public sealed class PlayerDatabaseTests
     }
 
     [Fact]
+    public void RecordLevel_DropsATitleWhoseBandExcludesTheReportedLevel()
+    {
+        // A rerolled character answers @level 1 while the record still carries the
+        // old character's "Curate" (Priest 10-14): that band would otherwise outrank
+        // the reading, so a manual @level changed nothing. A title that fits stays.
+        PlayerDatabase db = new();
+        DateTime now = new(2026, 9, 24, 0, 0, 0, DateTimeKind.Utc);
+        db.RecordObservation("Raijin", "Priest", null, null, "Curate", null, null, now);
+        db.RecordObservation("Bob", "Priest", null, null, "Curate", null, null, now);
+
+        db.RecordLevel("Raijin", 1, now);
+        db.RecordLevel("Bob", 12, now);
+
+        Assert.Null(db.Find("Raijin")!.Title);
+        Assert.Equal("Curate", db.Find("Bob")!.Title);
+    }
+
+    [Fact]
+    public void RecordPartyClass_NewClass_DropsTheOldCharactersObservations()
+    {
+        PlayerDatabase db = new();
+        DateTime now = new(2026, 9, 24, 0, 0, 0, DateTimeKind.Utc);
+        db.RecordObservation("Raijin", "Priest", "Elf", "Good", "Curate", "asdf", null, now);
+        db.RecordLevel("Raijin", 12, now);
+        db.RecordVersion("Raijin", "MudPlay 3.74.0", now);
+
+        Assert.Equal("Priest", db.RecordPartyClass("Raijin", "Mage"));
+
+        PlayerRecord r = db.Find("Raijin")!;
+        Assert.Equal("Mage", r.Class);
+        Assert.Null(r.Title);
+        Assert.Null(r.Level);
+        Assert.Null(r.Race);
+        Assert.Equal("asdf", r.Gang);                     // not character-specific
+        Assert.Equal("MudPlay 3.74.0", r.Version);
+        Assert.Null(db.RecordPartyClass("Raijin", "mage"));   // same class → no change
+    }
+
+    [Fact]
     public void RecordLevel_SplitsFullName_KeysOnGiven()
     {
         PlayerDatabase db = new();
@@ -453,13 +492,13 @@ public sealed class PlayerDatabaseTests
         PlayerDatabase db = new();
         DateTime now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
         db.RecordObservation("Bob Ironhelm", "Mage", "Elf", "Good", "Wizard", null, null, now);
-        db.RecordLevel("Bob", 42, now);
+        db.RecordLevel("Bob", 51, now);
 
         PlayerRecord? byGiven = db.Find("Bob");
         PlayerRecord? byFull  = db.Find("Bob Ironhelm");
 
         Assert.NotNull(byGiven);
-        Assert.Equal(42, byGiven!.Level);
+        Assert.Equal(51, byGiven!.Level);
         Assert.Equal("Wizard", byGiven.Title);
         Assert.NotNull(byFull);
         Assert.Equal("Bob", byFull!.GivenName);   // full name reduced to the given key

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.104.17
+
+- A party member who rerolled (same name, new class) no longer keeps their old character's title and level — the old high title was routing the party around level gates the new character clears
+- An `@level` reply now always takes effect: a stored title that can't match the reported level is dropped instead of outranking it
+- bug reports addressed: stock-20260924-133615
+
 ## 3.104.16
 
 - Pyramid climb re-anchors on the room you're actually in across the door-maze floor, instead of falling a step behind and bashing a door that can't be bashed
