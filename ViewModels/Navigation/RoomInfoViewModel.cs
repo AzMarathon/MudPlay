@@ -100,13 +100,18 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     public ObservableCollection<RoomDetailLink> FloorItems { get; } = new();
     public bool HasFloorItems => FloorItems.Count > 0;
 
-    // Room commands the map tooltip surfaces — teleports and priced services
-    // already read off the tooltip, and these are the effect commands that used to
-    // appear nowhere in this panel at all (report paradigm-20260911-010954:
-    // 8/461's "touch statue" summons the monster carrying the gate key). Each row
-    // links to the record its effect names where there is one.
+    // Room commands — every line the map tooltip lists for the room's CMD chain
+    // (RoomTooltipBuilder.ResolveRoomCommandLines): teleports, cast teleports, room
+    // actions, effect commands and paid / level-gated commands such as a captain's
+    // sailings. Each row links to what it names (see RoomCommandLineCommand).
     public ObservableCollection<RoomDetailLink> RoomCommands { get; } = new();
     public bool HasRoomCommands => RoomCommands.Count > 0;
+
+    // Teleports a monster placed here offers when asked a keyword — they live on the
+    // monster's greet, not the room's CMD chain, so Room commands never listed them.
+    // Clicking one re-roots the map on the destination.
+    public ObservableCollection<RoomDetailLink> NpcTransports { get; } = new();
+    public bool HasNpcTransports => NpcTransports.Count > 0;
 
     // Populate every section for the clicked room. Called from
     // NavigationViewModel.OnRoomLeftClicked on any left-click.
@@ -122,6 +127,7 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         Exits.Clear();
         FloorItems.Clear();
         RoomCommands.Clear();
+        NpcTransports.Clear();
         ShopLink = null;
         RoomSpellLink = null;
         HasRoom = true;
@@ -189,16 +195,26 @@ public sealed partial class RoomInfoViewModel : ObservableObject
                 $"{name}(#{id})", null, new RelayCommand(() => _services.OpenItemGameData(id))));
         }
 
-        // Room commands — the CMD-chain effects (summon / learnspell / ability
-        // grant / room-item drop / turn-in), with any charge folded in. Clicking a
-        // row opens the record the effect names, so "touch statue — summons
-        // obsidian statue" jumps straight to the statue's monster record.
-        foreach (RoomTooltipBuilder.RoomEffectRow row in
-                 RoomTooltipBuilder.ResolveRoomEffectRows(room, _services.GameData, _services.TBInfo))
+        // Room commands — the same lines the map tooltip lists (teleports, cast
+        // teleports, room actions, effect commands, paid / level-gated commands such
+        // as a captain's sailings), from the one shared resolver so the two never
+        // disagree. A teleport line re-roots the map on its destination; an effect
+        // line opens the record it names; anything else opens the room's record,
+        // where its CMD chain lives.
+        foreach (RoomTooltipBuilder.RoomCommandLine line in RoomTooltipBuilder.ResolveRoomCommandLines(
+                     room, _services.RoomGraph, _services.GameData, _services.TBInfo, _services.SpellCatalog))
         {
-            string label = $"{string.Join(" / ", row.Keywords)} — {row.EffectText}";
-            if (row.CostText.Length > 0) label += $" — {row.CostText}";
-            RoomCommands.Add(new RoomDetailLink(label, null, EffectRowCommand(row)));
+            string text = line.Indent > 0 ? "    " + line.Text : line.Text;
+            RoomCommands.Add(new RoomDetailLink(text, null, RoomCommandLineCommand(line)));
+        }
+
+        foreach (RoomTooltipBuilder.NpcTransport t in RoomTooltipBuilder.ResolveNpcTransports(
+                     room, _services.GameData, _services.MonsterSpawns, _services.TBInfo))
+        {
+            RoomKey dest = t.Destination;
+            NpcTransports.Add(new RoomDetailLink(
+                RoomTooltipBuilder.FormatNpcTransport(t, _services.RoomGraph), null,
+                new RelayCommand(() => _services.NavigateToRoom(dest))));
         }
 
         // Shop — one link that opens the interactive room-detail popup for this room (the
@@ -246,6 +262,15 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     // where the CMD chain that awards it is actually defined. That keeps every row
     // clickable (RoomDetailLink requires a command, and a null one would grey the
     // row out as if it were disabled).
+    private System.Windows.Input.ICommand RoomCommandLineCommand(RoomTooltipBuilder.RoomCommandLine line)
+    {
+        if (line.Destination is { } dest)
+            return new RelayCommand(() => _services.NavigateToRoom(dest));
+        if (line.Effect is { } effect)
+            return EffectRowCommand(effect);
+        return new RelayCommand(OpenRoomRecord);
+    }
+
     private System.Windows.Input.ICommand EffectRowCommand(RoomTooltipBuilder.RoomEffectRow row)
     {
         int id = row.TargetId;
@@ -280,5 +305,6 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         OnPropertyChanged(nameof(HasExits));
         OnPropertyChanged(nameof(HasFloorItems));
         OnPropertyChanged(nameof(HasRoomCommands));
+        OnPropertyChanged(nameof(HasNpcTransports));
     }
 }

@@ -206,7 +206,8 @@ public sealed class MovementFilter : IRoomFilter
     // independent (a toll exit carries Hint=Toll; a level or class gate is a
     // plain cardinal carrying a window / allowed-class), so each is checked.
     public bool IsExitBlocked(in RoomExit exit) =>
-        IsLevelGateBlocked(in exit) || IsTollGateBlocked(in exit) || IsClassGateBlocked(in exit)
+        IsLevelGateBlocked(in exit) || IsTollGateBlocked(in exit) || IsFareGateBlocked(in exit)
+        || IsClassGateBlocked(in exit)
         || IsItemGateBlocked(in exit) || IsImpassableDoorBlocked(in exit) || IsHazardEntryBlocked(in exit)
         || IsAlignmentGateBlocked(in exit);
 
@@ -222,6 +223,7 @@ public sealed class MovementFilter : IRoomFilter
         ExitBlockReason reasons = ExitBlockReason.None;
         if (IsLevelGateBlocked(in exit)) reasons |= ExitBlockReason.Level;
         if (IsTollGateBlocked(in exit)) reasons |= ExitBlockReason.Toll;
+        if (IsFareGateBlocked(in exit)) reasons |= ExitBlockReason.Fare;
         if (IsClassGateBlocked(in exit)) reasons |= ExitBlockReason.Class;
         if (IsItemGateBlocked(in exit))
             reasons |= exit.Hint == RoomExitHint.KeyLocked
@@ -466,15 +468,25 @@ public sealed class MovementFilter : IRoomFilter
         return CannotAfford((long)exit.TollGold * 100);
     }
 
+    // An NPC ask-transport charges its fare to every person who asks, so it gates on
+    // the same party-or-self wallet check as a toll — the party only routes through it
+    // when its poorest member can pay. The fare is already copper. Stands down with the
+    // toll gate while WarmForRoute plans the paid-crossings-permitted route.
+    private bool IsFareGateBlocked(in RoomExit exit)
+    {
+        if (exit.FareCopper <= 0 || _tollGateSuspended) return false;
+        return CannotAfford(exit.FareCopper);
+    }
+
     // Party-or-self affordability: true when the crosser can't cover `cost`
     // copper. Party branch (PartyWealthTracker.MinWealth folds in our own wallet
     // too) routes around a cost a member can't meet rather than stranding them
     // at the gate; a member who hasn't reported fresh wealth counts as
     // unaffordable. Returns false (don't gate) when solo / not leading / own
     // wallet unknown — same "don't refuse on what we can't evaluate" rule as an
-    // unknown level. Demand-driven: invoked only for a toll exit or a boat fare,
-    // so nothing polls unless one is actually in play. Shared by the toll gate
-    // and the boat fare gate.
+    // unknown level. Demand-driven: invoked only for a toll exit, an NPC transport
+    // fare, or a boat fare, so nothing polls unless one is actually in play. Shared
+    // by the toll, transport-fare, and boat-fare gates.
     private bool CannotAfford(long cost)
     {
         if (cost <= 0) return false;
@@ -537,7 +549,8 @@ public sealed class MovementFilter : IRoomFilter
     {
         ArgumentNullException.ThrowIfNull(bfs);
 
-        // Toll wealth warm — only when the party toll gate is actually in play.
+        // Toll / transport-fare wealth warm — only when a paid crossing is actually on
+        // the route.
         if (WealthWarmProbe is { } tollProbe && PartyWealthProvider?.Invoke() is not null)
         {
             _tollGateSuspended = true;

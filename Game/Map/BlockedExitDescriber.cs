@@ -1,4 +1,5 @@
 using System;
+using MudPlay.Game.Cash;
 
 namespace MudPlay.Game.Map;
 
@@ -30,6 +31,8 @@ public static class BlockedExitDescriber
             _ when exit.HasLevelGate
                 => $"a level gate {way} from {where} ({RoomExit.FormatLevelGate(exit.MinLevel, exit.MaxLevel)})",
             _ when exit.TollGold > 0 => $"a toll {way} from {where} ({exit.TollGold} gold)",
+            _ when exit.FareCopper > 0
+                => $"a paid transport from {where} ({CurrencyFormat.Full(exit.FareCopper)} per person)",
             _ when exit.HasClassGate => $"a class-restricted exit {way} from {where}",
             _ => $"a blocked exit {way} from {where}",
         };

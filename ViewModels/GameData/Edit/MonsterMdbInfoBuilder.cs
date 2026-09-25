@@ -148,17 +148,14 @@ public sealed class MonsterMdbInfoBuilder
             if (greetTxt > 0)
             {
                 // Decode the greet textblock into the "what can I ask, and what
-                // flags fire when I do" tree, then group it by keyword: each
-                // depth-0 line is a player keyword, the deeper lines beneath it
-                // are the effects it triggers. The dialog surfaces the keywords as
-                // chips and flies out each one's effects on click — so a block with
-                // dozens of keywords stays compact on the tab. A block with no
-                // player keywords (a pure dialogue greet) keeps the plain row.
+                // flags fire when I do" tree: each depth-0 line is a player keyword,
+                // the deeper lines beneath it are the effects it triggers. A block
+                // with no player keywords (a pure dialogue greet) keeps the plain row.
                 IReadOnlyList<TBInfoActionLine> decoded =
                     TBInfoActionDecoder.DecodeGreet(_tb, _cache, _roomGraph, greetTxt);
-                IReadOnlyList<GreetKeyword> keywords = GroupGreetKeywords(decoded);
+                IReadOnlyList<SpellEffectNode> keywords = BuildGreetTree(decoded);
                 if (keywords.Count > 0)
-                    kv.Add(new MdbInfoRow("Greet", $"Textblock #{greetTxt}", Keywords: keywords));
+                    kv.Add(new MdbInfoRow("Greet", $"Textblock #{greetTxt}", Greet: new GreetTree(keywords)));
                 else
                     AddRow(kv, "Greet", $"Textblock #{greetTxt}");
             }
@@ -611,31 +608,51 @@ public sealed class MonsterMdbInfoBuilder
         kv.Add(new MdbInfoRow($"{label} ({items.Count})", list, Items: links));
     }
 
-    // Group the flat, depth-tagged greet decode into per-keyword blocks: a depth-0 line opens
-    // a new keyword; the deeper lines that follow (re-indented relative to it) are the effects
-    // that fire when it's asked. Empty when the block has no player keywords.
-    private static IReadOnlyList<GreetKeyword> GroupGreetKeywords(IReadOnlyList<TBInfoActionLine> lines)
+    // Rebuild the flat, depth-tagged greet decode as a tree: a depth-0 line opens a keyword
+    // node; the deeper lines that follow nest under it by depth. Empty when the block has no
+    // player keywords.
+    private static IReadOnlyList<SpellEffectNode> BuildGreetTree(IReadOnlyList<TBInfoActionLine> lines)
     {
-        List<GreetKeyword> keywords = new();
-        string? keyword = null;
-        List<string> effects = new();
-        foreach (TBInfoActionLine line in lines)
+        List<SpellEffectNode> keywords = new();
+        int i = 0;
+        while (i < lines.Count)
         {
-            if (line.Depth == 0)
+            TBInfoActionLine head = lines[i++];
+            if (head.Depth != 0) continue;
+            int start = i;
+            IReadOnlyList<SpellEffectNode> effects = GreetNodes(lines, ref i, 1);
+            bool teleport = false;
+            for (int k = start; k < i; k++)
+                teleport |= lines[k].Room is not null;
+            keywords.Add(new SpellEffectNode
             {
-                if (keyword is not null)
-                    keywords.Add(new GreetKeyword(keyword, effects));
-                keyword = line.Text;
-                effects = new List<string>();
-            }
-            else if (keyword is not null)
-            {
-                effects.Add(new string(' ', (line.Depth - 1) * 2) + line.Text);
-            }
+                Runs = new[] { new MdbInline(teleport ? $"{head.Text} (teleport)" : head.Text) },
+                Children = effects,
+                IsBranch = true,
+                Tone = teleport ? "accent" : "neutral",
+                IsExpanded = false,
+            });
         }
-        if (keyword is not null)
-            keywords.Add(new GreetKeyword(keyword, effects));
         return keywords;
+    }
+
+    // Consume the run of lines at depth >= `depth` from i as sibling nodes, each taking the
+    // deeper lines that follow it as children. A line that skips a level still nests under
+    // its preceding sibling rather than being dropped.
+    private static IReadOnlyList<SpellEffectNode> GreetNodes(IReadOnlyList<TBInfoActionLine> lines, ref int i, int depth)
+    {
+        List<SpellEffectNode> nodes = new();
+        while (i < lines.Count && lines[i].Depth >= depth)
+        {
+            TBInfoActionLine line = lines[i++];
+            IReadOnlyList<SpellEffectNode> children = GreetNodes(lines, ref i, line.Depth + 1);
+            // A teleport line is a link that opens the map on its destination room.
+            MdbInline run = line.Room is { } room
+                ? new MdbInline(line.Text, new RoomLink(line.Text, room).Open)
+                : new MdbInline(line.Text);
+            nodes.Add(new SpellEffectNode { Runs = new[] { run }, Children = children });
+        }
+        return nodes;
     }
 
     // True when a Room.RawLairTag lists wccNo as one of its spawn monsters. v1.11p tags are

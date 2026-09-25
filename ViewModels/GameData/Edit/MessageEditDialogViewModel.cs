@@ -149,17 +149,8 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     public IReadOnlyList<SpellEffectNode> EffectTree { get; }
     public bool HasEffectTree => EffectTree.Count > 0;
 
-    [RelayCommand] private void ExpandAllEffects() => SetEffectsExpanded(EffectTree, true);
-    [RelayCommand] private void CollapseAllEffects() => SetEffectsExpanded(EffectTree, false);
-
-    private static void SetEffectsExpanded(IReadOnlyList<SpellEffectNode> nodes, bool expanded)
-    {
-        foreach (SpellEffectNode n in nodes)
-        {
-            n.IsExpanded = expanded;
-            SetEffectsExpanded(n.Children, expanded);
-        }
-    }
+    [RelayCommand] private void ExpandAllEffects() => SpellEffectNode.SetExpanded(EffectTree, true);
+    [RelayCommand] private void CollapseAllEffects() => SpellEffectNode.SetExpanded(EffectTree, false);
 
     // Interactive damage calculator (level + resist pickers), non-null only for a
     // damage spell. Sits at the top of the Game Data tab.

@@ -16,7 +16,7 @@ public enum ExitBlockReason
     LockedDoor = 1 << 4,   // a key-locked door we can neither key, pick, nor bash
     Door       = 1 << 5,   // a plain door the build can't pick or bash
     Hazard     = 1 << 6,   // a cast-on-enter room hazard we can't survive
-    Fare       = 1 << 7,   // a boat sailing's per-member copper fare the crosser can't cover
+    Fare       = 1 << 7,   // a per-member copper fare (boat sailing, NPC ask-transport) the crosser can't cover
     Alignment  = 1 << 8,   // an (Alignment: X to Y) exit a party member's alignment is outside
 }
 

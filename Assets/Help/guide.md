@@ -344,8 +344,9 @@ The panel lists clickable links to everything attached to the room:
 - **Obvious exits** — click one to re-root the map on that neighbour.
 - **Floor items** — everything the room drops on the ground (static placements plus anything its `roomitem` command scatters).
 - **Shop and room spell** — when the room hosts a shop, and its cast-on-enter room spell.
+- **NPC transports** — teleports a monster standing in the room offers when you ask it a keyword, e.g. `ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 1 runic`. These live on the monster, not the room, so they're listed apart from Room commands. Click one to re-root the map on the destination. The walker routes through a paid transport only when **everyone** can pay: each person who asks is charged the fare, so in a party it checks the poorest member's cash (the same `@wealth` check a toll uses) and walks around it otherwise.
 
-**Room commands** lists what you can type in that room and what it does — `touch statue / move statue — summons obsidian statue`, `give crane totem — teaches form of the crane`, `pull lever — drops frozen hydra in the room`, `hand over totem — takes crane totem`, `break apparatus — grants an ability` — with the cost appended when the command charges (`summon healer — summons healer — costs 100 Gold`). Synonyms that do the same thing share one row.
+**Room commands** lists what you can type in that room and what it does — `touch statue / move statue — summons obsidian statue`, `give crane totem — teaches form of the crane`, `pull lever — drops frozen hydra in the room`, `hand over totem — takes crane totem`, `break apparatus — grants an ability` — with the cost appended when the command charges (`summon healer — summons healer — costs 100 Gold`). Synonyms that do the same thing share one row. It carries the same lines as the map tooltip's Room commands — teleports and sailings included (a captain's `secure passage` lists each port it sails to); click a teleport or sailing line to re-root the map on its destination. Long rows wrap to the panel width.
 
 **Everything is clickable.** A **monster** or the **room spell** opens its full record in a dialog; the **shop** (and a shop room's name) opens the shop stock popup with buy/sell prices and the live Charm picker; a **room-command** row opens the record its effect names (the monster it summons, the spell it teaches, the item it drops or takes); and floor-item links open that record in the **Game Data Browser**. Either way it's a quick jump from "what's in this room" to the full record without hunting through the browser's tables.
 
@@ -385,6 +386,7 @@ Hovering a room shows its details in a tooltip:
 
 - **Monsters** — split into **Placed** (a boss / NPC fixture), **Assigned** (roams / rarely spawns there), and **Lair** (a consistent lair spawner), each with its game-data record number (e.g. `Dark Goblin Archer(#48)`). The lair's **Max Regen** sits directly beneath the Lair line.
 - **Floor items, shop / room spell, exits, and lighting** — everything else attached to the room.
+- **NPC transports** — the ask-a-keyword teleports of a monster placed there, with destination and any price.
 - **Room commands** — anything you can type there: teleports and paid services, and the commands that act on the room itself — what they **summon**, the spell they **teach**, the ability they **grant**, and the item they **drop** or **take**.
 
 (A locked door whose key id doesn't match any item in the set — a game-data typo, e.g. 8/462's north gate recording `Key: 1` — is shown as the plain door it behaves like, listing the picklocks/strength that actually opens it, rather than naming a key that doesn't exist.)
@@ -459,7 +461,7 @@ Both cards show their trap count. Click either route to preview its line on the 
 
 When a route (the one you're walking, or a queued preview) crosses a trap, its **Details…** view flags that step in **red** with the trap's damage related to your HP — e.g. *trap: 36 dmg (~11% of HP)* — so you can see the hit each trapped step on the path would land.
 
-**Walk it or teleport.** When the shortest route somewhere takes a **teleport** (a cast, an item-use portal, a CMD jump) and a plain **walking** route also exists, the picker asks which you want — **"Walk it"** (the safe overland route) or **"Teleport"** (the shortcut). A teleport can drop you somewhere lethal, so the client won't make that call for you.
+**Walk it or teleport.** When the shortest route somewhere takes a **teleport** (a cast, an item-use portal, a CMD jump) and a plain **walking** route also exists, the picker asks which you want — **"Walk it"** (the safe overland route) or **"Teleport"** (the shortcut). A teleport can drop you somewhere lethal, so the client won't make that call for you. When the shortcut goes through a paid NPC transport, the card states its fare ("Costs 1 runic per person").
 
 And once you're walking, a walk that **didn't** start on a teleport won't quietly switch to one: if the route has to re-plan mid-trip — say a counter you were searching for turns up and the destination is recomputed — it **keeps to the walking route** and only falls back to a teleport if walking has become genuinely impossible. So picking "Walk it" (or any ordinary walk-to) means you stay on foot the whole way, never surprised onto a vortex you didn't choose.
 
@@ -1324,7 +1326,7 @@ Each configured spell rung **substitutes** its spell for this monster and runs t
 
 The **Physical attack** box replaces the weapon command **only on a round the engine already chose physical** — it does not force physical or suppress the spell rungs, and carries no mana/cap gating.
 
-The read-only pane's **Spawns In** list shows each room's lair size (e.g. `1/2122 (lair: 2)`). Every spell a monster references — its **spell-attacks, per-hit, create, death, and between-rounds** spells — links to that spell's record and shows the spell's number (`[#N]`), and each entry in the **Summons** list links to the summoned monster's record.
+A monster's **Greet** row shows every keyword you can ask it as a collapsible tree, the same layout as a room spell's **Conditional effects**: expand a keyword to see what happens when you ask it (**expand all** / **collapse all** sit beside the row). A keyword that **teleports** you is labelled `(teleport)` and tinted, and the destination room is a link that opens the map on that room. The read-only pane's **Spawns In** list shows each room's lair size (e.g. `1/2122 (lair: 2)`). Every spell a monster references — its **spell-attacks, per-hit, create, death, and between-rounds** spells — links to that spell's record and shows the spell's number (`[#N]`), and each entry in the **Summons** list links to the summoned monster's record.
 
 (Combat message wording and per-monster flavor prefixes are no longer edited here — hits, misses, dodges, blocks, and deaths are recognized generically from line colour and the experience line, and flavor adjectives come from one shared vocabulary you edit under **Flavor Prefixes** (below), so you never hand-enter a monster's messages or prefixes.)
 

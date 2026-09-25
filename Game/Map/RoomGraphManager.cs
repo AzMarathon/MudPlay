@@ -1045,7 +1045,10 @@ public sealed class RoomGraphManager
                         // MovementFilter.IsClassGateBlocked drops it for every class
                         // but N — the wrong class never routes through it (issue #455).
                         ClassGate: t.RequiredClass,
-                        GatewayTeleport: false);
+                        GatewayTeleport: false,
+                        // Every person who asks pays the fare, so MovementFilter
+                        // gates the edge on the poorest party member's wallet.
+                        FareCopper: t.FareCopper);
                     var rebuilt = new Dictionary<Direction, RoomExit>(room.Exits)
                     {
                         [Direction.Teleport] = tele
@@ -1057,6 +1060,7 @@ public sealed class RoomGraphManager
                         + $"'{t.Command}' → {t.Destination}"
                         + (t.MinLevel > 0 ? $" (Level {t.MinLevel}+)" : "")
                         + (t.RequiredClass > 0 ? $" (class {t.RequiredClass} only)" : "")
+                        + (t.FareCopper > 0 ? $" (fare {t.CostText})" : "")
                         + ".");
                     minted = true;
                     break; // one Direction.Teleport slot per room

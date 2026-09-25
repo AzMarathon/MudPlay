@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game.Cash;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 
@@ -411,10 +412,15 @@ public sealed partial class RouteChoiceDialogViewModel
         {
             FreeSummary = $"Walk it — {StepsEta(choice.FreeStepCount, freeEta)}, no teleport";
             GatedSummary = $"Teleport — {StepsEta(choice.GatedStepCount, gatedEta)} — much shorter";
+            // A paid NPC transport charges every person who asks it; the planner only
+            // offers the route when the poorest member can pay, so state the cost.
+            string fare = choice.TeleportFareCopper > 0
+                ? $" Costs {CurrencyFormat.Full(choice.TeleportFareCopper)} per person."
+                : string.Empty;
             TeleportCaveat =
                 $"Teleports via {choice.TeleportLanding ?? "an unknown room"} — a teleport can drop "
                 + "you somewhere deadly (a damaging plane, water with no boat). Whether you survive "
-                + "depends on your character, so the call is yours.";
+                + "depends on your character, so the call is yours." + fare;
             RequirementSummary = string.Empty;
             TrapCaveat = string.Empty;
             AvoidCaveat = string.Empty;

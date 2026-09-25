@@ -734,6 +734,56 @@ public sealed class MovementFilterTests
         Assert.False(filter.IsExitBlocked(GatedExit(20, 0)));  // level OK, no toll
     }
 
+    // ----- IsExitBlocked: NPC ask-transport fare -------------------
+
+    // Seher'Sahham's activate: 1 runic, charged to every person who asks.
+    private static RoomExit FareExit(long fareCopper) =>
+        new(new RoomKey(16, 637), RoomExitHint.Teleport, RawHint: "greet teleport",
+            TextCommands: new[] { "ask Seher'Sahham activate" }, FareCopper: fareCopper);
+
+    [Fact]
+    public void Fare_SelfCannotAfford_BlocksAsFare()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.WealthProvider = () => 999_999;
+        Assert.True(filter.IsExitBlocked(FareExit(1_000_000)));
+        Assert.Equal(ExitBlockReason.Fare, filter.DescribeExitBlock(FareExit(1_000_000)));
+    }
+
+    [Fact]
+    public void Fare_PoorestPartyMemberCannotAfford_Blocks()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // We can pay, but each member pays their own fare — the poorest can't.
+        filter.WealthProvider = () => 5_000_000;
+        filter.PartyWealthProvider = () => 999_999;
+        Assert.True(filter.IsExitBlocked(FareExit(1_000_000)));
+    }
+
+    [Fact]
+    public void Fare_WholePartyAffords_Allows()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.PartyWealthProvider = () => 1_000_000;
+        Assert.False(filter.IsExitBlocked(FareExit(1_000_000)));
+    }
+
+    [Fact]
+    public void Fare_UnknownWealth_DoesNotBlock()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.WealthProvider = () => null;
+        Assert.False(filter.IsExitBlocked(FareExit(1_000_000)));
+    }
+
+    [Fact]
+    public void Fare_FreeTransport_NeverBlocks()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.WealthProvider = () => 0;
+        Assert.False(filter.IsExitBlocked(FareExit(0)));
+    }
+
     // ----- IRoomFilter integration with BfsMapper -------------------
 
     [Fact]
