@@ -497,6 +497,19 @@ there** — treat as close-but-unconfirmed until a Paradigm source or capture pi
   that resolves to a known monster (not already in the room) is appended as an arrival, tripping the
   combat gate a round before the spawn's first swing. Keys on the palette index (3/11), never the RGB.
 
+**Generic movement lines for a monster with no sentence of its own** *([CONFIRMED] 2026-09-24, user + contributor capture, PR #690)*
+- Arrival, compass direction: `"<mob> moves into the from the <dir>."` — the server really drops the
+  word **"room"** on this one form (e.g. `bugbear captain moves into the from the northeast.`), while
+  the vertical siblings are complete: `"… moves into the room from above."` / `"… from below."`.
+- Arrival, directionless: `"<mob> just arrived from <dir|nowhere>."`.
+- Departure: `"<mob> just left to the <dir>."`, and for the vertical pair the direction is an adverb
+  with no "to the": `"… just left upwards."` / `"… just left downwards."` (players leave with the same
+  wording — `Fujin just left upwards.` is in our own captures).
+- **Client note:** `RoomEntryArrival` / `RoomEntryDeparture` match these; the "just arrived" / "just
+  left" branches require a real direction word so chat of the same shape ("I just left downtown.")
+  stays out. Missing the compass arrival was permanent in a **dark** room, which never re-displays an
+  `Also here:` to correct the roster, so auto-combat never engaged the monster.
+
 **Sneak vs hide — both enable backstab** *([CONFIRMED])*
 - **Sneaking** and **hidden** are distinct stealth states and **either one enables a backstab**:
   - *Sneaking* lets you **move** silently and open on a target you approach, but does **not** remove
