@@ -81,7 +81,7 @@ public sealed class GhSweepManager : IDisposable
     private static readonly TimeSpan MinCommandInterval = TimeSpan.FromMilliseconds(800);
 
     // Pause after the game complains about our command rate before resuming the
-    // queue. Matches RoombaSyncSender's clobber backoff, for the same reason:
+    // queue. Matches PacedReplySender's clobber backoff, for the same reason:
     // give the limiter time to forgive before pushing again.
     private static readonly TimeSpan RateLimitBackoff = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan InventoryVerificationTimeout = TimeSpan.FromSeconds(3);

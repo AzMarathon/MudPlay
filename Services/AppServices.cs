@@ -988,6 +988,8 @@ public sealed class AppServices
     // @roomba read-only query handler — reports an item's last-seen gang-house
     // room from GhItemLocations. App-lifetime, like the other query handlers.
     public Game.Remote.RoombaQueryHandler RoombaQuery { get; private set; } = null!;
+    public Game.Remote.LoopShareHandler LoopShare { get; private set; } = null!;
+    public Game.Remote.LoopShareReceiver LoopShareInbox { get; private set; } = null!;
 
     // Requester-side @roomba sync listener — merges another MudPlay client's
     // sighting log into GhItemLocations as replies arrive. App-lifetime; unlike
@@ -4914,17 +4916,18 @@ public sealed class AppServices
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
         BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
         DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
+        // Paced-send scheduler: a UI-thread one-shot (same shape as the combat
+        // switch-dispatch delay) so an @roomba sync / @loop send trickles its lines
+        // out ~800ms apart instead of flooding the channel.
+        Action<TimeSpan, Action> pacedReplyScheduler = (delay, callback) =>
+        {
+            if (delay <= TimeSpan.Zero) { Avalonia.Threading.Dispatcher.UIThread.Post(callback); return; }
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+        };
         RoombaQuery = new Game.Remote.RoombaQueryHandler(RemoteCommands, GhItemLocations, GhRoomLabels, Log,
-            // Paced-send scheduler: a UI-thread one-shot (same shape as the combat
-            // switch-dispatch delay) so @roomba sync trickles its telepaths out
-            // ~800ms apart instead of flooding the channel.
-            paceScheduler: (delay, callback) =>
-            {
-                if (delay <= TimeSpan.Zero) { Avalonia.Threading.Dispatcher.UIThread.Post(callback); return; }
-                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
-                timer.Tick += (_, _) => { timer.Stop(); callback(); };
-                timer.Start();
-            });
+            paceScheduler: pacedReplyScheduler);
         // Adopt an @roomba sync reply only inside the window our own outbound
         // `@roomba sync` opens (NoteSyncRequested, wired from the outbound-chat
         // watcher in MainWindowViewModel). The permission gate is on the responder
@@ -4934,14 +4937,17 @@ public sealed class AppServices
         // Rate-limit clobber watcher: the game drops a command when we type too
         // fast — stock says "You are typing too quickly - command ignored",
         // paradigm "Too many messages sent - please wait …". Either one during a
-        // paced @roomba sync means the last telepath was lost, so poke the sender
-        // to back off and resend it (no-op when no sync is draining).
+        // paced @roomba sync / @loop send means the last telepath was lost, so poke
+        // the senders to back off and resend it (no-op when nothing is draining).
         Router.LineDispatched += line =>
         {
             string t = line.Text;
             if (t.Contains("typing too quickly", StringComparison.OrdinalIgnoreCase)
                 || t.Contains("Too many messages sent", StringComparison.OrdinalIgnoreCase))
+            {
                 RoombaQuery.NoteRateLimitClobber();
+                LoopShare?.NoteRateLimitClobber();   // built later in this constructor
+            }
         };
 
         // Write-side inventory / cash actions — @get-all / @drop-all /
@@ -6565,6 +6571,13 @@ public sealed class AppServices
         RoomSearch = new RoomSearchService(
             RoomGraph, GameData, Bfs, RoomBlacklist, Movement, Log, Favorites, Bosses);
 
+        // @loop send — sender side paces its @loopdata lines the same way as @roomba sync; the
+        // receiver saves a loop we asked for (window opened by our own outbound
+        // `@loop send yes`, wired from the outbound-chat watcher in MainWindowViewModel).
+        LoopShare = new Game.Remote.LoopShareHandler(Loops, Log, paceScheduler: pacedReplyScheduler);
+        LoopShareInbox = new Game.Remote.LoopShareReceiver(Chat, Loops,
+            notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)), Log);
+
         // MovePlayer remote-command handler.
         // Registers @goto, @loop, @lair, @stop, @rego against the
         // RemoteCommandManager. Dispatch routes to the now-existing
@@ -6573,7 +6586,7 @@ public sealed class AppServices
         // can issue these.
         MoveRemote = new Game.Remote.MovePlayerHandler(
             RemoteCommands, RoomSearch, RoomGraph, RoomTracker, Walker, Loops, LoopRunner,
-            Lairs, AutoLair, MovementCoordinator, MovementControl, Favorites, Bosses, Bfs);
+            Lairs, AutoLair, MovementCoordinator, MovementControl, Favorites, Bosses, Bfs, LoopShare);
 
         // Leader-side @comeback. Snapshots the running movement
         // engine, stops it (stop-and-restart, NOT a coordinator gate —

@@ -1164,6 +1164,9 @@ public partial class MainWindowViewModel : ObservableObject
         // Same idea for `@roomba sync`: seeing our own request go out opens the
         // receiver's adopt window so the replies aren't ignored. See OnChatForRoombaSync.
         AppServices.Current.Chat.EntryClassified += OnChatForRoombaSync;
+        // And `@loop send yes`: confirming a player's loop offer opens the window in
+        // which their @loopdata lines are saved. See OnChatForLoopShare.
+        AppServices.Current.Chat.EntryClassified += OnChatForLoopShare;
         // Poller needs the same wire-sender to send @health round-trip
         // requests and the periodic par poll.
         AppServices.Current.PartyPoller.SetWireSender(engineSend);
@@ -3348,6 +3351,27 @@ public partial class MainWindowViewModel : ObservableObject
         if (!outgoing) return;
         if (!e.Message.TrimStart().StartsWith("@roomba sync", StringComparison.OrdinalIgnoreCase)) return;
         AppServices.Current.RoombaSync.NoteSyncRequested();
+    }
+
+    // Our own outbound `@loop send yes` (or `y`) — the player we said it to may now
+    // send their loop. A telepath names that player (the outgoing entry's Speaker is
+    // the recipient), so only their lines are adopted; gangpath / say can't, so any
+    // player there may answer. Same self-outgoing detection as OnChatForRoombaSync.
+    private void OnChatForLoopShare(MudPlay.Game.ChatLogEntry e)
+    {
+        bool telepath = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing;
+        bool selfSpoke = e.Speaker is null || IsSelfName(e.Speaker);
+        bool outgoing = telepath
+                     || ((e.Channel == MudPlay.Game.ChatChannel.Gangpath
+                          || e.Channel == MudPlay.Game.ChatChannel.Local) && selfSpoke);
+        if (!outgoing) return;
+        string[] words = e.Message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length != 3
+            || !words[0].Equals("@loop", StringComparison.OrdinalIgnoreCase)
+            || !words[1].Equals(Game.Remote.LoopShareHandler.SendVerb, StringComparison.OrdinalIgnoreCase)
+            || !Game.Remote.LoopShareHandler.IsConfirm(words[2]))
+            return;
+        AppServices.Current.LoopShareInbox.NoteSendConfirmed(telepath ? e.Speaker : null);
     }
 
     private async void OpenTimerSyncWindow()

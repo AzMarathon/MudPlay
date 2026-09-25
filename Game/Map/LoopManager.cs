@@ -117,6 +117,23 @@ public sealed class LoopManager
     public Loop? Get(string name) =>
         _loops.TryGetValue(name, out Loop? loop) ? loop : null;
 
+    // Resolve a typed loop name the way the remote @loop commands do: an exact
+    // (case-insensitive) name wins outright; otherwise every loop whose name holds
+    // every typed word, in any order ("godfrey bank" → "Bank of Godfrey Loop").
+    // One result is a match; several are an ambiguity for the caller to report;
+    // none is a miss.
+    public IReadOnlyList<Loop> FindByName(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return Array.Empty<Loop>();
+        if (_loops.TryGetValue(query.Trim(), out Loop? exact)) return new[] { exact };
+        Loop[] found = Loops.Where(l => RoomSearchService.NameMatchesTokens(l.Name, query)).ToArray();
+        if (found.Length > 0) return found;
+        // Typed chat drops apostrophes — "kings road" should still find "King's Road",
+        // which the word match splits into "King" + "s".
+        string bare = query.Replace("'", "");
+        return Loops.Where(l => RoomSearchService.NameMatchesTokens(l.Name.Replace("'", ""), bare)).ToArray();
+    }
+
     // Deserialize a single loop file the user browsed to (may live outside the
     // active set's folder). Returns null if it isn't a valid loop. Doesn't add
     // it to the catalogue — the caller decides what to do with it.

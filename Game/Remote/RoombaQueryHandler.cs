@@ -66,7 +66,7 @@ public sealed class RoombaQueryHandler : IDisposable
     private readonly GhItemLocationStore _locations;
     private readonly GhRoomLabelStore _labels;
     private readonly LogService? _log;
-    private readonly RoombaSyncSender _sender;
+    private readonly PacedReplySender _sender;
     private bool _disposed;
 
     public RoombaQueryHandler(RemoteCommandManager engine, GhItemLocationStore locations, GhRoomLabelStore labels,
@@ -79,7 +79,7 @@ public sealed class RoombaQueryHandler : IDisposable
         _locations = locations;
         _labels = labels;
         _log = log;
-        _sender = new RoombaSyncSender(paceScheduler, log);
+        _sender = new PacedReplySender(paceScheduler, log);
 
         if (!RemoteCommandCatalog.TryGetCategory("@roomba", out PlayerRemoteControls category))
             throw new InvalidOperationException(
@@ -186,7 +186,7 @@ public sealed class RoombaQueryHandler : IDisposable
         IReadOnlyList<string> labelLines = GhItemSyncCodec.EncodeLabelLines(labels, MaxBlobCharsPerLine);
         IReadOnlyList<string> itemLines = GhItemSyncCodec.EncodeLines(records, MaxBlobCharsPerLine);
 
-        // Paced out one telepath at a time (RoombaSyncSender) so a big log can't
+        // Paced out one telepath at a time (PacedReplySender) so a big log can't
         // flood the channel or trip the game's burst rate limit — the sync is a
         // background courtesy to the requester, not something that should stall
         // this client's own combat/heal/movement sends.

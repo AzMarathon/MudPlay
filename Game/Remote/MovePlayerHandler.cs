@@ -34,6 +34,7 @@ public sealed class MovePlayerHandler : IDisposable
     private readonly FavoritesStore _favorites;
     private readonly BossStore _bosses;
     private readonly BfsMapper _bfs;
+    private readonly LoopShareHandler _share;
     private bool _disposed;
 
     public MovePlayerHandler(
@@ -50,7 +51,8 @@ public sealed class MovePlayerHandler : IDisposable
         MovementController controller,
         FavoritesStore favorites,
         BossStore bosses,
-        BfsMapper bfs)
+        BfsMapper bfs,
+        LoopShareHandler share)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(search);
@@ -66,6 +68,7 @@ public sealed class MovePlayerHandler : IDisposable
         ArgumentNullException.ThrowIfNull(favorites);
         ArgumentNullException.ThrowIfNull(bosses);
         ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(share);
         _engine = engine;
         _search = search;
         _graph = graph;
@@ -80,6 +83,7 @@ public sealed class MovePlayerHandler : IDisposable
         _favorites = favorites;
         _bosses = bosses;
         _bfs = bfs;
+        _share = share;
 
         Register("@goto", OnGoto);
         Register("@loop", OnLoop);
@@ -264,6 +268,14 @@ public sealed class MovePlayerHandler : IDisposable
         string raw = string.Join(' ', ctx.Args).Trim();
         if (raw.Length == 0) { ctx.Reply("@loop requires a name, coordinate list, or 'last'"); return; }
 
+        // "@loop send <name>" hands the sender a copy of one of our saved loops, after
+        // we confirm with "@loop send yes" / "no" — see LoopShareHandler.
+        if (ctx.Args[0].Equals(LoopShareHandler.SendVerb, StringComparison.OrdinalIgnoreCase))
+        {
+            _share.OnSend(ctx, string.Join(' ', ctx.Args.Skip(1)).Trim());
+            return;
+        }
+
         // "@loop last" re-runs the most recent loop this session — including an
         // ad-hoc, never-saved one (LoopRunner keeps the whole snapshot, not just its
         // name). The fast way to put someone back on their loop after a stop/@stop
@@ -294,26 +306,22 @@ public sealed class MovePlayerHandler : IDisposable
         // in the loop name (order-independent), and it has to single out exactly one
         // loop — "godfrey bank" resolves to "Bank of Godfrey Loop" when it's the only
         // loop carrying both words.
-        Loop? saved = _loops.Loops.FirstOrDefault(l =>
-            string.Equals(l.Name, raw, StringComparison.OrdinalIgnoreCase));
-        if (saved is null)
-        {
-            List<Loop> fuzzy = _loops.Loops
-                .Where(l => RoomSearchService.NameMatchesTokens(l.Name, raw))
-                .ToList();
-            if (fuzzy.Count == 1) saved = fuzzy[0];
-            else if (fuzzy.Count > 1)
-            {
-                ctx.Reply($"'{raw}' matches {fuzzy.Count} loops: "
-                    + string.Join(", ", fuzzy.Take(4).Select(l => $"'{l.Name}'")));
-                return;
-            }
-        }
-
-        if (saved is null) { ctx.Reply($"no saved loop named '{raw}'"); return; }
+        if (ResolveSavedLoop(ctx, _loops, raw) is not { } saved) return;
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Loop);
         _loopRunner.Start(saved);
         ctx.Reply($"starting loop '{saved.Name}' ({saved.Waypoints.Count} rooms)");
+    }
+
+    // One saved loop for a typed name (LoopManager.FindByName), replying on a miss or
+    // an ambiguity. Null when it replied instead of resolving.
+    internal static Loop? ResolveSavedLoop(RemoteCommandContext ctx, LoopManager loops, string query)
+    {
+        IReadOnlyList<Loop> found = loops.FindByName(query);
+        if (found.Count == 1) return found[0];
+        ctx.Reply(found.Count == 0
+            ? $"no saved loop named '{query}'"
+            : $"'{query}' matches {found.Count} loops: " + string.Join(", ", found.Take(4).Select(l => $"'{l.Name}'")));
+        return null;
     }
 
     private void OnLair(RemoteCommandContext ctx)
