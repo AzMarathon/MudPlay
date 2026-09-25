@@ -38,7 +38,8 @@ public static class ExperienceTableCalculator
     // (the @exp reply, the status bar). Tiered so each magnitude reads cleanly:
     //   >= 25h  → "1d 1h 0m"   (rolls up to days rather than a 25+ hour count)
     //   >= 90m  → "4h 10m"     (hours + minutes)
-    //   >= 1m   → "89m"        (plain minutes — 60–89m stays "89m", not "1h 29m")
+    //   >= 10m  → "89m"        (plain minutes — 60–89m stays "89m", not "1h 29m")
+    //   >= 1m   → "4m 12s"     (the last ten minutes count down in seconds)
     //   else    → "9s"
     // The 90-minute / 25-hour thresholds are deliberate: an hour count only earns
     // its "Hh Mm" shape once there's more than an hour and a half left, and days
@@ -47,7 +48,8 @@ public static class ExperienceTableCalculator
     {
         if (ts.TotalHours >= 25) return $"{ts.Days}d {ts.Hours}h {ts.Minutes}m";
         if (ts.TotalMinutes >= 90) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
-        if (ts.TotalMinutes >= 1) return $"{(int)ts.TotalMinutes}m";
+        if (ts.TotalMinutes >= 10) return $"{(int)ts.TotalMinutes}m";
+        if (ts.TotalMinutes >= 1) return $"{(int)ts.TotalMinutes}m {ts.Seconds}s";
         return $"{ts.Seconds}s";
     }
 

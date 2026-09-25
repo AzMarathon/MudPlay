@@ -22,6 +22,8 @@
 - The `@join` nag isn't cancelled by a member's automatic `@where`, and a member left in a quiet `[Invited]` slot is re-invited and nagged when seen
 - A hand `train stats` with nothing in the CP plan to apply (e.g. before the `train` that earns the level's CP) says so in the Program log
 - A CP plan applied from your own `train stats` clears that level's row from the CP Allocation tab, as Train Now does
+- TNL counts down like a timer on the status bar, Session Stats and the Party window — one shared clock, so all three match — resetting only when the estimate really changes
+- TNL under 10 minutes shows minutes and seconds (`4m 12s`), under a minute just seconds
 - bug reports addressed: stock-20260924-011014, stock-20260924-013525, stock-20260924-145334, stock-20260924-145545, stock-20260924-145644, stock-20260924-151140, stock-20260924-163156
 
 ## 3.104.17

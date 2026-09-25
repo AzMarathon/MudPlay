@@ -1137,6 +1137,19 @@ public sealed class AppServices
     // experience-gain line; reset on the session boundary.
     public Game.Combat.SessionActivityTracker SessionActivity { get; private set; } = null!;
 
+    // Our own time to next level: the banked-aware estimate at the session exp/hour,
+    // run through ONE countdown clock that Session Stats, the status bar and the
+    // Party window's self row all read — so they show the same figure, counting down
+    // like a timer instead of each recomputing (and jumping) on its own.
+    private readonly Game.Calculators.TnlCountdown _selfTnl = new();
+
+    public (Game.Calculators.TimeToLevelEstimator.Result Estimate, TimeSpan? Remaining) SelfTimeToLevel()
+    {
+        Game.Calculators.TimeToLevelEstimator.Result est = Game.Calculators.TimeToLevelEstimator.Estimate(
+            PlayerStats, GameData, SessionActivity.Snapshot().ExperiencePerHour);
+        return (est, _selfTnl.Remaining(est.Eta, DateTimeOffset.UtcNow));
+    }
+
     // Per-loop-step HP/MA min-max profile for the Session Stats "HP/MA History"
     // graph. Fed by the prompt scanner (gated on an actively-stepping loop) keyed
     // by the live loop step index; cleared at each new loop start and the session
@@ -6669,6 +6682,7 @@ public sealed class AppServices
             // The @level probe's last reading — lets the Party window put a level in
             // front of the class for members that don't report.
             recordedLevel: name => Players.Find(name)?.Level,
+            selfTimeToLevel: () => SelfTimeToLevel().Remaining,
             log: Log);
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);

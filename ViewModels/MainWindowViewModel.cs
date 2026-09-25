@@ -1988,9 +1988,8 @@ public partial class MainWindowViewModel : ObservableObject
     {
         string rate = $"{Game.Combat.RateText.Compact(xpHr)}/hr";
         if (xpHr <= 0) return rate;
-        Game.Calculators.TimeToLevelEstimator.Result est = Game.Calculators.TimeToLevelEstimator.Estimate(
-            AppServices.Current.PlayerStats, AppServices.Current.GameData, xpHr);
-        if (est.Eta is not { } tnl) return rate;
+        (Game.Calculators.TimeToLevelEstimator.Result est, TimeSpan? remaining) = AppServices.Current.SelfTimeToLevel();
+        if (remaining is not { } tnl) return rate;
         string time = tnl <= TimeSpan.Zero ? "ready"
             : Game.Calculators.ExperienceTableCalculator.FormatTimeToLevel(tnl);
         return $"{rate} - TNL: {time} (+{est.BankableLevelsFractional:0.00} lvls)";
@@ -5021,6 +5020,7 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.PlayerStats,
                 AppServices.Current.GameData,
                 AppServices.Current.Currency,
+                AppServices.Current.SelfTimeToLevel,
                 OpenTransactionHistory,
                 OpenPlayersSeen),
         };

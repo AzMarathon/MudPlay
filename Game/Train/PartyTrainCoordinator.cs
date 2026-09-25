@@ -82,6 +82,14 @@ public sealed class PartyTrainCoordinator : IDisposable
     private readonly Func<int> _selfLevel;
     private readonly Func<long> _selfExp;
     private readonly Func<string, int?> _recordedLevel;
+    // Our own time to next level off the shared TNL clock (AppServices.SelfTimeToLevel),
+    // so the self row matches Session Stats and the status bar.
+    private readonly Func<TimeSpan?> _selfTimeToLevel;
+    // Each other member's TNL as a running countdown (see TnlCountdown), so their
+    // line counts down between readings instead of jumping with our rate.
+    private readonly Dictionary<string, Calculators.TnlCountdown> _memberTnl = new(StringComparer.OrdinalIgnoreCase);
+    // The Party-window lines redraw this often while shown, so the TNLs tick.
+    private static readonly TimeSpan DisplayInterval = TimeSpan.FromSeconds(1);
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
@@ -159,6 +167,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         Func<int> selfLevel,
         Func<long> selfExp,
         Func<string, int?> recordedLevel,
+        Func<TimeSpan?> selfTimeToLevel,
         Func<DateTimeOffset>? now = null,
         LogService? log = null)
     {
@@ -184,12 +193,14 @@ public sealed class PartyTrainCoordinator : IDisposable
         _selfLevel = selfLevel ?? throw new ArgumentNullException(nameof(selfLevel));
         _selfExp = selfExp ?? throw new ArgumentNullException(nameof(selfExp));
         _recordedLevel = recordedLevel ?? throw new ArgumentNullException(nameof(recordedLevel));
+        _selfTimeToLevel = selfTimeToLevel ?? throw new ArgumentNullException(nameof(selfTimeToLevel));
         _now = now ?? (() => DateTimeOffset.Now);
         _log = log;
 
         _party.PropertyChanged += OnPartyChanged;
         _party.Members.CollectionChanged += OnRosterChanged;
         _armTimer(TickInterval, Tick);
+        _armTimer(DisplayInterval, DisplayTick);
     }
 
     // ----- bug report / status surface -------------------------------------
@@ -221,6 +232,19 @@ public sealed class PartyTrainCoordinator : IDisposable
         finally
         {
             _armTimer(TickInterval, Tick);
+        }
+    }
+
+    private void DisplayTick()
+    {
+        if (_disposed) return;
+        try
+        {
+            if (_party.IsInParty && Settings.AutoTrainParty) RefreshTrainInfo();
+        }
+        finally
+        {
+            _armTimer(DisplayInterval, DisplayTick);
         }
     }
 
@@ -646,6 +670,7 @@ public sealed class PartyTrainCoordinator : IDisposable
             _reports.Remove(name);
             _levelReplies.Remove(name);
             _announced.Remove(name);
+            _memberTnl.Remove(name);
         }
     }
 
@@ -960,26 +985,49 @@ public sealed class PartyTrainCoordinator : IDisposable
             int? canTrain = show && !m.IsSelf && _announced.TryGetValue(GivenName(m.Name), out int a) && a > level
                 ? a : null;
 
-            string text = status is { } st ? RowText(st, rate, gain, canTrain)
-                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.Needed, r2.TheirEta, rate, Math.Max(0, _selfExp() - r2.OurExpAt),
-                    canTrain, otherClient: !Speaks(GivenName(m.Name)))
+            string given = GivenName(m.Name);
+            TimeSpan? tnl = null;
+            if (status is not null && m.IsSelf) tnl = _selfTimeToLevel();
+            else if (status is { } rs)
+            {
+                long exp = rs.Exp > 0 ? rs.Exp + gain : 0;
+                tnl = MemberTnl(given, rs.NextExp > 0 && exp > 0 ? rs.NextExp - exp : null, rate);
+            }
+            else if (show && reply is { Needed: { } needed } rr)
+                tnl = MemberTnl(given, needed - Math.Max(0, _selfExp() - rr.OurExpAt), rate);
+
+            string text = status is { } st ? RowText(st, gain, tnl, canTrain)
+                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.Needed, r2.TheirEta, Math.Max(0, _selfExp() - r2.OurExpAt),
+                    tnl, canTrain, otherClient: !Speaks(given))
                 : canTrain is { } c ? $"can train L{c}"
                 : "";
             if (m.TrainInfo != text) m.TrainInfo = text;
         }
     }
 
-    // "4,120,331 xp · TNL ~1h 5m · ready +2 (12,345c)". Readings aren't refreshed on a
+    // A member's exp still to go, at our rate (the party shares the kills), run
+    // through its own countdown so the line ticks down rather than jumping.
+    private TimeSpan? MemberTnl(string given, long? expLeft, double ourRate)
+    {
+        TimeSpan? estimate = expLeft is not { } left ? null
+            : left <= 0 ? TimeSpan.Zero
+            : Calculators.ExperienceTableCalculator.CalcTimeToLevel(left, 0, (long)ourRate);
+        if (!_memberTnl.TryGetValue(given, out Calculators.TnlCountdown? clock))
+            _memberTnl[given] = clock = new Calculators.TnlCountdown();
+        return clock.Remaining(estimate, _now());
+    }
+
+    // "4,120,331 xp · TNL 1h 5m · ready +2 (12,345c)". Readings aren't refreshed on a
     // timer (the member pushes its own changes), so between reports the exp is the
-    // report plus the exp WE've gained since (gain), and the TNL is worked from that.
-    // A member that announced a trainable level (canTrain) but isn't going to the
-    // trainer with us — off, blocked, or not yet past its own gates — says so ahead of
-    // its state: "can train L2 · party train off".
-    private static string RowText(PartyTrainStatus s, double ourRate, long gain, int? canTrain = null)
+    // report plus the exp WE've gained since (gain); tnl is the row's running
+    // countdown. A member that announced a trainable level (canTrain) but isn't going
+    // to the trainer with us — off, blocked, or not yet past its own gates — says so
+    // ahead of its state: "can train L2 · party train off".
+    private static string RowText(PartyTrainStatus s, long gain, TimeSpan? tnl, int? canTrain = null)
     {
         long exp = s.Exp > 0 ? s.Exp + gain : 0;
         string expText = exp > 0 ? $"{exp:N0} xp" : "? xp";
-        string tnlText = $"TNL {Remaining(s.NextExp > 0 && exp > 0 ? s.NextExp - exp : null, ourRate) ?? "?"}";
+        string tnlText = $"TNL {FormatTnl(tnl) ?? "?"}";
         string state = s.Readiness switch
         {
             PartyTrainReadiness.Ready => $"ready +{s.LevelsToTrain} ({s.CostCopper:N0}c)",
@@ -998,7 +1046,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     // while our rate is unknown. An announced trainable level (canTrain) outranks the
     // reading, which predates it. otherClient tags a member on another client (or an
     // older MudPlay), which is why it can't report.
-    private static string LevelReplyText(int level, long? needed, string? theirEta, double ourRate, long gain,
+    private static string LevelReplyText(int level, long? needed, string? theirEta, long gain, TimeSpan? tnl,
         int? canTrain = null, bool otherClient = true)
     {
         string tag = otherClient ? " · other client" : "";
@@ -1006,20 +1054,18 @@ public sealed class PartyTrainCoordinator : IDisposable
         if (needed is not { } n) return $"L{level}{tag}";
         if (n <= 0) return $"L{level + 1} reached · can train{tag}";
         long left = Math.Max(0, n - gain);
-        string when = Remaining(left, ourRate) ?? theirEta ?? "?";
+        string when = FormatTnl(tnl) ?? theirEta ?? "?";
         return $"{left:N0} to L{level + 1} · TNL {when}{tag}";
     }
 
-    // Exp still to go, as a time at our rate: "~1h 5m", "due" once the estimate says
-    // it's reached (the next report / re-ask settles it), null with no rate or figure.
-    private static string? Remaining(long? expLeft, double ourRate)
+    // "due" once the countdown says it's reached (the next report / re-ask settles
+    // it), null with no rate or figure.
+    private static string? FormatTnl(TimeSpan? tnl) => tnl switch
     {
-        if (expLeft is not { } left) return null;
-        if (left <= 0) return "due";
-        return Calculators.ExperienceTableCalculator.CalcTimeToLevel(left, 0, (long)ourRate) is { } t
-            ? $"~{Calculators.ExperienceTableCalculator.FormatTimeToLevel(t)}"
-            : null;
-    }
+        null => null,
+        { } t when t <= TimeSpan.Zero => "due",
+        { } t => Calculators.ExperienceTableCalculator.FormatTimeToLevel(t),
+    };
 
     // ----- shared -----------------------------------------------------------
 

@@ -112,6 +112,9 @@ public sealed class ExperienceTableCalculatorTests
 
     [Theory]
     [InlineData(0, 0, 30, "30s")]            // sub-minute → seconds
+    [InlineData(0, 4, 12, "4m 12s")]         // under 10m → minutes and seconds
+    [InlineData(0, 9, 59, "9m 59s")]
+    [InlineData(0, 10, 0, "10m")]            // 10m and up → plain minutes
     [InlineData(0, 45, 0, "45m")]            // < 90m → plain minutes
     [InlineData(0, 89, 0, "89m")]            // 60–89m stays minutes, not "1h 29m"
     [InlineData(0, 90, 0, "1h 30m")]         // 90m → h/m cutover
