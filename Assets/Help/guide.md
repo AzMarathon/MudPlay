@@ -344,6 +344,7 @@ The panel lists clickable links to everything attached to the room:
 - **Obvious exits** — click one to re-root the map on that neighbour.
 - **Floor items** — everything the room drops on the ground (static placements plus anything its `roomitem` command scatters).
 - **Shop and room spell** — when the room hosts a shop, and its cast-on-enter room spell.
+- **NPC transports** — teleports a monster standing in the room offers when you ask it a keyword, e.g. `ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 100,000 copper (x10)`. These live on the monster, not the room, so they're listed apart from Room commands. Click one to re-root the map on the destination.
 
 **Room commands** lists what you can type in that room and what it does — `touch statue / move statue — summons obsidian statue`, `give crane totem — teaches form of the crane`, `pull lever — drops frozen hydra in the room`, `hand over totem — takes crane totem`, `break apparatus — grants an ability` — with the cost appended when the command charges (`summon healer — summons healer — costs 100 Gold`). Synonyms that do the same thing share one row.
 
@@ -385,6 +386,7 @@ Hovering a room shows its details in a tooltip:
 
 - **Monsters** — split into **Placed** (a boss / NPC fixture), **Assigned** (roams / rarely spawns there), and **Lair** (a consistent lair spawner), each with its game-data record number (e.g. `Dark Goblin Archer(#48)`). The lair's **Max Regen** sits directly beneath the Lair line.
 - **Floor items, shop / room spell, exits, and lighting** — everything else attached to the room.
+- **NPC transports** — the ask-a-keyword teleports of a monster placed there, with destination and any price.
 - **Room commands** — anything you can type there: teleports and paid services, and the commands that act on the room itself — what they **summon**, the spell they **teach**, the ability they **grant**, and the item they **drop** or **take**.
 
 (A locked door whose key id doesn't match any item in the set — a game-data typo, e.g. 8/462's north gate recording `Key: 1` — is shown as the plain door it behaves like, listing the picklocks/strength that actually opens it, rather than naming a key that doesn't exist.)
@@ -1324,7 +1326,7 @@ Each configured spell rung **substitutes** its spell for this monster and runs t
 
 The **Physical attack** box replaces the weapon command **only on a round the engine already chose physical** — it does not force physical or suppress the spell rungs, and carries no mana/cap gating.
 
-The read-only pane's **Spawns In** list shows each room's lair size (e.g. `1/2122 (lair: 2)`). Every spell a monster references — its **spell-attacks, per-hit, create, death, and between-rounds** spells — links to that spell's record and shows the spell's number (`[#N]`), and each entry in the **Summons** list links to the summoned monster's record.
+A monster's **Greet** row lists every keyword you can ask it as a chip; click one to see what happens when you ask it. A keyword that **teleports** you is labelled `(teleport)`, and in its details the destination room is a link that opens the map on that room. The read-only pane's **Spawns In** list shows each room's lair size (e.g. `1/2122 (lair: 2)`). Every spell a monster references — its **spell-attacks, per-hit, create, death, and between-rounds** spells — links to that spell's record and shows the spell's number (`[#N]`), and each entry in the **Summons** list links to the summoned monster's record.
 
 (Combat message wording and per-monster flavor prefixes are no longer edited here — hits, misses, dodges, blocks, and deaths are recognized generically from line colour and the experience line, and flavor adjectives come from one shared vocabulary you edit under **Flavor Prefixes** (below), so you never hand-enter a monster's messages or prefixes.)
 

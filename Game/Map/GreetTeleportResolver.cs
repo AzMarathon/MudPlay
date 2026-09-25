@@ -30,8 +30,12 @@ public static class GreetTeleportResolver
     // One ask-transport exit: the verbatim `ask <noun> <keyword>` command, the
     // room it lands in, any level floor the game gates the transport behind (0 when
     // ungated by level), and any single class the transport is restricted to
-    // (0 when ungated by class — a `class N` directive, N = Classes.Number).
-    public readonly record struct GreetTeleport(string Command, RoomKey Destination, int MinLevel, int RequiredClass);
+    // (0 when ungated by class — a `class N` directive, N = Classes.Number). CostText
+    // is the `price` on the teleporting line, worded like the greet decoder's Cost line
+    // ("100,000 copper (x10)"), or empty when the transport is free. Display only —
+    // what the game does with a repeated price directive isn't modelled.
+    public readonly record struct GreetTeleport(string Command, RoomKey Destination, int MinLevel, int RequiredClass,
+        string CostText = "");
 
     // Matches the door decoder's depth cap — a malformed self-referential greet
     // chain can't spin the resolver; the per-walk visited set breaks true cycles.
@@ -65,9 +69,9 @@ public static class GreetTeleportResolver
             if (pointer <= 0) continue;
 
             if (TryResolveUngatedTeleport(store, pointer, new HashSet<int>(),
-                    out RoomKey dest, out int minLevel, out int requiredClass))
+                    out RoomKey dest, out int minLevel, out int requiredClass, out string cost))
             {
-                yield return new GreetTeleport($"ask {noun} {keyword}", dest, minLevel, requiredClass);
+                yield return new GreetTeleport($"ask {noun} {keyword}", dest, minLevel, requiredClass, cost);
             }
         }
     }
@@ -92,11 +96,12 @@ public static class GreetTeleportResolver
     // check the walker reacts to (verify-and-retry), so the transport stays
     // routable for its class.
     private static bool TryResolveUngatedTeleport(TBInfoStore store, int number,
-        HashSet<int> visited, out RoomKey dest, out int minLevel, out int requiredClass)
+        HashSet<int> visited, out RoomKey dest, out int minLevel, out int requiredClass, out string cost)
     {
         dest = default;
         minLevel = 0;
         requiredClass = 0;
+        cost = string.Empty;
         int depth = 0;
         while (number > 0 && depth++ < MaxDepth && visited.Add(number))
         {
@@ -115,6 +120,9 @@ public static class GreetTeleportResolver
                 RoomKey lineDest = default;
                 bool lineHasDest = false;
                 bool lineGated = false;
+                int linePrice = 0;
+                int linePriceCount = 0;
+                string lineCoin = " copper";
 
                 foreach (string tokenRaw in rawLine.Split(':'))
                 {
@@ -129,6 +137,15 @@ public static class GreetTeleportResolver
                     // `class N` (N = Classes.Number) restricts this branch line to a
                     // single class; surfaced as the edge's ClassGate so a character
                     // of the wrong class is filtered out.
+                    else if (token.StartsWith("price ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        int amount = GuardDoorCommandResolver.FirstIntAfter(token, "price ");
+                        if (amount > 0)
+                        {
+                            if (linePriceCount == 0) { linePrice = amount; lineCoin = CoinOf(token); }
+                            linePriceCount++;
+                        }
+                    }
                     else if (token.StartsWith("class ", StringComparison.OrdinalIgnoreCase))
                     {
                         int cls = GuardDoorCommandResolver.FirstIntAfter(token, "class ");
@@ -146,12 +163,29 @@ public static class GreetTeleportResolver
                     dest = lineDest;
                     minLevel = lineMinLevel;
                     requiredClass = lineClass;
+                    if (linePriceCount > 0)
+                        cost = $"{linePrice:N0}{lineCoin}" + (linePriceCount > 1 ? $" (x{linePriceCount})" : "");
                     return true;
                 }
             }
             return false; // first non-empty block decides
         }
         return false;
+    }
+
+    // The coin a `price` directive names, by its trailing letter — the same reading the
+    // greet decoder's Cost line uses (TBInfoActionDecoder.Coin).
+    private static string CoinOf(string token)
+    {
+        char last = token.Length > 0 ? char.ToUpperInvariant(token[^1]) : ' ';
+        return last switch
+        {
+            'R' => " runic",
+            'P' => " platinum",
+            'G' => " gold",
+            'S' => " silver",
+            _   => " copper",
+        };
     }
 
     // Directives that make a greet effect conditional on alignment or a quest

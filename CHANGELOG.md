@@ -1,5 +1,10 @@
 # Version history
 
+## 3.105.9
+
+- A monster's ask-keyword teleports now show on its room: an **NPC transports** section in the Navigation Room info and the map tooltip (`ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 100,000 copper (x10)`), clickable to the destination
+- On a monster record, a greet keyword that teleports is labelled `(teleport)`, its details wrap instead of cutting off, and the destination room is a link
+
 ## 3.105.8
 
 - `@quest <name|flag>` marks the quests its live flag read proves done (e.g. `Abil: 126 step 6` ticks Good align 1) and reports the updated marks

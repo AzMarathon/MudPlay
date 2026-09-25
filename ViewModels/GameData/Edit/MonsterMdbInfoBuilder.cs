@@ -618,7 +618,7 @@ public sealed class MonsterMdbInfoBuilder
     {
         List<GreetKeyword> keywords = new();
         string? keyword = null;
-        List<string> effects = new();
+        List<GreetEffect> effects = new();
         foreach (TBInfoActionLine line in lines)
         {
             if (line.Depth == 0)
@@ -626,11 +626,12 @@ public sealed class MonsterMdbInfoBuilder
                 if (keyword is not null)
                     keywords.Add(new GreetKeyword(keyword, effects));
                 keyword = line.Text;
-                effects = new List<string>();
+                effects = new List<GreetEffect>();
             }
             else if (keyword is not null)
             {
-                effects.Add(new string(' ', (line.Depth - 1) * 2) + line.Text);
+                string text = new string(' ', (line.Depth - 1) * 2) + line.Text;
+                effects.Add(new GreetEffect(text, line.Room is { } room ? new RoomLink(text, room) : null));
             }
         }
         if (keyword is not null)

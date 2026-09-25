@@ -379,7 +379,7 @@
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:GreetKeyword">
                                                         <Button Classes="MdbLink"
-                                                                Content="{Binding Keyword}"
+                                                                Content="{Binding ChipLabel}"
                                                                 Margin="0,0,10,2">
                                                             <Button.Flyout>
                                                                 <Flyout Placement="Bottom">
@@ -391,15 +391,30 @@
                                                                         <ScrollViewer MaxHeight="360"
                                                                                       Padding="0,0,16,0"
                                                                                       VerticalScrollBarVisibility="Auto"
-                                                                                      HorizontalScrollBarVisibility="Auto">
+                                                                                      HorizontalScrollBarVisibility="Disabled">
                                                                             <ItemsControl ItemsSource="{Binding Effects}">
                                                                                 <ItemsControl.ItemTemplate>
-                                                                                    <DataTemplate x:DataType="x:String">
-                                                                                        <TextBlock Text="{Binding}"
-                                                                                                   Foreground="{StaticResource ChromeFgBrush}"
-                                                                                                   FontFamily="{StaticResource FontMono}"
-                                                                                                   FontSize="11"
-                                                                                                   TextWrapping="NoWrap" Margin="0,1"/>
+                                                                                    <!-- Wrapped, not clipped: a teleport line names its
+                                                                                         destination room, and at NoWrap the name and its
+                                                                                         map/room ran off the edge. A teleport line is a
+                                                                                         link that opens the map on that room. -->
+                                                                                    <DataTemplate x:DataType="vm:GreetEffect">
+                                                                                        <Panel Margin="0,1">
+                                                                                            <TextBlock Text="{Binding Text}"
+                                                                                                       IsVisible="{Binding IsPlain}"
+                                                                                                       Foreground="{StaticResource ChromeFgBrush}"
+                                                                                                       FontFamily="{StaticResource FontMono}"
+                                                                                                       FontSize="11"
+                                                                                                       TextWrapping="Wrap"/>
+                                                                                            <Button Classes="MdbLink"
+                                                                                                    IsVisible="{Binding IsLink}"
+                                                                                                    Command="{Binding Room.Open, FallbackValue={x:Null}}"
+                                                                                                    FontFamily="{StaticResource FontMono}"
+                                                                                                    FontSize="11"
+                                                                                                    ToolTip.Tip="Open the map on this room">
+                                                                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                                                                                            </Button>
+                                                                                        </Panel>
                                                                                     </DataTemplate>
                                                                                 </ItemsControl.ItemTemplate>
                                                                             </ItemsControl>

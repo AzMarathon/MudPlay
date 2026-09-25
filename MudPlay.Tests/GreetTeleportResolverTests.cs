@@ -190,4 +190,35 @@ public sealed class GreetTeleportResolverTests : IDisposable
         Assert.Empty(GreetTeleportResolver.Resolve(store, 366, null));
         Assert.Empty(GreetTeleportResolver.Resolve(store, 366, "  "));
     }
+
+    // Seher'Sahham (monster 715, both shipped sets): "activate" charges a price
+    // (repeated ten times on the line) then teleports to 16/637; "home" is a free
+    // teleport to 1/140. Both surface, the paid one with its cost worded like the
+    // greet decoder's Cost line.
+    [Fact]
+    public void Resolve_SeherSahham_BothTeleportsWithTheActivateCost()
+    {
+        string price = string.Join(":", Enumerable.Repeat("price 100000 2446", 10));
+        string json = $$"""
+            [
+              { "Number": 2766, "LinkTo": 0,
+                "Action": "fee:2769\nactivate:2777\nhome:2779\n", "Called From": "Monster #715" },
+              { "Number": 2769, "LinkTo": 0, "Action": "message 2440\n", "Called From": "" },
+              { "Number": 2777, "LinkTo": 2778, "Action": null, "Called From": "" },
+              { "Number": 2778, "LinkTo": 0, "Action": "{{price}}:message 2447:teleport 637 16\n", "Called From": "" },
+              { "Number": 2779, "LinkTo": 2780, "Action": null, "Called From": "" },
+              { "Number": 2780, "LinkTo": 0, "Action": "message 2451:teleport 140 1\n", "Called From": "" }
+            ]
+            """;
+        TBInfoStore store = NewStore(json);
+
+        var teleports = GreetTeleportResolver.Resolve(store, 2766, "Seher'Sahham").ToList();
+
+        Assert.Equal(2, teleports.Count);
+        Assert.Equal("ask Seher'Sahham activate", teleports[0].Command);
+        Assert.Equal(new RoomKey(16, 637), teleports[0].Destination);
+        Assert.Equal("100,000 copper (x10)", teleports[0].CostText);
+        Assert.Equal(new RoomKey(1, 140), teleports[1].Destination);
+        Assert.Equal(string.Empty, teleports[1].CostText);
+    }
 }

@@ -1249,6 +1249,20 @@
                                             </ItemsControl>
                                         </StackPanel>
 
+                                        <!-- NPC transports: a placed monster's ask-keyword teleports.
+                                             Clicking one re-roots the map on the destination. -->
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasNpcTransports}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="NPC transports"/>
+                                            <ItemsControl ItemsSource="{Binding RoomInfo.NpcTransports}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="gd:RoomDetailLink">
+                                                        <Button Classes="RecordLink"
+                                                                Content="{Binding Text}" Command="{Binding Open}"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
                                         <!-- Shop -->
                                         <StackPanel IsVisible="{Binding RoomInfo.HasShop}" Spacing="1">
                                             <TextBlock Classes="RoomInfoGroup" Text="Shop"/>

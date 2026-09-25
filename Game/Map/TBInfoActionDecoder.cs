@@ -9,7 +9,8 @@ namespace MudPlay.Game.Map;
 // (already resolved to names); Depth is the indent level — 0 is the player
 // command keyword, deeper levels are the effects/flags that command triggers.
 // The view turns Depth into leading spaces so the tree reads as an outline.
-public readonly record struct TBInfoActionLine(string Text, int Depth);
+// Room is the destination of a teleport line, so a view can link it; null otherwise.
+public readonly record struct TBInfoActionLine(string Text, int Depth, RoomKey? Room = null);
 
 // Faithful port of MegaMUD Explorer's textblock command decoder (its
 // AddCommandNode). A monster's greet textblock lists player-typeable keywords,
@@ -64,9 +65,9 @@ public static class TBInfoActionDecoder
 
         private bool Capped => Lines.Count >= MaxLines;
 
-        private void Emit(string text, int depth)
+        private void Emit(string text, int depth, RoomKey? room = null)
         {
-            if (!Capped) Lines.Add(new TBInfoActionLine(text, depth));
+            if (!Capped) Lines.Add(new TBInfoActionLine(text, depth, room));
         }
 
         // A greet block's lines are `keyword:pointer`. Group synonyms sharing a
@@ -345,7 +346,7 @@ public static class TBInfoActionDecoder
             else if (Contains(tok, "teleport "))
             {
                 (int room, int map) = ParseTeleport(tok);
-                if (room != 0 && map != 0) Emit($"Teleport: {RoomName(map, room)}", depth);
+                if (room != 0 && map != 0) Emit($"Teleport: {RoomName(map, room)}", depth, new RoomKey(map, room));
                 else Emit(tok.Trim(), depth);
             }
             else if (Contains(tok, "remoteaction "))

@@ -108,6 +108,12 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     public ObservableCollection<RoomDetailLink> RoomCommands { get; } = new();
     public bool HasRoomCommands => RoomCommands.Count > 0;
 
+    // Teleports a monster placed here offers when asked a keyword — they live on the
+    // monster's greet, not the room's CMD chain, so Room commands never listed them.
+    // Clicking one re-roots the map on the destination.
+    public ObservableCollection<RoomDetailLink> NpcTransports { get; } = new();
+    public bool HasNpcTransports => NpcTransports.Count > 0;
+
     // Populate every section for the clicked room. Called from
     // NavigationViewModel.OnRoomLeftClicked on any left-click.
     public void Show(RoomKey key)
@@ -122,6 +128,7 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         Exits.Clear();
         FloorItems.Clear();
         RoomCommands.Clear();
+        NpcTransports.Clear();
         ShopLink = null;
         RoomSpellLink = null;
         HasRoom = true;
@@ -199,6 +206,15 @@ public sealed partial class RoomInfoViewModel : ObservableObject
             string label = $"{string.Join(" / ", row.Keywords)} — {row.EffectText}";
             if (row.CostText.Length > 0) label += $" — {row.CostText}";
             RoomCommands.Add(new RoomDetailLink(label, null, EffectRowCommand(row)));
+        }
+
+        foreach (RoomTooltipBuilder.NpcTransport t in RoomTooltipBuilder.ResolveNpcTransports(
+                     room, _services.GameData, _services.MonsterSpawns, _services.TBInfo))
+        {
+            RoomKey dest = t.Destination;
+            NpcTransports.Add(new RoomDetailLink(
+                RoomTooltipBuilder.FormatNpcTransport(t, _services.RoomGraph), null,
+                new RelayCommand(() => _services.NavigateToRoom(dest))));
         }
 
         // Shop — one link that opens the interactive room-detail popup for this room (the
@@ -280,5 +296,6 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         OnPropertyChanged(nameof(HasExits));
         OnPropertyChanged(nameof(HasFloorItems));
         OnPropertyChanged(nameof(HasRoomCommands));
+        OnPropertyChanged(nameof(HasNpcTransports));
     }
 }
