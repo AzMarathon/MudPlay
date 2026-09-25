@@ -167,7 +167,7 @@
                             <Flyout Placement="Bottom">
                                 <StackPanel MinWidth="300" Spacing="6">
                                     <TextBlock Classes="FieldLabel" TextWrapping="Wrap" MaxWidth="320"
-                                               Text="Checkbox: show the attack in Your Matchup.   Radio: use it for Est. Rounds to Kill."/>
+                                               Text="Checkbox: show the attack in Your Matchup.   Radio: use it for Est. Rounds to Kill — or pick 'Fastest of all my attacks' to use whichever of your attacks (melee or spell) kills each monster soonest."/>
                                     <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
                                         <ItemsControl ItemsSource="{Binding AttackOptions}">
                                             <ItemsControl.ItemTemplate>
@@ -175,6 +175,9 @@
                                                     <Grid ColumnDefinitions="Auto,Auto,*" Margin="0,2">
                                                         <CheckBox Grid.Column="0" VerticalAlignment="Center"
                                                                   IsChecked="{Binding Shown, Mode=TwoWay}"
+                                                                  Opacity="{Binding ShownToggleOpacity}"
+                                                                  IsHitTestVisible="{Binding CanToggleShown}"
+                                                                  Focusable="{Binding CanToggleShown}"
                                                                   ToolTip.Tip="Show this attack in Your Matchup"/>
                                                         <RadioButton Grid.Column="1" GroupName="MiRoundsAttack" Margin="10,0"
                                                                      VerticalAlignment="Center"
@@ -267,7 +270,13 @@
                                        Minimum="1" Maximum="999999" Increment="1"
                                        FormatString="0" ShowButtonSpinner="True"
                                        Width="110" MinWidth="110"
-                                       ToolTip.Tip="A monster the selected attack needs more than this many rounds to kill is filtered OUT of the list, so you see only fights you can finish quickly. Raise it to include tougher monsters. Saved automatically, per character."/>
+                                       ToolTip.Tip="A monster the Est. Rounds to Kill attack (see Edit Attacks) needs more than this many rounds to kill is filtered OUT of the list, so you see only fights you can finish quickly. Raise it to include tougher monsters. Saved automatically, per character."/>
+                        <!-- The cap is otherwise a silent filter: say how many monsters it is
+                             currently hiding so a low value can't quietly gut the list. -->
+                        <TextBlock Classes="FieldLabel" VerticalAlignment="Center"
+                                   Text="{Binding CapHiddenText}" IsVisible="{Binding HasCapHidden}"
+                                   Foreground="{StaticResource AccentAmberBrush}"
+                                   ToolTip.Tip="Monsters that pass your other filters but take more rounds than the cap to kill, so they're left out of the list. Raise Max Rnds to Kill to see them."/>
                     </StackPanel>
                     <CheckBox Content="Hide regen timers" IsChecked="{Binding HideRegenMonsters, Mode=TwoWay}"
                               VerticalAlignment="Center" Margin="0,0,0,4"

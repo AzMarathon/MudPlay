@@ -94,11 +94,12 @@ public sealed class MonsterIntelViewModelTests : IDisposable
     }
 
     // Edit Attacks picker: the roster always offers the usable melee attacks
-    // (Normal + Bash at least), exactly one is the rounds-to-kill basis (default
-    // Normal), the radio is single-select, and both the pick and a hide persist
-    // to the Character tier.
+    // (Normal + Bash at least) behind a leading "fastest of all" basis row, exactly
+    // one row is the rounds-to-kill basis (default: the fastest-of-all row), the
+    // radio is single-select, and both the pick and a hide persist to the
+    // Character tier.
     [Fact]
-    public void EditAttacks_DefaultsToNormal_SingleSelect_AndPersists()
+    public void EditAttacks_DefaultsToFastestOfAll_SingleSelect_AndPersists()
     {
         var cache = new GameDataCache(_root);
         cache.SwitchSet("test-set");
@@ -117,13 +118,17 @@ public sealed class MonsterIntelViewModelTests : IDisposable
             observations: null, playerState: null))
         {
             Assert.NotEmpty(vm.AttackOptions);
-            AttackPickRow normal = vm.AttackOptions.Single(o => o.Label == "Normal");
-            Assert.True(normal.IsRoundsAttack);                                 // default basis
+            AttackPickRow fastest = vm.AttackOptions.First();
+            Assert.Equal("best", fastest.Key);
+            Assert.True(fastest.BasisOnly);                                     // not an attack: no Matchup toggle
+            Assert.True(fastest.IsRoundsAttack);                                // default basis
             Assert.Single(vm.AttackOptions.Where(o => o.IsRoundsAttack));
 
+            AttackPickRow normal = vm.AttackOptions.Single(o => o.Label == "Normal");
+            Assert.False(normal.IsRoundsAttack);
             AttackPickRow bash = vm.AttackOptions.Single(o => o.Label == "Bash");
             bash.IsRoundsAttack = true;                                         // switch basis
-            Assert.False(normal.IsRoundsAttack);                               // single-select enforced
+            Assert.False(fastest.IsRoundsAttack);                               // single-select enforced
             Assert.Single(vm.AttackOptions.Where(o => o.IsRoundsAttack));
 
             normal.Shown = false;                                               // hide from Your Matchup
@@ -132,6 +137,109 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         OtherSettings saved = resolver.Resolve<OtherSettings>("Other");
         Assert.Equal("melee:Bash", saved.MonsterIntelRoundsAttack);
         Assert.Contains("melee:Normal", saved.MonsterIntelHiddenAttacks);
+    }
+
+    // The reported failure: a caster whose spell kills a monster in a few casts saw
+    // it filtered out because Est. Rounds to Kill defaulted to the Normal melee
+    // swing. With the fastest-of-all basis the spell counts, so a monster melee
+    // could never finish inside the cap still shows; picking the melee row instead
+    // restores the old melee-only figure.
+    [Fact]
+    public void RoundsToKill_DefaultsToFastestAttack_SoACastersSpellCounts()
+    {
+        WriteCasterFixtures();
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        var stats = new PlayerStats { Name = "Tester", Level = 10, ArmourClass = 10, Agility = 50, Charm = 50 };
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
+        spellbook.Reseed(classNumber: 12, level: 10);
+        spellbook.SetObtainedByNames(new[] { "smite" });
+        Assert.Equal(1, spellbook.ObtainedCount);
+        var itemMagic = new ItemMagicIndex(cache);
+
+        var profile = new ProfileService();
+        profile.LoadBlank();
+        var resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), profile);
+
+        using var vm = new MonsterIntelViewModel(
+            cache, catalog, resolver, stats, inventory, spellbook, itemMagic,
+            observations: null, playerState: null);
+        Assert.Equal(1, vm.KnownAttackSpellCount);
+
+        vm.RoundsToKillCap = 6;
+        MonsterIntelEntry tank = Assert.Single(
+            vm.RowsView.Cast<MonsterIntelEntry>().Where(e => e.Name == "test tank"));
+        Assert.InRange(tank.EstimatedRoundsToKill, 1, 6);     // the spell's figure, not bare-handed melee's
+
+        // Explicitly basing it on a melee swing ignores the spell again.
+        vm.AttackOptions.Single(o => o.Label == "Normal").IsRoundsAttack = true;
+        Assert.NotInRange(tank.EstimatedRoundsToKill, 1, 6);
+
+        // ...and picking the spell row uses that spell alone.
+        vm.AttackOptions.Single(o => o.Label == "smite").IsRoundsAttack = true;
+        Assert.InRange(tank.EstimatedRoundsToKill, 1, 6);
+    }
+
+    // The rounds cap is otherwise a silent filter, so the window says how many
+    // monsters it is hiding — counting only those the cap alone removes, never ones
+    // another filter (here the name box) already dropped.
+    [Fact]
+    public void RoundsCap_ReportsHowManyMonstersItHides()
+    {
+        using MonsterIntelViewModel vm = BuildViewModelWithSyntheticEntry(50);
+        MonsterIntelEntry goblin = Assert.Single(vm.RowsView.Cast<MonsterIntelEntry>());
+        goblin.EstimatedRoundsToKill = 50;
+        Assert.False(vm.HasCapHidden);                        // default cap 999: nothing over it
+
+        vm.RoundsToKillCap = 6;
+        Assert.Empty(vm.RowsView.Cast<MonsterIntelEntry>());
+        Assert.True(vm.HasCapHidden);
+        Assert.Equal("1 more hidden by this cap", vm.CapHiddenText);
+
+        vm.NameFilter = "no such monster";                   // dropped by the name box, not the cap
+        Assert.False(vm.HasCapHidden);
+        vm.NameFilter = null;
+        Assert.True(vm.HasCapHidden);
+
+        vm.RoundsToKillCap = 100;
+        Assert.Single(vm.RowsView.Cast<MonsterIntelEntry>());
+        Assert.False(vm.HasCapHidden);
+    }
+
+    // A caster class with one single-target damage spell (1000 dmg/round at any
+    // level) it has learned, plus a monster only that spell can drop quickly. Written
+    // over the shared fixture set before its GameDataCache is constructed.
+    private void WriteCasterFixtures()
+    {
+        string setDir = Path.Combine(_root, "test-set");
+        File.WriteAllText(Path.Combine(setDir, "Monsters.json"), """
+        [
+          {
+            "Number": 3, "Name": "test tank", "Type": 1, "Align": 2, "HP": 5000, "EXP": 50,
+            "AttType-0": 1, "AttName-0": "hits you", "Att%-0": 100, "AttTrue%-0": 100,
+            "AttAcc-0": 50, "AttMin-0": 1, "AttMax-0": 5, "AttEnergy-0": 100, "AttHitSpell-0": 0
+          }
+        ]
+        """);
+        File.WriteAllText(Path.Combine(setDir, "Classes.json"), """
+        [ { "Number": 12, "Name": "Mage", "MageryType": 1, "MageryLVL": 3 } ]
+        """);
+        File.WriteAllText(Path.Combine(setDir, "Spells.json"), """
+        [
+          {
+            "Number": 100, "Name": "smite", "Short": "smit", "Magery": 1, "MageryLVL": 1, "ReqLevel": 1,
+            "Learnable": 1, "Learned From": "\u0000", "Classes": "(*)", "Targets": 8, "AttType": 4,
+            "MinBase": 1000, "MaxBase": 1000, "MinInc": 0, "MinIncLVLs": 0, "MaxInc": 0, "MaxIncLVLs": 0,
+            "Dur": 0, "DurInc": 0, "DurIncLVLs": 0, "Cap": 0, "EnergyCost": 1000, "ManaCost": 5,
+            "Abil-0": 1, "AbilVal-0": 0, "Abil-1": 0, "AbilVal-1": 0, "Abil-2": 0, "AbilVal-2": 0,
+            "Abil-3": 0, "AbilVal-3": 0, "Abil-4": 0, "AbilVal-4": 0, "Abil-5": 0, "AbilVal-5": 0,
+            "Abil-6": 0, "AbilVal-6": 0, "Abil-7": 0, "AbilVal-7": 0, "Abil-8": 0, "AbilVal-8": 0,
+            "Abil-9": 0, "AbilVal-9": 0
+          }
+        ]
+        """);
     }
 
     [Fact]
@@ -304,9 +412,13 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
         var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
         var itemMagic = new ItemMagicIndex(cache);
+        // A loaded (blank) profile so tests that edit the persisted rounds cap can write it.
+        var profile = new ProfileService();
+        profile.LoadBlank();
+        var resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), profile);
 
         var vm = new MonsterIntelViewModel(
-            cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
+            cache, catalog, resolver, stats, inventory, spellbook, itemMagic,
             observations: null, playerState: null);
         inventory.Dispose();
 

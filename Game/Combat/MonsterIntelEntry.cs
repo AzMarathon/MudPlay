@@ -63,12 +63,13 @@ public sealed class MonsterIntelEntry : INotifyPropertyChanged
     }
     public string IncomingHitPercentText => IncomingHitPercent >= 0 ? $"{IncomingHitPercent}%" : string.Empty;
 
-    // Projected rounds for the player to kill this monster with their current
-    // weapon, given live accuracy/damage/swings/crit — the other live,
+    // Projected rounds for the player to kill this monster with the attack basis
+    // picked in Edit Attacks (by default the fastest of their melee attacks and
+    // attack spells), given live accuracy/damage/swings/crit — the other live,
     // player-dependent field alongside IncomingHitPercent, set the same way
     // by RebuildCharacterCapabilities. -1 = no character context (not yet
-    // computed); 0 = computed but not killable (no weapon, or the weapon
-    // can't out-damage the monster's regen/HP at all).
+    // computed); 0 = computed but not killable (no weapon, or none of the
+    // attacks in play can out-damage the monster's regen/HP at all).
     private int _estimatedRoundsToKill = -1;
     public int EstimatedRoundsToKill
     {

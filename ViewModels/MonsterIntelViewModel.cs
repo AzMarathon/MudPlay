@@ -93,14 +93,20 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private string _lastWornSignature = "";
     private bool _suppressSimRecompute;
 
-    // "Edit Attacks" picker state. AttackOptions is the picker's rows (usable
-    // melee attacks + obtained attack spells); _hiddenAttackKeys are the attacks
-    // hidden from Your Matchup; _roundsAttackKey is the single attack driving the
-    // master list's Est. Rounds to Kill. Persisted per character in OtherSettings;
-    // _buildingOptions suppresses row-event write-back while the list is (re)built.
+    // "Edit Attacks" picker state. AttackOptions is the picker's rows (a leading
+    // "fastest of all" basis row, then usable melee attacks + obtained attack
+    // spells); _hiddenAttackKeys are the attacks hidden from Your Matchup;
+    // _roundsAttackKey is what drives the master list's Est. Rounds to Kill — one
+    // attack, or BestKey for whichever of your attacks kills each monster fastest.
+    // Persisted per character in OtherSettings; _buildingOptions suppresses row-event
+    // write-back while the list is (re)built.
     private readonly List<MudAttackType> _usableMelee = new();
     private readonly HashSet<string> _hiddenAttackKeys = new(System.StringComparer.Ordinal);
-    private string _roundsAttackKey = MeleeKey(MudAttackType.Normal);
+    // A caster's spells out-damage its melee by orders of magnitude, so defaulting
+    // the basis to the Normal swing made the rounds cap hide every monster the
+    // character actually kills in a couple of casts.
+    private const string BestKey = "best";
+    private string _roundsAttackKey = BestKey;
     private bool _buildingOptions;
     public ObservableCollection<AttackPickRow> AttackOptions { get; } = new();
 
@@ -123,6 +129,28 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private MonsterIntelEntry? _selectedEntry;
 
     public string CountText => $"{RowsView.Count} monster{(RowsView.Count == 1 ? "" : "s")}";
+
+    // Monsters that pass every other filter and are dropped ONLY by the rounds-to-kill
+    // cap. The cap is otherwise invisible — a low saved value silently shrinks the list
+    // to a handful with nothing saying why — so the count is surfaced beside the cap.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCapHidden))]
+    [NotifyPropertyChangedFor(nameof(CapHiddenText))]
+    private int _hiddenByCap;
+    public bool HasCapHidden => HiddenByCap > 0;
+    public string CapHiddenText => $"{HiddenByCap:N0} more hidden by this cap";
+
+    // Re-derive every label that reflects what the filters currently let through.
+    // Call after any change that can re-shape the list.
+    private void RaiseCountChanged()
+    {
+        int hidden = 0;
+        if (_hasCharacterContext)
+            foreach (MonsterIntelEntry e in _all)
+                if (e.EstimatedRoundsToKill > RoundsToKillCap && PassesFilter(e, applyRoundsCap: false)) hidden++;
+        HiddenByCap = hidden;
+        OnPropertyChanged(nameof(CountText));
+    }
 
     // The single-monster detail panel shows once something's selected.
     public bool ShowSingleDetail => HasSelection;
@@ -165,7 +193,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(NameFilter) or nameof(HideRegenMonsters))
-            { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
+            { RowsView.Refresh(); RaiseCountChanged(); }
             else if (e.PropertyName == nameof(SelectedEntry)) { RebuildDetail(); UpdateAcVsTarget(); }
         };
 
@@ -190,6 +218,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             // next gear/spell change, so the master list opens empty.
             RebuildCharacterCapabilities();
             RowsView.Refresh();
+            RaiseCountChanged();
             _inventory!.Changed += OnCharacterCapabilitiesChanged;
             _spellbook!.Changed += OnCharacterCapabilitiesChanged;
         }
@@ -466,27 +495,51 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         ComputeRoundsToKill(worn, encum);
     }
 
-    // Fill every entry's Est. Rounds to Kill from the currently-selected attack:
-    // a melee pick runs the full Compute() matchup; a spell pick divides the
-    // monster's HP by that spell's resist-adjusted per-round damage against it.
+    // Fill every entry's Est. Rounds to Kill from the currently-selected basis: a
+    // melee pick runs the full Compute() matchup; a spell pick divides the
+    // monster's HP by that spell's resist-adjusted per-round damage against it; the
+    // "fastest" basis takes whichever of those is quickest for each monster.
     private void ComputeRoundsToKill(IReadOnlyList<EquippedItem> worn, EncumbranceReading encum)
     {
         MudAttackType? roundsMelee = MeleeTypeForKey(_roundsAttackKey);
         PlayerAttackSpell? roundsSpell = roundsMelee is null ? SpellForKey(_roundsAttackKey) : null;
-        if (roundsMelee is null && roundsSpell is null) roundsMelee = MudAttackType.Normal;  // saved pick gone
-        PlayerMatchupProfile? meleeProfile = roundsMelee is { } mt
-            ? CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData)
-            : null;
+        // No single pick (the default, or a saved pick that's gone stale) → fastest of all.
+        bool fastest = roundsMelee is null && roundsSpell is null;
+
+        List<PlayerMatchupProfile> meleeProfiles = new();
+        if (fastest)
+        {
+            // Backstab is a one-time opener, not something you sustain round after
+            // round, so it never counts as "how fast can I kill this".
+            foreach (MudAttackType t in _usableMelee)
+                if (t != MudAttackType.Backstab)
+                    meleeProfiles.Add(CharacterCalculator.BuildMeleeAttackProfile(t, _stats!, worn, encum, _gameData));
+        }
+        else if (roundsMelee is { } mt)
+        {
+            meleeProfiles.Add(CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData));
+        }
 
         foreach (MonsterIntelEntry entry in _all)
         {
             if (entry.Hp <= 0) { entry.EstimatedRoundsToKill = -1; continue; }
             MonsterCatalogEntry m = entry.Source;
-            entry.EstimatedRoundsToKill = meleeProfile is { } mp
-                ? MonsterMatchupCalculator.Compute(mp, MonsterProfileFor(m)).RoundsToKill
-                : SpellRoundsToKill(roundsSpell!.Value, m);
+            MonsterMatchupProfile monster = MonsterProfileFor(m);
+            int best = 0;   // 0 = none of the candidate attacks can kill it
+            foreach (PlayerMatchupProfile mp in meleeProfiles)
+                best = FasterRounds(best, MonsterMatchupCalculator.Compute(mp, monster).RoundsToKill);
+            if (fastest)
+                foreach (PlayerAttackSpell s in _ownedAttackSpells)
+                    best = FasterRounds(best, SpellRoundsToKill(s, m));
+            else if (roundsSpell is { } picked)
+                best = SpellRoundsToKill(picked, m);
+            entry.EstimatedRoundsToKill = best;
         }
     }
+
+    // The smaller positive rounds figure; 0 means "can't kill", so it never wins.
+    private static int FasterRounds(int current, int candidate)
+        => candidate > 0 && (current == 0 || candidate < current) ? candidate : current;
 
     // Refill every entry's Hits-You-% from the current defense-simulator inputs
     // (AC / Prot Evil / Vile Ward + its alignment scale / Shadow). Dodge and Prot
@@ -514,7 +567,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (_suppressSimRecompute || !_hasCharacterContext) return;
         RecomputeIncomingHits();
         RowsView.Refresh();
-        OnPropertyChanged(nameof(CountText));
+        RaiseCountChanged();
         UpdateAcVsTarget();
     }
 
@@ -624,32 +677,32 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // Rebuild the picker rows from the current usable-melee + owned-spell sets,
     // carrying the user's show/hide + rounds-attack picks across the rebuild. If
     // the saved rounds pick is no longer available (spell unlearned / class swap),
-    // fall back to Normal so the column always has a basis.
+    // fall back to the fastest-of-all basis so the column always has one.
     private void RebuildAttackOptions()
     {
         _buildingOptions = true;
         foreach (AttackPickRow r in AttackOptions) r.PropertyChanged -= OnAttackOptionChanged;
         AttackOptions.Clear();
 
+        AttackOptions.Add(NewOption(BestKey, "Fastest of all my attacks", isSpell: false, basisOnly: true));
         foreach (MudAttackType t in _usableMelee)
             AttackOptions.Add(NewOption(MeleeKey(t), MeleeLabel(t), isSpell: false));
         foreach (PlayerAttackSpell s in _ownedAttackSpells)
             AttackOptions.Add(NewOption(SpellKey(s.Short), s.Name, isSpell: true));
 
-        if (AttackOptions.Count > 0 && !AttackOptions.Any(o => o.IsRoundsAttack))
+        if (!AttackOptions.Any(o => o.IsRoundsAttack))
         {
-            AttackPickRow fallback = AttackOptions.FirstOrDefault(o => o.Key == MeleeKey(MudAttackType.Normal))
-                ?? AttackOptions[0];
-            fallback.IsRoundsAttack = true;
-            _roundsAttackKey = fallback.Key;
+            AttackOptions[0].IsRoundsAttack = true;
+            _roundsAttackKey = BestKey;
         }
         _buildingOptions = false;
     }
 
-    private AttackPickRow NewOption(string key, string label, bool isSpell)
+    private AttackPickRow NewOption(string key, string label, bool isSpell, bool basisOnly = false)
     {
         var row = new AttackPickRow(key, label, isSpell,
-            shown: !_hiddenAttackKeys.Contains(key), isRoundsAttack: key == _roundsAttackKey);
+            shown: !_hiddenAttackKeys.Contains(key), isRoundsAttack: key == _roundsAttackKey,
+            basisOnly: basisOnly);
         row.PropertyChanged += OnAttackOptionChanged;
         return row;
     }
@@ -685,6 +738,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (!_hasCharacterContext) return;
         ComputeRoundsToKill(_inventory!.Snapshot.EquippedItems, _inventory.Snapshot.Encumbrance);
         RowsView.Refresh();
+        RaiseCountChanged();
         if (SelectedEntry is not null) RebuildDetail();
     }
 
@@ -777,7 +831,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     {
         RebuildCharacterCapabilities();
         RowsView.Refresh();
-        OnPropertyChanged(nameof(CountText));
+        RaiseCountChanged();
         if (SelectedEntry is not null) RebuildDetail();
     }
 
@@ -793,7 +847,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         dto.RoundsToKillCap = value;
         _resolver.WriteAt(SettingsTier.Character, "Other", dto);
         RowsView.Refresh();
-        OnPropertyChanged(nameof(CountText));
+        RaiseCountChanged();
     }
 
     private void OnPlayerStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -834,13 +888,17 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     {
         if (e.PropertyName != nameof(HitsFilterBucket.Selected)) return;
         RowsView.Refresh();
-        OnPropertyChanged(nameof(CountText));
+        RaiseCountChanged();
         OnPropertyChanged(nameof(HitsFilterLabel));
     }
 
-    private bool PassesFilter(object o)
+    private bool PassesFilter(object o) => o is MonsterIntelEntry e && PassesFilter(e, applyRoundsCap: true);
+
+    // applyRoundsCap: false answers "would this monster show if the cap were off" —
+    // the hidden-by-cap count is exactly the monsters that pass with it off and fail
+    // with it on.
+    private bool PassesFilter(MonsterIntelEntry e, bool applyRoundsCap)
     {
-        if (o is not MonsterIntelEntry e) return false;
         if (!string.IsNullOrWhiteSpace(NameFilter)
             && !e.Name.Contains(NameFilter, StringComparison.OrdinalIgnoreCase)) return false;
 
@@ -858,7 +916,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // show "<cap>+"). A monster it can't drop at all still shows as "—" — a
         // different axis (can't-kill, not slow-kill) whose Hits-You-% read stays
         // useful — so only a positive projection over the cap is filtered.
-        if (_hasCharacterContext && e.EstimatedRoundsToKill > RoundsToKillCap) return false;
+        if (applyRoundsCap && _hasCharacterContext && e.EstimatedRoundsToKill > RoundsToKillCap) return false;
 
         // Hits-You-% bands: selecting none shows every monster; selecting any
         // keeps a monster whose Hits You % falls in ANY selected band. Each band
