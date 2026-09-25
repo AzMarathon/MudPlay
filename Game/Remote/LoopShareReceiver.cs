@@ -124,7 +124,7 @@ public sealed class LoopShareReceiver : IDisposable
         if (_loops.Get(loop.Name) is { } existing && SameRoute(existing, loop))
         {
             _log?.Info("LoopShare", $"loop '{loop.Name}' from {sender} matches ours — nothing saved.");
-            _notice($"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}, already saved in {Location(existing)}]");
+            _notice($"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}, already have it]");
             return;
         }
 
@@ -134,13 +134,9 @@ public sealed class LoopShareReceiver : IDisposable
         _log?.Info("LoopShare",
             $"saved loop '{loop.Name}' ({loop.Waypoints.Count} rooms) received from {sender}.");
         _notice(loop.Name == original
-            ? $"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}, saved in {Location(loop)}]"
-            : $"[Received loop '{original}' {loop.Waypoints.Count} rooms from {sender}, saved in {Location(loop)} as '{loop.Name}']");
+            ? $"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}]"
+            : $"[Received loop '{original}' {loop.Waypoints.Count} rooms from {sender}, saved as '{loop.Name}']");
     }
-
-    // Where the loop sits in the Navigation Loops list: the root, or its folder.
-    private static string Location(Loop loop) =>
-        loop.Folder.Length == 0 ? "Loops" : $"Loops/{loop.Folder}";
 
     // The sender's name if it's free, else "<name> (from <sender>)", numbered on.
     private string FreeName(string name, string sender)
