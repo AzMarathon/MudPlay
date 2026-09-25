@@ -333,6 +333,35 @@ A small **Realm:** line under the headline notes which game-data realm is active
 
 **A lair that hasn't respawned costs a few seconds, not the full timeout.** If nothing turns up within a moment of stepping in, Auto-Lair takes that as "not back yet" and moves on to the next lair rather than standing in an empty room — entering already burned that lair's timer, so there's nothing to be gained by waiting there. If it still looks like it's idling, the usual reason is that the monsters you're after don't actually *spawn* in that room: some wander in from elsewhere on their own schedule, and a room they merely pass through isn't a lair Auto-Lair can time.
 
+## Fighting in a dark room
+
+A room too dark to see in prints no name, no exits and no **Also here:**, so
+the usual way of learning what shares the room with you is gone. Auto-combat
+falls back on what still reaches you — the attack itself:
+
+- **something damages you** — `... you for N damage!`
+- **something swings at you twice in the same round** — one swing is not
+  enough, because an emote (`The barmaid smiles at you.`) reads the same way;
+  a monster names itself on every swing, so a repeat is the tell
+- **a party member announces an attack** — `<player> moves to attack <mob>.`
+
+The attacker's name is read off the line and matched against your game data,
+taking the longest match — so `The bugbear captain all-out cleaves you for 20
+damage!` resolves to **bugbear captain**, not `bugbear`. A leading `The` is
+optional, since a monster with a proper name is printed without one.
+
+What it finds is added to the room list, so the fight starts the ordinary way:
+by name, honouring **Relationship**, **Attack Priority** and **Target Order**.
+Two consequences worth knowing:
+
+- a monster your game data doesn't have is **not** attacked. There is nothing
+  to name, and guessing would mean swinging at whatever the room holds.
+- something set to **Neutral** or **Friendly** is still left alone, even if it
+  is the thing hitting you.
+
+This only runs while the room is dark. In a lit room **Also here:** is
+authoritative and is used instead.
+
 ## The map and obstacles
 
 **Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target), then **Walk here**, **I am here** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list), **Use Teleport**, **Center on…**, and toggles to mark a room **Avoid** or **Stash**.

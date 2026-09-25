@@ -164,6 +164,41 @@ public sealed class DarkRoomCombatIntegrationTests
     }
 
     [Fact]
+    public void ReportedSession_InDark_EngagesTheAttackerByName()
+    {
+        // End to end: the wire from the reported session drives a real
+        // CombatManager, and what goes out names the monster.
+        using Harness h = new();
+        h.AddMonster(963, "bugbear captain");
+        h.EnterDarkRoom();
+
+        h.Feed("bugbear captain moves into the from the northeast.");
+        h.Feed("The bugbear captain swings at you with their greataxe!");
+
+        Assert.Equal("a bugbear captain", h.LastSent);
+        Assert.Equal("bugbear captain", h.Combat.CurrentTarget);
+    }
+
+    [Fact]
+    public void ANonHostileAttacker_InDark_IsNotEngaged()
+    {
+        // Injecting through the classifier is what buys this: the ordinary
+        // hostility filter still refuses, so a trigger cannot open on something
+        // set Neutral.
+        using Harness h = new();
+        h.AddMonster(50, "barmaid");
+        h.SetOverlay(50, MonsterRelationship.Neutral);
+        h.EnterDarkRoom();
+
+        h.Feed("The barmaid swings at you.");
+
+        // AttackSends, not Sent: CombatManager also emits a bare CR to force a
+        // room re-display, which is not an attack.
+        Assert.Equal(0, h.AttackSends);
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    [Fact]
     public void PartyAttackAnnounce_InDark_SpinsUsIntoCombat()
     {
         // The leader engages a monster the dark room never named; the announce

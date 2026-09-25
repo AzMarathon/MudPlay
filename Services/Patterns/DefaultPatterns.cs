@@ -167,6 +167,18 @@ public static class DefaultPatterns
         // no-article, blank-verb dodge shape that motivated this.
         yield return new RegexPattern(KnownPatterns.MobAttacksYou,
             @"^The [\w -]+ \w+ you\b");
+        // Damage landing on US, article-optional so a monster with a proper name
+        // counts — see KnownPatterns.IncomingDamage.
+        yield return new RegexPattern(KnownPatterns.IncomingDamage,
+            @"^(?!You )(?<source>.*?)\byou for (?<damage>\d+) damage!");
+        // Something swinging at us, hit or miss, with the article optional so a
+        // named monster counts — see KnownPatterns.IncomingAttack. Loose on
+        // purpose and NOT safe alone. `source` captures a PREFIX of the
+        // attacker ("bugbear" out of "bugbear captain swings at you"): name and
+        // verb cannot be told apart here, and the consumer only compares it
+        // with itself to spot a repeat, so a stable prefix is enough.
+        yield return new RegexPattern(KnownPatterns.IncomingAttack,
+            @"^(?!You )(?:The )?(?<source>[\w' -]+?) [\w' ]*?\bat you\b");
         yield return new RegexPattern(KnownPatterns.UserGainExperience,
             @"^You gain (?<exp>\d+) experience\.");
         // The local player's own swing missing. On the live realm a whiff
@@ -226,8 +238,13 @@ public static class DefaultPatterns
 
         // "You don't see <X> here!" — target-gone signal. Trailing punctuation
         // tolerant — "!" canonical but some realms emit ".".
+        // BOTH SPELLINGS. The realm prints the uncontracted form, "You do not
+        // see <X> here!", so a pattern that demands "don't" never matches and
+        // CombatManager never learns its target is gone: it holds a target the
+        // server denies, and DarkRoomCombatWatcher's AlreadyPresent check then
+        // suppresses every reveal for that room.
         yield return new RegexPattern(KnownPatterns.TargetNotHere,
-            @"^You don't see (?<target>.+?) here[.!]\s*$");
+            @"^You do(?:n't| not) see (?<target>.+?) here[.!]\s*$");
 
         // Weapon-no-effect signals.
         yield return new RegexPattern(KnownPatterns.WeaponNoEffect,

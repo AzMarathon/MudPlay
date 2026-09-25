@@ -71,6 +71,32 @@ public static class KnownPatterns
     // an empty, stuck-gate room and abandoning the fight (report
     // stock-20260730-190736).
     public const string MobAttacksYou        = "combat.mob-attacks-you";
+
+    // SOMETHING DAMAGED US, whoever or whatever it was. Keyed on the one phrase
+    // that can only mean that — "... you for N damage!" — with no article
+    // required, because a monster with a proper name is printed without one.
+    //
+    // It also catches damage whose line names no attacker at all, which is most
+    // spell wordings.
+    //
+    // Our own swing is excluded by the leading (?!You ): "You hit X for 41
+    // damage!" names a number too. A blow landing on a PARTY MEMBER says "...
+    // Bob for 8 damage!" and is likewise out — the literal "you for" is what
+    // makes this OUR health. Deliberately NOT wired into the hit/miss statistics,
+    // which stay on MobHits so their denominators keep meaning what they meant.
+    public const string IncomingDamage       = "combat.incoming-damage";
+
+    // SOMETHING IS SWINGING AT US, hit or miss. Article-optional for the same
+    // reason as IncomingDamage, and deliberately loose about the verb, because
+    // every monster brings its own from the .mdb ("swings at you with their
+    // greataxe", "lunges at you", "spits at you").
+    //
+    // THAT LOOSENESS MEANS IT CANNOT BE TRUSTED ALONE: "The barmaid smiles at
+    // you." fits it exactly, and nothing in the sentence separates the two. A
+    // consumer must require the SAME source twice inside one round before acting
+    // — a monster names itself on every swing, an emote says its line once.
+    // Never use this as a standalone attack signal.
+    public const string IncomingAttack       = "combat.incoming-attack";
     public const string UserGainExperience   = "combat.user-gain-experience";
 
     // The local player's own swing MISSING. On the live realm a whiff prints the
