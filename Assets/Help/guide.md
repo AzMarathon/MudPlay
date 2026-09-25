@@ -578,7 +578,7 @@ On top of that, **Settings → Talk** has master and per-channel kill switches (
 
 Active party members get a few things for free regardless of the grid: the party-coordination signals, the health queries (`@health` / `@status` / `@lives`), `@reset`, and a bare `@party` status check.
 
-### Sending a command back to yourself (`&@`)
+### Recursive remote commands (`&@`) — sending a command back to yourself
 
 Put **`&`** in front of any remote command — `&@invite`, `&@where`, `&@wealth` — and the player you send it to **sends that `@`-command back to you**, on the same channel it arrived on (telepath, gangpath, or a directed say). Your own client then runs it as if they had sent it, under the permissions *you* grant *them*. It's the way to make another player ask something of you: telling a party member `&@invite` makes them send you `@invite`, and your client invites them.
 
