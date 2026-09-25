@@ -115,11 +115,13 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     // instead of throwing.
     private static string BuildTip(PlayerRemoteControls category)
     {
-        string[] cmds = RemoteCommandCatalog.Map
+        IEnumerable<string> catalog = RemoteCommandCatalog.Map
             .Where(kv => kv.Value == category)
-            .Select(kv => kv.Key)
-            .OrderBy(c => c, StringComparer.Ordinal)
-            .ToArray();
+            .Select(kv => kv.Key);
+        // Relay-back isn't a catalog command, but this grant is what lets it through.
+        if (category == RemoteCommandManager.RelayBackCategory)
+            catalog = catalog.Append(RemoteCommandManager.RelayBackPrefix + "<command>");
+        string[] cmds = catalog.OrderBy(c => c, StringComparer.Ordinal).ToArray();
         if (cmds.Length == 0) return "(no @-commands in this category yet)";
         return $"Ticked grants: {string.Join("  ", cmds)}\n"
              + $"Unticked denies the same.";

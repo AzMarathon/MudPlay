@@ -578,6 +578,12 @@ On top of that, **Settings → Talk** has master and per-channel kill switches (
 
 Active party members get a few things for free regardless of the grid: the party-coordination signals, the health queries (`@health` / `@status` / `@lives`), `@reset`, and a bare `@party` status check.
 
+### Sending a command back to yourself (`&@`)
+
+Put **`&`** in front of any remote command — `&@invite`, `&@where`, `&@wealth` — and the player you send it to **sends that `@`-command back to you**, on the same channel it arrived on (telepath, gangpath, or a directed say). Your own client then runs it as if they had sent it, under the permissions *you* grant *them*. It's the way to make another player ask something of you: telling a party member `&@invite` makes them send you `@invite`, and your client invites them.
+
+The player relaying it needs to grant you **Execute commands** (the `@do` tier) — relaying a line on your behalf is something `@do` could already do. The relayed command must be one their client knows; anything else (or a bare `&@`) is ignored, and the reroll / `set suicide` blocks apply to it as well. Bare `@help` lists `&@<command>` when you hold that grant, and `@help &@` describes it. On **gangpath** or **say** everyone on that channel sees both lines: every MudPlay client there that grants you Execute commands relays the command back, and any that grants the relaying player the command runs it too. Use **telepath** when you want exactly one player to relay it, and only to you.
+
 ### Syntax examples
 
 Every remote command is the `@`-word typed into **telepath, gangpath, or say**. A **bare** command (no argument) is just the word — `@health`, `@where`, `@inv`, `@wealth`, `@stop`, `@version`. The commands that take an argument follow the **Args** column in the tables below; here's one valid example of each shape:
@@ -604,6 +610,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@trap north` — search and disarm a trap that way (`@trap stop` aborts)
 - `@equip-backstab` — wear the saved gear set whose keyword is "backstab"
 - `@do rest` — send `rest` to the game verbatim (highest-trust)
+- `&@invite` — have the player send `@invite` back to you (any command works after `&`; needs their Execute commands grant)
 - `@party use chime` — relay `use chime` to the whole party (say channel only)
 - `@comeback 3/599` — ask the party to recover you (the coordinate is optional)
 

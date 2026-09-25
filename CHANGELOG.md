@@ -1,5 +1,9 @@
 # Version history
 
+## 3.106.0
+
+- New `&@<command>`: sent to a player who grants you Execute commands, they send `@<command>` back to you on the same channel, so your client runs it as theirs (`&@invite` makes them ask you for an invite)
+
 ## 3.105.11
 
 - Game-data triggers no longer vanish from a client that failed to read the shared file (another client's save, a Windows file lock): it keeps its list, retries, and won't save over the file until the read succeeds
