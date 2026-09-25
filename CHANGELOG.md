@@ -1,5 +1,9 @@
 # Version history
 
+## 3.105.11
+
+- Game-data triggers no longer vanish from a client that failed to read the shared file (another client's save, a Windows file lock): it keeps its list, retries, and won't save over the file until the read succeeds
+
 ## 3.105.10
 
 - A monster's ask-keyword teleports now show on its room: an **NPC transports** section in the Navigation Room info and the map tooltip (`ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 1 runic`), clickable to the destination

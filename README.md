@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.105.10**
-> - A monster's ask-keyword teleports now show on its room: an **NPC transports** section in the Navigation Room info and the map tooltip (`ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 1 runic`), clickable to the destination
-> - A monster record's greet keywords show as a collapsible tree (like a room spell's conditional effects); a keyword that teleports is labelled `(teleport)` and its destination room is a link
-> - The walker only takes a paid NPC transport when everyone in the party can pay its fare (each person is charged); the route card shows the fare
-> - A room whose NPC offers an ask-keyword teleport is marked as a teleport room on the map
-> - Room info lists the same Room commands as the map tooltip (sailings included), and its rows wrap instead of running off the panel
+> **Version 3.105.11**
+> - Game-data triggers no longer vanish from a client that failed to read the shared file (another client's save, a Windows file lock): it keeps its list, retries, and won't save over the file until the read succeeds
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
