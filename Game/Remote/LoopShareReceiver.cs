@@ -106,7 +106,7 @@ public sealed class LoopShareReceiver : IDisposable
         catch (FormatException ex)
         {
             _log?.Warn("LoopShare", $"loop from {sender} couldn't be read: {ex.Message}");
-            _notice($"Loop from {sender} arrived damaged and wasn't saved.");
+            _notice($"[Loop from {sender} arrived damaged, not saved]");
             return;
         }
         Save(loop, sender);
@@ -117,14 +117,14 @@ public sealed class LoopShareReceiver : IDisposable
         if (_loops.SetName is null)
         {
             _log?.Warn("LoopShare", $"loop '{loop.Name}' from {sender} not saved — no game-data set is active");
-            _notice($"Loop '{loop.Name}' from {sender} wasn't saved — no game data set is loaded.");
+            _notice($"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}, not saved: no game data set is loaded]");
             return;
         }
 
         if (_loops.Get(loop.Name) is { } existing && SameRoute(existing, loop))
         {
             _log?.Info("LoopShare", $"loop '{loop.Name}' from {sender} matches ours — nothing saved.");
-            _notice($"Loop '{loop.Name}' from {sender}: you already have it.");
+            _notice($"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}, already saved in {Location(existing)}]");
             return;
         }
 
@@ -134,9 +134,13 @@ public sealed class LoopShareReceiver : IDisposable
         _log?.Info("LoopShare",
             $"saved loop '{loop.Name}' ({loop.Waypoints.Count} rooms) received from {sender}.");
         _notice(loop.Name == original
-            ? $"Loop '{loop.Name}' ({loop.Waypoints.Count} rooms) received from {sender} and saved."
-            : $"Loop '{original}' ({loop.Waypoints.Count} rooms) received from {sender} — saved as '{loop.Name}'.");
+            ? $"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}, saved in {Location(loop)}]"
+            : $"[Received loop '{original}' {loop.Waypoints.Count} rooms from {sender}, saved in {Location(loop)} as '{loop.Name}']");
     }
+
+    // Where the loop sits in the Navigation Loops list: the root, or its folder.
+    private static string Location(Loop loop) =>
+        loop.Folder.Length == 0 ? "Loops" : $"Loops/{loop.Folder}";
 
     // The sender's name if it's free, else "<name> (from <sender>)", numbered on.
     private string FreeName(string name, string sender)

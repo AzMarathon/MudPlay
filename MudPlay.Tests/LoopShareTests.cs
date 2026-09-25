@@ -238,7 +238,7 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in Enumerable.Reverse(lines)) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Equal(200, loops.Get("Grand tour")!.Waypoints.Count);
-        Assert.Equal("Loop 'Grand tour' (200 rooms) received from Raijin and saved.", notices.Single());
+        Assert.Equal("[Received loop 'Grand tour' 200 rooms from Raijin, saved in Loops]", notices.Single());
     }
 
     [Fact]
@@ -272,7 +272,7 @@ public sealed class LoopShareTests : IDisposable
 
         Assert.Equal("9/1", loops.Get("King's Road")!.Waypoints[0].Room);   // ours untouched
         Assert.Equal(3, loops.Get("King's Road (from Raijin)")!.Waypoints.Count);
-        Assert.Contains("saved as 'King's Road (from Raijin)'", notices.Single());
+        Assert.Equal("[Received loop 'King's Road' 3 rooms from Raijin, saved in Loops as 'King's Road (from Raijin)']", notices.Single());
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in DataLines(SampleLoop())) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Single(loops.Loops);
-        Assert.Equal("Loop 'King's Road' from Raijin: you already have it.", notices.Single());
+        Assert.Equal("[Received loop 'King's Road' 3 rooms from Raijin, already saved in Loops]", notices.Single());
     }
 
     [Fact]
