@@ -63,6 +63,17 @@ public sealed class TriggerEngine
     private int _reloadGeneration;
     private static readonly TimeSpan ExternalReloadDebounce = TimeSpan.FromMilliseconds(300);
 
+    // True while the active set's triggers file exists but our last read of it failed —
+    // on Windows a just-written file is briefly held (the antivirus scan, the other
+    // client's rename), and a client on another version may not parse a newer file.
+    // The live list is kept as it was rather than cleared, the read is retried, and
+    // until one succeeds we never WRITE the file: saving our stale (or empty) slice over
+    // it would wipe the other client's triggers for both.
+    private bool _gameDataUnread;
+    private int _readRetries;
+    private const int MaxReadRetries = 10;
+    private static readonly TimeSpan ReadRetryDelay = TimeSpan.FromSeconds(2);
+
     // Compiled-regex cache, keyed by (match type, raw pattern). Built lazily as
     // triggers fire.
     private readonly Dictionary<(TriggerMatchType Kind, string Pattern), Regex?> _regexCache = new();
@@ -179,6 +190,14 @@ public sealed class TriggerEngine
     private void SavePerSetTriggers()
     {
         if (string.IsNullOrWhiteSpace(_activeSet)) return;
+        if (_gameDataUnread)
+        {
+            _log?.Log(LogSeverity.Warn, LogSource,
+                $"Not saving game-data triggers for '{_activeSet}': the file couldn't be read, so "
+                + "writing now would overwrite triggers another client saved. Retrying the read.");
+            ScheduleExternalReload(_activeSet, ReadRetryDelay);
+            return;
+        }
         List<Trigger> gd = Triggers
             .Where(t => t.Location == TriggerLocation.GameData)
             .ToList();
@@ -526,10 +545,12 @@ public sealed class TriggerEngine
 
     // Watcher events arrive on a pool thread, several per save; coalesce them and
     // reload on the UI thread (the live collection is bound to the Triggers tab).
-    private void ScheduleExternalReload(string setName)
+    private void ScheduleExternalReload(string setName) => ScheduleExternalReload(setName, ExternalReloadDebounce);
+
+    private void ScheduleExternalReload(string setName, TimeSpan delay)
     {
         int generation = Interlocked.Increment(ref _reloadGeneration);
-        _ = Task.Delay(ExternalReloadDebounce).ContinueWith(_ =>
+        _ = Task.Delay(delay).ContinueWith(_ =>
         {
             if (generation != Volatile.Read(ref _reloadGeneration)) return;
             Dispatcher.UIThread.Post(() => ReloadIfChangedExternally(setName));
@@ -540,12 +561,45 @@ public sealed class TriggerEngine
     {
         if (!string.Equals(_activeSet, setName, StringComparison.Ordinal)) return;
         string path = AppPaths.TriggersFile(setName);
-        string? text = ReadTextOrNull(path);
-        if (text is null || text == _syncedText) return;   // our own save, or nothing new
+        if (!_gameDataUnread && ReadTextOrNull(path) is { } current && current == _syncedText)
+            return;   // our own save, or nothing new
+        if (TryReadPerSet(setName, out _))
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"Game-data triggers for '{setName}' changed in another client — reloaded.");
+    }
+
+    // Read the set's triggers file and, only on success, replace the game-data slice
+    // with it. On failure the slice is left alone, _gameDataUnread blocks saving over
+    // the file, and the read is retried a few times.
+    private bool TryReadPerSet(string setName, out bool fileExists)
+    {
+        string path = AppPaths.TriggersFile(setName);
+        fileExists = System.IO.File.Exists(path);
+        if (!fileExists) { _gameDataUnread = false; return false; }
+        List<Trigger>? loaded;
+        string? text;
+        try
+        {
+            text = System.IO.File.ReadAllText(path);
+            loaded = JsonStore.Load<List<Trigger>>(path);
+        }
+        catch (Exception ex)
+        {
+            _gameDataUnread = true;
+            if (_readRetries++ < MaxReadRetries)
+                ScheduleExternalReload(setName, ReadRetryDelay);
+            _log?.Log(LogSeverity.Warn, LogSource,
+                $"Couldn't read game-data triggers '{path}' ({ex.Message}) — keeping the current list"
+                + (_readRetries <= MaxReadRetries ? ", retrying." : "; giving up until the set reloads."));
+            return false;
+        }
         DropTriggersByLocation(TriggerLocation.GameData);
-        AppendFromFile(path, TriggerLocation.GameData);
-        _log?.Log(LogSeverity.Info, LogSource,
-            $"Game-data triggers for '{setName}' changed in another client — reloaded.");
+        foreach (Trigger t in loaded ?? new List<Trigger>())
+            Triggers.Add(t with { Location = TriggerLocation.GameData });
+        _syncedText = text;
+        _gameDataUnread = false;
+        _readRetries = 0;
+        return true;
     }
 
     private static string? ReadTextOrNull(string path)
@@ -560,12 +614,9 @@ public sealed class TriggerEngine
     // the next edit (PersistAll writes the new file).
     private void LoadPerSetTriggers(string setName)
     {
-        string path = AppPaths.TriggersFile(setName);
-        if (System.IO.File.Exists(path))
-        {
-            AppendFromFile(path, TriggerLocation.GameData);
-            return;
-        }
+        _readRetries = 0;
+        TryReadPerSet(setName, out bool fileExists);
+        if (fileExists) return;
         // No per-set file yet → seed from the universal default.
         AppendFromFile(AppPaths.DefaultTriggersSeedFile, TriggerLocation.GameData);
     }
@@ -674,10 +725,6 @@ public sealed class TriggerEngine
         try
         {
             List<Trigger>? loaded = JsonStore.Load<List<Trigger>>(path);
-            if (forceLocation == TriggerLocation.GameData
-                && _activeSet is { } set
-                && string.Equals(path, AppPaths.TriggersFile(set), StringComparison.Ordinal))
-                _syncedText = ReadTextOrNull(path);
             if (loaded is null) return;
             foreach (Trigger t in loaded)
                 Triggers.Add(t with { Location = forceLocation });
