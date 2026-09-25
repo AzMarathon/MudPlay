@@ -9,7 +9,8 @@ namespace MudPlay.ViewModels.GameData.Edit;
 // and holds child outcome nodes; an outcome node carries a weighted percentage and its
 // effect as mixed text/link runs (summon → monster record, teleport → map room, cast →
 // spell record). Deep or huge sub-trees collapse to a single summary node. Rendered as
-// an expandable tree in the spell record's Game Data tab.
+// an expandable tree in the spell record's Game Data tab, and reused for a monster's
+// greet keywords (see GreetTree).
 public sealed partial class SpellEffectNode : ObservableObject
 {
     // Weighted chance of this outcome under its parent random block; null on a branch
@@ -39,4 +40,14 @@ public sealed partial class SpellEffectNode : ObservableObject
     // Tone → the CSS-ish brush keys the view maps to (border + percent colour).
     public bool IsDanger => Tone == "danger";
     public bool IsAccent => Tone == "accent";
+
+    // Drives a tree's Expand all / Collapse all buttons.
+    public static void SetExpanded(IReadOnlyList<SpellEffectNode> nodes, bool expanded)
+    {
+        foreach (SpellEffectNode n in nodes)
+        {
+            n.IsExpanded = expanded;
+            SetExpanded(n.Children, expanded);
+        }
+    }
 }

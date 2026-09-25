@@ -3429,6 +3429,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // captain room glyphs even though its CMD carries no cast-teleport.
             if (Graph.BoatPassagesAt(room.Key).Count > 0) { set.Add(room.Key); continue; }
 
+            // A placed NPC that teleports you when asked a keyword (its greet chain) —
+            // the same resolver the Room info "NPC transports" section reads, so the
+            // glyph and the panel agree.
+            if (room.Npc > 0 && RoomTooltipBuilder.ResolveNpcTransports(
+                    room, _services.GameData, spawnIndex: null, _services.TBInfo).Count > 0)
+            { set.Add(room.Key); continue; }
+
             if (room.Cmd <= 0) continue;
             // Destinations, not keyworded teleports: a captain dock reaches its
             // `teleport` through a colour-code intro block that LinkTo's the

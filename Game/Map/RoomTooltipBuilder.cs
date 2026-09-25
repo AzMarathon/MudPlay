@@ -771,7 +771,30 @@ public static class RoomTooltipBuilder
     private static string BuildRoomCommandsBlock(Room room, RoomGraphManager graph,
         GameDataCache? data, TBInfoStore? tbinfo, Game.Spells.KnownSpellCatalog? spellCatalog)
     {
-        if (tbinfo is null || room.Cmd <= 0) return string.Empty;
+        IReadOnlyList<RoomCommandLine> lines = ResolveRoomCommandLines(room, graph, data, tbinfo, spellCatalog);
+        if (lines.Count == 0) return string.Empty;
+        StringBuilder sb = new("Room commands:");
+        foreach (RoomCommandLine line in lines)
+            sb.Append('\n').Append(line.Indent > 0 ? "      " : "  ").Append(line.Text);
+        return sb.ToString();
+    }
+
+    // One line of a room's commands block: its text, an indent (1 = one landing of a
+    // multi-room cast teleport, listed under its command), and what it points at — a
+    // destination room for a teleport, the effect row for an effect command — so the
+    // Navigation Room info panel can make the same lines clickable.
+    public sealed record RoomCommandLine(string Text, int Indent = 0, RoomKey? Destination = null,
+        RoomEffectRow? Effect = null);
+
+    // Every command a room's CMD chain offers, as the tooltip lists them: literal and
+    // cast teleports, room actions, effect commands, and paid / level-gated commands
+    // (a captain's sailings) — shared by the map tooltip and the Room info panel.
+    public static IReadOnlyList<RoomCommandLine> ResolveRoomCommandLines(Room room, RoomGraphManager graph,
+        GameDataCache? data, TBInfoStore? tbinfo, Game.Spells.KnownSpellCatalog? spellCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(room);
+        ArgumentNullException.ThrowIfNull(graph);
+        if (tbinfo is null || room.Cmd <= 0) return Array.Empty<RoomCommandLine>();
 
         // Literal teleports (`teleport <room> <map>`): group destination →
         // list of keywords so multi-synonym CMDs ("use chime" / "ring
@@ -855,7 +878,7 @@ public static class RoomTooltipBuilder
 
         if (byDest.Count == 0 && castGroups.Count == 0 && actionKeywords.Count == 0
             && requirements.Count == 0 && effectRows.Count == 0)
-            return string.Empty;
+            return Array.Empty<RoomCommandLine>();
 
         // Append what a rendered group's keyword demands (marking it shown so it
         // isn't also listed standalone). Synonyms share the requirement.
@@ -876,29 +899,30 @@ public static class RoomTooltipBuilder
             return text.Length > 0 ? " — " + text : string.Empty;
         }
 
-        StringBuilder sb = new();
-        sb.Append("Room commands:");
+        var lines = new List<RoomCommandLine>();
         foreach (KeyValuePair<RoomKey, List<string>> entry in byDest)
         {
-            sb.Append('\n').Append("  ")
-              .Append(string.Join(" / ", entry.Value))
+            StringBuilder sb = new();
+            sb.Append(string.Join(" / ", entry.Value))
               .Append(" → ").Append(FormatDest(graph, entry.Key));
             int ml = minLevelByDest.GetValueOrDefault(entry.Key);
             if (ml > 0)
                 sb.Append(" (").Append(RoomExit.FormatLevelGate(ml, 0)).Append(')');
             sb.Append(CostSuffix(entry.Value, levelShown: ml > 0));
+            lines.Add(new RoomCommandLine(sb.ToString(), Destination: entry.Key));
         }
         foreach (CastTeleportGroup g in castGroups)
         {
             string castCost = CostSuffix(g.Keywords, levelShown: g.MinLevel > 0);
-            sb.Append('\n').Append("  ")
-              .Append(string.Join(" / ", g.Keywords)).Append(" → ");
+            StringBuilder sb = new();
+            sb.Append(string.Join(" / ", g.Keywords)).Append(" → ");
             if (g.Destinations.Count == 1)
             {
                 sb.Append(FormatDest(graph, g.Destinations[0]));
                 if (g.MinLevel > 0)
                     sb.Append(" (").Append(RoomExit.FormatLevelGate(g.MinLevel, 0)).Append(')');
                 sb.Append(castCost);
+                lines.Add(new RoomCommandLine(sb.ToString(), Destination: g.Destinations[0]));
             }
             else
             {
@@ -912,13 +936,13 @@ public static class RoomTooltipBuilder
                     sb.Append(" (").Append(RoomExit.FormatLevelGate(g.MinLevel, 0)).Append(')');
                 sb.Append(castCost);
                 sb.Append(':');
+                lines.Add(new RoomCommandLine(sb.ToString()));
                 foreach (RoomKey d in g.Destinations)
-                    sb.Append('\n').Append("      ").Append(FormatDest(graph, d));
+                    lines.Add(new RoomCommandLine(FormatDest(graph, d), Indent: 1, Destination: d));
             }
         }
         if (actionKeywords.Count > 0)
-            sb.Append('\n').Append("  ").Append(string.Join(" / ", actionKeywords))
-              .Append(" (room action)");
+            lines.Add(new RoomCommandLine(string.Join(" / ", actionKeywords) + " (room action)"));
 
         // An effect row that also charges (the healer's "summon healer" for gold)
         // carries its own cost, so mark those keywords shown — otherwise the same
@@ -926,9 +950,9 @@ public static class RoomTooltipBuilder
         foreach (RoomEffectRow row in effectRows)
         {
             foreach (string kw in row.Keywords) requirementShown.Add(kw);
-            sb.Append('\n').Append("  ").Append(string.Join(" / ", row.Keywords))
-              .Append(" — ").Append(row.EffectText);
-            if (row.CostText.Length > 0) sb.Append(" — ").Append(row.CostText);
+            string text = $"{string.Join(" / ", row.Keywords)} — {row.EffectText}";
+            if (row.CostText.Length > 0) text += $" — {row.CostText}";
+            lines.Add(new RoomCommandLine(text, Effect: row));
         }
 
         // Paid commands not already surfaced above (a healer's buy list, a
@@ -937,10 +961,9 @@ public static class RoomTooltipBuilder
         {
             if (requirementShown.Contains(pc.Keyword)) continue;
             requirementShown.Add(pc.Keyword);
-            sb.Append('\n').Append("  ").Append(pc.Keyword)
-              .Append(" — ").Append(FormatRequirement(pc));
+            lines.Add(new RoomCommandLine($"{pc.Keyword} — {FormatRequirement(pc)}"));
         }
-        return sb.ToString();
+        return lines;
     }
 
     // One room command described by what it does: its synonyms grouped, the effect

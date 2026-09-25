@@ -3,7 +3,9 @@
 <!-- current-version:start -->
 > **Version 3.105.9**
 > - A monster's ask-keyword teleports now show on its room: an **NPC transports** section in the Navigation Room info and the map tooltip (`ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 100,000 copper (x10)`), clickable to the destination
-> - On a monster record, a greet keyword that teleports is labelled `(teleport)`, its details wrap instead of cutting off, and the destination room is a link
+> - A monster record's greet keywords show as a collapsible tree (like a room spell's conditional effects); a keyword that teleports is labelled `(teleport)` and its destination room is a link
+> - A room whose NPC offers an ask-keyword teleport is marked as a teleport room on the map
+> - Room info lists the same Room commands as the map tooltip (sailings included), and its rows wrap instead of running off the panel
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

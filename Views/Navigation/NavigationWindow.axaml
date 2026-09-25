@@ -1216,8 +1216,9 @@
                                             <ItemsControl ItemsSource="{Binding RoomInfo.Exits}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="gd:RoomDetailLink">
-                                                        <Button Classes="RecordLink"
-                                                                Content="{Binding Text}" Command="{Binding Open}"/>
+                                                        <Button Classes="RecordLink" Command="{Binding Open}">
+                                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                                                        </Button>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
@@ -1242,8 +1243,9 @@
                                             <ItemsControl ItemsSource="{Binding RoomInfo.RoomCommands}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="gd:RoomDetailLink">
-                                                        <Button Classes="RecordLink"
-                                                                Content="{Binding Text}" Command="{Binding Open}"/>
+                                                        <Button Classes="RecordLink" Command="{Binding Open}">
+                                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                                                        </Button>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
@@ -1256,8 +1258,11 @@
                                             <ItemsControl ItemsSource="{Binding RoomInfo.NpcTransports}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="gd:RoomDetailLink">
-                                                        <Button Classes="RecordLink"
-                                                                Content="{Binding Text}" Command="{Binding Open}"/>
+                                                        <!-- A TextBlock, not string content: a string renders
+                                                             unwrapped and a long destination ran past the rail. -->
+                                                        <Button Classes="RecordLink" Command="{Binding Open}">
+                                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                                                        </Button>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>

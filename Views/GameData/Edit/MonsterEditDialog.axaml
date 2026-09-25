@@ -55,8 +55,8 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,4,0,1"/>
         </Style>
-        <!-- A textblock-backed value (Greet) that pops its command keywords on
-             click. Styled to read as a link, not a chrome button. -->
+        <!-- A record / room link inside the MDB pane. Styled to read as a link,
+             not a chrome button. -->
         <Style Selector="Button.MdbLink">
             <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
             <Setter Property="FontSize" Value="11"/>
@@ -68,6 +68,19 @@
         </Style>
         <Style Selector="Button.MdbLink:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
+        <!-- Small muted text button beside the Greet row (expand all / collapse all). -->
+        <Style Selector="Button.TreeToolBtn">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="6,1"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="Background" Value="{StaticResource ChromeBgBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.TreeToolBtn:pointerover /template/ ContentPresenter">
             <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
         </Style>
     </Window.Styles>
@@ -275,7 +288,7 @@
                             <ItemsControl ItemsSource="{Binding MdbInfo}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:MdbInfoRow">
-                                        <Grid ColumnDefinitions="140,*" Margin="0,1">
+                                        <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto" Margin="0,1">
                                             <TextBlock Grid.Column="0" Classes="MdbKey"
                                                        Text="{Binding Key}"
                                                        VerticalAlignment="Top"
@@ -364,68 +377,74 @@
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
 
-                                            <!-- Textblock-backed rows (Greet) surface each keyword
-                                                 the block responds to as a clickable chip; clicking
-                                                 one flies out the effects that fire when it's asked.
-                                                 Only the keywords sit on the tab, so a block with
-                                                 dozens of them stays compact. -->
-                                            <ItemsControl Grid.Column="1" ItemsSource="{Binding Keywords}"
-                                                          IsVisible="{Binding HasKeywords}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate>
-                                                        <WrapPanel/>
-                                                    </ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="vm:GreetKeyword">
-                                                        <Button Classes="MdbLink"
-                                                                Content="{Binding ChipLabel}"
-                                                                Margin="0,0,10,2">
-                                                            <Button.Flyout>
-                                                                <Flyout Placement="Bottom">
-                                                                    <StackPanel MaxWidth="560">
-                                                                        <TextBlock Classes="SectionHeader"
-                                                                                   Text="{Binding Keyword, StringFormat='Responds to “{0}” with:'}"/>
-                                                                        <!-- Right padding reserves a gutter so the overlay
-                                                                             vertical scrollbar doesn't sit on the text. -->
-                                                                        <ScrollViewer MaxHeight="360"
-                                                                                      Padding="0,0,16,0"
-                                                                                      VerticalScrollBarVisibility="Auto"
-                                                                                      HorizontalScrollBarVisibility="Disabled">
-                                                                            <ItemsControl ItemsSource="{Binding Effects}">
-                                                                                <ItemsControl.ItemTemplate>
-                                                                                    <!-- Wrapped, not clipped: a teleport line names its
-                                                                                         destination room, and at NoWrap the name and its
-                                                                                         map/room ran off the edge. A teleport line is a
-                                                                                         link that opens the map on that room. -->
-                                                                                    <DataTemplate x:DataType="vm:GreetEffect">
-                                                                                        <Panel Margin="0,1">
-                                                                                            <TextBlock Text="{Binding Text}"
-                                                                                                       IsVisible="{Binding IsPlain}"
-                                                                                                       Foreground="{StaticResource ChromeFgBrush}"
-                                                                                                       FontFamily="{StaticResource FontMono}"
-                                                                                                       FontSize="11"
-                                                                                                       TextWrapping="Wrap"/>
-                                                                                            <Button Classes="MdbLink"
-                                                                                                    IsVisible="{Binding IsLink}"
-                                                                                                    Command="{Binding Room.Open, FallbackValue={x:Null}}"
-                                                                                                    FontFamily="{StaticResource FontMono}"
-                                                                                                    FontSize="11"
-                                                                                                    ToolTip.Tip="Open the map on this room">
-                                                                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
-                                                                                            </Button>
-                                                                                        </Panel>
-                                                                                    </DataTemplate>
-                                                                                </ItemsControl.ItemTemplate>
-                                                                            </ItemsControl>
-                                                                        </ScrollViewer>
-                                                                    </StackPanel>
-                                                                </Flyout>
-                                                            </Button.Flyout>
-                                                        </Button>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
+                                            <!-- Textblock-backed rows (Greet): the value names the
+                                                 textblock, with the tree's expand / collapse buttons
+                                                 beside it; the keyword tree itself spans the pane
+                                                 below, since the value column is too narrow for it. -->
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
+                                                        IsVisible="{Binding HasGreet}">
+                                                <TextBlock Classes="MdbValue" Text="{Binding Value}"
+                                                           VerticalAlignment="Center"/>
+                                                <Button Classes="TreeToolBtn" Content="expand all"
+                                                        Command="{Binding Greet.ExpandAllCommand, FallbackValue={x:Null}}"/>
+                                                <Button Classes="TreeToolBtn" Content="collapse all"
+                                                        Command="{Binding Greet.CollapseAllCommand, FallbackValue={x:Null}}"/>
+                                            </StackPanel>
+
+                                            <!-- The same collapsible tree a room spell's conditional
+                                                 effects use: keyword branches (tinted when asking one
+                                                 teleports you) over the effects they fire, a teleport
+                                                 line linking to its map room. Runs wrap to the pane
+                                                 width instead of running off the edge. -->
+                                            <TreeView Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                                      IsVisible="{Binding HasGreet}"
+                                                      ItemsSource="{Binding Greet.Keywords, FallbackValue={x:Null}}"
+                                                      Background="Transparent" BorderThickness="0"
+                                                      Margin="0,2,0,4"
+                                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                      ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                                <TreeView.Styles>
+                                                    <Style Selector="TreeViewItem" x:DataType="vm:SpellEffectNode">
+                                                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                                    </Style>
+                                                    <Style Selector="Border.node">
+                                                        <Setter Property="Padding" Value="4,1"/>
+                                                        <Setter Property="CornerRadius" Value="3"/>
+                                                    </Style>
+                                                    <Style Selector="Border.branch">
+                                                        <Setter Property="BorderThickness" Value="2,0,0,0"/>
+                                                        <Setter Property="Padding" Value="6,3"/>
+                                                        <Setter Property="Background" Value="{StaticResource ChromeBgBrush}"/>
+                                                        <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderSoftBrush}"/>
+                                                    </Style>
+                                                    <Style Selector="Border.branch.accent">
+                                                        <Setter Property="BorderBrush" Value="{StaticResource AccentCyanBrush}"/>
+                                                    </Style>
+                                                </TreeView.Styles>
+                                                <TreeView.ItemTemplate>
+                                                    <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:SpellEffectNode">
+                                                        <Border Classes="node" Classes.branch="{Binding IsBranch}"
+                                                                Classes.accent="{Binding IsAccent}"
+                                                                HorizontalAlignment="Stretch">
+                                                            <ItemsControl ItemsSource="{Binding Runs}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="vm:MdbInline">
+                                                                        <Panel>
+                                                                            <TextBlock Text="{Binding Text}" IsVisible="{Binding IsPlainRun}"
+                                                                                       Classes="MdbValue" TextWrapping="Wrap"/>
+                                                                            <Button Classes="MdbLink" Command="{Binding Open}"
+                                                                                    IsVisible="{Binding IsLink}"
+                                                                                    ToolTip.Tip="Open the map on this room">
+                                                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                                                                            </Button>
+                                                                        </Panel>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </Border>
+                                                    </TreeDataTemplate>
+                                                </TreeView.ItemTemplate>
+                                            </TreeView>
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
