@@ -593,6 +593,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@loop Black Fortress` — start a saved loop by name
 - `@loop 5/10 5/11 5/12` — an ad-hoc loop from two or more `map/room` coordinates
 - `@loop last` — re-run the last loop run this session
+- `@loop send kings road` — ask the player for a copy of their saved loop (they offer it; answer `@loop send yes` or `@loop send no`)
 - `@lair mud men` — start an Auto-Lair (a setup name or coordinates)
 - `@timer dragon` — boss timers whose name matches "dragon" (bare `@timer` lists them all). Each line gives the full respawn plus every un-passed early-spawn window — on Paradigm all three (`-20%` / `-10%` / `-5%`), on Stock the single `87.5%`
 - `@death all` — every unrecovered death (bare `@death` gives just the latest)
@@ -647,12 +648,24 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 | Command | Args | Does |
 |---|---|---|
 | `@goto` | `<destination>` | walks you to a saved GOTO favorite, a searched room (coords / name / acronym), or a boss |
-| `@loop` | `<name>`, ≥2 coords, or `last` | starts a saved loop, an ad-hoc coordinate loop, or (`@loop last`) re-runs the last loop run this session — including an ad-hoc one that was never saved |
+| `@loop` | `<name>`, ≥2 coords, `last`, or `send <name>` / `send yes` / `send no` | starts a saved loop, an ad-hoc coordinate loop, or (`@loop last`) re-runs the last loop run this session — including an ad-hoc one that was never saved. `@loop send` asks for a copy of one of their loops instead (see *Getting a loop from another player* below) |
 | `@lair` | `<name>` or coords | starts an Auto-Lair setup |
 | `@stop` | — | pauses your movement |
 | `@rego` | — | resumes it |
 
 A new movement command overrides an `@stop`: after `@stop`, an `@goto` / `@loop` / `@lair` abandons the pause and starts the new movement straight away — you don't need `@rego` first (use `@rego` only to resume the *same* thing you paused).
+
+#### Getting a loop from another player (`@loop send`)
+
+Another MudPlay player who grants you **Move player** (the same grant `@loop` needs) can send you a copy of one of their saved loops over chat:
+
+1. Send them **`@loop send <name>`** — the name matches the same way `@loop` does (exact name first, otherwise every word you type, in any order; apostrophes are optional, so `kings road` finds *King's Road*). They reply **`{preparing to send: King's Road, yes to confirm, no to deny}`**, or tell you the name matched nothing or several loops.
+2. Answer **`@loop send yes`** to receive it, or **`@loop send no`** to call it off (they reply that it was cancelled). The offer lapses after two minutes.
+3. On yes they reply how many rooms and lines are coming, then send the loop as a few encoded `@loopdata` lines, paced so they don't crowd out anything else. Your client puts it back together and saves it to your Loops list, with a note in the terminal.
+
+What arrives is the route itself — every waypoint's room, command, delay, *Don't rest here* and *Don't attack here*, the loop's notes and its *Only attack in lair rooms* setting. Whether it's a favourite, and which folder it sits in, stay your own choice. A loop never overwrites one of yours: if you already have the identical loop you're told so and nothing is saved, and if you have a *different* loop by that name it's saved as **`<name> (from <player>)`**.
+
+Your client only accepts loop lines within two minutes of your own `@loop send yes`, and — when you answered by telepath — only from the player you said yes to. Use telepath: on gangpath or say, every MudPlay player there who grants you Move player would offer their own match.
 
 ### Change my settings
 

@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.106.0**
-> - New `&@<command>`: sent to a player who grants you Execute commands, they send `@<command>` back to you on the same channel, so your client runs it as theirs (`&@invite` makes them ask you for an invite)
+> **Version 3.107.0**
+> - New `@loop send <name>`: asks a player for a copy of one of their saved loops; they offer the best match, and `@loop send yes` sends it encoded (saved to your Loops, never over one of yours) while `@loop send no` calls it off
+> - `@loop` names ignore apostrophes (`kings road` finds King's Road)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

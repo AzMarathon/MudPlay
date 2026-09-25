@@ -4,19 +4,21 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Remote;
 
-// Paces the @roomba sync reply out one telepath at a time so a full gang-house
-// log (dozens of lines) can't monopolize the outbound channel and starve the
-// engine's real-time commands (combat, heal, movement) — a sync is triggered by
-// another player's request, so it must stay in the background. Even serialized
+// Paces a multi-line data reply (an @roomba sync, a @loop send) out one line at a
+// time so a big payload (a gang-house log runs dozens of lines) can't monopolize the
+// outbound channel and starve the engine's real-time commands (combat, heal,
+// movement) — it's triggered by another player's request, so it must stay in the
+// background. Even serialized
 // (TelnetClient no longer interleaves writes), a tight burst still floods; this
 // trickles them ~800ms apart, leaving a wide gap for other sends between each.
 //
 // Rate-limit aware: if the game reports a hard clobber ("You are typing too
 // quickly - command ignored" on stock; "Too many messages sent …" on paradigm),
 // the caller pokes NoteClobber — we then pause a few seconds and re-send the last
-// line (the merge is newest-wins idempotent, so a stray resend is harmless), so
-// nothing is lost even if the pace briefly clips the limit.
-public sealed class RoombaSyncSender
+// line (the receivers tolerate a duplicate: a roomba merge is newest-wins, a loop
+// chunk just overwrites its own slot), so nothing is lost even if the pace briefly
+// clips the limit.
+public sealed class PacedReplySender
 {
     public static readonly TimeSpan PaceInterval = TimeSpan.FromMilliseconds(800);
     public static readonly TimeSpan ClobberBackoff = TimeSpan.FromSeconds(3);
@@ -33,14 +35,14 @@ public sealed class RoombaSyncSender
     private bool _draining;
     private bool _backoffNext;
 
-    public RoombaSyncSender(Action<TimeSpan, Action>? scheduleAfter = null, LogService? log = null)
+    public PacedReplySender(Action<TimeSpan, Action>? scheduleAfter = null, LogService? log = null)
     {
         _scheduleAfter = scheduleAfter ?? ((_, action) => action());
         _log = log;
     }
 
-    // Queue one sync response's lines (already wrapped as "@roombadata <blob>")
-    // for paced delivery through `reply`. Multiple requests share the one queue,
+    // Queue one response's lines (already wrapped, e.g. "@roombadata <blob>") for
+    // paced delivery through `reply`. Multiple requests share the one queue,
     // so concurrent syncs naturally serialize behind the same pace.
     public void Enqueue(Action<string> reply, IReadOnlyList<string> lines)
     {
@@ -68,8 +70,8 @@ public sealed class RoombaSyncSender
             _lastSent = null;
         }
         _backoffNext = true;
-        _log?.Info("RoombaSync",
-            "rate-limit clobber during @roomba sync — backing off and resending the last line");
+        _log?.Info("RemoteCmd",
+            "rate-limit clobber during a paced data reply — backing off and resending the last line");
     }
 
     private void Pump()

@@ -97,7 +97,7 @@ public sealed class MovePlayerHandlerStopGotoTests : IDisposable
 
         // Registers @goto / @stop / @rego / … on the engine.
         _ = new MovePlayerHandler(engine, search, graph, tracker, walker, loops, loopRunner,
-            lairs, autoLair, coord, controller, favorites, bosses, bfs);
+            lairs, autoLair, coord, controller, favorites, bosses, bfs, new LoopShareHandler(loops));
 
         return new Rig
         {

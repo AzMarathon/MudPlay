@@ -5,7 +5,7 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-public sealed class RoombaSyncSenderTests
+public sealed class PacedReplySenderTests
 {
     // Manual scheduler: records each (delay, action) the sender schedules and runs
     // them one at a time on demand, so a test can inject a clobber between pumps
@@ -28,7 +28,7 @@ public sealed class RoombaSyncSenderTests
     public void Enqueue_DrainsLinesInOrder_OneAtATime()
     {
         ManualScheduler sched = new();
-        RoombaSyncSender sender = new(sched.Schedule);
+        PacedReplySender sender = new(sched.Schedule);
         List<string> sent = new();
 
         sender.Enqueue(sent.Add, new[] { "a", "b", "c" });
@@ -48,19 +48,19 @@ public sealed class RoombaSyncSenderTests
     public void Pacing_FirstSendImmediate_RestPaced()
     {
         ManualScheduler sched = new();
-        RoombaSyncSender sender = new(sched.Schedule);
+        PacedReplySender sender = new(sched.Schedule);
         List<string> sent = new();
         sender.Enqueue(sent.Add, new[] { "a", "b" });
 
         Assert.Equal(TimeSpan.Zero, sched.RunNext());                  // first send is immediate
-        Assert.Equal(RoombaSyncSender.PaceInterval, sched.RunNext());  // then paced ~800ms apart
+        Assert.Equal(PacedReplySender.PaceInterval, sched.RunNext());  // then paced ~800ms apart
     }
 
     [Fact]
     public void Clobber_BacksOffThenResendsLastLine()
     {
         ManualScheduler sched = new();
-        RoombaSyncSender sender = new(sched.Schedule);
+        PacedReplySender sender = new(sched.Schedule);
         List<string> sent = new();
         sender.Enqueue(sent.Add, new[] { "a", "b", "c" });
 
@@ -71,7 +71,7 @@ public sealed class RoombaSyncSenderTests
 
         sched.RunNext();                             // the queued pump becomes a backoff beat
         Assert.Equal(new[] { "a" }, sent);           // nothing sent on the backoff beat
-        Assert.Equal(RoombaSyncSender.ClobberBackoff, sched.RunNext());  // resend fires after the backoff
+        Assert.Equal(PacedReplySender.ClobberBackoff, sched.RunNext());  // resend fires after the backoff
         Assert.Equal(new[] { "a", "a" }, sent);      // "a" resent
 
         sched.RunNext();                             // "b"
@@ -83,7 +83,7 @@ public sealed class RoombaSyncSenderTests
     public void Clobber_WhileIdle_DoesNothing()
     {
         ManualScheduler sched = new();
-        RoombaSyncSender sender = new(sched.Schedule);
+        PacedReplySender sender = new(sched.Schedule);
 
         Exception? ex = Record.Exception(() => sender.NoteClobber());
 
