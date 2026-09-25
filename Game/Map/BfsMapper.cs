@@ -366,7 +366,8 @@ public sealed class BfsMapper
     }
 
     // True when the shortest route from source to destination crosses at
-    // least one (Toll: N) exit under the supplied filter. Used at walk-start
+    // least one paid exit — a (Toll: N) or an NPC ask-transport fare — under the
+    // supplied filter. Used at walk-start
     // to decide whether a party @wealth probe is worth firing: the probe only
     // matters when a toll is actually on the route the walker will take, not
     // on some off-path toll edge the BFS frontier happened to touch. The
@@ -385,6 +386,7 @@ public sealed class BfsMapper
             if (room is null) return false;
             if (!room.Exits.TryGetValue(dir, out RoomExit exit)) return false;
             if (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0) return true;
+            if (exit.FareCopper > 0) return true;   // an NPC ask-transport's per-person fare
             cursor = exit.Target;
         }
         return false;

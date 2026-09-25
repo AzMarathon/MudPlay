@@ -4709,5 +4709,9 @@ trailing letter (R runic / P platinum / G gold / S silver), else copper.
 - Decoders that collapse repeats (the greet tree's `Cost: 100,000 copper (x10)`, as MME shows it) are
   showing a repeat count that is a real multiplier.
 
-**Client use:** `GreetTeleportResolver` sums the line's `price` directives into the NPC transport's
-`CostText`. Display only — routing does not yet gate a greet teleport on the fare.
+**Each person pays.** A party crosses an NPC ask-transport by every member asking it themselves (the
+leader relays the keyword), and each asker is charged the full fare — so the whole party needs it on hand.
+
+**Client use:** `GreetTeleportResolver` sums the line's `price` directives into the transport's
+`FareCopper`; the graph stamps it on the synthesised Teleport edge (`RoomExit.FareCopper`) and
+`MovementFilter` gates it like a toll — on the poorest party member's `@wealth` (or your own wallet solo).

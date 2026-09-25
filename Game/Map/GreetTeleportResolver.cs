@@ -31,11 +31,14 @@ public static class GreetTeleportResolver
     // One ask-transport exit: the verbatim `ask <noun> <keyword>` command, the
     // room it lands in, any level floor the game gates the transport behind (0 when
     // ungated by level), and any single class the transport is restricted to
-    // (0 when ungated by class — a `class N` directive, N = Classes.Number). CostText
-    // is the total `price` charged on the teleporting line in coin words ("1 runic"),
-    // or empty when the transport is free. Display only — routing doesn't gate on it.
+    // (0 when ungated by class — a `class N` directive, N = Classes.Number). FareCopper
+    // is the total `price` charged on the teleporting line — every person who asks
+    // pays it — or 0 when the transport is free; CostText words it in coins ("1 runic").
     public readonly record struct GreetTeleport(string Command, RoomKey Destination, int MinLevel, int RequiredClass,
-        string CostText = "");
+        long FareCopper = 0)
+    {
+        public string CostText => FareCopper > 0 ? CurrencyFormat.Full(FareCopper) : string.Empty;
+    }
 
     // Matches the door decoder's depth cap — a malformed self-referential greet
     // chain can't spin the resolver; the per-walk visited set breaks true cycles.
@@ -69,9 +72,9 @@ public static class GreetTeleportResolver
             if (pointer <= 0) continue;
 
             if (TryResolveUngatedTeleport(store, pointer, new HashSet<int>(),
-                    out RoomKey dest, out int minLevel, out int requiredClass, out string cost))
+                    out RoomKey dest, out int minLevel, out int requiredClass, out long fare))
             {
-                yield return new GreetTeleport($"ask {noun} {keyword}", dest, minLevel, requiredClass, cost);
+                yield return new GreetTeleport($"ask {noun} {keyword}", dest, minLevel, requiredClass, fare);
             }
         }
     }
@@ -96,12 +99,12 @@ public static class GreetTeleportResolver
     // check the walker reacts to (verify-and-retry), so the transport stays
     // routable for its class.
     private static bool TryResolveUngatedTeleport(TBInfoStore store, int number,
-        HashSet<int> visited, out RoomKey dest, out int minLevel, out int requiredClass, out string cost)
+        HashSet<int> visited, out RoomKey dest, out int minLevel, out int requiredClass, out long fare)
     {
         dest = default;
         minLevel = 0;
         requiredClass = 0;
-        cost = string.Empty;
+        fare = 0;
         int depth = 0;
         while (number > 0 && depth++ < MaxDepth && visited.Add(number))
         {
@@ -159,8 +162,7 @@ public static class GreetTeleportResolver
                     dest = lineDest;
                     minLevel = lineMinLevel;
                     requiredClass = lineClass;
-                    if (linePriceCopper > 0)
-                        cost = CurrencyFormat.Full(linePriceCopper);
+                    fare = linePriceCopper;
                     return true;
                 }
             }

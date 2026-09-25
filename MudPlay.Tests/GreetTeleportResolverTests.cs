@@ -216,6 +216,7 @@ public sealed class GreetTeleportResolverTests : IDisposable
         Assert.Equal(2, teleports.Count);
         Assert.Equal("ask Seher'Sahham activate", teleports[0].Command);
         Assert.Equal(new RoomKey(16, 637), teleports[0].Destination);
+        Assert.Equal(1_000_000, teleports[0].FareCopper);
         Assert.Equal("1 runic", teleports[0].CostText);
         Assert.Equal(new RoomKey(1, 140), teleports[1].Destination);
         Assert.Equal(string.Empty, teleports[1].CostText);

@@ -126,7 +126,11 @@ public sealed record RouteChoice(
     RoomKey? TokenLanding = null,
     long TokenCostCopper = 0,
     int TokenMinLevel = 0,
-    int? TokenCharges = null)
+    int? TokenCharges = null,
+    // For a Teleport choice: the per-person copper fare the teleport route's paid
+    // transports charge (an NPC ask-transport), so the card can state the cost
+    // before the user commits. Zero when the teleports are free.
+    long TeleportFareCopper = 0)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -328,7 +332,8 @@ public static class RouteChoicePlanner
             BuildKeyPath(graph, source, walk),
             BuildKeyPath(graph, source, tele),
             RouteChoiceKind.Teleport,
-            landing);
+            landing,
+            TeleportFareCopper: RouteFareCopper(graph, source, tele));
     }
 
     // Compares the shortest route (by hops — the walker's default plan, which crosses
@@ -657,6 +662,23 @@ public static class RouteChoicePlanner
             cur = exit.Target;
         }
         return null;
+    }
+
+    // Total per-person fare of the paid transports a planned route crosses (0 when
+    // none). The filter already refused any fare the party can't cover, so this is
+    // what the route will cost each member, stated on the card.
+    private static long RouteFareCopper(RoomGraphManager graph, RoomKey source, IReadOnlyList<Direction> path)
+    {
+        long fare = 0;
+        RoomKey cur = source;
+        foreach (Direction dir in path)
+        {
+            Room? room = graph.GetRoom(cur);
+            if (room is null || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            fare += exit.FareCopper;
+            cur = exit.Target;
+        }
+        return fare;
     }
 
     // Expand a planned direction list to the RoomKey sequence it visits (source

@@ -16,6 +16,9 @@ namespace MudPlay.Game.Map;
 //     impossible).
 //   - KeyItemId — item id required for KeyLocked, Item, Ticket exits.
 //   - TollGold — gold cost on Toll exits.
+//   - FareCopper — the copper price an NPC ask-transport (a greet teleport) charges
+//     each person who asks it. Unlike a toll it isn't parsed from the exit cell;
+//     the graph stamps it on the synthesised Teleport edge. 0 means free.
 //   - TextCommands — comma-separated alternatives on Text exits. Any one of
 //     them moves the player.
 //   - MinLevel / MaxLevel — character level window on a level-gated exit
@@ -101,7 +104,8 @@ public readonly partial record struct RoomExit(
     bool CastPocketEntrance = false,
     bool GatewayTeleport = false,
     IReadOnlyList<RoomKey>? CastTeleportTargets = null,
-    (int Lo, int Hi)? AlignmentGate = null)
+    (int Lo, int Hi)? AlignmentGate = null,
+    long FareCopper = 0)
 {
     // True when this exit carries a character-level window (either a floor, a
     // cap, or both).
