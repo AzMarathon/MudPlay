@@ -1508,7 +1508,7 @@ The toolbar across the top controls what you see:
 
 - **Channel checkboxes** — **Gossip, Say, Telepath, Gang, Broadcast, Yell, Server** — tick or untick to show or hide each channel. Each box is painted in its channel's color, so the row doubles as a color key. Your choices are remembered per character. (Telepaths in and out share the one Telepath box; realm notices and PvP messages share the Server box.)
 - **Search** box — narrows the log to lines whose speaker or text matches what you type (this one isn't remembered between sessions).
-- **Auto-scroll** — when ticked, the log stays pinned to the newest line; untick it to read back without being yanked to the bottom.
+- **Auto-scroll** — when ticked, the log follows the newest line while you're at the bottom. Scroll or drag up to read back and new lines leave your place alone; scroll back to the bottom (or re-tick the box) and it follows again. Untick it to never follow.
 
 ## Talking
 

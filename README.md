@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.105.3**
+> **Version 3.105.4**
 > - The Conversation window's message list fills the window again — its scrollbar sits at the window's edge instead of wherever the longest line ends
+> - Scrolling or dragging up in the Conversation window stays put while new lines arrive — auto-scroll follows only while you're at the bottom — and the scrollbar thumb no longer jumps while dragged
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

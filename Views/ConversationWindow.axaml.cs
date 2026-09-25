@@ -22,6 +22,15 @@ public partial class ConversationWindow : Window
     private ListBox? _rowsList;
     private ScrollViewer? _rowsScroll;
 
+    // Auto-scroll follows the newest line only while the view is at the bottom. Once
+    // the user scrolls or drags up to read, a new line must not yank the view back
+    // down — pinning on every line made a thumb drag jump around as chat arrived. It
+    // re-engages when they scroll back to the bottom. _pinning marks our own
+    // ScrollToEnd so it isn't read as the user moving.
+    private bool _followTail = true;
+    private bool _pinning;
+    private const double BottomSlack = 8;
+
     // Per-window Tab-completion cursor over the input box, mirroring the
     // terminal's own (Controls.TerminalControl._autoComplete) — cycling state
     // is per-widget, the on/off setting (AppServices.InventoryTabCompleteEnabled)
@@ -59,10 +68,12 @@ public partial class ConversationWindow : Window
                 RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
             _rowsList.AddHandler(InputElement.PointerReleasedEvent, OnRowsPointerReleased,
                 RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+            _rowsList.AddHandler(ScrollViewer.ScrollChangedEvent, OnRowsScrollChanged);
         }
         if (DataContext is ConversationViewModel vm)
         {
             vm.ScrollToRowRequested += OnScrollToRow;
+            vm.PropertyChanged += OnViewModelPropertyChanged;
             // Land on the freshest row.
             if (vm.Rows.Count > 0) PinToBottomOnOpen();
             this.FindControl<TextBox>("InputBox")?.Focus();
@@ -74,6 +85,7 @@ public partial class ConversationWindow : Window
         if (DataContext is ConversationViewModel vm)
         {
             vm.ScrollToRowRequested -= OnScrollToRow;
+            vm.PropertyChanged -= OnViewModelPropertyChanged;
             vm.Dispose();
         }
     }
@@ -111,6 +123,7 @@ public partial class ConversationWindow : Window
     {
         if (_rowsList is null) return;
         if (DataContext is not ConversationViewModel { AutoScroll: true }) return;
+        if (!_followTail) return;   // reading history — leave the view where it is
         // Defer the scroll. Calling ScrollIntoView synchronously while the
         // virtualizing panel is mid-update (a chat line arriving as the row is
         // added, or the panel still materialising on open) re-enters the layout
@@ -119,6 +132,8 @@ public partial class ConversationWindow : Window
         // panel finish its layout first.
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            if (!_followTail) return;   // the user scrolled up while this was queued
+            _pinning = true;
             _rowsList?.ScrollIntoView(row);
             // ScrollIntoView only scrolls far enough to reveal the row, leaving
             // the ListBox's bottom padding (and any extent growth from a line
@@ -126,7 +141,27 @@ public partial class ConversationWindow : Window
             // edge — so "auto-scroll" visibly stopped short of the true bottom.
             // Pin the inner viewport to its end to close that gap.
             ResolveRowsScroll()?.ScrollToEnd();
+            Dispatcher.UIThread.Post(() => _pinning = false, DispatcherPriority.Background);
         });
+    }
+
+    // Track whether the user has the view at the bottom. Only a change that moved the
+    // offset counts, and not one we made: a new line only grows the extent (offset
+    // unchanged), which must not read as "scrolled away" before its pin lands.
+    private void OnRowsScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        if (_pinning || e.OffsetDelta.Y == 0) return;
+        if (ResolveRowsScroll() is not { } sv) return;
+        _followTail = sv.Offset.Y + sv.Viewport.Height >= sv.Extent.Height - BottomSlack;
+    }
+
+    // Ticking Auto-scroll back on means "take me to the newest line": follow again.
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ConversationViewModel.AutoScroll)) return;
+        if (sender is not ConversationViewModel { AutoScroll: true } vm || vm.Rows.Count == 0) return;
+        _followTail = true;
+        OnScrollToRow(vm.Rows[^1]);
     }
 
     private ScrollViewer? ResolveRowsScroll()
@@ -149,10 +184,15 @@ public partial class ConversationWindow : Window
             ScrollViewer? sv = ResolveRowsScroll();
             if (sv is null) return;
             double before = sv.Offset.Y;
+            _pinning = true;
             sv.ScrollToEnd();
             // Offset unchanged → extent settled, we're truly at the bottom.
             // Otherwise the extent grew this pass; try once more next pass.
-            if (System.Math.Abs(sv.Offset.Y - before) < 0.5 || attempts++ >= 8) return;
+            if (System.Math.Abs(sv.Offset.Y - before) < 0.5 || attempts++ >= 8)
+            {
+                Dispatcher.UIThread.Post(() => _pinning = false, DispatcherPriority.Background);
+                return;
+            }
             Dispatcher.UIThread.Post(Pin, DispatcherPriority.Background);
         }
 

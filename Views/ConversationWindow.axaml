@@ -142,6 +142,15 @@
                     <Setter Property="MinHeight" Value="0"/>
                 </Style>
             </ListBox.Styles>
+            <!-- Rows wrap to different heights, and the virtualizing panel estimates the
+                 extent from the rows it has realized; with only the visible handful, that
+                 estimate swung as a thumb drag realized new rows and the thumb jumped
+                 under the pointer. Realizing a couple of viewports either side steadies it. -->
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel CacheLength="2"/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
                 <DataTemplate DataType="vm:ConversationRowViewModel">
                     <Grid Margin="4,2">
