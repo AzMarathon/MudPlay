@@ -360,29 +360,14 @@ public static class DefaultPatterns
         // its greedy name capture would swallow "You notice <name>" and the
         // wire's monster hue would tag the sneaker a null-numbered Monster that
         // strands the Combat gate. SneakArrivalNotice handles that line instead.
-        // TWO GENERIC FORMS THE SERVER SENDS THAT THIS USED TO MISS, both from a
-        // monster with no movement sentence of its own (the ones that DO carry one
-        // — "A tall elite orc guard strides in from the east!" — always matched):
-        //
-        //   "<mob> moves into the from the <dir>."   the word "room" is MISSING
-        //   "<mob> just arrived from <dir|nowhere>."  no "in"/"into" at all
-        //
-        // The first is a STOCK TYPO the server reproduces deliberately: that one
-        // string omits "room" while its two vertical siblings ("from above." /
-        // "from below.") are complete, so only the COMPASS arrival was unparseable
-        // — and the compass arrival is the line a monster prints when it pursues
-        // you or wanders in. Nothing learned the mob was there, so auto-combat had
-        // no target to pick. In a lit room the next room re-display heals it via
-        // "Also here:"; a DARK room never re-displays, so it never healed and the
-        // mob beat on a client that would not swing back (report: "it will not auto
-        // attack a monster that is attacking you ... I get this situation in dark
-        // rooms often", with a capture of a bugbear captain doing exactly that).
-        //
-        // The new branches require a REAL direction word, anchored to the end of
-        // the token, because "<name> just left/arrived ..." is a shape ordinary
-        // chat produces ("I just left downtown.", "Bob just arrived from the
-        // store."). The original branches keep their loose [\w-]+ direction
-        // untouched — their verb phrases are specific enough on their own.
+        // Also the server's two generic arrivals, sent for a monster with no movement
+        // sentence of its own: "<mob> moves into the from the <dir>." (the compass
+        // form really does drop "room" — its "from above." / "from below." siblings
+        // don't) and "<mob> just arrived from <dir|nowhere>.". Missed, the monster
+        // never reached the roster; a lit room caught up on its next "Also here:",
+        // a dark room never re-displays, so auto-combat never engaged it. "<name>
+        // just arrived from …" is also a chat shape ("Bob just arrived from the
+        // store."), so that branch requires a real direction word.
         yield return new RegexPattern(KnownPatterns.RoomEntryArrival,
             @"^(?!You notice )(?<name>.+?) (?:\w+ in(?:to)?(?: the(?: room)?)? from (?:the )?"
           + @"|just arrived from (?:the )?(?=(?:northeast|northwest|southeast|southwest|north|south|east|west|upwards|downwards|up|down|above|below|nowhere)[.!]))"
@@ -427,19 +412,10 @@ public static class DefaultPatterns
         // so it's folded into \w+ exactly like the arrival line's verb capture —
         // the "out to <dir>" structure is the reliable anchor. Add alternates to
         // the drag-out branch if the game emits other "the room" verbs.
-        // ...AND THE GENERIC DEPARTURE, the mirror of the arrival above and missed
-        // for the same reason. A monster with no departure sentence of its own
-        // leaves with
-        //
-        //   "<mob> just left to the <dir>."
-        //   "<mob> just left upwards."  /  "<mob> just left downwards."
-        //
-        // none of which carry "out"/"the room", so nothing removed it from the
-        // roster: the engine kept swinging at a monster that had walked away and
-        // the server answered "You do not see <mob> here!". The vertical pair
-        // spells the direction as an adverb with no "to the", so the "to the" is
-        // optional on this branch. Same real-direction lookahead as the arrival —
-        // "I just left downtown." is a chat line, not a departure.
+        // And the generic departure, the arrival's mirror: "<mob> just left to the
+        // <dir>." / "just left upwards." / "just left downwards." (no "to the" on the
+        // vertical pair). Missed, the engine kept swinging at a monster that had gone.
+        // Same real-direction requirement — "I just left downtown." is chat.
         yield return new RegexPattern(KnownPatterns.RoomEntryDeparture,
             @"^(?<name>.+?) (?:(?:(?:walks out of|exits) the room|\w+ out) to (?:the )?"
           + @"|just left (?:to (?:the )?)?(?=(?:northeast|northwest|southeast|southwest|north|south|east|west|upwards|downwards|up|down|above|below|nowhere)[.!]))"
