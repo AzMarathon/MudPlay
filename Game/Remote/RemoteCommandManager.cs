@@ -31,6 +31,9 @@ namespace MudPlay.Game.Remote;
 //      players is PlayerRemoteControls.None → every per-flag handler denies.
 //      Users grant access via the Players tab edit dialog.
 //
+// Relay-back: `&@<command> [args]` asks us to send `@<command> [args]` back to its
+// sender (see HandleRelayBack), so the sender's own client runs it as if we'd sent it.
+//
 // Threading: ChatRouter.EntryClassified fires on the dispatcher's thread (the
 // MessageRouter already marshalled the line upstream). Handler invocation happens
 // on the same thread. Long work inside a handler must offload via Task.Run per
@@ -351,6 +354,8 @@ public sealed class RemoteCommandManager : IDisposable
             if (IsAuthorised(sender, entry.Value, entry.Key))
                 permitted.Add(entry.Key);
         }
+        if (IsAuthorised(sender, RelayBackCategory, RelayBackPrefix))
+            permitted.Add(RelayBackPrefix + "<command>");
         return permitted;
     }
 
@@ -387,7 +392,8 @@ public sealed class RemoteCommandManager : IDisposable
         // classifier emitting a null speaker for own-speech.
         if (entry.Speaker.Equals("You", StringComparison.OrdinalIgnoreCase)) return;
         if (string.IsNullOrEmpty(entry.Message)) return;
-        if (entry.Message[0] != '@') return;             // Not an @-command.
+        bool relayBack = entry.Message.StartsWith(RelayBackPrefix, StringComparison.Ordinal);
+        if (!relayBack && entry.Message[0] != '@') return;   // Not an @-command.
         // Public-channel self-echo: a gangpath (also gossip / auction / broadcast) echoes
         // our OWN line back tagged with our character name, so it slipped past the null /
         // "You" guards above. We never issue remote commands to ourselves, so skip it —
@@ -396,6 +402,12 @@ public sealed class RemoteCommandManager : IDisposable
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Skipping own {entry.Channel} echo of {entry.Message} (self).");
+            return;
+        }
+
+        if (relayBack)
+        {
+            HandleRelayBack(entry.Speaker, entry.Message, channel.Value);
             return;
         }
 
@@ -521,6 +533,50 @@ public sealed class RemoteCommandManager : IDisposable
                 $"Handler for {command} threw on {entry.Speaker}'s invocation: {ex.Message}");
         }
     }
+
+    // `&@<command> [args]` — "send this remote command to me". We echo the @-command
+    // back to its sender on the channel it arrived on, so the sender's client runs it
+    // under the sender's own grants for us: a leader's `&@invite` makes the member ask
+    // to be invited. Gated at the @do tier, since `@do /<sender> @<command>` could already
+    // put the same line on the wire. Only a command this client knows is relayed — the
+    // echo is never arbitrary text — and a nested `&@&@…` isn't a known command, so it
+    // can't ping-pong. The reroll / set-suicide hard-blocks apply to the payload too.
+    private void HandleRelayBack(string sender, string message, RemoteChannel channel)
+    {
+        string payload = message[1..].Trim();
+        string[] tokens = payload.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 0 || tokens[0].Length < 2) return;   // a bare "&@"
+        string command = tokens[0];
+        string[] args = tokens[1..];
+
+        if (IsHardBlocked(command, args, out string? reason))
+        {
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Blocked relay-back of {command} for {sender}: {reason}");
+            return;
+        }
+        if (!_handlers.ContainsKey(command) && !TryMatchPrefixHandler(command, out _, out _))
+        {
+            _log?.Log(LogSeverity.Debug, "RemoteCmd",
+                $"Ignoring relay-back of unknown command {command} from {sender} (no reply).");
+            return;
+        }
+        if (!IsAuthorised(sender, RelayBackCategory, RelayBackPrefix))
+        {
+            _log?.Log(LogSeverity.Debug, "RemoteCmd",
+                $"Denied relay-back of {command} for {sender} (lacks {RelayBackCategory}).");
+            SendDenialReply(channel, sender);
+            return;
+        }
+
+        _log?.Log(LogSeverity.Info, "RemoteCmd",
+            $"Relaying {payload} back to {sender} on {channel} (&@ request).");
+        SendLine(channel, sender, payload);
+    }
+
+    // The relay-back marker and the grant it needs (see HandleRelayBack).
+    public const string RelayBackPrefix = "&@";
+    public const PlayerRemoteControls RelayBackCategory = PlayerRemoteControls.ExecuteCommands;
 
     private bool IsChannelDisabled(RemoteChannel c) => c switch
     {
@@ -830,8 +886,15 @@ public sealed class RemoteCommandManager : IDisposable
     private void SendReply(RemoteChannel channel, string recipient, string text)
     {
         if (string.IsNullOrEmpty(text)) return;
+        SendLine(channel, recipient, $"{{{text}}}");
+    }
+
+    // Address a line to recipient on channel and put it on the wire. A reply wraps its
+    // text in { } first; a relay-back sends its @-command bare so the recipient's
+    // engine runs it.
+    private void SendLine(RemoteChannel channel, string recipient, string payload)
+    {
         string given = GivenName(recipient);
-        string payload = $"{{{text}}}";
         string wire = channel switch
         {
             RemoteChannel.Telepath => $"/{given} {payload}",

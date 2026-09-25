@@ -154,6 +154,17 @@ public sealed class HelpHandlerTests
     }
 
     [Fact]
+    public void GetPermittedCommands_ListsRelayBack_OnlyWithExecuteGrant()
+    {
+        var (_, _, players, engine) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryLocation);
+        SeedPlayer(players, "Ann", PlayerRemoteControls.ExecuteCommands);
+
+        Assert.DoesNotContain("&@<command>", engine.GetPermittedCommands("Bob"));
+        Assert.Contains("&@<command>", engine.GetPermittedCommands("Ann"));
+    }
+
+    [Fact]
     public void Help_WithCommandArg_RepliesWithThatCommandsSyntax()
     {
         // @help only needs QueryVersion; the ARG command is merely described, so a

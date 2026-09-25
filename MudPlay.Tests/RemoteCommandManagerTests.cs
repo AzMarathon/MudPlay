@@ -1273,4 +1273,99 @@ public sealed class RemoteCommandManagerTests
 
         Assert.True(fired);
     }
+
+    // ===== &@ relay-back =====
+
+    private static List<string> Sent(RemoteCommandManager engine) =>
+        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToList();
+
+    [Fact]
+    public void RelayBack_Granted_EchoesTheCommandToTheSenderBare()
+    {
+        var (engine, _, players) = Setup();
+        bool ranHere = false;
+        engine.RegisterHandler("@invite", PlayerRemoteControls.RequestInvite, _ => ranHere = true);
+        SeedPlayer(players, "Leader", PlayerRemoteControls.ExecuteCommands);
+
+        engine.DispatchForTests(Telepath("Leader", "&@invite"));
+
+        Assert.Equal(new[] { "/Leader @invite\r" }, Sent(engine));
+        Assert.False(ranHere);   // relayed, not run on this client
+    }
+
+    [Fact]
+    public void RelayBack_KeepsArgs_AndRepliesOnTheInboundChannel()
+    {
+        var (engine, _, players) = Setup();
+        engine.RegisterHandler("@where", PlayerRemoteControls.QueryLocation, _ => { });
+        SeedPlayer(players, "Leader", PlayerRemoteControls.ExecuteCommands);
+
+        engine.DispatchForTests(Gangpath("Leader", "&@where now"));
+        engine.DispatchForTests(Local("Leader", "&@where"));
+
+        Assert.Equal(new[] { "bg @where now\r", ">Leader @where\r" }, Sent(engine));
+    }
+
+    [Fact]
+    public void RelayBack_WithoutExecuteGrant_Denied()
+    {
+        var (engine, _, players) = Setup();
+        engine.RegisterHandler("@invite", PlayerRemoteControls.RequestInvite, _ => { });
+        // Holding the command's own grant isn't enough — relay-back is the @do tier.
+        SeedPlayer(players, "Leader", PlayerRemoteControls.RequestInvite);
+
+        engine.DispatchForTests(Telepath("Leader", "&@invite"));
+
+        Assert.Equal(new[] { "/Leader {command invalid or not allowed}\r" }, Sent(engine));
+    }
+
+    [Fact]
+    public void RelayBack_Denied_SilentWhenWarnOnDenialOff()
+    {
+        var (engine, _, _) = Setup();
+        engine.WarnOnDenial = false;
+        engine.RegisterHandler("@invite", PlayerRemoteControls.RequestInvite, _ => { });
+
+        engine.DispatchForTests(Telepath("Stranger", "&@invite"));
+
+        Assert.Empty(engine.LastSentForTests);
+    }
+
+    [Fact]
+    public void RelayBack_UnknownOrNestedCommand_Ignored()
+    {
+        var (engine, _, players) = Setup();
+        SeedPlayer(players, "Leader", PlayerRemoteControls.ExecuteCommands);
+
+        engine.DispatchForTests(Telepath("Leader", "&@nosuchthing"));
+        engine.DispatchForTests(Telepath("Leader", "&@&@invite"));
+        engine.DispatchForTests(Telepath("Leader", "&@"));
+
+        Assert.Empty(engine.LastSentForTests);
+    }
+
+    [Fact]
+    public void RelayBack_HardBlockedPayload_SilentlyDropped()
+    {
+        var (engine, _, players) = Setup();
+        engine.RegisterHandler("@do", PlayerRemoteControls.ExecuteCommands, _ => { });
+        SeedPlayer(players, "Leader", PlayerRemoteControls.ExecuteCommands);
+
+        engine.DispatchForTests(Telepath("Leader", "&@do reroll"));
+
+        Assert.Empty(engine.LastSentForTests);
+    }
+
+    [Fact]
+    public void RelayBack_MasterDisable_Ignored()
+    {
+        var (engine, _, players) = Setup();
+        engine.RegisterHandler("@invite", PlayerRemoteControls.RequestInvite, _ => { });
+        SeedPlayer(players, "Leader", PlayerRemoteControls.ExecuteCommands);
+        engine.MasterDisable = true;
+
+        engine.DispatchForTests(Telepath("Leader", "&@invite"));
+
+        Assert.Empty(engine.LastSentForTests);
+    }
 }

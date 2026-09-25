@@ -10,7 +10,7 @@ namespace MudPlay.Game.Remote;
 //                      permitted to issue (their merged per-player grant, via
 //                      RemoteCommandManager.GetPermittedCommands), plus a hint.
 //   @help <command>  — replies with THAT command's syntax + one-line description,
-//                      from RemoteCommandCatalog. Only the <command> ARGUMENT is
+//                      from RemoteCommandCatalog (`@help &@` describes relay-back). Only the <command> ARGUMENT is
 //                      accepted with or without the leading @ (`@help suicide` ==
 //                      `@help @suicide`).
 //
@@ -52,7 +52,11 @@ public sealed class HelpHandler : IDisposable
         if (ctx.Args.Count > 0)
         {
             string requested = ctx.Args[0];
-            if (RemoteCommandCatalog.TryGetHelp(requested, out RemoteCommandHelp help))
+            // The relay-back marker isn't a catalog command, but it is listed.
+            if (requested.StartsWith('&'))
+                ctx.Reply($"{RemoteCommandManager.RelayBackPrefix}<command> — sends @<command> back to you, "
+                    + "so your client runs it as if I'd sent it (e.g. &@invite makes me ask you for a party invite)");
+            else if (RemoteCommandCatalog.TryGetHelp(requested, out RemoteCommandHelp help))
                 ctx.Reply($"{help.Syntax} — {help.Description}");
             else
                 ctx.Reply($"no such command '{requested}' — try @help for the list");
