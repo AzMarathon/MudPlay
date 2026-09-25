@@ -6770,6 +6770,7 @@ public sealed class AppServices
             profile: () => Profile.Current,
             quests: Quests,
             probe: QuestQueryReader,
+            sync: QuestFlagSync,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             // Stock's live flag read is the same gated `sys god <name> abil` the daily
             // sync uses — sys-god access, not the separate sys-status capability.

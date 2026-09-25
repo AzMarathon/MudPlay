@@ -127,22 +127,7 @@ public sealed class QuestFlagSyncManager
             return 0;
         }
 
-        int? classId = _classId();
-        IReadOnlyList<CrawledQuest> crawled = QuestCrawler.Crawl(_gameData, classId);
-        if (crawled.Count == 0) return 0;
-
-        // Only quests this character can actually complete at its current level — the same
-        // eligible + level-met + incomplete set the availability announce uses. On paradigm
-        // this bounds the `abil` burst to relevant flags (not every quest in the realm); on
-        // both realms it keeps the marking to quests the character could really have done.
-        var eligible = new HashSet<(int Flag, int Step)>(
-            _availableQuests().Select(q => (q.Flag, q.Step)));
-
-        List<QuestFlagCompletion.Target> targets = crawled
-            .Where(q => eligible.Contains((q.Flag, q.Step)))
-            .Select(q => new QuestFlagCompletion.Target(
-                q.Flag, q.Step, _quests.Resolve(q.Flag, q.Step).CompleteValueOverride ?? q.CompleteValue))
-            .ToList();
+        List<QuestFlagCompletion.Target> targets = EligibleTargets();
         if (targets.Count == 0)
         {
             LastResult = "nothing to check (no eligible incomplete quests at this level)";
@@ -161,16 +146,7 @@ public sealed class QuestFlagSyncManager
             return 0;
         }
 
-        IReadOnlyDictionary<int, int> observed;
-        if (_realm() == RealmType.ParaMud)
-        {
-            observed = await _probe.ReadParadigmAsync(flags, ct).ConfigureAwait(true);
-        }
-        else if (_hasSysopPowers())
-        {
-            observed = await _probe.ReadStockAsync(_characterName() ?? string.Empty, ct).ConfigureAwait(true);
-        }
-        else
+        if (await ReadFlagsAsync(flags, ct).ConfigureAwait(true) is not { } observed)
         {
             LastResult = "skipped — stock flag read needs sys-god powers for this BBS";
             _log?.Info("QuestFlags", $"sync {LastResult}");
@@ -195,6 +171,93 @@ public sealed class QuestFlagSyncManager
             $"sync marked {newly.Count} quest(s) complete: {string.Join(", ", newly.Select(k => $"{k.Flag}/{k.Step}"))}");
         Synced?.Invoke();
         return newly.Count;
+    }
+
+    public enum UpdateOutcome { NoProfile, Busy, NoAccess, NothingToCheck, Done }
+
+    public readonly record struct UpdateResult(
+        UpdateOutcome Outcome, int FlagsRead, IReadOnlyList<QuestFlagCompletion.QuestKey> Marked);
+
+    // `@quest update` — the login sync's read-and-mark, on demand: no daily gate and no
+    // opt-in, since someone just asked for it. Bounded the same way (flags of quests
+    // this character can do at its level and hasn't marked), and one-way the same way.
+    public async Task<UpdateResult> UpdateNowAsync(CancellationToken ct = default)
+    {
+        if (_profile.Current is not { } prof) return new(UpdateOutcome.NoProfile, 0, []);
+        if (_running) return new(UpdateOutcome.Busy, 0, []);
+        _running = true;
+        try
+        {
+            List<QuestFlagCompletion.Target> targets = EligibleTargets();
+            HashSet<QuestFlagCompletion.QuestKey> alreadyComplete = BuildAlreadyComplete(prof.QuestLog);
+            IReadOnlyList<int> flags = QuestFlagCompletion.FlagsToQuery(targets, alreadyComplete);
+            if (flags.Count == 0) return new(UpdateOutcome.NothingToCheck, 0, []);
+
+            if (await ReadFlagsAsync(flags, ct).ConfigureAwait(true) is not { } observed)
+                return new(UpdateOutcome.NoAccess, 0, []);
+
+            IReadOnlyList<QuestFlagCompletion.QuestKey> newly =
+                QuestFlagCompletion.ResolveNewlyComplete(targets, observed, alreadyComplete);
+            Mark(prof, newly, "@quest update");
+            LastResult = $"@quest update: {observed.Count} flag(s) read, {newly.Count} quest(s) marked complete";
+            return new(UpdateOutcome.Done, observed.Count, newly);
+        }
+        finally { _running = false; }
+    }
+
+    // A live flag read made elsewhere (the @quest <name|flag> reply) — mark what it
+    // proves. Every crawled quest of this character's class on a read flag counts, not
+    // just level-eligible ones: a flag at a band's complete value means that band is
+    // done, whatever our level says. One-way like the sync.
+    public IReadOnlyList<QuestFlagCompletion.QuestKey> MarkObserved(IReadOnlyDictionary<int, int> observed)
+    {
+        ArgumentNullException.ThrowIfNull(observed);
+        if (_profile.Current is not { } prof || observed.Count == 0) return [];
+        List<QuestFlagCompletion.Target> targets = QuestCrawler.Crawl(_gameData, _classId())
+            .Where(q => observed.ContainsKey(q.Flag))
+            .Select(ToTarget)
+            .ToList();
+        IReadOnlyList<QuestFlagCompletion.QuestKey> newly =
+            QuestFlagCompletion.ResolveNewlyComplete(targets, observed, BuildAlreadyComplete(prof.QuestLog));
+        Mark(prof, newly, "@quest");
+        return newly;
+    }
+
+    private void Mark(CharacterProfile prof, IReadOnlyList<QuestFlagCompletion.QuestKey> newly, string source)
+    {
+        if (newly.Count == 0) return;
+        ApplyComplete(prof, newly);
+        _profile.Save();
+        _log?.Info("QuestFlags",
+            $"{source} marked {newly.Count} quest(s) complete: {string.Join(", ", newly.Select(k => $"{k.Flag}/{k.Step}"))}");
+        Synced?.Invoke();
+    }
+
+    // Only quests this character can actually complete at its current level — the same
+    // eligible + level-met + incomplete set the availability announce uses. On paradigm
+    // this bounds the `abil` burst to relevant flags (not every quest in the realm); on
+    // both realms it keeps the marking to quests the character could really have done.
+    private List<QuestFlagCompletion.Target> EligibleTargets()
+    {
+        IReadOnlyList<CrawledQuest> crawled = QuestCrawler.Crawl(_gameData, _classId());
+        if (crawled.Count == 0) return [];
+        var eligible = new HashSet<(int Flag, int Step)>(
+            _availableQuests().Select(q => (q.Flag, q.Step)));
+        return crawled.Where(q => eligible.Contains((q.Flag, q.Step))).Select(ToTarget).ToList();
+    }
+
+    private QuestFlagCompletion.Target ToTarget(CrawledQuest q) =>
+        new(q.Flag, q.Step, _quests.Resolve(q.Flag, q.Step).CompleteValueOverride ?? q.CompleteValue);
+
+    // Paradigm: `abil` per flag. Stock: the one `sys god <name> abil` dump, only with
+    // sys-god access for this BBS — null without it.
+    private async Task<IReadOnlyDictionary<int, int>?> ReadFlagsAsync(IReadOnlyList<int> flags, CancellationToken ct)
+    {
+        if (_realm() == RealmType.ParaMud)
+            return await _probe.ReadParadigmAsync(flags, ct).ConfigureAwait(true);
+        if (_hasSysopPowers())
+            return await _probe.ReadStockAsync(_characterName() ?? string.Empty, ct).ConfigureAwait(true);
+        return null;
     }
 
     private static HashSet<QuestFlagCompletion.QuestKey> BuildAlreadyComplete(IReadOnlyList<QuestProgress>? log)

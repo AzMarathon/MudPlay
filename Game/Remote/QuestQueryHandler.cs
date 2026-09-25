@@ -19,6 +19,13 @@ namespace MudPlay.Game.Remote;
 //                            (by ordinal) plus the live step, e.g.
 //                            "Good align 1, 2, 3 marked complete. Abil: 126 step 16".
 //   @quest 126             → same, by flag number.
+//   @quest update          → read every flag this character's quests use and mark the
+//                            completed ones, then report what's marked.
+//
+// A live read also MARKS what it proves (QuestFlagSyncManager.MarkObserved): a flag at a
+// band's complete value means that band is done, so the reply reflects the fresh marks —
+// "Good align: none marked complete. Abil: 126 step 6" becomes "Good align 1 marked
+// complete …" once step 6 is read.
 //
 // The live read reuses QuestFlagProbe (its own instance so an in-flight daily
 // QuestFlagSync never clobbers this read), and the realm/gate selection mirrors
@@ -31,6 +38,7 @@ public sealed class QuestQueryHandler : IDisposable
     private readonly Func<CharacterProfile?> _profile;
     private readonly QuestStore _quests;
     private readonly QuestFlagProbe _probe;
+    private readonly QuestFlagSyncManager _sync;
     private readonly Func<bool> _isParadigm;
     private readonly Func<bool> _canStockRead;
     private readonly Func<string?> _characterName;
@@ -42,6 +50,7 @@ public sealed class QuestQueryHandler : IDisposable
         Func<CharacterProfile?> profile,
         QuestStore quests,
         QuestFlagProbe probe,
+        QuestFlagSyncManager sync,
         Func<bool> isParadigm,
         Func<bool> canStockRead,
         Func<string?> characterName,
@@ -51,6 +60,7 @@ public sealed class QuestQueryHandler : IDisposable
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _quests = quests ?? throw new ArgumentNullException(nameof(quests));
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
+        _sync = sync ?? throw new ArgumentNullException(nameof(sync));
         _isParadigm = isParadigm ?? throw new ArgumentNullException(nameof(isParadigm));
         _canStockRead = canStockRead ?? throw new ArgumentNullException(nameof(canStockRead));
         _characterName = characterName ?? throw new ArgumentNullException(nameof(characterName));
@@ -79,6 +89,12 @@ public sealed class QuestQueryHandler : IDisposable
         if (query.Length == 0)
         {
             ctx.Reply(QuestQueryReport.FormatAll(log, _quests));
+            return;
+        }
+
+        if (string.Equals(query, "update", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = UpdateAndReplyAsync(ctx);
             return;
         }
 
@@ -118,9 +134,54 @@ public sealed class QuestQueryHandler : IDisposable
             return;
         }
 
-        ctx.Reply(observed.TryGetValue(flag, out int step)
-            ? $"{marked}. Abil: {flag} step {step}"
-            : $"{marked}. Abil: {flag} unavailable");
+        if (!observed.TryGetValue(flag, out int step))
+        {
+            ctx.Reply($"{marked}. Abil: {flag} unavailable");
+            return;
+        }
+
+        // The read proves what's done — mark it, then report the updated state.
+        int newly = _sync.MarkObserved(observed).Count;
+        List<QuestProgress> log = _profile()?.QuestLog ?? new List<QuestProgress>();
+        string label = QuestNameResolver.Label(flag, ResolveName(flag, log));
+        string now = QuestQueryReport.FormatFlag(flag, label, log, _quests.StepsForFlag(flag));
+        ctx.Reply(newly > 0
+            ? $"{now}. Abil: {flag} step {step} ({newly} newly marked)"
+            : $"{now}. Abil: {flag} step {step}");
+    }
+
+    private async Task UpdateAndReplyAsync(RemoteCommandContext ctx)
+    {
+        QuestFlagSyncManager.UpdateResult result;
+        try
+        {
+            result = await _sync.UpdateNowAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _log?.Warn("QuestFlags", $"@quest update failed: {ex.Message}");
+            if (_engine.WarnOnDenial) ctx.Reply("quest flag read failed");
+            return;
+        }
+
+        List<QuestProgress> log = _profile()?.QuestLog ?? new List<QuestProgress>();
+        switch (result.Outcome)
+        {
+            case QuestFlagSyncManager.UpdateOutcome.Done:
+                ctx.Reply($"{result.FlagsRead} flag(s) read, {result.Marked.Count} newly marked — "
+                    + QuestQueryReport.FormatAll(log, _quests));
+                break;
+            case QuestFlagSyncManager.UpdateOutcome.NothingToCheck:
+                ctx.Reply("nothing to check — " + QuestQueryReport.FormatAll(log, _quests));
+                break;
+            // Failure replies obey the WarnOnDenial master gate like every other one.
+            case QuestFlagSyncManager.UpdateOutcome.NoAccess:
+                if (_engine.WarnOnDenial) ctx.Reply("can't read quest flags here (stock needs sys-god access)");
+                break;
+            case QuestFlagSyncManager.UpdateOutcome.Busy:
+                if (_engine.WarnOnDenial) ctx.Reply("a quest flag read is already running");
+                break;
+        }
     }
 
     // Candidate (flag, name) pairs the name resolver matches against: every named quest
