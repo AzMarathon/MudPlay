@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
@@ -326,6 +327,10 @@ public partial class ConversationWindow : Window
         if (!e.GetCurrentPoint(_rowsList).Properties.IsLeftButtonPressed) return;   // left only
         // A press on an inline link (or any button) activates it — don't hijack for a drag.
         if (e.Source is Visual src && src.FindAncestorOfType<Button>(includeSelf: true) is not null) return;
+        // Nor a press on the scrollbar: the theme overlays it on the rows, so the row
+        // hit-test below finds the row UNDER the thumb and swallowed the press — the
+        // thumb couldn't be grabbed wherever a row sat beneath it.
+        if (e.Source is Visual onBar && onBar.FindAncestorOfType<ScrollBar>(includeSelf: true) is not null) return;
 
         ListBoxItem? container = ContainerAt(e.GetPosition(_rowsList));
         if (container is null) return;   // background press — leave it to the list
