@@ -6683,6 +6683,7 @@ public sealed class AppServices
             // front of the class for members that don't report.
             recordedLevel: name => Players.Find(name)?.Level,
             selfTimeToLevel: () => SelfTimeToLevel().Remaining,
+            telepathsPending: () => Telepaths.Queued + Telepaths.InFlight > 0,
             log: Log);
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);

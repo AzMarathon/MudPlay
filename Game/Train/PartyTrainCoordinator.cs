@@ -32,8 +32,9 @@ namespace MudPlay.Game.Train;
 //       like everyone else, power-levelers not waited for;
 //     * on Fire: plans the money (PartyTrainFundingPlanner), the stops
 //       (PartyTrainItineraryPlanner — members first, leader last), pauses the engine
-//       (TrainerWalkManager.BeginPartyTrip), walks the party round, trains itself
-//       last, re-forms the party and resumes the engine.
+//       (TrainerWalkManager.BeginPartyTrip), walks the party round — at its own
+//       stop training alongside the members there, re-forming the party once — and
+//       resumes the engine.
 //
 // Members that never report — toggle off, another client — are simply not waited
 // for: they follow the leader there and back like any other walk.
@@ -85,6 +86,9 @@ public sealed class PartyTrainCoordinator : IDisposable
     // Our own time to next level off the shared TNL clock (AppServices.SelfTimeToLevel),
     // so the self row matches Session Stats and the status bar.
     private readonly Func<TimeSpan?> _selfTimeToLevel;
+    // True while paced telepaths are still queued or unacknowledged (TelepathPacer).
+    private readonly Func<bool> _telepathsPending;
+    private static readonly TimeSpan OrdersDeliveredTimeout = TimeSpan.FromSeconds(10);
     // Each other member's TNL as a running countdown (see TnlCountdown), so their
     // line counts down between readings instead of jumping with our rate.
     private readonly Dictionary<string, Calculators.TnlCountdown> _memberTnl = new(StringComparer.OrdinalIgnoreCase);
@@ -168,6 +172,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         Func<long> selfExp,
         Func<string, int?> recordedLevel,
         Func<TimeSpan?> selfTimeToLevel,
+        Func<bool> telepathsPending,
         Func<DateTimeOffset>? now = null,
         LogService? log = null)
     {
@@ -194,6 +199,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         _selfExp = selfExp ?? throw new ArgumentNullException(nameof(selfExp));
         _recordedLevel = recordedLevel ?? throw new ArgumentNullException(nameof(recordedLevel));
         _selfTimeToLevel = selfTimeToLevel ?? throw new ArgumentNullException(nameof(selfTimeToLevel));
+        _telepathsPending = telepathsPending ?? throw new ArgumentNullException(nameof(telepathsPending));
         _now = now ?? (() => DateTimeOffset.Now);
         _log = log;
 
@@ -842,11 +848,18 @@ public sealed class PartyTrainCoordinator : IDisposable
                 if (stop.LeaderTrains) atStop.Add(self);
                 _log?.Info(LogCategory, $"At {stop.Trainer.Name} — training {string.Join(", ", atStop)}.");
 
+                // Everyone at the stop trains at once. The leader used to wait out the
+                // members' trains and their rejoin, then train itself and re-form the
+                // party a second time; every train drops its trainer from the party
+                // anyway, so the leader goes as soon as the orders are delivered (its
+                // own train takes it out of the realm, where they'd be lost) and the
+                // one re-form below collects everybody.
                 if (stop.Members.Count > 0)
-                    await TrainMembersAsync(stop.Members, members, room);
+                    SendTrainOrders(stop.Members, members, room);
 
                 if (stop.LeaderTrains && leader is { } l)
                 {
+                    if (stop.Members.Count > 0) await TelepathsDeliveredAsync();
                     // Our train disbands the party, so note who to pull back first —
                     // everyone who set out, not just who's in the roster now: a member
                     // shut out of the trainer's room mid-fight is left in an [Invited]
@@ -857,6 +870,8 @@ public sealed class PartyTrainCoordinator : IDisposable
                     _log?.Info(LogCategory, $"Leader train: {report}");
                     if (levels > 0 && followers.Count > 0) _reformParty(followers);
                 }
+
+                if (stop.Members.Count > 0) await AwaitMembersDoneAsync();
             }
 
             _trainer.EndPartyTrip("all stops done.");
@@ -882,22 +897,35 @@ public sealed class PartyTrainCoordinator : IDisposable
         }
     }
 
-    private async Task TrainMembersAsync(IReadOnlyList<string> names, List<PartyTrainee> members, RoomKey room)
+    // Arm the `done` wait, then order each member at this stop to train here.
+    private void SendTrainOrders(IReadOnlyList<string> names, List<PartyTrainee> members, RoomKey room)
     {
         _awaitingDone = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
         _seenGone.Clear();
         _doneTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        TaskCompletionSource<bool> done = _doneTcs;
         foreach (string name in names)
         {
             int target = members.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)).TargetLevel;
             _send($"/{name} @ptrain train {target} {room.Map}/{room.Room}");
         }
+    }
+
+    private async Task AwaitMembersDoneAsync()
+    {
+        if (_doneTcs is not { } done) return;
         _armTimer(MemberTrainTimeout, () => done.TrySetResult(false));
         if (!await done.Task && _awaitingDone is { Count: > 0 } missing)
             _log?.Info(LogCategory, $"No word from {string.Join(", ", missing)} after {MemberTrainTimeout.TotalSeconds:0}s — moving on.");
         _awaitingDone = null;
         _doneTcs = null;
+    }
+
+    // The members' train orders are paced telepaths; wait until they've gone out and
+    // been acknowledged before our own `train` takes us out of the realm.
+    private async Task TelepathsDeliveredAsync()
+    {
+        DateTimeOffset giveUp = _now() + OrdersDeliveredTimeout;
+        while (_telepathsPending() && _now() < giveUp) await DelayAsync(TimeSpan.FromMilliseconds(250));
     }
 
     private Task<(int Levels, string Report)> TrainSelfAsync(int targetLevel)

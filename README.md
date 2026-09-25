@@ -4,7 +4,7 @@
 > **Version 3.105.0**
 > - Auto-train party — a new CP Allocation checkbox that makes auto-train work in a group: members tell the leader when their own auto-train settings say they're ready, and the leader takes the party to train together; needs two or more members on MudPlay with it on (a lone leader uses its solo Auto-train and re-invites the party), and keeps telepaths to one ask per member join plus their own change reports
 > - The leader goes once a set number of party members (it counts as one) is ready; the rest stay banked and follow, and a power-leveler well above the party is never waited for
-> - Party trips visit the trainer serving the most members first, chain across level bands, and train the leader last, then re-invite everyone and resume the loop
+> - Party trips visit the trainer serving the most members first, chain across level bands, and at the leader's stop everyone trains at once, then the party is re-formed once and the loop resumes
 > - Short members are covered by party members' spare coin, or withdraw their own fee at a bank stop on the way
 > - New Settings → Auto-Trainer Party options: members needed ready, level gap, and leave the level-11 train to a solo trip
 > - Party window shows each member's level before their class, and — leading with Auto-train party — their exp, time to level at your exp/hour and train readiness under their bars
