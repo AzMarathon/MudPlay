@@ -1,5 +1,9 @@
 # Version history
 
+## 3.105.6
+
+- Release builds ship uncompressed and ReadyToRun-precompiled: each running client uses noticeably less memory (program code is shared between clients instead of copied into each) and starts faster, for a larger download
+
 ## 3.105.5
 
 - The Conversation window's message list fills the window again — its scrollbar sits at the window's edge instead of wherever the longest line ends
