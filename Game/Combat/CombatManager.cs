@@ -896,18 +896,20 @@ public sealed partial class CombatManager : IDisposable
     // flight.
     public string? CurrentTarget => _currentTarget;
 
-    // The target an exp-inferred kill just dropped, still attributable within
-    // ExpKillWindow of the drop. A kill inferred from an exp gain nulls
-    // _currentTarget before the death's *Combat Off* fires (so the round's
-    // alternate can't corpse-cast), which leaves a death-event consumer that
-    // reads CurrentTarget — the boss-timer attribution among them — with no
-    // name. This exposes the retained name so "we attacked it, then exp gained"
-    // can still be attributed to the boss that died.
-    public string? RecentInferredKillName =>
-        _inferredKillPendingRemoval is { } name
-        && DateTimeOffset.Now - _inferredKillPendingAt < ExpKillWindow
-            ? name
-            : null;
+    // Who a MonsterDied event is about when it carries no identity: the live target,
+    // else the target an exp-inferred kill just dropped (still inside ExpKillWindow).
+    // A kill inferred from an exp gain nulls _currentTarget before the death's
+    // *Combat Off* fires (so the round's alternate can't corpse-cast), which left
+    // every death-event consumer reading CurrentTarget with no name — the boss-timer
+    // attribution, the temp-death-spell nudge, and the summon-on-death recheck, which
+    // then never re-scanned for the bone snake a stitched zombie's death spell summons
+    // (report paradigm-20260925-115042).
+    public string? DeathAttributionTarget =>
+        _currentTarget
+        ?? (_inferredKillPendingRemoval is { } name
+            && DateTimeOffset.Now - _inferredKillPendingAt < ExpKillWindow
+                ? name
+                : null);
 
     // The monster the round's combat spell was announced against, or null when the
     // round isn't in spell mode. Distinct from CurrentTarget: a weapon attack and a

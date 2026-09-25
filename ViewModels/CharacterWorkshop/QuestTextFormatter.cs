@@ -236,8 +236,15 @@ internal static partial class QuestTextFormatter
     public static IReadOnlyList<string> StepLines(GameDataCache gameData, CrawledQuest q,
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms = null,
         ItemSourceIndex? itemSources = null)
+        => StepEntries(gameData, q, monsterRooms, itemSources).Select(e => e.Line).ToList();
+
+    // StepLines with each line's give-step Order alongside — the flag value that step
+    // sets, so a live flag read can say which checklist lines it proves done.
+    public static IReadOnlyList<(int Order, string Line)> StepEntries(GameDataCache gameData, CrawledQuest q,
+        IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms = null,
+        ItemSourceIndex? itemSources = null)
     {
-        var lines = new List<string>();
+        var lines = new List<(int Order, string Line)>();
         var seenOrders = new HashSet<int>();
         foreach (QuestStep s in QuestStepGraph.Build(gameData, q.Flag, q.ProgressByValue))
         {
@@ -250,7 +257,7 @@ internal static partial class QuestTextFormatter
             // player can act on, so it's dropped from the draft rather than listed as an
             // opaque "Step N" — the seed guides list actions, not narrative ticks.
             if (StepOrNull(gameData, s, monsterRooms, itemSources) is not { } body) continue;
-            lines.Add(string.Create(CultureInfo.InvariantCulture, $"[] {body}"));
+            lines.Add((s.Order, string.Create(CultureInfo.InvariantCulture, $"[] {body}")));
         }
         return lines;
     }

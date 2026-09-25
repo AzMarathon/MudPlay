@@ -600,7 +600,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@have rope and grapple` · `@uses silvery skullcap` · `@token arlysia` — an item / limited-use item / transport token by name (shorthand and best-match are fine)
 - `@roomba severed head` — Roomba sightings of matching items
 - `@quest good align` — quest progress: marked-complete bands, plus the live flag step on Paradigm / sys-god (bare `@quest` lists all your completed quests)
-- `@quest update` — have a party member re-read their quest flags and mark every quest those flags show they've finished
+- `@quest update` — have a party member re-read their quest flags and mark every quest those flags show they've finished; a quest they're part-way through has its checklist ticked up to the step the flag shows
 - `@auto-combat off` — force an engine off (bare toggles it; `on` forces it on)
 - `@atkprio 3 Fujin` — Target Priority: attack-what-player Fujin (`1` = Default, `2` = follow-leader)
 - `@atkorder 4 Suijin` — Attack Order: attack after Suijin (`1`–`3` and `5` are the fixed orders)
@@ -1027,6 +1027,8 @@ The **Announce available quests** checkbox at the top (on by default, saved per 
 Alignment quests are gated separately: the three **Evil / Neutral / Good** checkboxes on the second header row (off by default, saved per character) declare which alignment chain(s) you're committed to — an alignment-gated quest only counts as available when its matching box is ticked, since in-game you're locked to one alignment chain once you start it regardless of your live alignment.
 
 **Auto-detect completed quests from your flags.** Turn on **Settings → General → "Auto-detect completed quests from flags on login"** (off by default) and, on your first login of the day, MudPlay reads your live quest-flag values and ticks **Complete** on any quest whose flag has reached its finished value — then sends the availability announce, so a quest you've already done drops off the "now available" list. It runs **at most once per day** per character, so relogging later the same day doesn't re-fire the flag-read burst; the next day's first login checks again. Turning the checkbox on **while you're already playing** fires the check right away if it hasn't run yet today (it does nothing if you flip it at the character-select menu):
+
+A live flag read — that login check, `@quest update`, or `@quest <name|flag>` — also records how far you are through a quest you haven't finished: each quest step sets the flag to that step's number, so the checklist ticks every step up to the value read (a flag read of 7 ticks every step up to step 7). This works on the crawler's own checklist; a checklist you've rewritten in **Edit Quests…** keeps only your own ticks.
 
 - **Multi-tier alignment quests** complete each tier at its own last flag value — so `128(17)` (Evil) reads tiers 1–4 done and tier 5 still in progress.
 - **It only queries quests you can complete at your current level** (not every quest in the realm), and alignment "check" helper flags — internal turn-in markers nested inside an alignment quest — are never treated as quests. It only ever *marks* complete; it never un-ticks a quest, so your manual state is safe.
@@ -2602,6 +2604,8 @@ Settings → Health. Two stacked sections — **Health (HP)** on top, **Mana / K
 **What it does:** Once resting, MudPlay stops and stands back up once the pool reaches this value. Both HP and Mana need to reach their own target before you stand (unless your class has no mana pool).
 
 The percentage is read against your **Default gear set's** max HP / mana — so a Pre-rest HP/Mana set that swaps in an item which changes your max doesn't move the target you tuned — and it's capped at your current gear's real max, so a rest set that lowers your pool can never leave you resting for a level you can't physically reach. The **heal**, **flee (run)**, and **emergency-hangup** HP triggers anchor to the same Default-set max, so they fire at the HP you tuned regardless of what set is worn.
+
+Only Default-set items you actually **have** (worn or carried) count toward that max — an item lost to a deathpile, sold, or never obtained is left out, and when you have none of them (or before your first inventory check) the **live** max is used instead. The figure beside each threshold says which basis it's using: **(def)** for the Default-set max, **(live)** for your current max.
 
 ### Rest if below (HP / MA)
 

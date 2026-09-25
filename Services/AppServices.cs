@@ -3565,12 +3565,11 @@ public sealed class AppServices
         // died (awarded exp)"; the room comes from the live tracker (the event
         // carries neither). Fallback deaths (no candidate identity) are attributed
         // through the engaged name, so they're covered too.
-        // CurrentTarget is live during a normal death, but an exp-inferred kill
-        // nulls it before this fires — fall back to the retained just-killed name
-        // so "we attacked the boss, then gained exp" still attributes the death.
+        // DeathAttributionTarget covers an exp-inferred kill, which nulls CurrentTarget
+        // before this fires, so "we attacked the boss, then gained exp" still attributes.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key,
-                Combat.CurrentTarget ?? Combat.RecentInferredKillName);
+                Combat.DeathAttributionTarget);
         // Grab-All: the moment a tracked boss with GrabAll set dies, blindly `get`
         // every item in its game-data drop table — no room re-parse. BossKilled fires
         // for any matched boss; we gate on the flag here, where the catalog + item
@@ -3611,7 +3610,7 @@ public sealed class AppServices
         RoomClassifier.SetRoomAwareResolver(RoomAwareMonster.ResolveInCurrentRoom);
         SummonSettle = new Game.Combat.SummonOnDeathSettle(
             MonsterDeath, RoomClassifier, MovementCoordinator, MonsterDeathSummon,
-            currentTargetName: () => Combat.CurrentTarget,
+            currentTargetName: () => Combat.DeathAttributionTarget,
             movementActive: () => MovementControl.IsActive,
             log: Log);
         MonsterDeath.MonsterDied += evt =>
@@ -7477,6 +7476,30 @@ public sealed class AppServices
     // left untouched so it still shows the user's real ON/OFF.
     private bool CombatSuppressedInCurrentRoom()
     {
+        (Game.Map.RoomKey? evalKey, bool suppressed, _) = CombatSuppressionVerdict();
+
+        // Edge-trigger a Combat-log line on transition — the three gate Funcs
+        // each call this per observation, so log only when (room, suppressed)
+        // actually changes to avoid per-line spam. Explains a "loop walked past
+        // hostiles" in the program log.
+        if (suppressed != _lastCombatSuppressed || !Equals(evalKey, _lastCombatSuppressedRoom))
+        {
+            _lastCombatSuppressed = suppressed;
+            _lastCombatSuppressedRoom = evalKey;
+            if (suppressed && evalKey is { } rk)
+                Log.Combat("Combat", $"combat suppressed in {rk} — loop 'do not attack' / 'only lair rooms'");
+        }
+        return suppressed;
+    }
+    private bool _lastCombatSuppressed;
+    private Game.Map.RoomKey? _lastCombatSuppressedRoom;
+
+    // The loop combat-suppression decision the engage gates act on: the room it was
+    // judged against, whether combat is suppressed there, and whether that room is the
+    // one an in-flight loop move is entering (vs the tracker's current room). Shared
+    // with the bug report so the capture shows exactly what the engine decided.
+    public (Game.Map.RoomKey? Room, bool Suppressed, bool EnteringRoom) CombatSuppressionVerdict()
+    {
         // Which room to judge suppression against. Normally the room we're standing in.
         // BUT during a loop move the RoomTracker is still Pending on the room we're
         // LEAVING (RoomConfidence.Pending: CurrentRoom lags until the next observation
@@ -7485,15 +7508,20 @@ public sealed class AppServices
         // room, so a 'do not attack' / non-lair room leaks one attack on the entry pass
         // — before the room confirms and suppression flips (report paradigm-20260915-122832,
         // whether the flag was live-edited or configured before the run). So while a loop
-        // move is in flight, judge against the loop's expected target room instead.
+        // move is in flight — running, or paused mid-move by the very fight it walked
+        // into — judge against the loop's expected target room instead.
         Game.Map.RoomKey? evalKey;
         bool evalIsLair;
-        if (LoopRunner.State == Game.Map.LoopState.Running
-            && RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
+        bool entering = false;
+        if (Game.Map.LoopCombatSuppression.JudgeEnteringRoom(
+                LoopRunner.State, LoopRunner.IsStepInFlight,
+                RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending,
+                LoopRunner.ExpectedMoveTarget is not null)
             && LoopRunner.ExpectedMoveTarget is { } target)
         {
             evalKey = target;
             evalIsLair = RoomGraph.GetRoom(target)?.HasLair ?? false;
+            entering = true;
         }
         else if (RoomTracker.State.CurrentRoom is { } here)
         {
@@ -7511,22 +7539,8 @@ public sealed class AppServices
             && LoopRunner.CurrentLoop is { } loop
             && evalKey is { } key
             && Game.Map.LoopCombatSuppression.IsSuppressed(loop, key, evalIsLair);
-
-        // Edge-trigger a Combat-log line on transition — the three gate Funcs
-        // each call this per observation, so log only when (room, suppressed)
-        // actually changes to avoid per-line spam. Explains a "loop walked past
-        // hostiles" in the program log.
-        if (suppressed != _lastCombatSuppressed || !Equals(evalKey, _lastCombatSuppressedRoom))
-        {
-            _lastCombatSuppressed = suppressed;
-            _lastCombatSuppressedRoom = evalKey;
-            if (suppressed && evalKey is { } rk)
-                Log.Combat("Combat", $"combat suppressed in {rk} — loop 'do not attack' / 'only lair rooms'");
-        }
-        return suppressed;
+        return (evalKey, suppressed, entering);
     }
-    private bool _lastCombatSuppressed;
-    private Game.Map.RoomKey? _lastCombatSuppressedRoom;
 
     // Per-monster overlay resolve: seed-store value forms the Defaults tier,
     // SettingsResolver overlays Global / BBS / Char-tier user overrides on top.
@@ -7635,11 +7649,12 @@ public sealed class AppServices
     // The DEFAULT gear set's max HP / mana for the Settings rest-preview conversions
     // — the same basis the rest engine anchors to — so the displayed "= N/M" figures
     // stay put while a Pre-rest set that alters the pool is worn. Falls back to the
-    // live pool max before a stat screen / when no Default set is configured.
-    public int RestPreviewMaxHp()
-        => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp) is int v and > 0 ? v : PlayerState.MaxHp;
-    public int RestPreviewMaxMa()
-        => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa) is int v and > 0 ? v : PlayerState.MaxMa;
+    // live pool max before a stat screen / when none of the Default set's items is
+    // owned; FromDefaultSet says which basis it is, for the "(def)" / "(live)" marker.
+    public (int Max, bool FromDefaultSet) RestPreviewMaxHp()
+        => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp) is int v and > 0 ? (v, true) : (PlayerState.MaxHp, false);
+    public (int Max, bool FromDefaultSet) RestPreviewMaxMa()
+        => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa) is int v and > 0 ? (v, true) : (PlayerState.MaxMa, false);
 
     // The max HP or mana the DEFAULT gear set would give (selector picks the pool
     // from an equipment-stat summary). Re-bases the LIVE gear-aware pool max off the
@@ -7703,15 +7718,25 @@ public sealed class AppServices
     // The DEFAULT gear set's item-bearing slots as EquippedItems, for summing their
     // flat +MaxHP/+MaxMana bonuses. Skips empty slots and the two virtual
     // alternate-weapon slots (never worn — they write CombatSettings, not the wire).
+    //
+    // Only items the character actually has (worn or carried) count: the Default set is
+    // the loadout the rest %s are tuned for, but a set item that's gone — lost to a
+    // deathpile, sold, never obtained — can't be worn, so basing the pool on it made the
+    // rest engine and the Settings / Workshop "N/M" figures chase a max the character
+    // can't reach (report paradigm-20260925-112819: 458/380 shown against a live
+    // 483/272, with the gear in a deathpile). Before the first 'i' dump nothing is known
+    // to be owned, so the basis falls back to the live max.
     private IReadOnlyList<Game.Inventory.EquippedItem> DefaultSetEquippedItems()
     {
-        if (Profile.Current?.Equipment is not { } eq)
+        if (Profile.Current?.Equipment is not { } eq || !Inventory.IsLoaded)
             return Array.Empty<Game.Inventory.EquippedItem>();
+        Game.Inventory.InventorySnapshot pack = Inventory.Snapshot;
         return eq.Sets
             .FirstOrDefault(s => s.Trigger == Models.Profile.EquipTriggerType.Default)?.Slots
             .Where(e => !string.IsNullOrWhiteSpace(e.ItemName)
                      && e.Slot != Models.Profile.EquipmentSlot.AlternateWeapon
-                     && e.Slot != Models.Profile.EquipmentSlot.AlternateOffHand)
+                     && e.Slot != Models.Profile.EquipmentSlot.AlternateOffHand
+                     && pack.Has(e.ItemName!))
             .Select(e => new Game.Inventory.EquippedItem(e.ItemName!.Trim(), string.Empty))
             .ToList()
             ?? (IReadOnlyList<Game.Inventory.EquippedItem>)Array.Empty<Game.Inventory.EquippedItem>();
@@ -8257,8 +8282,8 @@ public sealed class AppServices
         HashSet<int> numbers = new();
         foreach (Game.Combat.MonsterDeathIdentity id in evt.Candidates)
             if (id.Number is { } n) numbers.Add(n);
-        if (!string.IsNullOrWhiteSpace(Combat.CurrentTarget)
-            && ResolveMonsterNumberByName(Combat.CurrentTarget) is { } cur) numbers.Add(cur);
+        if (Combat.DeathAttributionTarget is { Length: > 0 } dying
+            && ResolveMonsterNumberByName(dying) is { } cur) numbers.Add(cur);
 
         foreach (int num in numbers)
         {

@@ -27,6 +27,13 @@ public sealed class QuestProgress
     // (single-part quests only). null / empty when nothing's ticked.
     public List<int>? CheckedSteps { get; set; }
 
+    // The quest flag's value at the last live read (the login quest sync, `@quest
+    // update`, `@quest <name|flag>`), null until one lands. A quest step sets the flag
+    // to its give-step order, so a read of N proves every auto-drafted step up to N is
+    // done — the Quest Status checklist pre-ticks those, showing where the character
+    // is in an unfinished quest rather than only whether it's complete.
+    public int? FlagValue { get; set; }
+
     // Per-character opt-in to keep this quest in the journal even though the
     // character can't complete it (wrong class/race/alignment, or a class
     // restriction). Default false: a "Cannot complete" quest is hidden unless the

@@ -212,6 +212,24 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
+    public void ExpGain_MidFight_DeathStillAttributedToTheDroppedTarget()
+    {
+        // The exp-inferred kill nulls CurrentTarget before the death event fires, so the
+        // death's consumers (summon-on-death recheck, temp-death nudge, boss timers) read
+        // the dropped target instead (report paradigm-20260925-115042: a stitched zombie's
+        // summoned bone snake went unchecked).
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("giant rat", h.Combat.DeathAttributionTarget);
+
+        h.Feed("You gain 100 experience.");
+
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.Equal("giant rat", h.Combat.DeathAttributionTarget);
+    }
+
+    [Fact]
     public void CombatOff_WithoutExp_KeepsTarget()
     {
         // Breaking combat to cast a between-round (0-energy) spell emits a *Combat Off*

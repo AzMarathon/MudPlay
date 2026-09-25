@@ -268,18 +268,32 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     // `[]`-marked line is a tickable step keyed by its 0-based checkbox index (the
     // CheckedSteps key — stable across edits to the surrounding prose); a plain line
     // is a context label. A step is pre-ticked when its index is in saved progress.
+    //
+    // On the auto-draft, a live flag read (QuestProgress.FlagValue) also ticks every step
+    // whose give-step order it has reached — the game says those are done. A user-edited
+    // checklist has no step orders to match, so it keeps only its own ticks.
     private void PopulateSteps(QuestCardViewModel card, CrawledQuest q, QuestDefinition def, QuestProgress prog,
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms, ItemSourceIndex? itemSources)
     {
-        string text = !string.IsNullOrWhiteSpace(def.Steps)
-            ? def.Steps!
-            : string.Join("\n", QuestTextFormatter.StepLines(_gameData, q, monsterRooms, itemSources));
-        AddStepRows(card, text, prog);
+        if (!string.IsNullOrWhiteSpace(def.Steps))
+        {
+            AddStepRows(card, def.Steps!, prog);
+            return;
+        }
+        IReadOnlyList<(int Order, string Line)> entries =
+            QuestTextFormatter.StepEntries(_gameData, q, monsterRooms, itemSources);
+        // Each auto-draft line is one checkbox, so its index is the CheckedSteps key.
+        HashSet<int>? provenDone = prog.FlagValue is int value
+            ? entries.Select((e, i) => (e.Order, i)).Where(x => x.Order <= value).Select(x => x.i).ToHashSet()
+            : null;
+        AddStepRows(card, string.Join("\n", entries.Select(e => e.Line)), prog, provenDone);
     }
 
     // Materialize a quest's step markdown into tickable/label rows on the card. Shared by
     // crawled quests (auto-draft or edited override) and manual quests (override only).
-    private void AddStepRows(QuestCardViewModel card, string text, QuestProgress prog)
+    // provenDone: checkbox indices a live flag read shows done, ticked on top of saved progress.
+    private void AddStepRows(QuestCardViewModel card, string text, QuestProgress prog,
+        IReadOnlySet<int>? provenDone = null)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
 
@@ -287,7 +301,8 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         foreach ((bool checkable, string display) in QuestTextFormatter.ParseStepLines(text))
         {
             int order = checkable ? checkIndex++ : -1;
-            bool isChecked = checkable && prog.CheckedSteps?.Contains(order) == true;
+            bool isChecked = checkable
+                && (prog.CheckedSteps?.Contains(order) == true || provenDone?.Contains(order) == true);
             card.Steps.Add(new QuestStepRowViewModel(order, BuildSegments(display), isChecked, checkable, row => OnStepToggled(card, row)));
         }
     }

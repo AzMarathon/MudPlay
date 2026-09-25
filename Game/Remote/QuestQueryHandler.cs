@@ -168,8 +168,9 @@ public sealed class QuestQueryHandler : IDisposable
         switch (result.Outcome)
         {
             case QuestFlagSyncManager.UpdateOutcome.Done:
-                ctx.Reply($"{result.FlagsRead} flag(s) read, {result.Marked.Count} newly marked — "
-                    + QuestQueryReport.FormatAll(log, _quests));
+                ctx.Reply($"{result.FlagsRead} flag(s) read, {result.Marked.Count} newly marked"
+                    + (result.Progressed > 0 ? $", {result.Progressed} in progress advanced" : "")
+                    + " — " + QuestQueryReport.FormatAll(log, _quests));
                 break;
             case QuestFlagSyncManager.UpdateOutcome.NothingToCheck:
                 ctx.Reply("nothing to check — " + QuestQueryReport.FormatAll(log, _quests));

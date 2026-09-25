@@ -69,4 +69,50 @@ public sealed class LoopCombatSuppressionTests
         Loop loop = LoopWith(onlyLair: true, (5, true), (6, false));
         Assert.True(LoopCombatSuppression.IsSuppressed(loop, K(5), currentIsLair: true));
     }
+
+    // ----- which room to judge: the one being entered vs the tracker's --------
+
+    [Fact]
+    public void JudgeEnteringRoom_RunningLoopMidMove()
+    {
+        Assert.True(LoopCombatSuppression.JudgeEnteringRoom(
+            LoopState.Running, stepInFlight: true, trackerPending: true, hasExpectedTarget: true));
+    }
+
+    [Fact]
+    public void JudgeEnteringRoom_LoopPausedMidMove_StillTheEnteredRoom()
+    {
+        // The Combat gate that the entering-room engage asserts is what pauses the
+        // loop; flipping to the stale room left the gate held while the engine read
+        // "suppressed" and never fought (report paradigm-20260925-070016).
+        Assert.True(LoopCombatSuppression.JudgeEnteringRoom(
+            LoopState.Paused, stepInFlight: true, trackerPending: true, hasExpectedTarget: true));
+    }
+
+    [Fact]
+    public void JudgeEnteringRoom_PausedWithNoLoopMoveInFlight_JudgesCurrentRoom()
+    {
+        // A pending MANUAL move while the loop is paused isn't the loop's target.
+        Assert.False(LoopCombatSuppression.JudgeEnteringRoom(
+            LoopState.Paused, stepInFlight: false, trackerPending: true, hasExpectedTarget: true));
+    }
+
+    [Theory]
+    [InlineData(false, true)]   // move already confirmed
+    [InlineData(true, false)]   // no expected target
+    public void JudgeEnteringRoom_NeedsAPendingMoveWithATarget(bool pending, bool hasTarget)
+    {
+        Assert.False(LoopCombatSuppression.JudgeEnteringRoom(
+            LoopState.Running, stepInFlight: true, trackerPending: pending, hasExpectedTarget: hasTarget));
+    }
+
+    [Theory]
+    [InlineData(LoopState.Idle)]
+    [InlineData(LoopState.Approaching)]
+    [InlineData(LoopState.Recovering)]
+    public void JudgeEnteringRoom_OnlyForARunningOrPausedLoop(LoopState state)
+    {
+        Assert.False(LoopCombatSuppression.JudgeEnteringRoom(
+            state, stepInFlight: true, trackerPending: true, hasExpectedTarget: true));
+    }
 }

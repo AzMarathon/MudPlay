@@ -241,6 +241,10 @@ public sealed class LoopRunner : IRecoverableEngine
     // AppServices.CombatSuppressedInCurrentRoom (report paradigm-20260915-122832).
     public RoomKey? ExpectedMoveTarget => _expectedMoveTarget;
 
+    // True while a loop step is on the wire awaiting its landing — including while the
+    // loop is paused mid-step (see LoopCombatSuppression.JudgeEnteringRoom).
+    public bool IsStepInFlight => _stepInFlight;
+
     // Name of the most recently RUN loop, retained after the run stops (unlike
     // CurrentLoop, which nulls on Stop/Reset). Set when a loop starts and only
     // overwritten by the next loop — so after a death or manual stop, @path can

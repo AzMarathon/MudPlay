@@ -1044,10 +1044,14 @@ public static class BugReportBuilder
                 curLoop.Waypoints.Count(w => w.DoNotAttack).ToString());
             Kv(sb, "Loop do-not-rest waypoints",
                 curLoop.Waypoints.Count(w => w.DoNotRest).ToString());
+            // The verdict the engage gates act on, and which room it judged — the
+            // room an in-flight loop move is entering, or the tracker's current room.
+            (Game.Map.RoomKey? judged, bool suppressedNow, bool entering) = svc.CombatSuppressionVerdict();
             Kv(sb, "Combat suppressed in current room",
-                svc.RoomTracker.State.CurrentRoom is { } cur
-                    ? Game.Map.LoopCombatSuppression.IsSuppressed(curLoop, cur.Key, cur.HasLair).ToString()
+                judged is { } jr
+                    ? $"{suppressedNow} (judged at {jr}, {(entering ? "room the in-flight loop move is entering" : "tracker's current room")})"
                     : "(unknown room)");
+            Kv(sb, "Loop step in flight", svc.LoopRunner.IsStepInFlight.ToString());
         }
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
         // Last loop / auto-lair run this session, retained past a stop/death —
