@@ -24,6 +24,7 @@
 - A CP plan applied from your own `train stats` clears that level's row from the CP Allocation tab, as Train Now does
 - TNL counts down like a timer on the status bar, Session Stats and the Party window — one shared clock, so all three match — resetting only when the estimate really changes
 - TNL under 10 minutes shows minutes and seconds (`4m 12s`), under a minute just seconds
+- One `invite` per returning member: the realm re-entry re-invite, invite-if-seen and the reform no longer each send their own
 - bug reports addressed: stock-20260924-011014, stock-20260924-013525, stock-20260924-145334, stock-20260924-145545, stock-20260924-145644, stock-20260924-151140, stock-20260924-163156, stock-20260924-175224
 
 ## 3.104.17

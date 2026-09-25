@@ -544,6 +544,21 @@ public sealed class AutoPartyManagerTests
     }
 
     [Fact]
+    public void InviteAlreadyOnTheWire_IsNotSentTwice()
+    {
+        // Report stock-20260924-175224: a member back from training re-entered the
+        // realm (PartyManager re-invites that) and then showed in "Also here" before
+        // the echo landed, so invite-if-seen sent a second `invite`.
+        var (engine, router, players, _) = Setup();
+        SeedPlayer(players, "Raijin", inviteOnSeen: true);
+
+        engine.ObserveOutbound(Encoding.Latin1.GetBytes("invite Raijin\r"));
+        Dispatch(router, "Also here: Raijin.");
+
+        Assert.DoesNotContain(engine.LastSentForTests, b => Encoding.Latin1.GetString(b).StartsWith("invite", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void SeeingAQuietInvitedMember_ReinvitesAndNagsAgain()
     {
         // The same report: the member sat in an [Invited] slot with no nag running

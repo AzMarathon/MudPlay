@@ -515,6 +515,27 @@ public sealed class AutoPartyManager : IDisposable
             $"Started @join nag for {given} on manual `invite` echo.");
     }
 
+    // Every outbound line (MainWindowViewModel.SendUserInput). An `invite X` from any
+    // source — PartyManager's re-invite of a member re-entering the realm, a typed
+    // one, ours — starts X's invite cooldown. A member back from training re-enters
+    // the realm and then shows in the room's "Also here" before that invite's echo
+    // lands, so without this both paths invited them.
+    public void ObserveOutbound(byte[] data)
+    {
+        string line = System.Text.Encoding.Latin1.GetString(data).Trim();
+        if (!line.StartsWith("invite ", StringComparison.OrdinalIgnoreCase)) return;
+        string given = ExtractGiven(line["invite ".Length..].Trim());
+        if (given.Length > 0) _recentlyInvited[given] = NowProvider();
+    }
+
+    // Any `invite X` on the wire this recently already covers a deliberate re-invite
+    // (menu exit, party reform), which otherwise overrides the cooldown: a member back
+    // from training got the realm re-entry re-invite and the reform's on top of it.
+    private static readonly TimeSpan DuplicateInviteWindow = TimeSpan.FromSeconds(5);
+
+    private bool InvitedJustNow(string given, DateTime now) =>
+        _recentlyInvited.TryGetValue(given, out DateTime at) && now - at < DuplicateInviteWindow;
+
     // ----- Behaviour ----------------------------------------------------
 
     private void TryAutoInvite(string given)
@@ -634,7 +655,13 @@ public sealed class AutoPartyManager : IDisposable
 
             // Override the regular re-invite cooldown — the menu exit
             // is a deliberate refresh signal, not the rapid room
-            // re-render the cooldown protects against.
+            // re-render the cooldown protects against — but not an invite
+            // that's already just gone out.
+            if (InvitedJustNow(given, now))
+            {
+                if (!_activeNags.ContainsKey(given)) StartNag(given, now);
+                continue;
+            }
             _recentlyInvited[given] = now;
             _wire.Send($"invite {given}");
             _log?.Log(LogSeverity.Info, "AutoParty",
@@ -991,7 +1018,13 @@ public sealed class AutoPartyManager : IDisposable
         if (!_wire.IsBound) return;
         DateTime now = NowProvider();
         // Override the re-invite cooldown — the split is a deliberate reform
-        // trigger, not the rapid room re-render the cooldown guards against.
+        // trigger, not the rapid room re-render the cooldown guards against — but
+        // not an invite that's already just gone out.
+        if (InvitedJustNow(given, now))
+        {
+            if (!_activeNags.ContainsKey(given)) StartNag(given, now);
+            return;
+        }
         _recentlyInvited[given] = now;
         _wire.Send($"invite {given}");
         StartNag(given, now);

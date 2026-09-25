@@ -3222,6 +3222,9 @@ public partial class MainWindowViewModel : ObservableObject
         // conversation entry is attributed. Typed telepaths render on-screen
         // and are caught by the router's line sniff instead.
         AppServices.Current.Chat.ObserveOutbound(data);
+        // Auto-party — every outbound `invite X` (whoever sent it) starts X's invite
+        // cooldown, so two re-invite paths firing together send one invite.
+        AppServices.Current.AutoParty.ObserveOutbound(data);
         // Sysop room-status parser — arms only on an outbound `sys st`. The gate
         // is a security control here, not noise suppression: the block it parses
         // drives a programmatic SetLocated, so an always-on match would let any
