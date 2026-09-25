@@ -1,5 +1,9 @@
 # Version history
 
+## 3.105.3
+
+- The Conversation window's message list fills the window again — its scrollbar sits at the window's edge instead of wherever the longest line ends
+
 ## 3.105.2
 
 - Auto-combat engages a monster that walks in on the server's generic arrival line (`… moves into the from the northeast.`, `… just arrived from nowhere.`) — a dark room never re-displayed it to catch up

@@ -124,6 +124,11 @@
         </Border>
 
         <!-- ============ Rows list ============ -->
+        <!-- One Grid as the DockPanel's fill child, holding the list and the emote
+             popup: with the popup as the panel's LAST child, LastChildFill gave it the
+             fill and docked the list left at its content width, so the scrollbar sat
+             where the longest line ended instead of at the window edge. -->
+        <Grid>
         <ListBox x:Name="RowsList"
                  ItemsSource="{Binding Rows}"
                  Background="{StaticResource ChromeBgSunkenBrush}"
@@ -239,6 +244,7 @@
                 </ListBox>
             </Border>
         </Popup>
+        </Grid>
 
     </DockPanel>
 </Window>

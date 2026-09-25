@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.105.2**
-> - Auto-combat engages a monster that walks in on the server's generic arrival line (`… moves into the from the northeast.`, `… just arrived from nowhere.`) — a dark room never re-displayed it to catch up
-> - A monster leaving on the generic `just left …` line is dropped from the room, so the engine stops swinging at it
+> **Version 3.105.3**
+> - The Conversation window's message list fills the window again — its scrollbar sits at the window's edge instead of wherever the longest line ends
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
