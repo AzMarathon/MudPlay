@@ -40,6 +40,29 @@ public static class QuestFlagCompletion
         return result;
     }
 
+    // A crawled quest (or band) for progress recording: its identity plus the lowest
+    // give-step order its checklist covers (0 for a single-part quest).
+    public readonly record struct Band(int Flag, int Step, int StepRangeStart);
+
+    // The flag value a live read proves for each quest (or band) it has reached: every
+    // positive read value on the quest's flag, but for a band only once the value is at
+    // or past the band's first step — a low read mustn't seed progress for later bands.
+    public static IReadOnlyList<(QuestKey Key, int Value)> ResolveProgress(
+        IEnumerable<Band> quests, IReadOnlyDictionary<int, int> observed)
+    {
+        ArgumentNullException.ThrowIfNull(quests);
+        ArgumentNullException.ThrowIfNull(observed);
+
+        var result = new List<(QuestKey, int)>();
+        foreach (Band q in quests)
+        {
+            if (!observed.TryGetValue(q.Flag, out int value) || value <= 0) continue;
+            if (q.StepRangeStart > 0 && value < q.StepRangeStart) continue;
+            result.Add((new QuestKey(q.Flag, q.Step), value));
+        }
+        return result;
+    }
+
     // The distinct flags worth querying on the per-flag (paradigm) path: every detectable,
     // not-yet-complete target's flag. Bounds the burst of `abil` sends to what could
     // actually change — a flag with no incomplete detectable quest is never asked about.

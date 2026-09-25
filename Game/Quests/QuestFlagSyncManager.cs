@@ -153,10 +153,12 @@ public sealed class QuestFlagSyncManager
             return 0;
         }
 
+        int progressed = RecordFlagValues(prof, observed);
         IReadOnlyList<QuestFlagCompletion.QuestKey> newly =
             QuestFlagCompletion.ResolveNewlyComplete(targets, observed, alreadyComplete);
         if (newly.Count == 0)
         {
+            if (progressed > 0) { _profile.Save(); Synced?.Invoke(); }
             LastResult = $"{observed.Count} flag(s) read, nothing newly complete";
             _log?.Info("QuestFlags", $"sync: {LastResult}");
             StampCheckedToday(prof);
@@ -175,8 +177,11 @@ public sealed class QuestFlagSyncManager
 
     public enum UpdateOutcome { NoProfile, Busy, NoAccess, NothingToCheck, Done }
 
+    // Progressed = in-progress quests whose recorded flag value moved (their checklist
+    // now ticks further), alongside Marked = quests newly complete.
     public readonly record struct UpdateResult(
-        UpdateOutcome Outcome, int FlagsRead, IReadOnlyList<QuestFlagCompletion.QuestKey> Marked);
+        UpdateOutcome Outcome, int FlagsRead, IReadOnlyList<QuestFlagCompletion.QuestKey> Marked,
+        int Progressed = 0);
 
     // `@quest update` — the login sync's read-and-mark, on demand: no daily gate and no
     // opt-in, since someone just asked for it. Bounded the same way (flags of quests
@@ -196,11 +201,13 @@ public sealed class QuestFlagSyncManager
             if (await ReadFlagsAsync(flags, ct).ConfigureAwait(true) is not { } observed)
                 return new(UpdateOutcome.NoAccess, 0, []);
 
+            int progressed = RecordFlagValues(prof, observed);
             IReadOnlyList<QuestFlagCompletion.QuestKey> newly =
                 QuestFlagCompletion.ResolveNewlyComplete(targets, observed, alreadyComplete);
-            Mark(prof, newly, "@quest update");
-            LastResult = $"@quest update: {observed.Count} flag(s) read, {newly.Count} quest(s) marked complete";
-            return new(UpdateOutcome.Done, observed.Count, newly);
+            Mark(prof, newly, "@quest update", progressed);
+            LastResult = $"@quest update: {observed.Count} flag(s) read, {newly.Count} quest(s) marked complete, "
+                + $"{progressed} in progress advanced";
+            return new(UpdateOutcome.Done, observed.Count, newly, progressed);
         }
         finally { _running = false; }
     }
@@ -217,20 +224,57 @@ public sealed class QuestFlagSyncManager
             .Where(q => observed.ContainsKey(q.Flag))
             .Select(ToTarget)
             .ToList();
+        int progressed = RecordFlagValues(prof, observed);
         IReadOnlyList<QuestFlagCompletion.QuestKey> newly =
             QuestFlagCompletion.ResolveNewlyComplete(targets, observed, BuildAlreadyComplete(prof.QuestLog));
-        Mark(prof, newly, "@quest");
+        Mark(prof, newly, "@quest", progressed);
         return newly;
     }
 
-    private void Mark(CharacterProfile prof, IReadOnlyList<QuestFlagCompletion.QuestKey> newly, string source)
+    private void Mark(CharacterProfile prof, IReadOnlyList<QuestFlagCompletion.QuestKey> newly, string source,
+        int progressed = 0)
     {
-        if (newly.Count == 0) return;
-        ApplyComplete(prof, newly);
+        if (newly.Count == 0 && progressed == 0) return;
+        if (newly.Count > 0) ApplyComplete(prof, newly);
         _profile.Save();
-        _log?.Info("QuestFlags",
-            $"{source} marked {newly.Count} quest(s) complete: {string.Join(", ", newly.Select(k => $"{k.Flag}/{k.Step}"))}");
+        if (newly.Count > 0)
+            _log?.Info("QuestFlags",
+                $"{source} marked {newly.Count} quest(s) complete: {string.Join(", ", newly.Select(k => $"{k.Flag}/{k.Step}"))}");
         Synced?.Invoke();
+    }
+
+    // Record each read flag's value on the character's progress for every crawled quest
+    // (or band) the read has reached (QuestFlagCompletion.ResolveProgress). Returns how
+    // many rows' recorded value changed. Unlike completion this isn't one-way: the latest
+    // read is the truth about where the character is.
+    private int RecordFlagValues(CharacterProfile prof, IReadOnlyDictionary<int, int> observed)
+    {
+        List<QuestProgress> log = prof.QuestLog is { } existing
+            ? new List<QuestProgress>(existing)
+            : new List<QuestProgress>();
+        var byKey = log.ToDictionary(p => (p.Flag, p.Step));
+        int changed = 0;
+        IEnumerable<QuestFlagCompletion.Band> bands = QuestCrawler.Crawl(_gameData, _classId())
+            .Select(q => new QuestFlagCompletion.Band(q.Flag, q.Step, q.StepRangeStart));
+        foreach ((QuestFlagCompletion.QuestKey key, int value) in QuestFlagCompletion.ResolveProgress(bands, observed))
+        {
+            if (!byKey.TryGetValue((key.Flag, key.Step), out QuestProgress? p))
+            {
+                p = new QuestProgress(key.Flag, key.Step);
+                log.Add(p);
+                byKey[(key.Flag, key.Step)] = p;
+            }
+            if (p.FlagValue == value) continue;
+            p.FlagValue = value;
+            changed++;
+        }
+        if (changed > 0)
+        {
+            prof.QuestLog = log;
+            _log?.Info("QuestFlags", $"recorded flag progress on {changed} quest(s): "
+                + string.Join(", ", observed.Where(kv => kv.Value > 0).Select(kv => $"{kv.Key}={kv.Value}")));
+        }
+        return changed;
     }
 
     // Only quests this character can actually complete at its current level — the same

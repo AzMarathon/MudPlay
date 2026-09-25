@@ -3565,12 +3565,11 @@ public sealed class AppServices
         // died (awarded exp)"; the room comes from the live tracker (the event
         // carries neither). Fallback deaths (no candidate identity) are attributed
         // through the engaged name, so they're covered too.
-        // CurrentTarget is live during a normal death, but an exp-inferred kill
-        // nulls it before this fires — fall back to the retained just-killed name
-        // so "we attacked the boss, then gained exp" still attributes the death.
+        // DeathAttributionTarget covers an exp-inferred kill, which nulls CurrentTarget
+        // before this fires, so "we attacked the boss, then gained exp" still attributes.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key,
-                Combat.CurrentTarget ?? Combat.RecentInferredKillName);
+                Combat.DeathAttributionTarget);
         // Grab-All: the moment a tracked boss with GrabAll set dies, blindly `get`
         // every item in its game-data drop table — no room re-parse. BossKilled fires
         // for any matched boss; we gate on the flag here, where the catalog + item
@@ -3611,7 +3610,7 @@ public sealed class AppServices
         RoomClassifier.SetRoomAwareResolver(RoomAwareMonster.ResolveInCurrentRoom);
         SummonSettle = new Game.Combat.SummonOnDeathSettle(
             MonsterDeath, RoomClassifier, MovementCoordinator, MonsterDeathSummon,
-            currentTargetName: () => Combat.CurrentTarget,
+            currentTargetName: () => Combat.DeathAttributionTarget,
             movementActive: () => MovementControl.IsActive,
             log: Log);
         MonsterDeath.MonsterDied += evt =>
@@ -8283,8 +8282,8 @@ public sealed class AppServices
         HashSet<int> numbers = new();
         foreach (Game.Combat.MonsterDeathIdentity id in evt.Candidates)
             if (id.Number is { } n) numbers.Add(n);
-        if (!string.IsNullOrWhiteSpace(Combat.CurrentTarget)
-            && ResolveMonsterNumberByName(Combat.CurrentTarget) is { } cur) numbers.Add(cur);
+        if (Combat.DeathAttributionTarget is { Length: > 0 } dying
+            && ResolveMonsterNumberByName(dying) is { } cur) numbers.Add(cur);
 
         foreach (int num in numbers)
         {

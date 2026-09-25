@@ -139,4 +139,37 @@ public sealed class QuestFlagSyncTests
         var flags = QuestFlagCompletion.FlagsToQuery(targets, already).OrderBy(f => f).ToArray();
         Assert.Equal(new[] { 131, 133 }, flags);
     }
+
+    // ----- in-progress flag values -------------------------------------
+
+    [Fact]
+    public void ResolveProgress_RecordsTheReadValueOnAnInProgressQuest()
+    {
+        // report paradigm-20260925-122911: DaoLordQuest(134) read 7 — the sunstone
+        // wristband quest (reward at give-step 12) is mid-way, not complete, but the
+        // read still says which steps are done.
+        var got = QuestFlagCompletion.ResolveProgress(
+            new[] { new QuestFlagCompletion.Band(134, 0, 0) },
+            new Dictionary<int, int> { [134] = 7 });
+
+        Assert.Equal(new[] { (new QuestFlagCompletion.QuestKey(134, 0), 7) }, got);
+    }
+
+    [Fact]
+    public void ResolveProgress_SkipsZeroReadsAndUnreachedBands()
+    {
+        var got = QuestFlagCompletion.ResolveProgress(
+            new[]
+            {
+                new QuestFlagCompletion.Band(50, 0, 0),       // read 0 — nothing done
+                new QuestFlagCompletion.Band(126, 10, 1),     // band 1: reached
+                new QuestFlagCompletion.Band(126, 20, 6),     // band 2 starts at 6: reached
+                new QuestFlagCompletion.Band(126, 30, 11),    // band 3 starts at 11: not yet
+                new QuestFlagCompletion.Band(999, 0, 0),      // flag not read
+            },
+            new Dictionary<int, int> { [50] = 0, [126] = 6 });
+
+        Assert.Equal(new[] { 10, 20 }, got.Select(g => g.Key.Step));
+        Assert.All(got, g => Assert.Equal(6, g.Value));
+    }
 }

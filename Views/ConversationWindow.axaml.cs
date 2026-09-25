@@ -32,6 +32,13 @@ public partial class ConversationWindow : Window
     private bool _pinning;
     private const double BottomSlack = 8;
 
+    // Whether the user is the one moving the view right now: a scrollbar grab / track
+    // click held, or a wheel / navigation key within the last UserScrollWindow. Only a
+    // user scroll may take the view OFF follow (see OnRowsScrollChanged).
+    private bool _scrollBarHeld;
+    private DateTimeOffset _userScrollUntil = DateTimeOffset.MinValue;
+    private static readonly TimeSpan UserScrollWindow = TimeSpan.FromMilliseconds(600);
+
     // Per-window Tab-completion cursor over the input box, mirroring the
     // terminal's own (Controls.TerminalControl._autoComplete) — cycling state
     // is per-widget, the on/off setting (AppServices.InventoryTabCompleteEnabled)
@@ -70,6 +77,10 @@ public partial class ConversationWindow : Window
             _rowsList.AddHandler(InputElement.PointerReleasedEvent, OnRowsPointerReleased,
                 RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
             _rowsList.AddHandler(ScrollViewer.ScrollChangedEvent, OnRowsScrollChanged);
+            _rowsList.AddHandler(InputElement.PointerWheelChangedEvent, (_, _) => NoteUserScroll(),
+                RoutingStrategies.Tunnel, handledEventsToo: true);
+            _rowsList.AddHandler(InputElement.KeyDownEvent, OnRowsNavigationKey,
+                RoutingStrategies.Tunnel, handledEventsToo: true);
         }
         if (DataContext is ConversationViewModel vm)
         {
@@ -146,14 +157,36 @@ public partial class ConversationWindow : Window
         });
     }
 
-    // Track whether the user has the view at the bottom. Only a change that moved the
+    // Track whether the view follows the newest line. Only a change that moved the
     // offset counts, and not one we made: a new line only grows the extent (offset
     // unchanged), which must not read as "scrolled away" before its pin lands.
+    //
+    // Reaching the bottom by any means re-engages follow, but only a USER scroll can
+    // disengage it. The list also moves the offset on its own — anchoring while the
+    // history cap trims the oldest row just after a new one is added, or correcting its
+    // height estimate as rows realize — and reading that as "scrolled up" dropped
+    // follow before the new line's queued pin ran, so the pin bailed and auto-scroll
+    // quietly stopped until the user scrolled down by hand (report
+    // paradigm-20260925-115129).
     private void OnRowsScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
         if (_pinning || e.OffsetDelta.Y == 0) return;
         if (ResolveRowsScroll() is not { } sv) return;
-        _followTail = sv.Offset.Y + sv.Viewport.Height >= sv.Extent.Height - BottomSlack;
+        bool atBottom = sv.Offset.Y + sv.Viewport.Height >= sv.Extent.Height - BottomSlack;
+        bool userScrolling = _scrollBarHeld || DateTimeOffset.Now < _userScrollUntil;
+        if (atBottom == _followTail || (!atBottom && !userScrolling)) return;
+        _followTail = atBottom;
+        MudPlay.Services.AppServices.Current.Log.Debug("Conversation",
+            atBottom ? "auto-scroll following again (back at the bottom)"
+                     : "auto-scroll paused — scrolled up to read");
+    }
+
+    private void NoteUserScroll() => _userScrollUntil = DateTimeOffset.Now + UserScrollWindow;
+
+    private void OnRowsNavigationKey(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown or Key.Home or Key.End)
+            NoteUserScroll();
     }
 
     // Ticking Auto-scroll back on means "take me to the newest line": follow again.
@@ -330,7 +363,11 @@ public partial class ConversationWindow : Window
         // Nor a press on the scrollbar: the theme overlays it on the rows, so the row
         // hit-test below finds the row UNDER the thumb and swallowed the press — the
         // thumb couldn't be grabbed wherever a row sat beneath it.
-        if (e.Source is Visual onBar && onBar.FindAncestorOfType<ScrollBar>(includeSelf: true) is not null) return;
+        if (e.Source is Visual onBar && onBar.FindAncestorOfType<ScrollBar>(includeSelf: true) is not null)
+        {
+            _scrollBarHeld = true;   // a thumb drag / track click is the user scrolling
+            return;
+        }
 
         ListBoxItem? container = ContainerAt(e.GetPosition(_rowsList));
         if (container is null) return;   // background press — leave it to the list
@@ -364,6 +401,7 @@ public partial class ConversationWindow : Window
 
     private void OnRowsPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        _scrollBarHeld = false;
         if (!_dragging) return;
         _dragging = false;
         _dragLastIndex = -1;
