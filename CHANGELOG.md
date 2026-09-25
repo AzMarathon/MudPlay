@@ -1,5 +1,12 @@
 # Version history
 
+## 3.107.2
+
+- A loop paused mid-move by a fight now fights it: combat no longer judges the room it just left (a non-lair / do-not-attack room) and stands there being hit
+- The bug report's combat-suppression line shows the verdict the engine acts on and which room it judged
+- Rest / heal / run thresholds count only Default-set gear you actually have (worn or carried), else your live max; each figure is tagged (def) or (live)
+- bug reports addressed: paradigm-20260925-070016, paradigm-20260925-112819
+
 ## 3.107.0
 
 - New `@loop send <name>`: asks a player for a copy of one of their saved loops; they offer the best match, and `@loop send yes` sends it encoded (saved to your Loops, never over one of yours) while `@loop send no` calls it off

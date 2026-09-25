@@ -367,9 +367,13 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     // DEFAULT gear set's pool (what the thresholds are tuned for), so the displayed
     // "= N/M" stays put while a Pre-rest set that alters the pool is worn, letting you
     // adjust your values mid-rest. Falls back to the live pool max before a stat
-    // screen / when no Default set is configured.
-    public int PreviewMaxHp => AppServices.CurrentOrNull?.RestPreviewMaxHp() ?? (_state?.MaxHp ?? 0);
-    public int PreviewMaxMa => AppServices.CurrentOrNull?.RestPreviewMaxMa() ?? (_state?.MaxMa ?? 0);
+    // screen / when none of the Default set's items is owned. The FromDefaultSet half
+    // drives the "(def)" / "(live)" marker on each conversion, so a figure that isn't
+    // the character's live max reads as the Default-set basis rather than a wrong number.
+    private (int Max, bool FromDefaultSet) PreviewHp =>
+        AppServices.CurrentOrNull?.RestPreviewMaxHp() ?? (_state?.MaxHp ?? 0, false);
+    private (int Max, bool FromDefaultSet) PreviewMa =>
+        AppServices.CurrentOrNull?.RestPreviewMaxMa() ?? (_state?.MaxMa ?? 0, false);
 
     // NumericUpDown Maximum for the threshold fields: 100 in Percentage mode (a % can't
     // exceed 100), the absolute ceiling in Value mode.
@@ -403,39 +407,42 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         }
     }
 
-    // Render the live conversion of a threshold field against the player's live
-    // max. Percentage mode shows the absolute equivalent ("= 120/200"); Value mode
-    // shows the percentage ("= 60%"). Empty string when no connection / no prompt
-    // data yet so the layout doesn't render a misleading "= 0/0".
-    private static string FormatConversion(int value, int max, bool isPercentageMode)
+    // Render the conversion of a threshold field against the preview basis.
+    // Percentage mode shows the absolute equivalent ("120/200"); Value mode shows the
+    // percentage ("60%"). Tagged "(def)" when the basis is the Default gear set's pool,
+    // "(live)" when it's the live max. Empty string when no connection / no prompt data
+    // yet so the layout doesn't render a misleading "0/0".
+    private static string FormatConversion(int value, (int Max, bool FromDefaultSet) basis, bool isPercentageMode)
     {
+        (int max, bool fromDefaultSet) = basis;
         if (max <= 0) return string.Empty;
+        string tag = fromDefaultSet ? " (def)" : " (live)";
         if (isPercentageMode)
         {
             int abs = (int)Math.Round(max * value / 100.0);
-            return $"{abs}/{max}";
+            return $"{abs}/{max}{tag}";
         }
         int pct = (int)Math.Round(value * 100.0 / max);
-        return $"{pct}%";
+        return $"{pct}%{tag}";
     }
 
     // ----- HP conversion strings (resolve against the Default-set basis) -----
-    public string RestMaxHpConverted              => FormatConversion(RestMaxHp,              PreviewMaxHp, HpModePercentage);
-    public string RestIfBelowHpConverted          => FormatConversion(RestIfBelowHp,          PreviewMaxHp, HpModePercentage);
-    public string HealRestTriggerConverted        => FormatConversion(HealRestTrigger,        PreviewMaxHp, HpModePercentage);
-    public string MinorHealCombatTriggerConverted => FormatConversion(MinorHealCombatTrigger, PreviewMaxHp, HpModePercentage);
-    public string MajorHealCombatTriggerConverted => FormatConversion(MajorHealCombatTrigger, PreviewMaxHp, HpModePercentage);
-    public string EmergencyHealTriggerConverted   => FormatConversion(EmergencyHealTrigger,   PreviewMaxHp, HpModePercentage);
-    public string RunIfBelowHpConverted           => FormatConversion(RunIfBelowHp,           PreviewMaxHp, HpModePercentage);
-    public string HangIfBelowHpConverted          => FormatConversion(HangIfBelowHp,          PreviewMaxHp, HpModePercentage);
+    public string RestMaxHpConverted              => FormatConversion(RestMaxHp,              PreviewHp, HpModePercentage);
+    public string RestIfBelowHpConverted          => FormatConversion(RestIfBelowHp,          PreviewHp, HpModePercentage);
+    public string HealRestTriggerConverted        => FormatConversion(HealRestTrigger,        PreviewHp, HpModePercentage);
+    public string MinorHealCombatTriggerConverted => FormatConversion(MinorHealCombatTrigger, PreviewHp, HpModePercentage);
+    public string MajorHealCombatTriggerConverted => FormatConversion(MajorHealCombatTrigger, PreviewHp, HpModePercentage);
+    public string EmergencyHealTriggerConverted   => FormatConversion(EmergencyHealTrigger,   PreviewHp, HpModePercentage);
+    public string RunIfBelowHpConverted           => FormatConversion(RunIfBelowHp,           PreviewHp, HpModePercentage);
+    public string HangIfBelowHpConverted          => FormatConversion(HangIfBelowHp,          PreviewHp, HpModePercentage);
 
     // ----- MA conversion strings (resolve against the Default-set basis) -----
-    public string RestMaxMaConverted              => FormatConversion(RestMaxMa,              PreviewMaxMa, MaModePercentage);
-    public string RestIfBelowMaConverted          => FormatConversion(RestIfBelowMa,          PreviewMaxMa, MaModePercentage);
-    public string HealIfAboveMaRestingConverted   => FormatConversion(HealIfAboveMaResting,   PreviewMaxMa, MaModePercentage);
-    public string HealIfAboveMaCombatConverted    => FormatConversion(HealIfAboveMaCombat,    PreviewMaxMa, MaModePercentage);
-    public string RunIfBelowMaConverted           => FormatConversion(RunIfBelowMa,           PreviewMaxMa, MaModePercentage);
-    public string BlessIfAboveMaConverted         => FormatConversion(BlessIfAboveMa,         PreviewMaxMa, MaModePercentage);
+    public string RestMaxMaConverted              => FormatConversion(RestMaxMa,              PreviewMa, MaModePercentage);
+    public string RestIfBelowMaConverted          => FormatConversion(RestIfBelowMa,          PreviewMa, MaModePercentage);
+    public string HealIfAboveMaRestingConverted   => FormatConversion(HealIfAboveMaResting,   PreviewMa, MaModePercentage);
+    public string HealIfAboveMaCombatConverted    => FormatConversion(HealIfAboveMaCombat,    PreviewMa, MaModePercentage);
+    public string RunIfBelowMaConverted           => FormatConversion(RunIfBelowMa,           PreviewMa, MaModePercentage);
+    public string BlessIfAboveMaConverted         => FormatConversion(BlessIfAboveMa,         PreviewMa, MaModePercentage);
 
     // Commit through the shared session (folds both tabs + persists Settings
     // ["Combat"] + Settings["Health"] + the profile blob + weapons as one unit).
