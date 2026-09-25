@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.GameData;
 using MudPlay.Game.Map;
+using MudPlay.Game.Train;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
@@ -42,7 +43,11 @@ namespace MudPlay.Game;
 // allocates CP without a fresh level-up.
 public sealed class TrainerWalkManager : IDisposable
 {
-    private enum Phase { Idle, Funding, Walking, Training, RefreshingStats, ApplyingCp }
+    // PartyTrip: a party auto-train trip owns the engine detour (the loop / auto-lair
+    // is stopped and snapshotted here) while PartyTrainCoordinator drives the walk
+    // and the members' trains; the leader's own train runs inside it and returns to
+    // PartyTrip rather than resuming the engine.
+    private enum Phase { Idle, Funding, Walking, Training, RefreshingStats, ApplyingCp, PartyTrip }
     private enum ResumeKind { None, Loop, Lair }
 
     // Why a (looping) train run stopped — shapes the @train reply.
@@ -87,6 +92,15 @@ public sealed class TrainerWalkManager : IDisposable
     private Action<string>? _reply;   // @train deferred reply sink (null for local runs)
     private TrainerShop? _target;
     private ResumeTarget _resume;
+
+    // Party-train run shaping. _ceilingCap tightens DoNotTrainAbove for this run only
+    // (the level-11 party rule, or the leader's target for a member); _noChain stops a
+    // run walking on to the next trainer — in a party that would leave everyone behind.
+    private int _ceilingCap;
+    private bool _noChain;
+    private Action<int, string>? _partyDone;   // (levels trained, report) for a party train
+    private bool _partyTrip;                   // a party trip holds the engine detour
+    private bool _partyTripTrained;
 
     // UI prompt for the CP reconcile (Train Now path only); abstract delegate so
     // the Game layer stays UI-free. Null until MainWindowViewModel wires it.
@@ -181,9 +195,9 @@ public sealed class TrainerWalkManager : IDisposable
     // carried around the circuit.
     public Action? AfterTrainRun { get; set; }
 
-    // True when training is allowed to start at all. Solo-only for now: training is a
-    // realm excursion that disbands a party server-side, so an armed auto-train in a
-    // group would break the group. Null = no restriction.
+    // True when the SOLO armed run may start. Training is a realm excursion that
+    // disbands a party server-side, so the solo run never fires in a group — party
+    // training goes through PartyTrainCoordinator instead. Null = no restriction.
     public Func<bool>? CanStartRun { get; set; }
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
@@ -287,6 +301,149 @@ public sealed class TrainerWalkManager : IDisposable
         _startLevel = _stats.Level;
         SendTrain();
     }
+
+    // Party-train in place: loop-train down to the reserve under a party ceiling, and
+    // never chain to another trainer. Used by a member when the leader says "train"
+    // at a stop, and by the leader at the trip's final stop (inside BeginPartyTrip).
+    // done receives (levels trained, report) once the run settles — always, even when
+    // there was nothing to train, so the coordinator never waits on silence.
+    public void TrainForParty(int ceilingCap, Action<int, string> done)
+    {
+        ArgumentNullException.ThrowIfNull(done);
+        bool inTrip = _phase == Phase.PartyTrip;
+        if ((!inTrip && IsBusy) || !_wire.IsBound)
+        {
+            done(0, "busy");
+            return;
+        }
+
+        AutoTrainerSettings s = ReadSettings();
+        int keep = Math.Max(0, s.LevelsToKeep);
+        int ceiling = MinCeiling(s.DoNotTrainAbove, ceilingCap);
+        if (CountBankableAbove(_stats.Level) <= keep || !TrainBudgetCalculator.WithinCeiling(_stats.Level, ceiling))
+        {
+            done(0, "nothing to train");
+            return;
+        }
+
+        ResetRunState(loop: true, applyCp: s.AutoTrainStats, reply: null);
+        _keepLevels = keep;
+        _ceilingCap = ceilingCap;
+        _noChain = true;
+        _partyDone = done;
+        _target = null;
+        if (!inTrip) _resume = default;   // a member trains where it stands; no engine detour
+        _startLevel = _stats.Level;
+        _log?.Info("AutoTrain", $"Party train at level {_startLevel} (ceiling {(ceiling > 0 ? ceiling : "none")}).");
+        SendTrain();
+    }
+
+    // Start a party trip: snapshot + stop the running loop / auto-lair so the trip's
+    // walk owns the wire, and hold IsBusy (so the solo armed run and Train Now stay
+    // out) until EndPartyTrip. False when something else is already running.
+    public bool BeginPartyTrip()
+    {
+        if (IsBusy || !_wire.IsBound) return false;
+        _resume = SnapshotEngine();
+        StopEngine();
+        _partyTrip = true;
+        _partyTripTrained = false;
+        _phase = Phase.PartyTrip;
+        _log?.Info("AutoTrain", "Party train trip started — engine paused for the detour.");
+        StateChanged?.Invoke();
+        return true;
+    }
+
+    // End the party trip and put the engine back. The movement gate the party
+    // re-form arms holds the resumed loop until the members are back.
+    public void EndPartyTrip(string reason)
+    {
+        if (!_partyTrip) return;
+        _partyTrip = false;
+        bool trained = _partyTripTrained;
+        _partyTripTrained = false;
+        _phase = Phase.Idle;
+        ResumeTarget resume = _resume;
+        _resume = default;
+        _log?.Info("AutoTrain", $"Party train trip ended — {reason}");
+        StateChanged?.Invoke();
+        ResumeEngine(resume);
+        if (trained) AfterTrainRun?.Invoke();
+    }
+
+    public bool PartyTripActive => _partyTrip;
+
+    // This character's party-train picture, from its own Auto-Trainer thresholds:
+    // Ready once the solo trigger would fire, Waiting (with a projected time to Ready
+    // at expPerHour, -1 when unknown) before that, Blocked when the party ceiling
+    // leaves nothing to train on the way — the level-11 rule, DoNotTrainAbove — or the
+    // class / exp chart can't be resolved.
+    public PartyTrainSelfAssessment AssessForParty(double expPerHour)
+    {
+        AutoTrainerSettings s = ReadSettings();
+        int level = _stats.Level;
+        int classNumber = ResolveClassNumber();
+        int chart = Chart();
+        int ceiling = PartyCeiling(s, level);
+        long exp = _stats.Exp;
+        long nextExp = level > 0 && chart > 0
+            ? ExperienceTableCalculator.CalcExpNeeded(level + CountBankableAbove(level) + 1, chart, _gameData.ActiveRealm)
+            : 0;
+        if (level <= 0 || chart <= 0 || !TrainBudgetCalculator.WithinCeiling(level, ceiling))
+            return new(level, classNumber, 0, 0, PartyTrainReadiness.Blocked, -1, exp, nextExp);
+
+        int keep = Math.Max(0, s.LevelsToKeep);
+        int toTrain = TrainBudgetCalculator.LevelsToTrain(
+            _stats.Exp, level, chart, _gameData.ActiveRealm, keep, MaxTrainLoopSteps, ceiling);
+        bool ready = toTrain > 0
+            && TrainBudgetCalculator.ShouldFire(CountBankableAbove(level), keep, s.FireAtBankedLevels);
+        if (ready)
+            return new(level, classNumber, toTrain, CostToTrain(level, toTrain, classNumber),
+                PartyTrainReadiness.Ready, 0, exp, nextExp);
+
+        // Ready arrives when the banked count reaches the fire threshold (floored at
+        // keep + 1, as ShouldFire does) — time to reach that level's exp at the rate.
+        int need = Math.Max(keep + 1, Math.Max(0, s.FireAtBankedLevels));
+        TimeSpan? eta = ExperienceTableCalculator.CalcTimeToLevel(
+            ExperienceTableCalculator.CalcExpNeeded(level + need, chart, _gameData.ActiveRealm),
+            _stats.Exp, (long)expPerHour);
+        return new(level, classNumber, 0, 0, PartyTrainReadiness.Waiting,
+            eta is { } t ? (int)Math.Min(int.MaxValue, t.TotalSeconds) : -1, exp, nextExp);
+    }
+
+    // The ceiling a party train runs under: DoNotTrainAbove, tightened to 10 below
+    // level 11 when the level-11 step is left to a solo trip.
+    public static int PartyCeiling(AutoTrainerSettings s, int level)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        return MinCeiling(s.DoNotTrainAbove, s.PartySkipLevel11 && level < 11 ? 10 : 0);
+    }
+
+    // Two "0 = none" ceilings combined: the tighter one that's set.
+    private static int MinCeiling(int a, int b)
+    {
+        a = Math.Max(0, a);
+        b = Math.Max(0, b);
+        if (a == 0) return b;
+        if (b == 0) return a;
+        return Math.Min(a, b);
+    }
+
+    private int EffectiveCeiling() => MinCeiling(ReadSettings().DoNotTrainAbove, _ceilingCap);
+
+    // What training these levels costs across however many trainers they span, priced
+    // from where we stand. 0 when we can't place ourselves (the trip's funding plan
+    // then just doesn't count this member's fee).
+    private long CostToTrain(int level, int levels, int classNumber)
+    {
+        if (_tracker.State.CurrentRoom is not { } cur) return 0;
+        IReadOnlyList<Game.Train.TrainSegment> itinerary = Game.Train.TrainItineraryPlanner.Build(
+            TrainerCatalog.Enumerate(_gameData), level, levels, classNumber,
+            ReadDisabledTrainers(), cur.Key, (a, b) => _bfs.DistanceBetween(a, b));
+        return Game.Train.TrainItineraryPlanner.TotalCost(itinerary);
+    }
+
+    public AutoTrainerSettings CurrentSettings => ReadSettings();
 
     private void Begin(bool loop, bool applyCp, Action<string>? reply, int keepLevels = 0)
     {
@@ -490,6 +647,9 @@ public sealed class TrainerWalkManager : IDisposable
 
     private void ResetRunState(bool loop, bool applyCp, Action<string>? reply)
     {
+        _ceilingCap = 0;
+        _noChain = false;
+        _partyDone = null;
         _loopTrain = loop;
         _cpOnlyRun = false;
         _keepLevels = 0;
@@ -582,7 +742,7 @@ public sealed class TrainerWalkManager : IDisposable
         // reserve (and the safety cap holds). We never refresh stats between loop
         // steps — PlayerStats.Level lags, so the bankable check rides _stats.Exp
         // (fixed mid-loop) against the just-attained level.
-        int ceiling = Math.Max(0, ReadSettings().DoNotTrainAbove);
+        int ceiling = EffectiveCeiling();
         if (_loopTrain && _trainSteps < MaxTrainLoopSteps
             && CountBankableAbove(_attainedLevel) > _keepLevels
             && TrainBudgetCalculator.WithinCeiling(_attainedLevel, ceiling))
@@ -611,7 +771,7 @@ public sealed class TrainerWalkManager : IDisposable
 
     private bool TryChainToNextTrainer()
     {
-        if (_phase != Phase.Training || !_loopTrain || _cpOnlyRun) return false;
+        if (_phase != Phase.Training || !_loopTrain || _cpOnlyRun || _noChain) return false;
         if (_trainSteps >= MaxTrainLoopSteps) return false;
 
         if (_tracker.State.CurrentRoom is not { } cur) return false;
@@ -623,7 +783,7 @@ public sealed class TrainerWalkManager : IDisposable
         int level = _attainedLevel > 0 ? _attainedLevel : _stats.Level;
         TrainerShop? pick = Game.Train.TrainItineraryPlanner.NextTrainerInChain(
             TrainerCatalog.Enumerate(_gameData), level, CountBankableAbove(level), _keepLevels,
-            Math.Max(0, ReadSettings().DoNotTrainAbove), ResolveClassNumber(), ReadDisabledTrainers(),
+            EffectiveCeiling(), ResolveClassNumber(), ReadDisabledTrainers(),
             cur.Key, (a, b) => _bfs.DistanceBetween(a, b));
 
         if (pick is not { } next) return false;
@@ -720,6 +880,13 @@ public sealed class TrainerWalkManager : IDisposable
     // The run itself still finishes on the idle transition in OnAutoTrainStateChanged.
     private void OnCpPlanCommitted()
     {
+        // The user's own `train stats` applied the plan (no run of ours in flight):
+        // that level's row is just as fulfilled as after Train Now.
+        if (_phase == Phase.Idle && _autoTrain.ManualApplyLevel is { } manualLevel)
+        {
+            RemoveFulfilledPlanRows(manualLevel);
+            return;
+        }
         if (_phase != Phase.ApplyingCp || _cpApplied) return;
         _cpApplied = true;
         RemoveFulfilledPlanRows(_cpTargetLevel);
@@ -767,9 +934,11 @@ public sealed class TrainerWalkManager : IDisposable
         int keep = Math.Max(0, s.LevelsToKeep);
         if (!IsBusy && EngineActive && s.AutoTrain
             && DateTimeOffset.Now >= _fundingRetryAt
-            && CanStartRun?.Invoke() != false
             && TrainBudgetCalculator.ShouldFire(CountBankableAbove(_stats.Level), keep, s.FireAtBankedLevels)
-            && TrainBudgetCalculator.WithinCeiling(_stats.Level, Math.Max(0, s.DoNotTrainAbove)))
+            && TrainBudgetCalculator.WithinCeiling(_stats.Level, Math.Max(0, s.DoNotTrainAbove))
+            // Last: in a party the gate also notes who to re-invite, so only ask it
+            // once a run is otherwise going.
+            && CanStartRun?.Invoke() != false)
             // Armed auto-train: detour + loop-train down to the reserve, applying
             // CP per the Auto-train-stats toggle. Suppressed once the level ceiling
             // is reached.
@@ -786,8 +955,16 @@ public sealed class TrainerWalkManager : IDisposable
         string report = BuildReport(_levelsTrained, _stopReason, _cpApplied, _cpTargetLevel,
                                     _attainedLevel > 0 ? _attainedLevel : _startLevel);
         Action<string>? reply = _reply;
+        Action<int, string>? partyDone = _partyDone;
+        int levels = _levelsTrained;
+        _partyDone = null;   // delivered here with the report, not by Finish
         Finish(null);
-        if (reply is not null) reply(report);
+        if (partyDone is not null)
+        {
+            _log?.Info("AutoTrain", report);
+            partyDone(levels, report);
+        }
+        else if (reply is not null) reply(report);
         else _log?.Info("AutoTrain", report);
     }
 
@@ -795,10 +972,15 @@ public sealed class TrainerWalkManager : IDisposable
     {
         if (reason is not null) _log?.Info("AutoTrain", reason);
         bool trained = _levelsTrained > 0;
+        int levels = _levelsTrained;
+        Action<int, string>? partyDone = _partyDone;
         ResumeTarget resume = _resume;
         _phase = Phase.Idle;
         _target = null;
         _resume = default;
+        _ceilingCap = 0;
+        _noChain = false;
+        _partyDone = null;
         _applyCp = false;
         _loopTrain = false;
         _cpOnlyRun = false;
@@ -811,8 +993,28 @@ public sealed class TrainerWalkManager : IDisposable
         _attainedLevel = 0;
         _cpTargetLevel = 0;
         _stopReason = StopReason.None;
+
+        // Inside a party trip the engine stays down: the trip goes on (more stops,
+        // the re-form) and EndPartyTrip resumes it.
+        if (_partyTrip)
+        {
+            _partyTripTrained |= trained;
+            _phase = Phase.PartyTrip;
+            _resume = resume;
+            StateChanged?.Invoke();
+            partyDone?.Invoke(levels, reason ?? "");
+            return;
+        }
+
         StateChanged?.Invoke();
         ResumeEngine(resume);
+        if (partyDone is not null)
+        {
+            // A member's party train: stand where the leader stopped us — no bank
+            // detour of our own while the party waits.
+            partyDone(levels, reason ?? "");
+            return;
+        }
 
         // Offer the purse to auto-deposit AFTER the engine is back up, not before:
         // the deposit reroute snapshots whatever engine is running so it can restore
@@ -862,7 +1064,7 @@ public sealed class TrainerWalkManager : IDisposable
 
     // ----- engine detour (mirrors AutoDepositManager) --------------------
 
-    private bool EngineActive => _loopRunner.State != LoopState.Idle || _autoLair.IsActive;
+    public bool EngineActive => _loopRunner.State != LoopState.Idle || _autoLair.IsActive;
 
     private ResumeTarget SnapshotEngine()
     {

@@ -9,7 +9,8 @@ namespace MudPlay.Game;
 // captured at party-join time so the UI can show both the absolute number and
 // the current percentage (H:690 94%).
 //
-// Ownership: PartyManager is the sole writer of every observable field below —
+// Ownership: PartyManager is the sole writer of every observable field below
+// (TrainInfo excepted — see its comment) —
 // the IL-scan test enforces it. Consumers (PartyWindow VM, automation engines)
 // bind to these properties and never call the setters.
 //
@@ -24,7 +25,10 @@ public sealed partial class PartyMember : ObservableObject
 
     // Class string (e.g. "Mage", "Cleric"). Empty until first `par`
     // observation — follows-you doesn't disclose class.
-    [ObservableProperty] [field: Owner(typeof(PartyManager))] private string _class = string.Empty;
+    [ObservableProperty]
+    [field: Owner(typeof(PartyManager))]
+    [NotifyPropertyChangedFor(nameof(ClassDisplay))]
+    private string _class = string.Empty;
 
     // Baseline HP captured at party-join via the on-join `@health` exchange. 0
     // until that exchange completes — UI shows "—%" until both BaselineHp and
@@ -66,6 +70,29 @@ public sealed partial class PartyMember : ObservableObject
     [field: Owner(typeof(PartyManager))]
     [NotifyPropertyChangedFor(nameof(MaRichDisplay))]
     private bool _isKai;
+
+    // Party auto-train line under the bars — this member's last `@ptrain` report as
+    // the leader holds it (level, ready / time-to-ready, fee). Empty when there's no
+    // fresh report. The one field here not owned by PartyManager: it's the train
+    // coordinator's view of the member, not the par table's.
+    [ObservableProperty]
+    [field: Owner(typeof(Train.PartyTrainCoordinator))]
+    [NotifyPropertyChangedFor(nameof(HasTrainInfo))]
+    private string _trainInfo = string.Empty;
+
+    public bool HasTrainInfo => TrainInfo.Length > 0;
+
+    // Best-known level (0 = unknown) for the "Level 20 - Druid" subtitle: the member's own
+    // @ptrain report, else the last @level reading, else our own stats on the self
+    // row. Owned by the train coordinator for the same reason as TrainInfo.
+    [ObservableProperty]
+    [field: Owner(typeof(Train.PartyTrainCoordinator))]
+    [NotifyPropertyChangedFor(nameof(ClassDisplay))]
+    private int _knownLevel;
+
+    public string ClassDisplay => KnownLevel > 0
+        ? (Class.Length > 0 ? $"Level {KnownLevel} - {Class}" : $"Level {KnownLevel}")
+        : Class;
 
     // PartyWindow display string for HP. When BaselineHp is known (the on-join
     // `@health` exchange completed and we captured this member's max), shows

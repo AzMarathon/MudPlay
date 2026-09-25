@@ -21,12 +21,19 @@ namespace MudPlay.Services;
 // automator, so a malicious server can't re-prompt "what is your username
 // again?" mid-session and get it echoed back.
 //
+// Built-in pager continue: a BBS pages long bulletins / news during login with
+// "(N)onstop, (Q)uit, or (C)ontinue?", and Enter continues. Whenever that prompt
+// shows up while the current step hasn't matched, the automator presses Enter and
+// keeps waiting on the same step — nobody has to author a step for a pager that
+// only appears when there's news. A step that does wait for it still wins.
+//
 // State is lock-guarded so the UI-thread Feed call can't race the
 // post-ConfigureAwait(false) continuation in ResolveAndSendAsync or the
 // per-step timeout callback.
 public sealed class LoginAutomator : IDisposable
 {
     private const int BufferCap = 4096;
+    private const string PagerPrompt = "(N)onstop, (Q)uit, or (C)ontinue?";
 
     // Case-insensitive — users may type "{Username}" or "{USERNAME}" and
     // still expect substitution. Compiled once at type init.
@@ -223,7 +230,16 @@ public sealed class LoginAutomator : IDisposable
             if (_disposed || _resolving || _stepIndex >= _steps.Count) return;
             step = _steps[_stepIndex];
             string text = _buffer.ToString();
-            if (!step.TryMatch(text, out int matchEnd)) return;
+            if (!step.TryMatch(text, out int matchEnd))
+            {
+                int pager = text.IndexOf(PagerPrompt, StringComparison.OrdinalIgnoreCase);
+                if (pager < 0) return;
+                // Consume the prompt so the same text can't answer twice, then Enter.
+                _buffer.Remove(0, pager + PagerPrompt.Length);
+                _log?.Invoke($"LoginAutomator: pager prompt — sent Enter (still awaiting step {_stepIndex + 1}/{_steps.Count})");
+                _ = SendPagerContinueAsync();
+                return;
+            }
 
             _buffer.Remove(0, matchEnd);
 
@@ -329,6 +345,18 @@ public sealed class LoginAutomator : IDisposable
 
         if (done) { FireDone(); return; }
         TryAdvance();
+    }
+
+    private async Task SendPagerContinueAsync()
+    {
+        try
+        {
+            await _sendText("\r", CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Abort($"pager continue: send failed: {ex.Message}");
+        }
     }
 
     private void Abort(string reason)

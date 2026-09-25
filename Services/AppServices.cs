@@ -384,6 +384,10 @@ public sealed class AppServices
     // panic / kill broadcasts.
     public Game.Remote.PartyBroadcaster PartyBroadcaster { get; }
 
+    // Paces every outgoing telepath and resends the ones the server's throttle
+    // refused ("--- Telepath Not Sent ---"). Sits in front of the socket write.
+    public Game.Remote.TelepathPacer Telepaths { get; }
+
     // Live mirror of the per-character game-menu commands
     // (GameCommands.EntryCommand /
     // GameCommands.ExitCommand). Hydrated from the
@@ -615,6 +619,11 @@ public sealed class AppServices
     // @train handler — trains in place (no walk) on a permitted party
     // member's request, applying the CP plan when Auto-train-stats is on.
     public Game.Remote.TrainHandler TrainRemote { get; }
+
+    // Party auto-train: member readiness reports, the leader's quorum + trip, and the
+    // @ptrain handshake that carries them between MudPlay clients.
+    public Game.Train.PartyTrainCoordinator PartyTrain { get; }
+    public Game.Remote.PartyTrainHandler PartyTrainRemote { get; }
 
     // @equip-<set> handler — a permitted party member asks us to
     // wear one of our saved gear sets. The set keyword is the suffix after
@@ -1127,6 +1136,19 @@ public sealed class AppServices
     // kills/hour sparkline. Fed by MonsterDeath and the
     // experience-gain line; reset on the session boundary.
     public Game.Combat.SessionActivityTracker SessionActivity { get; private set; } = null!;
+
+    // Our own time to next level: the banked-aware estimate at the session exp/hour,
+    // run through ONE countdown clock that Session Stats, the status bar and the
+    // Party window's self row all read — so they show the same figure, counting down
+    // like a timer instead of each recomputing (and jumping) on its own.
+    private readonly Game.Calculators.TnlCountdown _selfTnl = new();
+
+    public (Game.Calculators.TimeToLevelEstimator.Result Estimate, TimeSpan? Remaining) SelfTimeToLevel()
+    {
+        Game.Calculators.TimeToLevelEstimator.Result est = Game.Calculators.TimeToLevelEstimator.Estimate(
+            PlayerStats, GameData, SessionActivity.Snapshot().ExperiencePerHour);
+        return (est, _selfTnl.Remaining(est.Eta, DateTimeOffset.UtcNow));
+    }
 
     // Per-loop-step HP/MA min-max profile for the Session Stats "HP/MA History"
     // graph. Fed by the prompt scanner (gated on an actively-stepping loop) keyed
@@ -2424,6 +2446,11 @@ public sealed class AppServices
         // loop start); the broadcaster's also the canonical spot for the
         // panic / kill broadcasts.
         PartyBroadcaster = new Game.Remote.PartyBroadcaster(PartyState);
+        Telepaths = new Game.Remote.TelepathPacer(
+            armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
+                .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+                    System.Threading.Tasks.TaskScheduler.Default),
+            log: Log);
         // Auto-party flag consumer — invites flagged players when they
         // appear in our room, accepts invites from flagged players.
         // Wire-sender is bound by MainWindowViewModel once the telnet
@@ -3641,6 +3668,14 @@ public sealed class AppServices
             Router, RoomTracker, RoomClassifier,
             currentTarget: () => Combat.CurrentTarget,
             log: Log);
+
+        // Our own say echo ("You say \"…\"") only reaches the chat router — it's chat
+        // by shape — so the combat engine hears about an attack the server read as a
+        // say from here.
+        Chat.EntryClassified += e =>
+        {
+            if (e.Channel == Game.ChatChannel.Local && e.Speaker is null) Combat.NoteOwnSay(e.Message);
+        };
 
         // Subscribes to RoomTracker.StateChanged HERE — before Walker / LoopRunner
         // below — so on a synchronous dark-room advance it asserts the settle gate
@@ -6597,13 +6632,6 @@ public sealed class AppServices
         Walker.Event += e => TrainFunding.OnWalkEvent(e.Kind);
         // Shortfall wording comes from the live session earn rate + lap time, which
         // live out here rather than in the train coordinator.
-        // Bank the excess on the way back into the circuit. AutoDeposit's own check
-        // decides whether there's anything worth a trip, against the user's
-        // keep-on-hand floor — this just gives it the prompt to look.
-        TrainerWalk.AfterTrainRun = () => AutoDeposit.OnInventoryChanged();
-        // Solo-only: training drops you out of and back into the realm, which
-        // disbands a party server-side, so an armed run must not fire in a group.
-        TrainerWalk.CanStartRun = () => !PartyState.IsInParty;
         TrainerWalk.DescribeShortfall = shortfall =>
             Game.Train.TrainFundingForecast.Describe(
                 shortfall,
@@ -6615,6 +6643,78 @@ public sealed class AppServices
 
         // @train remote: trains in place (no walk) via the coordinator.
         TrainRemote = new Game.Remote.TrainHandler(RemoteCommands, TrainerWalk);
+
+        PartyTrain = new Game.Train.PartyTrainCoordinator(
+            PartyState, TrainerWalk,
+            expPerHour: () => SessionActivity.Snapshot().ExperiencePerHour,
+            holdings: () => Inventory.IsLoaded ? Inventory.Snapshot.Currency : null,
+            keepOnHandCopper: () =>
+            {
+                Models.Profile.CashSettings cash = ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+                return cash.KeepOnHandWealth * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
+            },
+            largestDeposit: () => BankBalance.LastKnown
+                .OrderByDescending(kv => kv.Value)
+                .Select(kv => ((string?)kv.Key, kv.Value))
+                .FirstOrDefault(),
+            runicName: () => Currency.RunicName,
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
+            distance: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            trainers: () => Game.GameData.TrainerCatalog.Enumerate(GameData),
+            nearestBankBranch: NearestBankBranch,
+            walkTo: key => Walker.WalkTo(key, planThroughAcquirableGates: true),
+            send: cmd => SendGameCommand(cmd),
+            // The on-join @version probe's reading — who's on MudPlay (and new enough
+            // to speak @ptrain) and who isn't worth asking.
+            recordedVersion: name => Players.Find(name) is { } p ? (p.Version, p.VersionAt) : (null, null),
+            // The leader's own train disbands the party; this is the same re-collect
+            // a leader reconnect uses — re-invite the followers standing with us and
+            // hold the resumed loop until they're back.
+            reformParty: givens => Party.BeginLeaderReconnectReform(givens),
+            armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
+                .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+                    System.Threading.Tasks.TaskScheduler.Default),
+            // Outside a trip nothing is telepathed mid-fight — a line at the wrong
+            // moment costs a round.
+            inCombat: () => PlayerState.InCombat,
+            selfLevel: () => PlayerStats.Level,
+            selfExp: () => PlayerStats.Exp,
+            // The @level probe's last reading — lets the Party window put a level in
+            // front of the class for members that don't report.
+            recordedLevel: name => Players.Find(name)?.Level,
+            selfTimeToLevel: () => SelfTimeToLevel().Remaining,
+            telepathsPending: () => Telepaths.Queued + Telepaths.InFlight > 0,
+            log: Log);
+        Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
+        PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
+        PartyLevelProbe.ProgressObserved += PartyTrain.NoteLevelProgress;
+        // A member's "I can now train to level: N", on any channel they announce on.
+        Chat.EntryClassified += entry =>
+        {
+            if (entry.Channel is Game.ChatChannel.Local or Game.ChatChannel.TelepathIncoming
+                    or Game.ChatChannel.Gangpath or Game.ChatChannel.Gossip or Game.ChatChannel.Yell
+                && !string.IsNullOrEmpty(entry.Speaker)
+                && Game.Train.PartyTrainCoordinator.TryParseTrainableAnnounce(entry.Message, out int level))
+                PartyTrain.NoteTrainableAnnounce(entry.Speaker, level);
+        };
+        PlayerStats.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Game.PlayerStats.Exp)) PartyTrain.OnOwnExpChanged();
+        };
+        // After a run that trained: re-form a party a solo-fallback train disbanded,
+        // then bank the excess on the way back into the circuit. AutoDeposit's own
+        // check decides whether there's anything worth a trip, against the user's
+        // keep-on-hand floor — this just gives it the prompt to look.
+        TrainerWalk.AfterTrainRun = () =>
+        {
+            PartyTrain.AfterSoloRun();
+            AutoDeposit.OnInventoryChanged();
+        };
+        // Training drops you out of and back into the realm, which disbands a party
+        // server-side, so the solo run stays out of a group — a party trains through
+        // PartyTrain instead. The exception is a leader with Auto-train party on
+        // and nobody to train with: it trains by its solo settings and re-forms.
+        TrainerWalk.CanStartRun = () => PartyTrain.AllowSoloRun();
         // Level-up announcer. Built after StatParser + the ProfileLoaded
         // Hydrate wiring so its baseline seed sees freshly-hydrated stats; watches
         // StatParser.ExperienceGained to broadcast newly-trainable levels.
@@ -9062,6 +9162,24 @@ public sealed class AppServices
         if (PathItemBankRoom() is { } bank && RoomGraph.GetRoom(bank)?.Name is { Length: > 0 } bankName)
             return $"{basePhrase} (withdraw {amount} at {bankName} first)";
         return $"{basePhrase} — short {amount}, set a bank in Settings → Cash";
+    }
+
+    // The branch of a named bank nearest from, or null when none is reachable — a
+    // withdraw only pays out at a branch of the bank holding the deposit.
+    private Game.Map.RoomKey? NearestBankBranch(string bankName, Game.Map.RoomKey from)
+    {
+        Game.Map.RoomKey? best = null;
+        int bestDist = int.MaxValue;
+        foreach (Game.GameData.BankShop b in Game.GameData.BankCatalog.Enumerate(GameData))
+        {
+            if (!string.Equals(b.Name, bankName, StringComparison.OrdinalIgnoreCase)) continue;
+            if (Bfs.DistanceBetween(from, b.Key, Movement) is { } d && d < bestDist)
+            {
+                best = b.Key;
+                bestDist = d;
+            }
+        }
+        return best;
     }
 
     // The bank name (= its shop name, what `bank` lists) hosting a room, via the

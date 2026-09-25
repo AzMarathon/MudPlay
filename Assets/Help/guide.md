@@ -92,6 +92,7 @@ Each logon step is a **Message** to wait for and a **Response** to send when it 
 
 - **Add only steps that LOG YOU IN** — never a log-out or quit step (e.g. a *"Are you sure you want to log off? (Y/N)"* confirmation, a common MegaMUD holdover). That prompt never appears on the login path, so a logout step just sits there unmatched and stalls the sequence.
 - **You don't need a final "enter the realm" step.** Once your steps reach the game's entry menu, MudPlay sends the entry command for you — and it does so even if your steps don't perfectly reach the end, so an automatic reconnect after a drop still lands you back in the game.
+- **You don't need a step for the bulletin pager.** If the board pages news or bulletins with *"(N)onstop, (Q)uit, or (C)ontinue?"* during login, MudPlay presses Enter for you each time it appears and carries on with your steps — useful since that prompt only shows up on days there's something new to read.
 
 (The one time it won't auto-enter is right after you hang up on purpose — a manual `@hangup` or a hang-up-on-low-HP / hang-up-when-naked rule — so you can read the screen and enter manually.)
 
@@ -121,7 +122,7 @@ The status bar along the bottom packs several live readouts:
 
 - The **connection light** — **red** idle · **yellow** connecting · **green** connected (a reconnect countdown shows beside it while reconnecting). It's just the dot; hover it for the state text.
 - An **engine-state badge** mirroring the Navigation one — **IDLE / WALKING / LOOPING / AUTO-LAIR** — whose border turns **yellow** then **red** as the engine-recovery gate escalates.
-- Your **location** (the map/room key), the session's **exp/hr** rate, and **- TNL:** — the estimated time to next level at that rate, followed by a bracketed **(+N.NN lvls)** ratio. Because TNL counts to the next level you can still *earn* (banked-but-untrained levels are already skipped), that bracket says how far past your current trained level your exp already sits — e.g. `(+2.91 lvls)` means you've banked two full levels and you're 91% of the way to a third, so a large TNL time on a lower level reads clearly. It's the same figure a website toplist shows in brackets beside a player's level.
+- Your **location** (the map/room key), the session's **exp/hr** rate, and **- TNL:** — the estimated time to next level at that rate, followed by a bracketed **(+N.NN lvls)** ratio. TNL runs as a **countdown**: once estimated it ticks down second by second, and only resets when a fresh estimate differs by more than a little (a much better or worse stretch, a level gained), not on every kill. Under 10 minutes it shows minutes and seconds (`4m 12s`), under a minute just seconds. Session Stats and your own Party-window row read the **same** clock, so all three always agree. Because TNL counts to the next level you can still *earn* (banked-but-untrained levels are already skipped), that bracket says how far past your current trained level your exp already sits — e.g. `(+2.91 lvls)` means you've banked two full levels and you're 91% of the way to a third, so a large TNL time on a lower level reads clearly. It's the same figure a website toplist shows in brackets beside a player's level.
 - A **TGT HP:** readout that appears after you `look <monster>` — a coarse wound band × the monster's max HP, so you get an absolute HP range (invaluable on fast-regen bosses). The same estimate is also printed as a yellow line in the terminal. A **Settings → Other → "Show monster HP lookup"** checkbox (default on) toggles both. The max HP is read from the monster record **placed or summoned in your current room**, so a display name shared across zones (an "orc lieutenant" in the barracks vs the slums) resolves to the one you're actually fighting.
 - **Tick countdowns** — the combat round tick, the natural HP-regen tick, and the mana / meditate tick.
 
@@ -680,8 +681,11 @@ A new movement command overrides an `@stop`: after `@stop`, an `@goto` / `@loop`
 - `@wait` — hold: automation pauses until you `@ok` (which releases it).
 - `@comeback` (optionally `<map/room>`) — a stranded member asks the party to come recover them; `@forget` calls that recovery off.
 - `@share` — splits your held coin evenly across the party.
+- `@ptrain` — the **Auto-train party** handshake between MudPlay clients (readiness reports, and the leader's give / withdraw / train orders during a party training trip). You never type it; a client only acts on it while its own *Auto-train party* box is on, and only on orders from its current leader. See **Auto-train party** under Settings → Auto-Trainer.
 - `@party` — bare, it reports whether you're solo / following / leading. Sent on **say** *with* arguments, it relays whatever follows verbatim to your character as if you typed it (the party version of `@do`) — `@party rest`, `@party use chime`, and so on. The directive form only works on the say channel, and Settings → Talk can disallow it.
 - `@panic` — the party-wide bail-out (MegaMUD parity). A **leader** whose HP crosses its **"hang if below"** floor says a bare `@panic` on say and then escapes (hangs up, or breaks + `sys goto <wimpy>` per the Health tab) — warning the whole party to get out. It's opt-in on both sides via two **Settings → Party** checkboxes: **Use @panic while leading** (whether you send it) and **Ignore @panics** (whether a received one makes *you* bail). Both default off. A received `@panic` makes you escape exactly as your own low-HP emergency would; it still respects the *Disable hangups* master switch for the carrier-drop (you'll `sys goto` wimpy if configured, but never be force-disconnected by someone else's panic).
+
+**Telepath pacing.** The server throttles telepaths — fire several at once and the later ones come back `--- Telepath Not Sent ---`. MudPlay sends every telepath (its own @-command traffic and replies, and the ones you type) at least 100 ms apart, and resends any the server refuses, up to three tries. Other commands — movement, attacks, casts — are never held behind a telepath.
 
 ### Irreversible and always-blocked
 
@@ -870,7 +874,7 @@ Then name the **item to wear**. It goes on the moment you enter a matching room 
 
 Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you.
 
-Two checkboxes here are the ONLY place the automation switches live: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan). They sit next to the plan they act on; Settings → Auto-Trainer holds the behaviour knobs (when to make the trip, what to keep banked, where to stop).
+Three checkboxes here are the ONLY place the automation switches live: **Auto-train** (level up at trainers), **Auto-train stats** (apply this plan) and **Auto-train party** (train together with your party — see Settings → Auto-Trainer). They sit next to the plan they act on; Settings → Auto-Trainer holds the behaviour knobs (when to make the trip, what to keep banked, where to stop).
 
 **Hover a stat's column header** to see everything that stat drives, one effect per line: the derived stat's **current value for your character**, its marginal rate (e.g. *~6 AGL → +1*, *+3 per 4*), and — where it's a discrete breakpoint — **the very next value of that stat where it ticks up** (`next at N`). That's the point of it: spend to a real breakpoint instead of guessing that every 5th or 10th point is a good stopping place.
 
@@ -2739,6 +2743,7 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 
 **Default:** On
 **What it does:** After inviting someone, MudPlay follows up with reminder nags if they haven't joined yet, on a repeating cadence, until they join, decline, or the attempt window runs out.
+**Important notes:** Only a typed reply counts as declining. Their client's automatic traffic doesn't: replies in `{…}` or `@`-commands such as the `@where` a follower sends when its party breaks. If someone flagged *Invite to party if seen* is left sitting in an `[Invited]` slot with no nag running (a follow that broke, a nag they cut off), seeing them again re-sends the invite and starts a fresh nag.
 
 ### First nag after (seconds) / Resend frequency (seconds) / Max attempt window (seconds)
 
@@ -3019,14 +3024,14 @@ Settings → Auto-Lair. This tab tunes the scheduler that loops between "lairs" 
 
 Settings → Auto-Trainer. Controls *how* auto-training behaves once it runs — when to make the trip, how many levels to hold back, where to stop, and whether to announce.
 
-**The on/off switches are not here.** **Auto-train** and **Auto-train stats** live on the Player Workshop's **CP Allocation** tab, beside the plan they act on. They used to appear in both places, which was confusing and worse than cosmetic: this tab saves every setting on it at once, so pressing Apply here could quietly undo a toggle you had just flipped on the CP tab.
+**The on/off switches are not here.** **Auto-train**, **Auto-train stats** and **Auto-train party** live on the Player Workshop's **CP Allocation** tab, beside the plan they act on. They used to appear in both places, which was confusing and worse than cosmetic: this tab saves every setting on it at once, so pressing Apply here could quietly undo a toggle you had just flipped on the CP tab.
 
 ### Auto-train
 
 **Where:** Player Workshop → CP Allocation tab (not this tab).
 **Default:** Off
 **What it does:** The master auto-leveling switch. When on, and you're running a Loop or Auto-Lair, the moment your banked experience makes a new level trainable, MudPlay automatically pauses, detours to an allowed trainer, trains every level you can, then resumes what it was doing.
-**Solo only:** training briefly drops you out of and back into the realm, which disbands a party server-side — so an armed Auto-train never fires while you're grouped. Train between groups, or with "Train Now."
+**Solo only:** training briefly drops you out of and back into the realm, which disbands a party server-side — so an armed Auto-train never fires while you're grouped. To train while grouped, turn on **Auto-train party** (below). One exception: **leading** with Auto-train party on when nobody else in the party uses it, Auto-train runs as your normal solo trip — the members follow, and they're re-invited once you've trained.
 **It checks it can pay first.** Before walking anywhere, MudPlay prices the whole run — including the second trainer when your banked levels span two level bands, since each charges its own markup — and compares it to the coin you're carrying.
 
 If you're short it collects the difference first: your stash rooms, then your bank, or a combination, picking the bank branch nearest the trainer rather than nearest you. Pick up enough coin along the way and it abandons the errand and heads straight for the trainer. If everything you can reach still falls short, nothing is walked: it logs how far short you are and roughly how many laps of your loop will close the gap, and stays armed.
@@ -3045,7 +3050,7 @@ If you're short it collects the difference first: your stash rooms, then your ba
 
 **Where:** Player Workshop → CP Allocation tab (not this tab).
 **Default:** Off
-**What it does:** Independent of Auto-train. When on, every time a training happens (whether from Auto-train, a manual "Train Now," or a remote `@train`), MudPlay also applies your saved CP allocation plan's spending for the level you just reached. **It also fires the moment you open the `train stats` screen yourself** — type `train stats` at any trainer with the box checked and MudPlay applies the plan for you, no button press needed. (With it *off*, MudPlay stays out of the way and you allocate by hand.)
+**What it does:** Independent of Auto-train. When on, every time a training happens (whether from Auto-train, a manual "Train Now," or a remote `@train`), MudPlay also applies your saved CP allocation plan's spending for the level you just reached. **It also fires the moment you open the `train stats` screen yourself** — type `train stats` at any trainer with the box checked and MudPlay applies the plan for you, no button press needed. (With it *off*, MudPlay stays out of the way and you allocate by hand.) In an **Auto-train party** trip it applies the same way — the leader's plan when it trains at the last stop, a member's when it trains on the leader's order.
 **Important notes:** You need a saved CP plan (from the Player Workshop's CP Allocation tab) before this checkbox will actually stay checked — MudPlay reverts it and warns you if you try to enable it with no plan saved. Applying stats isn't level-gated like a level-up is, so "Train Now" applies your CP at whatever class-valid trainer you're standing in — it no longer walks you off to a level-band-matching one (or gives up) just to spend points.
 
 ### Levels to keep banked
@@ -3066,6 +3071,35 @@ If you're short it collects the difference first: your stash rooms, then your ba
 **Available channel options:** `Gangpath`, `Gossip`, `Yell`, `Say`
 **What it does:** When on, the moment you become able to train a new level, MudPlay sends a short message on the chosen chat channel (`I can now train to level: N`) — handy for letting a static party know it's time to regroup at a trainer.
 **Important notes:** Deliberately doesn't spam on login — only a genuine in-session level-up crossing announces, never a backlog of levels you were already eligible for when you connected.
+
+### Auto-train party
+
+**Where:** Player Workshop → CP Allocation tab (not this tab).
+**Default:** Off
+**What it does:** Makes auto-training work in a party. Every member who wants it ticks the box on their own client. A party trip needs **at least two** of you on MudPlay with the box on (the leader included); a leader that's the only one falls back to its own solo Auto-train settings, and a follower that's the only one simply follows.
+- **As a member**, you don't walk off to train. Instead your client tells the leader where you stand — *ready* once your own settings above (levels stacked, levels to keep banked, do-not-train-above) say you'd make a trip, or *waiting*, with a rough time until you will be from your exp/hour. At the trainer you train when the leader says so, never walking on to another trainer by yourself, and let the leader know once you're back in the party.
+- **As the leader**, with a Loop or Auto-Lair running, MudPlay collects everyone's report plus your own and decides when to go — once a set **number of party members** is ready (2 by default), and you count as one member like everyone else:
+  - everyone ready → go;
+  - at least that many ready → go; anyone not ready yet keeps their levels banked and just follows along;
+  - otherwise keep grinding.
+
+  Then it walks the whole party round: every member who's ready trains first — at the trainer that serves the most of them, then the next, when you're spread across level bands — and you train at the final stop, **at the same time** as the members there: once their train orders are delivered you train too, since every train drops that character from the party anyway. It then re-invites everyone once (so leave **Re-invite lost party members** on in Settings → Party — it also re-invites each member as they come back from their own train) and holds the loop until they're back, then carries on grinding.
+
+**Seeing where everyone stands.** While you lead with the box on, the Party window shows a line under each member's bars from their last report — their total exp (between their reports, what they reported plus the exp **you've** gained since — party members gain the same from a kill, so it's an estimate), their time to next level at **your** exp/hour, and their state: `4,120,331 xp · TNL 1h 5m · not ready`, `… · ready +2 (12,345c)` (levels this trip trains and the fee), or `… · no party train` — and your own on your row. Members on another client (MegaMUD, or an older MudPlay) can't report, so the leader asks them `@level` instead and shows `1,000 to L23 · TNL 12m · other client`: their reply only counts to their **next** level, not past it the way MudPlay's banked-aware figure does, so the line names that level — and their own "will level in" estimate stands in until you have an exp/hour rate. A member with no line hasn't answered either. When a member broadcasts **"I can now train to level: N"** (the Auto-Trainer's *Announce level-ups*, on any channel), their line says so — `can train L12 · party train off`, `can train L12 · other client` — until they're seen at that level. It's display only: it shows who could train even though they won't be auto-trained (box off, still short of their own settings, another client). Whether a member comes on a party trip is still their own report. **Following** with the box on, your Party window shows the same lines: your own row is the status you report to the leader, and the leader's and other members' rows fill in from their `@level` / `@exp` replies (ask them yourself), timed at your own exp/hour, since the party shares the kills. Members' reports only ever go to the leader, so a follower sees readings, not their ready state. Each member's TNL counts down between readings the same way the status bar's does. Each member's level also shows with their class (`Level 20 - Druid`) — from their report, or from the last `@level` reading for members who don't report.
+**The leader doesn't have to be training.** A high-level leader power-leveling the party still escorts everyone to the trainer and back — the trip goes whenever enough members are ready.
+**Money.** Each member reports its purse and its biggest bank deposit. If someone is short, members with coin to spare give it to them before anyone walks (only what they can spare above their own fee and keep-on-hand amount). If the party's spare coin can't cover everyone, the trip first stops at a bank and short members withdraw their own fee; anyone who still can't pay sits the trip out.
+**Who isn't waited for:** members with the box off, members on another client, and anyone who doesn't answer. They just follow the leader there and back.
+**A member shut out of the trainer's room.** Some trainers' rooms can't be entered during a fight, so a member still fighting outside is left behind and their follow breaks. The train order carries the trainer's room, so that member walks in by itself once the fight is over, trains, and reports. Everyone at a stop trains at once. As soon as the members' train orders are delivered, the leader trains too, then re-invites everyone who set out on the trip (including a member left in an `[Invited]` slot) and waits for each member's `done` before moving on. Every train drops that character from the party, so there's just the one re-form.
+**Kept quiet on the wire.** A telepath at the wrong moment costs the leader a little exp/hour, so the handshake is the bare minimum: the leader asks each member **once** when they join (after a short pause so the join-time `@version` check can say whether they're on MudPlay at all — members on another client are never asked), and from then on a member only speaks up when something that matters changes (ready, level, levels to train, or switching the box off). A member only ever reports to a leader that asked. If a member that's still waiting hasn't spoken up by **10 minutes past** its projected ready time, the leader sends it one "ready yet?" ask — its own report normally beats that, so it's rarely needed. Members on another client get one `@level` if the join-time check didn't already supply it, and one more 10 minutes past their projected level-up. Asking a member `@level` or `@exp` yourself (by telepath, or `.@level` on say) also refreshes their line. Outside a trip, nothing is sent mid-combat.
+**Important notes:** Orders are only taken from your current party leader, and only while your own box is on — nobody can make your character train, give or withdraw otherwise. After a trip, the leader waits a few minutes before deciding again.
+
+### Party options
+
+These shape how the **leader** runs an Auto-train party trip (the level-11 rule applies to everyone).
+
+- **Go once at least N party members are ready to train** — default `2`, range 1–6. The leader counts as one. Members who don't report, or are skipped by the level gap, don't count — and if everyone who does count is ready, the trip goes even when that's fewer than N.
+- **Don't wait for anyone more than N levels above the party** — default `5`, `0` = off. A member who isn't ready and is this far above the rest of the party (a power-leveler — the leader included) is never waited for.
+- **Leave the level 11 train to a solo trip** — default on. Party trips train no higher than level 10; the step to 11 is a solo effort, so take it on your own.
 
 ### Discovered trainers table
 
@@ -3554,6 +3588,8 @@ This section is a compact, technical lookup table for every setting documented a
 | Flat / per-encumbrance seconds per hop | 1.5 / 0.7-0.7-0.7-1.7-1.7 | 0.1–60 each | `FlatSecondsPerHop` / `HopTimesByEncumbrance.*` | Models/Profile/AutoLairSettings.cs |
 | Lair marker override respawn / Skip (parked, unused) | null / false | int? seconds / bool | `LairMarker.OverrideRespawnSeconds` / `.Skip` | Models/Profile/LairMarker.cs |
 | Auto-train / Auto-train stats | false / false | bool | `AutoTrain` / `AutoTrainStats` | Models/Profile/AutoTrainerSettings.cs |
+| Auto-train party | false | bool | `AutoTrainParty` | Models/Profile/AutoTrainerSettings.cs |
+| Party members ready / level gap / leave level 11 solo | 2 / 5 / true | 1–6 / 0–200 / bool | `PartyMinReady` / `PartyLevelGap` / `PartySkipLevel11` | Models/Profile/AutoTrainerSettings.cs |
 | Levels to keep banked / Do not train above level | 0 / 0 | ≥0 (UI 0–60 / 0–200) | `LevelsToKeep` / `DoNotTrainAbove` | Models/Profile/AutoTrainerSettings.cs |
 | Announce level-ups / channel | false / Gangpath | bool / Gangpath,Gossip,Yell,Say | `AnnounceLevelUps` / `AnnounceChannel` | Models/Profile/AutoTrainerSettings.cs |
 | Discovered trainers "Use?" | all allowed | bool per trainer (disabled-list) | `DisabledTrainers` | Models/Profile/AutoTrainerSettings.cs |

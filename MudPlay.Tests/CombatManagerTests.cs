@@ -462,6 +462,27 @@ public sealed class CombatManagerTests
         Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
     }
 
+    // A monster a party member killed (no exp for us, so no death seen) stays on the
+    // roster; with talk-slow off, attacking it comes back `You say "a giant rat"` (with
+    // it on, "Your command had no effect." — the CommandNoEffect path). That echo of
+    // our own attack drops the target and re-displays the room (report
+    // stock-20260924-013525).
+    [Fact]
+    public void AttackEchoedAsSay_DropsTheGhostTarget_AndRefreshesTheRoom()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+
+        h.Combat.NoteOwnSay("hello there");   // ordinary talk is ignored
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+
+        h.Combat.NoteOwnSay("a giant rat");
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.Equal(1, h.CrRefreshSends);
+    }
+
     // ----- dark-room CR-refresh suppression -----------------------------
 
     [Fact]

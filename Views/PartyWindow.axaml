@@ -93,6 +93,7 @@
                              one column (bar + "X:cur/max pct%"); the MA sub-row
                              hides for no-mana classes. -->
                         <Grid ColumnDefinitions="20,28,150,190,Auto,*,Auto"
+                              RowDefinitions="Auto,Auto"
                               VerticalAlignment="Center">
 
                             <!-- (0) Leader star — visible only on the leader -->
@@ -133,10 +134,10 @@
                                            FontSize="12"
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{StaticResource ChromeFgBrush}"/>
-                                <TextBlock Text="{Binding Class}"
-                                           FontSize="9"
+                                <TextBlock Text="{Binding ClassDisplay}"
+                                           FontSize="11"
                                            Foreground="{StaticResource ChromeFgMutedBrush}"
-                                           IsVisible="{Binding Class, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                           IsVisible="{Binding ClassDisplay, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                             </StackPanel>
 
                             <!-- (3) HP + MA stacked, single column (HEALTH · MANA).
@@ -181,6 +182,21 @@
                                                Foreground="{StaticResource ChromeFgBrush}"/>
                                 </Grid>
                             </StackPanel>
+
+                            <!-- Auto-train party line under the bars — exp, time to
+                                 next level at the leader's rate, ready state (leader
+                                 side; hidden with no fresh report). Its own row
+                                 spanning the bar + chip columns: too long for the
+                                 fixed-width bar column. -->
+                            <TextBlock Grid.Row="1" Grid.Column="3" Grid.ColumnSpan="3"
+                                       Margin="6,2,8,0"
+                                       Text="{Binding TrainInfo}"
+                                       IsVisible="{Binding HasTrainInfo}"
+                                       ToolTip.Tip="{Binding TrainInfo}"
+                                       TextTrimming="CharacterEllipsis"
+                                       FontFamily="{StaticResource FontMono}"
+                                       FontSize="11"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
                             <!-- (4) Status-flag chips. Each chip self-collapses when the
                                  corresponding flag is false. REST / MED communicate

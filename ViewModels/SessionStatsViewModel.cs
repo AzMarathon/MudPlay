@@ -44,6 +44,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     private readonly CombatSessionTracker _combatTracker;
     private readonly TimeAnalysisTracker _timeTracker;
     private readonly SessionActivityTracker _activityTracker;
+    private readonly Func<(TimeToLevelEstimator.Result Estimate, TimeSpan? Remaining)> _selfTimeToLevel;
     private readonly HpMaHistoryTracker _hpMaTracker;
     private readonly SessionStatsLayoutStore _layoutStore;
 
@@ -194,6 +195,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         PlayerStats stats,
         GameDataCache gameData,
         CurrencyNaming naming,
+        Func<(TimeToLevelEstimator.Result Estimate, TimeSpan? Remaining)> selfTimeToLevel,
         Action openTransactionHistory,
         Action openPlayersSeen)
     {
@@ -207,11 +209,13 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(naming);
+        ArgumentNullException.ThrowIfNull(selfTimeToLevel);
         ArgumentNullException.ThrowIfNull(openTransactionHistory);
         ArgumentNullException.ThrowIfNull(openPlayersSeen);
         _combatTracker = combat;
         _timeTracker = time;
         _activityTracker = activity;
+        _selfTimeToLevel = selfTimeToLevel;
         _hpMaTracker = hpMaHistory;
         _runner = runner;
         _graph = graph;
@@ -447,17 +451,16 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         {
             if (_stats.Level <= 0) return "level unknown — type stat";
 
-            // Shared with the status-bar "TNL" (TimeToLevelEstimator) so the two
-            // readouts can't drift — banked-aware target level + game-data exp chart.
-            TimeToLevelEstimator.Result r =
-                TimeToLevelEstimator.Estimate(_stats, _gameData, Activity.ExperiencePerHour);
+            // The shared TNL clock (AppServices.SelfTimeToLevel) — the status bar and the
+            // Party window's self row read the same countdown, so all three agree.
+            (TimeToLevelEstimator.Result r, TimeSpan? remaining) = _selfTimeToLevel();
             if (r.TargetLevel <= 0) return "exp chart unavailable — import game data";
 
             string bankedPart = $"{r.BankableLevels} level{(r.BankableLevels == 1 ? "" : "s")} gained";
-            string etaPart = r.Eta is null
+            string etaPart = remaining is not { } eta
                 ? "rate unknown"
-                : r.Eta.Value <= TimeSpan.Zero ? "ready to level"
-                    : $"{Fmt(r.Eta.Value)} until level {r.TargetLevel}";
+                : eta <= TimeSpan.Zero ? "ready to level"
+                    : $"{Fmt(eta)} until level {r.TargetLevel}";
 
             return $"{bankedPart} · {etaPart}";
         }

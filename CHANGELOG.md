@@ -1,5 +1,32 @@
 # Version history
 
+## 3.105.0
+
+- **Auto-train party** — a new CP Allocation checkbox that makes auto-train work in a group: members tell the leader when their own auto-train settings say they're ready, and the leader takes the party to train together; needs two or more members on MudPlay with it on (a lone leader uses its solo Auto-train and re-invites the party), and keeps telepaths to one ask per member join plus their own change reports
+- The leader goes once a set number of party members (it counts as one) is ready; the rest stay banked and follow, and a power-leveler well above the party is never waited for
+- Party trips visit the trainer serving the most members first, chain across level bands, and at the leader's stop everyone trains at once, then the party is re-formed once and the loop resumes
+- Short members are covered by party members' spare coin, or withdraw their own fee at a bank stop on the way
+- New Settings → Auto-Trainer **Party** options: members needed ready, level gap, and leave the level-11 train to a solo trip
+- Party window shows each member's level before their class, and — leading with Auto-train party — their exp, time to level at your exp/hour and train readiness under their bars
+- MegaMUD party members' `@level` replies are now read — their level was never recorded — and, leading with Auto-train party, their exp to next level and time at your rate show under their bars
+- Auto-login presses Enter at a bulletin pager's `(N)onstop, (Q)uit, or (C)ontinue?` prompt whenever it appears — no menu-nav step needed
+- A member's MudPlay version is recorded from any `{MudPlay …}` / `{MegaMud …}` reply, and a stale older-MudPlay record no longer writes them off as another client
+- Telepaths are paced 100 ms apart, and any the server refuses (`--- Telepath Not Sent ---`) are resent, so a party-join burst no longer loses probes
+- Party window: `Level 1 - Druid` under each name in a larger font; your own exp updates on every kill, and members' exp is estimated from your gains between their reports
+- A reporting member still waiting 10 minutes past its projected ready time gets one "ready yet?" ask
+- `@level` / `@exp` replies over telepath or directed say (`.@level`) update the member's line
+- Combat no longer keeps swinging at a monster a party member killed: an attack the server reads back as `You say "…"` (talk-slow off) drops the target and re-looks the room
+- A member's `I can now train to level: N` announcement shows as `can train LN` on their Party-window line — display only, for members that won't be auto-trained
+- Following with Auto-train party on, the Party window shows the train lines too — your own status, and the others' from their `@level` / `@exp` replies at your exp/hour
+- A member shut out of a combat-restricted trainer room walks in and trains once its fight ends, instead of reporting "done 0" where it stood; the leader re-invites everyone who set out
+- The `@join` nag isn't cancelled by a member's automatic `@where`, and a member left in a quiet `[Invited]` slot is re-invited and nagged when seen
+- A hand `train stats` with nothing in the CP plan to apply (e.g. before the `train` that earns the level's CP) says so in the Program log
+- A CP plan applied from your own `train stats` clears that level's row from the CP Allocation tab, as Train Now does
+- TNL counts down like a timer on the status bar, Session Stats and the Party window — one shared clock, so all three match — resetting only when the estimate really changes
+- TNL under 10 minutes shows minutes and seconds (`4m 12s`), under a minute just seconds
+- One `invite` per returning member: the realm re-entry re-invite, invite-if-seen and the reform no longer each send their own
+- bug reports addressed: stock-20260924-011014, stock-20260924-013525, stock-20260924-145334, stock-20260924-145545, stock-20260924-145644, stock-20260924-151140, stock-20260924-163156, stock-20260924-175224
+
 ## 3.104.17
 
 - A party member who rerolled (same name, new class) no longer keeps their old character's title and level — the old high title was routing the party around level gates the new character clears

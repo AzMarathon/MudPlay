@@ -45,7 +45,7 @@ namespace MudPlay.Game.Remote;
 //   - QueryQuests — @quest (marked-complete quest state + the live quest-flag step
 //     read via `abil` / `sys god … abil`). Its own category, same extension family.
 //
-// Party-coordination commands (@wait / @ok / @comeback / @forget / @share) map
+// Party-coordination commands (@wait / @ok / @comeback / @forget / @share / @ptrain) map
 // to PlayerRemoteControls.None — they're gated by the engine's party-whitelist
 // branch instead of the per-player flag check. Any active party member can issue
 // them by default. @comeback and @forget additionally honour a bridge
@@ -215,6 +215,11 @@ public static class RemoteCommandCatalog
             // at engine level via IsHardBlocked.
             ["@party"]        = PlayerRemoteControls.QueryHealthStatus,
             ["@share"]        = PlayerRemoteControls.None,
+            // @ptrain is the party auto-train handshake between two MudPlay clients
+            // (member reports, leader orders). Party-whitelist gated, and the
+            // receiver only acts while its own Auto-train-party toggle is on and the
+            // order comes from its current leader — consent is the member's setting.
+            ["@ptrain"]       = PlayerRemoteControls.None,
         };
 
     // Per-command help — argument syntax + a one-line description, surfaced by
@@ -292,6 +297,7 @@ public static class RemoteCommandCatalog
             ["@heal"]         = new("@heal", "asks a configured party healer to heal whoever's low"),
             ["@party"]        = new("@party [directive]", "bare reports solo/following/leading; with args on say, relays the directive to your character"),
             ["@share"]        = new("@share", "splits your held coin evenly across the party"),
+            ["@ptrain"]       = new("@ptrain <st|ask|train|give|with|done>", "party auto-train handshake between MudPlay clients (acts only with Auto-train party on)"),
         };
 
     // Commands accepted ONLY over telepath and gangpath. @dupe hands out trust, so

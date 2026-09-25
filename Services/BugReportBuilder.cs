@@ -277,6 +277,35 @@ public static class BugReportBuilder
             ? "(none)"
             : string.Join(", ", givenUp.Select(kv => $"{kv.Key} ({kv.Value} fails)")));
         Kv(sb, "Probe stats on partying (@level/@version)", svc.PartyProbe.Enabled ? "on" : "off");
+        // Telepath pacing: a queue that won't drain, or a climbing given-up count,
+        // is the "my telepath never arrived" report.
+        Kv(sb, "Telepaths queued / awaiting ack", $"{svc.Telepaths.Queued} / {svc.Telepaths.InFlight}");
+        Kv(sb, "Telepaths resent / given up (throttle)", $"{svc.Telepaths.Resends} / {svc.Telepaths.GivenUp}");
+
+        // Party auto-train. "The party never went to train" / "we left someone
+        // behind" hinges on each side's own report, what the leader heard, and why
+        // the quorum decided what it did.
+        Game.Train.PartyTrainCoordinator ptrain = svc.PartyTrain;
+        Kv(sb, "Auto-train party", svc.TrainerWalk.CurrentSettings.AutoTrainParty ? "on" : "off");
+        Kv(sb, "Party train — own report", ptrain.OwnStatus().Encode());
+        Kv(sb, "Party train — trip", ptrain.TripRunning
+            ? "running" + (svc.TrainerWalk.PartyTripActive ? " (engine paused)" : "")
+            : "idle");
+        Kv(sb, "Party train — last decision", ptrain.LastDecision.Length > 0 ? ptrain.LastDecision : "(none)");
+        Kv(sb, "Party train — members needed ready", svc.TrainerWalk.CurrentSettings.PartyMinReady.ToString());
+        Kv(sb, "Party train — cooldown until", ptrain.CooldownUntil is { } cd
+            ? cd.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
+            : "(none)");
+        Kv(sb, "Party train — done owed to", ptrain.PendingDoneFor ?? "(none)");
+        Kv(sb, "Party train — partners (MudPlay, feature on)", ptrain.HasPartners ? "yes — party trips" : "none — solo settings when leading");
+        Kv(sb, "Party train — asked this membership", ptrain.AskedMembers.Count == 0
+            ? "(none)" : string.Join(", ", ptrain.AskedMembers));
+        Kv(sb, "Party train — reporting to", ptrain.ReportingTo ?? "(no leader has asked)");
+        var reports = ptrain.Reports;
+        Kv(sb, "Party train — member reports", reports.Count == 0
+            ? "(none)"
+            : string.Join("; ", reports.Select(r =>
+                $"{r.Name} @{r.At.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)}: {r.Status.Encode()}")));
 
         sb.Append("\n**Members** (").Append(party.Members.Count).Append(")\n\n");
         if (party.Members.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }

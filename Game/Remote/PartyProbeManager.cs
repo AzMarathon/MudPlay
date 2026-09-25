@@ -189,10 +189,21 @@ public sealed class PartyProbeManager : IDisposable
         if (string.IsNullOrEmpty(entry.Speaker) || string.IsNullOrEmpty(entry.Message)) return;
 
         string given = GivenName(entry.Speaker);
-        if (!_awaitingVersion.TryGetValue(given, out DateTime deadline)) return;
-
         DateTime now = _clock();
-        if (now > deadline) { _awaitingVersion.Remove(given); return; }
+        if (!_awaitingVersion.TryGetValue(given, out DateTime deadline) || now > deadline)
+        {
+            _awaitingVersion.Remove(given);
+            // Outside a probe window, still take a reply that can only be a client
+            // version ("{MudPlay 3.105.0}", "{MegaMud 1.03u}") — a manual /x @version,
+            // or a probe reply that landed late. Without this a record stays stale for
+            // the rest of the day whenever the join probe's telepath didn't get through.
+            if (TryParseVersion(entry.Message, out string late) && IsKnownClientVersion(late))
+            {
+                _players.RecordVersion(entry.Speaker, late, now);
+                _log?.Info("PartyProbe", $"Recorded {given} version = {late} (unsolicited reply)");
+            }
+            return;
+        }
 
         // @level / @health replies share the brace-wrap and this window (we sent
         // @level too) — leave the expectation armed and wait for the real
@@ -203,6 +214,23 @@ public sealed class PartyProbeManager : IDisposable
         _awaitingVersion.Remove(given);
         _log?.Info("PartyProbe", $"Recorded {given} version = {version}");
     }
+
+    // A version string that can only have come from a client's @version reply — a
+    // known client name followed by a version number — so it's safe to record with
+    // no probe window to vouch for it (unlike, say, an @where room name with digits).
+    internal static bool IsKnownClientVersion(string version)
+    {
+        foreach (string client in KnownClients)
+        {
+            if (version.Length > client.Length + 1
+                && version.StartsWith(client + " ", StringComparison.OrdinalIgnoreCase)
+                && char.IsDigit(version[client.Length + 1]))
+                return true;
+        }
+        return false;
+    }
+
+    private static readonly string[] KnownClients = { AppInfo.DisplayName, "MegaMud" };
 
     // A version reply is the brace-wrapped, letter-led payload the client returns
     // to @version (e.g. "{MudPlay 2.37.0}", "{MegaMud 1.03u}"). Requiring the
@@ -217,7 +245,11 @@ public sealed class PartyProbeManager : IDisposable
         string inner = p[1..^1].Trim();
         if (inner.Length is 0 or > 60) return false;
         if (!char.IsLetter(inner[0])) return false;
-        if (inner.StartsWith("Level ", StringComparison.OrdinalIgnoreCase)
+        // "Level" covers both @level shapes — MudPlay's "Level 12, …" and MegaMUD's
+        // "Level: 12  Needed: …", which the letter + digit rule would otherwise
+        // accept as a client version.
+        if (inner.StartsWith("Level", StringComparison.OrdinalIgnoreCase)
+            || inner.StartsWith("Made:", StringComparison.OrdinalIgnoreCase)
             || inner.StartsWith("level unknown", StringComparison.OrdinalIgnoreCase)
             || inner.StartsWith("HP=", StringComparison.OrdinalIgnoreCase)) return false;
         bool hasDigit = false;

@@ -52,6 +52,27 @@ public sealed class AutoTrainerSettings
     // (most useful to a party).
     public AnnounceChannel AnnounceChannel { get; set; } = AnnounceChannel.Gangpath;
 
+    // Party-friendly auto-train. In a party, auto-train can't just walk off: a
+    // follower's `train` drops only that follower, but the leader's disbands the
+    // whole party. With this on, a member reports its readiness (per the thresholds
+    // above) to the leader instead of training alone, and the leader — when its own
+    // copy is on — takes everyone who's ready to the trainer(s) together. Off, a
+    // character in a party never auto-trains (the solo run is solo-only).
+    public bool AutoTrainParty { get; set; }
+
+    // How many party members (the leader counting as one) must be ready before the
+    // leader goes; whoever isn't ready then sits the trip out. A party where everyone
+    // who counts is ready goes even when that's fewer than this.
+    public int PartyMinReady { get; set; } = 2;
+
+    // A member who isn't ready and sits more than this many levels above the rest
+    // of the party (a power-leveler) is never waited for. 0 = no gap rule.
+    public int PartyLevelGap { get; set; } = 5;
+
+    // Never party-train from level 10 to 11: that trainer is a solo effort, so a
+    // character stops at 10 in party mode and takes the step to 11 solo.
+    public bool PartySkipLevel11 { get; set; } = true;
+
     // Trainer rows the user has switched OFF for auto-train, keyed by
     // Game.GameData.TrainerShop.RowKey (shop/map/room) so a multi-room shop's
     // rooms toggle independently. Storing the disabled set (rather than the

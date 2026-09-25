@@ -521,6 +521,59 @@ public sealed class AutoPartyManagerTests
     }
 
     [Fact]
+    public void JoinNag_IncomingRemoteCommand_DoesNotAbort()
+    {
+        // Report stock-20260924-145545: a follower whose party broke probes its old
+        // leader with `@where`; that's its client asking, not a decline.
+        var (engine, router, players, _) = Setup();
+        SeedPlayer(players, "Raijin", inviteOnSeen: true);
+        DateTime t0 = Now;
+        engine.NowProvider = () => t0;
+        engine.JoinNagInitialDelay = TimeSpan.FromSeconds(5);
+        engine.JoinNagFrequency    = TimeSpan.FromSeconds(10);
+        engine.JoinNagMaxTotal     = TimeSpan.FromSeconds(120);
+
+        Dispatch(router, "Also here: Raijin.");
+        engine.LastSentForTests.Clear();
+        Dispatch(router, "Raijin telepaths: @where");
+
+        engine.NowProvider = () => t0.AddSeconds(5);
+        engine.TickNagsForTests();
+        byte[] sent = Assert.Single(engine.LastSentForTests);
+        Assert.Equal("/Raijin @join\r", Encoding.Latin1.GetString(sent));
+    }
+
+    [Fact]
+    public void InviteAlreadyOnTheWire_IsNotSentTwice()
+    {
+        // Report stock-20260924-175224: a member back from training re-entered the
+        // realm (PartyManager re-invites that) and then showed in "Also here" before
+        // the echo landed, so invite-if-seen sent a second `invite`.
+        var (engine, router, players, _) = Setup();
+        SeedPlayer(players, "Raijin", inviteOnSeen: true);
+
+        engine.ObserveOutbound(Encoding.Latin1.GetBytes("invite Raijin\r"));
+        Dispatch(router, "Also here: Raijin.");
+
+        Assert.DoesNotContain(engine.LastSentForTests, b => Encoding.Latin1.GetString(b).StartsWith("invite", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SeeingAQuietInvitedMember_ReinvitesAndNagsAgain()
+    {
+        // The same report: the member sat in an [Invited] slot with no nag running
+        // (the follow broke into it), and walking past him did nothing.
+        var (engine, router, players, party) = Setup();
+        SeedPlayer(players, "Raijin", inviteOnSeen: true);
+        party.Members.Add(new PartyMember { Name = "Raijin", IsInvited = true });
+
+        Dispatch(router, "Also here: Raijin.");
+
+        Assert.Contains(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "invite Raijin\r");
+        Assert.Contains(engine.ActiveNagSnapshot(), n => n.Given == "Raijin");
+    }
+
+    [Fact]
     public void ActiveNagSnapshot_ReflectsInFlightNagProgression()
     {
         // Backs the bug-report engine-state dump — the snapshot must mirror the

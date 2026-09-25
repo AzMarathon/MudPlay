@@ -77,6 +77,31 @@
                           SelectedItem="{Binding AnnounceChannel, Mode=TwoWay}"
                           IsEnabled="{Binding AnnounceLevelUps}"/>
             </StackPanel>
+
+            <!-- Party auto-train options. The on/off switch is the "Auto-train party"
+                 box on the CP Allocation tab; these shape how the leader runs it. -->
+            <TextBlock Classes="SectionHeader" Text="PARTY (Auto-train party on the CP Allocation tab)"/>
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Go once at least" VerticalAlignment="Center"/>
+                <NumericUpDown MinWidth="110" VerticalAlignment="Center"
+                               Minimum="1" Maximum="6" Increment="1"
+                               FormatString="0"
+                               Value="{Binding PartyMinReady, Mode=TwoWay}"
+                               ToolTip.Tip="Leader only. How many party members must be ready to train before the trip goes — you count as one. Whoever isn't ready yet stays banked and follows along. If everyone who counts is ready, the trip goes even when that's fewer than this."/>
+                <TextBlock Text="party members are ready to train" VerticalAlignment="Center"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Don't wait for anyone more than" VerticalAlignment="Center"/>
+                <NumericUpDown MinWidth="110" VerticalAlignment="Center"
+                               Minimum="0" Maximum="200" Increment="1"
+                               FormatString="0"
+                               Value="{Binding PartyLevelGap, Mode=TwoWay}"
+                               ToolTip.Tip="Leader only. A member who isn't ready and is more than this many levels above the rest of the party (a power-leveler, the leader included) is never waited for. 0 = no level-gap rule."/>
+                <TextBlock Text="levels above the party" VerticalAlignment="Center"/>
+            </StackPanel>
+            <CheckBox Content="Leave the level 11 train to a solo trip" Margin="0,8,0,0"
+                      IsChecked="{Binding PartySkipLevel11, Mode=TwoWay}"
+                      ToolTip.Tip="In party mode, train no higher than level 10: the level-11 trainer is a solo effort, so take that step on your own."/>
         </StackPanel>
 
         <!-- Header + right-aligned view filter. Unchecked = all discovered

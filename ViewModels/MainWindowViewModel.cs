@@ -1041,6 +1041,10 @@ public partial class MainWindowViewModel : ObservableObject
         // "On deposit: N copper farthings" blocks so the route picker can weigh a
         // buy the purse can't cover against money on deposit.
         AppServices.Current.BankBalance.AttachLineExtractor(Lines);
+        // Telepath acks ("--- Telepath Sent to X ---" / "--- Telepath Not Sent ---")
+        // retire or resend the pacer's in-flight telepaths.
+        AppServices.Current.Telepaths.AttachLineExtractor(Lines);
+        AppServices.Current.Telepaths.SetWriter(WriteToWire);
         // Quest-flag reader — parses the `abil` / `sys god … abil` replies during the
         // login completion sync.
         AppServices.Current.QuestFlagReader.AttachLineExtractor(Lines);
@@ -1984,9 +1988,8 @@ public partial class MainWindowViewModel : ObservableObject
     {
         string rate = $"{Game.Combat.RateText.Compact(xpHr)}/hr";
         if (xpHr <= 0) return rate;
-        Game.Calculators.TimeToLevelEstimator.Result est = Game.Calculators.TimeToLevelEstimator.Estimate(
-            AppServices.Current.PlayerStats, AppServices.Current.GameData, xpHr);
-        if (est.Eta is not { } tnl) return rate;
+        (Game.Calculators.TimeToLevelEstimator.Result est, TimeSpan? remaining) = AppServices.Current.SelfTimeToLevel();
+        if (remaining is not { } tnl) return rate;
         string time = tnl <= TimeSpan.Zero ? "ready"
             : Game.Calculators.ExperienceTableCalculator.FormatTimeToLevel(tnl);
         return $"{rate} - TNL: {time} (+{est.BankableLevelsFractional:0.00} lvls)";
@@ -3219,6 +3222,9 @@ public partial class MainWindowViewModel : ObservableObject
         // conversation entry is attributed. Typed telepaths render on-screen
         // and are caught by the router's line sniff instead.
         AppServices.Current.Chat.ObserveOutbound(data);
+        // Auto-party — every outbound `invite X` (whoever sent it) starts X's invite
+        // cooldown, so two re-invite paths firing together send one invite.
+        AppServices.Current.AutoParty.ObserveOutbound(data);
         // Sysop room-status parser — arms only on an outbound `sys st`. The gate
         // is a security control here, not noise suppression: the block it parses
         // drives a programmatic SetLocated, so an always-on match would let any
@@ -3236,8 +3242,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Stock use-counting — counts an outbound `use <item>` for a limited-use item
         // (stock has no charge line; no-op on Paradigm, which reads the look reply).
         AppServices.Current.ItemUseCounts.ObserveOutbound(data);
-        var t = _telnet;
-        if (t is not null) _ = FireSendAsync(t, data);
+        AppServices.Current.Telepaths.Send(data);
     }
 
     // Raw wire write for engine sends that must NOT re-enter SendUserInput's
@@ -3260,6 +3265,13 @@ public partial class MainWindowViewModel : ObservableObject
         // an engine-issued cast echoed a truncated command back ("swan", "tige") and
         // the capture queue filled with the client's own output.
         AppServices.Current.MessageCandidateWatcher.ObserveOutbound(data);
+        AppServices.Current.Telepaths.Send(data);
+    }
+
+    // The socket write behind TelepathPacer — everything that reaches the wire from
+    // SendUserInput / SendEngineWireRaw ends here, telepaths just a little later.
+    private void WriteToWire(byte[] data)
+    {
         TelnetClient? t = _telnet;
         if (t is not null) _ = FireSendAsync(t, data);
     }
@@ -5011,6 +5023,7 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.PlayerStats,
                 AppServices.Current.GameData,
                 AppServices.Current.Currency,
+                AppServices.Current.SelfTimeToLevel,
                 OpenTransactionHistory,
                 OpenPlayersSeen),
         };

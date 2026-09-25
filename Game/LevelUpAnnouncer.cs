@@ -31,6 +31,10 @@ public sealed class LevelUpAnnouncer : IDisposable
     // levels at once, but never an unbounded number.
     private const int MaxLevelScan = 60;
 
+    // The announcement, followed by the level. A party leader reads party members'
+    // announcements back (PartyTrainCoordinator.TryParseTrainableAnnounce).
+    public const string AnnounceText = "I can now train to level: ";
+
     private readonly PlayerStats _stats;
     private readonly StatParser _statParser;
     private readonly GameDataCache _gameData;
@@ -141,7 +145,7 @@ public sealed class LevelUpAnnouncer : IDisposable
 
     private void Announce(int level, AnnounceChannel channel)
     {
-        string msg = $"I can now train to level: {level}";
+        string msg = AnnounceText + level;
         // MajorMUD chat channels: gossip / gangpath are word-verbs, but say and
         // yell are punctuation-prefixed (a leading '.' speaks to the room, a
         // leading '"' yells) — there is no `say`/`yell` keyword, so prefixing

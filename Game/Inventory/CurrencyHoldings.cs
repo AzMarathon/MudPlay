@@ -90,6 +90,57 @@ public readonly record struct CurrencyHoldings(
     // counted toward the keep floor; they simply stay in hand. keepCopper is a
     // floor on the ELIGIBLE pool (the stash path passes 0 — its keep-on-hand
     // rule lives on the banking side).
+    // Coins to hand over so a recipient gets AT LEAST `copper`, spending no more than
+    // `capCopper` — the opposite goal from PlanOffloadAboveKeep, which never overshoots.
+    // Covering someone's training shortfall has to actually cover it, so: largest
+    // denominations first up to the amount (fewest coins, so fewest `give`s), then if
+    // the coins don't line up exactly, one more coin of the smallest denomination that
+    // closes the gap — overpaying slightly rather than leaving them short — as long as
+    // that stays within the cap. Returns what was actually covered; a result below
+    // `copper` means these coins can't cover it within the cap.
+    public (IReadOnlyList<(string Currency, long Count)> Coins, long CopperGiven) PlanCover(
+        long copper, long capCopper)
+    {
+        (string name, long unit, long available)[] ladder =
+        {
+            ("copper", 1L, (long)Copper),
+            ("silver", 10L, (long)Silver),
+            ("gold", 100L, (long)Gold),
+            ("platinum", 10_000L, (long)Platinum),
+            ("runic", 1_000_000L, (long)Runic),
+        };
+        long target = Math.Min(Math.Max(0, copper), Math.Max(0, capCopper));
+        long[] taken = new long[ladder.Length];
+        long given = 0;
+
+        for (int i = ladder.Length - 1; i >= 0; i--)
+        {
+            long count = Math.Min(ladder[i].available, (target - given) / ladder[i].unit);
+            if (count <= 0) continue;
+            taken[i] = count;
+            given += count * ladder[i].unit;
+        }
+
+        if (given < copper)
+        {
+            long gap = copper - given;
+            for (int i = 0; i < ladder.Length; i++)
+            {
+                if (ladder[i].unit < gap) continue;
+                if (ladder[i].available - taken[i] <= 0) continue;
+                if (given + ladder[i].unit > capCopper) break;   // every larger coin overshoots the cap too
+                taken[i]++;
+                given += ladder[i].unit;
+                break;
+            }
+        }
+
+        List<(string Currency, long Count)> coins = new();
+        for (int i = ladder.Length - 1; i >= 0; i--)
+            if (taken[i] > 0) coins.Add((ladder[i].name, taken[i]));
+        return (coins, given);
+    }
+
     public IReadOnlyList<(string Currency, long Count)> PlanOffloadAboveKeep(
         long keepCopper, long maxUnit = long.MaxValue)
     {
