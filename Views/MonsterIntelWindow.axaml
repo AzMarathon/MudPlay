@@ -177,6 +177,7 @@
                                                                   IsChecked="{Binding Shown, Mode=TwoWay}"
                                                                   Opacity="{Binding ShownToggleOpacity}"
                                                                   IsHitTestVisible="{Binding CanToggleShown}"
+                                                                  Focusable="{Binding CanToggleShown}"
                                                                   ToolTip.Tip="Show this attack in Your Matchup"/>
                                                         <RadioButton Grid.Column="1" GroupName="MiRoundsAttack" Margin="10,0"
                                                                      VerticalAlignment="Center"
