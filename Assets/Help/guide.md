@@ -344,7 +344,7 @@ The panel lists clickable links to everything attached to the room:
 - **Obvious exits** — click one to re-root the map on that neighbour.
 - **Floor items** — everything the room drops on the ground (static placements plus anything its `roomitem` command scatters).
 - **Shop and room spell** — when the room hosts a shop, and its cast-on-enter room spell.
-- **NPC transports** — teleports a monster standing in the room offers when you ask it a keyword, e.g. `ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 100,000 copper`. These live on the monster, not the room, so they're listed apart from Room commands. Click one to re-root the map on the destination.
+- **NPC transports** — teleports a monster standing in the room offers when you ask it a keyword, e.g. `ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 1 runic`. These live on the monster, not the room, so they're listed apart from Room commands. Click one to re-root the map on the destination.
 
 **Room commands** lists what you can type in that room and what it does — `touch statue / move statue — summons obsidian statue`, `give crane totem — teaches form of the crane`, `pull lever — drops frozen hydra in the room`, `hand over totem — takes crane totem`, `break apparatus — grants an ability` — with the cost appended when the command charges (`summon healer — summons healer — costs 100 Gold`). Synonyms that do the same thing share one row. It carries the same lines as the map tooltip's Room commands — teleports and sailings included (a captain's `secure passage` lists each port it sails to); click a teleport or sailing line to re-root the map on its destination. Long rows wrap to the panel width.
 

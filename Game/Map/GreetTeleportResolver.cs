@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MudPlay.Game.Cash;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
@@ -31,9 +32,8 @@ public static class GreetTeleportResolver
     // room it lands in, any level floor the game gates the transport behind (0 when
     // ungated by level), and any single class the transport is restricted to
     // (0 when ungated by class — a `class N` directive, N = Classes.Number). CostText
-    // is the `price` on the teleporting line, worded like the greet decoder's Cost line
-    // ("100,000 copper"), or empty when the transport is free. Display only — routing
-    // doesn't gate on it.
+    // is the total `price` charged on the teleporting line in coin words ("1 runic"),
+    // or empty when the transport is free. Display only — routing doesn't gate on it.
     public readonly record struct GreetTeleport(string Command, RoomKey Destination, int MinLevel, int RequiredClass,
         string CostText = "");
 
@@ -120,8 +120,7 @@ public static class GreetTeleportResolver
                 RoomKey lineDest = default;
                 bool lineHasDest = false;
                 bool lineGated = false;
-                int linePrice = 0;
-                string lineCoin = " copper";
+                long linePriceCopper = 0;
 
                 foreach (string tokenRaw in rawLine.Split(':'))
                 {
@@ -133,13 +132,12 @@ public static class GreetTeleportResolver
                         int lvl = GuardDoorCommandResolver.FirstIntAfter(token, "minlevel ");
                         if (lvl > 0) lineMinLevel = lvl;
                     }
-                    // A line can repeat the same `price` several times (Seher'Sahham's
-                    // activate lists it ten times) — the author's per-class handling, not a
-                    // multiplier — so the first one is the price shown.
+                    // Every `price` on the line charges, so repeats add up: Seher'Sahham's
+                    // activate lists 100,000 copper ten times — a 1 runic fare.
                     else if (token.StartsWith("price ", StringComparison.OrdinalIgnoreCase))
                     {
                         int amount = GuardDoorCommandResolver.FirstIntAfter(token, "price ");
-                        if (amount > 0 && linePrice == 0) { linePrice = amount; lineCoin = CoinOf(token); }
+                        if (amount > 0) linePriceCopper += amount * CopperWorthOf(token);
                     }
                     // `class N` (N = Classes.Number) restricts this branch line to a
                     // single class; surfaced as the edge's ClassGate so a character
@@ -161,8 +159,8 @@ public static class GreetTeleportResolver
                     dest = lineDest;
                     minLevel = lineMinLevel;
                     requiredClass = lineClass;
-                    if (linePrice > 0)
-                        cost = $"{linePrice:N0}{lineCoin}";
+                    if (linePriceCopper > 0)
+                        cost = CurrencyFormat.Full(linePriceCopper);
                     return true;
                 }
             }
@@ -171,18 +169,18 @@ public static class GreetTeleportResolver
         return false;
     }
 
-    // The coin a `price` directive names, by its trailing letter — the same reading the
-    // greet decoder's Cost line uses (TBInfoActionDecoder.Coin).
-    private static string CoinOf(string token)
+    // Copper worth of the coin a `price` directive names, by its trailing letter — the
+    // same reading the greet decoder's Cost line uses (TBInfoActionDecoder.Coin).
+    private static long CopperWorthOf(string token)
     {
         char last = token.Length > 0 ? char.ToUpperInvariant(token[^1]) : ' ';
         return last switch
         {
-            'R' => " runic",
-            'P' => " platinum",
-            'G' => " gold",
-            'S' => " silver",
-            _   => " copper",
+            'R' => 1_000_000,
+            'P' => 10_000,
+            'G' => 100,
+            'S' => 10,
+            _   => 1,
         };
     }
 

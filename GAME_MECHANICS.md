@@ -4696,3 +4696,18 @@ on that confirmation to know the hidden exit opened, even mid-blindness.
 just because the character is blind — the search still works and is required to unveil the exit. (It also
 must not trust a stale observed-exits set from a room it only dead-reckoned into — see RoomTracker.SetRoom
 clearing ObservedExitDirections; a stale set made the walker skip the required search and ram a wall.)
+
+## Repeated `price` directives add up *([CONFIRMED] 2026-09-24, user)*
+
+Every `price <amount> <msg>` directive on a textblock line charges its amount, so a line that lists the
+same `price` several times charges the **sum**, not the amount once. The coin is named by the directive's
+trailing letter (R runic / P platinum / G gold / S silver), else copper.
+
+- **Example — Seher'Sahham (monster #715, 16/2666), `ask Seher'Sahham activate`:** TB #2778 is
+  `price 100000 2446` ×10, then `message 2447`, then `teleport 637 16` — a **1 runic** fare
+  (10 × 100,000 copper) to Damp Cavern, Wellspring (16/637). The same data ships in stock and Paradigm.
+- Decoders that collapse repeats (the greet tree's `Cost: 100,000 copper (x10)`, as MME shows it) are
+  showing a repeat count that is a real multiplier.
+
+**Client use:** `GreetTeleportResolver` sums the line's `price` directives into the NPC transport's
+`CostText`. Display only — routing does not yet gate a greet teleport on the fare.

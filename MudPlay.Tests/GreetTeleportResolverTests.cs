@@ -191,10 +191,9 @@ public sealed class GreetTeleportResolverTests : IDisposable
         Assert.Empty(GreetTeleportResolver.Resolve(store, 366, "  "));
     }
 
-    // Seher'Sahham (monster 715, both shipped sets): "activate" charges a price
-    // (repeated ten times on the line) then teleports to 16/637; "home" is a free
-    // teleport to 1/140. Both surface, the paid one with its cost worded like the
-    // greet decoder's Cost line.
+    // Seher'Sahham (monster 715, both shipped sets): "activate" charges 100,000 copper
+    // ten times on the line — a 1 runic fare — then teleports to 16/637; "home" is a
+    // free teleport to 1/140. Both surface, the paid one with its summed cost.
     [Fact]
     public void Resolve_SeherSahham_BothTeleportsWithTheActivateCost()
     {
@@ -217,7 +216,7 @@ public sealed class GreetTeleportResolverTests : IDisposable
         Assert.Equal(2, teleports.Count);
         Assert.Equal("ask Seher'Sahham activate", teleports[0].Command);
         Assert.Equal(new RoomKey(16, 637), teleports[0].Destination);
-        Assert.Equal("100,000 copper", teleports[0].CostText);
+        Assert.Equal("1 runic", teleports[0].CostText);
         Assert.Equal(new RoomKey(1, 140), teleports[1].Destination);
         Assert.Equal(string.Empty, teleports[1].CostText);
     }
