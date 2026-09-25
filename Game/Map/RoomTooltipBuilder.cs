@@ -159,7 +159,7 @@ public static class RoomTooltipBuilder
         return result;
     }
 
-    // "ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 100,000 copper (x10)"
+    // "ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 100,000 copper"
     public static string FormatNpcTransport(NpcTransport t, RoomGraphManager graph)
     {
         Room? dest = graph.GetRoom(t.Destination);

@@ -32,8 +32,8 @@ public static class GreetTeleportResolver
     // ungated by level), and any single class the transport is restricted to
     // (0 when ungated by class — a `class N` directive, N = Classes.Number). CostText
     // is the `price` on the teleporting line, worded like the greet decoder's Cost line
-    // ("100,000 copper (x10)"), or empty when the transport is free. Display only —
-    // what the game does with a repeated price directive isn't modelled.
+    // ("100,000 copper"), or empty when the transport is free. Display only — routing
+    // doesn't gate on it.
     public readonly record struct GreetTeleport(string Command, RoomKey Destination, int MinLevel, int RequiredClass,
         string CostText = "");
 
@@ -121,7 +121,6 @@ public static class GreetTeleportResolver
                 bool lineHasDest = false;
                 bool lineGated = false;
                 int linePrice = 0;
-                int linePriceCount = 0;
                 string lineCoin = " copper";
 
                 foreach (string tokenRaw in rawLine.Split(':'))
@@ -134,18 +133,17 @@ public static class GreetTeleportResolver
                         int lvl = GuardDoorCommandResolver.FirstIntAfter(token, "minlevel ");
                         if (lvl > 0) lineMinLevel = lvl;
                     }
-                    // `class N` (N = Classes.Number) restricts this branch line to a
-                    // single class; surfaced as the edge's ClassGate so a character
-                    // of the wrong class is filtered out.
+                    // A line can repeat the same `price` several times (Seher'Sahham's
+                    // activate lists it ten times) — the author's per-class handling, not a
+                    // multiplier — so the first one is the price shown.
                     else if (token.StartsWith("price ", StringComparison.OrdinalIgnoreCase))
                     {
                         int amount = GuardDoorCommandResolver.FirstIntAfter(token, "price ");
-                        if (amount > 0)
-                        {
-                            if (linePriceCount == 0) { linePrice = amount; lineCoin = CoinOf(token); }
-                            linePriceCount++;
-                        }
+                        if (amount > 0 && linePrice == 0) { linePrice = amount; lineCoin = CoinOf(token); }
                     }
+                    // `class N` (N = Classes.Number) restricts this branch line to a
+                    // single class; surfaced as the edge's ClassGate so a character
+                    // of the wrong class is filtered out.
                     else if (token.StartsWith("class ", StringComparison.OrdinalIgnoreCase))
                     {
                         int cls = GuardDoorCommandResolver.FirstIntAfter(token, "class ");
@@ -163,8 +161,8 @@ public static class GreetTeleportResolver
                     dest = lineDest;
                     minLevel = lineMinLevel;
                     requiredClass = lineClass;
-                    if (linePriceCount > 0)
-                        cost = $"{linePrice:N0}{lineCoin}" + (linePriceCount > 1 ? $" (x{linePriceCount})" : "");
+                    if (linePrice > 0)
+                        cost = $"{linePrice:N0}{lineCoin}";
                     return true;
                 }
             }
