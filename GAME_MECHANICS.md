@@ -4652,7 +4652,7 @@ bounds the per-flag `abil` burst; on both realms it keeps marking to quests the 
 **Client use:** the login quest-completion sync (`QuestFlagSyncManager`, opt-in via
 `GeneralSettings.AutoSyncQuestFlagsOnLogin`) reads these values before the availability announce and marks
 `QuestProgress.Complete` for any quest whose flag has reached its effective complete value (the per-quest
-`QuestDefinition.CompleteValueOverride` if set, else the crawl's). Strictly one-way — never clears.
+`QuestDefinition.CompleteValueOverride` if set, else the crawl's). Strictly one-way — never clears. The `@quest <name|flag>` remote reply marks the same way from its live read (every crawled band on a read flag, not just level-eligible ones — the flag value proves it), and `@quest update` runs the sync's read-and-mark on demand (no daily gate, no opt-in).
 
 ## Route gate items — required vs optional shortcut, and reliable vs unreliable sources *([CONFIRMED] 2026-09-13, user + report `paradigm-20260913-100733`)*
 

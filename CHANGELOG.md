@@ -1,5 +1,10 @@
 # Version history
 
+## 3.105.8
+
+- `@quest <name|flag>` marks the quests its live flag read proves done (e.g. `Abil: 126 step 6` ticks Good align 1) and reports the updated marks
+- New `@quest update`: a party member re-reads their quest flags (`abil` on Paradigm, `sys god … abil` with Sysop god lives on stock) and marks every quest they've finished
+
 ## 3.105.6
 
 - Release builds ship uncompressed and ReadyToRun-precompiled: each running client uses noticeably less memory (program code is shared between clients instead of copied into each) and starts faster, for a larger download
