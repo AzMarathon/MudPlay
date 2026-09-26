@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.107.14**
-> - Code comments corrected where they contradicted the code (shop charm pricing, held-member pause, buff timers across a reconnect, Stock buff-removal timing)
+> **Version 3.107.15**
+> - GAME_MECHANICS.md reorganised into 16 subject chapters with a linked contents list; duplicate and scattered entries merged into one topic each
+> - Every topic now carries a status line (confidence, date, source, realm) and a Client use list; stale notes reconciled against the current code; contradictions settled with user-confirmed answers, game data and code (realm splits, mana per fire, portal and spell-700 data, and more)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
