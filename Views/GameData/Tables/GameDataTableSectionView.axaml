@@ -107,10 +107,15 @@
                      follows the section's live ShowSimulate flag, wired in code-behind. -->
                 <Button x:Name="SimulateButton" DockPanel.Dock="Right" Margin="0,0,6,0" IsVisible="False"/>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6">
+                    <!-- Searches on Enter, not per keystroke; clearing it re-shows every row. -->
                     <TextBox Classes="clearable" Text="{Binding SearchText, Mode=TwoWay}"
-                             PlaceholderText="Filter…"
+                             PlaceholderText="Filter… (Enter)"
                              ToolTip.Tip="{Binding FilterHint}"
-                             Width="320"/>
+                             Width="320">
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding ApplySearchCommand}"/>
+                        </TextBox.KeyBindings>
+                    </TextBox>
                     <Button x:Name="AddButton"    Content="Add"    IsVisible="False"/>
                     <Button x:Name="RemoveButton" Content="Remove" IsVisible="False"/>
                     <!-- Optional "Wildcards" viewer (Triggers tab only); wired in code-behind. -->

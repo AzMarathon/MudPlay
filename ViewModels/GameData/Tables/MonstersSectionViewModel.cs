@@ -36,6 +36,10 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
     protected override string TableName => "Monsters";
 
+    // A monster the game marks out of play (In Game = 0) can't be met without a sysop, so it
+    // is listed in the Unobtainable table rather than here.
+    protected override bool IncludeRow(JsonElement element) => !InGameFlag.IsOutOfPlay(element);
+
     // Wide record table — the user arranges its columns by dragging the headers.
     public override bool AllowColumnReorder => true;
 
