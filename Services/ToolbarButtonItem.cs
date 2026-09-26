@@ -35,7 +35,11 @@ public sealed partial class ToolbarButtonItem : ObservableObject
     // toolbar button's IsEnabled.
     [ObservableProperty] private bool _isActionEnabled = true;
 
-    public ICommand? Command { get; }
+    // What a click runs. A split button runs its picked sub-action (see
+    // SelectedSubAction); an ordinary button runs the catalogue command.
+    public ICommand? Command => HasSubActions ? _runSelected : _command;
+    private readonly ICommand? _command;
+    private readonly ICommand? _runSelected;
 
     // Toolbar button's Active visual state (amber).
     [ObservableProperty] private bool _isActive;
@@ -58,6 +62,33 @@ public sealed partial class ToolbarButtonItem : ObservableObject
     public IReadOnlyList<ToolbarMenuAction> SubActions { get; }
     public bool HasSubActions => SubActions.Count > 0;
 
+    // The sub-action a click runs — the character's saved pick, else the first.
+    [ObservableProperty] private ToolbarMenuAction? _selectedSubAction;
+
+    // Saves a pick (the sub-action's Key) to the character. Null in tests.
+    private readonly Action<string>? _saveChoice;
+
+    // The ▾ menu's pick: the button runs this action from now on, and runs it now too —
+    // choosing it from the menu means "do this".
+    public void ChooseAndRun(ToolbarMenuAction action)
+    {
+        SelectedSubAction = action;
+        _saveChoice?.Invoke(action.Key);
+        RunSelected();
+    }
+
+    private void RunSelected()
+    {
+        if (SelectedSubAction is { Command: { } cmd } a && cmd.CanExecute(a.Parameter))
+            cmd.Execute(a.Parameter);
+    }
+
+    // The tooltip names what a click will do now.
+    partial void OnSelectedSubActionChanged(ToolbarMenuAction? value)
+    {
+        if (value is not null) Tooltip = $"{Label}: {value.Label} — ▾ to change";
+    }
+
     public ToolbarButtonItem(
         ToolbarItemKind kind,
         string? actionId,
@@ -66,7 +97,9 @@ public sealed partial class ToolbarButtonItem : ObservableObject
         string tooltip,
         ICommand? command,
         string? alternateIconResourceKey = null,
-        IReadOnlyList<ToolbarMenuAction>? subActions = null)
+        IReadOnlyList<ToolbarMenuAction>? subActions = null,
+        string? savedChoice = null,
+        Action<string>? saveChoice = null)
     {
         SubActions = subActions ?? Array.Empty<ToolbarMenuAction>();
         Kind = kind;
@@ -74,10 +107,18 @@ public sealed partial class ToolbarButtonItem : ObservableObject
         Label = label;
         IconResourceKey = iconResourceKey;
         _tooltip = tooltip;
-        Command = command;
+        _command = command;
         AlternateIconResourceKey = alternateIconResourceKey;
+        _saveChoice = saveChoice;
+        if (HasSubActions)
+        {
+            _runSelected = new CommunityToolkit.Mvvm.Input.RelayCommand(RunSelected);
+            SelectedSubAction = SubActions.FirstOrDefault(a => a.Key == savedChoice) ?? SubActions[0];
+        }
     }
 }
 
-// One resolved entry in a split toolbar button's ▾ menu.
-public sealed record ToolbarMenuAction(string Label, System.Windows.Input.ICommand? Command, string? Tooltip);
+// One resolved entry in a split toolbar button's ▾ menu. Key is what the character's
+// pick is saved under; Parameter is handed to Command.
+public sealed record ToolbarMenuAction(
+    string Label, System.Windows.Input.ICommand? Command, string? Tooltip, string Key, string? Parameter = null);

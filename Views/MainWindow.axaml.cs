@@ -562,13 +562,26 @@ public partial class MainWindow : Window
                 if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
                 return item;
             }
+            case MenuActionCatalogue.Kind.Submenu:
+            {
+                // A ready-made submenu: each child is an ordinary catalogue entry, built
+                // exactly as if the user had added it on its own.
+                MenuItem item = new() { Header = header.TrimEnd(' ', '▸') };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                foreach (string childId in def.Children ?? System.Array.Empty<string>())
+                    if (MenuActionCatalogue.Find(childId) is { } child
+                        && BuildContextMenuEntry(child, vm) is { } built)
+                        item.Items.Add(built);
+                return item.Items.Count == 0 ? null : item;
+            }
             default: // Command — reflection-resolve CommandName → ICommand, like the toolbar.
             {
                 ICommand? cmd = def.CommandName is null
                     ? null
                     : vm.GetType().GetProperty(def.CommandName)?.GetValue(vm) as ICommand;
                 if (cmd is null) return null;
-                MenuItem item = new() { Header = header, Command = cmd };
+                // Parameter rides through for a parameterised command (EquipSet's set name).
+                MenuItem item = new() { Header = header, Command = cmd, CommandParameter = def.Parameter };
                 if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
                 if (def.GestureProperty is not null)
                     item.Bind(MenuItem.InputGestureProperty, new Binding(def.GestureProperty) { Source = vm });
@@ -682,8 +695,9 @@ public partial class MainWindow : Window
         flyout.ShowAt(button);
     }
 
-    // A split toolbar button's ▾: open its related actions (ToolbarButtonItem
-    // .SubActions — e.g. Drop All's everything / coins / keys) as a menu.
+    // A split toolbar button's ▾: pick which of its actions (ToolbarButtonItem
+    // .SubActions — Drop All's unworn / everything / coins / keys, Equip's gear sets)
+    // the button runs. The current pick is ticked; picking one sets it AND runs it.
     private void OnToolbarSubActionsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (sender is not Button arrow
@@ -691,7 +705,14 @@ public partial class MainWindow : Window
         MenuFlyout flyout = new();
         foreach (Services.ToolbarMenuAction action in item.SubActions)
         {
-            MenuItem entry = new() { Header = action.Label, Command = action.Command };
+            Services.ToolbarMenuAction picked = action;
+            MenuItem entry = new()
+            {
+                Header = action.Label,
+                ToggleType = MenuItemToggleType.Radio,
+                IsChecked = ReferenceEquals(action, item.SelectedSubAction),
+            };
+            entry.Click += (_, _) => item.ChooseAndRun(picked);
             if (action.Tooltip is { Length: > 0 } tip) ToolTip.SetTip(entry, tip);
             flyout.Items.Add(entry);
         }

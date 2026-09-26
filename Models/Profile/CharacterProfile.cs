@@ -143,6 +143,11 @@ public sealed class CharacterProfile
     // of the splittable area occupied by the LEFT pane at the user's last close.
     // Populated by SplitterLayoutStore on profile save and applied on every
     // dialog open. null / missing entries mean "use the XAML defaults".
+    // Which option each split toolbar button runs (its ▾ pick) — toolbar ActionId →
+    // the picked sub-action's key (ToolbarItemCatalogue.SubAction.Key). Kept apart from
+    // the toolbar layout so reordering or editing the layout never drops a pick.
+    public Dictionary<string, string>? ToolbarSplitChoices { get; set; }
+
     public Dictionary<string, double>? SplitterRatios { get; set; }
 
     // Snapshot of the most recent stat + exp observations. Written by

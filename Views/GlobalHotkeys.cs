@@ -124,6 +124,13 @@ public static class GlobalHotkeys
     // items, so they fall back to an explicit name map.
     private static System.Windows.Input.ICommand? ResolveCommand(MainWindowViewModel vm, BuiltInAction action)
     {
+        // A split button (Drop All / Hide All / Equip) runs its ▾ pick, looked up at press
+        // time so a later pick — or a toolbar rebuild — is followed.
+        if (ToolbarItemCatalogue.Find(action.ToString()) is { SubActions: { Count: > 0 } })
+        {
+            string id = action.ToString();
+            return new CommunityToolkit.Mvvm.Input.RelayCommand(() => vm.RunToolbarPick(id));
+        }
         string? commandName = ToolbarItemCatalogue.Find(action.ToString())?.CommandName
                               ?? FileMenuCommandName(action);
         if (commandName is null) return null;

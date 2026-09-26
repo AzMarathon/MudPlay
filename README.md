@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.110.5**
-> - Ancient Galleon, Black Ice Cavern, Burning Plains, Chaotic Isle, Darkened Tunnels and Pirate Galleon are areas of their real region, not landmasses, so the Landmass column and filter no longer list them; the temple landmass is named Dinos
+> **Version 3.110.6**
+> - Action menu: Drop, Hide and Equip are submenus; Equip can wear any of your six gear sets
+> - Drop All / Hide All / Equip toolbar buttons: the ▾ now picks what the button does (and does it once), saved per character; a keybind on the button follows the pick
+> - Terminal right-click menu can hold ready-made Drop ▸ / Hide ▸ / Equip ▸ submenus, or just the single actions, including each gear set
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

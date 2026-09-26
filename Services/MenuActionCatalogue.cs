@@ -25,6 +25,7 @@ public static class MenuActionCatalogue
         SettingsTab,     // Parameter → Settings section id (OpenSettingsTab)
         GameDataSection, // Parameter → Game Data Browser section id (OpenGameDataSection)
         WalkFlyout,      // Parameter "favorites"/"recent" → the dynamic walk submenu
+        Submenu,         // Children → a ready-made submenu of other entries (Drop ▸ / Hide ▸ / Equip ▸)
     }
 
     public sealed record Entry(
@@ -41,7 +42,10 @@ public static class MenuActionCatalogue
         // set and the capability is off, BuildContextMenuEntry omits the entry from
         // the live menu. The entry stays in the editor pool regardless — only the
         // rendered menu is gated. Null = always rendered.
-        string? Capability = null);
+        string? Capability = null,
+        // Submenu kind only: the ids of the entries it nests, in order. Each is also
+        // addable on its own, so a user picks the whole submenu or just the one action.
+        IReadOnlyList<string>? Children = null);
 
     // ----- Individual File-menu commands -----
     private static readonly Entry[] _file =
@@ -91,6 +95,20 @@ public static class MenuActionCatalogue
         new("action.hidecoins", "Hide Coins", Kind.Command, "Action", CommandName: "HideCoinsCommand", Tooltip: "Hide every coin you're carrying in the room"),
         new("action.hidekeys", "Hide Keys", Kind.Command, "Action", CommandName: "HideKeysCommand", Tooltip: "Hide every key on your key ring in the room"),
         new("action.equipall", "Equip All", Kind.Command, "Action", CommandName: "EquipAllCommand", Tooltip: "Wear the Default gear set"),
+        new("action.equip.backstab", "Equip Backstab set", Kind.Command, "Action", CommandName: "EquipSetCommand", Parameter: "backstab"),
+        new("action.equip.resthp", "Equip Pre-rest HP set", Kind.Command, "Action", CommandName: "EquipSetCommand", Parameter: "resthp"),
+        new("action.equip.restma", "Equip Pre-rest Mana set", Kind.Command, "Action", CommandName: "EquipSetCommand", Parameter: "restma"),
+        new("action.equip.moving", "Equip While Moving set", Kind.Command, "Action", CommandName: "EquipSetCommand", Parameter: "moving"),
+        new("action.equip.bossing", "Equip Bossing set", Kind.Command, "Action", CommandName: "EquipSetCommand", Parameter: "bossing"),
+        // Ready-made submenus of the entries above — a user adds the submenu, or just
+        // the single action they want, to their right-click menu.
+        new("action.drop", "Drop ▸", Kind.Submenu, "Action", Tooltip: "Drop all / everything / coins / keys",
+            Children: new[] { "action.dropall", "action.dropeverything", "action.dropcoins", "action.dropkeys" }),
+        new("action.hide", "Hide ▸", Kind.Submenu, "Action", Tooltip: "Hide all / everything / coins / keys in the room",
+            Children: new[] { "action.hideall", "action.hideeverything", "action.hidecoins", "action.hidekeys" }),
+        new("action.equip", "Equip ▸", Kind.Submenu, "Action", Tooltip: "Wear one of your gear sets",
+            Children: new[] { "action.equipall", "action.equip.backstab", "action.equip.resthp",
+                              "action.equip.restma", "action.equip.moving", "action.equip.bossing" }),
         new("action.depositall", "Deposit All", Kind.Command, "Action", CommandName: "DepositAllCommand", Tooltip: "Bank wealth down to the keep-on-hand floor"),
     };
 

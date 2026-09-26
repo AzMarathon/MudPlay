@@ -207,15 +207,26 @@
                      gear set; the toolbar Get/Drop/Equip/Deposit buttons drive
                      the same commands via the catalogue. -->
                 <MenuItem Header="Get All"     Command="{Binding GetAllCommand}"     ToolTip.Tip="Pick up every item on the room floor"/>
-                <MenuItem Header="Drop All"    Command="{Binding DropAllCommand}"    ToolTip.Tip="Drop every carried (unworn) item"/>
-                <MenuItem Header="Drop Everything" Command="{Binding DropEverythingCommand}" ToolTip.Tip="Drop everything held — worn gear, light, keys and coins too"/>
-                <MenuItem Header="Drop Coins"  Command="{Binding DropCoinsCommand}"  ToolTip.Tip="Drop every coin you're carrying"/>
-                <MenuItem Header="Drop Keys"   Command="{Binding DropKeysCommand}"   ToolTip.Tip="Drop every key on your key ring"/>
-                <MenuItem Header="Hide All"    Command="{Binding HideAllCommand}"    ToolTip.Tip="Hide every carried (unworn) item in the room — only a search finds it"/>
-                <MenuItem Header="Hide Everything" Command="{Binding HideEverythingCommand}" ToolTip.Tip="Hide everything held in the room — worn gear, light, keys and coins too"/>
-                <MenuItem Header="Hide Coins"  Command="{Binding HideCoinsCommand}"  ToolTip.Tip="Hide every coin you're carrying in the room"/>
-                <MenuItem Header="Hide Keys"   Command="{Binding HideKeysCommand}"   ToolTip.Tip="Hide every key on your key ring in the room"/>
-                <MenuItem Header="Equip All"   Command="{Binding EquipAllCommand}"   ToolTip.Tip="Wear the Default gear set"/>
+                <MenuItem Header="Drop">
+                    <MenuItem Header="All (unworn items)" Command="{Binding DropAllCommand}"        ToolTip.Tip="Drop every carried (unworn) item"/>
+                    <MenuItem Header="Everything"         Command="{Binding DropEverythingCommand}" ToolTip.Tip="Drop everything held — worn gear, light, keys and coins too"/>
+                    <MenuItem Header="Coins"              Command="{Binding DropCoinsCommand}"      ToolTip.Tip="Drop every coin you're carrying"/>
+                    <MenuItem Header="Keys"               Command="{Binding DropKeysCommand}"       ToolTip.Tip="Drop every key on your key ring"/>
+                </MenuItem>
+                <MenuItem Header="Hide">
+                    <MenuItem Header="All (unworn items)" Command="{Binding HideAllCommand}"        ToolTip.Tip="Hide every carried (unworn) item in the room — only a search finds it"/>
+                    <MenuItem Header="Everything"         Command="{Binding HideEverythingCommand}" ToolTip.Tip="Hide everything held in the room — worn gear, light, keys and coins too"/>
+                    <MenuItem Header="Coins"              Command="{Binding HideCoinsCommand}"      ToolTip.Tip="Hide every coin you're carrying in the room"/>
+                    <MenuItem Header="Keys"               Command="{Binding HideKeysCommand}"       ToolTip.Tip="Hide every key on your key ring in the room"/>
+                </MenuItem>
+                <MenuItem Header="Equip">
+                    <MenuItem Header="Default set"       Command="{Binding EquipAllCommand}"                                  ToolTip.Tip="Wear the Default gear set"/>
+                    <MenuItem Header="Backstab set"      Command="{Binding EquipSetCommand}" CommandParameter="backstab"/>
+                    <MenuItem Header="Pre-rest HP set"   Command="{Binding EquipSetCommand}" CommandParameter="resthp"/>
+                    <MenuItem Header="Pre-rest Mana set" Command="{Binding EquipSetCommand}" CommandParameter="restma"/>
+                    <MenuItem Header="While Moving set"  Command="{Binding EquipSetCommand}" CommandParameter="moving"/>
+                    <MenuItem Header="Bossing set"       Command="{Binding EquipSetCommand}" CommandParameter="bossing"/>
+                </MenuItem>
                 <MenuItem Header="Deposit All" Command="{Binding DepositAllCommand}" ToolTip.Tip="Bank wealth down to the keep-on-hand floor"/>
                 <Separator/>
 
@@ -345,7 +356,7 @@
                                     </Button>
                                     <Button Classes="ToolbarBtn ToolbarArrow"
                                             IsVisible="{Binding HasSubActions}"
-                                            ToolTip.Tip="More options"
+                                            ToolTip.Tip="Pick what this button does (and do it now)"
                                             Click="OnToolbarSubActionsClick">
                                         <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                               StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"
@@ -404,7 +415,7 @@
                                 </Button>
                                 <Button Classes="ToolbarBtn ToolbarArrowV"
                                         IsVisible="{Binding HasSubActions}"
-                                        ToolTip.Tip="More options"
+                                        ToolTip.Tip="Pick what this button does (and do it now)"
                                         Click="OnToolbarSubActionsClick">
                                     <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                           StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"
@@ -462,7 +473,7 @@
                                 </Button>
                                 <Button Classes="ToolbarBtn ToolbarArrowV"
                                         IsVisible="{Binding HasSubActions}"
-                                        ToolTip.Tip="More options"
+                                        ToolTip.Tip="Pick what this button does (and do it now)"
                                         Click="OnToolbarSubActionsClick">
                                     <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                           StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"
@@ -611,7 +622,7 @@
                                     </Button>
                                     <Button Classes="ToolbarBtn ToolbarArrow"
                                             IsVisible="{Binding HasSubActions}"
-                                            ToolTip.Tip="More options"
+                                            ToolTip.Tip="Pick what this button does (and do it now)"
                                             Click="OnToolbarSubActionsClick">
                                         <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                               StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"
