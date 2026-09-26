@@ -444,6 +444,8 @@ When the only route somewhere is fully blocked but you can still reach the obsta
 
 Either way the previewed route now **draws its line on the map** even though you can't currently pass it, so you can see where it goes before you commit.
 
+**Keeping a hazard buff up.** Some hazards are survived by *using* an item rather than just carrying it — the desert heat is countered by drinking a **waterskin** (`use waterskin`), which holds only while its buff lasts. On your own walk, loop or Auto-Lair the client drinks as it steps into the hazard and again only when the buff is about to lapse, so a crossing spends as few charges as it can. **Following a party leader** it does the same on arriving in each hazard room (it can't see the leader's next step, so it drinks on arrival rather than ahead of it). If the heat still reaches you — *You suffer in the desert heat…* — it drinks again; and if that shows you've **run out of waterskins**, it says so in the room (`I'm out of waterskins!`, once) so the party knows. On your own walk it also stops rather than marching deeper into the heat.
+
 When a route crosses a survivable hazard **and** a hard gate past it — a keyed door you don't have the key for, like the walk to the Iceforge (across the Silver River, then through a locked door) — the picker offers the same hazard choices, but each one **stops at the hard gate** you must clear by hand:
 
 - **"Obtain, then cross"** — fetches the counter and crosses, then halts at the door.

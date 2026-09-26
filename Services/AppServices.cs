@@ -6069,7 +6069,15 @@ public sealed class AppServices
             messageMatcherForSpell: BuildSpellLinePredicate,
             walkActive:     () => MovementControl.IsActive,
             haltWalk:       _ => MovementControl.Stop(),
-            log:            Log);
+            log:            Log,
+            // A follower is carried through a hazard by the leader's route, with no
+            // walk of its own for the approach hook to ride — it raises on arrival.
+            followingLeader: () => PartyState.IsInParty && !PartyState.SelfIsLeader);
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom is { } arrived && !Equals(arrived.Key, t.PreviousRoom?.Key))
+                AutoHazardCounterProvisioner.OnArrivedInRoom(arrived.Key);
+        };
 
         // Predictive one-room-lookahead: the walker hands the room it's about to
         // enter to both provisioners BEFORE the move bytes — the light one `use`s a
