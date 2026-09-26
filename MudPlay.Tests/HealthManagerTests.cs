@@ -3265,6 +3265,39 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
+    public void Follower_BasisWobbleMidGearSwap_NeverOksWhileTheGateHolds()
+    {
+        // report paradigm-20260926-121252: MA 246 under a 64 % trigger (247 of 386).
+        // A Pre-rest Mana set streaming on moved the live max (386 → 421) and, for a
+        // moment, the Default-set basis — rest-max dipped under 246 and read "rested"
+        // → @ok, then the next prompt re-sent @wait, flapping 3-4× a second.
+        int waits = 0, oks = 0;
+        int defaultMa = 386;
+        using Harness h = new();
+        h.Settings.RestIfBelowMa = 64;
+        h.Settings.RestMaxMa = 65;
+        h.Health.SetRestPoolMaxProviders(null, () => defaultMa, null, null);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => oks++);
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 386, maxMa: 386);
+
+        h.State.Ma = 246;            // below 247 → gate + @wait
+        Assert.True(h.ManaGateHeld);
+        Assert.Equal(1, waits);
+
+        defaultMa = 370;             // mid-swap wobble: rest-max 65 % of 370 = 241 ≤ 246
+        h.State.MaxMa = 421;         // the Pre-rest set's bigger pool lands
+        h.Health.Evaluate();
+        defaultMa = 386;             // swap settles
+        h.Health.Evaluate();
+
+        Assert.Equal(0, oks);        // never released while still below the floor
+        Assert.Equal(1, waits);      // so no re-@wait either — no flap
+    }
+
+    [Fact]
     public void Follower_DisabledMidRecovery_ReleasesOk()
     {
         int oks = 0;

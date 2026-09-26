@@ -938,7 +938,14 @@ public sealed class HealthManager : IDisposable
                 _log?.Info(LogCategory, "dropped below a rest floor while following — asking the leader to @wait");
             _requestPartyWait?.Invoke();
         }
-        else if (_partyWaitSignaled)
+        // Never release while a recovery gate is still held — below a rest floor is
+        // not "rested", whatever the rest-max comparison says — and not while a pool's
+        // max is still settling after a gear change. A Pre-rest set streaming on piece
+        // by piece moves the live max and the worn set out of step, so the Default-set
+        // basis (and with it rest-max) wobbles for a moment; reading "rested" off that
+        // wobble sent @ok, the next prompt re-sent @wait, and the pair flapped 3-4
+        // times a second (report paradigm-20260926-121252).
+        else if (_partyWaitSignaled && !droppedBelowFloor && !hpMaxUnsettled && !maMaxUnsettled)
         {
             bool hpRested = _state.MaxHp <= 0 || _state.Hp >= hpRestMax;
             bool maRested = _state.MaxMa <= 0 || _state.Ma >= maRestMax;

@@ -8430,6 +8430,20 @@ public sealed class AppServices
         return (r.WorstTick, r.BestTick);
     }
 
+    // The level-scaled range a mana-regen roll spell can roll at the character's current
+    // level — on Paradigm the reroll threshold is compared against this rolled value
+    // (its `abil 145` spells contribution), so the Add-buff dialog's threshold box spans
+    // exactly it, negatives included. Null when the spell isn't a resolvable roll spell.
+    public (int Min, int Max)? ManaRegenRollRange(string? spellCode)
+    {
+        if (string.IsNullOrWhiteSpace(spellCode)) return null;
+        if (Spellbook.FindByCastCode(spellCode.Trim()) is not { } spell) return null;
+        if (!Game.Spells.ManaRegenReroller.IsRollSpell(spell.Formula)) return null;
+        (long min, long max) = Game.Spells.SpellCalculator.AffectMagnitude(
+            spell.Formula, System.Math.Max(1, PlayerStats.Level));
+        return ((int)System.Math.Min(min, max), (int)System.Math.Max(min, max));
+    }
+
     // The character's natural passive mana-regen per 30 s tick — level / stats /
     // magery with worn +ManaRgn% folded in, NOT meditating — the "mana gained per
     // tick" the Buff Watchdog shows against its per-tick maintenance cost so you can

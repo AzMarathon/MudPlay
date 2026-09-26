@@ -731,7 +731,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     private async System.Threading.Tasks.Task AddBuff()
     {
         AddBuffDialogViewModel dlg = new(BuildPickOptions(SlottedSpells()), IsLightSpell, IsRollSpell,
-            IsStockRealm, AppServices.Current.ManaRegenTickRange);
+            IsStockRealm, AppServices.Current.ManaRegenTickRange,
+            rollRange: AppServices.Current.ManaRegenRollRange);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
@@ -849,7 +850,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             d.OnlyWhenDark, d.CastBeforeRestingForMana, d.RerollCount, d.RerollThreshold, d.RerollInfinite);
         AddBuffDialogViewModel dlg = new(
             options, IsLightSpell, IsRollSpell,
-            IsStockRealm, AppServices.Current.ManaRegenTickRange, initial);
+            IsStockRealm, AppServices.Current.ManaRegenTickRange, initial,
+            rollRange: AppServices.Current.ManaRegenRollRange);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;

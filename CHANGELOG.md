@@ -1,5 +1,11 @@
 # Version history
 
+## 3.107.11
+
+- A follower no longer flaps @wait/@ok while a Pre-rest gear set swaps on: it never sends @ok while still below a rest floor or while its max HP/mana is settling
+- The Buff Watchdog's mana-regen reroll threshold saves values above 1 again, and on Paradigm the box spans the roll spell's range at your level (negatives included), shown under it
+- bug reports addressed: paradigm-20260926-112808, paradigm-20260926-121252
+
 ## 3.107.9
 
 - Gear a party member recovers and hands back to you now closes your deathpile and is re-worn (Auto-equip on recovery), instead of sitting unworn in your pack
