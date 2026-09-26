@@ -309,6 +309,57 @@ public sealed class InventoryActionHandlerTests
         Assert.Empty(Wire(h));
     }
 
+    // ----- @hide-all ---------------------------------------------------
+
+    [Fact]
+    public void HideAllFull_HidesWornGearLightKeysAndCoins_NeverABareHide()
+    {
+        Harness h = Setup(paradigm: true);
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+        Feed(h.Lines, "You are carrying 94 gold crowns, a rusty dagger, padded vest (Torso), torch (Readied/40).");
+        Feed(h.Lines, "You have the following keys: 3 black star key.");
+        Feed(h.Lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@hide-all full"));
+
+        string[] sent = Wire(h).ToArray();
+        Assert.Contains("hide rusty dagger", sent);
+        Assert.Contains("hide padded vest", sent);          // worn — hidden directly, no rem
+        Assert.Contains("hide torch", sent);
+        Assert.Contains("hide 3 black star key", sent);     // batched on Paradigm
+        Assert.Contains("hide 94 gold crown", sent);
+        Assert.DoesNotContain("hide", sent);                // a bare hide hides the player
+        Assert.StartsWith("hiding everything:", Assert.Single(Replies(h.Engine)));
+    }
+
+    [Fact]
+    public void HideAll_OnStock_OneHidePerCopy()
+    {
+        Harness h = Setup(paradigm: false);
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+        Feed(h.Lines, "You are carrying 2 black diamond.");
+        Feed(h.Lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@hide-all"));
+
+        Assert.Equal(new[] { "hide black diamond", "hide black diamond" }, Wire(h));
+        Assert.Equal("hiding 2 carried items", Assert.Single(Replies(h.Engine)));
+    }
+
+    [Fact]
+    public void HideAll_UnknownScope_RepliesUsage()
+    {
+        Harness h = Setup();
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+        Feed(h.Lines, "You are carrying a rusty dagger.");
+        Feed(h.Lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@hide-all everything"));
+
+        Assert.Empty(Wire(h));
+        Assert.StartsWith("usage: @hide-all", Assert.Single(Replies(h.Engine)));
+    }
+
     // ----- @deposit-all ------------------------------------------------
 
     [Fact]

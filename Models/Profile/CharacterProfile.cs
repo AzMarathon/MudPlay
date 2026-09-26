@@ -341,7 +341,7 @@ public sealed class CharacterProfile
     public bool QuestAlignEvil { get; set; }
 
     // Per-character equipment-manager state (Workshop Equipment tab) — saved
-    // gear sets and the auto-equip triggers between them. Drives @equip-<set>,
+    // gear sets and the auto-equip triggers between them. Drives @equip <set>,
     // the per-slot editor, and trigger evaluation. null means nothing configured
     // yet.
     public EquipmentSettings? Equipment { get; set; }

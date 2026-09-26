@@ -1488,4 +1488,72 @@ public sealed class EquipmentManagerTests
         mgr.ResetBlocks();
         Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
     }
+
+    // ===== UpdateSetFromWorn / built-in short names =====
+
+    private static EquipmentSettings RosterSettings() => new()
+    {
+        Sets = new List<EquipmentSet>
+        {
+            new() { Trigger = EquipTriggerType.Default, Name = "Default", Keyword = "default",
+                    Slots = new List<EquipmentSlotEntry>
+                    {
+                        new(EquipmentSlot.Head, "old helm"),
+                        new(EquipmentSlot.AlternateWeapon, "spare axe"),
+                    } },
+            new() { Trigger = EquipTriggerType.PreRestMana, Name = "Pre-rest Mana", Keyword = "prerest-mana" },
+        },
+    };
+
+    [Fact]
+    public void UpdateSetFromWorn_RewritesToWornGear_PairedRingsAndAltWeaponKept()
+    {
+        EquipmentSettings cfg = RosterSettings();
+        int saves = 0, edits = 0;
+        EquipmentManager mgr = Manager(cfg, SnapshotWithSlots(
+            ("Weapon Hand", "long sword"), ("Torso", "chain mail"),
+            ("Finger", "gold ring"), ("Finger", "silver ring")), new CombatSettings());
+        mgr.SetEquipmentSaver(() => saves++);
+        mgr.SetsEdited += () => edits++;
+
+        EquipUpdateResult r = mgr.UpdateSetFromWorn("default");
+
+        Assert.Equal(EquipUpdateOutcome.Updated, r.Outcome);
+        Assert.Equal(4, r.Slots);
+        List<EquipmentSlotEntry> slots = cfg.Sets[0].Slots;
+        Assert.DoesNotContain(slots, e => e.Slot == EquipmentSlot.Head);           // unworn → no change
+        Assert.Contains(slots, e => e.Slot == EquipmentSlot.Weapon && e.ItemName == "long sword");
+        Assert.Contains(slots, e => e.Slot == EquipmentSlot.Finger1 && e.ItemName == "gold ring");
+        Assert.Contains(slots, e => e.Slot == EquipmentSlot.Finger2 && e.ItemName == "silver ring");
+        Assert.Contains(slots, e => e.Slot == EquipmentSlot.AlternateWeapon && e.ItemName == "spare axe");
+        Assert.Equal(1, saves);
+        Assert.Equal(1, edits);
+    }
+
+    [Fact]
+    public void UpdateSetFromWorn_ShortName_ResolvesRestMana()
+    {
+        EquipmentSettings cfg = RosterSettings();
+        EquipmentManager mgr = Manager(cfg, SnapshotWithSlots(("Neck", "mana amulet")), new CombatSettings());
+
+        Assert.Equal(EquipUpdateOutcome.Updated, mgr.UpdateSetFromWorn("restma").Outcome);
+        Assert.Contains(cfg.Sets[1].Slots, e => e.Slot == EquipmentSlot.Neck && e.ItemName == "mana amulet");
+    }
+
+    [Fact]
+    public void UpdateSetFromWorn_BeforeFirstInventory_WritesNothing()
+    {
+        EquipmentSettings cfg = RosterSettings();
+        EquipmentManager mgr = Manager(cfg, InventorySnapshot.Empty, new CombatSettings());
+
+        Assert.Equal(EquipUpdateOutcome.InventoryUnknown, mgr.UpdateSetFromWorn("default").Outcome);
+        Assert.Contains(cfg.Sets[0].Slots, e => e.Slot == EquipmentSlot.Head);
+    }
+
+    [Fact]
+    public void UpdateSetFromWorn_UnknownSet_IsNotFound()
+    {
+        EquipmentManager mgr = Manager(RosterSettings(), SnapshotWithSlots(("Neck", "x")), new CombatSettings());
+        Assert.Equal(EquipUpdateOutcome.NotFound, mgr.UpdateSetFromWorn("tanking").Outcome);
+    }
 }

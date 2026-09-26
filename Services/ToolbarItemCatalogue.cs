@@ -114,6 +114,17 @@ public static class ToolbarItemCatalogue
                 new("Drop Coins", "DropCoinsCommand"),
                 new("Drop Keys", "DropKeysCommand"),
             }),
+        new("ActionHideAll",      "Hide All",             "IconHideAll",
+            "HideAllCommand",
+            Tooltip: "Hide All — hide every carried (unworn) item in the room (▾ for everything / coins / keys)",
+            SubActions: new SubAction[]
+            {
+                new("Hide All (unworn items)", "HideAllCommand"),
+                new("Hide Everything", "HideEverythingCommand",
+                    "Everything held — worn gear, light, keys and coins too"),
+                new("Hide Coins", "HideCoinsCommand"),
+                new("Hide Keys", "HideKeysCommand"),
+            }),
         new("ActionEquipAll",     "Equip All",            "IconEquipAll",
             "EquipAllCommand",
             Tooltip: "Equip All — wear the Default gear set"),

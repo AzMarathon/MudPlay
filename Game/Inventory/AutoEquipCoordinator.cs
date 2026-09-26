@@ -43,7 +43,7 @@ namespace MudPlay.Game.Inventory;
 // rather than "unknown", so firing before the first dump would emit a wear for
 // every set item — including one already worn (the game answers "You do not
 // have X left unequipped."). Manual applies (the Workshop button,
-// @equip-<set>) carry explicit intent and aren't gated here.
+// @equip <set>) carry explicit intent and aren't gated here.
 public sealed class AutoEquipCoordinator : IDisposable
 {
     private readonly PlayerState _player;
@@ -646,7 +646,7 @@ public sealed class AutoEquipCoordinator : IDisposable
         // Respect the automation master switch — with the Auto-All kill-switch
         // engaged the user has silenced every engine, so a posture transition or
         // loop start must not auto-swap gear. Explicit applies (Workshop "Apply
-        // Now", "Equip All", @equip-<set>) don't flow through here, so they still
+        // Now", "Equip All", @equip <set>) don't flow through here, so they still
         // work with the kill-switch on.
         if (!_isAutoEnabled()) return;
         // An item-cast buff swap just borrowed an equip slot and restores it itself

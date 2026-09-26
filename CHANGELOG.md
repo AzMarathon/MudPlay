@@ -1,5 +1,11 @@
 # Version history
 
+## 3.110.0
+
+- New `@hide-all [full|coins|keys]` and Hide All / Hide Everything / Hide Coins / Hide Keys actions (Action menu + a Hide All toolbar button): the Drop All sweeps, stashed with `hide` instead of dropped
+- `@equip <set>` replaces `@equip-<set>` (the dashed form still works); sets answer to default / backstab / resthp / restma / moving / bossing
+- `@equip <set> update` saves what you're wearing into that gear set
+
 ## 3.109.0
 
 - An `@path` reply (e.g. from your party leader) draws their route on the Navigation map, CURRENT NAV rows and status line in cyan under a FOLLOWING badge, planned from the reply alone

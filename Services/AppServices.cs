@@ -633,10 +633,10 @@ public sealed class AppServices
     public Game.Train.PartyTrainCoordinator PartyTrain { get; }
     public Game.Remote.PartyTrainHandler PartyTrainRemote { get; }
 
-    // @equip-<set> handler — a permitted party member asks us to
-    // wear one of our saved gear sets. The set keyword is the suffix after
-    // @equip-; routed via RemoteCommands's prefix handler
-    // into Equipment.
+    // @equip <set> [update] / @equip-all handler — a permitted party member asks
+    // us to wear one of our saved gear sets, or to save what we're wearing into
+    // one. The older dashed @equip-<set> still routes via RemoteCommands's prefix
+    // handler into Equipment.
     public Game.Remote.EquipHandler EquipRemote { get; private set; } = null!;
 
     // @profile — swap the active casting spell profile (AlterSettings-gated).
@@ -1505,7 +1505,7 @@ public sealed class AppServices
     // Models.Profile.EquipmentSet against the live worn loadout
     // (Inventory's snapshot) and paces wear commands;
     // virtual slots write Models.Profile.CombatSettings instead.
-    // Driven by the @equip-<set> remote command
+    // Driven by the @equip <set> remote command
     // (EquipRemote) and the auto-equip triggers
     // (AutoEquip).
     public Game.Inventory.EquipmentManager Equipment { get; private set; } = null!;
@@ -5020,7 +5020,7 @@ public sealed class AppServices
         // MainWindowViewModel.
         AutoTrain = new Game.AutoTrainManager(PlayerStats, GameData, Inventory, Profile, TrainerMenu, Log);
 
-        // EquipmentManager + the @equip-<set> handler. The engine
+        // EquipmentManager + the @equip <set> handler. The engine
         // reads saved gear sets off the char profile, diffs against Inventory's
         // worn loadout, and paces `wear` commands; virtual slots (Alternate
         // Weapon / Off-Hand) persist into the char-tier Combat section so the
@@ -5046,6 +5046,8 @@ public sealed class AppServices
         // Paradigm slot 1 (first-listed), Stock slot 2 — so the swap builder rems
         // the right odd-out (see EquipmentManager.ComposePairedSlotCommands).
         Equipment.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
+        // @equip <set> update rewrites a set on the character profile — persist it.
+        Equipment.SetEquipmentSaver(() => Profile.Save());
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
 
         // Location-based auto-equip: re-evaluated on every room transition (fires

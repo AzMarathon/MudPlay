@@ -134,6 +134,27 @@ public sealed class EquipmentManager
     public string? CurrentSetId { get; private set; }
     public event Action? CurrentSetChanged;
 
+    // Fires after UpdateSetFromWorn rewrites a set's slots, so an open Workshop
+    // Equipment tab reloads instead of later saving its stale rows back over the update.
+    public event Action? SetsEdited;
+
+    // Persists the character profile after a set is rewritten. Null until wired.
+    private Action? _saveEquipment;
+
+    // The six built-in sets answer to these short names whatever keyword the user has
+    // given them — the names a party member types (`@equip restma`) — alongside the
+    // roster's own keywords.
+    private static readonly IReadOnlyDictionary<string, EquipTriggerType> TriggerAliases =
+        new Dictionary<string, EquipTriggerType>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["default"]  = EquipTriggerType.Default,
+            ["backstab"] = EquipTriggerType.Backstab,
+            ["resthp"]   = EquipTriggerType.PreRestHp,
+            ["restma"]   = EquipTriggerType.PreRestMana,
+            ["moving"]   = EquipTriggerType.WhileMoving,
+            ["bossing"]  = EquipTriggerType.Bossing,
+        };
+
     public EquipmentManager(
         Func<EquipmentSettings> readEquipment,
         Func<InventorySnapshot> getSnapshot,
@@ -163,6 +184,9 @@ public sealed class EquipmentManager
     // Bind the wire sink. Idempotent; later binds replace earlier ones.
     public void SetWireSender(Action<byte[]> send) => _wire.Bind(send);
 
+    // Bind the profile save UpdateSetFromWorn persists through.
+    public void SetEquipmentSaver(Action save) => _saveEquipment = save;
+
     // Bind the realm probe (true on Paradigm) so paired-slot swaps pick the right
     // evicted slot. Read live per-apply, so a mid-session set swap is honoured.
     public void SetRealmProbe(Func<bool> onParadigm) => _paradigmPairedEviction = onParadigm;
@@ -176,7 +200,7 @@ public sealed class EquipmentManager
     // Every buffer the engine has pushed to the wire, for tests.
     internal IReadOnlyList<byte[]> LastSentForTests => _wire.LastSentForTests;
 
-    // ----- @equip-<set> ---------------------------------------------------
+    // ----- @equip <set> ----------------------------------------------------
 
     // Resolve a gear set by EquipmentSet.Keyword (case-insensitive, the set's
     // Name as a fallback) and apply it. Declines while an apply is already in
@@ -226,8 +250,8 @@ public sealed class EquipmentManager
     private EquipmentSet? FindSet(string keyword)
     {
         EquipmentSettings cfg = _readEquipment();
-        // Keyword is the @equip-<set> suffix contract; fall back to the set's
-        // display name so a caller can type either.
+        // Keyword is the @equip <set> contract; fall back to the set's display name,
+        // then the built-in short names, so a caller can type any of them.
         foreach (EquipmentSet s in cfg.Sets)
             if (!string.IsNullOrEmpty(s.Keyword)
                 && string.Equals(s.Keyword, keyword, StringComparison.OrdinalIgnoreCase))
@@ -235,7 +259,51 @@ public sealed class EquipmentManager
         foreach (EquipmentSet s in cfg.Sets)
             if (string.Equals(s.Name, keyword, StringComparison.OrdinalIgnoreCase))
                 return s;
+        if (TriggerAliases.TryGetValue(keyword, out EquipTriggerType trigger))
+            return cfg.Sets.FirstOrDefault(s => s.Trigger == trigger);
         return null;
+    }
+
+    // Rewrite a set to what we're wearing right now: every worn piece fills its slot
+    // (a second ring / bracelet takes slot 2) and every unworn slot goes back to
+    // {no change}. The alternate-weapon entries aren't worn slots, so they're kept.
+    // Refused while a swap is streaming (the worn list is mid-change) and before the
+    // first `i` dump, when an empty worn list would wipe the set.
+    public EquipUpdateResult UpdateSetFromWorn(string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword)) return new(EquipUpdateOutcome.NotFound, null, 0);
+        EquipmentSet? set = FindSet(keyword.Trim());
+        if (set is null) return new(EquipUpdateOutcome.NotFound, null, 0);
+        if (_isEquipping) return new(EquipUpdateOutcome.Busy, set.Name, 0);
+        InventorySnapshot snap = _getSnapshot();
+        if (snap.LastUpdated == DateTimeOffset.MinValue) return new(EquipUpdateOutcome.InventoryUnknown, set.Name, 0);
+
+        List<EquipmentSlotEntry> slots = set.Slots
+            .Where(e => e.Slot is EquipmentSlot.AlternateWeapon or EquipmentSlot.AlternateOffHand)
+            .ToList();
+        HashSet<EquipmentSlot> used = new();
+        foreach (EquippedItem worn in snap.EquippedItems)
+        {
+            if (EquipmentSlotMap.FromWornString(worn.Slot) is not { } slot) continue;
+            if (used.Contains(slot))
+            {
+                EquipmentSlot? partner = slot switch
+                {
+                    EquipmentSlot.Finger1 => EquipmentSlot.Finger2,
+                    EquipmentSlot.Wrist1 => EquipmentSlot.Wrist2,
+                    _ => null,
+                };
+                if (partner is not { } p || used.Contains(p)) continue;
+                slot = p;
+            }
+            used.Add(slot);
+            slots.Add(new EquipmentSlotEntry(slot, worn.Name));
+        }
+        set.Slots = slots;
+        _saveEquipment?.Invoke();
+        _log?.Info(LogCategory, $"gear set '{set.Name}' updated from worn gear ({used.Count} slot(s))");
+        SetsEdited?.Invoke();
+        return new(EquipUpdateOutcome.Updated, set.Name, used.Count);
     }
 
     // ----- immediate weapon swap (combat fast path) -----------------------
@@ -836,7 +904,7 @@ public sealed class EquipmentManager
             && string.Equals(c["eq ".Length..], name, StringComparison.OrdinalIgnoreCase)));
 
     // Inventory-aware apply plan for the user-initiated equip paths (Equip All /
-    // @equip-<set>). Honors the set's picks the character actually carries (or
+    // @equip <set>). Honors the set's picks the character actually carries (or
     // already wears), then fills any slot the set left empty — or named an item
     // that isn't carried — from equippable carried gear, first-come-first-served.
     //

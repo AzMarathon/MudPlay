@@ -4,7 +4,7 @@ namespace MudPlay.Models.Profile;
 // this set's Trigger moment fires. The Equipment Manager keeps one set per
 // EquipTriggerType (Default / Backstab / Pre-rest HP / Pre-rest Mana); a set can
 // be applied automatically when enabled (Enabled) or remotely via
-// @equip-<keyword>.
+// @equip <keyword>.
 public sealed class EquipmentSet
 {
     // Stable identity used to reference the set (e.g. from automation). A GUID
@@ -21,8 +21,8 @@ public sealed class EquipmentSet
     // User-facing set name shown in the Workshop (e.g. "Pre-rest HP").
     public string Name { get; set; } = string.Empty;
 
-    // Short suffix a party member appends to @equip- to apply this set (e.g.
-    // @equip-backstab). Matched case-insensitively; the set Name is a fallback
+    // Short word a party member names after @equip to apply this set (e.g.
+    // @equip backstab). Matched case-insensitively; the set Name is a fallback
     // when no keyword matches.
     public string Keyword { get; set; } = string.Empty;
 

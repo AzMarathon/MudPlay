@@ -23,7 +23,7 @@ namespace MudPlay.Game.Remote;
 //   - RequestInvite — party invite / join / leave signals.
 //   - MovePlayer — goto / loop / lair / stop / rego.
 //   - ExecuteCommands — @do passthrough, bulk inventory actions (@get-all /
-//     @drop-all / @deposit-all), and gear-set apply (@equip-<set>).
+//     @drop-all / @deposit-all), and gear sets (@equip <set> [update], @equip-all).
 //   - HangupDisconnect — @hangup / @relog.
 //   - AlterSettings — auto-* toggles, @settings. Note: @reset also sits in this
 //     category in the catalog, but its actual home is the session-stats tracker
@@ -108,9 +108,10 @@ public static class RemoteCommandCatalog
             // Bulk inventory verbs — operate on *all* applicable items
             // (@get-all: everything on the ground we can pick up; @drop-all:
             // everything in the pack we can drop; @deposit-all: bank it all).
-            // Distinct from @equip-<set>, which is a per-slot loadout swap.
+            // Distinct from @equip <set>, which is a per-slot loadout swap.
             ["@get-all"]      = PlayerRemoteControls.ExecuteCommands,
             ["@drop-all"]     = PlayerRemoteControls.ExecuteCommands,
+            ["@hide-all"]     = PlayerRemoteControls.ExecuteCommands,
             ["@deposit-all"]  = PlayerRemoteControls.ExecuteCommands,
             ["@do"]           = PlayerRemoteControls.ExecuteCommands,
             // @kill <target> asks a party member to attack a named target
@@ -128,13 +129,12 @@ public static class RemoteCommandCatalog
             // spend the CP plan — assuming we're already at a trainer (no walk).
             // "Do something on my behalf", so ExecuteCommands like @do / @kill.
             ["@train"]        = PlayerRemoteControls.ExecuteCommands,
-            // @equip-<setname> asks us to wear one of our saved gear sets
-            // (Workshop Equipment tab) — the text after "@equip-" is the set
-            // keyword, dispatched via RemoteCommandManager.RegisterPrefixHandler.
-            // This bare "@equip" key is what the @help listing + Players-tab
-            // tooltip surface; the wire form always carries a suffix. "Do
-            // something on my behalf", so ExecuteCommands like @do / @train.
-            // Handler lives in EquipHandler.cs.
+            // @equip <set> asks us to wear one of our saved gear sets (Workshop
+            // Equipment tab); @equip <set> update rewrites the set to what we're
+            // wearing. @equip-all wears the Default set — it, and the older dashed
+            // @equip-<set> a party member on a previous client still sends, arrive
+            // through the "@equip-" prefix handler. "Do something on my behalf", so
+            // ExecuteCommands like @do / @train. Handler lives in EquipHandler.cs.
             ["@equip"]        = PlayerRemoteControls.ExecuteCommands,
 
             // ===== Movement / Loops =====
@@ -258,12 +258,13 @@ public static class RemoteCommandCatalog
             ["@join"]         = new("@join", "asks you to join the sender's party"),
             ["@get-all"]      = new("@get-all", "pick up everything on the ground you can"),
             ["@drop-all"]     = new("@drop-all [full|coins|keys]", "drop everything unworn in your pack; 'full' everything held (worn gear, light, keys, coins); 'coins' / 'keys' just those"),
+            ["@hide-all"]     = new("@hide-all [full|coins|keys]", "the @drop-all sweeps, but hidden in the room instead of dropped"),
             ["@deposit-all"]  = new("@deposit-all", "bank all excess coin"),
             ["@do"]           = new("@do <command>", "sends the command verbatim to the game (highest-trust)"),
             ["@kill"]         = new("@kill <target>", "retargets your combat onto the named monster this round"),
             ["@trap"]         = new("@trap <dir>", "search and disarm a trap in that direction; @trap stop aborts"),
             ["@train"]        = new("@train", "trains (and applies your CP plan if Auto-train-stats is on); assumes you're at a trainer"),
-            ["@equip"]        = new("@equip-<set>", "wears a saved gear set by keyword (e.g. @equip-backstab; @equip-all = Default set)"),
+            ["@equip"]        = new("@equip <set> [update] | @equip-all", "wears a saved gear set (default / backstab / resthp / restma / moving / bossing, or its keyword); 'update' saves what you're wearing into that set; @equip-all wears the Default set"),
             ["@goto"]         = new("@goto <destination>", "walks you to a GOTO favorite, a searched room (coords/name/acronym), or a boss"),
             ["@loop"]         = new("@loop <name|coords|last> | @loop send <name|yes|no>", "starts a saved loop, an ad-hoc coordinate loop (≥2 coords), or re-runs the last loop ('last'); 'send' asks for a copy of one of my loops"),
             ["@lair"]         = new("@lair <name|coords>", "starts an Auto-Lair setup"),

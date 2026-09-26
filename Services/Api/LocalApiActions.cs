@@ -48,7 +48,7 @@ public static class LocalApiActions
     // if these two ever disagree about what a string means, the gate stops
     // guarding what actually runs.
     //
-    // Suffix-form commands (@equip-<set>) aren't literal catalog keys, so they
+    // Suffix-form commands (@equip-all, the legacy @equip-<set>) aren't literal catalog keys, so they
     // resolve through their BASE command and inherit its category. Derived rather
     // than special-cased: the point of reading categories out of the catalog is
     // that a command added later is classified automatically, and a hardcoded

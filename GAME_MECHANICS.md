@@ -2378,6 +2378,11 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - A **player** has to `search` the room to reveal (unhide) you; **monsters do not search rooms**, so a monster that walks into a room you're hidden in never reveals you — it just becomes a backstab target.
   - A monster's passive **see-hidden** ability is a separate thing: it reveals a stealthed character to the whole room on sight, defeating the opener (see *Combat → Backstab*).
 - **Command** *([OBSERVED] — the client issues it)*: `hid` — attempt to hide.
+- **The bare verb hides the player; with an object it stashes the object** *([CONFIRMED] 2026-09-26, user)*.
+  A plain `hide` (or its shorthand `hid`) is the player hiding themselves; `hide <N> <item>` stashes the
+  item in the room, where it can't be seen again until someone actively searches for it (see *Items,
+  inventory & equipment → Hiding items in a room (stashing)* and *Money, banks & shops → Hiding coin in a
+  room (stashing)*).
 - **Hide state machine** *(lines all [CONFIRMED] — from paired two-character POV captures)*:
   - `Attempting to hide...` (alone, no suffix) — the attempt fired and the server ran a hide check, but the outcome is **NOT reported to you**. This line is **ambiguous**: it means "a check happened," not "you are hidden." You cannot tell success from failure off this line alone.
   - `Attempting to hide...You don't think you are hidden.` — explicit hide **FAILURE**. This is the only self-observable failure signal.
@@ -3451,6 +3456,22 @@ A `get <item>` that can't succeed replies with one of these shapes:
 **Client use:**
 - Roomba treats any drop refusal as "verify against a real `i` before doing anything else". It also drops its belief in a carried item the moment anything else is seen dropping it.
 - `@drop-all full` / Drop Everything drops worn gear with the same `drop` it uses for the pack (InventoryActionHandler).
+
+### Hiding items in a room (stashing)
+*Status: CONFIRMED 2026-09-26 (user) · Realm: both; the counted form is Paradigm-only*
+
+- **`hide <item>` stashes an item in the room; a bare `hide` hides the player instead.** A stashed item
+  can't be seen again until someone actively searches the room for it. `hid <item>` is the shorthand.
+- **Worn gear hides directly**, like `drop`: `hide <item>` on a worn piece takes it off and stashes it
+  in one command, no `rem` first.
+- **Counts follow the batching rule** (see *Item batching: Paradigm counted commands vs Stock
+  one-per-command*): Paradigm takes `hide <N> <item>` in one command; Stock needs one `hide` per copy.
+- Coin stashes: see *Money, banks & shops → Hiding coin in a room (stashing)*.
+
+**Client use:**
+- `@hide-all [full|coins|keys]` and the Hide All / Hide Everything / Hide Coins / Hide Keys actions
+  (`InventoryActionHandler.HideAll`) run the Drop All sweeps with `hide`, always naming the item or coin
+  — never a bare `hide`, which would hide the character instead.
 
 ### Room item capacity: drop refusal
 *Status: CONFIRMED 2026-09-02 (user, live capture); per-object stacking 2026-09-03 (user; mechanism NEEDS CONFIRMATION); realm CONFIRMED 2026-09-26 (user) · Realm: Stock — Paradigm rooms have no item cap*
