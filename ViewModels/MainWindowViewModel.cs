@@ -1270,7 +1270,7 @@ public partial class MainWindowViewModel : ObservableObject
         // same gate-wrapped pipeline as the other engines.
         AppServices.Current.ItemCast.SetWireSender(engineSend);
         // EquipmentManager's paced `wear` commands ride the same
-        // gate-wrapped pipeline (@equip-<set> set-apply).
+        // gate-wrapped pipeline (@equip <set> set-apply).
         AppServices.Current.Equipment.SetWireSender(engineSend);
         // CashManager's `get all <coin>` commands ride the gate-wrapped
         // pipeline like the other engines.
@@ -5492,6 +5492,24 @@ public partial class MainWindowViewModel : ObservableObject
     private static void RunDrop(Game.Remote.InventoryActionHandler.DropScope scope) =>
         AppServices.Current.Log.Info(Game.Inventory.InventoryManager.LogCategory,
             AppServices.Current.InventoryAction.DropAll(scope));
+
+    // "Hide All" family — the Drop All sweeps with `hide`, stashing everything in the
+    // room (only a search turns it up again) instead of leaving it on the floor.
+    [RelayCommand]
+    private void HideAll() => RunHide(Game.Remote.InventoryActionHandler.DropScope.Unworn);
+
+    [RelayCommand]
+    private void HideEverything() => RunHide(Game.Remote.InventoryActionHandler.DropScope.Full);
+
+    [RelayCommand]
+    private void HideCoins() => RunHide(Game.Remote.InventoryActionHandler.DropScope.Coins);
+
+    [RelayCommand]
+    private void HideKeys() => RunHide(Game.Remote.InventoryActionHandler.DropScope.Keys);
+
+    private static void RunHide(Game.Remote.InventoryActionHandler.DropScope scope) =>
+        AppServices.Current.Log.Info(Game.Inventory.InventoryManager.LogCategory,
+            AppServices.Current.InventoryAction.HideAll(scope));
 
     // "Deposit All" — bank wealth down to the keep-on-hand floor.
     [RelayCommand]

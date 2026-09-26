@@ -41,7 +41,7 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
 {
     // The fixed set roster, in left-list display order: trigger → seeded name +
-    // @equip- keyword. EnsureSets reconciles the persisted blob to this.
+    // @equip keyword. EnsureSets reconciles the persisted blob to this.
     private static readonly (EquipTriggerType Trigger, string Name, string Keyword)[] Roster =
     {
         (EquipTriggerType.Default, "Default", "default"),
@@ -209,6 +209,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         _questBonuses.Changed += OnQuestBonusesChanged;
         _equipment.CurrentSetChanged += OnCurrentSetChanged;
         _equipment.BlocksChanged += OnBlocksChanged;
+        _equipment.SetsEdited += OnSetsEdited;
         if (_combatProfiles is not null) _combatProfiles.Changed += OnCombatProfilesChanged;
     }
 
@@ -718,6 +719,10 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
 
     private void OnProfileLoaded(CharacterProfile _) => ReloadFromProfile();
 
+    // A party member's @equip <set> update rewrote a set — reload so the rows show it
+    // and a later edit here doesn't save the stale rows back over it.
+    private void OnSetsEdited() => ReloadFromProfile();
+
     private void OnActiveSetChanged(string? _)
     {
         BuildRows();                // new item table → rebuild rows
@@ -762,6 +767,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         _questBonuses.Changed -= OnQuestBonusesChanged;
         _equipment.CurrentSetChanged -= OnCurrentSetChanged;
         _equipment.BlocksChanged -= OnBlocksChanged;
+        _equipment.SetsEdited -= OnSetsEdited;
         if (_combatProfiles is not null) _combatProfiles.Changed -= OnCombatProfilesChanged;
     }
 }

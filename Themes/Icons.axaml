@@ -81,6 +81,8 @@
     <StreamGeometry x:Key="IconGetAll">M12 3 V13 M8 9 L12 13 L16 9 M4 16 V20 H20 V16</StreamGeometry>
     <!-- Up-arrow out of bottom box. -->
     <StreamGeometry x:Key="IconDropAll">M12 21 V11 M8 15 L12 11 L16 15 M4 4 V8 H20 V4</StreamGeometry>
+    <!-- Closed chest with a latch — a stash. -->
+    <StreamGeometry x:Key="IconHideAll">M3 7 H21 V11 H3 Z M4 11 V20 H20 V11 M12 10 V13</StreamGeometry>
     <!-- Classic heraldic shield. -->
     <StreamGeometry x:Key="IconEquipAll">M12 3 L20 6 V12 A8 8 0 0 1 12 21 A8 8 0 0 1 4 12 V6 Z</StreamGeometry>
     <!-- Coin descending into bank slot. -->

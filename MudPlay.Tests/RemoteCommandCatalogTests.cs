@@ -75,9 +75,8 @@ public sealed class RemoteCommandCatalogTests
     [InlineData("@blind")]
     [InlineData("@diseased")]
     [InlineData("@held")]
-    // @equip-all was a misfit: equipping is per-slot (you can't wear "all"
-    // items), and the @equip- namespace now belongs to gear-set apply
-    // (@equip-<set>). Dropped in favour of the prefix-routed @equip.
+    // @equip-all isn't its own entry: it rides the "@equip-" prefix handler
+    // (wears the Default set) under the @equip catalog key and help line.
     [InlineData("@equip-all")]
     // @home (mudop-only per the wiki) is dropped — MudPlay won't wire it,
     // so it must not linger in the catalog advertising an unhandled command.

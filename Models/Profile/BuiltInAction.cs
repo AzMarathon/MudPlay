@@ -42,6 +42,7 @@ public enum BuiltInAction
     // ---- Bulk one-shot actions (toolbar / Action menu) ----
     ActionGetAll,
     ActionDropAll,
+    ActionHideAll,
     ActionEquipAll,
     ActionDepositAll,
 

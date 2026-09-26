@@ -1,6 +1,6 @@
 namespace MudPlay.Game.Inventory;
 
-// Outcome of an @equip-<set> / set-apply request, so callers (EquipHandler) can
+// Outcome of an @equip <set> / set-apply request, so callers (EquipHandler) can
 // craft the right reply.
 public enum EquipResult
 {

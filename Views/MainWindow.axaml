@@ -203,7 +203,7 @@
                 <Separator/>
 
                 <!-- Bulk one-shot commands. Local twins of the @get-all /
-                     @drop-all / @deposit-all remote commands and the Default
+                     @drop-all / @hide-all / @deposit-all remote commands and the Default
                      gear set; the toolbar Get/Drop/Equip/Deposit buttons drive
                      the same commands via the catalogue. -->
                 <MenuItem Header="Get All"     Command="{Binding GetAllCommand}"     ToolTip.Tip="Pick up every item on the room floor"/>
@@ -211,6 +211,10 @@
                 <MenuItem Header="Drop Everything" Command="{Binding DropEverythingCommand}" ToolTip.Tip="Drop everything held — worn gear, light, keys and coins too"/>
                 <MenuItem Header="Drop Coins"  Command="{Binding DropCoinsCommand}"  ToolTip.Tip="Drop every coin you're carrying"/>
                 <MenuItem Header="Drop Keys"   Command="{Binding DropKeysCommand}"   ToolTip.Tip="Drop every key on your key ring"/>
+                <MenuItem Header="Hide All"    Command="{Binding HideAllCommand}"    ToolTip.Tip="Hide every carried (unworn) item in the room — only a search finds it"/>
+                <MenuItem Header="Hide Everything" Command="{Binding HideEverythingCommand}" ToolTip.Tip="Hide everything held in the room — worn gear, light, keys and coins too"/>
+                <MenuItem Header="Hide Coins"  Command="{Binding HideCoinsCommand}"  ToolTip.Tip="Hide every coin you're carrying in the room"/>
+                <MenuItem Header="Hide Keys"   Command="{Binding HideKeysCommand}"   ToolTip.Tip="Hide every key on your key ring in the room"/>
                 <MenuItem Header="Equip All"   Command="{Binding EquipAllCommand}"   ToolTip.Tip="Wear the Default gear set"/>
                 <MenuItem Header="Deposit All" Command="{Binding DepositAllCommand}" ToolTip.Tip="Bank wealth down to the keep-on-hand floor"/>
                 <Separator/>
