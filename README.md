@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.110.2**
-> - Monsters filter sidebar gains a Location section: Landmass / Region / Area dropdowns that narrow each other, with (not set) to find unfiled monsters
+> **Version 3.110.3**
+> - Monsters the game marks out of play (In Game = 0, sysop-only or test NPCs) leave the Monsters table and are listed in the Unobtainable table instead
+> - Unobtainable table now covers Monsters as well as Items, with a Kind column and HP / Exp / Avg Damage / Alignment for monsters
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

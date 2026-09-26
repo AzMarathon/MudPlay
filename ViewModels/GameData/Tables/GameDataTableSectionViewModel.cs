@@ -657,8 +657,8 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
     protected abstract string TableName { get; }
 
     // Row-level filter applied while populating from the raw table. Default keeps every
-    // row; a derived view (e.g. Unobtainable = Items with In Game == 0) overrides to
-    // include only the rows it wants without duplicating the whole populate loop.
+    // row; a section (e.g. Monsters, which leaves out the rows the game marks out of play)
+    // overrides to include only the rows it wants without duplicating the whole populate loop.
     protected virtual bool IncludeRow(JsonElement element) => true;
 
     // Column whose value identifies the record for tier-override lookup (default: the
@@ -708,18 +708,28 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
     }
 
     protected override void PopulateRows(IList<GameDataRow> rows)
+        => AddTableRows(rows, TableName, IncludeRow, ComputeRowCells);
+
+    // Append the rows of one raw table that pass `include`, shaped with this section's
+    // columns and formatters. PopulateRows uses it for the section's own table; a derived
+    // view that gathers rows from more than one table (Unobtainable) calls it once per table.
+    protected void AddTableRows(
+        IList<GameDataRow> rows,
+        string tableName,
+        Func<JsonElement, bool> include,
+        Func<JsonElement, IReadOnlyDictionary<string, string?>?> computeCells)
     {
-        JsonDocument? doc = _cache.GetRawTable(TableName);
+        JsonDocument? doc = _cache.GetRawTable(tableName);
         if (doc is null) return;
 
         IReadOnlyDictionary<string, Func<string?, string?>>? formatters = ColumnFormatters;
         foreach (JsonElement el in doc.RootElement.EnumerateArray())
         {
-            if (!IncludeRow(el)) continue;
+            if (!include(el)) continue;
             // Sections may inject synthesised cells that aren't backed
             // by a real MDB field (e.g. Races / Classes synthesise an
             // "Abilities" column from Abil-N / AbilVal-N pairs).
-            IReadOnlyDictionary<string, string?>? computed = ComputeRowCells(el);
+            IReadOnlyDictionary<string, string?>? computed = computeCells(el);
             GameDataRow row = GameDataRow.FromJson(el, ValueColumns, formatters, computed);
             // Per-row tier resolution: look up the record by its primary
             // key column value (typically Number) and ask the resolver
@@ -728,7 +738,7 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
             {
                 string? key = row.Get(OverrideKeyColumn);
                 if (!string.IsNullOrEmpty(key))
-                    row.SourceTier = _resolver.GetGameDataSourceTier(TableName, key);
+                    row.SourceTier = _resolver.GetGameDataSourceTier(tableName, key);
             }
             rows.Add(row);
         }
