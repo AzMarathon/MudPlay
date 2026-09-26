@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.110.7**
+> **Version 3.110.8**
 > - Drop All / Hide All / Equip toolbar ▾ only changes what the button does; nothing is sent until you click the button
+> - Equip All / Equip Now no longer fill an empty off-hand from your pack under a two-handed weapon, including one they just wielded
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

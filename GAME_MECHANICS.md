@@ -3558,6 +3558,11 @@ There is no room to drop amethyst pendant here.
   - An item whose MDB `Worn` code is Off-Hand (12) can still print under the generic `(Worn)` bucket in the game's own `i` text (e.g. a *red skull*, a worn charm/skull item).
   - Such an item still mechanically fills the off-hand and blocks a 2H wield exactly the same way: `You may not ready a 2-handed weapon with your <item> worn!`, naming the blocking item. The client's own `EquippedItems.Slot` label is taken verbatim from the game's `i` text, so it can disagree with what actually blocks a 2H equip.
 - **The item's declared MDB `Worn` code is the authoritative signal, not its display bucket.**
+- **[OBSERVED report `paradigm-20260926-194514`, Paradigm] The reverse is blocked too.** Wearing an off-hand item while a two-hander is wielded is refused with `You may not wear an off-hand item while you have a 2-handed weapon readied.`
+
+**Client use:**
+- `EquipmentManager.PrependTwoHandOffHandConflictRems` rems the conflicting piece before a set that changes the hands.
+- `EquipmentManager.BuildEquipCommands` never fills an empty off-hand from the pack under a two-hander, and never fills a two-hander beside an off-hand (report `paradigm-20260926-194514`).
 
 ### Worn state: no forced unequip, persists across login (EP-zap exception)
 *Status: CONFIRMED*

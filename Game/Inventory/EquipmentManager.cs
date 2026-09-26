@@ -698,7 +698,7 @@ public sealed class EquipmentManager
         {
             return BuildEquipCommands(
                 set, snap.CarriedItems, snap.EquippedItems, _resolveItemSlot, _canEquipItem,
-                blocked, ParadigmPairedEviction);
+                blocked, ParadigmPairedEviction, _isTwoHanded);
         }
 
         var worn = new HashSet<string>(
@@ -923,8 +923,10 @@ public sealed class EquipmentManager
         Func<string, EquipmentSlot?> resolveSlot,
         Func<string, bool> canEquip,
         ISet<string>? blockedNames = null,
-        bool evictsFirstListed = true)
+        bool evictsFirstListed = true,
+        Func<string?, bool>? isTwoHanded = null)
     {
+        isTwoHanded ??= static _ => false;
         var result = new List<string>();
         var wornNames = new HashSet<string>(
             worn.Select(e => e.Name), StringComparer.OrdinalIgnoreCase);
@@ -957,8 +959,18 @@ public sealed class EquipmentManager
             Bump(used, FamilyOf(entry.Slot));
         }
 
-        // Fallback pass — fill remaining empty slots, first-come-first-served.
-        foreach (string rawName in carried)
+        // What the hands will hold once the set pass lands — a two-hander fills the
+        // off-hand too, so the fallback must not top that "empty" slot up (the game
+        // refuses the wear: report paradigm-20260926-194514), nor pull a two-hander
+        // in beside an off-hand.
+        string? handWeapon = PlannedOrWorn(set, result, worn, EquipmentSlot.Weapon, "Weapon Hand");
+        string? handOffHand = PlannedOrWorn(set, result, worn, EquipmentSlot.OffHand, "Off-Hand");
+
+        // Fallback pass — fill remaining empty slots, first-come-first-served, except
+        // weapons go first: a two-hander it wields must shut the off-hand before an
+        // off-hand item earlier in the pack claims it.
+        foreach (string rawName in carried.OrderBy(
+                     c => resolveSlot(StripStackCount(c.Trim())) == EquipmentSlot.Weapon ? 0 : 1))
         {
             string name = StripStackCount(rawName.Trim());
             if (name.Length == 0 || chosen.Contains(name) || wornNames.Contains(name)) continue;
@@ -966,10 +978,14 @@ public sealed class EquipmentManager
             if (resolveSlot(name) is not EquipmentSlot slot || IsVirtual(slot)) continue;
             EquipmentSlot family = FamilyOf(slot);
             if (used.GetValueOrDefault(family) >= Capacity(family)) continue;
+            if (slot == EquipmentSlot.OffHand && isTwoHanded(handWeapon)) continue;
+            if (slot == EquipmentSlot.Weapon && handOffHand is not null && isTwoHanded(name)) continue;
             if (!canEquip(name)) continue;
             result.Add($"{Verb(slot)} {name}");
             chosen.Add(name);
             Bump(used, family);
+            if (slot == EquipmentSlot.Weapon) handWeapon = name;
+            else if (slot == EquipmentSlot.OffHand) handOffHand = name;
         }
 
         // Compose the paired finger / wrist frees around the wears — the same slot-2-
@@ -979,6 +995,16 @@ public sealed class EquipmentManager
         // with the member the set keeps and never settled (report
         // paradigm-20260825-103537). Only families actually gaining a member are touched.
         return ComposePairedSlotCommands(set, worn, result, evictsFirstListed);
+    }
+
+    // The set's pick for a held slot when this plan equips it, else what's worn there.
+    private static string? PlannedOrWorn(
+        EquipmentSet set, List<string> cmds, IReadOnlyList<EquippedItem> worn,
+        EquipmentSlot slot, string wornLabel)
+    {
+        string? pick = set.Slots.FirstOrDefault(e => e.Slot == slot)?.ItemName?.Trim();
+        if (!string.IsNullOrEmpty(pick) && PlanEquips(cmds, pick)) return pick;
+        return WornSlotItem(worn, wornLabel);
     }
 
     // The game lists a stack of identical items as "<count> <name>" (e.g.

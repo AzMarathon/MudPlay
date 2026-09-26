@@ -1,8 +1,10 @@
 # Version history
 
-## 3.110.7
+## 3.110.8
 
 - Drop All / Hide All / Equip toolbar ▾ only changes what the button does; nothing is sent until you click the button
+- Equip All / Equip Now no longer fill an empty off-hand from your pack under a two-handed weapon, including one they just wielded
+- bug reports addressed: paradigm-20260926-194514
 
 ## 3.110.6
 
