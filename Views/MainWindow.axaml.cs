@@ -682,6 +682,22 @@ public partial class MainWindow : Window
         flyout.ShowAt(button);
     }
 
+    // A split toolbar button's ▾: open its related actions (ToolbarButtonItem
+    // .SubActions — e.g. Drop All's everything / coins / keys) as a menu.
+    private void OnToolbarSubActionsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is not Button arrow
+            || arrow.DataContext is not Services.ToolbarButtonItem { HasSubActions: true } item) return;
+        MenuFlyout flyout = new();
+        foreach (Services.ToolbarMenuAction action in item.SubActions)
+        {
+            MenuItem entry = new() { Header = action.Label, Command = action.Command };
+            if (action.Tooltip is { Length: > 0 } tip) ToolTip.SetTip(entry, tip);
+            flyout.Items.Add(entry);
+        }
+        flyout.ShowAt(arrow);
+    }
+
     // Toolbar right-click: the Combat-Profile CYCLE button steps to the PREVIOUS
     // profile (its left-click / Command steps to the next).
     private void OnToolbarButtonPointerReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)

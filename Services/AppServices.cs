@@ -4961,7 +4961,8 @@ public sealed class AppServices
             GroundItems,
             PartyState,
             readCash: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash"),
-            naming: Currency);
+            naming: Currency,
+            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud);
 
         // Receive side of @heal — a configured party-healer polls `par` on
         // request so CastingDirector re-evaluates its party-heal thresholds

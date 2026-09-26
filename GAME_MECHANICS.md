@@ -3546,15 +3546,21 @@ fresh `@level` lands ≥ 10.)
   yet captured; until it is, a get that never yields a `You took` line is released by the settle
   timeout rather than by a confirmation.
 - **[CONFIRMED — Paradigm-specific]** **Paradigm lets a single action name a count** —
-  `buy <N> <item>`, `sell <N> <item>`, `get <N> <item>`, `drop <N> <item>`, `hide <N> <item>` — and
+  `buy <N> <item>`, `sell <N> <item>`, `get <N> <item>`, `drop <N> <item>`, `give <N> <item>`,
+  `hide <N> <item>` — where `<item>` is **anything in the Items table** of a game-data import: keys
+  (`drop 3 black star key`), equipment, weapons, usable items, loot — and
   its confirmation echoes the count with the **SINGULAR** item name: e.g. `You hid 35 orc-head.`
-  (not `orc-heads`). **Stock has no such batching — one item per action.** Consequence for inventory
+  (not `orc-heads`). **Stock has no such batching — one item per action, for every verb and every
+  kind of item** (the client emits both forms through `CountedCommand.Emit`). Consequence for inventory
   tracking: a counted confirmation removes/adds N copies, not one, so the carried-list and running
   weight adjustments must strip the leading count and apply it N times, or the encumbrance estimate
   drifts (report `paradigm-20260812-201631`: 35 stashed orc-heads left the estimate ~1050 too heavy,
   so the cash "skip if Heavy" gate wrongly skipped a collect while the character was actually Medium).
   The bare-count confirmations for the other verbs (`You took/dropped <N> <item>.`, buy/sell) are the
   same shape but not all captured from a live session yet.
+- **[CONFIRMED] 2026-09-26, user** — **A worn item drops with a plain `drop <item>`** — no `rem`
+  first; the game takes it off and drops it in one command. Client use: `@drop-all full` / Drop
+  Everything drops worn gear with the same `drop` it uses for the pack (InventoryActionHandler).
 - **[CONFIRMED]** **A get/drop target given as the bare denomination adjective binds to any
   like-named item, not the coins.** `drop 1 silver` can resolve to a *silver ring* instead of a
   silver noble; the game picks whichever object matches first. Emitting the **full two-word coin

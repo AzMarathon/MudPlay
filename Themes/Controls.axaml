@@ -129,6 +129,14 @@
     <Style Selector="Button.ToolbarBtn.Danger:pointerover /template/ ContentPresenter">
         <Setter Property="TextElement.Foreground" Value="{StaticResource AccentRedBrush}"/>
     </Style>
+    <!-- A split toolbar button's ▾: a narrow strip beside the main button (below it
+         on a vertical toolbar) that opens the button's related actions. -->
+    <Style Selector="Button.ToolbarBtn.ToolbarArrow">
+        <Setter Property="Width" Value="12"/>
+    </Style>
+    <Style Selector="Button.ToolbarBtn.ToolbarArrowV">
+        <Setter Property="Height" Value="12"/>
+    </Style>
 
 
     <!-- ============ Status bar ============ -->

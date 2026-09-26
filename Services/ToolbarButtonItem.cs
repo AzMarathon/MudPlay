@@ -53,6 +53,11 @@ public sealed partial class ToolbarButtonItem : ObservableObject
     private string? _badgeText;
     public bool HasBadgeText => !string.IsNullOrEmpty(BadgeText);
 
+    // A split button's ▾ menu (ToolbarItemCatalogue.Entry.SubActions), commands
+    // resolved. Empty for an ordinary button.
+    public IReadOnlyList<ToolbarMenuAction> SubActions { get; }
+    public bool HasSubActions => SubActions.Count > 0;
+
     public ToolbarButtonItem(
         ToolbarItemKind kind,
         string? actionId,
@@ -60,8 +65,10 @@ public sealed partial class ToolbarButtonItem : ObservableObject
         string? iconResourceKey,
         string tooltip,
         ICommand? command,
-        string? alternateIconResourceKey = null)
+        string? alternateIconResourceKey = null,
+        IReadOnlyList<ToolbarMenuAction>? subActions = null)
     {
+        SubActions = subActions ?? Array.Empty<ToolbarMenuAction>();
         Kind = kind;
         ActionId = actionId;
         Label = label;
@@ -71,3 +78,6 @@ public sealed partial class ToolbarButtonItem : ObservableObject
         AlternateIconResourceKey = alternateIconResourceKey;
     }
 }
+
+// One resolved entry in a split toolbar button's ▾ menu.
+public sealed record ToolbarMenuAction(string Label, System.Windows.Input.ICommand? Command, string? Tooltip);

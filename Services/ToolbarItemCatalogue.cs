@@ -17,13 +17,22 @@ public static class ToolbarItemCatalogue
     // One catalogue entry. ActionId is the stable identifier persisted on the
     // user's profile; CommandName is the MainWindowViewModel property the button
     // binds to (Avalonia resolves {Binding {CommandName}} via the DataContext).
+    //
+    // SubActions makes the button a split button: its own click still runs
+    // CommandName, and a narrow ▾ beside it opens a menu of these related actions
+    // (e.g. Drop All's "Drop Everything" / coins / keys).
     public sealed record Entry(
         string ActionId,
         string Label,
         string IconResourceKey,
         string CommandName,
         string? Tooltip = null,
-        string? ShortcutHint = null);
+        string? ShortcutHint = null,
+        IReadOnlyList<SubAction>? SubActions = null);
+
+    // One entry in a split button's ▾ menu: its label and the MainWindowViewModel
+    // command it runs.
+    public sealed record SubAction(string Label, string CommandName, string? Tooltip = null);
 
     private static readonly Entry[] _entries =
     {
@@ -96,7 +105,15 @@ public static class ToolbarItemCatalogue
             Tooltip: "Get All — pick up every item on the room floor"),
         new("ActionDropAll",      "Drop All",             "IconDropAll",
             "DropAllCommand",
-            Tooltip: "Drop All — drop every carried (unworn) item"),
+            Tooltip: "Drop All — drop every carried (unworn) item (▾ for everything / coins / keys)",
+            SubActions: new SubAction[]
+            {
+                new("Drop All (unworn items)", "DropAllCommand"),
+                new("Drop Everything", "DropEverythingCommand",
+                    "Everything held — worn gear, light, keys and coins too"),
+                new("Drop Coins", "DropCoinsCommand"),
+                new("Drop Keys", "DropKeysCommand"),
+            }),
         new("ActionEquipAll",     "Equip All",            "IconEquipAll",
             "EquipAllCommand",
             Tooltip: "Equip All — wear the Default gear set"),

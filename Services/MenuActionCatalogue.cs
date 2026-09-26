@@ -83,6 +83,9 @@ public static class MenuActionCatalogue
         new("action.resetstates", "Reset States", Kind.Command, "Action", CommandName: "ResetStatesCommand", Tooltip: "Clear my own stuck ailments, waits, and movement holds — return to idle"),
         new("action.getall", "Get All", Kind.Command, "Action", CommandName: "GetAllCommand", Tooltip: "Pick up every item on the room floor"),
         new("action.dropall", "Drop All", Kind.Command, "Action", CommandName: "DropAllCommand", Tooltip: "Drop every carried (unworn) item"),
+        new("action.dropeverything", "Drop Everything", Kind.Command, "Action", CommandName: "DropEverythingCommand", Tooltip: "Drop everything held — worn gear, light, keys and coins too"),
+        new("action.dropcoins", "Drop Coins", Kind.Command, "Action", CommandName: "DropCoinsCommand", Tooltip: "Drop every coin you're carrying"),
+        new("action.dropkeys", "Drop Keys", Kind.Command, "Action", CommandName: "DropKeysCommand", Tooltip: "Drop every key on your key ring"),
         new("action.equipall", "Equip All", Kind.Command, "Action", CommandName: "EquipAllCommand", Tooltip: "Wear the Default gear set"),
         new("action.depositall", "Deposit All", Kind.Command, "Action", CommandName: "DepositAllCommand", Tooltip: "Bank wealth down to the keep-on-hand floor"),
     };
