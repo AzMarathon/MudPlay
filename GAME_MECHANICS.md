@@ -13,6 +13,12 @@ it isn't here and you're unsure, ask.
   extending anything that depends on it.
 - **[CONFLICT — ask the user]** — two recorded statements disagree; both are kept until the user
   settles it.
+- **Unrated** — recorded without a confidence tag; treat it as unverified and check the code or ask
+  before building on it.
+- **Client policy** — a MudPlay design decision, not game behaviour; recorded here because it sits
+  next to the mechanic it acts on.
+
+A status line with no `Realm:` part means the realm wasn't recorded — don't assume `both`.
 
 **Entry format.** Each `###` topic sits in the one chapter its subject belongs to, and reads:
 1. a status line — `*Status: CONFIRMED <date> (<source>; report \`<id>\`) · Realm: both | Paradigm | Stock*`;
@@ -52,9 +58,10 @@ how many swings or spell fires a player or monster gets inside one round.
 ### Combat round (5s) and the between-round cast cycle
 *Status: CONFIRMED (user); between-round-cycle rule CONFIRMED 2026-09-16 (user; report `paradigm-20260916-074131`)*
 
-- **A combat round is 5 seconds** — precisely ~5.04s; the client surfaces it as a round "5" for
-  human input. This is the cadence of combat lines. *([CONFIRMED])*
-- **A between-round spell can be cast once per combat round.** *([CONFIRMED])*
+- **A combat round is 5 seconds** — precisely ~5.04s; the client shows it as a 5-second round.
+  This is the cadence of combat lines. *([CONFIRMED])*
+- **A between-round spell can be cast once per combat round.** *([CONFIRMED])* See *Spells, buffs &
+  conditions → One between-round spell per combat round*.
 - **The between-round cycle runs on this SAME 5s tick WHETHER OR NOT you are in combat.**
   *([CONFIRMED] 2026-09-16, user)* The one-0-energy-cast-per-round cap always applies; a second
   cast within the same 5s window draws `You have already cast a spell this round!`.
@@ -67,7 +74,7 @@ how many swings or spell fires a player or monster gets inside one round.
     or after the window lapses.
 
 ### Spell round (3s) and durations
-*Status: CONFIRMED (user); wall-clock length OBSERVED (report `paradigm-20260816-222917`)*
+*Status: CONFIRMED (user); wall-clock length OBSERVED (report `paradigm-20260816-222917`; observed on Paradigm)*
 
 - **A spell round is 3 seconds.** *([CONFIRMED])* Buff/debuff durations on a player, item
   durations, and spell durations (e.g. a teleport / boat-transit spell) are all counted in
@@ -105,7 +112,7 @@ how many swings or spell fires a player or monster gets inside one round.
   fires while you're standing in a monster-less room mid-transit.
 - **Free rooms per hop ≈ `floor(5s ÷ step-seconds)`.** Concretely (user): at **1.0–1.2s per step
   you can cross 4 empty (non-lair) rooms** between lairs without dropping a round; **above 1.2s it
-  drops to 3**.
+  drops to 3**. **[CONFLICT — ask the user]** the formula gives 5 at 1.0s; which is right?
 
 ### Exp/hour ceiling and loop geometry
 *Status: CONFIRMED 2026-08-02 (user); single-target-ceiling rule CONFIRMED 2026-08-14 (user)*
@@ -124,16 +131,19 @@ how many swings or spell fires a player or monster gets inside one round.
   so that return walk is dead time that wastes combat ticks. So the middle lairs of a line are hit
   less than a naive "each lair once per lap" count, and the end lairs less than the middle.
 - **Client use:**
-  - A faithful estimate must **replay the actual room order** with per-mob respawn clocks (per the
-    "Lair respawn timers" section), not assume a uniform per-lap fire rate — that's what the Exp/Hr
-    estimator now does (exp-estimator work).
+  - A faithful estimate must **replay the actual room order** with per-mob respawn clocks (see
+    *Monsters, lairs & spawns → Lair respawn timers*), not assume a uniform per-lap fire rate —
+    that's what the Exp/Hr estimator now does.
 
 ### Combat spells: engaged once, auto-repeat per round
 *Status: CONFIRMED 2026-08-22 (user)*
 
 - **A combat spell is engaged ONCE and auto-repeats.** You type `disr zombie` a single time; the
   engine then re-fires it **every round on its own** — you do NOT re-issue it per round — until the
-  monster dies or an **in-between-round action breaks combat**.
+  monster dies or an **in-between-round action breaks combat**. The repeat stops on `break`,
+  moving, the room clearing, the target dying (single-target) or any non-swing action (cast /
+  equip) with its `*Combat Off*` (see *Combat → Non-swing actions break combat (casting,
+  equipping)*). See also *Combat → Spell attacks auto-repeat; re-announcing a single-target spell is harmless*.
 - **Fires per round = `floor(1000 / EnergyCost)`** — the 1000-energy round budget over the spell's
   cost. A **500-cost** spell (`disr`, `mmis`, `lbol`) fires **up to twice** a round, **333** → 3×,
   **250** → 4×.
@@ -169,7 +179,7 @@ how many swings or spell fires a player or monster gets inside one round.
 - **Evidence** *([CONFIRMED] 2026-08-31 vs MMUD-Explorer + live game)*: a L28 Paladin (CombatLVL 6)
   with throwing hammers (speed 1100) at 57% encum reads normal 7.143 / bash 3.572 in `stat all`,
   matching `level × 6`; `level × 8` inflated it to 9 / 4.5.
-- **Leftover player energy rolls over** the same way as a monster's (see below): `CombatCalculator`
+- **Leftover player energy rolls over** the same way as a monster's (see *Monster swings per round: energy budget and rollover*): `CombatCalculator`
   uses `remaining = (remaining % energy) + 1000`.
 
 ### Monster swings per round: energy budget and rollover
@@ -204,10 +214,10 @@ how many swings or spell fires a player or monster gets inside one round.
 
 ## Wire, prompt & command output
 
-What the game prints on the wire, including the prompt/statline, the command rate limiter, the output formats of informational commands (`spells`, `health`, `bank`), social/interaction lines, the realm exit sequence, the catalogue of lines the client parses, and the MegaMUD `messages.md` source format.
+What the game prints on the wire, including the prompt/statline, the command rate limiter, the output formats of informational commands (`spells`, `health`; the `bank` output is in *Money, banks & shops → Bank commands: balance / withdraw / deposit*), social/interaction lines, the realm exit sequence, the catalogue of lines the client parses, and the MegaMUD `messages.md` source format.
 
 ### Statline & prompt shape
-*Status: no confidence tag in source*
+*Status: Unrated*
 
 - **The prompt/statline is user-defined.** MajorMUD's `set statline` lets a player format the prompt however they like. The default is bracketed HP/mana (`[HP=%h/MA=%m]: %r`, or `KAI`, or HP-only), and that is what the vast majority run. A custom statline can be any shape (`set statline full custom <template>`).
 - **Template static text is exact; dynamic parts are `%`-wildcards** (`%h`, `%m`, `%r`, …).
@@ -222,11 +232,11 @@ What the game prints on the wire, including the prompt/statline, the command rat
 ### Command rate limit (typing/sending too fast)
 *Status: CONFIRMED 2026-08-25 (user); bulk `get`/`drop` extension OBSERVED 2026-09-02 (capture `stock-20260902-224515`); prompt-per-rate-line OBSERVED 2026-09-03 · Realm: both (wording differs per realm)*
 
-- **The game throttles how fast a client may send commands** (typed input or telepaths). Exceeding the limit **drops** the offending command silently on the game side, so it is never processed. The wording of the notice is **realm-specific**.
+- **The game throttles how fast a client may send commands** (typed input or telepaths). Exceeding the limit means the offending command **is dropped and never processed**. The wording of the notice is **realm-specific**.
 - **Stock realms are stricter and give a two-tier signal.** Approaching the limit, the game nudges with **`Why don't you slow down for a few seconds?`**. Pushing past it drops the command with **`You are typing too quickly - command ignored`**.
 - **Paradigm realms give no early warning.** They accept moderately paced rapid input without complaint and only object to a **burst of more than ~10 lines at once**, with the red line **`Too many messages sent - please wait for a few moments before
   trying again`**. Any lines beyond the burst allowance are dropped.
-- **Bulk sends must be paced, and a rate-limit line means the last send was lost.** For example, `@roomba sync` can be ~20 telepaths. Pace them out so a burst never forms (MudPlay uses ~800ms between telepaths), and treat the "command ignored" / "too many messages" lines as a signal that the last send was lost and should be re-sent.
+- **Bulk sends must be paced, and a rate-limit line means the last send was lost.** For example, `@roomba sync` can be ~20 telepaths. Pace them out so a burst never forms, and treat the "command ignored" / "too many messages" lines as a signal that the last send was lost and should be re-sent.
 - **Bulk `get`/`drop` is limited just like telepaths** *(2026-09-02, observed; capture `stock-20260902-224515`)*. A Roomba sort sent a whole room's batch at once (26 gets) and tripped the stock limiter. **Every** command in the batch was dropped, and so was the movement command that followed it. That left the tracker Pending on a move the server never processed, which took the sweep down with it.
 - **A flood also costs the *next* command, not just the flooded batch.** This collateral damage is the part to remember.
 - **Every rate-limit line the game emits carries its own prompt** *(2026-09-03, observed)*. So the prompt alone is NOT sufficient as a rate signal. Gating purely on prompts speeds the client up in exactly the condition that should slow it down: the nudge arrives with a prompt, the prompt releases another command, and that command earns another nudge. This was observed as bursts of five nudges inside 200ms, repeating on every back-off.
@@ -234,11 +244,11 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **This is not the outbound-write interleaving bug.** That was a client-side concurrency defect in `TelnetClient`, not a game rate limit.
 
 **Client use:**
-- MudPlay paces telepaths ~800ms apart (e.g. `@roomba sync`).
-- Roomba now releases `get`/`drop` one command per wire prompt. The game's own prompt acts as the meter, so no rate has to be guessed. Because the prompt alone is not sufficient, it is used as a gate on top of a time floor.
+- Every telepath passes `TelepathPacer`'s 100 ms floor; bulk reply bursts (e.g. `@roomba sync`) go ~800 ms apart via `PacedReplySender`. See *Talk & chat channels → Telepath throttle and per-telepath acknowledgement*.
+- Roomba releases `get`/`drop` at most one per wire prompt AND no faster than an 800 ms floor (`GhSweepManager.MinCommandInterval`). The game's own prompt acts as the meter, so no rate has to be guessed. Because the prompt alone is not sufficient, it is used as a gate on top of a time floor.
 
 ### Message catalogue (lines the client parses)
-*Status: mostly untagged in source; the Thorns/ShockShield row is CONFIRMED 2026-08-15 (user)*
+*Status: Unrated; the Thorns/ShockShield row is CONFIRMED 2026-08-15 (user)*
 
 | Event | Line |
 |---|---|
@@ -255,34 +265,34 @@ What the game prints on the wire, including the prompt/statline, the command rat
 | Weapon ineffective | `Your weapon has no effect against this monster!` |
 | Fists ineffective | `Your fists have no effect against this monster!` |
 | Spell can't affect target (e.g. living-only vs NonLiving) | `Your spell has no effect on <monster>.` |
-| Local player death (lives readout, slow / normal) | `You now have N lives remaining.` |
-| Local player death (DoT / no named killer) | `You have been killed!` |
-| Miracle-save lives readout (a death, still has lives) | `You have N lives left.` |
-| Local player slain (attacker named) | `You have been slain by <killer>.` |
-| Party member / other player killed in room | `<Name> has died.` |
+| Local player death (lives readout, slow / normal; see *Death & corpse recovery → Death lines & the miracle-save*) | `You now have N lives remaining.` |
+| Local player death (DoT / no named killer; see *Death & corpse recovery → Death lines & the miracle-save*) | `You have been killed!` |
+| Miracle-save lives readout (a death, still has lives; see *Death & corpse recovery → Death lines & the miracle-save*) | `You have N lives left.` |
+| Local player slain (attacker named; see *Death & corpse recovery → Death lines & the miracle-save*) | `You have been slain by <killer>.` |
+| Party member / other player killed in room (see *Death & corpse recovery → Death lines & the miracle-save*) | `<Name> has died.` |
 | Character drops (0 HP, party/room-side; self sees own name) | `<Name> drops to the ground!` |
 | Being dragged while dropped (dragged char's view, per move) | `<Leader> is dragging you around.` |
 | Action attempted while dropped (rejection) | `You may not do that while you are mortally wounded!` |
-| Coin pickup (no trailing period) | `You picked up N <coin>` (e.g. `6 silver nobles`) |
+| Coin pickup (no trailing period; see *Money, banks & shops → Coin wire wording*) | `You picked up N <coin>` (e.g. `6 silver nobles`) |
 | Coin drop | `You dropped N <coin>.` |
 | Coin stash / hide | `You hid N <coin>.` |
 | Bank deposit (manual or auto; multi-currency, may wrap) | `You deposit 1 platinum piece, 93 gold crowns, ... copper farthings.` |
 | Corpse loot drop (bare keyword) | `N <keyword> drop to the ground.` |
 | Room cash survey | `You notice ... N <coin> ... here.` |
 | Move refused — no exit | `There is no exit in that direction!` |
-| Move refused — blocked way | `You can't go that way.` / `You can't move that way.` |
-| Move refused — shut door | `The door is closed.` |
+| Move refused — blocked way | `You can't go that way.` / `You can't move that way.` *([NEEDS CONFIRMATION] the client's refusal detector matches "You can't move (in) that direction" — which wording does the game print?)* |
+| Move refused — shut door / gate (the client matches case-insensitively, `.` or `!`) | `The door is closed.` / `The door is Closed!` (captured forms); gate form `The gate is closed!` |
 | Room too dark to see (starves name + exits + Also-here) | `The room is very dark - you can't see anything.` |
 | Room considerably darker (same starving) | `The room is pitch black...` |
 | Guard interposes for a guarded monster (no trailing period, no prefix) | `<guard> moves to protect <protected>` |
 | Incoming mob attack — miss (dark cyan; reveals a mob in a dark room) | `The <monster> <verb> at you` |
 | Incoming mob attack — hit (dark cyan; reveals a mob in a dark room) | `The <monster> <verb> you for N damage!` |
-| Thorns / ShockShield reflect (**white** line, follows the **red** hit that triggered it, inside a *Combat Engaged*…*Combat Off* window) | `The <item-wording> stab <attacker> for N damage!` — **[CONFIRMED 2026-08-15, user]** a worn item with the **ShockShield** property (value = max reflect damage, e.g. 5) strikes the attacker BACK for up to that much when the wearer is hit **physically**; fires after an **armor-block glance** (0 damage to us) OR a real hit. The item wording varies (`armour spikes`, `collar spikes`, …), so it's recognized by COLOUR (white/default, vs the red of a real incoming hit) + `for N damage` + a non-`you` target — NOT by wording. The **monster is the victim**, so it's OUR (or a party member's) damage, classified `Reflect`, not a monster hit |
+| Thorns / ShockShield reflect (**white** line, follows the **red** hit that triggered it, inside a *Combat Engaged*…*Combat Off* window) | `The <item-wording> stab <attacker> for N damage!` — see *Armour, defence & to-hit → Thorns / ShockShield reflect damage* |
 | Monster leaves the room (e.g. dragged out by a fleeing player) | `<name> walks out of the room to <dir>.` **or** `<name> exits the room to <dir>.` — both confirmed; the "exits" form (no leading article) was the paradigm drag-out capture |
-| Attacked a target not in the room | `Your command had no effect.` |
+| Attacked a target not in the room (with talk slow on; with it off the words are spoken — see *Combat → Attacking a monster that isn't in the room*; also a no-op `break` on Paradigm) | `Your command had no effect.` |
 | Toll exit unaffordable | `You do not have enough to cover the toll of N gold crowns.` |
-| Train success — stock (carries the attained level) | `You hand over <cost> and you receive training to attain level N.` |
-| Train success — Paradigm/ParaMud (**level-less**) | `You hand over <cost> to train to the next level!` — a successful train with **no level number**; mutually exclusive with the stock line above, so auto-train infers the new level as current+1 |
+| Train success — stock (carries the attained level; see *Character stats & progression → Trainers: level band, class restriction, and `train stats`*) | `You hand over <cost> and you receive training to attain level N.` |
+| Train success — Paradigm/ParaMud (**level-less**; see *Character stats & progression → Trainers: level band, class restriction, and `train stats`*) | `You hand over <cost> to train to the next level!` — a successful train with **no level number**; mutually exclusive with the stock line above, so auto-train infers the new level as current+1 |
 | Server PvP announcement (**Paradigm-only**) | `Server PvP Message: <body>` — realm-wide server broadcast for PvP events; the kill form is `Server PvP Message: <killer> just killed <victim>!`, but other PvP bodies share the same `Server PvP Message: ` prefix. Not emitted on stock realms |
 
 ### The `spells` / `sp` command output
@@ -328,28 +338,6 @@ What the game prints on the wire, including the prompt/statline, the command rat
 **Client use:**
 - StatParser.TryHealthCommandLine, gated on an observed outbound `health`.
 
-### The `bank` command output
-*Status: CONFIRMED 2026-09-07 (user + screenshots) · Realm: both*
-
-- **`bank` is a self-only, global account query.** It lists the character's balance at **every bank they have ever deposited at**, from any room. It is NOT a room action like `dep`/`with`, which do require standing at the bank.
-- **A bank the character has never used stays hidden; one used and then fully withdrawn shows with a zero balance.**
-- **It never shows party members' banks.** Bank balances can only be seen for yourself. Party on-hand cash is visible separately via `@wealth`, which reports **carried** coin only, never deposits.
-- **Output is one two-line block per bank, repeated:**
-
-  ```
-  Your balance at Bank of Godfrey is:                              (Paradigm — bank name only)
-  On deposit: 19578816 copper farthings [195,788.16 gold crowns]
-  Your balance at Bank of Godfrey (#8) is:                         (Stock — appends the shop number)
-  On deposit: 4512 copper farthings [45.12 gold crowns]
-  ```
-
-- **The header is `Your balance at <name> is:`, where `<name>` is the bank's shop name.** Stock appends a ` (#N)` shop-number suffix that Paradigm omits. Drop the suffix so the name matches the shop-name key.
-- **The authoritative figure on the deposit line is the copper farthings count** (thousands-commas allowed). The bracketed gold-crowns value is only a gloss.
-- **Because the name is the shop name, a parsed balance maps back to its room(s) via the bank-shop catalogue (ShopType 7).** So a route that needs more money than the purse holds can point at the nearest bank where the deposit actually sits.
-
-**Client use:**
-- BankBalanceProbe.
-
 ### Another player looking at you
 *Status: CONFIRMED 2026-07-20 (user)*
 
@@ -357,7 +345,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **The wording is user-supplied, not data-derived.** It is a live interaction line and is not present in any imported MDB table.
 
 **Client use:**
-- The reactive-look-back feature (Settings → Talk) keys on this exact phrase. If a realm's wording differs, it's a one-line regex tweak (`DefaultPatterns.PlayerLooksAtYou`).
+- The reactive-look-back feature (Settings → Talk) keys on this exact phrase. If a realm's wording differs, it's a one-line regex tweak (`KnownPatterns.PlayerLooksAtYou`, regex registered in `DefaultPatterns`).
 
 ### BBS actions / emotes (the `action list` socials)
 *Status: CONFIRMED 2026-08-14 (user + live capture)*
@@ -436,8 +424,7 @@ How the game's talk modes and chat channels behave: say forms, the gang channel'
 *Status: CONFIRMED 2026-08-24 (user)*
 
 - **On a public / broadcast channel (gangpath, gossip, auction, broadcast) the server echoes our own message back tagged with our character name**, e.g. `Raijin gangpaths: <msg>`. It does **NOT** use `You`.
-- **Only the directed/room channels use the `You` form:** say → `You say "…"`, telepath echo → `--- Telepath sent to X ---`.
-  - The echo is written `--- Telepath sent to X ---` here and `--- Telepath Sent to <Name> ---` in the acknowledgement entry below; only the capitalisation differs. The client's parser matches the lowercase form (`DefaultPatterns` `ConversationTelepathOut`) and `TelepathPacer` matches the acknowledgement case-insensitively, so either casing is read correctly.
+- **Only the directed/room channels use the `You` form:** say → `You say "…"`, telepath echo → `--- Telepath sent to X ---` / `--- Telepath Sent to <Name> ---`. The client reads either casing (`ConversationTelepathOut`, registered in `DefaultPatterns`, is case-insensitive, as is `TelepathPacer`'s acknowledgement match). See *Talk & chat channels → Telepath throttle and per-telepath acknowledgement*.
 
 **Client use:**
 - In `RemoteCommandManager`, the null-/`You`-speaker self-echo guard can't catch a public-channel self-echo, so it must compare the speaker against our own name (`SelfNameProvider` → `PartyManager.LocalCharacterName`, given-name form). Otherwise our own gangpath'd `@`-command (e.g. `@timer sync`) is read back as an inbound command and bounces a denial at the whole gang.
@@ -485,7 +472,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - **A level-10 character who spent nothing has 190 CP** (100 base + 9×10). Confirmed by a level-10 Kang who trained straight to 190 spent.
 
 ### What CP costs to spend
-*Status: CONFIRMED*
+*Status: CONFIRMED · Realm: differs*
 
 - **Raising a stat one point costs** `((currentStat - raceMin) / 10) + 1` CP — it escalates by 1 for every full 10 the stat sits above its race minimum.
 - **ParaMUD/Paradigm is uncapped; Stock caps the per-point cost at 10.**
@@ -493,7 +480,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Worked example** — Kang (mSTR 55, mAGL 30, mHEA 50) at level 10 with 190 CP: STR 55→99 = 120 CP, AGI 30→60 = 60, HEA 50→60 = 10 → exactly 190. The **next** STR point (99→100) costs `(99-55)/10 + 1 = 5` CP, which 190 can't afford, so **99 is the real ceiling** at that level — a plan must not offer 100.
 
 ### Class/race exp modifier — the `ExpTable` field carries a −100 baseline
-*Status: CONFIRMED 2026-09-23 (user + GreaterMUD Explorer screenshots, Paradigm 1.9.1) · Realm: Paradigm*
+*Status: CONFIRMED 2026-09-23 (user + GreaterMUD Explorer screenshots, Paradigm 1.9.1) · Realm: Paradigm* *([NEEDS CONFIRMATION] the client applies the +100 baseline on Stock too — does Stock's table include it?)*
 
 - **The class exp modifier a player reads (and MMUD / GreaterMUD Explorer shows) is `ExpTable + 100`**, not the raw MDB field: the stored `ExpTable` is the class's delta ABOVE the 100% baseline. E.g. Warrior `320` → **420%**, Thief `230` → **330%**, Paladin `490` → **590%** — a uniform +100 across every class.
 - **The race exp modifier is added raw (no +100):** the game's exp-chart percentage is **`(classExpTable + 100) + raceExpTable`** (`ExperienceTableCalculator.CalcExpChart`), so the 100% baseline is counted once, on the class term.
@@ -520,6 +507,9 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Trainers carry a level band.** A training room is `Shops.ShopType == 8`; its `MinLVL` / `MaxLVL` fields are the **level range it can train** and `ClassRest` the single class it serves (a `Classes` row, `0` = any class).
 - **The range is one contiguous band per shop** — the schema has no way to express a gap, so a trainer never splits into multiple bands.
 - **The `MinLVL` / `MaxLVL` band gates `train` (level up) ONLY — NOT `train stats` (CP allocation).** Applying stat points works at **any** trainer that isn't class-restricted against you (a universal Training Room `ClassRest == 0`, or your own class's trainer), regardless of the trainer's level band. The `train` level-up path stays band-gated.
+- **The train success line differs by realm** (also listed in *Wire, prompt & command output → Message catalogue (lines the client parses)*):
+  - Stock carries the attained level: `You hand over <cost> and you receive training to attain level N.`
+  - Paradigm/ParaMud is **level-less**: `You hand over <cost> to train to the next level!` — mutually exclusive with the stock line, so auto-train infers the new level as current+1.
 - **A trainer can also stock items** (the Bard Training Room sells songsheets, the Thief Training Room lockpicks) — same 20-slot stock table as a merchant — so a training room is a trainer *and* a merchant at once, not either/or.
 
 **Client use:**
@@ -542,7 +532,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - A screen-scan detector must arm on the box's *rising edge* only — a level-triggered re-arm flaps held→resume→held off the stale box every feed and holds the movement engine (the "walker stalls after training, moves one room per manual `rm`" bug).
 
 ### Base-stat → derived-stat contributions (overview)
-*Status: see each derived-stat topic below*
+*Status: Unrated (each derived-stat topic in this chapter carries its own tag)*
 
 - **What each of the six base stats buys**, so a CP plan can target real breakpoints. These are the gear-free stat-and-level portion (item bonuses stack on top in-game).
 - **Integer division truncates toward zero**, matching the engine.
@@ -577,7 +567,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - `CalcStealthBase` is realm-split.
 
 ### Crit rating (base)
-*Status: CONFIRMED Stock (via `dll-stats-map.md` (`0x710`)); **AGL term NOT verified for Paradigm** — stock formula used for both, flag*
+*Status: CONFIRMED Stock (via `dll-stats-map.md` (`0x710`)); **AGL term NOT verified for Paradigm** — stock formula used for both, flagged for confirmation*
 
 - **Formula:** `clamp(level/10 + (INT-50)/10 + (AGL-50)/20 + (CHM-50)/30, 1, 75)`. So INT ~10/pt, AGL ~20/pt, CHM ~30/pt.
 
@@ -587,19 +577,19 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Floored at 0:** min `(STR-100)/10`, max `(STR-50)/10`, never negative. So ~+1 min per 10 STR above 100, ~+1 max per 10 above 50.
 
 ### Max encumbrance (carry weight)
-*Status: CONFIRMED Stock (via `dll-stats-map.md` (`0xb2`)); **NOT verified for Paradigm** — stock formula used for both, flag*
+*Status: CONFIRMED Stock (via `dll-stats-map.md` (`0xb2`)); **NOT verified for Paradigm** — stock formula used for both, flagged for confirmation*
 
 - **Formula:** `STR*48`, plus `STR*36 - 3600` once STR > 100 (steeper past 100). So +48/pt (more above 100).
 
 ### Magic resistance
-*Status: CONFIRMED Stock (via `dll-stats-map.md`); **NOT verified for Paradigm** — stock formula used for both, flag*
+*Status: CONFIRMED Stock (via `dll-stats-map.md`); **NOT verified for Paradigm** — stock formula used for both, flagged for confirmation*
 
 - **Formula:** `(INT + 3*WIL)/4`. WIL is the heaviest term (~0.75/pt vs INT ~0.25/pt).
 
 ### Health (HEA) — max HP and HP regen
-*Status: no tag in source*
+*Status: Unrated*
 
-- **HEA feeds max HP and HP regen, both level-scaled** (see the Vitality section).
+- **HEA feeds max HP and HP regen, both level-scaled** (see *Health, resting & recovery → Max-HP sources*).
 - **Max-HP marginal per HEA point is `(1/2 + level/16)`** (the `HEA/2` + `(HEA-50)*level/16` terms of `CalcMaxHp`), so it rises nearly every point and steepens with level.
 - **HP regen idle is `(level+20)*HEA/divisor`** (750 stock / 500 Para), tripled while resting.
 
@@ -607,7 +597,9 @@ How a character earns and spends character points (CP), how exp needed per level
 - The CP tooltip shows the current-value max-HP marginal and the next HEA that ticks regen up.
 
 ### Mana regen — one stat per class; max mana is not stat-driven
-*Status: CONFIRMED (user + `CharacterCalculator.CalcManaRegen`, matches the mana-regen section)*
+*Status: CONFIRMED (user + `CharacterCalculator.CalcManaRegen`)*
+
+- **Matches the full passive-tick model in *Health, resting & recovery → Mana regeneration & the ManaRgn breakpoints*** (the 30 s tick, the `ManaRgn%` modifier and its breakpoints, realm forms); the stat-side view follows.
 
 - **Mana regen scales off ONE stat per class:** magery type 1 = INT (Mage), 2 = WIL (Priest), 3 = (INT+WIL)/2 (Druid), 4 = CHM (Bard), 5 = fixed Kai rate (Mystic).
 - **Core formula:** `((level+20)*stat*(mageryLevel+2))/1650`.
@@ -619,7 +611,7 @@ How a character earns and spends character points (CP), how exp needed per level
 ### Spellcasting skill (spellLvl, 0x604)
 *Status: CONFIRMED Stock (RE'd DLL `dll-stats-map.md`, verified asm 0x41aae0); Paradigm unverified*
 
-- **Formula:** `Level*2 + manaStat + mageryLevel*5 + spellcastingAbility(70)`.
+- **Formula:** `Level*2 + manaStat + mageryLevel*5 + spellcastingAbility(70)` — 70 is the +spellcasting ability code (gear/innate).
 - **The blended `manaStat` differs from the mana-regen stat:** type 1 = (3*Int+Wil)/6, 2 = (3*Wil+Int)/6, 3 = (Int+Wil)/3, 4 = (3*Chm+Wil)/6. So for a Priest each WIL point is ~+0.5 spellcasting (+1 per 2).
 - **Non-casters / Mystics have no standard spellcasting skill.**
 
@@ -657,8 +649,8 @@ How a character earns and spends character points (CP), how exp needed per level
 ### Realm differences in stat derivation & Paradigm-verification summary
 *Status: CONFIRMED 2026-09-10 (inspected syntax53/MMUD-Explorer `modMMudFunc.bas`) for the realm-difference note*
 
-- **MMUD-Explorer reads, not derives, most derived stats:** it reads crit / encumbrance / magic-resist / spellcasting / mana-regen / HP straight from the pasted character (`tCharStats.nCrit`, `.nEncumMax`, `.nMagicRes`, `.nSpellcasting`, …) — it does NOT derive them from primary stats, so it provides no independent Paradigm derivation to compare against. The only stat→derived formulas that exist are the RE'd stock ones here.
-- **Known realm differences live in how these get *applied* in combat** (MMUD-Explorer's `bGreaterMUD` branches: accuracy weighting, dodge-vs-accuracy curve, spell-damage multiplier, resist application) and in the two stat derivations that already realm-split in code — **normal-attack accuracy** (Stock STR+AGL vs Paradigm AGL+INT+CHM) and **HP-regen divisor** (750 stock / 500 Paradigm). Those two the CP tooltip already reflects per realm; the rest use the stock derivation for both, flagged.
+- **MMUD-Explorer reads, not derives, most derived stats:** it reads crit / encumbrance / magic-resist / spellcasting / mana-regen / HP straight from the pasted character (`tCharStats.nCrit`, `.nEncumMax`, `.nMagicRes`, `.nSpellcasting`, …) — it does NOT derive them from primary stats, so it provides no independent Paradigm derivation to compare against. Most of the stat→derived formulas here are the RE'd stock ones.
+- **Known realm differences live in how these get *applied* in combat** (MMUD-Explorer's `bGreaterMUD` branches: accuracy weighting, dodge-vs-accuracy curve, spell-damage multiplier, resist application) and in the three stat derivations that already realm-split in code — **normal-attack accuracy** (Stock STR+AGL vs Paradigm AGL+INT+CHM), **stealth rounding** (Stock truncates each term, Paradigm rounds once — see *Stealth base*, `CalcStealthBase`) and **HP-regen divisor** (750 stock / 500 Paradigm). Those three the CP tooltip already reflects per realm; the rest use the stock derivation for both, flagged for confirmation.
 - **Realm-verified:** accuracy (both realms, incl. the MMUD-Explorer Paradigm branch), dodge, stealth (MMUD-Explorer-verified — realms differ by a rounding step, not identical), and melee damage.
 - **Unverified on Paradigm:** **crit's AGL term, encumbrance, and magic resistance use the stock formula for Paradigm as well and are unverified there** — treat as close-but-unconfirmed until a Paradigm source or capture pins them.
 
@@ -666,7 +658,7 @@ How a character earns and spends character points (CP), how exp needed per level
 
 ## Armour, defence & to-hit
 
-How Armour Class and damage resistance are stored and displayed, which sources add to a character's defence, and the realm-dependent limits on a monster's chance to hit (to-hit floor, dodge caps).
+How Armour Class and damage resistance are stored and displayed, which sources add to a character's defence, and the realm-dependent limits on a monster's chance to hit (to-hit floor, dodge caps), plus the Thorns/ShockShield damage a worn item reflects back at an attacker.
 
 ### Armour Class (AC) — stored at 10×, displayed to the tenth, floored for combat
 *Status: CONFIRMED 2026-09-07 (user + source: syntax53/MMUD-Explorer); CONFIRMED 2026-09-04 (user)*
@@ -699,7 +691,7 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 
 - **Shadow property (ability code 9) — a flat +10 AC that stacks only once,** no matter how many sources carry it. Ten shadow items still grant a single +10, not +100. Note: the client's `AbilityNames`/stat map currently labels code 9 "Shadow Resist" and accumulates its raw `AbilVal`; the *AC effect* is the flat +10-once, computed separately from that raw sum.
 - **Prot-Evil / PREV (ability code 24) — 1 AC per point, but ONLY versus evil monsters** (the majority of monsters). Because it's conditional, it is surfaced as its own "+N vs evil" line rather than folded into a flat AC total.
-- **Prot-Good / PRGD (ability code 25, granted by spell #108 "protection from good") — 1 AC per point, but ONLY versus GOOD monsters, and STOCK realms only** (see realm exclusivity below). The mirror of Prot-Evil.
+- **Prot-Good / PRGD (ability code 25, granted by spell #108 "protection from good") — 1 AC per point, but ONLY versus GOOD monsters, and STOCK realms only** (see the ProtGood vs VileWard realm-exclusivity bullet in this topic). The mirror of Prot-Evil.
 - **VileWard (ability code 1113) — a Paradigm-only AC bonus vs evil monsters whose magnitude scales with the wearer's own evil.** Confirmed formula (MMUD-Explorer `CalculateAttackDefense`): when the target is evil, `wearer-evil ≤ Seedy → 0`, `≤ Criminal → halved`, then **`÷10`** and added to secondary defense.
 - **ProtGood vs VileWard are realm-EXCLUSIVE.** The ability *numbering* is shared across realms (25 = ProtGood, 1113 = VileWard in both — `bGreaterMUD` changes behavior, not numbers), but **Stock uses ProtGood and Paradigm uses VileWard**. Paradigm **dropped ProtGood**: its server does not honor ability 25, and its gear carries none (all moved to VileWard 1113). A stray ability-25 value on Paradigm must never add to defense.
 
@@ -720,7 +712,7 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 - The finder shows the nominal (max) value, not an encumbrance-adjusted one, since it's a planning aid without a fixed load assumption.
 
 ### To-hit floor — the minimum chance a monster can ever land, by realm and armour type
-*Status: CONFIRMED 2026-09-06 (MMUD-Explorer `modMMudFunc.bas` `CalculateAttackDefense`)*
+*Status: CONFIRMED 2026-09-06 (MMUD-Explorer `modMMudFunc.bas` `CalculateAttackDefense`) · Realm: differs*
 
 - **A physical hit chance never reaches 0%.** No matter how high a defender's AC/Dodge climbs, an attacker's chance to land a physical hit is **clamped to a floor**. The floor is realm-dependent, and on ParaMUD it also depends on the **defender's class armour type**.
 - **Stock: 8%.** Flat, regardless of armour type.
@@ -732,6 +724,19 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 - Mirrors `CombatCalculator.GetHitMin`: ParaMUD base `PARAMUD_HIT_MIN = 2`, minus 1 when `ArmourType` is in 1..6; Stock `STOCK_HIT_MIN = 8`.
 - This is why Monster Intel's Hits-You-% column can read **1%** for a light-armour ParaMUD class and its filter dropdown grows a leading `≤1%` band there — the estimator threads the class `ArmourType` into the hit-chance calc so the shown number matches the engine's real minimum (PR #503, v3.52.7).
 
+### Thorns / ShockShield reflect damage
+*Status: CONFIRMED 2026-08-15 (user)*
+
+- **Wire line:** `The <item-wording> stab <attacker> for N damage!` — a **white** line that follows the **red** hit that triggered it, inside a *Combat Engaged*…*Combat Off* window.
+- **A worn item with the ShockShield property strikes the attacker BACK** when the wearer is hit **physically**. The property's value is the max reflect damage (e.g. 5); the reflect does up to that much.
+- **It fires after an armor-block glance (0 damage to us) OR a real hit.**
+- **The item wording varies** (`armour spikes`, `collar spikes`, …), so the line can't be keyed on wording.
+- **The monster is the victim**, so the damage is OURS (or a party member's), not a monster hit.
+
+**Client use:**
+- Recognized by COLOUR (white/default, vs the red of a real incoming hit) + `for N damage` + a non-`you` target — NOT by wording.
+- Classified `Reflect`, not a monster hit.
+
 ---
 
 ## Health, resting & recovery
@@ -742,7 +747,7 @@ How HP works from full health down through dropping and death, how monster healt
 *Status: CONFIRMED*
 
 - **Class sets the base health rolls; race adjusts them; level scales within those bounds.** The same class differs by race, and max HP climbs with level between the race/class-determined floor and ceiling.
-- **The Health stat scales HP regen, not max HP.** Higher Health means faster natural recovery. It is a regen rate on a scale, not a cap.
+- **The Health stat scales HP regen and also feeds max HP.** Higher Health means faster natural recovery (a regen rate on a scale), and it adds to max HP too — `CharacterCalculator.CalcMaxHp` uses `health/2 + (health-50)*level/16` (see *Character stats & progression → Health (HEA) — max HP and HP regen*).
 
 ### Positive HP — fully functional
 *Status: CONFIRMED*
@@ -754,30 +759,18 @@ How HP works from full health down through dropping and death, how monster healt
 *Status: CONFIRMED*
 
 - **Hitting 0 HP drops the character.** They can **no longer move on their own**, and can **no longer fight or cast spells**. A dropped character is out of the action entirely, not merely immobile.
-- **A drop means bleeding out.** Left unreversed, HP keeps trending toward the BBS death threshold (see the death-readout topic below).
-- **The game rejects every action command while dropped / mortally wounded.** Movement, casting, aiding and telepaths all bounce with `You may not do that while you are mortally wounded!`, `Your command had no effect.`, or (for remote / telepath commands) `{command invalid or not allowed}`.
+- **A drop means bleeding out.** Left unreversed, HP keeps trending toward the BBS death threshold (see *Death & corpse recovery → Death threshold & consequences*).
+- **Dropping removes you from the party** — see *Party → Dropping (0 HP) or instant death removes you from the party* and *Party → Dropped ally rescue*.
+- **The game rejects every action command while dropped / mortally wounded** — except `sys …` commands (see *Sysop commands → Sysop power gating*). Movement, casting, aiding and telepaths all bounce with `You may not do that while you are mortally wounded!`, `Your command had no effect.`, or (for remote / telepath commands) `{command invalid or not allowed}`.
 - **Two reversals bring a dropped character back into the positive:**
   - **another player** issues `aid <name>` on them, or
   - a **healing spell** lifts their HP above 0.
-- **Another player can `drag <name>` a dropped character.** The dropped character then **follows wherever the dragging player moves** — their only way out of the room until aided or healed.
-- **A dropped character can still hang up.** Dropping blocks in-realm *actions* (move / fight / cast), but the **carrier drop / main-menu exit** (the Game-Exit command, e.g. `=x` / `;o`) **still goes through at 0 HP or below**. So the emergency-hangup escape stays available all the way through the bleeding-out window.
-- **HP percentage goes negative while bleeding out.** HP% is a plain `hp / maxHp` ratio with no clamp at zero, so a dropped character reads a **negative percentage**. The `par` party display shows it as such (e.g. a member driven to −12/200 HP reads a negative HP%). A percentage-based threshold is therefore a continuous scale from 100 % down through 0 % into the negatives, exactly like an absolute-HP scale.
+- **Another player can `drag <name>` a dropped character.** The dropped character then **follows wherever the dragging player moves** — their only way out of the room until aided or healed. **[CONFLICT — ask the user]** Party records drag as a leader command — can any player drag a dropped character, or only the party leader?
+- **A dropped character can still hang up.** Dropping blocks in-realm *actions* (move / fight / cast), but the **carrier drop / main-menu exit** (the Game-Exit command, e.g. `=x` / `;o`; see *Wire, prompt & command output → Realm exit / logoff sequence*) **still goes through at 0 HP or below** *([NEEDS CONFIRMATION] is it the BBS-level =x that works at 0 HP?)*. So the emergency-hangup escape stays available all the way through the bleeding-out window.
+- **HP percentage goes negative while bleeding out.** HP% is a plain `hp / maxHp` ratio with no clamp at zero, so a dropped character reads a **negative percentage**. The `par` party display shows it as such (e.g. a member driven to −12/200 HP reads a negative HP%). **[CONFLICT — ask the user]** Party says a dropped member leaves par — does par keep listing them with a negative HP% for a while? A percentage-based threshold is therefore a continuous scale from 100 % down through 0 % into the negatives, exactly like an absolute-HP scale.
 - **Client use:**
   - The client's low-HP auto-hangup fires down to (but not past) the BBS death floor, giving a dropped-but-not-yet-dead character a last chance to disconnect before dying. Its "hang up if below" trigger can be set anywhere on the HP% scale, including negative.
   - Client engines that keep firing commands while dropped accomplish nothing but noise — a dropped / mortally-wounded local player must suppress engine command output until healed / aided.
-
-### Death readout, overkill & the death threshold
-*Status: CONFIRMED*
-
-- **There is no "overkill" message.** The HP figure visible at death is just the value HP was driven to by the killing event.
-- **A single large hit can drive HP far below the true floor.** The blow overshoots the threshold with no clamp or announcement, so an overkill death's HP reading **over-negatives** (understates) the real floor.
-- **A slow death is an accurate measurement.** Bleeding out, HP crosses the floor one tick at a time and lands right at the floor, so that reading measures the true threshold.
-- **One death message, both cases.** There is exactly **one death line** — `You have been slain by <killer>.` — for **every** death, an overkill blow *and* a slow bleed-out alike. A bleed-out still names the **last attacker**, so the line by itself cannot tell a slow death from an overkill. The only runtime signal that separates them is the **HP trajectory** into death: a gradual, small-step descent through the bleeding-out band (slow, accurate) versus a single large HP drop that blows past the floor (overkill, discard).
-- **An overkill can mask the reached HP entirely.** A killing blow that jumps well past the floor may emit **no sub-floor HP prompt at all** — the client sees the pre-death HP and then the death, and the intermediate value the blow drove HP to is never printed. (Observed: at HP `-241` a `9`-point hit simply killed the character; no `-250` prompt appeared.) So a single terminal reading can never be trusted as a floor measurement.
-- **Live-survival evidence is the reliable complement.** While HP ticks down through the negatives and the character is confirmed **still alive** (a *later* in-band prompt proves the previous one was survived), each survived reading is a valid lower bound — the floor sits **below** it. The estimate ratchets down progressively as HP rolls further negative and simply **stops at the death message**. The terminal/masked reading is structurally excluded because it is never followed by another in-band prompt.
-- **Client use:**
-  - The stored death threshold is only a starting estimate — the client seeds it at `-25`, a guess. Refine it from **slow deaths only**; an overkill reading is unreliable and must not push the estimate more negative.
-  - The client's floor auto-refinement must classify off the observed HP steps, not the message — and, per the trace's stated assumption, only while the killing blow isn't a huge hit that leaps right past the floor.
 
 ### Poison prevents resting
 *Status: CONFIRMED 2026-08-17 (user; report `paradigm-20260817-092945`)*
@@ -815,7 +808,7 @@ How HP works from full health down through dropping and death, how monster healt
 S (base stat) by magery type:  mage = INT ·  priest = WIL ·  druid = (INT + WIL) / 2 ·  bard = CHM ·  mystic = fixed 1
 base = trunc( (level + 20) · S · (mageryLevel + 2) / 1650 )
 tick = trunc( (ManaRgn% + 100) · base / 100 )        [stock]
-tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD — functionally equivalent]
+tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD — functionally equivalent for ManaRgn% ≥ 0; for a negative total they differ by 1, e.g. R=−31, b=5 → 3 on stock, 4 on Paradigm]
 ```
 
 - **`mageryLevel` is the class's magery tier (`Classes.MageryLVL`), a constant per class — NOT the character level.** It also drives max mana: `MaxMana = (mageryLevel · level · 2) + 6`. (A stock ability code 145 = "ManaRgn".)
@@ -889,7 +882,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 ### Attack announce lines and round commits
 *Status: CONFIRMED (user); room-spell and poised lines CONFIRMED 2026-09-21 (user)*
 
-- **Any normal attack against an NPC is announced publicly.** The attacker sees `*Combat Engaged*`; everyone else in the room sees `<player> moves to attack <target>`.
+- **Any normal attack against an NPC is announced publicly.** The attacker sees `*Combat Engaged*`; everyone else in the room sees `<player> moves to attack <target>.` (the client's `moves to attack` regex requires the trailing period).
 - **A backstab round is silent.** It emits no `moves to attack` line to other players, so the surprise opener doesn't tip off onlookers. The client therefore can't confirm its own backstab landed from a `moves to attack` echo (there won't be one); it uses the `surprise` swing line instead (see *Backstab*).
 - **A round action is announced by ONE of two lines, melee OR spell.** A party member has "gone" for the round when the room shows *either* `<player> moves to attack <target>.` (melee/ranged) *or* `<player> moves to cast <spell name> upon <target>.` (a combat spell). Both count as that member's announce; a caster's turn produces the second form only.
 - *([CONFIRMED] 2026-09-21, user)* **A ROOM spell announces as `<player> moves to attack everyone in the room.`** — the melee "moves to attack" form with the wildcard target `everyone in the room`, NOT the single-target `moves to cast … upon …` form. Rooming is always a spell cast; physical attacks can't AoE. It matches the `moves to attack` regex with `target = "everyone in the room"` — a room-wide commit rather than a specific mob.
@@ -898,38 +891,39 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 **Client use:**
 - Attack-last coordination (waiting until every other member has committed before our own `*Combat Engaged*` lands) must treat the melee and spell announce lines as equivalent per-member signals — keying only on `moves to attack` misses every spellcaster in the party.
 - A `moves to attack everyone in the room` line counts as that member's round commit against the whole room, our target included. Never follow "everyone in the room" as a literal monster (there is no such mob).
-- `<player> is poised to assault the room!` is also treated as a room commit for attack-last (room after a party member already poised, so ours lands last).
+- `<player> is poised to assault the room!` is also treated as a room commit for attack-last (we cast our room spell after the poised member, so ours lands last).
 
 ### Player attack order and "Attack last"
-*Status: no confidence tag in source*
+*Status: Unrated*
 
 - **Player attack order = announce order, FIFO.** Players deal their damage in the order they engaged/announced their attacks — first to announce fires first. Party rank does NOT change this order.
 - **Backstab is pre-emptive.** A successful backstab always resolves **first**, ahead of the normal order.
 - **"Attack last" (client setting) therefore does two independent things:**
   - Resolves your action at the **end** of the round's order — the **mana/energy save**. In a party that *usually but not always* one-rounds a mob, a spellcaster set to attack last casts last, so if the mob is already dead its spell has no target and **never fires — energy/mana saved**; it only spends when the mob survives to the caster's slot.
-  - **Raises** your monster-targeting odds (a positive modifier) — useful for a tank drawing aggro, a cost for a squishy caster (see *Monster target selection*).
+  - **Raises** your monster-targeting odds (a positive modifier) (Paradigm: score modifier; Stock: lock re-point — see *Monster target selection — who it swings at once fighting*) — useful for a tank drawing aggro, a cost for a squishy caster.
 
-### Spell attacks auto-repeat; re-announcing is harmless
+### Spell attacks auto-repeat; re-announcing a single-target spell is harmless
 *Status: CONFIRMED 2026-08-05 (user); stop conditions and re-announce rule CONFIRMED 2026-09-21 (user) · Realm: both*
 
-- **A spell attack command AUTO-REPEATS server-side every round, exactly like a weapon swing — on ALL realms.** You announce the spell once (type its cast-code + target); the next combat tick it fires, and it keeps firing each round while the target is present and mana suffices, with NO re-announcing. A spell attack is functionally identical to a physical attack — announce once, the server owns the per-round repeat. The only difference is the spell-slot gates (mana threshold + `MinManaPerCast`, `MaxCasts`, `MinEnemies`).
-- **The auto-repeat stops only on `break`, the room clearing, or moving rooms** *(2026-09-21, user)*.
-- **Re-announcing a spell the server is already repeating is HARMLESS — it costs no mana and does NOT double-fire** *(2026-09-21, user)*. Mana is spent once per round, when the round FIRES, for any combat spell; the announce itself is free. Re-typing the cast-code (e.g. `fbal`) just re-postures the same auto-repeat: the server still fires it once that round (or, if mana is short that round, postures without firing and tries again next round).
-- **This corrects an earlier note** that claimed re-announcing "double-fires / wastes mana" — it does not.
-- **The one real hazard is targeting, not mana.** Re-announcing a **single-target** spell at a mob that just died would re-aim at the corpse. A **room spell is cast bare** — no target — so it has no corpse hazard and is always safe to re-announce.
+- **A spell attack command AUTO-REPEATS server-side every round, exactly like a weapon swing — on ALL realms.** You announce the spell once (type its cast-code + target); the next combat tick it fires, and it keeps firing each round while the target is present and mana suffices, with NO re-announcing. A spell attack is functionally identical to a physical attack — announce once, the server repeats it; the client adds its own gates (`MinManaPerCast`, `MaxCasts`, `MinEnemies`). See also *Timing & rounds → Combat spells: engaged once, auto-repeat per round*.
+- **The auto-repeat stops on** *(2026-09-21, user)*: `break`; moving rooms; the room clearing; the target dying (single-target); or any non-swing action (a cast or an equip) with its `*Combat Off*` (see *Non-swing actions break combat (casting, equipping)*).
+- **Re-announcing a SINGLE-TARGET spell the server is already repeating is HARMLESS — it costs no mana and does NOT double-fire** *(2026-09-21, user)*. Mana is spent once per round, when the round FIRES, for any combat spell *([NEEDS CONFIRMATION] a 500-energy spell fires twice a round — is mana charged per fire or once per round?)*; the announce itself is free. Re-typing the cast-code (e.g. `fbal`) just re-postures the same auto-repeat: the server still fires it once that round (or, if mana is short that round, postures without firing and tries again next round).
+- **This corrects an earlier note** that claimed re-announcing "double-fires / wastes mana" — it does not, for a single-target spell.
+- **Room spells are the exception — do NOT re-send one while it is channeling** *([CONFIRMED] 2026-09-23, report `paradigm-20260923-103938`)*: re-sending the same room spell breaks the running channel and starts a fresh one, wasting the round (see *Room-attack spells: cast bare, persistent channel*). This newer rule supersedes the 2026-09-21 "harmless" note for room spells.
+- **The hazard for a single-target spell is targeting, not mana.** Re-announcing a **single-target** spell at a mob that just died would re-aim at the corpse. A **room spell is cast bare** — no target — so it has no corpse hazard, but it still must not be re-sent while channeling.
 
 **Client use:**
-- The client CAN safely re-announce a combat spell for ordering purposes — this is how **attack-last** works for a caster: re-announcing our attack / room spell after the party's commits re-posts our action so it lands last, with no extra mana cost. The single-target re-announce guards on the target still being our live current target.
+- The client CAN safely re-announce a single-target combat spell for ordering purposes — this is how **attack-last** works for a caster: re-announcing our attack after the party's commits re-posts our action so it lands last, with no extra mana cost. A room spell must not be re-sent while it is channeling. The single-target re-announce guards on the target still being our live current target.
 - The client re-announces when the best action must change, AND for attack-last ordering:
   - **Target dies** → announce at the next target.
   - **`MaxCasts` rounds elapsed** → switch to the next cascade action. Scope: **per-target** for the single-target slots (normal / alternate attack spell, single-target debuff); **per-room** for the two AoE slots (multi-attack, area debuff).
-  - **Attack-last re-fire** → re-announce our current action after a party member's round commit, so ours lands last (harmless re-posture per the rule above).
+  - **Attack-last re-fire** → re-announce our current action after a party member's round commit, so ours lands last (a harmless re-posture for a single-target spell; never re-send a channeling room spell).
 
 ### Non-swing actions break combat (casting, equipping)
 *Status: CONFIRMED (user); equip rule CONFIRMED 2026-08-24 (user) · Realm: both (equip rule)*
 
-- **Casting a spell mid-fight drops the auto-attack for that round.** The server emits `*Combat Off*` because a cast is a distinct action that interrupts the sustained weapon swing. If the target is **still alive** after the cast, the desired behaviour is to **re-attack immediately** (as soon as the `*Combat Off*` lands), not wait for the next combat-round tick or a manual room re-parse. Confirmed by the user casting a Kai power (`swan`) on a live target: without a prompt re-attack the client idled a full round.
-- **This applies to a hand-typed cast just as much as an engine-issued between-round cast.** In this realm a spell is cast by typing its cast-code (`Spells.Short`) directly (`swan`, `swan rat`), with no `c` verb precursor, so the client recognises a manual cast by that cast-code on the wire.
+- **Casting a spell mid-fight emits `*Combat Off*`; the re-attack lands the same round.** The server emits `*Combat Off*` because a cast is a distinct action that interrupts the sustained weapon swing (see *Spells, buffs & conditions → Between-round cast slot vs the combat attack*). If the target is **still alive** after the cast, the desired behaviour is to **re-attack immediately** (as soon as the `*Combat Off*` lands), not wait for the next combat-round tick or a manual room re-parse. Confirmed by the user casting a Kai power (`swan`) on a live target: without a prompt re-attack the client idled a full round.
+- **This applies to a hand-typed cast just as much as an engine-issued between-round cast.** A spell is cast by typing its cast-code (`Spells.Short`) directly (see *Spells, buffs & conditions → Casting syntax — bare cast code, optional target name*) (`swan`, `swan rat`), with no `c` verb precursor, so the client recognises a manual cast by that cast-code on the wire.
 - **Equipping (`eq` / `wear` / `wield`) breaks combat on both Stock and Paradigm** *([CONFIRMED] 2026-08-24, user)*. It's a non-swing action, so it interrupts the sustained weapon attack and emits `*Combat Off*`, exactly like a between-round cast.
 - **Getting items from the ground (`get`) and recovering your corpse (`recover corpse`) do NOT break combat** — you can grab your pile mid-fight without dropping the round.
 - **This asymmetry is what makes in-combat death recovery safe to interleave:** grab everything freely, but the re-equip burst must be paced across rounds (a few pieces per round, re-attacking after each) so it doesn't stall the fight.
@@ -968,9 +962,8 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **A room / multi-target attack spell is a persistent channel, not a one-shot** *([CONFIRMED] 2026-09-23)*. E.g. `hsto` hellstorm — cast bare, no target. Once cast while engaged, it auto-fires at **every** monster in the room **each combat round** — the survivors of any kill **and** monsters that **roam in afterward** — until you stop meeting the conditions to cast it. It is the same server-side auto-repeat a single-target attack spell / weapon swing gets: announce **once**, the server owns the repeat.
 - **You do NOT recast it to include new arrivals** — the running channel already hits them next round.
 - **The game has no engine-side collision guard against recasting the same room attack.** If the client re-sends the same room spell while it is already channeling, the engine **breaks the current one and starts a fresh one** — visible as a `*Combat Off*` immediately followed by a `*Combat Engaged*`. That wastes the round and interrupts the AoE. (Contrast: re-sending a **between-round** spell — Energy 0 — shows only the `*Combat Off*` half.)
-- **When the channel ends:** you keep casting the room spell until a cast condition fails — the room drops **below MinEnemies**, you hit **MaxCastsPerRoom**, or mana falls **below the AoE slot's per-cast floor**. At that point re-evaluate the rest of the spell/combat chain normally (single-target attack spell → weapon, etc.).
-- **An AoE spell's live enemy count dropping below `MinEnemies`** → switch to a single-target action.
-- **Room / multi-target attack spells fire at an empty room and emit a "nothing to hit here" style message** — exact wording unconfirmed (no test character yet).
+- **When the channel ends:** you keep casting the room spell until a cast condition fails — the room's live enemy count drops **below `MinEnemies`** (→ switch to a single-target action), you hit **MaxCastsPerRoom**, or mana falls **below the AoE slot's per-cast floor**. At that point re-evaluate the rest of the spell/combat chain normally (single-target attack spell → weapon, etc.).
+- **A fresh room / multi-target attack spell cast into an empty room still fires and emits a "nothing to hit here" style message** — *([NEEDS CONFIRMATION] exact wording unknown — no test character yet)*.
 
 **Client use:**
 - `CombatManager._roomChannelSpell` records the active room-attack spell for the engagement. It **survives a kill** (unlike `_castingSpellTarget`/`_announcedSpellCode`, which a kill clears to re-pick a target) and clears only on a genuine end-of-fight (`ClearAttackSpellCascadeState`), a physical move (`NotePreMove`), or a switch to a non-room action.
@@ -989,7 +982,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   - **When the Alternate is considered (single-target only):** only against a still-ALIVE target the Normal can't handle — (a) we don't meet the Normal's cast conditions (mana below its floor, or its MaxCasts rounds elapsed while the target lives), or (b) the Normal came back "no effect" / immune (e.g. priest `harm` vs an acid slime).
   - **Every fresh target re-evaluates the Normal first.** The cascade state (which spell is current, the per-target cast count, the mana-drop latch) resets per target — a new mob always reconsiders the Normal, re-checking mana (regen ticks in / casts drain it round to round). It must NOT carry the previous target's cascade position, or a fresh mob opens on the alternate.
   - **MaxCasts=1 = one FULL round** (the spell actually fired), then switch ONLY if the target is still alive — never "announce once then immediately switch the same round before it fires."
-  - **Mana fallback under Spells-first:** below the Normal's min-mana → consider the Alt; if mana is at or above the Alt's min-mana use the Alt, else fall back to physical. Once dropped off the Normal for mana, stay dropped for that target (a regen tick lifting mana back over the floor must not flip back mid-fight — the per-target latch).
+  - **Mana fallback under Spells-first:** below the Normal's min-mana → consider the Alt; if mana is at or above the Alt's min-mana use the Alt, else fall back to physical. Once dropped off the Normal for mana, the per-target mana-drop latch applies (see the "Once dropped, stay dropped" rule in this topic).
 
 ### Weapons: "no effect" lines and the magical-weapon requirement
 *Status: "no effect" lines OBSERVED; magical-weapon and hit-magic rules CONFIRMED*
@@ -1003,6 +996,11 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 
 **Client use:**
 - UI that surfaces the hit-magic stat (e.g. the Item Finder) shows it on weapon rows only and blanks it everywhere else.
+
+### Attack-command "no effect" fallback
+*Status: Client policy (report `paradigm-20260809-131642`)*
+
+- **Attack-command "no effect" fallback.** A spell driven through the global **attack-command** slot (`NormalAttackCommand = "harm"`, not the attack-*spell* rung) draws the same `Your spell has no effect on <monster>.` immunity line, but reaches the wire as a plain command, so the spell-slot cascade can't see it. The client falls the COMMAND path back the same way it does a physical weapon's "no effect": it marks the species failed vs the normal command (the next pick prefers `AlternateAttackCommand`) and re-sends the alternate command this round; with no distinct alternate it concedes the species and re-picks. (Report `paradigm-20260809-131642` — priest `harm` command vs an acid slime never dropped to `attack`.)
 
 ### Martial-arts strikes are class-innate
 *Status: CONFIRMED · Realm: both (observed across every stock + Paradigm set)*
@@ -1019,16 +1017,16 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 
 - **Backstab command: `bs <target>`** *([OBSERVED])*.
 - **A monster in the room with the see-hidden ability reveals the sneaker to the whole room** *([OBSERVED])*, so the opening move falls back to a normal attack rather than `bs`.
-- **Backstab only lands on the opening round** *([CONFIRMED])* — the very first action taken in a freshly-approached room while sneaking. Once ANY combat action has fired here (a `bs`, a spell, or a normal swing), the surprise is spent and a later `bs` can no longer connect. So after the opener the client must fall back to the configured normal attack priority; re-issuing `bs` on a re-engage (a cast interrupt's re-attack, a target re-pick) wastes the round.
+- **Backstab only lands on the opening round** *([CONFIRMED])* — the very first action taken in a freshly-approached room while sneaking or hidden. Once ANY combat action has fired here (a `bs`, a spell, or a normal swing), the surprise is spent and a later `bs` can no longer connect. So after the opener the client must fall back to the configured normal attack priority; re-issuing `bs` on a re-engage (a cast interrupt's re-attack, a target re-pick) wastes the round.
 - **Success line** *([CONFIRMED])*: a landed backstab is a **single** swing containing the word **`surprise`** — e.g. `You surprise punch large wild dog for 36 damage!`. A surprise line making it through **proves the sneak did not fail** — the opener connected.
-- **Backstab is silent to onlookers and resolves first** — see *Attack announce lines* and *Player attack order*.
+- **Backstab is silent to onlookers and resolves first** — see *Attack announce lines and round commits* and *Player attack order and "Attack last"*.
 - **The opener is always `bs`, never `pu`** *([CONFIRMED])*. The stock realm has been observed to still run the surprise round even when the opener was a normal `pu` on the mystic — but that leeway is **realm-specific** and must not be relied on; other game types may require the literal `bs` opener to trigger the surprise at all. So whenever backstab is enabled and the character is armed (a successful sneak, or hidden with a monster in the room), the opening command is **always** `bs <target>` — the client must never substitute `pu` and hope the surprise still fires.
 - **Only the opener needs to be `bs`, and follow-on attacks must stay quiet** *([OBSERVED, mechanism unconfirmed])*. In one live capture the opener `bs large wild dog` was followed by two client-sent `pu large wild dog` during the `*Combat Off*` / `*Combat Engaged*` interrupt bounce, and `You surprise punch ... for 36 damage!` still landed. **Do not read this as "the engine continues the backstab through follow-on attacks"** — the likelier explanation is timing: the `pu` commands simply hadn't registered server-side before the `bs` surprise round resolved. So a well-timed follow-on `pu` *could* have sabotaged the surprise. Practical rule: send `bs` as the opener, then stay quiet — don't spam follow-on attack commands that might register and clobber the surprise (let the server's auto-repeat carry the fight). Never send a second `bs`.
 - **Failure signals — the reliable single-line tell** *([CONFIRMED])*. The surprise round is a **single** swing, so the **first** of the player's own combat-result lines after the `bs` settles the outcome: it either **carries `surprise`** (landed) or **lacks it** (failed). A failure surfaces either as a **whiff** (`You swing at <target>!` — no "for N damage", renders dark-cyan) or as a **folded normal round** (`You punch <target> for N damage!` with no "surprise"). Detection is **text-only** — the `surprise` token, not the color.
 - **`You cannot backstab with this weapon.`** *([CONFIRMED])* — you tried to `bs` while sneaking with a weapon that isn't backstab-capable. No weapon-type flag in the game data exposes this ahead of time; it is only knowable reactively from this line.
 
 **Client use:**
-- The client tracks the spent opener per room and re-arms it only on the next sneak-approach.
+- The client tracks the spent opener per room; it is re-armed on the next sneak-approach or a fresh in-place hide (see *Movement & navigation → Hiding — sneak vs hide, the hide state machine, and search reveals*).
 - The client enforces the quiet-follow-on rule by suppressing all Attack-Order re-fire while a `bs` is pending resolution.
 - The client keys off the first-line failure tell and, when *Run if BS fails* is on, flees on a detected failure (routed through the normal break-before-flee escape path).
 
@@ -1083,18 +1081,18 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 ### Monster aggression — who opens on you unprovoked
 *Status: CONFIRMED (Layer 1 alignment auto-aggro; Layer 2 criminal/guard behaviour; guard identification)*
 
-- **A monster is hostile (attacks without being engaged first) as a function of the monster's `Align` and your character's alignment title.** Two independent layers stack. In the source tables: **columns = your (player) alignment, rows = the monster's alignment.**
+- **A monster is hostile (attacks without being engaged first) as a function of the monster's `Align` and your character's alignment title.** Two independent layers stack.
 - **Layer 1 — alignment auto-aggro (every monster, straight from `Align`):**
   - `Align` **1 / 2 / 5** (Evil / Chaotic Evil / Neutral Evil) — **opens on everyone**, every title.
   - `Align` **0 / 3** (Good / Neutral) — **never** aggros anyone.
-  - `Align` **6** (Lawful Evil) — "honor among the wicked": aggros **Lawful / Good / Neutral** titles, but **spares the Evil bucket** (Seedy and worse).
+  - `Align` **6** (Lawful Evil) — "honor among the wicked": aggros **Lawful / Good / Neutral** titles *([NEEDS CONFIRMATION] there is no Lawful title band — does this cover Saint too?)*, but **spares the Evil bucket** (Seedy and worse).
   - `Align` **4** (Lawful Good) — **never aggros by alignment**; the only Align-4 aggro is the guard subset via Layer 2.
   - So the only alignment-driven aggro that depends on *your* title is Align-6 (spares Seedy+); 1/2/5 are unconditional, 0/3/4 never bite on alignment alone.
-- **Layer 2 — criminal / guard system** (the Align-4 `*`; runtime reputation, NOT in the monster table). Keyed on **your title**, enforced by **guard** NPCs plus special actors:
+- **Layer 2 — criminal / guard system** (the guard subset of Align 4; runtime reputation, NOT in the monster table). Keyed on **your title**, enforced by **guard** NPCs plus special actors:
 
 | Your title | Guards | Extra actors |
 |---|---|---|
-| Lawful / Good / Neutral | ignore | — |
+| Lawful / Good / Neutral *([NEEDS CONFIRMATION] there is no Lawful title band — does this cover Saint too?)* | ignore | — |
 | Seedy | ignore | bad deeds done *to* you are ignored (you lose guard protection, but guards don't aggro) |
 | Outlaw | **attack on sight**, but spare your life | — |
 | Criminal | **slay on sight** | — |
@@ -1105,17 +1103,17 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   - **The reliable proxy:** a monster that **casts spell 583 (`jail`)** is a guard, and it attacks us when our title is **Outlaw or worse**. Detection = the monster references spell `583` in any of its castable-spell fields (`AttHitSpell-*`, `MidSpell-*`, `DeathSpell`, `CreateSpell`).
   - In the shipped set that flags the guardsmen (#13/#14/#905/#538), Sheriff Lionheart (#40), and elite guardsman (#757).
   - This is a **partial** list — other mobs aggro the evil-titled without casting `jail` (e.g. Templar is a guard yet has no `jail`); those get added here as they're recognised.
-- **A monster that opens on you unprovoked is an enemy, not a neutral** — e.g. storm giants. The client models those as the `Enemy` relationship (see *Neutral monsters*).
+- **A monster that opens on you unprovoked is an enemy, not a neutral** — e.g. storm giants. The client models those as the `Enemy` relationship (see *Neutral monsters and kill-on-sight*).
 
 **Client use:**
-- **Hostile-in-room test.** For each monster in the room, read its `Align`: hostile if `Align ∈ {1,2,5}` (always), or `Align == 6` and our title is Lawful / Good / Neutral, or the monster is a **guard** (casts `jail` 583, per above) **and** our title is Outlaw-or-worse. Our own title comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
+- **Hostile-in-room test.** For each monster in the room, read its `Align`: hostile if `Align ∈ {1,2,5}` (always), or `Align == 6` and our title is Lawful / Good / Neutral, or the monster is a **guard** (casts `jail` 583 — the guard proxy in this topic) **and** our title is Outlaw-or-worse. Our own title comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
 
 ### Neutral monsters and kill-on-sight
 *Status: CONFIRMED 2026-08-15 (user)*
 
-- **A neutral monster never attacks you on sight / never attacks first.** It attacks **only if you've attacked it** and it's still alive — and once provoked it **keeps attacking every round until it dies**, even if you `break` and sit there.
+- **A neutral monster never attacks you on sight / never attacks first.** "Neutral" here means any monster that doesn't open on you (see *Monster aggression — who opens on you unprovoked*), not only `Align` 3. It attacks **only if you've attacked it** and it's still alive — and once provoked it **keeps attacking every round until it dies**, even if you `break` and sit there.
 - **So a room of un-engaged neutrals is safe to rest in.** The moment you engage one, *that* one is hitting you back (no resting mid-fight), but the others stay passive until you turn on them.
-- **A monster that *does* open on you unprovoked is an enemy, not a neutral** — e.g. storm giants; see *Monster aggression*.
+- **A monster that *does* open on you unprovoked is an enemy, not a neutral** — e.g. storm giants; see *Monster aggression — who opens on you unprovoked*.
 
 **Client use:**
 - The per-monster overlay `Relationship` (`Enemy` / `Neutral` / `Friend` / `Flee` / `Hangup`) drives auto-combat. `Enemy` = engage on sight; `Neutral` = leave alone.
@@ -1131,12 +1129,12 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   2. **No lock → spread pick** among the aggroed players in room / terminal order: each rolls `genrdn(0,100) < 50 − 5 × (hits they're already taking this beat)`; **first to pass** is hit; if none pass, the **last eligible** player is hit (fallback). The mob drifts toward whoever *isn't* already piled on — a player taking ≥10 hits this beat hits a 0% threshold and is skipped by fresh rolls.
   3. **After swinging it rolls `genrdn(1,100) < Follow%`** (Monsters `Follow%`): pass → **lock** onto the just-hit player; fail on an **aggressive** align (∉ {0,3,4}) → **clear** the lock and re-spread next beat; fail on a **passive** align ({0,3,4}) → **keep** the lock.
   - **The mirror roll when a *player* hits the mob re-points the lock to that attacker** — the "attack last" behaviour. Follow% is the stickiness dial.
-  - **Special types:** summoned (type `0x25`) never manage a lock this way; a type-5 monster only acquires a lock when currently untargeted.
+  - **Special types** (engine-internal type, not the imported `Type` column)**:** summoned (type `0x25`) never manage a lock this way; a type-5 monster only acquires a lock when currently untargeted.
   - **Carve-out:** an evil NPC won't spread onto a fellow-evil player (`EvilPoints > 39`).
 - **Paradigm** *([CONFIRMED] — user writeup, Paradigm only)*. Paradigm rewrote target selection into a **weighted lottery** with no locked-target mechanic. Each player scores from a base **150**: `+ (10 − Charm/5)` (higher Charm lowers the score), `+` party position (frontrank 60 / midrank 30 / backrank 0; **solo = frontrank 60**), `+` recent aggro (last hitter **+30 × players-in-fight**, everyone else **−5 × players-in-fight**), **floored at 50**. The monster rolls a weighted lottery over the summed scores — bigger score = bigger slice, never a guarantee, never impossible.
 - **Charm and party position have no effect on stock target selection** — they are Paradigm-only.
 - **Targeting depends on the realm** *([CONFIRMED] 2026-09-26, user)* — the two models above never share a formula, and the Monster Aggro calculator shows each one.
-- **In plain terms, on Paradigm** (an older summary that named no realm; it describes the Paradigm lottery): a hostile NPC picks its target by **chance**; hidden **modifiers** make a party member more or less likely to be chosen — never guaranteed, and the modifier values aren't visible in game:
+- **Paradigm, in plain terms:** a hostile NPC picks its target by **chance**; hidden **modifiers** make a party member more or less likely to be chosen — never guaranteed, and the modifier values aren't visible in game:
   - **Party rank** — **frontrank** raises the odds of being targeted, **backrank** lowers them (midrank between).
   - **Attacking last** raises the odds; **attacking first** lowers them.
   - These stack: a **frontrank member attacking last** is the most likely target; a **backrank member attacking first** the least — but it's still a weighted roll.
@@ -1146,7 +1144,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - Surfaced in the **Monster Aggro** calculator (Workshop → Calculators), which shows the loaded set's model: `StockAggroCalculator` (acquisition → spread pick → Follow% stickiness) or `ParadigmAggroCalculator` (weighted lottery).
 
 ### Per-monster overlay automation (client policy)
-*Status: CONFIRMED 2026-07-10 (user design); count-field reading is a client interpretation flagged for user confirmation*
+*Status: CONFIRMED 2026-07-10 (user design); count-field reading is a client interpretation, [NEEDS CONFIRMATION]*
 
 Client-side automation policy for the Game Data → Monster overlay flags — not engine behaviour, but how the client's auto-combat interprets the per-monster overrides.
 
@@ -1156,10 +1154,9 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
   - a **raw command verb** ("attack", "bash") sent **verbatim** as the attack verb, forced over the whole spell/weapon flow, with **no** rung gating (the server auto-repeats it like any attack command).
 - **The editor disambiguates on save.** A positive integer is the spell id; other text is checked against the active set's known spell **cast-codes** — a match (e.g. "turn") resolves to that spell's Number and takes the **gated spell rung** (a user who types the code they'd cast in-game gets mana/cap gating, not a raw command). Only text matching no spell stays a raw command — this is what lets `attack` persist; an earlier int-only parse silently dropped it.
 - **The pre-attack override stays spell-only** and occupies the *Single-Target Debuff* rung.
-- **Gate bypass.** When an override is set the client **bypasses the effectiveness gates** (observed "no effect" immunity, SpellImmu level-block, and ≥100% elemental resist) — the rationale is that a user who hand-picks the attack for a specific monster has done the due diligence that it works. So a forced command is **never** second-guessed by the "no effect" fallback below. The **physical constraints still apply** for the spell-id form: the rung's mana floor, the once-per-target guard (pre-attack), and the override's own per-room cast cap.
-- **Count = per-room cast cap (spell-id form only).** The override's configured count is the cap; the overlay documents **null = 0**, so a spell set with **no positive count is treated as inactive** and the client falls back to the global slot (likewise if the number doesn't resolve to a known cast-code). The command form carries no count — it's active whenever the text is non-blank. This "null/zero count ⇒ fall back to global" reading is the client's interpretation of the ambiguous count field — **flag for user confirmation** if override behaviour is ever questioned.
+- **Gate bypass.** When an override is set the client **bypasses the effectiveness gates** (observed "no effect" immunity, SpellImmu level-block, and ≥100% elemental resist) — the rationale is that a user who hand-picks the attack for a specific monster has done the due diligence that it works. So a forced command is **never** second-guessed by the *Attack-command "no effect" fallback*. The **physical constraints still apply** for the spell-id form: the rung's mana floor, the once-per-target guard (pre-attack), and the override's own per-room cast cap.
+- **Count = per-room cast cap (spell-id form only).** The override's configured count is the cap; the overlay documents **null = 0**, so a spell set with **no positive count is treated as inactive** and the client falls back to the global slot (likewise if the number doesn't resolve to a known cast-code). The command form carries no count — it's active whenever the text is non-blank. This "null/zero count ⇒ fall back to global" reading is the client's interpretation of the ambiguous count field — **[NEEDS CONFIRMATION]** if override behaviour is ever questioned.
 - **0-mana stand-down.** At literal 0 mana nothing that costs MA can land — the server silently **no-ops** a cast or a mana-costing command with **no error line** to react to (an earlier build kept re-sending a forced `turn` every round while the player stood there getting hit until a regen tick). So at 0 mana the client marks spells unavailable (the chooser collapses to Backstab/Physical) and, for a forced command that resolves to a spell cast-code, falls back to the physical weapon; a genuinely free verb (bash/kick) still fires since it costs no MA. Re-evaluated each round, so it resumes the instant mana ticks back up.
-- **Attack-command "no effect" fallback.** A spell driven through the **attack-command** slot (`NormalAttackCommand = "harm"`, not the attack-*spell* rung) draws the same `Your spell has no effect on <monster>.` immunity line, but reaches the wire as a plain command, so the spell-slot cascade can't see it. The client falls the COMMAND path back the same way it does a physical weapon's "no effect": it marks the species failed vs the normal command (the next pick prefers `AlternateAttackCommand`) and re-sends the alternate command this round; with no distinct alternate it concedes the species and re-picks. (Report `paradigm-20260809-131642` — priest `harm` command vs an acid slime never dropped to `attack`.)
 
 ### Combat round output order — damage lines precede the prompt, so HP lags a round
 *Status: CONFIRMED 2026-09-05 (user + report `paradigm-20260904-214056`)*
@@ -1176,10 +1173,10 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
 
 - **A kill prints in a fixed order:** the monster's **death line** (e.g. `The toad croaks in agony, and collapses wetly.`) → `You gain N experience.` → `*Combat Off*`, all in the same server flush.
 - **`*Combat Off*` is not a reliable death signal on its own.** Non-sustaining attacks (thrown weapons, KAI pummel, a party member's throws) emit an off/engaged bounce **every strike**, so a `*Combat Off*` fires many times per fight with no death.
-- **The "exp + Combat Off within a window" fallback death is a *weak* heuristic** — only trust it for monsters whose specific death line isn't in the data. Because a specific death line always precedes its exp, an exp that lands right after a specific death belongs to that already-attributed kill and must not also arm the fallback. Otherwise, with identical-exp mobs dying every few seconds (a swarm), the prior kill's exp stays inside the window and the next fight's non-death `*Combat Off*` fires a phantom fallback death on it, a beat before the current mob actually dies.
+- **The "exp + Combat Off within a window" fallback death is a *weak* heuristic** — only trust it for monsters whose specific death line isn't in the data (historical — per-monster death lines were retired in v3.16.0; the exp line followed by `*Combat Off*` is the kill signal). Because a specific death line always precedes its exp, an exp that lands right after a specific death belongs to that already-attributed kill and must not also arm the fallback. Otherwise, with identical-exp mobs dying every few seconds (a swarm), the prior kill's exp stays inside the window and the next fight's non-death `*Combat Off*` fires a phantom fallback death on it, a beat before the current mob actually dies.
 - **The exp line is the earliest reliable per-kill signal during combat** *([CONFIRMED] 2026-08-15, user)*. Every kill grants exp, and the exp line lands **before** the kill's `*Combat Off*`. So while engaged with a target we've attacked, a `You gain N experience.` line means that target just died — recognize the kill on the **exp line**, not the later `*Combat Off*`. Waiting for the Off let the round's **alternate** attack corpse-cast: `lbol` kills → `mmis <corpse>` → "You don't see X here!" (report `paradigm-20260814-230258`). This is generic — the exp line is identical for every monster.
 - **AoE clears the whole room as a burst of exp lines** *([CONFIRMED] 2026-08-15, user — "20 targets dead in 1 spell")*. One room spell prints a `<flavor>` + `You gain N experience.` **pair per monster it kills**, then a **single** `*Combat Off*` at the end. So exp-line count = kill count.
-- **"The fight is over" = `*Combat Off*` AND an empty hostile roster** *([CONFIRMED] 2026-09-08, user)*. On stock, `*Combat Off*` is the message that marks combat ending — but as above it also fires on every cast and once per strike for non-sustaining attacks, so on its own it says nothing about whether anything is still alive. The usable pair is that line **plus** a room re-display showing no engageable monster left.
+- **"The fight is over" = `*Combat Off*` AND an empty hostile roster** *([CONFIRMED] 2026-09-08, user)*. On stock, `*Combat Off*` is the message that marks combat ending *([NEEDS CONFIRMATION] same on Paradigm?)* — but as above it also fires on every cast and once per strike for non-sustaining attacks, so on its own it says nothing about whether anything is still alive. The usable pair is that line **plus** a room re-display showing no engageable monster left.
 - **Death messages are arbitrary per-monster flavor** — no shared keyword (a scan of 1035 seed death lines: `…a tortured squeak`, `…to the ground`, `…without a sound`, `…a thousand pieces`, `…an agonized bellow`, `…in a heap`, most with no death word) and no distinctive colour (they render default/white). So a monster death **cannot be recognized by wording or colour generically** — the exp line is the generic signal, and our own targeting (`CombatManager.CurrentTarget`) names the mob.
 
 **Client use:**
@@ -1199,7 +1196,7 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
 - This is what boss-timer kill detection uses.
 
 ### Attacking a monster that isn't in the room
-*Status: CONFIRMED 2026-09-24 (user; report `stock-20260924-013525`)*
+*Status: CONFIRMED 2026-09-24 (user; report `stock-20260924-013525`) · Realm: Stock (Paradigm NEEDS CONFIRMATION)*
 
 - **An attack at a monster that isn't in the room answers per the "talk slow" setting.**
   - With talk slow **off**, the unrecognised command is spoken: `a kobold thief` → `You say "a kobold thief"`.
@@ -1218,7 +1215,8 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
 
 - **`EnergyCost` sets a spell's per-round firing rate.** `EnergyCost` 1–1000 fires
   `floor(1000 ÷ EnergyCost)` times per round (mmis/lbol at 500 → 2×). `EnergyCost` 0 is cast between
-  rounds.
+  rounds. (Full firing-rate rule: *Timing & rounds → Combat spells: engaged once, auto-repeat per
+  round*.)
 - **Energy does NOT track lasting effect — `Dur` does.** A monster's damage breath can be `EnergyCost` 0
   yet purely instant, and a per-round bolt can still *poison*. The reliable tell is the spell's
   **duration**.
@@ -1243,10 +1241,16 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   success% = clamp(Spellcasting + Diff, 0, cap)
   ```
 
+  **[CONFLICT — ask the user]** is "…but fail." the failure outcome of the Spellcasting+Diff roll, and
+  is there a separate fizzle line? (*"You attempt to cast <spell>, but fail." — cast but missed* says
+  that line is NOT a fizzle.)
+
 - **`Diff` is the Spells-table `Diff` column, normally ≤ 0.** A harder spell is more negative, so it
   lowers the chance (`ethereal shield` = −5). It's added directly to Spellcasting.
 - **cap = 100 for a Kai caster (`Magery` type 5), else 98.** 98 is MajorMUD/stock; Paradigm shares the
-  stock cap — it's a MajorMUD variant, not GreaterMUD, whose cap is 100.
+  stock cap — it's a MajorMUD variant, not GreaterMUD, whose cap is 100. **[CONFLICT — ask the user]**
+  is MMUD-Explorer's GreaterMUD branch Paradigm's behaviour? (Other chapters read `bGreaterMUD` as
+  Paradigm.)
 - **Short-circuits:** `Diff ≥ 200` marks an always-succeeds utility spell → **100%**. A `Spellcasting`
   of **0** means the character isn't a caster (or the stat line isn't parsed yet) → **no stated chance**
   (the client shows "—", never a bogus 100%).
@@ -1258,7 +1262,9 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
 *Status: CONFIRMED 2026-08-05 (user)*
 
 - **The line means the spell DID cast — mana was spent — but it missed the target (a hit-roll
-  failure).** It is NOT a fizzle and NOT out-of-mana.
+  failure).** It is NOT a fizzle and NOT out-of-mana. **[CONFLICT — ask the user]** is "…but fail."
+  the failure outcome of the Spellcasting+Diff roll, and is there a separate fizzle line? (*Spell
+  cast-success chance and the `Diff` column* frames that roll as land-vs-fizzle.)
 - **An attack spell drains mana every round it repeats, whether it lands or misses.** A "but fail" round
   is a spent round (mana down, zero damage), not a free retry.
 - **Client use:**
@@ -1274,8 +1280,8 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   behind it, both in the same combat round.
 - **A 0-energy between-round cast and the combat action do not compete for one slot.** Sending the debuff
   "has nothing to do with" the combat spell, so pairing them does **not** draw the
-  `You have already cast a spell this round!` rejection that a second *between-round* cast would (see the
-  one-between-round-cast rule).
+  `You have already cast a spell this round!` rejection that a second *between-round* cast would (see
+  *One between-round spell per combat round*).
 - **The debuff still obeys the Spells + Ailments spell-type priority.** A higher-priority in-between
   survival cast (heal / cure / buff) that's due wins the in-between slot first, and the debuff waits for
   the next in-between pass. Only when nothing higher-priority is queued does the debuff pre-empt the
@@ -1307,15 +1313,15 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
     `paradigm-20260918-190830`). That coupling was removed.
 
 ### Why an attack spell fails to damage — three independent mechanics
-*Status: CONFIRMED · Realm: worked examples use the 1.11p data set*
+*Status: CONFIRMED (worked examples use the 1.11p data set)*
 
 - **Three independent mechanics decide whether an attack spell damages a monster — do not conflate
   them:**
-  1. **SpellImmu +N — level immunity** (below).
-  2. **Spell targeting restriction (e.g. living-only)** — see "Spell targeting: monster type tags" and
-     "“Your spell has no effect” — immunity spends no round".
-  3. **Damage-type resistance** — see "Elemental resistance", "Magic Resist (M.R.) and `TypeOfResists`"
-     and "Poison (`AttType 6`) — binary immunity".
+  1. **SpellImmu +N — level immunity** (this topic).
+  2. **Spell targeting restriction (e.g. living-only)** — see *Spell targeting: monster type tags* and
+     *"Your spell has no effect" — immunity spends no round*.
+  3. **Damage-type resistance** — see *Elemental resistance — flat, deterministic, pre-emptable*,
+     *Magic Resist (M.R.) and `TypeOfResists`* and *Poison (`AttType 6`) — binary immunity*.
 - **`SpellImmu +N` blocks any spell whose base learnable level (the Spells table `ReqLevel`) is below
   N; such a spell deals no damage.** A spell learnable at level ≥ N still lands.
 - **Example:** monster **#184** has `SpellImmu +10`, so every spell learnable at level 9 or lower can't
@@ -1375,17 +1381,15 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   the Spells row (only `ReqLevel` / `MageryLVL` / `Cap`, which are learn/scaling params). Ask before
   building on a charm-level rule.
 
-- **Client use:** the 2026-09-22 update supersedes the older reactive-only note:
-  - (older, undated block) Caught only **reactively**, off the `no effect` line: `OnSpellNoEffect`
-    marks the species + spell immune for the rest of the room and gates that spell down the attack
-    cascade (primary → alternate → weapon).
-  - (UPDATE 2026-09-22, see the next topic) The client now **proactively skips** an attack spell whose
-    target-class the monster's type excludes — `SpellTargetTypeIndex` + `MonsterLifeIndex.CanAffect`,
-    gated in `CombatSpellChooser`; only the reactive backstop remains for spells with no target-class
-    tag.
+- **Client use:**
+  - Reactive backstop, off the `no effect` line: `OnSpellNoEffect` marks the species + spell immune
+    for the rest of the room and gates that spell down the attack cascade (primary → alternate →
+    weapon).
+  - Since 2026-09-22 target-class mismatches are pre-empted from game data — see *"Your spell has no
+    effect" — immunity spends no round*.
 
 ### "Your spell has no effect" — immunity spends no round
-*Status: CONFIRMED 2026-08-09 (user; report `paradigm-20260809-162350`) · UPDATE 2026-09-22 (report paradigm-20260922-082559)*
+*Status: CONFIRMED 2026-08-09 (user; report `paradigm-20260809-162350`); updated 2026-09-22 (report `paradigm-20260922-082559`)*
 
 - **`Your spell has no effect on <monster>.` spends NO round — it's free.** A no-effect cast (the
   living-only / immunity mismatch) doesn't consume the combat round, so you can cast a *different* spell
@@ -1396,7 +1400,7 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   that "the living-only immunity isn't pre-emptable from data" was WRONG — a spell's target-class
   restriction *is* in game data (Spells `Abil` codes 23 AffectsUndeadOnly / 80 AffectsAnimalsOnly / 108
   AffectsLivingOnly), as is the monster's life-class (NonLiving ability 109, Undead column, Animal
-  ability 78 — see "Spell targeting: monster type tags").
+  ability 78 — see *Spell targeting: monster type tags*).
 - **Client use:**
   - The client swaps the attack cascade's primary → alternate attack spell **immediately** on the
     no-effect line, the same round, rather than idling until the next ~5s tick (report
@@ -1405,7 +1409,7 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   - Since 2026-09-22 the client **proactively skips** an attack spell whose target-class the monster's
     type excludes (`turn`-undead vs a non-undead mob, `harm` vs a nonliving construct) —
     `SpellTargetTypeIndex` + `MonsterLifeIndex.CanAffect`, gated in `CombatSpellChooser` beside the
-    level / resist blocks (report paradigm-20260922-082559).
+    level / resist blocks (report `paradigm-20260922-082559`).
   - Only the reactive backstop remains for spells with no target-class tag; the reactive
     one-step-per-round path still applies to any immunity game data can't prove.
 
@@ -1416,12 +1420,13 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   it.** Examples: `vamp`, `dtch`, and (high-level evil mage) `nebo`. Availability is gated by the
   class's **magery level**, like any spell.
 - **They are a combat action, NOT a between-round cast.** They take the place of the round's attack and
-  auto-repeat server-side like any attack spell (see the auto-repeat rule).
+  auto-repeat server-side like any attack spell (see *Combat → Spell attacks auto-repeat; re-announcing
+  is harmless*).
 - **Tactically they're used like a heal** — only worth casting when you actually want the HP back, so a
   drain-capable mage treats them as an emergency heal that also does damage.
 - **They cannot affect NonLiving or Undead targets.** Draining one produces the same
   `Your spell has no effect on <monster>.` line as any living-only spell (there's no life to drain). So a
-  drain's valid target is **living (no NonLiving ability 109) AND not undead (Undead column != 0)** — the
+  drain's valid target is **living (no NonLiving ability 109) AND not undead (Undead column == 0)** — the
   union of the living-only gate and an undead exclusion.
 - **Client use:**
   - Against an ineligible target the drain is skipped and the client falls back to the normal attack
@@ -1434,7 +1439,7 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
     lets it pre-empt the AoE too when the loop calls for it.
 
 ### Elemental resistance — flat, deterministic, pre-emptable
-*Status: CONFIRMED · Realm: worked examples use the 1.11p data set*
+*Status: CONFIRMED (worked examples use the 1.11p data set)*
 
 - **A spell's damage type is its Spells-table `AttType` column** (the same values `LookupEnums` labels
   for the Browser). How resistance applies depends on which type it is — **do not treat all three
@@ -1461,11 +1466,12 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   **fire** the spell: it's a damage bonus or a partial cut, never a reason to skip.
 - **There is no dedicated message.** Every spell's verbose hit text differs, so the only runtime tell is
   the **damage number** in that spell's own hit line — **0 or negative is the resist signal.**
-- **Not modeled today:** a resisted 0 / heal cast produces no `no effect` line, so nothing currently
-  stops the engine from re-casting a spell that heals the monster.
+- **Not modeled today:** a resisted 0 / heal cast produces no `no effect` line, so when game data
+  doesn't show the resist, the runtime 0 / negative hit line isn't acted on — the engine can keep
+  re-casting a spell that heals the monster.
 - **Client use:**
   - Elemental ≥100% resist is pre-empted via `MonsterResistIndex`; `CombatSpellChooser` explicitly
-    resist-blocks *elemental* spells only.
+    resist-blocks *elemental* spells only (see also *Magic Resist (M.R.) and `TypeOfResists`*).
 
 ### Magic Resist (M.R.) and `TypeOfResists`
 *Status: CONFIRMED; damage-code gating CONFIRMED 2026-08-30 (user + syntax53/MMUD-Explorer `CalculateResistDamage` / `CalculateSpellCast`)*
@@ -1515,8 +1521,8 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
     separately, never folded into the range.
   - **The combat engine never estimates M.R.-reduced damage** — it only pre-empts spells on
     deterministic signals (elemental ≥100% resist via `MonsterResistIndex`, `SpellImmu`, and the
-    `Magical` weapon-hit gate), and `CombatSpellChooser` explicitly resist-blocks *elemental* spells
-    only.
+    `Magical` weapon-hit gate) — M.R. is never a resist-block (see *Elemental resistance — flat,
+    deterministic, pre-emptable*).
   - So correcting the code-1↔17 gating changed **no combat decision** — the old reversed note was never
     implemented in engine code; it drove only the (now-fixed) doc and this display calculator.
 
@@ -1532,7 +1538,7 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
     grants immunity to certain poisons, varying by game-data set.
 
 ### Attack-spell mana efficiency
-*Status: formula as used by Monster Intel (no confidence tag in source)*
+*Status: Unrated (client formula as used by Monster Intel)*
 
 - **Damage per mana:** `damage-per-mana = effective-damage-per-round ÷ mana-per-round`.
 - **Rounds to kill:** `rounds-to-kill = ceil(monster HP ÷ effective-damage-per-round)`.
@@ -1558,42 +1564,81 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
     party-settings heal, regardless of which spell sits in the slot: it can't know per-spell whether a
     self-cast is legal, and the caster's own dips are the Spells + Ailments self-heal slots' job anyway.
 
-### Item-cast triggers — how a `CastsSp` fires
-*Status: CONFIRMED 2026-07-18 (user)*
+### Item-cast spells — how a `CastsSp` fires (on-use vs combat proc)
+*Status: CONFIRMED 2026-07-18 (user); message-record rules CONFIRMED (user + item panels)*
 
 - **An Items row's `CastsSp` ability (code 43, `AbilVal` = the cast `Spells.Number`) does NOT always
-  mean "you command-cast this spell."** How the cast fires depends on the ability that **immediately
-  precedes** the `43` slot in the item's `Abil-0..19` list.
-- **`%Spell` (code 114) before `CastsSp` → an automatic per-swing combat proc.** The `%Spell` `AbilVal`
-  is the proc chance; on a hit the weapon adds the cast spell as **extra damage lines during combat**
-  (e.g. *hellblade*: `%Spell 25` → `sunsword`). Not player-triggered.
-- **`CastOnKill%` (code 1114) before `CastsSp` → an on-kill proc.** Fires **only when the wearer lands a
-  monster kill** (`AbilVal` = chance). Legitimately appears on **worn** gear, not just weapons (e.g. the
-  *fukumen* / *shinobi mask* / *oni mask*, all worn masks → `invigorate` / `adrenaline rush` /
-  `nimble`). Not player-triggered.
+  mean "you command-cast this spell."** An item delivers a spell via an `Abil 43` (CastsSp) slot, and
+  how the cast fires depends on the ability that **immediately precedes** the `43` slot in the item's
+  `Abil-0..19` list.
+- **`%Spell` (code 114, `Abil 114`) before `CastsSp` → an automatic per-swing combat proc.** The
+  `%Spell` `AbilVal` is the proc chance; it fires only while the item is equipped and you send a
+  physical attack — on a hit the weapon adds the cast spell as **extra damage lines during combat**
+  (e.g. *hellblade*: `%Spell 25` → `sunsword`; nexus spear's energy-hits #431 at 25%/swing, darkwood
+  staff #849 at 10%/swing). This is the "casts a spell during combat rounds" case. Not
+  player-triggered.
+- **`CastOnKill%` (code 1114, `1114`) before `CastsSp` → an on-kill proc.** Fires **only when the
+  wearer lands a monster kill** (`AbilVal` = the per-kill chance), not per swing. Legitimately appears
+  on **worn** gear, not just weapons (e.g. the *fukumen* / *shinobi mask* / *oni mask*, all worn masks
+  → `invigorate` / `adrenaline rush` / `nimble`). Not player-triggered.
 - **A single item can carry both** — one `%Spell→CastsSp` proc **and** a separate
   `CastOnKill%→CastsSp` proc (e.g. *Pulsar*: `%Spell 45 → blue ray` + `CastOnKill% 90 → energy barrier`).
   Two independent automatic procs.
 - **Bare `CastsSp` (no `%Spell` / `CastOnKill%` modifier before it) → a command-activated "on use"
-  cast.** The player deliberately activates the readied item to cast the spell (e.g. a wand/staff, or
-  *jeweled longsword* → `weapon major valour`). **These are the item spell sources the Spell Book
-  lists** alongside learnable spells.
+  cast.** The player deliberately activates the readied item — `use <item>` — to cast the spell (e.g.
+  a wand/staff; *jeweled longsword* → `weapon major valour`; weapon major bless #114 blesses your
+  weapon; the nexus spear's spear-slam #72). **These are the item spell sources the Spell Book lists**
+  alongside learnable spells. They are player-visible casts, so their message records
+  (caster/target/witness, plus applied/wear-off for a lasting effect) are worth keeping and filling.
 - **`CastsSp` on a one-time consumable** (potion, food — `ItemType` Drink/Food, worn Nowhere) →
   technically activates on use (quaff/eat), but it's **single-use**, so it is **not** a repeatable cast
   source and is **excluded** from the Spell Book. (The equippable-slot gate already filters these — a
   cast source must ready into a real equipment slot.)
+- **The on-use / proc MESSAGE lives on the cast spell's record (Spells#N)**, shared by every item that
+  casts the same spell — never on the item.
+- **A weapon-proc spell that only deals damage (no lasting effect — `Dur==0`, which excludes every
+  ailment) is not worth a message record** and is dropped from the seeds; the generic colour combat
+  recognizer still tallies its damage.
+- **A proc that applies an ailment (poison/blind/hold/disease — `Dur>0`) keeps its record and its
+  condition flag; an on-use cast always keeps its record.**
 - **Client use:**
   - `KnownSpellCatalog.GetClassCastItems` (the Spell Book's item-cast list) must skip any `CastsSp` slot
     preceded by a `%Spell` / `CastOnKill%` modifier — otherwise proc weapons and on-kill gear masquerade
     as command-cast spell sources.
+  - See `ItemCastSpells`, `Game/GameData/`.
 
-### `RemovesSpell` is literal — buff clobbering and removal timing
-*Status: CONFIRMED 2026-09-10 (user; report paradigm-20260910-012303) · Realm: literal-list rule Paradigm; removal timing differs by realm (Stock vs Paradigm)*
+### `RemovesSpell` buff clobbering — literal lists, per-realm timing, shared wear-off
+*Status: CONFIRMED 2026-09-07 (user + game data); literal-list rule CONFIRMED 2026-09-10 (user; report `paradigm-20260910-012303`; verified on Paradigm); realm timing CONFIRMED 2026-09-10 + 2026-09-26 (user) · Realm: differs — Paradigm re-checks every tick (~3s), Stock only at cast*
 
+- **A spell that carries a RemovesSpell ability (Abil 122 → a target spell number) strips that target
+  buff off you the instant it lands.**
+- **When the removal is checked depends on the realm** *([CONFIRMED] 2026-09-10 + 2026-09-26, user)*
+  — this is why #540's suppression is Paradigm-only:
+  - **Paradigm checks engine-side every tick (~3s)** and strips any buff a spell on you removes — an
+    ACTIVE remover keeps stripping its removes on that ongoing tick, not just at its own cast. So a
+    one-way-removed buff CANNOT coexist with an active remover regardless of cast order: an active
+    greater bless re-strips chant every few seconds. Layering is impossible there: a one-way loser can
+    never hold while its remover is up.
+  - **Stock checks only at the moment of cast** — a buff's RemovesSpell fires ONLY when that spell is
+    cast (one-time; no ongoing re-check). A buff and its remover **can** be layered by casting in the
+    right order — the remover first, then the buff it removes. So a ONE-WAY pair cast in non-colliding
+    order holds **both, durably**: cast **greater bless first, then chant** and both stay (gbls's strip
+    already fired with no chant present; chant doesn't list gbls). Reverse order (chant then gbls)
+    leaves only gbls. (Also subject to the stock 10-affect cap — see *Stock "10 spelling" affect cap*.)
+  - **On Stock, clobbering is a one-time effect at cast, not a standing suppression.** Casting a buff
+    that the other removes, **after** it, simply re-applies — only the remover's cast strips. (Not so
+    on Paradigm, which re-checks every tick.)
+  - **Mutual pairs (bless ↔ greater bless — each lists the other) are last-cast-wins in both realms.**
+- **For a mutual pair, whichever was cast last is on you; one-way pairs follow the per-realm rule**;
+  the buffs the winning cast removes are gone.
 - **A buff strips exactly the spells its own `RemovesSpell` (Abil-122) list names — nothing more.** There
   is NO "family exclusivity slot": the fact that bless removes both chant and greater bless, and that
   bless ↔ greater bless remove each other, does NOT make chant remove greater bless.
-- **The bless family, concretely:**
+- **The direction is per the realm's data, so check it, don't assume** — on Paradigm 1.9.1 **bless
+  removes chant** (confirmed 2026-09-07, user + game data), and chant (#23) also removes bless, so the
+  pair is mutual there. On Stock v1.11p the removal is one-way: bless removes chant, but chant (#23 /
+  #825) removes only blight and curse.
+- **The bless family, concretely (Paradigm 1.9.1 data — chant lists bless there):**
   - **greater bless #146** removes: greater curse #61, bless #14, curse #15, **chant #23**, divine
     favour #62, ashwood wand #668.
   - **chant #23** removes: blight #75, curse #15, bless #14 — **NOT greater bless.**
@@ -1604,30 +1649,35 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
 - **Two `chant` records share cast code `chan`.** **#23** is the learnable one (`Learnable`, all
   classes, the one a player casts and the one gbls/curse/blight reference); **#825** is a non-learnable
   room-cast duplicate (`Casted By = Room …`). The clobber math keys off #23.
-- **Removal TIMING differs by realm — this is why #540's suppression is Paradigm-only** *([CONFIRMED]
-  2026-09-10, user)*:
-  - **Stock — a buff's RemovesSpell fires ONLY when that spell is cast** (one-time; no ongoing
-    re-check). So a ONE-WAY pair cast in non-colliding order holds **both, durably**: cast **greater
-    bless first, then chant** and both stay (gbls's strip already fired with no chant present; chant
-    doesn't list gbls). Reverse order (chant then gbls) leaves only gbls. (Also subject to the stock
-    10-affect cap.)
-  - **Paradigm — an ACTIVE remover keeps stripping its removes on an ongoing ~3-second tick**, not just
-    at its own cast, so a one-way-removed buff CANNOT coexist with an active remover regardless of cast
-    order: an active greater bless re-strips chant every few seconds.
-  - **Mutual pairs (bless ↔ greater bless — each lists the other) are last-cast-wins in both realms.**
+- **A wear-off line does fire when the buff is stripped — but only as the shared family text, so it
+  cannot be attributed to the right spell by text alone.** Bless and chant **share the same message
+  records** (both the cast/applied line "You feel lucky!" *and* the wear-off "The effects of bless wear
+  off!"), so a chant-being-stripped shows bless's wear-off text; there is no distinct wear-off for the
+  stripped buff. A client keying timers off those shared lines mis-attributes — the cast confirm
+  refreshes the wrong buff, and the wear-off clears the wrong one.
+- **The reliable signal is what we actually sent** (the distinct "You cast <spell> on …" / the pending
+  self-buff short).
 - **Client use:**
-  - This is exactly why **#540's "suppress the loser" is correct on Paradigm** (don't waste rounds
-    maintaining chant under a maintained gbls) and **correctly does nothing on stock** (where cast-order
-    lets you hold both).
-  - The stock counterpart — **cast the remover before the loser so both stay up** — is BUILT: the Buff
-    Watchdog re-orders its maintenance casts (remover before removed) on stock only, keeping the loser
-    maintained instead of dropping it (`BuffPriorityOrder.OrderRemoversFirst` +
-    `AppServices.CollisionOrderConstraints`, the stock branch of the same one-way removes graph #540
-    suppresses on Paradigm). The clobber-clear re-applies the loser after each remover recast.
-  - **Applied-latch gotcha** *(report paradigm-20260910-012303)*: `ConditionTracker` dedups a repeated
+  - Paradigm: `BuffConflictAnalyzer.OneDirectionalLosers` flags a one-way loser, which is dropped rather
+    than cast into a remover that re-strips it every tick. Mutual pairs stay last-cast-wins. This is
+    exactly why **#540's "suppress the loser" is correct on Paradigm** (don't waste rounds maintaining
+    chant under a maintained gbls) and **correctly does nothing on stock** (where cast-order lets you
+    hold both).
+  - Stock: `BuffConflictAnalyzer.OneDirectionalRemoverCodes` + `BuffPriorityOrder.OrderRemoversFirst`
+    cast the remover ahead of its loser so both stay up. The stock counterpart — **cast the remover
+    before the loser so both stay up** — is BUILT: the Buff Watchdog re-orders its maintenance casts
+    (remover before removed) on stock only, keeping the loser maintained instead of dropping it
+    (`BuffPriorityOrder.OrderRemoversFirst` + `AppServices.CollisionOrderConstraints`, the stock branch
+    of the same one-way removes graph #540 suppresses on Paradigm). The clobber-clear re-applies the
+    loser after each remover recast.
+  - The Buff Watchdog keys the timer off what was sent and, on a wear-off right after a clobbering
+    cast, leaves both timers alone and **infers** the clobber from RemovesSpell + cast order
+    (`Until − TotalSec` = each buff's cast instant), rendering the clobbered bar as **"conflict"** rather
+    than a bogus countdown.
+  - **Applied-latch gotcha** *(report `paradigm-20260910-012303`)*: `ConditionTracker` dedups a repeated
     applied line (each spell's "You feel …" latches once until its wear-off). A clobber clears the
-    victim's *timer* but the game sends no distinct wear-off for it (the shared family wear-off is
-    ignored), so the victim's applied-latch survived — and a later **re-cast** of that victim was
+    victim's *timer* but the only wear-off the game sends for it is the shared family text, which the
+    tracker ignores, so the victim's applied-latch survived — and a later **re-cast** of that victim was
     deduped, never re-confirmed, and so never drove its own clobber-clear (a re-cast greater bless never
     dropped an active chant). Fixed by `ConditionTracker.ReleaseApplied`, called from the clobber-clear
     so the victim's latch is dropped too.
@@ -1642,17 +1692,17 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   - Not modelled in the client yet.
 
 ### Buff timers across a disconnect
-*Status: CONFIRMED 2026-08-28 (user); earlier note 2026-08-16 (user)*
+*Status: CONFIRMED 2026-08-28 (user); earlier model 2026-08-16 (user); current behaviour after report `paradigm-20260908-205555`*
 
-The two notes below were recorded as the client's reconnect model evolved; neither describes the
-current code exactly. **Current client behaviour** (`CastingDirector.PauseBuffTimers` /
-`ResumeBuffTimers`, after report `paradigm-20260908-205555`): any disconnect freezes the Buff Watchdog
-display only; on the first in-game prompt after reconnect, **both** self and party timers ride their
-real (absolute) expiry — no shift by the offline gap, no wholesale wipe of self timers — and only the
-timers that lapsed while offline are dropped and recast. A fresh character (ProfileLoaded) is the
-only path that clears everything. The notes, oldest last:
-
-- **(2026-08-28) When WE (the caster) disconnect, only OUR OWN buffs are in doubt.** The other party
+- **Current client behaviour** (`CastingDirector.PauseBuffTimers` / `ResumeBuffTimers`, after report
+  `paradigm-20260908-205555`): any disconnect freezes the Buff Watchdog display only.
+- **On the first in-game prompt after reconnect, both self and party timers ride their real (absolute)
+  expiry** — no shift by the offline gap, no wholesale wipe of self timers — and only the timers that
+  lapsed while offline are dropped and recast.
+- **A fresh character (ProfileLoaded) is the only path that clears everything.**
+- The superseded models were recorded as the client's reconnect handling evolved; neither describes
+  the current code exactly.
+- **Superseded (2026-08-28): when WE (the caster) disconnect, only OUR OWN buffs are in doubt.** The other party
   members stayed **online**, so their buffs kept **counting down in real time** the whole time we were
   gone — their absolute expiry doesn't move.
   - On reconnect: clear our self-buff timers (re-establish fresh), and **leave party-member timers at
@@ -1660,7 +1710,7 @@ only path that clears everything. The notes, oldest last:
     we were away recast).
   - Do **not** shift party timers forward by the offline gap (the old "freeze + preserve remaining"
     model over-counted them).
-- **(2026-08-16) Session vs drop for buff timers.** **Any** disconnect — manual, hangup, or an unexpected
+- **Superseded (2026-08-16): session vs drop for buff timers.** **Any** disconnect — manual, hangup, or an unexpected
   drop — **freezes** the buff timers (the buffs persist server-side through link-death).
   - The Buff Watchdog display freezes at the drop instant too (its 1s heartbeat is a wall clock that
     keeps ticking offline).
@@ -1708,11 +1758,20 @@ only path that clears everything. The notes, oldest last:
 - **Poison / blind / hold-person ARE enumerated engine effects**, so their cures clear the effect
   wholesale and the causing spells are found by the spell's own **inflict ability code**: Poison =
   **19**, BlindUser = **107**, HoldPerson = **74**, Paralyze = **75** (74+75 → "Movement prevented").
+  **[CONFLICT — ask the user]** do paralyze spells use ability 75, ability 71 at +100, or both — and
+  which does the MovementPrevented flag derivation follow? (*Condition Effects flags derive from the
+  linked spell's ability codes* says paralyze = `71` +100 with no distinct hold code.)
   - CurePoison is code 20; a cure poison spell also lists 794/798 explicitly via RemovesSpell as special
     cases.
-  - Ability 19 is the lingering-poison DoT; instant poison *damage* spells like `poison bolt` use a
+  - Ability 19 is the lingering-poison DoT. `poison bolt`'s own record has no 19, but it EndCasts poison
+    bite (19), so it does poison — see *Condition Effects flags derive from the linked spell's ability
+    codes* (data-verified on both v1.11p and Paradigm 1.9.1: spell #35 → EndCast (151) → #1366). This
+    supersedes the 2026-09-03 claim that instant poison *damage* spells like `poison bolt` use a
     different code and are not "poisoned"-condition.
 - **The ailment→flag map:** Diseased, Poisoned, Blinded, MovementPrevented.
+- **Diseased has no ability code, so its flags are set by hand:** the seed's Diseased flags were
+  hand-authored from the *cure disease* / *cure major disease* RemovesSpell union, and the runtime reads them from the
+  seed (`AppServices.DiseaseApplySpellNumbers` reads the Diseased flag off the Messages seed records).
 - **Client use:**
   - Both realm seeds are flagged from their own realm MDB (Euphoria-Stock-ish for stock, Paradigm-1.9.1
     for paradigm).
@@ -1748,7 +1807,7 @@ only path that clears everything. The notes, oldest last:
 - **A code plus a name is a single-target cast** (`gbls fuj`, `bles alice`). The name is a **prefix / shorthand** the server resolves against the players (and NPCs, for offensive spells) **in the room**: `gbls fuj` casts greater bless on `Fujin` if that uniquely matches.
 - **An ambiguous prefix bonks** with a "do you mean …" list and casts NOTHING.
 - **Client use:**
-  - This is exactly how the engine casts — bare code for self / whole-party, `code given` for a single member.
+  - This is exactly how the engine casts — bare code for self / whole-party, `<code> <given-name prefix>` (e.g. `gbls fuj`) for a single member.
 
 ### Combat vs in-between spells — round energy cost is the divider
 *Status: CONFIRMED 2026-08-14 (user; capture `paradigm-20260814-210613`)*
@@ -1766,6 +1825,8 @@ only path that clears everything. The notes, oldest last:
 *Status: CONFIRMED 2026-08-16 (user + report `paradigm-20260816-101702`); same-round attack rule CONFIRMED 2026-09-16 (user; report `paradigm-20260916-033047`)*
 
 - **You may cast only ONE 0-energy "between-round" spell per combat round — total, across heals, buffs, debuffs, and use-item buffs.** These are the `EnergyCost = 0` spells (mageshield / holy armour, cures, regen HoTs, etc.); they ride *between* the round's main action, so one is free each round on top of your attack.
+- **The between-round cycle runs on the same 5s tick whether or not you are in combat** — see *Timing & rounds → Combat round (5s) and the between-round cast cycle*.
+- **A between-round cast and the combat attack are independent slots** — see *Between-round cast slot vs the combat attack*.
 - **A second between-round spell the same round is rejected with `You have already cast a spell this round!`, and the spell you just sent does NOT fire** — success or failure of the first doesn't matter, the round's single between-round slot is spent.
 - **This line never appears for combat spells** (lbol / mmis / deathtouch / fireball are 500–1000 energy — the round's main action, not between-round), so it is purely the between-round coordinator's signal.
 - **A between-round buff never delays the SAME round's real attack — a fresh engage must fire instantly right behind one** *(CONFIRMED, user 2026-09-16)*. Casting a 0-energy buff (`prfl`, `vlwa`, …) and then immediately attacking a monster that just arrived is legitimate the same round; there is no server-side wait.
@@ -1785,7 +1846,8 @@ only path that clears everything. The notes, oldest last:
   - **AppliedMessage** — the buff-applied condition line.
 - **A successful cast emits the perspective-appropriate line to each observer**, so a buff landing on the party can be recognised from ANY seat — our own cast (Caster), a buff cast ON us (Target), or a buff cast on a party member (Witness).
 - **Client use:**
-  - Today the buff-timer engine reads only CasterMessage (our casts) + AppliedMessage (self conditions); it does NOT yet read Target / Witness, so a buff another party member casts — or our own single-target manual cast — isn't tracked in the Buff Watchdog.
+  - Today the buff-timer engine reads only CasterMessage (our casts) + AppliedMessage (self conditions); it does NOT yet read Target / Witness, so a buff another party member casts isn't tracked in the Buff Watchdog.
+  - Our own single-target manual cast IS tracked: `CastingDirector.NoteManualBuffCast` arms a pending confirm for a targeted hand cast (`gbls fuj`) and resolves the member off the success line.
 
 ### Learning a spell from a teaching item
 *Status: CONFIRMED 2026-08-15 (user + wire capture)*
@@ -1821,7 +1883,7 @@ only path that clears everything. The notes, oldest last:
 - **A genuine fresh-cast effect line has no parenthetical.**
 - **Client use:**
   - Treating the readout as a cast falsely marked buffs active on **login** (the post-entry `stat` refresh), and because the tracker only fires on a not-active→active transition, that stale "active" state then **suppressed the confirm on the real manual cast** (a repeat applied line is no transition).
-  - The client keys off the trailing **`(<remaining>s)`** parenthetical to skip these readouts entirely (`ConditionTracker`).
+  - The client keys off the trailing **`(<remaining>s)`** parenthetical to skip these readouts entirely (`ConditionTracker`). *([NEEDS CONFIRMATION] Stock's stat list has no countdown suffix — does a Stock stat readout falsely arm buffs?)* (The Stock no-suffix form is in *Fear*.)
 
 ### Party buff slot scope — whole-party vs single-target
 *Status: user 2026-08-17 / 2026-08-28, corrected 2026-09-06 (CONFIRMED, user; report `paradigm-20260906-150624`); master-enable note 2026-09-09 (report `paradigm-20260909-220212`) · Realm: both (scope classification confirmed against stock + Paradigm data)*
@@ -1833,28 +1895,11 @@ only path that clears everything. The notes, oldest last:
   - **`Spells.Targets` = 2 (Self or User) → a single-target beneficial buff** cast on ONE other member (`frenzy`, `divine favour`, `blood ritual`, `regeneration`). Never targets self (self uses the self-slots).
   - **`Spells.Targets` = 10 / 13 (Divided / Full Party Area) → a whole-party buff**, one cast with no target that blankets the party (`chant`, `mass frenzy`, `unholy fanaticism`, `rejuvenating field`). Lands on self too.
   - **Scope 0/1 (self-only), 4/8/9/12 (enemy), 7 (item) are NOT party buffs.**
-- **Single-target targeting is by selected member (given name), not class** — a slot blesses "all members" or a checklist of specific players, and only fires for a name that is BOTH a current `par` party member AND in the room (never casts at someone absent / uninvited / in another room).
-- **Supersession: a spell that carries RemovesSpell (Abil 122) removes the named spell** (the Spell Book renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g. **chant removes bless**), in a party we stop self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a single-target party buff can't cover self). (Paradigm 1.9.1 data has both directions — chant #23 removes bless and bless removes chant; see the RemovesSpell topic below.)
+- **Single-target targeting is by selected member (given name), not class** — a slot blesses "all members" or a checklist of specific players, and only fires for a name that is a current `par` party member (never casts at someone uninvited). Targeting is by `par` membership, not room presence (`AppServices.IsGivenNameInRoom` is NOT a party-buff cast gate); a `You do not see <name> here!` reply backs that member off — see *Party → Targeted casts on a hiding member*.
+- **Supersession: a spell that carries RemovesSpell (Abil 122) removes the named spell** (the Spell Book renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g. **chant removes bless** — a Paradigm-only example), in a party we stop self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a single-target party buff can't cover self). (Paradigm 1.9.1 data has both directions — chant #23 removes bless and bless removes chant; see *`RemovesSpell` buff clobbering — literal lists, per-realm timing, shared wear-off*.) **[CONFLICT — ask the user]** on Stock a remover and its loser can be layered — should a whole-party one-way remover still suppress the self-buff it removes on Stock (the client's `AppServices.SelfBuffCoverage` is not realm-gated)?
 - **Client use:**
   - `CastingDirector.PickUnifiedBuff` falls back to the self-bless timing gates for a `WholePartyOn` slot when `!PartyState.IsInParty`, instead of holding it forever behind "must be in a party" (report `paradigm-20260906-150624`: a whole-party item-cast buff, `platinum sceptre`, never fired outside a party).
   - **`WholePartyOn` remains the master enable**: the per-slot `CastSolo` option only extends an enabled slot to solo play and must not bypass an unchecked Party box. (2026-09-09, report `paradigm-20260909-220212`: unchecked whole-party rows kept casting solo through their default `CastSolo=true`, draining mana while the rest of the UI reported them off.)
-
-### RemovesSpell buffs clobber on cast; the wear-off line is shared
-*Status: CONFIRMED 2026-09-07 (user + game data); realm timing CONFIRMED 2026-09-26 (user) · Realm: differs — Paradigm re-checks every tick, Stock only at cast*
-
-- **A spell that carries a RemovesSpell ability (Abil 122 → a target spell number) strips that target buff off you the instant it lands.**
-- **The direction is per the realm's data, so check it, don't assume** — on Paradigm 1.9.1 **bless removes chant** (confirmed 2026-09-07, user + game data), and chant (#23) also removes bless, so the pair is mutual there. On Stock v1.11p the removal is one-way: bless removes chant, but chant (#23 / #825) removes only blight and curse.
-- **When the removal is checked depends on the realm** *([CONFIRMED] 2026-09-26, user)*:
-  - **Paradigm checks engine-side every tick** (~3s) and strips any buff a spell on you removes. Layering is impossible there: a one-way loser can never hold while its remover is up.
-  - **Stock checks only at the moment of cast.** A buff and its remover **can** be layered by casting in the right order — the remover first, then the buff it removes.
-- **Among a clashing set, whichever was cast LAST is the one actually on you**; the buffs it removes are gone.
-- **A wear-off line does fire when the buff is stripped — but it cannot be attributed to the right spell by text alone.** Bless and chant **share the same message records** (both the cast/applied line "You feel lucky!" *and* the wear-off "The effects of bless wear off!"), so a chant-being-stripped shows bless's wear-off text. A client keying timers off those shared lines mis-attributes — the cast confirm refreshes the wrong buff, and the wear-off clears the wrong one.
-- **The reliable signal is what we actually sent** (the distinct "You cast <spell> on …" / the pending self-buff short).
-- **On Stock, clobbering is a one-time effect at cast, not a standing suppression.** Casting a buff that the other removes, **after** it, simply re-applies — only the remover's cast strips. (Not so on Paradigm — see the per-tick rule above.)
-- **Client use:**
-  - Paradigm: `BuffConflictAnalyzer.OneDirectionalLosers` flags a one-way loser, which is dropped rather than cast into a remover that re-strips it every tick. Mutual pairs stay last-cast-wins.
-  - Stock: `BuffConflictAnalyzer.OneDirectionalRemoverCodes` + `BuffPriorityOrder.OrderRemoversFirst` cast the remover ahead of its loser so both stay up.
-  - The Buff Watchdog keys the timer off what was sent and, on a wear-off right after a clobbering cast, leaves both timers alone and **infers** the clobber from RemovesSpell + cast order (`Until − TotalSec` = each buff's cast instant), rendering the clobbered bar as **"conflict"** rather than a bogus countdown.
 
 ### Debuff slot spells — energy and targeting
 *Status: CONFIRMED 2026-08-17 (user + game-data trace) · Realm: Paradigm 1.9.1*
@@ -1865,7 +1910,7 @@ only path that clears everything. The notes, oldest last:
   - A non-zero-energy spell in a debuff slot is an attack spell mis-slotted.
 - **Targeting must fit the slot** (`Spells.Targets` scope):
   - **Single-target debuff** → a single-enemy scope: **Monster (4)** or **Monster or User (8)** (e.g. `blin`/`frai`/`corr`-flesh are 8).
-  - **AoE debuff** → an area/room scope: **Divided Area not-self (3)**, **Divided Area incl-self (5)**, **Divided Attack Area (9)**, **Full Area (11)**, **Full Attack Area (12)** (e.g. `stnk`/`fbal` are 12).
+  - **AoE debuff** → an area/room scope: **Divided Area not-self (3)**, **Divided Area incl-self (5)**, **Divided Attack Area (9)**, **Full Area (11)**, **Full Attack Area (12)** (e.g. `stnk` is 12; `fbal` shares scope 12 but is an attack (EnergyCost 1000), so not slot-eligible).
   - The **party-area** scopes (Divided Party Area 10 / Full Party Area 13) are buffs/heals aimed at the party, **never** enemy debuffs.
   - So a targeted spell can't be slotted as an AoE, nor an AoE as single-target (e.g. `stnk`, Targets 12, belongs in the AoE slot, not single-target).
 - **Gating:** the **single-target** debuff is gated by **Auto-Combat** (it's a pre-attack debuff, part of the attack rotation); the **AoE** debuff is gated by **Auto-Nuke**.
@@ -1881,18 +1926,6 @@ only path that clears everything. The notes, oldest last:
 - **Client use:**
   - Modelled only in Monster Intel's "Apply Debuffs" WHAT-IF (`MonsterDebuffCalculator` + the `MonsterMatchupCalculator` monster-swing model) — the app does NOT apply debuff stat effects during live combat; this is a preview.
 
-### Item-cast spells — on-use vs combat proc
-*Status: CONFIRMED (user + item panels)*
-
-- **An item delivers a spell via an `Abil 43` (CastsSp) slot, and HOW it fires depends on the slot that precedes it.**
-- **Bare CastsSp (no modifier) = a command on-use cast** — the player `use <item>`s it (weapon major bless #114 blesses your weapon; the nexus spear's spear-slam #72). These are player-visible casts and their message records (caster/target/witness, plus applied/wear-off for a lasting effect) are worth keeping and filling.
-- **CastsSp preceded by `Abil 114` (%Spell) or `1114` (CastOnKill%) = a combat proc** — it fires only while the item is equipped and you send a physical attack (the % is the per-swing / per-kill chance; nexus spear's energy-hits #431 at 25%/swing, darkwood staff #849 at 10%/swing). This is the "casts a spell during combat rounds" case.
-- **The on-use / proc MESSAGE lives on the cast spell's record (Spells#N)**, shared by every item that casts the same spell — never on the item.
-- **A weapon-proc spell that only deals damage (no lasting effect — `Dur==0`, which excludes every ailment) is not worth a message record** and is dropped from the seeds; the generic colour combat recognizer still tallies its damage.
-- **A proc that applies an ailment (poison/blind/hold/disease — `Dur>0`) keeps its record and its condition flag; an on-use cast always keeps its record.**
-- **Client use:**
-  - See `ItemCastSpells`, `Game/GameData/`.
-
 ### Condition Effects flags derive from the linked spell's ability codes
 *Status: CONFIRMED 2026-09-04 (user + game-data) · Realm: both (Paradigm 1.9.1 / Stock 1.11.p)*
 
@@ -1906,10 +1939,10 @@ only path that clears everything. The notes, oldest last:
 | **71** | Confusion | **Confused** | rose book confuse #199, convulsions #951, beholder death #1111 |
 
 - **Poison follows the `EndCast` (151) cast-chain** — a damage spell (poison bolt) does its damage then EndCasts the actual DoT (poison bite), which carries the `19`. Only EndCast is followed for condition-inflict; `GiveTempSpell` (160) GRANTS a castable spell to the caster (its code confuses only when the player later casts it), so it is NOT followed.
-- **`Confusion` (71) is shared with sleep / stun / paralyze** — those are code-71 too (paralyze = `71` +100 = fumble 100% = full incapacitation). They carry NO distinct hold code; their "can't move OR attack" is a manual Movement+Attack-prevented classification. So Confused is added from code 71 **only when the record isn't already Movement/Attack-prevented**, keeping the hand-authored full-holds as hold.
+- **`Confusion` (71) is shared with sleep / stun / paralyze** — those are code-71 too (paralyze = `71` +100 = fumble 100% = full incapacitation). They carry NO distinct hold code; their "can't move OR attack" is a manual Movement+Attack-prevented classification. So Confused is added from code 71 **only when the record isn't already Movement/Attack-prevented**, keeping the hand-authored full-holds as hold. **[CONFLICT — ask the user]** do paralyze spells use ability 75, ability 71 at +100, or both — and which does the MovementPrevented flag derivation follow? (*Ailment identification — which spells cause disease / poison / blind / hold* lists Paralyze = **75**.)
 - **`LastActionFailed` is for spell/item-use FAILURES, not confusion** — a record that ends up Confused must not also carry it (stripped in the re-derivation).
 - **Mute (`76`, prevents casting) has no Effects flag and is out of scope** (rare, PVP-only on a learned spell).
-- **Diseased is monster/trap-inflicted with no spell code** — left hand-authored.
+- **Diseased is monster/trap-inflicted with no spell code** — left hand-authored. The seed's Diseased flags are set by hand from the *cure disease* / *cure major disease* RemovesSpell union, and the runtime (`AppServices.DiseaseApplySpellNumbers`) reads them from the seed — see *Ailment identification — which spells cause disease / poison / blind / hold*.
 - **Client use:**
   - The flags are recomputed **additively** (add what the codes prove, never strip a hand-authored flag except the LastActionFailed-on-confuse cleanup).
   - `SelfAilmentChipResponder` / `PartyAilmentTracker` / `ConditionTracker` all read these flags, so a missing flag silently breaks ailment + confuse-fumble recognition (the reason rose book #199 was invisible).
@@ -1917,11 +1950,12 @@ only path that clears everything. The notes, oldest last:
 ### Confusion is a single state — generic onset and wear-off lines
 *Status: CONFIRMED 2026-07-14 (user); single-state clear CONFIRMED 2026-07-28 (report `paradigm-20260728-173036`); five message forms CONFIRMED 2026-09-02 (user)*
 
-- **`The effects of confusion wear off!` is a shared, generic wear-off** reused by many different confusion sources — a lot of confusion spells and monster effects emit the same line. The onset `You are confused!` is likewise generic. So from the wire alone the client cannot tell *which* confusion is on the character: a single applied line covers every confusion source, and a single wear-off line ends it.
+- **`The effects of confusion wear off!` is a shared, generic wear-off** reused by many different confusion sources — a lot of confusion spells and monster effects emit the same line. The onset `You are confused!` is likewise generic. So from the wire alone the client cannot tell *which* of those confusions is on the character: most confusion sources share the generic onset, and a single wear-off line ends it.
+- **Most confusion sources share the generic onset; some (convulsions `You are in convulsions!`, form of the monkey) have their own onset and wear-off** — see *Convulsions — custom fumble line, repeated move fumbles, seed onset fix* and *Form of the monkey — self-buff that confuses the caster*.
 - **A few effects append their own specific wear-off** (e.g. `The effect of hypnotic hands wears off.`) rather than the generic line, but they still share the generic `You are confused!` onset. They are therefore not independently distinguishable from text alone.
 - **Records that share an applied line are aliases of one effect and must be cleared as a group** — when any of them wears off, all of them end. Keying each record's clear solely to its own end text strands the flag whenever a sibling with a specific wear-off never sees its matching line. *(2026-07-14)*
 - **Any confusion wear-off clears confusion entirely** *(CONFIRMED 2026-07-28, report `paradigm-20260728-173036`)*. More than one record can hold `Confused` at once: a specific source (a monster confuse spell with its own wear-off line, matched by a user-defined message entry incl. caster/target/witness cases) plus the generic `fumble` record, which also carries `Confused` so a confuse whose *set*-line was missed is still recognised. When ANY real confusion wears off you are no longer confused, so **every** latched `Confused` source clears — not just the record whose wear-off fired. Clearing only the wearing-off record (or its applied-line aliases) strands the flag: a death-dog shriek that wore off left the co-latched `fumble` still holding `Confused`, keeping the nav ConfusionGate stuck.
-- **A confuse spell surfaces up to FIVE distinct message forms** *(CONFIRMED 2026-09-02, user)*. From the target's point of view: (1) a caster→you cast line, (2) a third-party witness line, (3) an **applied** onset, (4) a **wear-off**, and (5) a per-action **fumble**. The applied/wear-off pair sets and clears the `Confused` state; the fumble line (carrying `LastActionFailed`) fires on each swallowed command and has no wear-off of its own — it clears with the effect via the single-state confusion clear above.
+- **A confuse spell surfaces up to FIVE distinct message forms** *(CONFIRMED 2026-09-02, user)*. From the target's point of view: (1) a caster→you cast line, (2) a third-party witness line, (3) an **applied** onset, (4) a **wear-off**, and (5) a per-action **fumble**. The applied/wear-off pair sets and clears the `Confused` state; the fumble line (carrying `LastActionFailed`) fires on each swallowed command and has no wear-off pairing of its own — it clears with the effect via the single-state confusion clear. (The catalogue's `fumble` RECORD does list an end text, but that is just the generic confusion wear-off — see *Confusion fumbles — actions fail and must be re-sent*.)
 - **Client use:**
   - `ConditionTracker`'s applied-line alias group-clear implements the shared-applied-line rule.
   - `ConditionTracker` clears every active `Confused` record when a `Confused`-carrying record's wear-off matches.
@@ -1930,31 +1964,31 @@ only path that clears everything. The notes, oldest last:
 ### Confusion fumbles — actions fail and must be re-sent
 *Status: CONFIRMED 2026-07-14 (user; report `paradigm-20260714-093614`); any-action + move revert CONFIRMED 2026-09-01 (user + report `paradigm-20260901-080223`); re-send of every client command CONFIRMED 2026-09-09 (user + report `paradigm-20260908-211659`)*
 
-- **Confusion does not block attacking (or acting) outright — each action you send can fumble.** The game consumes the command and it does **not execute** — surfaced as `You fumble in confusion!` (self) / `<name> fumbles about dazedly!` (others). The catalogue's `fumble` record carries the `LastActionFailed` flag (and `Confused`), and its wear-off is the generic `The effects of confusion wear off`.
+- **Confusion does not block attacking (or acting) outright — each action you send can fumble.** The game consumes the command and it does **not execute** — surfaced as `You fumble in confusion!` (self) / `<name> fumbles about dazedly!` (others). The catalogue's `fumble` record carries the `LastActionFailed` flag (and `Confused`), and the record's end text is the generic confusion wear-off `The effects of confusion wear off` — the fumble line itself has no wear-off pairing.
 - **A fumbled action is lost; to actually perform it you must re-send the same action.** Confusion can fumble several actions in a row; how many depends on the severity of the confusion.
-- **A fumble can prevent ANY action, not just combat, and the fumble line can be customized per confuse source** *(2026-09-01)*. Most confusion sources surface the generic `You fumble in confusion!`; `convulsions` customizes it (see the convulsions topic). Either way the just-sent command is consumed and never executes.
+- **A fumble can prevent ANY action, not just combat, and the fumble line can be customized per confuse source** *(2026-09-01)*. Most confusion sources surface the generic `You fumble in confusion!`; `convulsions` customizes it (see *Convulsions — custom fumble line, repeated move fumbles, seed onset fix*). Either way the just-sent command is consumed and never executes.
 - **The fumble line always appears as the direct reply to the command it swallowed**, never as unprompted ambient text *(2026-09-01)*.
 - **A fumbled move has to REVERT its pending step or the tracker strands** *(2026-09-01)* — the unreverted move got wrongly matched against later unrelated text and stranded a tier-3 recovery backtrack indefinitely (no timeout watched its landing).
 - **Implication for auto-combat:** an attack command (`aa` / `a`) that fumbles is consumed without hitting, so the engine must **re-issue its last attack** when it sees a fumble rather than assume the swing landed. Otherwise the monster goes unattacked until the user manually re-sends — the reported symptom of "monsters in room but not attacking unless I manually send attack commands" (report `paradigm-20260714-093614`).
 - **The re-send covers EVERY client-sent command, not just a weapon swing — but only the CLIENT's own commands, never what the user typed** *(2026-09-09)*. A fumble eats whatever command was just sent; to perform it you re-send the same command. The client does this generically for anything IT sent — weapon swing, attack spell (immediately, not deferred to the next round tick), item use, door bash, and so on — because a user fighting confused shouldn't have to hand-repeat each eaten action. A command the **user typed** is never auto-repeated (re-sending a manual command is the user's call).
 - **Client use:**
-  - `MovementRefusalDetector` recognizes the fumble lines as movement refusals, reverting the pending move immediately.
+  - `MovementRefusalDetector` recognizes the fumble lines as movement refusals, reverting the pending move immediately. The lines aren't hardcoded — they come from each Confused MessageRecord's `ConfuseFumbleLine`, checked via `ConditionTracker.IsConfuseFumbleLine`.
   - Every fumble fires `ConditionTracker.ActionFailed` (on a `LastActionFailed` record OR a `ConfuseFumbleLine` match). The handler calls `CombatManager.OnActionFailed` first (re-sends a weapon swing WITH its engage-verification bookkeeping, returns whether it did), and on false falls through to `EngineSendGate.ReplayLastClientCommand`, which re-sends the last command that passed through the engine send gate.
   - User-typed input bypasses that gate (it flows straight to `SendUserInput`), so it's never in the replay buffer.
-  - A bare **movement** step is skipped by the replay (the move-revert above already recovers it, and a second send would double-step).
+  - A bare **movement** step is skipped by the replay (the fumbled-move revert already recovers it, and a second send would double-step).
 
 ### Convulsions — custom fumble line, repeated move fumbles, seed onset fix
-*Status: CONFIRMED 2026-09-01 (user + report `paradigm-20260901-080223`); CONFIRMED 2026-09-02 (report `paradigm-20260902-113201`); CONFIRMED 2026-09-05 (report `paradigm-20260905-183956`); third fumble wording UNVERIFIED 2026-09-02*
+*Status: CONFIRMED 2026-09-01 (user + report `paradigm-20260901-080223`); CONFIRMED 2026-09-02 (report `paradigm-20260902-113201`); CONFIRMED 2026-09-05 (report `paradigm-20260905-183956`); third fumble wording NEEDS CONFIRMATION 2026-09-02*
 
 - **`convulsions` customizes the fumble line to `You convulse violently!` (with its own onset `You are in convulsions!`)** *(CONFIRMED 2026-09-01)*. Its wear-off (`AppliedEndsWith`) is `Your body returns to normal.`.
 - **Convulsions can fumble several consecutive moves in a row, well inside a handful of seconds** *(CONFIRMED 2026-09-02, report `paradigm-20260902-113201`)*. The per-move revert is correct, but `LoopRunner`'s bounded recovery budget (3 attempts) was shared between genuine desyncs and these fumbles — three convulsion bonks on the same room burned the whole budget in under 10 seconds and permanently failed the loop, leaving the character standing there Confused with nothing left running.
 - **The correct onset is `You are in convulsions!`** *(CONFIRMED 2026-09-05, report `paradigm-20260905-183956`)* — confirmed live in both this report and `paradigm-20260901-080223`. The shipped `convulsions` message record's `AppliedMessage` was wired to the wrong line, so the 2026-09-02 recovery-budget exemption never actually engaged for a real convulsions episode:
   - Both bundled seeds (`Messages.paradigm.seed.json` and `Messages.stock.seed.json`) had `AppliedMessage: "You look around stupidly and do nothing!"` on the merged `convulsions` record — that's one of the fumble wordings (correctly still listed in `ConfuseFumbleLine`), not the condition's own onset line.
   - Since that fumble text never actually appears as ambient onset text in a session, the record's `AppliedMessage` never matched, `ConditionTracker` never added it to `_active`, and `IsConfused` stayed false for the whole convulsions duration — so `LoopRunner.EnterRecovery` charged every fumble-caused block against `MaxRecoverAttempts` same as a real desync, burning the budget in under 20 seconds and permanently failing the loop.
-  - The onset had previously been found and hand-corrected by the user in a per-set `messages.json` override that predates the realm-flavored split — `DataMigration.RetireLegacyMessagesOnce` retired that override to `.bak` during the split since the shipped seed never carried the same correction, silently reintroducing the bug.
-- **`convulsions` may have a THIRD fumble wording — `You look around stupidly and do nothing!`** *([UNVERIFIED] 2026-09-02, cross-referenced from a messages.md export, not a live bug report)*, alongside the generic fumble and its own `You convulse violently!`, flagged `LastActionFailed` in the source data. Not yet confirmed against a live session; treat as provisional until it's actually observed. The 2026-09-05 entry above calls it "one of the fumble wordings" only because the client lists it in `ConfuseFumbleLine` — it still hasn't been seen live.
+  - The onset had previously been found and hand-corrected by the user in a per-set `messages.json` override that predates the realm-flavored split — a one-time legacy-messages migration (since removed; historically `DataMigration.RetireLegacyMessagesOnce`) retired that override to `.bak` during the split since the shipped seed never carried the same correction, silently reintroducing the bug.
+- **`convulsions` may have a THIRD fumble wording — `You look around stupidly and do nothing!`** *([NEEDS CONFIRMATION] 2026-09-02, cross-referenced from a messages.md export, not a live bug report)*, alongside the generic fumble and its own `You convulse violently!`, flagged `LastActionFailed` in the source data. Not yet confirmed against a live session; treat as provisional until it's actually observed. The 2026-09-05 onset-fix note calls it "one of the fumble wordings" only because the client lists it in `ConfuseFumbleLine` — it still hasn't been seen live.
 - **Client use:**
-  - `MovementRefusalDetector` recognizes BOTH `You fumble in confusion!` and `You convulse violently!` as movement refusals, reverting the pending move immediately; it also recognizes `You look around stupidly and do nothing!` (same revert mechanic), so if that wording does turn out to be real, a move fumbled this way won't strand the tracker.
+  - `MovementRefusalDetector` recognizes BOTH `You fumble in confusion!` and `You convulse violently!` as movement refusals, reverting the pending move immediately; it also recognizes `You look around stupidly and do nothing!` (same revert mechanic), so if that wording does turn out to be real, a move fumbled this way won't strand the tracker. These lines are no longer hardcoded in the detector — they come from each Confused MessageRecord's `ConfuseFumbleLine` via `ConditionTracker.IsConfuseFumbleLine`.
   - `LoopRunner.EnterRecovery` reads `ConditionTracker.IsConfused` (wired via `SetConfusedCheck`) and doesn't charge an attempt against `MaxRecoverAttempts` while it's true — the reroute/resend still happens every time, it just isn't bounded by the same budget a real mapping problem is.
   - Both bundled seeds' `convulsions` record now has `AppliedMessage: "You are in convulsions!"`; `AppliedEndsWith` (`Your body returns to normal.`) was already correct. No code change — `ConditionTracker` and `LoopRunner` already behaved exactly as designed once fed the right onset text.
 
@@ -1965,14 +1999,14 @@ only path that clears everything. The notes, oldest last:
 - **There is no separate wear-off for the confusion** — it ends when the **form itself** wears off (`The spirit of the monkey has left your body!`). **Client encoding:** the `form of the monkey` message record carries `Confused` (set on the form's onset, cleared on the form's wear-off, which triggers the single-state confusion clear); the separate `You are distracted!` record carries `LastActionFailed` (+ `Confused` as the missed-onset fallback) to drive the per-action re-send.
 
 ### Knockdown — a movement-preventing hold
-*Status: CONFIRMED (report 002413)*
+*Status: CONFIRMED (report `paradigm-20260714-002413`)*
 
 - **A knockdown is a movement-preventing (held) status.** The hit lands as `You are knocked off your feet, and land with a heavy thump!` (third-person `{s} is knocked flat!`).
 - **While down, the standing status is `You are flat on your back!`** — which is also what the server prints as the **move refusal** when you try to walk while knocked down (a bonk, no room redisplay).
 - **It clears with `You get back on your feet.`**.
 - **Client use:**
   - `MovementRefusalDetector` matches the `You are flat on your back!` move refusal.
-  - The applied/clear pair maps to the `MovementPrevented` flag, so the local hold (`SelfHeldResponder` → `HeldGate`) holds our own loop for the duration exactly as a confused leader's does — the `.@held` pause a held follower sends the leader is eaten for a held leader / solo.
+  - The applied/clear pair maps to the `MovementPrevented` flag, so the local hold (`SelfHeldResponder` → `HeldGate`) holds our own loop for the duration exactly as a confused leader's does. A held leader or solo character has no leader to send `.@held` to, so the local `HeldGate` alone pauses the loop.
 
 ---
 
@@ -1984,11 +2018,10 @@ How monsters come into a room (lair groups, `NPC` placements, bosses, death-summ
 
 *Status: CONFIRMED 2026-08-02 (user)*
 
-Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in the next topic), and they respawn on completely different rules. This matters directly for exp/hr estimation of a loop (how fast a lair refills vs how fast you can lap it).
+Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in *NPC-placed monsters*), and they respawn on completely different rules. This matters directly for exp/hr estimation of a loop (how fast a lair refills vs how fast you can lap it).
 
-- **Each monster slot in a lair carries its own respawn timer**, tracked independently — separate from every other lair, even lairs with the same monster type and size. So a dense multi-lair loop desynchronises: with enough slots there's almost always one ready, and the loop runs pinned at the 720/hr tick cap rather than clearing everything then idling for a synchronised repop. *(no confidence tag in source)*
-- **Respawn time `T`.** A room's `Lair` group spawns N monsters with a respawn time `T` — the lair's `AvgDelay` (stock exports it in **minutes**, Paradigm/GreaterMUD differs); else the slowest member's `RegenTime`. This is the resolution `LairTimerStore` already performs.
-- **The clock is per monster, keyed to each kill.** Each monster carries its own independent clock of length `T`, started at the moment *that* monster was last killed — not a shared lair clock. In a 3-mob, 60 s lair: a mob killed at t=0 is killable again at t=60; one killed at t=10 is back at t=70. They come back **staggered**.
+- **Respawn time `T`.** A room's `Lair` group spawns N monsters with a respawn time `T` — the lair's `AvgDelay` (stock exports it in **minutes**, Paradigm/GreaterMUD differs); else the slowest member's `RegenTime`. This is the resolution `LairTimerStore` already performs (it checks the room's `Delay` first). **[CONFLICT — ask the user]** `LairTimerStore`'s fallback multiplies RegenTime by 60 (minutes) while `BossCatalog`/`RouteExpResolver` treat it as hours — which unit is right?
+- **The clock is per monster slot, keyed to each kill.** Each monster slot in a lair carries its own independent respawn clock of length `T`, started at the moment *that* monster was last killed — not a shared lair clock, and separate from every other lair, even lairs with the same monster type and size. In a 3-mob, 60 s lair: a mob killed at t=0 is killable again at t=60; one killed at t=10 is back at t=70. They come back **staggered**. So a dense multi-lair loop desynchronises: with enough slots there's almost always one ready, and a single-target loop runs pinned at the 720/hr tick cap (the *single-target* ceiling — rooming runs above it; see *Timing & rounds → Exp/hour ceiling and loop geometry*) rather than clearing everything then idling for a synchronised repop.
 - **Being early does not make it spawn.** To re-kill a mob you must be in the room at or after `(its last kill + T)`. Arriving earlier, it simply isn't there yet.
 - **Loop consequence.** A lap that returns to a lair with period `P ≥ T` finds it fully respawned (full mobs that lap); `P < T` laps into a partial/empty room. So a lair's sustainable exp rate is capped at `mobs × exp ÷ T` regardless of how fast you loop — the "respawn-limited" regime — while a loop long enough that `P ≥ T` is "travel/kill-limited." The real rate per lair ≈ `min(the two)`.
 
@@ -1997,10 +2030,10 @@ Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in the next
 *Status: CONFIRMED 2026-08-02 (user) · Realm: Stock (verified examples)*
 
 - **NPC-placed mobs regenerate on entry — effectively no respawn cap.** A monster placed via the room's **`NPC`** field (a fixture, distinct from a `Lair` group) with `RegenTime` 0-ish **regenerates the moment you (re-)enter the room after killing it** — no timer to wait out. These are the classic "rooming" targets (kill as fast as you can fight; bounded by kill speed, not respawn).
-- **Verified stock examples:** slime beast `1/1765` (`NPC=57`, `RegenTime 0`, 250 xp); cave worm `1/866` (`NPC=8`, `RegenTime 0`, 100 xp); barmaid `1/311` (`NPC=248`, `RegenTime 1`, **0 xp** — an evil-points target, not exp).
+- **Verified stock examples:** slime beast `1/1765` (`NPC=57`, `RegenTime 0`, 250 xp); cave worm `1/866` (`NPC=8`, `RegenTime 0`, 100 xp); barmaid `1/311` (`NPC=248`, `RegenTime 1`, **0 xp** — an evil-points target, not exp). **[CONFLICT — ask the user]** on stock the barmaid has RegenTime 1 and the client (`BossCatalog.IsBoss`) treats her as a boss — is a placed RegenTime-1 monster a boss or an instant fixture?
 - **A room can carry both an NPC fixture and a `Lair` group** (cave-worm room `1/866` has `NPC=8` plus a lair), so a room's yield is the sum of its NPC target(s) + its lair contribution.
 - **In a loop, an instant mob still yields only once per lap** (bounded by lap time); only a stay-in-room **rooming** setup kills it every round.
-- **Exception — bosses:** a placed monster that qualifies as a boss is *not* instant; see Boss monsters.
+- **Exception — bosses:** a placed monster that qualifies as a boss is *not* instant; see *Boss monsters*.
 
 ### `Summoned By` spawn tokens
 
@@ -2008,7 +2041,7 @@ Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in the next
 
 A monster's `Summoned By` field lists the rooms it appears in, each token tagged by *how* it spawns there — three room-reference token kinds. Verified by the room side: a `Group(lair)` token always points at a room **with** a `Lair` tag, a `Group:` token at one **without**.
 
-- **`Room m/r`** — the room's `NPC` fixture: a **placed** boss / unique (the NPC-placed mechanic above). Nav tooltip labels these **`Placed:`**.
+- **`Room m/r`** — the room's `NPC` fixture: a **placed** boss / unique (the mechanic in *NPC-placed monsters*). Nav tooltip labels these **`Placed:`**.
 - **`Group: m/r`** (no `(lair)`) — an **assigned** roam / rare-random spawn; the room carries no `Lair` tag for it. Tooltip label **`Assigned:`**.
 - **`Group(lair): m/r`** — a **lair** spawn; the room's `Lair` tag lists the same monster. Tooltip label **`Lair:`** (sourced from the room's own `Lair` tag, which also carries the `(Max N)` simultaneous cap).
 - **One monster can carry more than one kind for the same room** — a placed boss that also has a `Group:` roam token, e.g. Aiken `1/398` has both `Room 1/398` and `Group: 1/398` — so the three tooltip lines may legitimately repeat a name.
@@ -2025,7 +2058,7 @@ A monster's `Summoned By` field lists the rooms it appears in, each token tagged
   - The crowned spider (`Number 929`, lair, `GameLimit 1`, `RegenTime 15`) is killable **once per 15 hours** and can spawn in **any** room of a multi-room lair.
   - The animated juggernaut (`Number 1211`, placed in `17/7055`, `GameLimit 1`, `RegenTime 3`, 1,300,000 exp) is killable **once per 3 hours**.
 - **A placed boss is NOT an instant fixture.** Normal `NPC`-placed monsters regenerate on entry (instant, every pass), but a *boss* placed monster is still gated by its regen, so it's amortised exactly like a lair boss, not grabbed every lap.
-- **A boss's `RegenTime` is in HOURS** (the Game-Data browser renders it "15 hour"), distinct from the lair-mob `AvgDelay`/`RegenTime` path above.
+- **A boss's `RegenTime` is in HOURS** (the Game-Data browser renders it "15 hour"), distinct from the lair-mob `AvgDelay`/`RegenTime` path in *Lair respawn timers*.
 - **Exp/hr estimation of a boss:** pull it OUT of its lair's per-mob average and add its amortised contribution **`boss exp ÷ regen-hours`, counted once** for the whole loop (a single time no matter how many rooms it can appear in) — `1,200,000 ÷ 15 = 80,000/hr`, not `1.2M` per lap in every room. The regular (non-boss) lair mobs still fire per-room on the room delay.
 
 ### Monster exp multiplier
@@ -2093,9 +2126,9 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 
 ### Summoned monster key drop
 
-*Status: no confidence tag in source · Realm: Paradigm 1.9.1 (worked example)*
+*Status: Unrated · Realm: Paradigm 1.9.1 (worked example)*
 
-- **A conjured monster drops loot exactly like a lair-spawned one.** Being conjured rather than lair-spawned changes nothing about the drop: the item lands loose on the ground, isn't announced on the death line, and has to be re-surveyed (`look`) before anything can see it, then `get`-ed by name — exactly the ground-drop rule.
+- **A conjured monster drops loot exactly like a lair-spawned one.** Being conjured rather than lair-spawned changes nothing about the drop: the item lands loose on the ground, isn't announced on the death line, and has to be re-surveyed (`look`) before anything can see it, then `get`-ed by name — exactly the rule in *Items, inventory & equipment → Monster drops land on the ground* (the worked chain is also in *Movement & navigation → Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*).
 - **Worked example (Paradigm 1.9.1):** room 8/461 "Black Steel Gate" carries `CMD 863` = `touch statue:summon 347` / `move statue:summon 347`; monster 347 "obsidian statue" is `GameLimit 1`, `Summoned By: Textblock #863`, and carries `DropItem-0: 806` (gate key) at `DropItem%-0: 100`. That key opens 8/461's south exit (`Key: 806 [or 101 picklocks]`).
 - **This is the shape that makes a key worth routing for** — the spawn is on demand and the drop is certain, so the whole chain is deterministic, unlike a lair key such as the black star key (item 172, dropped at 1–10% by lair-spawned cultists) which can never be relied on mid-route.
 - **Re-typing the summon keyword is *not* a known way to force a second monster** while one is already up.
@@ -2108,6 +2141,7 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 
 - **Arrival wording is per-monster and NOT exported.** A monster entering the room prints an arrival line; it can be the structured `"<name> <verb> into the room from <dir>."` form OR an arbitrary custom line with no such marker (e.g. `"A muckworm darts out of the mud!"`).
 - **Constant across every monster: the name is tagged the yellow ANSI colour index** (standard 3 / bright 11) — sometimes just the name, sometimes the whole line.
+  - Yellow is not strictly monster-only: the player sneak-notice line (`You notice <name> sneaking in from the <dir>.`) may also be painted yellow (see *Movement & navigation → Observing another player's failed sneak into your room*).
 - **This is an index, not a rendered colour.** The user confirmed the arrival name's yellow index is **not remapped or stripped by the client palette** — a custom palette only changes how index 3 *looks*, not that the cell carries index 3. So the index is the one palette-stable signal.
 - **Do NOT record a colour→line-type table as game truth.** Other lines' rendered colours (the `You notice` floor line, the `Also here:` roster, prompts, room descriptions) **vary by the user's palette** and are not reliable identifiers. Only the yellow *index* on an arrival name is dependable; a plain room description that happens to name a monster is default-colour (no yellow index), so it isn't an arrival.
 
@@ -2118,7 +2152,7 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 - **Departure:** `"<mob> just left to the <dir>."`, and for the vertical pair the direction is an adverb with no "to the": `"… just left upwards."` / `"… just left downwards."` (players leave with the same wording — `Fujin just left upwards.` is in our own captures).
 
 - **Client use:**
-  - `RoomEntryWatcher.OnLineScan` recognizes the unstructured custom spawns the two regex patterns miss — on a line no structured pattern claims, a run of fully-yellow-indexed words that resolves to a known monster (not already in the room) is appended as an arrival, tripping the combat gate a round before the spawn's first swing. Keys on the palette index (3/11), never the RGB.
+  - `RoomEntryWatcher.OnLineScan` recognizes the unstructured custom spawns the two regex patterns (`RoomEntryArrival` and `RoomSpawnArrival`, in `DefaultPatterns.cs`) miss — on a line no structured pattern claims, a run of fully-yellow-indexed words that resolves to a known monster (not already in the room) is appended as an arrival, tripping the combat gate a round before the spawn's first swing. Keys on the palette index (3/11), never the RGB.
   - `RoomEntryArrival` / `RoomEntryDeparture` match the generic lines; the "just arrived" / "just left" branches require a real direction word so chat of the same shape ("I just left downtown.") stays out.
   - Missing the compass arrival was permanent in a **dark** room, which never re-displays an `Also here:` to correct the roster, so auto-combat never engaged the monster.
 
@@ -2136,11 +2170,13 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A display can arrive well after the move that caused it** — combat / spell / event lines and even other commands' echoes can interleave between a move's echo and its landing room display.
 - **Every room display has an identifiable cause on the wire:**
   - **Move succeeded** — the move's echo, then a NEW room display. This is the only case that should advance position.
-  - **Move failed, stayed put** — the move's echo, then a failure line, no new room: `There is no exit in that direction!` (wall), `The gate is closed!`, `The door is Closed!`, or `You are typing too quickly - command ignored` (rate-limiter drop — common in fast command bursts; the command did NOT execute). These mean the move never happened.
-  - **`look` / `look <dir>`** — a `look` echo, then a room display that is the *same* room, an *adjacent* room (peek), or an *unreachable* room beyond a shut door. Never a move. (Directional peeks are already suppressed via the outbound `NoteLookSent` path.)
-  - **Spontaneous re-display** — NO command echo. An NPC self-moving (`X moves into the room from the <dir>` / `just left to the <dir>`), a regen/KAI tick, or a post-bonk redraw re-renders the CURRENT room. This is what fools a naive tracker into a phantom move.
+  - **Move failed, stayed put** — the move's echo, then a failure line, no new room: `There is no exit in that direction!` (wall), `The gate is closed!`, `The door is closed.` / `The door is Closed!`, or `You are typing too quickly - command ignored` (rate-limiter drop — common in fast command bursts; the command did NOT execute). These mean the move never happened.
+  - **`look` / `look <dir>`** — a `look` echo, then a room display that is the *same* room or an *adjacent* room (peek). Never a move. A shut door/gate blocks the peek entirely (see *`look <dir>` — peeking an adjacent room*: the server answers *"The door is closed in that direction!"* and renders no room). (Directional peeks are already suppressed via the outbound `NoteLookSent` path.)
+  - **Spontaneous re-display** — NO command echo. An NPC self-moving (`X moves into the room from the <dir>` / `just left to the <dir>` — see *Monsters, lairs & spawns → Monster movement lines* for the exact captured forms) or a regen/KAI tick re-renders the CURRENT room. This is what fools a naive tracker into a phantom move. (A refused move never redisplays the room — see *Refused ("bonked") moves*.)
 - **Moves with NO command echo (forced moves) — the complete set:**
-  - **Party follow / drag** — a follower moves because the leader did and sends no bytes; announced by `-- Following your Party leader <dir> --` (see *Party → Following the leader*).
+  - **Party follow / drag** — a follower moves because the leader did and sends no bytes; announced by `-- Following your Party leader <dir> --` (see *Party → Following the leader: follow / drag movement*).
+    - A hidden/foliage text-exit drag moves the follower with **no** `-- Following …` line and no direction (see *Party → Following the leader: follow / drag movement*).
+    - A dropped (0 HP) member being dragged sees `<Leader> is dragging you around.` on each of the dragger's moves (see *Party → Dropped ally rescue* and *Wire, prompt & command output → Message catalogue (lines the client parses)*).
   - **Fear** — the game shoves a feared character between cardinal-connected rooms with no echo and no per-move line (see *Spells, buffs & conditions → Fear*).
 - **Moves that are *not* in that set:**
   - **`go`/teleport is a commanded, echoed text-exit move** (`go vortex`, `go man`, `go path`); it can land you in a distant unrelated room (`You step into the swirling vortex, and find yourself... elsewhere.`).
@@ -2152,8 +2188,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 - **A refused move always prints an explicit line and never redisplays the room.** When a move command can't be honoured — no exit that way, a shut door, an impairment — the game emits a one-line refusal *instead of* a room display. The wording varies by the reason for the bonk, e.g.:
   - `There is no exit in that direction!`
-  - `You can't go that way.` / `You can't move that way.`
-  - `The door is closed.`
+  - `You can't go that way.` / `You can't move that way.` *([NEEDS CONFIRMATION] the refusal detector matches "You can't move (in) that direction" — which does the game print?)*
+  - `The door is closed.` / `The door is Closed!` / `The gate is closed!` (the client matches these case-insensitively, ending in `.` or `!`)
   - impairment forms (paralyzed / confused / stunned / dazed / too encumbered / can't see well enough to move).
 - **The player's on-screen room does not re-print on a refusal** — this is the authoritative signal the client keys on.
 - **Corollary: a room redisplay that still matches the room you moved from is never the result of a refused move.** While a move is pending, seeing the source room again can only be a **passive re-look** — a combat-clear, a monster/player arrival or departure notice, a bare re-glance — carrying no position signal.
@@ -2198,10 +2234,21 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - On Paradigm the recovery gate treats an *unanswered* forced `rm` as "confused, try again" — re-asking until the confusion self-clears and a `Location:` lands — rather than a genuine failure.
 - This is why the heuristic reverse-walk / "Lost" dialog should essentially never be reached on Paradigm: at every give-up boundary (before the backtrack, and again before Lost) the gate spends a forced `rm` first, and only a `rm` that *answers* with a room the loaded map set doesn't contain — not a fumble-eaten one — is a real dead end (report paradigm-20260902-223159, `EngineRecoveryGate.HandleResyncFailure`).
 
+### Nav-recovery authoritative locate (`rm` / `sys st`)
+*Status: Unrated · Realm: `rm` on Paradigm, `sys st` on stock with the sysop power*
+
+- **The sysop `sys st` position locate mirrors the Paradigm `rm` re-anchor at every point `rm` fires** —
+  first mismatch, engine stall, the tier-3 give-up ladder, the terminal pre-Lost shot, the no-engine
+  drift gap, `@where`, and a blocked loop/replan.
+- **On Paradigm `rm` wins each site (realm-gated); on a stock realm with the power `sys st` fills in.**
+- **Maze-solve stays `rm`-only** — the solver drives its own relocalization.
+- **Client use:**
+  - Both share the gate's `NoteAuthoritativePosition` / `OnAuthoritativeResyncFailed` consumers.
+
 ### Dark rooms — no name, no exits, traversal inferred from no bonk
 *Status: CONFIRMED*
 
-- **A room too dark to see in replaces the *entire* room display** (name, `Obvious exits:`, `Also here:`) with a single line — `The room is very dark - you can't see anything.`, or in a considerably darker room `The room is pitch black...`.
+- **A room too dark to see in replaces the *entire* room display** (name, `Obvious exits:`, `Also here:`) with a single line — `The room is very dark - you can't see anything.`, or in a considerably darker room `The room is pitch black...` (elided here; the full line is `The room is pitch black - you can't see anything`).
 - **Every dark room emits the same line, so the line itself carries no position signal.**
 - **Traversal is deducible from the absence of a bonk:** combined with the bonk rule (see *Refused ("bonked") moves*), once we send a move into the dark, **no bonk line means the move succeeded** — we advanced into the room the sent direction leads to.
 - **Only the *very dark* / *pitch black* forms starve the display this way** — a normally-lit room always prints its name + exits.
@@ -2242,9 +2289,9 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 ### Monsters in dark rooms
 *Status: CONFIRMED (attack-line engage; name dedupe 2026-07-21, user; late populate 2026-07-22, user)*
 
-- **A monster in a dark room is invisible to the room display but still attacks — engage it by the name in its attack line.** With no `Also here:` line (the dark room prints only the "can't see" line, see *Dark rooms*), the only evidence a hostile shares the room is its incoming attack line, rendered in dark cyan: a miss `The <monster> <verb> at you` or a hit `The <monster> <verb> you for N damage!`.
+- **A monster in a dark room is invisible to the room display but still attacks — engage it by the name in its attack line.** With no `Also here:` line (the dark room prints only the "can't see" line, see *Dark rooms — no name, no exits, traversal inferred from no bonk*), the only evidence a hostile shares the room is its incoming attack line, rendered in dark cyan: a miss `The <monster> <verb> at you` or a hit `The <monster> <verb> you for N damage!`.
   - The `<monster>` token is the monster's real name, so `a <monster>` (e.g. `a cave bear`) attacks it exactly as if it had been listed under `Also here:`.
-  - Attacking a monster that **isn't** in the room draws `Your command had no effect.` — the signal that the target is gone (retract it and stop swinging).
+  - Attacking a monster that **isn't** in the room draws `Your command had no effect.` (with talk slow on — see *Combat → Attacking a monster that isn't in the room*) — the signal that the target is gone (retract it and stop swinging).
 - **In a dark room, a distinct display name is a distinct enemy — dedupe reveals by name, never by monster record** *(2026-07-21, user)*.
   - A mob can swing more than once per round and the dark room re-emits its attack line every round, so four `The cave lizard swings at you` lines are **not** four lizards — the client collapses same-name reveals to one entity.
   - But `cave lizard` and `small cave lizard` (e.g. we're on one, a partner announces the other) are **two separate enemies**, even if they share a Monsters-table record — so the dedupe keys on the **name string**, not the resolved monster number; collapsing by record would drop a live mob.
@@ -2282,7 +2329,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 ### Sneaking — commands, equip order, and the sneak state machine
 *Status: commands OBSERVED (the client issues these) · equip-before-sneak CONFIRMED · sneak lines OBSERVED (parsed by the client)*
 
-- **Commands** *([OBSERVED])*: `sn` — attempt to sneak. `hid` — attempt to hide.
+- **Commands** *([OBSERVED])*: `sn` — attempt to sneak. (Hiding is `hid` — see *Hiding — sneak vs hide, the hide state machine, and search reveals*.)
 - **Equip before sneak** *([CONFIRMED])*: equipping / removing gear breaks sneak, so any gear change for an approach must be sent **before** the `sn`, never after. The correct approach order is **equip → sneak → move**.
 - **Sneak state machine** *(lines all [OBSERVED])*:
   - `Attempting to sneak...` (alone, no suffix) — the server ACK: the sneak took and you're armed to move. A move made now carries the sneak into the next room.
@@ -2315,6 +2362,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - *Hidden* removes your name from `Also here:` (you're invisible in the room) but you **cannot move** while hidden.
   - A **player** has to `search` the room to reveal (unhide) you; **monsters do not search rooms**, so a monster that walks into a room you're hidden in never reveals you — it just becomes a backstab target.
   - A monster's passive **see-hidden** ability is a separate thing: it reveals a stealthed character to the whole room on sight, defeating the opener (see *Combat → Backstab*).
+- **Command** *([OBSERVED] — the client issues it)*: `hid` — attempt to hide.
 - **Hide state machine** *(lines all [CONFIRMED] — from paired two-character POV captures)*:
   - `Attempting to hide...` (alone, no suffix) — the attempt fired and the server ran a hide check, but the outcome is **NOT reported to you**. This line is **ambiguous**: it means "a check happened," not "you are hidden." You cannot tell success from failure off this line alone.
   - `Attempting to hide...You don't think you are hidden.` — explicit hide **FAILURE**. This is the only self-observable failure signal.
@@ -2322,7 +2370,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Reveal (search) mechanic:**
   - A player runs `search` / `sea`. On a hit they see `You see <name> hiding in the shadows.` and the hidden character is revealed (returned to `Also here:`); on a miss they see `Your search revealed nothing.`.
   - The hidden character sees `<name> is searching the area.` while someone searches — i.e. you get a warning that a reveal attempt is in progress.
-- **Do not hide while in a party** *([CONFIRMED])*. A hidden member is removed from `Also here:`, and a player who isn't listed there **cannot be single-target-targeted** by other players — including party heals and buffs — until revealed. Only room-wide spells (relevant in PvP) and possibly party-wide spells still reach a hidden member.
+- **Do not hide while in a party** *([CONFIRMED])*. A hidden member is removed from `Also here:`, and a player who isn't listed there **cannot be single-target-targeted** by other players — including party heals and buffs — until revealed. Only room-wide spells (relevant in PvP) and possibly party-wide spells still reach a hidden member. (See *Party → Targeted casts on a hiding member*.)
 
 **Client use:**
 - The engine arms the opening `bs` off **either** stealth state (sneaking OR hidden — the backstab gate reads `StealthManager.IsStealthed`).
@@ -2357,16 +2405,20 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - Picking keeps its `MaxPickAttempts` retry cap.
 
 ### Hidden exits — `sea <dir>` reveal wording
-*Status: CONFIRMED (capture 2026-07-14, report 121106)*
+*Status: CONFIRMED (capture 2026-07-14, report 121106); works-while-blind: Unrated*
 
 - **Revealing a hidden exit is `sea <dir>`; the reply wording is axis-dependent:**
   - **success** — cardinals `You found an exit to the <dir>!`; up/down `You found an exit upwards!` / `You found an exit downwards!` (no "to the", `<dir>wards` suffix). *`upwards` confirmed on the wire; `downwards` confirmed from an earlier capture.*
   - **failure** — cardinals `You notice nothing different to the <dir>.`; up/down `You notice nothing different above you.` / `You notice nothing different below you.` (no "to the", no direction word). *Both vertical forms confirmed (`above you` on the wire, `below you` by the user).*
 - **A "bonked" `sea` is distinct from a bonked *move*:** the `sea` reply above is not a move refusal.
+- **Searching for a hidden exit works while blind** *(Unrated)*. `search` / `sea <dir>` reveals a hidden exit regardless of blindness. Blindness suppresses only the descriptive room lines — room name, room description (if enabled), the `Also here:` roster, and the `Obvious exits:` line — it does NOT block the search itself or its outcome.
+  - The reveal carries its own confirmation line (`You found an exit to the <dir>!` and its vertical forms) that fires whether or not you can see the room, so an engine driving a walk can rely on that confirmation to know the hidden exit opened, even mid-blindness.
 
 **Client use:**
 - The client keys on both to drive the reveal retry loop (`HiddenExitRevealManager`): a failure line triggers another `sea` up to the attempt cap, a success line resolves the reveal so the walker sends the move.
 - Because the up/down failure form drops "to the" entirely, a failure regex that only matched the cardinal `to the <dir>` shape never registered an up/down miss — so up/down searches never retried cleanly and stalled (the reported symptom).
+- The auto-walker's "is this exit already revealed?" pre-check must not skip the `sea <dir>` just because the character is blind — the search still works and is required to unveil the exit.
+- It also must not trust a stale observed-exits set from a room it only dead-reckoned into — see RoomTracker.SetRoom clearing ObservedExitDirections; a stale set made the walker skip the required search and ram a wall.
 
 ### Exit traps — search and disarm
 *Status: CONFIRMED (capture 2026-07-15, reports 132150 and 131801); `disarm trap <longdir>` acceptance NOT wire-confirmed*
@@ -2381,7 +2433,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 **Client use:**
 - The client keys on the trap-found line to drive `TrapDisarmManager`'s search→disarm loop.
 - **Direction matching must normalise both sides.** The @trap remote handler enqueues the short form it parsed, but the walker enqueues the long-form direction word — and the game's reply is long-form. Comparing a short-normalised observed direction against an un-normalised stored one (long-form from the walker) never matched, so a successful search stalled in *Searching* and the disarm never fired (the reported bug). Both the observed and the stored/enqueued direction are now normalised to the short form before compare.
-- **The disarm send stays long-form** — `sea southeast` is wire-confirmed, so the walker keeps sending the long form it enqueued (matching the confirmed search) rather than re-shortening it.
+- **The disarm send stays long-form** — kept long-form by analogy with `sea` (`sea southeast` is wire-confirmed, matching the confirmed search); unverified for `disarm` itself. The walker keeps sending the long form it enqueued rather than re-shortening it.
 - Trap-skill grant check: `AbilityNames.HasTrapAbility` — the same grant the party-delegation capability check already reads for other players.
 - When the Traps value hasn't been captured yet (a freshly loaded profile with no `stat` this session, or a new character), the client falls back to the race/class game-data grant to decide capability: the walker self-disarms if the selected class or race grants Traps, rather than deciding on a defaulted-zero value and waltzing through. A positive parsed Traps value remains the primary signal.
 
@@ -2404,7 +2456,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - `WinchManager` treats the drawbridge line as authoritative and skips the poll for it (whichever order it arrives relative to "begins to turn").
 
 ### Exit alignment gates
-*Status: CONFIRMED 2026-08-27 (user — mechanic for report `paradigm-20260827-144553`)*
+*Status: CONFIRMED 2026-08-27 (user — mechanic for report `paradigm-20260827-144553`) · Realm: Paradigm*
 
 - **A room exit can carry an `(Alignment: <low> to <high>)` restriction** (e.g. `(Alignment: Neutral to Fiend)`) — rare (only ~14 exits in the Paradigm dataset).
 - **The exit admits a character iff their numeric alignment falls inclusively within [value(low), value(high)]**; outside that band the game refuses the move with **"Your current alignment prevents you from entering this exit."**
@@ -2428,40 +2480,41 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 - **A CMD-driven room teleport moves only the character who types it — every member must fire it themselves.** Some rooms carry a command-triggered teleport in the room's `CMD` → TBInfo action chain rather than as a directional exit — e.g. Slum Street (`1/1182`) has TBInfo `#4087`: `ring chime:message …:teleport 65 1:message …` / `use chime:…` (a `ring chime` / `use chime` verb that teleports the caster).
 - **This is not a `Text` ("go path") exit** where the leader traverses and followers are dragged along: a CMD teleport **breaks the party apart** (the teleport removes the mover from the group). So a leader taking a party through one must:
-  1. relay the verb to the whole party first — `@party ring chime` — so every member's client fires it and teleports, then
+  1. relay the verb to the whole party first — `.@party ring chime` (the leading `.` sends the `@party` relay as a say) — so every member's client fires it and teleports, then
   2. fire the verb itself (`ring chime`), and
   3. because the teleport disbanded the party, **re-invite every member and wait for them to rejoin** before continuing the route.
 - **Arrival ordering** *([CONFIRMED], capture 2026-07-10)*: the leader teleports *first* (`You ring the chime…` → `You find yourself…elsewhere.`), then each relayed follower materialises a beat later, one per line: **`%name% appears in a blinding flash of light!`** (the generic teleport/recall arrival line for another player entering your room — no direction).
   - A re-invite fired the instant the leader crosses races **ahead** of the members' arrival and the server answers **`You don't see %name% here!`** — the invite is silently lost and that member is left out of the reformed party.
   - The re-invite for each member must therefore wait until that member is observed in the room (their `appears in a blinding flash of light!` line, or an `Also here:` listing if they landed ahead of the leader).
   - A member whose invite lands after arrival rejoins cleanly (`You have invited %name% to follow you.` → `%name% started to follow you.`).
-- **Believed general rule** *([NEEDS CONFIRMATION] — user's inference, not yet verified across all cases)*: a teleport driven by a room **`CMD`** (TBInfo chain) splits the party and needs each member to execute it (→ `@party` relay + re-invite/wait), whereas a teleport/traversal that is **exit-driven** (a `Text` exit like `go path`) needs **only the leader** to execute it and is party-safe (followers follow normally). Confirm before extending the split/re-invite behaviour to teleport shapes other than the `ring chime` CMD case above.
+- **Believed general rule** *([NEEDS CONFIRMATION] — user's inference, not yet verified across all cases)*: a teleport driven by a room **`CMD`** (TBInfo chain) splits the party and needs each member to execute it (→ `.@party` relay + re-invite/wait), whereas a teleport/traversal that is **exit-driven** (a `Text` exit like `go path`) needs **only the leader** to execute it and is party-safe (followers follow normally). Confirm before extending the split/re-invite behaviour to teleport shapes other than the `ring chime` CMD case above.
 
 ### Greet teleports — an NPC transports a player who asks
-*Status: CONFIRMED (report 2026-08-13); class gate + skill roll from Paradigm map 1 data (issue #455); party behaviour unverified*
+*Status: CONFIRMED (report 2026-08-13); class gate + skill roll from Paradigm map 1 data (issue #455); per-member fare CONFIRMED 2026-09-24 (user, greet-teleport fare gating)*
 
 - **Some placed NPCs carry, inside their `Monsters.GreetTXT` chain, an askable keyword whose directive block ends in a `teleport <room> <map>`** — asking the NPC that keyword (`ask <noun> <keyword>`, noun = last word of the monster's name, same convention as the guard-door ask commands) ports the asker to that room.
 - **Example — the Floating Citadel's Grey Lord** (`#251`, GreetTXT 366) stands in the Great Hall (`1/160`), a sealed pocket whose only cardinal exit is S; **`ask lord teleport`** ports the character to **Town Square (`1/224`)** — the pocket's only egress toward the rest of the realm.
   - The same greet also exposes quest keywords (`code` / `word`, TBInfo block 371) that reach the same room but sit behind `evilaligned` / `goodaligned` / `checkability` gates; the plain **`teleport`** keyword (block 370) is **ungated** and deterministic.
-- **Party behaviour is unverified** — treat a greet teleport the same as a CMD teleport (moves only the asker, likely party-splitting) until captured.
+- **Party behaviour — each person asks and each person pays** *([CONFIRMED] 2026-09-24, user — greet-teleport fare gating)*. Each party member using the transport word must have the fare: a party crosses an NPC ask-transport by every member asking it themselves (the leader relays the keyword), and each asker is charged the full fare — so the whole party needs it on hand. (Like a CMD teleport, it moves only the asker.)
 - **Class gate** *(issue #455, from Paradigm map 1 data)*: a **`class N`** gate (N = `Classes.Number`) restricts the transport to one class — the barmaid (`#248`, `1/391`) carries `class 12:testskill …:teleport 391 1`, a **bard-only** ask-transport. This is surfaced as the edge's `ClassGate` so `MovementFilter.IsClassGateBlocked` keeps it routable for that class and drops it for every other, rather than letting non-bards route through a transport they can't use.
 - **Skill roll** *(issue #455)*: a **`testskill <skill> <amount> <failTB>`** in the same block is a per-use **skill roll** (like the winch's `testskill strength`) that can fail even for the right class. A failed roll leaves the asker put — sometimes with no fresh room render at all, so no tracker transition comes.
 
 **Client use:**
 - The navigation engine models only the **ungated** greet teleport as a routable exit (GreetTeleportResolver → `RoomGraphManager.BuildGreetTeleportEdges`, a `Direction.Teleport` edge whose command is `ask <noun> <keyword>`); gated keywords are skipped because the client can't verify the gate and a failed transport would strand the walker.
-- Two directive kinds on a greet chain are NOT treated as "unverifiable, skip": `class N` and `testskill`.
+- Three directive kinds on a greet chain are NOT treated as "unverifiable, skip": `class N`, `testskill`, and `price` (`GreetTeleportResolver` parses it and sums repeats — see *Money, banks & shops → Repeated `price` directives add up*).
   - The client does NOT model the skill-roll odds; instead the walker treats a greet teleport as a **verify-and-retry** step: after asking, it checks it actually landed in the destination and, if not, **re-asks until it arrives.** The class gate guarantees only a class that CAN eventually pass the roll ever reaches the step, so the retry converges.
 - Ordinary CMD teleports — chime / boat / item-cast — stay fire-once; only the `ask`-transport edge, `RawHint` `"greet teleport"`, gets the retry watchdog.
+- **Fares:** `GreetTeleportResolver` sums the line's `price` directives into the transport's `FareCopper`; the graph stamps it on the synthesised Teleport edge (`RoomExit.FareCopper`) and `MovementFilter` gates it like a toll — on the poorest party member's `@wealth` (or your own wallet solo).
 
 ### Boat travel — the sea captain's `secure passage to <place>`
 *Status: CONFIRMED (user 2026-07-20) + OBSERVED from Paradigm-1.9.1 data · Realm: Paradigm*
 
 - **A sea-captain dock `CMD` ferries a party across water via `secure passage to <place>`.** This is a *specific, more elaborate application* of the CMD-teleport-splits-party mechanic (see *CMD-driven room teleports split the party*): a dock room's `CMD` points at a TBInfo block listing one `secure passage to <place>` verb per reachable port.
-  - Typing the verb at the dock CMD-teleports **only the caster** onto a ship, so it splits the party exactly like `ring chime` — the leader `@party`-relays the verb, every member fires their own copy, and the party **re-forms at the destination port** (re-invite/wait, same arrival-ordering rules).
+  - Typing the verb at the dock CMD-teleports **only the caster** onto a ship, so it splits the party exactly like `ring chime` — the leader `.@party`-relays the verb, every member fires their own copy, and the party **re-forms at the destination port** (re-invite/wait, same arrival-ordering rules).
   - The NPC behind it is the **old sea captain (#2344)** standing in the dock room.
 - **Per-member gating — the captain rejects an individual, not the party.** Each `secure passage` line carries an independent **minlevel** *and* a **fare** (price). Every member is gated **individually** on both: a member below the minlevel, or without the fare on hand, is refused *at the captain* and **left behind on the dock** while the rest sail. So the pre-flight check is per-member, mirroring the toll gate: route the party to a port only when the **poorest / lowest** member clears both bars.
   - **Fare is in copper** (the base coin unit), so it folds into the same `@wealth` pre-flight gate as tolls — a member needs `price` copper-value on hand. (Contrast: a `(Toll: N)` exit is `N` **gold** = `N*100` copper; a boat `price` is already copper.)
-  - **`checkability <flag> <rank>`** (optional, present only on talkiran below) is a **quest-flag / rank** gate the client does **not** read *for boat routing* — attunement (e.g. MerchantCaptain rank 3) is the user's responsibility. If a member routes to that port un-attuned the captain rejects *them*; the client never boards and **fails out** (see *Transit + fail-out*). (The client *does* read live quest-flag values elsewhere — the login quest-completion sync, see "Quest-flag values" — but never uses them to decide boat passage; attunement stays the user's call.)
+  - **`checkability <flag> <rank>`** (optional, present only on talkiran below) is a **quest-flag / rank** gate the client does **not** read *for boat routing* — attunement (e.g. MerchantCaptain rank 3) is the user's responsibility. If a member routes to that port un-attuned the captain rejects *them*; the client never boards and **fails out** (see the **Transit + fail-out** bullet in this topic). (The client *does* read live quest-flag values elsewhere — the login quest-completion sync, see *Quests → Quest-flag values (`abil` / `sys god abil`)* — but never uses them to decide boat passage; attunement stays the user's call.)
 - **TBInfo Action format** (verified verbatim off `data-Paradigm-1.9.1`, TBInfo #4986 / #5012, each reached from the dock room's `CMD`). One newline-separated line per port; colon-separated directives:
 
   ```
@@ -2470,7 +2523,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
   - `random <tbId>` points at a **weighted-random TBInfo table** (a `Textblock(rndm)`), whose lines read `<roll>:cast <boardSpell>:cast <tripSpell>`.
   - Both `cast`s fire in order: **`boardSpell` (5415 "board ship")** random-teleports the caster into a ship room (`Abil 140` val 0 over `MinBase..MaxBase` = rooms **14/715–723**, `Abil 141` = map 14); **`tripSpell`** starts the buff-locked voyage.
-- **Arrival-room resolution is a spell EndCast chain** (uses the `140/141/151` mechanics documented in *Cast-teleport exits*): follow `tripSpell` down its **`Abil 151` (EndCast → follow-on spell)** chain — `trip 1 → trip 2 → trip 3 → disembark to <port>` — to the terminal **`disembark`** spell, whose **fixed `Abil 140` room + `Abil 141` map** is the arrival `RoomKey`.
+- **Arrival-room resolution is a spell EndCast chain** (uses the `140/141/151` mechanics — `140/141` documented in *Cast-on-walk exits and random teleports*, the `151` EndCast chain in *Room-spell hazard shape 1 — direct damage, negated by an item's `NegateSpell-N`*): follow `tripSpell` down its **`Abil 151` (EndCast → follow-on spell)** chain — `trip 1 → trip 2 → trip 3 → disembark to <port>` — to the terminal **`disembark`** spell, whose **fixed `Abil 140` room + `Abil 141` map** is the arrival `RoomKey`.
   - Each trip leg carries `Abil 29` (buff-lock) so the player can't act mid-voyage; the final `<port> landing` spell is a cosmetic message.
   - Worked chain (albion): random `#4987` → `cast 5415`+`cast 5416` → `5416 → 5418 → 5419 → 5417 "disembark to kingsport"` (`Abil 140`=702, `Abil 141`=14) → arrival **14/702**.
 - **Verified Paradigm-1.9.1 dock table** (discovered data-driven, *not* to be hardcoded — scan every room's `CMD` TBInfo for `secure passage to` lines and resolve as above):
@@ -2495,6 +2548,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **In the jail rooms (Paradigm `1/541–545`, `14/1326–1333`) the `bribe guard` command casts a jail-teleport** — it moves the player between cells so a jailed player can reach their gear when they can't bash / picklock the cell door or lack the jail key.
 - **The TBInfo `Action` lists six escalating `price` tiers** — `100 / 1000 / 10000 / 100000 / 1000000 / 10000000` copper (1 Gold → 10 Runic).
 - **The guard charges the largest tier the player can currently afford**, capped at 10 Runic per bribe: carry 11 Runic → charged 10 Runic; carry 8 Runic → charged 1 Runic (the next tier, 10 Runic, is unaffordable). The escalating cost *is* the catch.
+  - **[CONFLICT — ask the user]** the six `price` tiers sit on one line, but the guard charges only the largest affordable tier while *Money, banks & shops → Repeated `price` directives add up* — why doesn't the sum rule apply here?
 - **This tiered multi-`price` shape is unique to bribe guard among room-`CMD` commands**; ordinary paid services (`roll dice`, `buy <spell>`, `summon <x>`, `secure passage`) carry a single `price <copper> [failTextblockId]`.
 
 **Client use:**
@@ -2512,9 +2566,9 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - Encoded in `RoomHazardIndex` — see the harm gate in `BuildHazard`.
 
 ### Protective-item gates — exit-gated vs room-spell-gated
-*Status: CONFIRMED (encoding fully decoded off the 1.11p data set)*
+*Status: CONFIRMED (encoding fully decoded off the stock v1.11p data set)*
 
-- **Some rooms harm you on entry unless you carry (or wear, or drink) a protective item — either exit-gated or room-spell-gated.** There are TWO gate locations (exit vs room-spell) and, within room-spells, THREE distinct protection encodings (the three shape topics below).
+- **Some rooms harm you on entry unless you carry (or wear, or drink) a protective item — either exit-gated or room-spell-gated.** There are TWO gate locations (exit vs room-spell) and, within room-spells, THREE distinct protection encodings (*Room-spell hazard shape 1 — direct damage, negated by an item's `NegateSpell-N`*, *Room-spell hazard shape 2 — TextBlock action guarded by `failitem <itemNum>`*, *Room-spell hazard shape 3 — buff check (`checkspell` / `failspell`): the desert waterskin*).
 - **A. Exit-gated** — the exit string itself carries the modifier; already parsed:
   - `Item: (item#)` → `RoomExit.KeyItemId` + `RoomExitHint.Item`. Traversal needs the item in the pack. Examples: `6/79 → 6/80` needs *rope and grapple* (item 191); `6/1549 → 6/1550` needs *climbing harness* (item 930).
   - `Level: X to Y` → `MinLevel`/`MaxLevel`. Example: `12/2369 → 12/2371` needs level 50+.
@@ -2527,7 +2581,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - (iii) resolve protective items via Items `NegateSpell-N`, `failitem` item ids, and `checkspell` buff-source `CastsSp` items.
 
 ### Room-spell hazard shape 1 — direct damage, negated by an item's `NegateSpell-N`
-*Status: CONFIRMED (lava/volcano via game data, Paradigm 1.9.1; Misty Bog by user, report `paradigm-20260829-203409`)*
+*Status: CONFIRMED (lava/volcano via game data, Paradigm 1.9.1; Misty Bog by user, report `paradigm-20260829-203409`) · Realm: Paradigm*
 
 - **The entry spell has `Abil 1` (Damage) directly, and may chain a death-timer via `Abil 151` (EndCast → follow-on spell).** Protection is a held/worn item whose `NegateSpell-0..9` list (an Items.json field) contains the spell number.
 - **Worked example — the underwater/frozen passage:**
@@ -2542,14 +2596,14 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - A player who equips a *different* group member they already own (swamp boots) is just as protected as one wearing the sourced item.
 
 **Client use:**
-- `RoomHazardIndex` already indexes the lava counters (one any-of group {487, 1000}), so the router treats lava exactly like the river/desert: avoid unless the player carries a counter.
-- The route picker/walker only ever resolve to *sourcing* one representative item from a multi-item group (whichever the acquisition pipeline can actually reach — here, trollskin via a shop). Before report `paradigm-20260829-203409`'s fix, the client's path-item tracking was still pinned to the one it originally chose even when the player equipped a different group member.
+- `RoomHazardIndex` already indexes the lava counters (one any-of group {487, 1000}), so the router treats lava like any protectable hazard: avoid unless the player carries a counter. By severity, lava sits with the river as *survivable* damage, while the desert is *grave* (see *Hazard severity — survivable damage vs grave*).
+- The route picker/walker only ever resolve to *sourcing* one representative item from a multi-item group (whichever the acquisition pipeline can actually reach — here, trollskin via a shop). The client's path-item tracking accepts **any** member of the any-of group, so equipping a different group member counts as protected (fixed for report `paradigm-20260829-203409`, when tracking was still pinned to the one item it originally chose).
 
 ### Room-spell hazard shape 2 — TextBlock action guarded by `failitem <itemNum>`
-*Status: CONFIRMED (ice cavern by user 2026-08-10, reports `paradigm-20260810-201953` / `-202239`)*
+*Status: CONFIRMED (ice cavern by user 2026-08-10, reports `paradigm-20260810-201953` / `-202239`) · Realm: both (Silver River `failitem` guards differ)*
 
 - **The entry spell has `Abil 148` (TextBlock → a `TBInfo.Number`); the TBInfo `Action` is a colon-separated command chain.** A leading run of `failitem N` tokens before a harmful `cast <spell>` means **"if you HOLD any listed item N, abort the chain (safe); if you hold none, fall through to the damage cast."**
-- **Worked example — Silver River:** `Spell:753` → `Abil-0 148`(TextBlock **2750**). TBInfo 2750 `Action`: `failitem 690:failitem 691:failitem 1181:message 2096:cast 754`. Items 690 *log raft* / 691 *wooden skiff* / 1181 *silverbark canoe* are the boats; holding any one aborts before `cast 754`.
+- **Worked example — Silver River:** `Spell:753` → `Abil-0 148`(TextBlock **2750**). TBInfo 2750 `Action` (stock): `failitem 690:failitem 691:failitem 1181:message 2096:cast 754`. Items 690 *log raft* / 691 *wooden skiff* / 1181 *silverbark canoe* are the boats; holding any one aborts before `cast 754`. *(DATA-VERIFIED: Paradigm's TB 2750 adds a fourth guard, `failitem 3609`; stock doesn't.)*
 - **Not every `failitem` is a hazard:** `failitem` is used 139× across TBInfo — many are quest "don't re-give" guards like `failitem 622:giveitem 622`; only the ones ending in a harmful `cast` are hazards.
 - **Ice cavern (Frozen Cavern) up/down slide** *([CONFIRMED by user 2026-08-10, reports `paradigm-20260810-201953` / `-202239`])* — the descent rooms (`10/276`–`10/295`) cast `Spell:1144` "ice cavern level 1" / `Spell:1145` "level 2", which check for a **rope & grapple** (item **191**): hold it and the slide is safe, lack it and you're **teleported down and take heavy damage**.
   - In the data the entry spell's TextBlock is **9407** (`failitem 191:failitem 930:random 9408`; `9408` does the `teleport … cast 1142` damage). The room-hazard machinery already handles this `failitem` shape — but see the encoding gotcha next.
@@ -2559,13 +2613,13 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - `RoomHazardIndex.WalkSpellChain` now falls back to `MinBase`/`MaxBase` when the Abil-148 `AbilVal` is 0 — before that fix every one of these hazards was invisible to the router, so no protection was ever offered (the ice-cavern route picker never surfaced).
 
 ### Room-spell hazard shape 3 — buff check (`checkspell` / `failspell`): the desert waterskin
-*Status: CONFIRMED (user; `failspell` 2026-07-28, report `paradigm-20260728-201619`; sunstone possession 2026-08-27, report `paradigm-20260827-112011`) · Realm: Paradigm*
+*Status: CONFIRMED (user; `failspell` 2026-07-28, report `paradigm-20260728-201619`; sunstone possession 2026-08-27, report `paradigm-20260827-112011`) · Realm: differs (Paradigm `failspell`, stock `checkspell`)*
 
 - **A TextBlock action guarded by a buff check — `checkspell` OR `failspell`** (a buff check, not an item check).
   - `checkspell S T` = "if buff S is active, branch to TBInfo T (safe); else fall through (damage)."
   - `failspell S T` is the sibling directive *([CONFIRMED by user 2026-07-28])*: "if buff S is **not** active, the damage fires."
   - Either way the survival model is identical — the room punishes you unless buff S is up.
-- **Worked example — Scorching Desert** `12/853` `Spell:683` → TextBlock **2653**: `failspell 711 2654:random 2655` — **`failspell`, not `checkspell`** (an earlier draft of this entry misread the directive, which is why the client's hazard parser first handled only `checkspell` and walked the desert unprotected; report `paradigm-20260728-201619`).
+- **Worked example — Scorching Desert** `12/853` `Spell:683` → TextBlock **2653**: `failspell 711 2654:random 2655` on **Paradigm 1.9.1** — **`failspell`, not `checkspell`** — but `checkspell 711 2654:random 2655` on **stock v1.11p** *(DATA-VERIFIED — the directive differs by realm)*. The client's hazard parser first handled only `checkspell` and so walked the Paradigm desert unprotected (report `paradigm-20260728-201619`).
   - Map 12 also has a `failspell 711` variant on `Spell:684`.
   - Buff 711 "waterskin" (`Dur 600`) is conferred by **using** the *waterskin* (item 283, `Abil 43` CastsSp→711, 3 uses).
 - **The desert spell does two things — damage AND a random teleport — and the two protections are NOT equivalent** *([CONFIRMED by user 2026-07-28, report `paradigm-20260728-201619`])*.
@@ -2573,11 +2627,12 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - The **sunstone wristband** (item 1180) prevents the **entire** interaction (damage + teleport), so **if you have the sunstone you don't need a waterskin at all.**
   - **The sunstone grants desert immunity by POSSESSION** *([CONFIRMED by user 2026-08-27, report `paradigm-20260827-112011`])* — it can be worn, but the player only needs to *have* it (carried or worn), matching the `failitem` "if you HOLD the item" mechanic.
   - In the data the wristband is a `failitem 1180` guard sitting one-to-two `random` hops below the `failspell` (e.g. `2653 → random 2655 → random 2700` and `2658 → random 2660`), guarding the sandstorm/sinkhole casts (713/714/743) — which are the only desert damage that fires above `maxlevel 19`, i.e. what actually hits a high-level character. (Its `NegateSpell` covers only 713; the reliable signal is the `failitem`, not the negator.)
-- **Protection is duration-based, not carry-based** *([CONFIRMED by user])*. `use waterskin` applies buff 711, which lasts its listed `Dur` (600 = 10 min game-time). You are protected only **while the buff is up** — carrying the item alone does nothing. If you're still in a desert/hazard room that needs the buff when it **expires**, you must `use waterskin` **again** to re-apply it.
+- **Protection is duration-based, not carry-based** *([CONFIRMED by user])*. `use waterskin` applies buff 711, which lasts its listed `Dur` (600 = 10 min game-time). **[CONFLICT — ask the user]** *Timing & rounds → Spell round (3s) and durations* gives real seconds = `Dur × 3` (600 → 30 min) — is the waterskin buff 10 min or 30 min? You are protected only **while the buff is up** — carrying the item alone does nothing. If you're still in a desert/hazard room that needs the buff when it **expires**, you must `use waterskin` **again** to re-apply it.
 - **Each `use` consumes one charge; a fresh waterskin carries 3 charges** *([CONFIRMED by user])* (the item's `Uses` field). When a waterskin is spent, you need another one — so players typically carry **2–3 waterskins** into the desert. Provisioning must therefore stock enough total charges to cover the expected time in the hazard stretch, not just "one waterskin."
 - **Routing model:** carry the source item(s), `use` on entering the first hazard room to raise the buff, and **re-`use` whenever the buff lapses while still inside a hazard room**, consuming a charge each time; when charges run out mid-stretch and no spare waterskin remains, halt rather than walking a room unprotected.
 - **There is NO wear-off message for the waterskin buff** *([CONFIRMED by user])*. So routine refresh cannot be reactive — the client **must TIME it** (predictively re-`use` a margin before the buff's `Dur` would expire; this is the PRIMARY refresh). The lapse prompt below is only a **reactive backstop**: when the timer's estimate is off and the buff drops early, the room re-emits the prompt and the client fires **exactly ONE** `use waterskin` to re-raise — not a client-side wear-off reaction (there's no such line), but a correction to a mistimed timer.
 - **Lapse / sandstorm spells are derivable from the checkspell chain.** `checkspell 711 2654` — the token's second int (2654) is the buff-ABSENT target TB; that block's `cast` is the lapse-damage spell. In the desert that's **spell 712 "desert damage"** (its CasterMessage is the thirst prompt); **spell 713 "desert sandstorm"** is the separate random-chance teleport, not a lapse signal.
+  - **[CONFLICT — ask the user]** the `checkspell S T` rule at the top of this topic says T is the branch taken when the buff is active — in stock's checkspell 711 2654, is 2654 the buff-present or buff-absent branch?
 - **Trigger + confirmation messages** *([CONFIRMED by user])* — all in the Messages game-data table, so match by record number, not hardcoded realm text. **These lines are plain text with no `{s}` placeholder**, so they're matched by literal case-insensitive substring, not the caster-message regex:
   - Desert lapse prompt — drink now (Spells#712): `You suffer in the desert heat... you need water, soon!` The game's own signal that the buff has lapsed while still in the hazard. Fire ONE `use waterskin` on this line.
   - Self re-`use` success (Spells#711): `You take a swig of water from your waterskin.` Confirms a charge burned and buff 711 re-applied. A `use waterskin` that draws no such line before the NEXT lapse prompt means charges/waterskins are exhausted → halt, don't walk on unprotected.
@@ -2590,12 +2645,12 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - The client resolves the lapse prompt via the Messages record linked to Spells#712, so it tracks the active set rather than hardcoded realm text.
 
 ### Hazard severity — survivable damage vs grave
-*Status: CONFIRMED 2026-09-02 (user + game-data trace, Paradigm 1.9.1)*
+*Status: CONFIRMED 2026-09-02 (user + game-data trace, Paradigm 1.9.1) · Realm: Paradigm*
 
 Among protectable hazards, a further split governs whether the navigator may offer to **cross it unprotected** (walk in and eat the effect on the user's say-so):
 
 - **Survivable damage** — the unprotected outcome is only a `Damage` hit: a direct `Damage` ability, OR a TextBlock `cast` of a spell whose own chain is `Damage`-only.
-  - Example: the **Silver River** (`Rooms.Spell 753`) → TB `failitem 690/691/1181/3609` (any raft) `: cast 754`, where spell **754 "battered"** is a plain `Damage` spell. You just take the hit and keep walking, so "cross unprotected — take the damage" is a legitimate choice.
+  - Example: the **Silver River** (`Rooms.Spell 753`) → TB `failitem 690/691/1181/3609` (any raft; the `3609` guard is Paradigm-only — stock's TB 2750 has `690/691/1181`) `: cast 754`, where spell **754 "battered"** is a plain `Damage` spell. You just take the hit and keep walking, so "cross unprotected — take the damage" is a legitimate choice (survivable = can't displace you or start a death timer; it can still kill a weak character — see *Teleport vs walking route choice*).
   - Lava / magma heat, `Spell 526`, is the same shape — a direct `Damage` ability.
 - **Grave** — the chain reaches an `EndCast` death-timer, a `teleport`/`transfer` (forced relocation), or a `checkspell`/`failspell` buff-gate (drown / suffocation / desert-heat-death). These can END or DISPLACE you, not just hurt you, so the counter is the only safe way past — the navigator must **never** offer to cross them unprotected.
   - Conservatively, ANY `EndCast` or buff-gate is treated as grave.
@@ -2682,7 +2737,7 @@ Among protectable hazards, a further split governs whether the navigator may off
 
 - **Context:** one of two exit shapes beyond ordinary cardinals / doors / CMD-teleports that the walker
   can route through, both on the route to the Necromancer (9/1431, phoenix-feather quest). (The other is
-  the item-use teleport, below.)
+  the item-use teleport — see *Item-use teleports*.)
 - **A room-command reveal is a lever whose opener is the room CMD.** A hidden exit
   (`(Hidden/Needs N Actions)`) whose unlock isn't an exit `Action` cell but a `remoteaction` in the
   **room's CMD chain**.
@@ -2721,10 +2776,12 @@ Among protectable hazards, a further split governs whether the navigator may off
   mid-fight — right after the attack-announcement lines — it's lost; the game won't process a whole-room
   search until the room is clear of hostiles.
 - **Out of combat it's a quick command→reply** (just the ~150 ms network latency, no server-side delay),
-  and the reveal doesn't always surface *everything* hidden (that's fine).
+  and the reveal doesn't always surface *everything* hidden (that's fine). *([NEEDS CONFIRMATION] does
+  this apply to hidden items/players only, with stashed coin always surfacing?)*
 - **An empty search answers with `Your search revealed nothing.`**; a reveal surfaces the
   `You notice … here.` survey.
-- (Targeted `sea <dir>` hidden-exit reveals are a separate path — see the next topic.)
+- (Targeted `sea <dir>` hidden-exit reveals are a separate path — see *Hidden exits — `sea <dir>` reveal
+  wording*.)
 - **Client use:**
   - Auto-search holds the `sea` past the fight and fires it **once** the room clears, then keeps the
     walker held briefly so the revealed `You notice … here.` survey lands and the get engines collect it
@@ -2742,21 +2799,6 @@ Among protectable hazards, a further split governs whether the navigator may off
     searched so a loop's later legs (each starting from a room already searched on arrival) don't
     re-search.
 
-### Searching for a hidden exit works while blind
-*Status: untagged in source*
-
-- **`search` / `sea <dir>` reveals a hidden exit regardless of blindness.** Blindness suppresses only the
-  descriptive room lines — room name, room description (if enabled), the `Also here:` roster, and the
-  `Obvious exits:` line — it does NOT block the search itself or its outcome.
-- **The reveal carries its own confirmation line that fires whether or not you can see the room**, so an
-  engine driving a walk can rely on that confirmation to know the hidden exit opened, even mid-blindness.
-- **Client use:**
-  - The auto-walker's "is this exit already revealed?" pre-check must not skip the `sea <dir>` just
-    because the character is blind — the search still works and is required to unveil the exit.
-  - It also must not trust a stale observed-exits set from a room it only dead-reckoned into — see
-    RoomTracker.SetRoom clearing ObservedExitDirections; a stale set made the walker skip the required
-    search and ram a wall.
-
 ### Toll exits
 *Status: CONFIRMED*
 
@@ -2769,17 +2811,6 @@ Among protectable hazards, a further split governs whether the navigator may off
   So affordability is `TotalCopperValue >= TollGold * 100`.
 - **The check is per-crosser.** Every party member needs their own `N × 100` on hand, and a member who
   can't cover it is refused at the gate and left behind while the rest pass.
-
-### NPC ask-transport fares
-*Status: untagged in source*
-
-- **Each person pays.** A party crosses an NPC ask-transport by every member asking it themselves (the
-  leader relays the keyword), and each asker is charged the full fare — so the whole party needs it on
-  hand.
-- **Client use:**
-  - `GreetTeleportResolver` sums the line's `price` directives into the transport's `FareCopper`; the
-    graph stamps it on the synthesised Teleport edge (`RoomExit.FareCopper`) and `MovementFilter` gates
-    it like a toll — on the poorest party member's `@wealth` (or your own wallet solo).
 
 ### Gating a party's route through toll and level exits
 *Status: CONFIRMED*
@@ -2804,8 +2835,7 @@ Among protectable hazards, a further split governs whether the navigator may off
     since.
 - **Client use:**
   - Toll half is implemented: `MovementFilter.IsTollGateBlocked` + `PartyWealthProbe` /
-    `PartyWealthTracker`. Unlike the level half — which keeps every member's level warm on each roster
-    change — wealth is **demand-polled**: `MinWealth` fires the `@wealth` probe only while BFS is
+    `PartyWealthTracker`. Wealth is **demand-polled**: `MinWealth` fires the `@wealth` probe only while BFS is
     evaluating a toll exit, and a follower with no fresh reading gates the toll, so the first plan
     routes around it while the probe warms up.
   - Level half is implemented: `MovementFilter.IsExitBlocked` + `PartyLevelProbe` /
@@ -2818,7 +2848,8 @@ Among protectable hazards, a further split governs whether the navigator may off
     gate.
   - That freshness poll is route-scoped and debounced the same way the `@wealth` toll poll is: fired from
     `MovementFilter.WarmForRoute` only when the levels-permitted shortest route genuinely uses a level
-    gate. The ordinary keep-warm refresh is the once-a-day party probe below, not a roster-change poll.
+    gate. The ordinary keep-warm refresh is the once-a-day party probe (see
+    *Party → Party intel probe: `@level` / `@version` on partying*), not a roster-change poll.
 
 ### Room-level entry blocks — an early-engine mechanism with no MDB representation
 *Status: CONFIRMED 2026-09-14 (user + other devs + data check) · Realm: Stock (Paradigm differs)*
@@ -2850,10 +2881,14 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **General lesson: absence of a gate in the data is not proof the game has no gate.** Treat a refusal
   on an exit the graph believes is open as possible evidence of a room-level block.
 - **Client use:**
-  - `MovementFilter.IsLevelGateBlocked` short-circuits on `if (!exit.HasLevelGate) return false;`, so on
-    stock an over-level character is routed into the Arena and refused by the server. The refusal is
-    handled (it reads as a failed move, not a stall), but nothing stops the router re-planning the same
-    way — the graph has no gate to route around.
+  - `RoomGraphManager.ApplyStockArenaEntryBlock` stamps `MinLevel 1 / MaxLevel 3` on the stock
+    `1/2146 D → 1/2150` exit at graph-build (Stock only; skipped if the exit already carries a gate), so
+    the router, route picker and room tooltip read it like the west exit.
+  - `MovementFilter.IsLevelGateBlocked` short-circuits on `if (!exit.HasLevelGate) return false;`, so any
+    inbound left ungated — the `1/2152 S` inbound is still ungated in the graph — lets an over-level
+    character be routed into the Arena and refused by the server. The refusal is handled (it reads as a
+    failed move, not a stall), but nothing stops the router re-planning the same way through an ungated
+    inbound.
 
 ### Guardian-monster doors opened by `ask`
 *Status: CONFIRMED (game data v1.11p map 9, MMUD Explorer cross-check)*
@@ -2874,11 +2909,11 @@ Among protectable hazards, a further split governs whether the navigator may off
   ("shadow guard" → `guard`), e.g. `ask guard morukai`.
 - **The five topics are alternatives** that all open the same door — the walker sends only one.
 - **The open is quest-gated and the gate is untrackable by the client.** `checkability 133 4` gates the
-  lift on ability **133 = PhoenixQuest**; the client can't read a character's quest abilities, so the
-  crossing is **reactive**: promote the door to routable, issue the `ask`, attempt the move, and react to
+  lift on ability **133 = PhoenixQuest**; the client doesn't pre-read the flag for routing (see
+  *Quests → Quest-flag values (`abil` / `sys god abil`)*), so the crossing is **reactive**: promote the door to routable, issue the `ask`, attempt the move, and react to
   whether it actually opened (halt/replan if not). Do **not** try to pre-check the gate.
 - **Client use:**
-  - Identical promotion to the lever-door case (Multi-action exits and levers): a `Door`/`KeyLocked`
+  - Identical promotion to the lever-door case (*Multi-action exits and levers*): a `Door`/`KeyLocked`
     exit fronted by a greeting monster whose `remoteaction` targets *its own room* and names *that exit*
     is promoted to `MultiActionHidden` at graph-build, folding the resolved `ask` command into the same
     `byExit` action table the `Action#N` lever cells populate (`GuardDoorCommandResolver` +
@@ -2890,25 +2925,21 @@ Among protectable hazards, a further split governs whether the navigator may off
 ### Keyword command forms (`ask <noun> <keyword>` vs verbatim room CMD)
 *Status: `ask` noun rule — as for guardian doors; command-form split CONFIRMED 2026-07-23 (user); keyword model CONFIRMED 2026-09-26 (user)*
 
+- **The target noun: the client sends the last word of a multi-word NPC name.** The game's `ask` parser
+  takes one target token and treats the rest as the keyword, so `Gnome Commander` reduces to
+  `ask commander orb`, **not** `ask gnome commander orb`. The 2026-07-23 note uses `ask gnome orb` — also
+  one token. Whether the game accepts *any* single word of a multi-word name is
+  *([NEEDS CONFIRMATION] does `ask` accept any single word of a multi-word NPC name, or only the last?)*.
 - **`ask` is the command for talking to an NPC through its keywords: `ask <npc name> <keyword>`** *([CONFIRMED] 2026-09-26, user)*. It runs whatever actions sit under that keyword.
   - Some keywords carry **checks with pass/fail criteria** and do different things depending on the result.
-  - An NPC's keywords are listed in game data: the monster's `GreetTXT` textblock holds `keyword:textblock` lines. For example, Paradigm 1.9.1 gnome commander #332 has `GreetTXT` 809, which lists `dark-elf` / `plots` / `slaves` / `orb` / `passage`. `orb` → 814 → 815 `giveitem 807`, the item he drops, so `orb` is the keyword that hands over the orb.
-
-- **The game's `ask` parser takes one target token and treats the rest as the keyword.** So a
-  multi-word name (`Gnome Commander`) must reduce to its last-word noun (`ask commander orb`, **not**
-  `ask gnome commander orb`).
+  - An NPC's keywords are listed in game data: the monster's `GreetTXT` textblock holds `keyword:textblock` lines. For example, Paradigm 1.9.1 gnome commander #332 has `GreetTXT` 809, which lists `dark-elf` / `plots` / `slaves` / `orb` / `passage`. `orb` → 814 → 815 `giveitem 807`, the item he drops, so `orb` is the keyword that hands over the orb. (The full dark-elf front-door chain is in *Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*; detecting the hand-over is in *Items, inventory & equipment → NPC keyword hand-over detection*.)
 - **The same `ask <noun> <keyword>` noun rule backs the path-item give router.** A giver NPC that hands
   over a path-gate item via a deterministic `giveitem` (an `ask <keyword>` dialogue award) is addressed
   by the identical single-word target.
 - **[CONFIRMED, user 2026-07-23] Keyword command form depends on the TBInfo trigger's root:** an
   **NPC-attached** keyword is issued as `ask <npc name> <keyword>` (e.g. `ask gnome orb`); a **room CMD**
   keyword is typed **verbatim** (e.g. `rub orb`, `touch statue`).
-- **Both forms are one target token, so they don't contradict the parser rule.** The rule only forbids the
-  two-word target (`ask gnome commander orb`). The 2026-07-23 note (and the dark-elf front-door
-  walkthrough) uses `ask gnome orb`; the client sends the last word (`ask commander orb`). Whether the game
-  accepts *any* single word of a multi-word name has not been confirmed separately *([NEEDS CONFIRMATION])*.
-- **Keyword strings are fixed in the TBInfo `Action`/keyword data, and the client can read them.** This
-  supersedes the earlier note that keyword strings "come from the NPC's dialogue at play time".
+- **Keyword strings are fixed in the TBInfo `Action`/keyword data, and the client can read them.**
 - **Client use:**
   - The give router reuses `GuardDoorCommandResolver.LastWord` for the single-word target; only the
     picker's human-readable "(ask …)" promise keeps the full name.
@@ -2940,7 +2971,9 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **A one-way cast "pocket" is not overdrawn onto its housing map.** A cast area can be a *sink* —
   entered by a single cast-on-walk exit with no walk-back, so it lives on but topologically apart from
   the surrounding map. The Warped Asylum is one: its 108 rooms are reachable only via one cast mouth
-  (`1182 W → 1183`, `(Cast: pre-0, post-596)`) and have zero exits back out. Laying the pocket out from
+  (`1182 W → 1183`, `(Cast: pre-0, post-596)`) and have zero exits back out (stock data; Paradigm adds
+  the `9/1259` pull-lever back to `9/1180`, which the client neutralises at graph-build — see
+  *Random-teleport maze (the Warped Asylum)*). Laying the pocket out from
   a housing-map origin poured all 108 rooms into the housing map's coordinate grid, drawing them on top
   of it (the Rhudaur overlay).
 - **Pocket entrance is a *topology* discriminator, orthogonal to `CastTeleportRandom` (a
@@ -3006,15 +3039,18 @@ Among protectable hazards, a further split governs whether the navigator may off
   - the TBInfo's `roomitem <fixture>` gate means it only fires in the room that holds that fixture (item
     993 "waterfall" lives in 3/1, which is why it "must be used there").
 - **The return trip is a normal exit** (9/1009→D→3/1), so the potion is never needed to come back.
-- **This is likely the ONLY item-only-anchored teleport in the data.**
+- **This is likely the ONLY item-only-anchored teleport in the data.** *([NEEDS CONFIRMATION] is the
+  nightblack portal (item 1419) an exit-anchored teleport rather than an item-use one?)*
 - **Partied: every member needs their OWN potion**, and the crossing is a party-relay — the leader must
   tell the party to use theirs *before* using its own.
 - **Client use:**
   - The client anchors its graph edge on the fixture item's own room (its `Obtained From`), since there's
     no exit / CMD / greet to hang it on.
   - The item-use teleport is an ordinary `Teleport`-hint edge, so the standard teleport party-relay
-    already handles it: a leader with followers sends `.@party use potion of levitation` on the party
-    channel, THEN uses its own `use potion of levitation`.
+    already handles it: a leader with followers sends `.@party use potion of levitation`, THEN uses its
+    own `use potion of levitation`. Every teleport relay takes this `.@party <keyword>` form: the leading
+    `.` sends the line as a say, so the followers in the room all hear and act on it (a say-relay — no
+    per-player grant needed). Item gives, by contrast, go out as a bare `@party give …`.
   - The one thing the client can't verify is whether each follower actually carries a potion — a member
     without one is left behind (we don't track follower inventory).
 
@@ -3057,7 +3093,7 @@ Among protectable hazards, a further split governs whether the navigator may off
      orb / hold bloodstone orb / rub orb"), so once the orb is in hand the walker already knows how to
      cross it.
   3. At the **Black Steel Gate (`8/461`)**, `touch statue` — summons the **obsidian statue
-     (monster 347)**; kill it and the corpse drops the **gate key (item 806)**. This summon command is
+     (monster 347)**; kill it and it drops the **gate key (item 806)**. This summon command is
      NOT surfaced anywhere on the map.
   4. The gate key opens the **town gate `8/461 → 8/462`** into the city — the exit shows
      `(Key: gate key)` but not how to obtain the key.
@@ -3078,13 +3114,13 @@ Among protectable hazards, a further split governs whether the navigator may off
   `summon 347` (kill → drop 806) are invisible to the walker until it reads TBInfo. So the walker can
   cross a gate it holds the item for, but is blind to how to obtain that item.
 - **[CONFIRMED 2026-08-18] Quest items on special-exit routes are never auto-obtained.** The potion (see
-  Item-use teleports), plus the titanium fork / magical quartz rod that gate the ruin's barrier exits,
+  *Item-use teleports*), plus the titanium fork / magical quartz rod that gate the ruin's barrier exits,
   are quest-locked, so a route missing one fails with a named "go obtain the &lt;item&gt;" message
   rather than trying to fetch it.
 - **[CONFIRMED 2026-09-13] A route's item gates come in two kinds the route picker must not conflate:**
   - **Required gate** — the destination is *unreachable* without crossing it (no route avoids it).
     Example on the way to the dark elf city interior (8/1699): the **bloodstone orb** (item 807) — every
-    route needs it.
+    route needs it. *([NEEDS CONFIRMATION] does the nightblack-portal backdoor bypass it?)*
   - **Optional shortcut** — an item merely unlocks a *shorter* route; a longer route reaches the
     destination without it. Example: the **amber talisman** (item 815) opens a rooftop shortcut through
     the slums; a longer walk (through the city gate) avoids it entirely. An optional shortcut item is
@@ -3122,8 +3158,8 @@ Among protectable hazards, a further split governs whether the navigator may off
   shares a name and plain-exit fingerprint, so the walker can't source a route. The Warped Asylum is the
   canonical one.
 - **The pocket is detected structurally, with no hardcoded room numbers:** it's the set of rooms trapped
-  behind a one-way cast-pocket entrance (`RoomExit.CastPocketEntrance` — a cast-on-walk mouth you can't
-  walk back out of) whose interior holds at least one random-teleport exit
+  behind a cast-pocket entrance (`RoomExit.CastPocketEntrance`, defined in *Cast-on-walk exits and
+  random teleports*) whose interior holds at least one random-teleport exit
   (`RoomExit.CastTeleportRandom`).
 - **Because the asylum's entrance exit is *both* a pocket mouth and a random teleport,
   `BfsMapper.FindPath(outside, mazeRoom)` is always null** — the clean signal the walker uses to hand the
@@ -3138,9 +3174,11 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **Solving:** relocalize from the signature → if a plain BFS route to the goal now exists, hand the final
   walk back to the walker; if the goal sits in a plain-disconnected component (reachable only by
   re-teleporting), **reshuffle** — walk a `CastTeleportRandom` exit to re-teleport and retry.
-- **Runs on every realm.** `rm` locates a room by number but does not relocalize inside a same-named
-  random-teleport maze (the tracker sits at Suspect, not Confirmed), so the look-sweep is the only thing
-  that can drive the asylum — Paradigm included.
+- **Runs on every realm; the relocalization method differs by realm.** Stock relocalizes by the 1x2
+  look-sweep. Paradigm relocalizes with `rm` alone and never looks: `rm` returns the room number, which is
+  distinct even though every asylum room shares one name, so it pinpoints the exact landing — every
+  landing and every plain step re-locates by `rm`, and a dropped reply is re-sent rather than falling
+  back to a look.
 - **[CONFIRMED, user 2026-08-16] Once relocalized into a "solvable" room, the plain route to the goal is
   unhindered — drive it with no per-step re-location.**
   - The initial teleport-landing relocalization (the 1x2 look-sweep on stock, `rm` on Paradigm) still
@@ -3168,22 +3206,11 @@ Among protectable hazards, a further split governs whether the navigator may off
   - The Paradigm lever's routable edge is **not synthesised** (`RoomGraphManager.ParadigmAsylumLeverRoom`),
     making the asylum act as the same one-way pocket it already is on stock.
 
-### Nav-recovery authoritative locate (`rm` / `sys st`)
-*Status: untagged in source · Realm: `rm` on Paradigm, `sys st` on stock with the sysop power*
-
-- **The sysop `sys st` position locate mirrors the Paradigm `rm` re-anchor at every point `rm` fires** —
-  first mismatch, engine stall, the tier-3 give-up ladder, the terminal pre-Lost shot, the no-engine
-  drift gap, `@where`, and a blocked loop/replan.
-- **On Paradigm `rm` wins each site (realm-gated); on a stock realm with the power `sys st` fills in.**
-- **Maze-solve stays `rm`-only** — the solver drives its own relocalization.
-- **Client use:**
-  - Both share the gate's `NoteAuthoritativePosition` / `OnAuthoritativeResyncFailed` consumers.
-
 ### Passive grid re-localiser (command-free)
-*Status: untagged in source*
+*Status: Unrated*
 
 - **Fills the same-name-grid + no-engine gap the two command-driven paths can't reach.** The
-  authoritative locate above and the gate's tier-2 forward localiser both require something to send / an
+  authoritative locate (*Nav-recovery authoritative locate (`rm` / `sys st`)*) and the engine's forward localiser (tier 2 of its Lost recovery) both require something to send / an
   engine to drive. When neither is available — no `rm`/`sys st` power, no engine attached (automation
   stopped, walking a same-name grid by hand, or a party drag) — the passive re-localiser runs.
 - **It sends nothing to the wire** (pure client-side inference) and **refuses to guess** — an ambiguous
@@ -3234,6 +3261,8 @@ Among protectable hazards, a further split governs whether the navigator may off
   per-door `The door to <dir> just opened.`, exits carry state (`open/closed door <dir>`). **Per-door:**
   `(Door [1000 picklocks/strength])` = unbashable → **wait** for the timer; lesser door on-path = **bash
   `<dir>`**.
+  - **[CONFLICT — ask the user]** spell 700 is also listed under **Fall/scatter** as the `cleanup 3`
+    scatter room-spell — is spell 700 both the F3 door timer and a scatter spell, or is one ID wrong?
   - Golden lion key drops from the neutral `floating key` monster (**#598**).
   - **No-drop bug** — a bugged kill drops nothing → exit E, re-enter W to respawn.
   - Key door: `unlock` → `The key breaks and crumbles apart.` → `open` → move.
@@ -3245,7 +3274,8 @@ Among protectable hazards, a further split governs whether the navigator may off
   **down** to the firepit.
 - **[CONFIRMED 2026-07-30] Undead-priest holds.** The pyramid undead priest is monster **#770**; it casts
   `MidSpell-0 = 66` — **spell #66 `hold person`, the SAME spell ID the player casts** (25% at level 20;
-  also casts #77).
+  also casts #77). (Hold person details: see *Spells, buffs & conditions → Ailment identification — which
+  spells cause disease / poison / blind / hold*.)
   - Wording: witness cast `<caster> casts hold person on <member>!`; the held target's own lines are
     `Your legs are paralyzed!` → `You can move again!` (private — a *witness* never sees a member's
     wear-off).
@@ -3260,14 +3290,15 @@ Among protectable hazards, a further split governs whether the navigator may off
   - Not walker-BFS-routable — the graph builder doesn't synthesise monster-greet `remoteaction` edges —
     so the climb runs a **canned per-floor script**; game-data room numbers position / detect floor /
     read door state.
-  - Scatter detection (above) halts the climb and reports.
+  - Scatter detection (**Fall/scatter**) halts the climb and reports.
   - **Pre-flight timer gate:** **Stock:** `Heavy` (>66%) leader → refuse. **Paradigm:** estimate
     `126·per-move + 6·250 ms` via `MovementSpeedCalculator` (live enc% + quickness, floored at the 1 s
     cap); over 5 min → refuse (crosses ~>80% enc, no quickness). Drives **leader/solo only**.
   - F3 key: the `floating key` monster's (#598) default client relationship was `Flee` in the Paradigm
     overlay (stock was already `Enemy`); set to **`Enemy`** so party auto-combat clears it for the key
     (the solver needs no kill logic). The client tracks who grabs it (`<name> picks up golden lion key`)
-    and forces `@party give golden lion key to <leader>` at the key-door unless the leader grabbed it.
+    and forces a bare `@party give golden lion key to <leader>` (no leading `.` — see *Item-use
+    teleports*) at the key-door unless the leader grabbed it.
     The no-drop respawn (exit E, re-enter W) is not yet automated.
   - F4: runs the footpath strictly forward (never back up); paces slower than the other floors for
     reaction time. The client doesn't check/encode the ability-134 pass gate.
@@ -3285,7 +3316,7 @@ How items are acquired, counted, picked up, dropped and stored in rooms. Also co
 ### Acquisition verbs
 *Status: CONFIRMED*
 
-- **Items are acquired via `buy` / `get` / `search`+`get`.** There is no "hunt" verb, so don't describe path-item sourcing as "hunting."
+- **[CONFIRMED] The acquisition verbs are `buy` / `get` / `search`+`get`** (plus NPC `ask` gives and chest opens). There is no "hunt" verb, so don't describe path-item sourcing as "hunting."
 
 ### Monster drops land on the ground
 *Status: CONFIRMED 2026-07-16 (user)*
@@ -3298,7 +3329,7 @@ How items are acquired, counted, picked up, dropped and stored in rooms. Also co
 *Status: CONFIRMED 2026-07-20 (user)*
 
 - **A ground stack of 2+ identical items shows a leading count; a lone item shows the article form (no count).** The room survey renders a pile as `You notice 5 piece of amber here.`, and the count is the true number on the floor.
-- **With only one of the item, the survey omits the count and uses the article**: `You notice a piece of amber here.` (never `1 piece of amber`). There is no bulk-get verb, so each `get <name>` grabs a single unit — true on Stock; Paradigm also accepts the counted `get <N> <item>` (next topic).
+- **With only one of the item, the survey omits the count and uses the article**: `You notice a piece of amber here.` (never `1 piece of amber`). There is no bulk-get verb, so each `get <name>` grabs a single unit — true on Stock; Paradigm also accepts the counted `get <N> <item>` (see *Item batching: Paradigm counted commands vs Stock one-per-command*).
 
 **Client use:**
 - The auto-collect engine issues **one `get` per counted unit** on both realms (the Stock-safe form; it does not route through `CountedCommand.Emit`): the survey count for a stack, exactly one for the article/lone form.
@@ -3311,8 +3342,7 @@ How items are acquired, counted, picked up, dropped and stored in rooms. Also co
 - **`<item>` can be anything in the Items table** of a game-data import: keys (`drop 3 black star key`), equipment, weapons, usable items and loot.
 - **The confirmation echoes the count with the SINGULAR item name**, e.g. `You hid 35 orc-head.` (not `orc-heads`).
 - **The other verbs' bare-count confirmations are not all captured yet.** They have the same shape (`You took/dropped <N> <item>.`, buy/sell), but not every one has been captured from a live session.
-- **Stock has no such batching: one item per action, for every verb and every kind of item.**
-- **[CONFIRMED] One item per command.** `buy <item>` and `sell <item>` each transact exactly one unit. Selling ten daggers means sending `sell dagger` ten times, and there is no quantity argument. (This entry was recorded without a realm tag. It matches the Stock rule above.)
+- **[CONFIRMED] Stock: one item per action — `sell dagger` ×10 to sell ten; no quantity argument.** This holds for every verb and every kind of item: `buy <item>` and `sell <item>` each transact exactly one unit.
 - **Gets follow the same split** (user, 2026-09-26): the ground-stack entry's "there is no bulk-get verb, so each `get <name>` grabs a single unit" (2026-07-20) holds on Stock; Paradigm accepts `get <N> <item>` — the capacity-refusal screenshot (see *`get` failure responses*) shows `get 20 torch`.
 
 **Client use:**
@@ -3327,9 +3357,9 @@ How items are acquired, counted, picked up, dropped and stored in rooms. Also co
   - An **item** get is `You took <item>.` and an item drop is `You dropped <item>.`
   - The drop/hide verbs are **shared** with coins. A colour-adjective item (`You dropped a silver key.`) is told apart from coin only by the trailing **coin noun** (`nobles`/`farthings`/…) and a numeric count.
   - `You picked up …` is coin-exclusive; items never use it.
-- **The pickup lines are the authoritative "the get landed" signal**: `You took <item>.` per item (one line per collected item), and `You picked up <N> <coin>.` per coin get.
-- **A `You picked up 0 <coin>.` is a FAILURE, not a success.** The character is at its carry limit and took nothing; the coins stay on the ground. For gate purposes the get has still *resolved*, so it stops the walker waiting on it, but nothing was collected.
-- **Item-get failures have their own wordings**, recorded in *`get` failure responses* below (CONFIRMED 2026-08-21 from screenshots; this entry predates that capture and called them not yet captured). A get that yields neither a `You took` line nor a recognised failure is released by the settle timeout rather than by a confirmation.
+- **The pickup lines are the authoritative "the get landed" signal**: `You took <item>.` per item (one line per collected item), and `You picked up <N> <coin>` per coin get (see *Money, banks & shops → Coin wire wording*).
+- **A `You picked up 0 <coin>` is a FAILURE, not a success.** (This entry originally wrote it with a trailing period, `You picked up 0 <coin>.`, which disagrees with *Money, banks & shops → Coin wire wording*.) The character is at its carry limit and took nothing; the coins stay on the ground. For gate purposes the get has still *resolved*, so it stops the walker waiting on it, but nothing was collected.
+- **Item-get failures have their own wordings**, recorded in *`get` failure responses* (CONFIRMED 2026-08-21 from screenshots; superseded: earlier recorded as not yet captured). A get that yields neither a `You took` line nor a recognised failure is released by the settle timeout rather than by a confirmation.
 
 **Client use:**
 - The client keys movement-resume (the acquisition gate) and collection dedup on the pickup lines.
@@ -3374,7 +3404,7 @@ A `get <item>` that can't succeed replies with one of these shapes:
 *Status: CONFIRMED 2026-09-02 (user); worn-item drop CONFIRMED 2026-09-26 (user)*
 
 - **`Syntax: DROP {Amount} {Currency}`** is the **drop** counterpart of the get syntax refusal (confirmed 2026-09-02). Note the **braces**.
-  - When this was recorded (2026-09-02), the get form was contrasted as using brackets. The 2026-09-03 correction in *`get` failure responses* found the get form uses braces too.
+  - The get form uses braces too. Corrected 2026-09-03: braces, not brackets (see *`get` failure responses*).
   - Same shape otherwise: no item name is echoed. It means the game didn't recognise the name as something you're holding, usually because you aren't.
 - **`You may not drop that item!` is a *different* refusal**: the item is held but undroppable.
 - **Drop arguments are PARTIAL-MATCHED against what you hold** *([CONFIRMED] 2026-09-02, user)*. This is the dangerous one.
@@ -3388,9 +3418,9 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - `@drop-all full` / Drop Everything drops worn gear with the same `drop` it uses for the pack (InventoryActionHandler).
 
 ### Room item capacity: drop refusal
-*Status: CONFIRMED 2026-09-02 (user, live capture); per-object stacking 2026-09-03 (user; mechanism UNVERIFIED); realm CONFIRMED 2026-09-26 (user) · Realm: Stock — Paradigm rooms have no item cap*
+*Status: CONFIRMED 2026-09-02 (user, live capture); per-object stacking 2026-09-03 (user; mechanism NEEDS CONFIRMATION); realm CONFIRMED 2026-09-26 (user) · Realm: Stock — Paradigm rooms have no item cap*
 
-On Stock, a room holds a limited number of items (Paradigm rooms have no item cap; the capture below didn't record its realm). The same cap drives the Stock deathpile spill-over (see *Death & corpse recovery → Deathpile*). A `drop` into a room already at that limit is refused:
+On Stock, a room holds a limited number of items (Paradigm rooms have no item cap; the capture below didn't record its realm). The same cap drives the Stock deathpile spill-over (see *Death & corpse recovery → Deathpile — where the items go*). A `drop` into a room already at that limit is refused:
 
 ```
 [HP=642/MA=265]:drop pend
@@ -3400,7 +3430,7 @@ There is no room to drop amethyst pendant here.
 - **The reply carries the item's FULL canonical name**, not the word typed. The command above abbreviated it to `pend`, and the refusal still named `amethyst pendant`. Unlike the `get` failures, where the echo can be truncated and name-matching is explicitly unsafe, a drop refusal CAN be correlated to the outstanding drop by name.
 - **It is per-drop, not per-batch.** A batch of N drops into a full room produces N refusals, one per command, and none of them confirm.
 - **The exact capacity is unknown, and the client never needs it.** "Full" is only ever learned by being refused.
-- **Capacity is per OBJECT, not per item, so a stacking drop may still fit a "full" room** *(2026-09-03, user; mechanism UNVERIFIED)*.
+- **Capacity is per OBJECT, not per item, so a stacking drop may still fit a "full" room** *(2026-09-03, user; [NEEDS CONFIRMATION] mechanism)*.
   - The sysop dump counts floor *objects*, and an id can appear more than once. Two black star keys dropped singly read `172(0) 172(0)` (two objects), while two diamonds read `902(1)` (one object of two).
   - So stacking is item-dependent. An item that stacks onto a pile already on the floor consumes no new slot, which means a room that refuses one item can still accept another that stacks with its existing contents.
 - **What isn't known: which items stack.**
@@ -3439,16 +3469,16 @@ There is no room to drop amethyst pendant here.
 - **Only one of each *named* item can be worn at a time.** Two identically-named pieces (e.g. two *silver bracelets*) can't both be equipped; the second is refused. Distinct names are fine: a *silver bracelet* and an *ivory bracelet* equip together.
 - **The finger and wrist families each hold two physical pieces** (Finger1/Finger2, Wrist1/Wrist2), so long as the two are distinct names. Every other slot holds one.
 - **`i`-list order IS physical slot order, and it's reliable** *([CONFIRMED] 2026-09-03, user in-game tests, both realms)*. The first-listed paired piece is slot 1 and the second is slot 2, on both Stock and Paradigm.
-- **`eq` and `wear` are identical, and target-swap ONE physical slot in place** *([CONFIRMED] 2026-09-03, user)*.
+- **`eq` target-swaps ONE physical slot in place** *([CONFIRMED] 2026-09-03, user)*. On Paradigm `wear` is **not** equivalent for paired items — it appends to slot 2 and shuffles (see **Client use** in this topic). *([NEEDS CONFIRMATION] is wear = eq on Stock paired slots?)*
   - Equipping a new paired piece into a FULL family evicts one slot's occupant, and the new piece takes that slot.
   - Equipping into a family with a free slot fills the empty slot.
 - **Which slot is evicted is realm-specific:**
   - **Paradigm evicts SLOT 1** (the first-listed). Worn `[adamantite, white gold]` + `eq silver` → removes adamantite → `[silver, white gold]`.
   - **Stock evicts SLOT 2** (the second-listed). Worn `[amethyst, silver]` + `eq copper` → removes silver → `[amethyst, copper]`.
 - **Consequences for a set swap (per realm):**
-  - A set pick bound for the **evicted** slot rides the eq, with no `rem`: it drops the odd-out sitting there.
-  - A pick bound for the **other** slot needs its odd-out `rem`med first, or the eq drops the member the set keeps.
-  - To swap BOTH members: `eq 3` (evicts the odd in the evicted slot), `rem <other odd>`, `eq 4`. That is **one** `rem`, not two.
+  - A set pick bound for the **evicted** slot rides the eq, with no `rem`: it displaces the odd-out sitting there back to the pack.
+  - A pick bound for the **other** slot needs its odd-out `rem`med first, or the eq displaces the member the set keeps back to the pack.
+  - To swap BOTH members: `eq <new A>` (evicts the odd in the evicted slot), `rem <other odd>`, `eq <new B>` (originally recorded as `eq 3` … `eq 4`). That is **one** `rem`, not two.
 
 **Client use:**
 - `EquipmentManager.ComposePairedSlotCommands` takes a realm flag (Paradigm ⇒ evict slot 1) and reasons off the reliable `i` order.
@@ -3496,7 +3526,7 @@ There is no room to drop amethyst pendant here.
 - The Equipment Manager blocks a slot whose item fails the check, and also blocks it on the EP-zap refusal.
 
 ### Item charges (`Uses` / `UseCount`)
-*Status: none recorded in source*
+*Status: Unrated*
 
 - **A positive value is the item's real charge count.** Charges are consumed to zero, then the item is gone.
 - **`<= 0` means unlimited.**
@@ -3510,9 +3540,9 @@ There is no room to drop amethyst pendant here.
 ### Equip → use → restore swap for a readied buff item
 *Status: CONFIRMED 2026-08-06 (user); 2H-weapon + off-hand-buff exception CONFIRMED 2026-08-26 (user)*
 
-- **To command-cast from an item you must have it equipped.** So the buff engine equips the cast item, `use`s it, then puts back whatever it displaced.
+- **To command-cast from an item you must have it equipped.** *([NEEDS CONFIRMATION] does this apply only to equippable cast items, with potions/waterskins usable from inventory?)* So the buff engine equips the cast item, `use`s it, then puts back whatever it displaced.
 - **A buff item can live in ANY equip slot, not just weapon / off-hand.** A warhorn is off-hand, a charged amulet is neck, etc.
-- **Restore is slot-specific.** `eq <item>` drops the item into **its own** slot and displaces only what was there.
+- **Restore is slot-specific.** `eq <item>` puts the item into **its own** slot and displaces only what was there.
 - **1H weapon buff:** displaces the **weapon hand**, so restore the weapon.
   - If you're on a 2H weapon, a 1H buff swaps cleanly: `eq buff`, `use`, `eq <2H weapon>`. There's no off-hand step, because the off-hand was empty under the two-hander.
 - **Off-hand buff** (warhorn, a held item): displaces the **off-hand**, so restore the off-hand shield.
@@ -3525,7 +3555,7 @@ There is no room to drop amethyst pendant here.
   - Without this order the sequence just loops on a rejected `eq <buff>`.
 - **Worn buff** (amulet/ring/etc.): displaces **that worn slot**, so restore that slot's item.
 - **2H weapon buff while holding a 1H weapon + off-hand:** the buff needs **both** hands.
-  - Order: `rem <off-hand>` → `eq <2H buff>` → `use` → `eq <1H weapon>` (this drops the two-hander and frees the off-hand) → `eq <off-hand>`.
+  - Order: `rem <off-hand>` → `eq <2H buff>` → `use` → `eq <1H weapon>` (this displaces the two-hander back to the pack and frees the off-hand) → `eq <off-hand>`.
 - **Whatever slot was empty simply isn't restored** (nothing to put back).
 
 ### Chests and chest loot tables
@@ -3534,8 +3564,8 @@ There is no room to drop amethyst pendant here.
 - **Some monsters drop a `chest`.** `open chest` **dumps a set of random items straight into inventory** that the player does not get to choose.
 - **A chest's loot table is data-driven through a three-hop chain.**
   - A container is `Items.ItemType == 8`.
-  - Its `open` behaviour is an ability pair `Abil == 43` (CastSpell) whose `AbilVal` is a **Spells** row.
-  - That spell carries `Abil == 148` (castsp) whose `AbilVal` is a **TBInfo** row.
+  - Its `open` behaviour is an ability pair `Abil == 43` (CastsSp) whose `AbilVal` is a **Spells** row.
+  - That spell carries `Abil == 148` (TextBlock) whose `AbilVal` is a **TBInfo** row.
 - **The top TBInfo entry's `Action` is a single colon-separated directive line.** It contains:
   - `message N` (flavour, ignore)
   - `giveitem I` (a **guaranteed** drop)
@@ -3569,7 +3599,7 @@ There is no room to drop amethyst pendant here.
 - **Gang house (GH) guards are conditionally hostile, gated on an item**, not on the alignment/title system.
 - **A gang house's guards do not attack a character carrying that house's matching emblem item.** The emblem's name matches the house's color/name: a gold house's guards stand down for a **Gold Emblem**, a silver house's for a **Silver Emblem**.
 - **Losing or dropping the required emblem while inside makes the guards attack.**
-- **This is separate from the `jail`-casting guard/title system** in *Monster aggression*. It is not tied to the player's alignment title at all, only to possession of the correct emblem for the specific house.
+- **This is separate from the `jail`-casting guard/title system** in *Combat → Monster aggression — who opens on you unprovoked*. It is not tied to the player's alignment title at all, only to possession of the correct emblem for the specific house.
 - **No item-level flag or `ItemType` value in the imported MDB data currently distinguishes an emblem** from any other item. The only known signal is the item name pattern (`"<Color> Emblem"`).
 
 **Client use (Roomba Mode / any GH automation):**
@@ -3601,17 +3631,22 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   keys policy/value on the keyword. Some lines carry only the keyword, others the full pair — don't
   assume one form.
 - **Get / drop commands the client sends name the coin in full** (`get 6 silver noble`,
-  `drop 1 silver noble`) — a bare adjective collides with like-named items (see the item-collision
-  note). Internally the client still keys policy/tally/parsing on the bare first word.
-- **Corpse loot drops name the bare keyword:** `6 silver drop to the ground.`
+  `drop 1 silver noble`) — the full-noun rule is in *Items, inventory & equipment → Coin-adjective
+  binding on get/drop*. Internally the client still keys policy/tally/parsing on the bare first word.
+- **Kill drops name the bare keyword:** `6 silver drop to the ground.`
 - **Pickup confirmation names the full coin and carries NO trailing period:**
   `You picked up 6 silver nobles` (singular `You picked up 1 silver noble`).
+  **[CONFLICT — ask the user]** is the singular coin pickup "1 silver noble" or "a silver noble", and
+  does any realm add a trailing period? (*Items, inventory & equipment → Pickup / drop confirmation
+  lines and item vs coin disambiguation* and
+  *Death & corpse recovery → Corpse recovery (`recover corpse`)* write `You picked up <N> <coin>.` with a period, and the code (`InventoryManager`) documents `You picked up a gold crown.`)
 - **Drop / stash confirmations name the full coin with a trailing period:**
   `You dropped 5 gold crowns.` / `You hid 219 copper farthings.`
 - **Bank deposit confirmation names the full multi-currency amount** as one comma-separated list with a
   trailing period: `You deposit 1 platinum piece, 93 gold crowns, 4 silver nobles,
   12 copper farthings.` Emitted for **both** a manual `dep` and the client's auto-deposit `dep`, so it's
-  the authoritative both-paths signal. Withdrawals mirror it: `You withdrew …` / `you withdrew …`.
+  the authoritative both-paths signal. Withdrawals mirror it: `You withdrew …` / `you withdrew …`
+  (but see the withdraw conflict in *Bank commands: balance / withdraw / deposit*).
 - **Room survey lists the full coin:** `You notice 56 silver nobles, 198 copper farthings here.`
 
 **Client use:**
@@ -3661,13 +3696,15 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 **Client use:**
 - A witnessed third-party pickup of a denomination we've deferred makes our stored exact per-pile count
   stale and unrecoverable — the remaining amount can't be derived from the line (recover with a bare
-  `look`, above).
+  `look` — *Re-surveying ground cash with `look`*).
 
 ### Hiding coin in a room (stashing)
 *Status: CONFIRMED 2026-08-29 (user; report `paradigm-20260829-212158`); CONFIRMED 2026-09-14 (user)*
 
 - **`hide <N> <coin>` is a stash, not a vault.** It is the object-hiding verb, unrelated to the stealth
-  `hid` that conceals the character (see *Stealth*) — the two share a prefix and nothing else.
+  `hid` that conceals the character *([NEEDS CONFIRMATION] is the self-hide command `hide` or `hid`?)*
+  (see *Movement & navigation → Hiding — sneak vs hide, the hide state machine, and search reveals*) —
+  the two share a prefix and nothing else.
 - **Hidden coin persists, but it is not yours.** It stays in the room rather than decaying, but **any
   player who searches that room finds it and can take it**. A stash balance is therefore a *belief*,
   never a fact: plan against it, but confirm it on arrival before spending it.
@@ -3689,31 +3726,56 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 **Client use:**
 - In a stash room the client `hide`s excess coin.
 - Auto-collect is suppressed in a stash room **only while an auto-search reveal is in flight** — coin
-  shown on plain entry or a corpse drop still collects, in the stash room and in the room after it.
+  shown on plain entry or a kill drop still collects, in the stash room and in the room after it.
   Implemented as `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.
 - Reading "am I in a stash room" alone is wrong: a room's entry survey is parsed before the room is
   confirmed, so it mis-attributes the *next* room's coin to the stash room just left — report
   `paradigm-20260829-212158`.
 
 ### Bank commands: balance / withdraw / deposit
-*Status: CONFIRMED 2026-07-19 (user, capture)*
+*Status: CONFIRMED 2026-07-19 (user, capture); `bank` output CONFIRMED 2026-09-07 (user + screenshots) · Realm: both (the `bank` header differs — Stock appends ` (#N)`)*
 
-- **`bank` prints the current balance:** `Your balance at <Bank name> (#<n>) is:` then
-  `On deposit: <N> copper farthings [<G> gold crowns]` — parse `(\d+) copper farthings` for the
-  authoritative banked total in copper.
+**`bank` — the balance readout:**
+- **`bank` is a self-only, global account query.** It lists the character's balance at **every bank they have ever deposited at**, from any room. It is NOT a room action like `dep`/`with`, which do require standing at the bank.
+- **A bank the character has never used stays hidden; one used and then fully withdrawn shows with a zero balance.**
+- **It never shows party members' banks.** Bank balances can only be seen for yourself. Party on-hand cash is visible separately via `@wealth`, which reports **carried** coin only, never deposits.
+- **Output is one two-line block per bank, repeated** — a `Your balance at …` header, then
+  `On deposit: <N> copper farthings [<G> gold crowns]`:
+
+  ```
+  Your balance at Bank of Godfrey is:                              (Paradigm — bank name only)
+  On deposit: 19578816 copper farthings [195,788.16 gold crowns]
+  Your balance at Bank of Godfrey (#8) is:                         (Stock — appends the shop number)
+  On deposit: 4512 copper farthings [45.12 gold crowns]
+  ```
+
+- **The header is `Your balance at <name> is:`, where `<name>` is the bank's shop name.** Only Stock
+  appends a ` (#N)` shop-number suffix (the Stock form is `Your balance at <Bank name> (#<n>) is:`);
+  Paradigm omits it. Drop the suffix so the name matches the shop-name key.
+- **The authoritative figure on the deposit line is the copper farthings count** — parse
+  `(\d+) copper farthings` for the banked total in copper, allowing thousands-commas in the number. The
+  bracketed gold-crowns value is only a gloss.
+- **Because the name is the shop name, a parsed balance maps back to its room(s) via the bank-shop catalogue (ShopType 7).** So a route that needs more money than the purse holds can point at the nearest bank where the deposit actually sits.
+
+**`with` / `dep` — at the bank:**
 - **`with <amount>` withdraws, where `<amount>` is in copper farthings.** Coins arrive in the **largest
   denominations** (`with 2000` → 20 gold crowns). Success line: `You withdrew <amount> copper
-  farthings.` (echoes the requested copper amount).
+  farthings.` (echoes the requested copper amount). *Coin wire wording* instead says withdrawals mirror
+  the multi-currency deposit list. **[CONFLICT — ask the user]** does `with 2000` print the copper
+  amount or a denomination list?
 - **Over-withdraw silently fails.** Requesting **more than the banked balance** produces **no output at
   all** — no error line. So verify a withdraw by watching for the `You withdrew …` success line (its
   absence within the reply window = failure), and/or read `bank` first and never request more than the
   balance.
 - **`dep <amount>` deposits (amount in copper).** The confirmation names the actual carried
   denominations (`You deposit 5 platinum pieces, 29 gold crowns, 7 silver nobles.`) — see *Coin wire
-  wording* above.
+  wording*.
+
+**Client use:**
+- BankBalanceProbe.
 
 ### Shop prices — buy & sell
-*Status: CONFIRMED (extracted from the reference client) · Realm: both (SELL formula differs Stock vs Paradigm)*
+*Status: CONFIRMED (extracted from the MMUD Explorer data viewer) · Realm: both (SELL formula differs Stock vs Paradigm)*
 
 - **Price inputs:** an item's cost is derived from its MDB `Price` + `Currency`, the shop's `Markup%`,
   and the buyer's Charm.
@@ -3724,8 +3786,9 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   the friendliest denomination that keeps the value ≥ 10 (or copper when < 100).
 - **BUY (per shop; identical formula in both realms).** Markup first, then charm:
   `buy = baseCopper + Fix(baseCopper × Markup%/100)`; if Charm > 0,
-  `buy = (1 − ((Fix(Charm/5) − 10)/100)) × buy`. (`Fix` truncates toward zero.) Charm below 50
-  discounts, above 50 marks up, exactly 50 is retail. Buy takes the item's **stock price** with a
+  `buy = (1 − ((Fix(Charm/5) − 10)/100)) × buy`. (`Fix` truncates toward zero.) Charm above 50
+  discounts, below 50 marks up, exactly 50 is retail (Charm 60 → ×0.98, Charm 40 → ×1.02;
+  `ShopPriceCalculator.CharmBuyMod`). Buy takes the item's **stock price** with a
   **charm-based markup or discount**.
 - **SELL ignores markup → same at every shop for a given charm.** Sell nets money by **shop + character
   charm**.
@@ -3735,11 +3798,11 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   ~half base at Charm 50.
 
 **Client use:**
-- The reference client wraps charm-scaled totals above 4,294,967,295 copper (a legacy 32-bit overflow
+- The MMUD Explorer data viewer wraps charm-scaled totals above 4,294,967,295 copper (a legacy 32-bit overflow
   bug); the client deliberately does **not** replicate that wrap.
 
 ### Shop stock & restock data
-*Status: CONFIRMED (verified against the 1.11p Shops table); `Time-N` units CONFIRMED 2026-07-10 (MMUD Explorer Shops tab rendering)*
+*Status: CONFIRMED (verified against the 1.11p Shops table); `Time-N` units CONFIRMED 2026-07-10 (the MMUD Explorer data viewer's Shops tab rendering)*
 
 - **Each shop carries a fixed list of items it can stock** (the Shops table's Item-0..19 slots). Every
   stocked item has one of two replenishment behaviours:
@@ -3754,13 +3817,13 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   self-restocks → the **no-stock** items that only exist in stock when a player sold one to the shop
   (330 slots), everything between = a probabilistic trickle (e.g. 35 / 25 / 5).
 - **`ShopType` 10 is the ordinary buy/sell merchant** (7 = bank, 8 = trainer). `Markup%` is the buy
-  markup fed to *Shop prices* above.
-- **`Time-N` is in minutes.** The reference client renders each slot's restock in a **Regen** column as
+  markup fed to *Shop prices — buy & sell*.
+- **`Time-N` is in minutes.** The MMUD Explorer data viewer renders each slot's restock in a **Regen** column as
   `<%-N>% for <Amount-N> per <Time-N humanised>` — humanising the minutes into `10m`, `2h` (120),
   `4h` (240), `12h` (720), etc.
 - **A `%-N = 0` slot renders as `no regen` regardless of its `Max-N`** (the cap still shows in its own
   column, but nothing spawns on its own).
-- **The reference's stock table columns are `# | Name | Max | Regen | Cost`**, Cost being the buy price
+- **The MMUD Explorer data viewer's stock table columns are `# | Name | Max | Regen | Cost`**, Cost being the buy price
   at the chosen Charm with `Markup%` applied.
 
 **Client use:**
@@ -3813,7 +3876,7 @@ glass jug               5               2 gold crowns
 | Sell — shop refuses | `You cannot sell <item> here.` |
 
 ### Auto-buy / auto-discard band semantics
-*Status: CONFIRMED 2026-07-10 (user design)*
+*Status: **Client policy** — CONFIRMED 2026-07-10 (user design)*
 
 - **Auto-discard with no Min/Max band set → discard *all*** of that item (drop every copy).
 - **Auto-buy with no band → buy as many as affordable.**
@@ -3824,14 +3887,18 @@ glass jug               5               2 gold crowns
 *Status: CONFIRMED 2026-09-24 (user) · Realm: both*
 
 - **Every `price <amount> <msg>` directive on a textblock line charges its amount**, so a line that
-  lists the same `price` several times charges the **sum**, not the amount once.
+  lists the same `price` several times charges the **sum**, not the amount once. (The NPC side of these
+  fares is in *Movement & navigation → Greet teleports — an NPC transports a player who asks*.)
+  **[CONFLICT — ask the user]** the jail `bribe guard` line carries six `price` tiers but charges only
+  the largest affordable one (*Movement & navigation → Jail `bribe guard` — cell-hop helper with an
+  escalating toll*) — does the sum rule apply only to identical repeats?
 - **The coin is named by the directive's trailing letter** (R runic / P platinum / G gold / S silver),
   else copper.
 - **Example — Seher'Sahham (monster #715, 16/2666), `ask Seher'Sahham activate`:** TB #2778 is
   `price 100000 2446` ×10, then `message 2447`, then `teleport 637 16` — a **1 runic** fare
   (10 × 100,000 copper) to Damp Cavern, Wellspring (16/637). The same data ships in stock and Paradigm.
 - **Decoders that collapse repeats show a real multiplier.** The greet tree's
-  `Cost: 100,000 copper (x10)`, as MME shows it, is a repeat count that is a real multiplier.
+  `Cost: 100,000 copper (x10)`, as the MMUD Explorer data viewer shows it, is a repeat count that is a real multiplier.
 
 ---
 
@@ -3847,17 +3914,17 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 ### Co-location and the `Also here:` line
 *Status: CONFIRMED 2026-08-28 (user; report `stock-20260828-124347` + scrollback)*
 
-- **Party members are always co-located: a party is a single room.** If a name shows in `par`, they are in your room, full stop. So the correct "is this member reachable?" gate is *party membership* (`par`), **not** the room's `Also here:` line. *(2026-08-28, user)*
+- **Party members are always co-located: a party is a single room.** If a name shows as an active (non-invited) `par` row, they are in your room, full stop. So the correct "is this member reachable?" gate is *party membership* (`par`), **not** the room's `Also here:` line. *(2026-08-28, user)*
 - **A party member may be missing from `Also here:` for two reasons, and neither means they left the room.** *(2026-08-28, user — report `stock-20260828-124347` + scrollback)*
   1. **The leader you're FOLLOWING is never listed in `Also here:`.** The game prints `You are following <leader>.` as a separate status line instead, and `Also here:` shows only the *other* occupants. The reverse also holds: when **you** lead, your followers **do** appear in your `Also here:` (you follow no one).
-  2. **A member who is HIDING is removed from `Also here:`** (see Stealth). They're still in the room and in `par`.
+  2. **A member who is HIDING is removed from `Also here:`** (see *Movement & navigation → Hiding — sneak vs hide, the hide state machine, and search reveals*). They're still in the room and in `par`.
 
 ### `par` output block
 *Status: CONFIRMED*
 
 - **`par` output must never be read as a room name.** The party-list command replies with a fixed block whose **first line is `You are following <leader>.`** (the follower's follow status), then `The following people are in your travel party:`, then one indented roster row per member (`<name>  (<class>)  [K/M: N%] [H: N%]  - Frontrank/Backrank`).
 - **The block routinely lands just before a dragged room, in room-title colour.** A follower's party tracking polls `par` constantly, so this block often lands in the room-display buffer just before a dragged room. `You are following <leader>.` renders in the **same bright cyan** the room title uses, so the colour-anchored room-name detector will grab it unless the `par` lines and the drag line are treated as block boundaries.
-- **`par` lists live membership only** (see Dropped ally rescue and Member death below for what a dropped or dead member looks like).
+- **`par` lists live membership only** (see *Dropped ally rescue* and *Member death shows as an invited slot in `par`* for what a dropped or dead member looks like).
 - **Client use:**
   - `RoomDisplayParser.PartyChatterBoundaryPattern` treats the `par` lines and the drag line as block boundaries. The room the follower lands in is displayed immediately after ` -- Following your Party leader <dir> --`, so that drag line is the natural boundary.
 
@@ -3876,10 +3943,10 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 
 - **A party follower is dragged one room per leader step, announced by ` -- Following your Party leader <dir> --`.** Movement is leader-driven: when the party leader walks, the game moves every follower one room the same way and prints this line immediately *before* the follower's new room display. The follower sends no bytes and issues no movement command of its own (`PartyFollowerMovementGate` holds its engines), so this line (`-- Following your Party leader <dir> --`) is the **only** signal that a dragged follower moved.
 - **The direction is the long-form word the game prints** (`north`, `northeast`, `up`, …). Verified from a live follower capture walking Darkwood Forest (northeast / east / southeast / southwest / south drags).
-- **Hidden/foliage exits drag the follower with no direction.** Some Darkwood Forest exits are text-only: the leader prints `<leader> shoves aside the foliage, and disappears among the trees.` and the follower is pulled through with `You push through the dense foliage, and walk onto a small path.` — **no** ` -- Following your Party leader <dir> --` line and **no** cardinal direction. The follower's room changes but there is nothing to feed `NoteMoveSent`, so the tracker sees the new room as a mismatch and must recover via replay/candidate resolution rather than a predicted step.
+- **Hidden/foliage exits drag the follower with no direction.** Some Darkwood Forest exits are text-only: the leader prints `<leader> shoves aside the foliage, and disappears among the trees.` and the follower is pulled through with `You push through the dense foliage, and walk onto a small path.` — **no** ` -- Following your Party leader <dir> --` line and **no** cardinal direction. The follower's room changes but there is nothing to feed `NoteFollowMove`, so the tracker sees the new room as a mismatch and must recover via replay/candidate resolution rather than a predicted step.
 - **Client use:**
   - The client keys on the follow line to stay located; without it the tracker keeps its old anchor, reads every new room as a mismatch and falls to Lost within a few rooms.
-  - The follow line is handled via `FollowMoveObserver` → `RoomTracker.NoteFollowMove` (an older note named `RoomTracker.NoteMoveSent`; `NoteFollowMove` now wraps the same prediction core but flags the pending move as a follow-drag so its near-instant arrival isn't taken for a passive re-look).
+  - The follow line is handled via `FollowMoveObserver` → `RoomTracker.NoteFollowMove`. `NoteFollowMove` wraps `RoomTracker.NoteMoveSent`'s prediction core but flags the move as a follow-drag, so its near-instant arrival isn't taken for a passive re-look.
 
 ### Losing the leader disbands the party
 *Status: CONFIRMED*
@@ -3896,13 +3963,13 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - There's no `<name> drops to the ground!` line, since the character never passed through the mortally-wounded state.
 
 ### Dropped ally rescue
-*Status: mixed (per-bullet tags below; untagged bullets carry no tag in the source)*
+*Status: mixed (per-bullet tags below; bullets without a tag are Unrated)*
 
 - **The drop line is seen party-side and by the dropped character.** When a character drops, everyone in the room (the party included) sees `<name> drops to the ground!`. The dropped character sees it with their **own** name (observed: `Raijin drops to the ground!`). That line is the party-side signal that a member has gone down.
 - **The drag prints to the dragged character on every move.** Once someone starts it, the drag prints `<leader> is dragging you around.` to the dragged character on each of the dragger's moves (observed: `MudPlay is dragging you around.`).
-- **Drag is a manual leader command, not automatic.** A dropped ally is only dragged when the party **leader types `drag <name>`** after seeing the drop line; nothing drags them on its own. Dragging only relocates the still-mortally-wounded body. It does **not** revive them or restore party membership.
+- **Drag is a manual leader command, not automatic.** A dropped ally is only dragged when the party **leader types `drag <name>`** after seeing the drop line; nothing drags them on its own. Dragging only relocates the still-mortally-wounded body. It does **not** revive them or restore party membership. *Health, resting & recovery → 0 HP — dropped / bleeding out* instead says another player can `drag <name>`. **[CONFLICT — ask the user]** can any player drag a dropped character, or only the party leader?
 - **A dropped ally is revived with `aid` and/or a heal.** A dropped ally sits at 0 HP or below and can't act for themselves. They must be brought back by **`aid <name>`** and/or a **heal** that lifts their HP above 0. So a party leader watching `<member> drops to the ground!` should **aid and heal that member** (drag is a separate, optional relocation choice, not the rescue).
-- **A dropped ally leaves `par`.** Once a member drops they no longer appear in the party's `par` roster (`par` lists live membership only). Their vitals therefore stop refreshing from `par`, so tracking a dropped, then partially-recovered ally's HP needs an out-of-band poll.
+- **A dropped ally leaves `par`.** Once a member drops they no longer appear in the party's `par` roster (`par` lists live membership only). Their vitals therefore stop refreshing from `par`, so tracking a dropped, then partially-recovered ally's HP needs an out-of-band poll. *Health, resting & recovery → 0 HP — dropped / bleeding out* instead says `par` shows a dropped member's negative HP%. **[CONFLICT — ask the user]** after a member drops, does par keep listing them with a negative HP% for a while, or do they vanish at once?
 - **An `@health` telepath polls a member's vitals.** *([CONFIRMED])* Sending an ally a telepath `@health` makes their client's @health responder reply with their current HP / MA. This is an out-of-band way to read a member's health when `par` won't show it (e.g. after they've dropped off the roster).
 - **A name-targeted heal still lands on a dropped ally who's been aided.** *([CONFIRMED])* Even though an aided-but-still-dropped ally isn't in `par` anymore, a heal cast **at them by name** still reaches them. A party healer can keep topping them up until they fully recover / rejoin.
 - **Recovering to positive HP does NOT auto-rejoin the party. A re-invite is required.** *([CONFIRMED])* The drop removed the character from the party game-side, so bringing them back above 0 HP (via `aid` + heal) restores their ability to act but **not** their membership.
@@ -3933,7 +4000,7 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 - **Training (`train` / `train stats`) is a realm excursion. It briefly drops you out of and back into the realm**, emitting `<Name> just left the Realm.` then `<Name> just entered the Realm.` to everyone in the room.
 - **The party effect depends on who trained.**
   - A **follower's** train drops only that follower. This is the same as a disconnect: they are removed server-side and need a fresh leader invite to rejoin. They do **not** auto-rejoin on return.
-  - The **leader's** train disbands the whole party (see Losing the leader). The leader sees `You are not in a party at the present time.` on return.
+  - The **leader's** train disbands the whole party (see *Losing the leader disbands the party*). The leader sees `You are not in a party at the present time.` on return.
 - **Self perspective (the character doing the training): entering the train-stats screen breaks up OUR OWN party server-side.** Our client must reset its own `PartyState` on train-stats entry to match:
   - a **leader** clears its whole roster (party disbanded)
   - a **follower** clears the "following `<leader>`" state (no longer following)
@@ -3944,7 +4011,7 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 ### The level-11 train is a solo trip
 *Status: CONFIRMED 2026-09-23 (user)*
 
-- **The level-11 trainer is a solo effort.** The step from 10 to 11 is only easily auto-trainable running solo.
+- **The level-11 trainer is a solo effort.** The step from 10 to 11 is only easily auto-trainable running solo. *([NEEDS CONFIRMATION] why is the 10→11 train solo-only?)*
 - **Client use:**
   - Party auto-train stops members at level 10 by default (Auto-Trainer → *Leave the level 11 train to a solo trip*).
 
@@ -3957,14 +4024,14 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - If `You do not see <name> here!` comes back, back that member off until you **move** or they **reappear in `Also here:`** (they unhid). Don't re-fire the cast, and repeat the failure, every round.
 
 ### Resting observed in the party
-*Status: mixed (rest line CONFIRMED; rest-to-use-the-wait is DESIGN, user directive 2026-07-11)*
+*Status: mixed (rest line CONFIRMED; rest-to-use-the-wait is **Client policy**, user directive 2026-07-11)*
 
 - **A party member sitting down to rest is announced to everyone else in the room as `<name> stops to rest.`** *([CONFIRMED])* `<name>` is the given name. The actor's own view uses a different verb form (`You stop to rest.`), so the third-person line never matches the resting player's own row.
 - **The meditate-observation line is not yet confirmed.** Do not guess it.
-- **Rest-to-use-the-wait.** *([DESIGN], user directive, 2026-07-11)*
+- **Rest-to-use-the-wait.** *(**Client policy**, user directive, 2026-07-11)*
   - When the party **leader** is `@wait`-held and **not poisoned**, the leader rests (or meditates) to use the forced downtime, until the wait clears.
   - A **follower** that sees the leader rest/meditate rests/meditates too, **unless the follower is poisoned** (poison ticks break rest and waste the downtime).
-  - The normal below-threshold rest is unaffected by poison; only these two downtime-rest paths gate on it.
+  - Poison blocks resting altogether — see *Health, resting & recovery → Poison prevents resting* (CONFIRMED 2026-08-17), which supersedes this 2026-07-11 note's claim that only these two downtime-rest paths gate on poison.
 - **Client use:**
   - The `<name> stops to rest.` line flips `PartyMember.Resting` the instant it's seen, ahead of the 5-second `par` poll, so a follower can mirror the leader's rest immediately.
 
@@ -3978,6 +4045,7 @@ This covers how a client learns which ailments afflict itself and its party memb
   - A member's poison chip is set when `P` is present in the par row and cleared when it drops.
   - `par` carries no other ailment letter.
 - **Blind / Diseased / Confused / Held are announced verbosely on SAY as a bare token**: `@blind`, `@diseased`, `@confused`, `@held`.
+  - **Wire form:** the sender types the token `.`-prefixed (`.@blind`, `.@held`, …; the leading `.` sends it on say), and observers see the bare token (`@blind`). The same holds for `@panic` (sent as `.@panic`).
   - There is **no `on`/`off` argument**; MegaMUD sends the bare token on apply only.
   - An observer sets the named member's chip on the bare token.
   - Confusion has no realm cure, so its announce only lights the chip. It is kept because ignore-confusion behavior applies to party members too.
@@ -4005,13 +4073,13 @@ This covers how a client learns which ailments afflict itself and its party memb
   - On expiry the leader gives up and resumes, so a dropped / AFK member can't strand the party forever.
 - **The leader-side "ignore @wait when leading" opt-out drops inbound `@wait` before it ever pauses.**
 - **Held follows the same `@wait` / `@ok` flow and cannot be suppressed.** A held member can't move, so the party waits for them. Held has no `Ignore` gate, so it is never suppressible.
-  - **Both signals pause the leader.** A held member telepaths `@wait`/`@ok` *in addition to* announcing its `.@held` on say: the say lights the member's chip, and the `@wait` pauses the leader. The inbound `.@held` say also routes through the same pause (`PartyEssentialHandlers.NotePause`), and that member's `@ok` on cure releases it.
+  - **Both signals pause the leader.** A held member telepaths `@wait`/`@ok` *in addition to* announcing its `.@held` on say: the say lights the member's chip, and the `@wait` pauses the leader. The inbound `@held` say also routes through the same pause (`PartyEssentialHandlers.NotePause`), and that member's `@ok` on cure releases it.
 - **All of this is party-only.** Solo (no party / no leader / you ARE the leader), nothing is telepathed. Self recognition and clearing run entirely off the apply/wear-off spell messages.
 
 ### `@panic` leader warning
 *Status: CONFIRMED 2026-09-12 (user)*
 
-- **`@panic` is a party-wipe warning (leader → party, SAY).** A party **leader** whose HP crosses its **"hang if below"** floor says the bare token **`@panic`**. It then hangs up (or `break` + `sys goto <wimpy>` if opted in).
+- **`@panic` is a party-wipe warning (leader → party, SAY).** A party **leader** whose HP crosses its **"hang if below"** floor says the bare token **`@panic`** (sent as `.@panic`). It then hangs up (or `break` + `sys goto <wimpy>` if opted in).
 - **Two checkboxes gate it:** **"use @panic while leading"** (send) and **"ignore @panics"** (receive).
 - **A member not ignoring `@panic` reacts the same way**, hanging up or doing break + sys-goto-wimpy, per its own settings.
 
@@ -4026,7 +4094,7 @@ This covers how a client learns which ailments afflict itself and its party memb
 - **Client use:**
   - The client's `ComebackRequester` is correctly telepath-only.
   - A follower must not auto-navigate itself back to a stale self-selected walk-to target.
-  - After **any** death, every movement engine is cleanly stopped and every retained destination cleared, the same as hitting the Nav Stop button. There is no lingering halt, so a manual or remote nav action afterward runs freely, and nothing re-drives us into the room we died in (report `stock-20260731-082602`).
+  - What happens to movement after a death is in *Death & corpse recovery → Death wipes all effects*.
 
 ### `@join` while already following
 *Status: CONFIRMED 2026-07-10 (capture)*
@@ -4087,17 +4155,17 @@ How MajorMUD quests are structured in the game data (kill steps, NPC dialogue st
 *Status: CONFIRMED 2026-07-16 (user)*
 
 - **A command-less quest step sourced from a monster's textblock is a "kill this monster" step.** The flag advances because the monster's **death spell** (or a room **`nomonster`** spell that fires when the room is cleared) grants the quest progress — you receive the flag by killing the monster, not by typing a command. So a crawled step whose Called-From is a `Monster #N` chain and carries no player command narrates `kill <monster> (<drop>)`.
-- **A monster a quest requires you to kill is placed in a specific room** — the room's **NPC field** (`Rooms.json` `NPC` = the monster number) names it. That placement is the authoritative room a guide walks you to for the kill (e.g. queen ant #485 is placed at 9/717 via `room.NPC == 485`).
-- **When the kill target is summoned rather than statically placed**, its Monsters `Summoned By` record resolves the room: either a room token directly (`Room 9/717` / `Group(lair): 1/531`), or a `Spell #N` that another NPC casts to summon it. In the spell case the summoner is the monster whose **`CreateSpell` == N**, and that summoner's own placement stands in as the target's room (e.g. *hydra head* is summoned by *hydra*'s CreateSpell, so you fight it where the hydra waits).
+- **A monster a quest requires you to kill is placed in a specific room** — the room's **NPC field** (`Rooms.json` `NPC` = the monster number) names it. That placement is the authoritative room a guide walks you to for the kill (e.g. queen ant #485 is placed at 9/717 via `room.NPC == 485`). The placement mechanic itself is in *Monsters, lairs & spawns → NPC-placed monsters*.
+- **When the kill target is summoned rather than statically placed**, its Monsters `Summoned By` record resolves the room: either a room token directly (`Room 9/717` / `Group(lair): 1/531`), or a `Spell #N` that another NPC casts to summon it. In the spell case the summoner is the monster whose **`CreateSpell` == N**, and that summoner's own placement stands in as the target's room (e.g. *hydra head* is summoned by *hydra*'s CreateSpell, so you fight it where the hydra waits). The token kinds are in *Monsters, lairs & spawns → `Summoned By` spawn tokens*.
 - **Client use:**
   - `RoomSearchService.QuestKillRooms` resolves the kill room this way.
 
 ### Quest dialogue steps — NPC keyword dispatch
 *Status: CONFIRMED 2026-07-16 (user)*
 
-- **A quest advances through NPC dialogue, not standalone room commands.** The player types `ask <npc> <keyword>`; the NPC's **root dispatch textblock** maps that keyword to a child textblock (`Action` is a `\n`-separated list of `keyword:textblock` chains, e.g. `crystal:7018`); the child block runs its own `Action` and eventually `giveability <flag> <step>` to grant progress.
+- **A quest advances through NPC dialogue, not standalone room commands.** The player types `ask <npc> <keyword>` (the command form is in *Movement & navigation → Keyword command forms (`ask <noun> <keyword>` vs verbatim room CMD)*); the NPC's **root dispatch textblock** maps that keyword to a child textblock (`Action` is a `\n`-separated list of `keyword:textblock` chains, e.g. `crystal:7018`); the child block runs its own `Action` and eventually `giveability <flag> <step>` to grant progress.
 - **Called-From links each block to its parent.** The child's **Called From** names its parent (`Textblock #N`), and the root dispatch block's Called From is the **`Monster #N`** — the NPC itself.
-- **A crawled step gated behind an NPC is recovered by walking its Called-From chain up to that `Monster #N`**, then reading which dispatch keyword branches into the child that leads to the step. That yields the exact `ask <npc> <keyword>` the player must type (e.g. Mandos quest: `ask archmage valduin crystal`, `ask kale mandos free`). The step is then re-anchored on the NPC so the guide links the NPC's placement room (same map used for kill steps).
+- **A crawled step gated behind an NPC is recovered by walking its Called-From chain up to that `Monster #N`**, then reading which dispatch keyword branches into the child that leads to the step. That yields the exact `ask <npc> <keyword>` the player must type (e.g. Mandos quest: `ask archmage valduin crystal` *([NEEDS CONFIRMATION] does the two-word target work, or must it be `ask valduin crystal`? The quest planner (`QuestStepGraph`) sends the full name)*, `ask kale mandos free`). The step is then re-anchored on the NPC so the guide links the NPC's placement room (same map used for kill steps).
 - **Auto-shown blocks aren't askable.** Dispatch keywords `message`, `text`, and `greeting` are shown automatically on interaction (or as flavor), not typed — a step reached only through one of those has no `ask` command and isn't drafted as one.
 - **Client use:**
   - `QuestStepGraph.ResolveAsk` performs the Called-From walk and keyword resolution.
@@ -4113,9 +4181,20 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
 
 - **Each BBS sets its own negative-HP death threshold**; not every BBS advertises the number. When HP **reaches or passes** it (at, or more negative than, the threshold), the character **dies**:
   - loses a **life**,
-  - **all non-loyal items are lost from the player** (loyal items stay on the player); *where* the dropped items land is realm-type dependent — see *Deathpile — where the items go* below,
+  - **all non-loyal items are lost from the player** (loyal items stay on the player); *where* the dropped items land is realm-type dependent — see *Deathpile — where the items go*,
   - the character is **teleported to the graveyard room** appropriate to the **map** they died on.
 - **Graveyard rooms are per-map**; two known graveyards are **`1/2189`** (map 1, room 2189) and **`16/542`** (map 16, room 542).
+
+**The death readout and overkill:**
+- **There is no "overkill" message.** The HP figure visible at death is just the value HP was driven to by the killing event.
+- **A single large hit can drive HP far below the true floor.** The blow overshoots the threshold with no clamp or announcement, so an overkill death's HP reading **over-negatives** (understates) the real floor.
+- **A slow death is an accurate measurement.** Bleeding out, HP crosses the floor one tick at a time and lands right at the floor, so that reading measures the true threshold.
+- **One death message, both cases.** An overkill blow and a slow bleed-out print the same death line, so the line by itself cannot tell a slow death from an overkill. This note records that line as `You have been slain by <killer>.`, with a bleed-out still naming the **last attacker**; *Death lines & the miracle-save* records `You have been killed!` for DoT / no-named-killer deaths and the miracle path. **[CONFLICT — ask the user]** does a slow bleed-out print `slain by <last attacker>` or `You have been killed!`? The only runtime signal that separates them is the **HP trajectory** into death: a gradual, small-step descent through the bleeding-out band (slow, accurate) versus a single large HP drop that blows past the floor (overkill, discard).
+- **An overkill can mask the reached HP entirely.** A killing blow that jumps well past the floor may emit **no sub-floor HP prompt at all** — the client sees the pre-death HP and then the death, and the intermediate value the blow drove HP to is never printed. (Observed: at HP `-241` a `9`-point hit simply killed the character; no `-250` prompt appeared.) So a single terminal reading can never be trusted as a floor measurement.
+- **Live-survival evidence is the reliable complement.** While HP ticks down through the negatives and the character is confirmed **still alive** (a *later* in-band prompt proves the previous one was survived), each survived reading is a valid lower bound — the floor sits **below** it. The estimate ratchets down progressively as HP rolls further negative and simply **stops at the death message**. The terminal/masked reading is structurally excluded because it is never followed by another in-band prompt.
+- **Client use:**
+  - The stored death threshold is only a starting estimate — the client seeds it at `-25`, a guess. Refine it from **slow deaths and survived negative-HP readings; never from an overkill death reading** (`DeathFloorTracer.RecordDeath` / `NoteHp`); an overkill reading is unreliable and must not push the estimate more negative.
+  - The client's floor auto-refinement must classify off the observed HP steps, not the message — and, per `DeathFloorTracer`'s stated assumption, only while the killing blow isn't a huge hit that leaps right past the floor.
 
 ### Death wipes all effects
 *Status: CONFIRMED 2026-08-09, 2026-08-28 (user; report `paradigm-20260809-114444`) · Realm: both*
@@ -4129,6 +4208,7 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
 - **Client use:**
   - `ConditionTracker` is an observation log driven by the server's applied / wear-off lines, and death teleports you out **without emitting those wear-off lines** — so a condition latched at the moment of death (most dangerously *MovementPrevented*, whose stale flag keeps `MovementCoordinator.HeldGate` asserted and strands the walker "Paused by: Held") never auto-clears.
   - Because the game clears *everything* on death, the client mirrors it with a full `ConditionTracker.ClearAll("death")` on `RoomTracker.PlayerDeathObserved` — no per-flag scoping — matching the mechanic exactly (report `paradigm-20260809-114444`, fixed v2.39.1).
+  - After **any** death, every movement engine is cleanly stopped and every retained destination cleared, the same as hitting the Nav Stop button. There is no lingering halt, so a manual or remote nav action afterward runs freely, and nothing re-drives us into the room we died in (report `stock-20260731-082602`).
 
 ### Death lines & the miracle-save
 *Status: CONFIRMED*
@@ -4148,18 +4228,17 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
 *Status: CONFIRMED 2026-08-24 (user); Stock spill mechanics CONFIRMED 2026-09-26 (user) · Realm: differs — Stock spills loose, Paradigm uses a corpse*
 
 - **Death-pile source differs by realm** *([CONFIRMED 2026-08-24, user])*:
-  - on **Stock**, death drops **all your items loose on the ground** — they appear in the room's `You notice … here.` survey and, if the floor is already crowded, can **spill into adjacent rooms**; you recover each with `get <item>` (confirmed by `You took <item>.`);
-  - on **Paradigm**, your items are held **inside a corpse** (`corpse of <given-name>` in the survey), recovered in one `recover corpse <name>` (confirmed by `You have recovered the corpse of <name>.`);
-  - the combat-break rule (which re-times only the wear/eq burst) is realm-agnostic, so it applies to both.
+  - on **Stock**, death drops **all your items loose on the ground** — they appear in the room's `You notice … here.` survey and, if the floor is already crowded, **spills on into connected rooms** (see the spill-over bullet); you recover each with `get <item>` (confirmed by `You took <item>.`);
+  - on **Paradigm**, your items are held **inside a corpse** (`corpse of <given-name>` in the survey) — the deathpile is a `corpse` object, recovered with one `recover corpse <given-name>` command, **NOT a per-item `get`** *([CONFIRMED] 2026-08-03, user + captures)* (confirmed by `You have recovered the corpse of <name>.`; procedure in *Corpse recovery (`recover corpse`)*);
+  - the combat-break rule of *Combat → Non-swing actions break combat (casting, equipping)* (which re-times only the wear/eq burst) is realm-agnostic, so it applies to both.
 - **Stock spill-over, in detail** *([CONFIRMED] 2026-09-26, user)*:
   - Dying on Stock spills the items you carried into **the death room**.
   - If that room fills before all your items are down, the rest spill into **one connected room** through a cardinal or diagonal exit or up/down (N/S/E/W/NE/NW/SE/SW/U/D only). Once that room fills too, another exit is picked and the same happens.
   - This repeats **up to roughly 5 rooms away**. Which exit is picked first is not known.
   - It only happens on Stock, because **Paradigm rooms have no item cap**.
-- **On Paradigm, the deathpile is a `corpse` object, recovered with one `recover corpse <given-name>` command — NOT a per-item `get`** *([CONFIRMED] 2026-08-03, user + captures)*. This entry once described itself as correcting "stock drops items loose to the ground" ("it does not"). The 2026-08-24 and 2026-09-26 confirmations settle it: the corpse is Paradigm-only, and Stock does drop items loose.
 
 ### Corpse recovery (`recover corpse`)
-*Status: CONFIRMED 2026-08-03 (user + captures) · Realm: Paradigm (Stock has no corpse — see Deathpile above)*
+*Status: CONFIRMED 2026-08-03 (user + captures) · Realm: Paradigm (Stock has no corpse — see *Deathpile — where the items go*)*
 
 - **Non-loyal items and coins go into a corpse of <player>** on the death-room floor; loyal items stay on the player.
 - **The room's floor survey names it by the player's GIVEN name only**, no article: `You notice corpse of Ermias here.` (character "Ermias Asghedom" → the corpse reads "Ermias").
@@ -4169,10 +4248,10 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
 - **Auto-recovery procedure:** on entering the death room, read the `You notice … here.` survey; if it holds `corpse of <ourGivenName>`, send one `recover corpse <name>` and finalise on `You have recovered the corpse of <name>.`; if the corpse is NOT in the survey, the pile is gone (looted / decayed) — mark it Missing and send nothing (never per-item `get`, which just spams `You don't see <item> here.`).
 
 ### Coins in the deathpile
-*Status: no confidence tag in source*
+*Status: Unrated*
 
-- **Coins on hand drop into the deathpile too**, alongside the non-loyal items — recoverable from the deathpile / corpse like the rest of the drop (per the stock-vs-paradigm note above).
-- **Five denominations** (largest first): `runic coin`, `platinum piece`, `gold crown`, `silver noble`, `copper farthing`, at the 1 000 000 / 10 000 / 100 / 10 / 1 copper-farthing ratio ladder.
+- **Coins on hand drop into the deathpile too**, alongside the non-loyal items — recoverable from the deathpile / corpse like the rest of the drop (per *Deathpile — where the items go*).
+- **Five denominations** (largest first): `runic coin`, `platinum piece`, `gold crown`, `silver noble`, `copper farthing` — values per *Money, banks & shops → Currency denominations & value ladder*.
 - **The deathpile display lists each denomination by its own count** (e.g. `100 gold crowns` + `1 platinum piece`), **not** re-bucketed into a consolidated wealth total.
 
 ---
@@ -4189,7 +4268,7 @@ The `sys …` sysop command family — `SYSOP STATUS` room dumps, `sys map`, `sy
 - **`sys goto` is its own separately-gated power too** *([CONFIRMED] 2026-09-08, user)* — distinct from `sys status` / `sys map` / `sys god`.
 - **`sys` commands are NOT gated by the mortally-wounded (HP ≤ 0) state** *([CONFIRMED] 2026-09-08, user)*. Ordinary action commands are refused while mortally wounded ("You may not do that while you are mortally wounded!"). Sysop powers bypass that entirely — `sys goto` (and the other `sys` commands) can be sent and are honoured at **any** HP, bleeding-out included.
 - **Client use:**
-  - The client's three sysop powers (status / map / god) are independent per-BBS checkboxes, and `sys map` auto-locate matters as much as `sys status` — both because of the separate gating above.
+  - The client's three sysop powers (status / god lives / goto) are independent per-BBS checkboxes, because each `sys` command is gated separately. The client does not use `sys map` (see *`sys map` — ASCII area map*).
   - The client holds its EngineSendGate at HP ≤ 0 (PlayerDroppedGate) because ordinary commands are refused while mortally wounded. So a `sys goto` must go out on a sender that pierces the mortally-wounded hold (the raw un-wrapped wire, like the emergency hangup uses), NOT the gate-wrapped engine sender that drops sends at HP ≤ 0. Consequence: the "sys goto wimpy instead of hanging" escape fires at any HP in its window, including deep in the bleeding-out band.
 
 ### `SYSOP STATUS` — forms and arguments
@@ -4206,7 +4285,7 @@ Forms, from the game's own help:
   - `sys st 224 1` (no `room` keyword) → `Cannot find user 224` — falls through to the user-lookup form.
 - **`SYS LIST USERS`** — lists users and the room each is in.
 - **`MAP`** — generated map of the current area. The help warns it is recursive and has caused stack overflows; treat as unsafe to automate.
-- **[UNVERIFIED]** **Denied wording is unknown** — the text emitted when the command is **denied** is believed to be a generic "Command not recognized". Nothing depends on it: the client gates on the user's own sysop-powers flag and falls back to a timeout, not a string match.
+- **[NEEDS CONFIRMATION]** **Denied wording is unknown** — the text emitted when the command is **denied** is believed to be a generic "Command not recognized". Nothing depends on it: the client gates on the user's own sysop-powers flag and falls back to a timeout, not a string match.
 
 ### `SYSOP STATUS` — room dump format
 *Status: CONFIRMED 2026-09-02 (user + live capture); per-fact tags inline*
@@ -4233,13 +4312,13 @@ Hidden items: 1845(0) 14(0) 894(0) 223(0) 879(0) 870(0) 897(1) 876(1) 402(0) 430
 - **[CONFIRMED, live capture 2026-09-02]** **An entry is one object on the floor; the parenthesised value is that object's stack size minus one** — `(0)` is a single item, `(1)` a stack of two. **An id can repeat in one list.** Dropping two black star keys one at a time gives `172(0) 172(0)` (two objects of one each); dropping two diamonds gives `902(1)` (one object of two). The room's true count of an item is therefore the **sum** of (value + 1) over every entry with that id, never a single-entry lookup. The room display aggregates either shape identically ("You notice 2 black star key" / "You notice 2 diamond"), so it can't be used to tell the two apart.
 - **[CONFIRMED, live capture 2026-09-02]** **Player-dropped items DO appear** in `Items:`, immediately. An empty room prints `Items: None` and `Hidden items: None` rather than omitting the lines.
 - **[CONFIRMED, user]** **Non-gettable items DO appear** in these lists. The MDB `Items` table carries a `Gettable` column (0 = cannot be picked up; 453 of 2047 rows in `realm2`), so fixtures are filtered from data rather than by a refused `get`.
-- **[UNVERIFIED, user's read]** **Container contents and carried items do not appear** — items inside a **container** in the room, and items **held by a monster or player**, are not listed.
+- **[NEEDS CONFIRMATION, user's read]** **Container contents and carried items do not appear** — items inside a **container** in the room, and items **held by a monster or player**, are not listed.
 - **[CONFIRMED, live capture 2026-09-02]** **`Monsters:` values are NOT `Monsters.Number`.** The line carries space-separated bare numbers (`Monsters: 4510 8407`); 4510 / 8407 / 2951 exist in no Monsters row of the `realm2` set, though the same dumps' `Specific Monster: 784-Mayor Godfrey [1/1]` line does carry a real catalogue number. What the `Monsters:` values identify is **unknown** (spawn instances, most likely). **Do not treat them as monster ids.** For "is this specific monster here", read `Specific Monster:`.
 - **[CONFIRMED, live capture 2026-09-02]** **Further conditional lines the dump can print:** `Controlling Room: <room>` (vs `No controlling room.`), `Current Area: Max: N Current: N`, `Specific Monster: <number>-<name> [n/m]Last Killed: hh:mm:ss (RG: n)`, and `Placed items: <id> <id>` — bare ids, no parens, listing which of `Items:` are the room's **static placements**. Subtracting `Placed items` from `Items` isolates player drops.
 - **[CONFIRMED, live capture 2026-09-02]** **The header often lands on the prompt row** — the server frequently prints the block's first line onto the row the prompt already occupies: `[HP=639/MA=268]:Room 3551  Map: 1`. Any parser that treats a prompt as the block terminator must ignore prompts seen **before** the room header, or it drops the entire dump.
 - **The lists wrap at the terminal margin mid-token** — `47` + `0(0)` is item `470`, `430` + `(0)` splits an id from its value. Rejoin the block before tokenizing.
 - **The dump carries no `Obvious exits:` line**, so it is not mistakable for a room display.
-- **[CONFIRMED, live capture 2026-09-02, report stock-20260902-203631]** **A full `sys st` dump is heavy** — ~8–9 lines (`Room N  Map: M`, `This room as Area:`, `Min/Max/Group/Lair`, `Room Max/Current/Last Killed/Delay`, controlling-room, `Monsters:`, `Items:`, `Hidden items:`) — far heavier than Paradigm's one-line `room` reply, and the item/hidden lists grow with room contents.
+- **[CONFIRMED, live capture 2026-09-02, report stock-20260902-203631]** **A full `sys st` dump is heavy** — ~8–9 lines (`Room N  Map: M`, `This room as Area:`, `Min/Max/Group/Lair`, `Room Max/Current/Last Killed/Delay`, controlling-room, `Monsters:`, `Items:`, `Hidden items:`) — far heavier than Paradigm's three-line `rm` reply, and the item/hidden lists grow with room contents.
 - **Client use:**
   - The client **throttles** repeated locates to keep the dump from flooding the screen: the give-up boundary fires unthrottled, but the eager tier-2 / loop-one-shot / no-engine / `@where` mirror sites reuse the 15s locate throttle (report stock-20260902-203631).
   - Only `Room N  Map: M` is needed for position; the rest is future roomba content-sync fodder.
@@ -4253,7 +4332,7 @@ Hidden items: 1845(0) 14(0) 894(0) 223(0) 879(0) 870(0) 897(1) 876(1) 402(0) 430
 - **Up/down aren't rendered on the flat grid** — a room whose only exit is **vertical (up/down)** draws as a lone `X`.
 - **Only remaining unknown:** whether letters other than S/L can appear (surfaces during parsing).
 - **Client use:**
-  - The **Sysop map** power records that the client may use `sys map`; parsing it to help locate (matching the drawn shape against the room graph, since there are no numbers) is a later addition.
+  - The client does not use `sys map` — its output can't be matched to the room graph reliably (there are no numbers, only the drawn shape). The Sysop map checkbox was removed.
 
 ### `sys god <name> add life`
 *Status: CONFIRMED 2026-09-04 (user)*
@@ -4268,10 +4347,10 @@ Hidden items: 1845(0) 14(0) 894(0) 223(0) 879(0) 870(0) 897(1) 876(1) 402(0) 430
 - **The keyword is sent verbatim; the game resolves the name.** `sys goto newhaven` sends exactly that — the client never sends the map/room.
 - **Hostiles merely PRESENT in the room do NOT block it.** You can `sys goto` out of a room full of hostile monsters. **Only ACTIVE combat blocks** — i.e. once an attack has been announced against a target. When actively engaged, you must send **`break`** first to stop combat, *then* `sys goto`.
 - **No confirmation, no messages on success** — a successful `sys goto` produces **only a statline redisplay**, no room display, no "you teleport" line. To learn the room you landed in you must send a **bare Enter** to force the room display.
-- **Works at any HP** — see *Sysop power gating* above: `sys goto` is honoured while mortally wounded.
-- **[UNVERIFIED]** **Denied / break-then-goto wording is not pinned down** — the exact wording of a *denied* `sys goto` (no power, or the game rejecting an unknown keyword) and of the `break`-then-goto success path. Nothing depends on it: the client gates on its own per-BBS power flag + the location table, and the landing resync is name-match-or-timeout, not a string match on any reply.
+- **Works at any HP** — see *Sysop power gating*: `sys goto` is honoured while mortally wounded.
+- **[NEEDS CONFIRMATION]** **Denied / break-then-goto wording is not pinned down** — the exact wording of a *denied* `sys goto` (no power, or the game rejecting an unknown keyword) and of the `break`-then-goto success path. Nothing depends on it: the client gates on its own per-BBS power flag + the location table, and the landing resync is name-match-or-timeout, not a string match on any reply.
 - **Client use:**
-  - Modeled as a fourth per-BBS **Sysop goto** checkbox backed by an editable location table (keyword → map/room + optional min-level), stored per-character-per-BBS.
+  - Modeled as a third per-BBS **Sysop goto** checkbox backed by an editable location table (keyword → map/room + optional min-level), stored per-character-per-BBS.
   - The stored map/room is only for the client's own landing resync + a human-readable "resolves to" preview; the optional min-level is a client-side courtesy gate (the game enforces its own).
   - When actively engaged, the client refuses with a notice and auto-sends `break` so a re-run works once combat stops.
   - After a goto the client sends the bare Enter itself and arms a landing-name resync: the next room display matching the stored location's name commits the position (`RoomTracker.SetLocated`).
