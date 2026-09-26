@@ -210,7 +210,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // with the two bundled faces — MX437 (the CP437 bitmap font that matches
     // classic BBS output) and JetBrains Mono — then lists every monospace font
     // installed on the system. Proportional faces are filtered out by
-    // MonospaceFontCatalog since they'd mangle the fixed cell grid. The default
+    // InstalledFontCatalog since they'd mangle the fixed cell grid. The default
     // font and DisplayConfig.DefaultFontSize carry a "{default}" tag in the
     // picker labels; a bundled
     // face persists as its avares:// URI while a system font persists as its
@@ -218,7 +218,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     public IReadOnlyList<FontFamilyOption> FontFamilyOptions { get; } = BuildFontFamilyOptions();
 
     public IReadOnlyList<FontSizeOption> FontSizeOptions { get; } =
-        BuildFontSizeOptions(DisplayConfig.DefaultFontSize);
+        FontSizeOption.Standard(DisplayConfig.DefaultFontSize);
 
     [ObservableProperty] private FontFamilyOption? _selectedFontFamily;
     [ObservableProperty] private FontSizeOption? _selectedFontSize;
@@ -230,7 +230,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // Independent selections so the tooltip can be tuned separately from the
     // terminal canvas.
     public IReadOnlyList<FontSizeOption> NavTooltipFontSizeOptions { get; } =
-        BuildFontSizeOptions(DisplayConfig.DefaultNavTooltipFontSize);
+        FontSizeOption.Standard(DisplayConfig.DefaultNavTooltipFontSize);
 
     [ObservableProperty] private FontFamilyOption? _selectedNavTooltipFontFamily;
     [ObservableProperty] private FontSizeOption? _selectedNavTooltipFontSize;
@@ -248,23 +248,13 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // Then every installed monospace font, skipping any that duplicates a
         // bundled face's family name so the picker never shows two identical
         // labels (e.g. a system-wide JetBrains Mono install).
-        foreach (string name in MonospaceFontCatalog.Families)
+        foreach (string name in InstalledFontCatalog.Monospace)
         {
             if (name.Equals("JetBrains Mono", StringComparison.OrdinalIgnoreCase)) continue;
             if (name.Equals("Mx437 IBM VGA 8x16", StringComparison.OrdinalIgnoreCase)) continue;
             list.Add(new FontFamilyOption(name, name));
         }
 
-        return list;
-    }
-
-    private static IReadOnlyList<FontSizeOption> BuildFontSizeOptions(double defaultSize)
-    {
-        double[] sizes = { 8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32 };
-        List<FontSizeOption> list = new(sizes.Length);
-        foreach (double s in sizes)
-            list.Add(new FontSizeOption(
-                s == defaultSize ? $"{s:0} {{default}}" : $"{s:0}", s));
         return list;
     }
 
@@ -770,11 +760,24 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
 // A labelled Buff Watchdog layout choice for the General-tab dropdown.
 public sealed record BuffLayoutOption(string Label, BuffWatchdogLayout Value);
 
-// Font-family picker row: the label shown in the General-tab dropdown and the
-// avares:// URI persisted into GeneralSettings.TerminalFontFamily.
+// Font-family picker row: the label shown in a font dropdown and the value
+// persisted — a bundled face's avares:// URI or an installed font's family name
+// (both are valid FontFamily inputs).
 public sealed record FontFamilyOption(string Label, string Uri);
 
 // Font-size picker row: the label shown in the dropdown (with a "{default}" tag
-// on the DisplayConfig.DefaultFontSize entry) and the point size persisted into
-// GeneralSettings.TerminalFontSize.
-public sealed record FontSizeOption(string Label, double Value);
+// on the picker's default entry) and the point size persisted.
+public sealed record FontSizeOption(string Label, double Value)
+{
+    // The point sizes every font-size picker offers (terminal, map tooltip,
+    // Conversation window), with defaultSize tagged "{default}".
+    public static IReadOnlyList<FontSizeOption> Standard(double defaultSize)
+    {
+        double[] sizes = { 8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32 };
+        List<FontSizeOption> list = new(sizes.Length);
+        foreach (double s in sizes)
+            list.Add(new FontSizeOption(
+                s == defaultSize ? $"{s:0} {{default}}" : $"{s:0}", s));
+        return list;
+    }
+}

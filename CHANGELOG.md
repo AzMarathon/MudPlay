@@ -1,5 +1,9 @@
 # Version history
 
+## 3.107.7
+
+- The Conversation window's font picker lists every installed text font (proportional included) after the three bundled ones, with the terminal's 8–32pt size range
+
 ## 3.107.6
 
 - A follower re-sends `@wait` when it drops below a rest floor again or is walked on while still recovering, so a leader whose wait window ran out stops again instead of dragging it along mid-rest

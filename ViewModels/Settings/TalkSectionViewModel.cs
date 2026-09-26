@@ -91,22 +91,20 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     // ----- Conversation window typography (Char-tier) -----
     // Font family + size the Conversation window renders its rows with. The
     // default is the bundled JetBrains Mono at size 12, tagged "{default}" in
-    // the pickers; a non-default pick persists as an avares:// URI / point size
-    // and is read back when the window next opens.
+    // the pickers; a non-default pick persists as an avares:// URI (bundled) or a
+    // family name (installed) plus a point size, and is read back live.
+    //
+    // The rows are plain wrapped text, not the terminal's fixed cell grid, so the
+    // picker offers every installed text font — proportional ones included — after
+    // the three bundled faces, and the same size range as the terminal.
     private const string DefaultConvoFontUri =
         "avares://MudPlay/Assets/Fonts/JetBrainsMono-Regular.ttf#JetBrains Mono";
     private const double DefaultConvoFontSize = 12;
 
-    public IReadOnlyList<FontFamilyOption> ConvoFontOptions { get; } = new[]
-    {
-        new FontFamilyOption("JetBrains Mono {default}", DefaultConvoFontUri),
-        new FontFamilyOption("IBM Plex Sans",
-            "avares://MudPlay/Assets/Fonts/IBMPlexSans-Regular.ttf#IBM Plex Sans"),
-        new FontFamilyOption("MX437 IBM VGA",
-            "avares://MudPlay/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16"),
-    };
+    public IReadOnlyList<FontFamilyOption> ConvoFontOptions { get; } = BuildConvoFontOptions();
 
-    public IReadOnlyList<FontSizeOption> ConvoFontSizeOptions { get; } = BuildConvoFontSizes();
+    public IReadOnlyList<FontSizeOption> ConvoFontSizeOptions { get; } =
+        FontSizeOption.Standard(DefaultConvoFontSize);
 
     [ObservableProperty] private FontFamilyOption? _selectedConvoFont;
     [ObservableProperty] private FontSizeOption? _selectedConvoFontSize;
@@ -383,13 +381,25 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
             : $"Imported {defined} emote(s) — Apply to save.";
     }
 
-    private static IReadOnlyList<FontSizeOption> BuildConvoFontSizes()
+    private static IReadOnlyList<FontFamilyOption> BuildConvoFontOptions()
     {
-        double[] sizes = { 10, 11, 12, 13, 14, 16, 18, 20 };
-        List<FontSizeOption> list = new(sizes.Length);
-        foreach (double s in sizes)
-            list.Add(new FontSizeOption(
-                s == DefaultConvoFontSize ? $"{s:0} {{default}}" : $"{s:0}", s));
+        List<FontFamilyOption> list = new()
+        {
+            new FontFamilyOption("JetBrains Mono {default}", DefaultConvoFontUri),
+            new FontFamilyOption("IBM Plex Sans",
+                "avares://MudPlay/Assets/Fonts/IBMPlexSans-Regular.ttf#IBM Plex Sans"),
+            new FontFamilyOption("MX437 IBM VGA",
+                "avares://MudPlay/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16"),
+        };
+        // Skip an installed copy of a bundled face so no label appears twice.
+        foreach (string name in InstalledFontCatalog.Text)
+        {
+            if (name.Equals("JetBrains Mono", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("IBM Plex Sans", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Mx437 IBM VGA 8x16", StringComparison.OrdinalIgnoreCase))
+                continue;
+            list.Add(new FontFamilyOption(name, name));
+        }
         return list;
     }
 
