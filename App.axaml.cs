@@ -22,15 +22,16 @@ public partial class App : Application
         // exists; later code reaches them via AppServices.Current.
         AppServices.Initialize();
 
-        // Pre-build the monospace system-font catalogue off the UI thread so the
-        // first Settings open doesn't stall while enumerating installed fonts.
-        // The count is logged so a "my font isn't in the list" report can be
-        // reasoned about without re-running the scan.
+        // Pre-build the system-font catalogue off the UI thread so the first
+        // Settings open doesn't stall while enumerating installed fonts. The counts
+        // are logged so a "my font isn't in the list" report can be reasoned about
+        // without re-running the scan.
         System.Threading.Tasks.Task.Run(() =>
         {
-            MonospaceFontCatalog.Warm();
+            InstalledFontCatalog.Warm();
             AppServices.Current.Log.Info("Fonts",
-                $"{MonospaceFontCatalog.Families.Count} monospace system fonts available for the terminal picker");
+                $"{InstalledFontCatalog.Monospace.Count} monospace system fonts for the terminal picker, "
+                + $"{InstalledFontCatalog.Text.Count} text fonts for the Conversation picker");
         });
 
         // On classic desktop platforms (Windows / Linux / macOS) the

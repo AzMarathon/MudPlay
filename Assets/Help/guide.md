@@ -2968,7 +2968,7 @@ Applied emotes live under your app-data **Emotes** folder.
 ### Font / Font size (Conversation window)
 
 **Default:** JetBrains Mono, 12pt
-**Available options:** Font — JetBrains Mono, IBM Plex Sans, MX437 IBM VGA; Size — 10–20pt in a fixed list.
+**Available options:** Font — JetBrains Mono, IBM Plex Sans, MX437 IBM VGA, then **every text font installed on your system** (proportional fonts included — chat rows are plain wrapped text, not the terminal's fixed grid); Size — 8–32pt, the same list as the terminal font. Sizes are in points on the same scale as the terminal, so 16 here matches 16 there.
 **What it does:** The font used inside the Conversation window's chat log.
 **Important notes:** Applies **live** — hit Apply and an already-open Conversation window re-fonts on the spot, no reopen needed.
 
@@ -3602,7 +3602,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Warn on invalid remote command / Failure message | true / default text | bool / free text | `WarnOnInvalidRemoteCommand` / `RemoteCommandFailureMessage` | Models/Profile/TalkSettings.cs |
 | Greet / Look back / Look on arrival | false (all) | bool | `GreetPlayersWhenFirstMet`, `LookBackWhenLookedAt`, `LookAtPlayersOnArrival` | Models/Profile/TalkSettings.cs |
 | Log conversations / transactions / line limit | true/true/2000 | bool / bool / 100–100,000 | `LogConversations`, `LogTransactions`, `LogMaxLines` | Models/Profile/TalkSettings.cs |
-| Conversation font / size / channel colors | defaults | 3 fonts / 10-20pt / hex per channel | `ConvoFont`, `ConvoFontSize`, `ChannelColors` | Models/Profile/TalkSettings.cs |
+| Conversation font / size / channel colors | defaults | bundled + installed text fonts / 8-32pt / hex per channel | `ConvoFont`, `ConvoFontSize`, `ChannelColors` | Models/Profile/TalkSettings.cs |
 
 ### Auto-Light / Auto-Lair / Auto-Trainer / Other / Events
 

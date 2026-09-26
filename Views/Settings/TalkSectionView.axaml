@@ -211,7 +211,7 @@
             <TextBlock Classes="SectionHeader" Text="Conversation window font"/>
             <TextBlock Classes="HelpText"
                        Margin="0,0,0,4"
-                       Text="Font and size the Conversation window renders its chat rows with. Applies the next time the window is opened."/>
+                       Text="Font and size the Conversation window renders its chat rows with. Sizes are in points, the same scale as the terminal font. Applies to an open window as soon as you save."/>
 
             <Grid ColumnDefinitions="180,*" Margin="0,4,0,0">
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Font"/>
@@ -219,7 +219,7 @@
                           Width="240" HorizontalAlignment="Left"
                           ItemsSource="{Binding ConvoFontOptions}"
                           SelectedItem="{Binding SelectedConvoFont, Mode=TwoWay}"
-                          ToolTip.Tip="Row font for the Conversation window. JetBrains Mono is the bundled default; IBM Plex Sans is the proportional chrome font; MX437 is the CP437 bitmap terminal font.">
+                          ToolTip.Tip="Row font for the Conversation window. JetBrains Mono is the bundled default; IBM Plex Sans is the proportional chrome font; MX437 is the CP437 bitmap terminal font. Every text font installed on your system is listed below them — proportional fonts included, since chat rows aren't a fixed grid like the terminal.">
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:FontFamilyOption">
                             <TextBlock Text="{Binding Label}"/>
@@ -234,7 +234,7 @@
                           Width="240" HorizontalAlignment="Left"
                           ItemsSource="{Binding ConvoFontSizeOptions}"
                           SelectedItem="{Binding SelectedConvoFontSize, Mode=TwoWay}"
-                          ToolTip.Tip="Message-body font size in points. Timestamp / channel tag / speaker render one point smaller.">
+                          ToolTip.Tip="Message-body font size in points (8–32, the same range as the terminal). Timestamp / channel tag / speaker render one point smaller.">
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:FontSizeOption">
                             <TextBlock Text="{Binding Label}"/>
