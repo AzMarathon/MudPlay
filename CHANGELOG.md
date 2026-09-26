@@ -1,5 +1,13 @@
 # Version history
 
+## 3.107.19
+
+- On Stock, a whole-party buff that removes one of your self-buffs one way now layers with it (party buff first) instead of stopping the self-buff
+- Spell Book Success % caps at 100% on Paradigm (98% stays for Stock)
+- NPC `ask` commands (guardian doors, ask-transports, item givers) send the NPC's full name instead of only its last word
+- A monster counts as a boss only when its GameLimit is 1, so placed fixtures like the stock barmaid are treated as instant respawns again
+- CLAUDE.md gains a guide to using and editing GAME_MECHANICS.md
+
 ## 3.107.15
 
 - GAME_MECHANICS.md reorganised into 16 subject chapters with a linked contents list; duplicate and scattered entries merged into one topic each

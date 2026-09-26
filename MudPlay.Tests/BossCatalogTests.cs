@@ -14,12 +14,11 @@ namespace MudPlay.Tests;
 public sealed class BossCatalogTests
 {
     [Theory]
-    [InlineData(1, 0, true)]    // GameLimit 1 → boss even with no regen
-    [InlineData(0, 1, true)]    // RegenTime >= 1h → boss
-    [InlineData(0, 24, true)]
-    [InlineData(0, 0, false)]   // ordinary mob
-    public void IsBoss_MatchesGameLimitOrHourRegen(int gameLimit, int regen, bool expected)
-        => Assert.Equal(expected, BossCatalog.IsBoss(gameLimit, regen));
+    [InlineData(1, true)]    // GameLimit 1 → boss, whatever its regen
+    [InlineData(5, false)]   // the stock barmaid: GameLimit 5, RegenTime 1 — not a boss
+    [InlineData(0, false)]   // ordinary mob
+    public void IsBoss_IsExactlyGameLimitOne(int gameLimit, bool expected)
+        => Assert.Equal(expected, BossCatalog.IsBoss(gameLimit));
 
     [Fact]
     public void BundledSeed_ParsesWithExpectedShape()

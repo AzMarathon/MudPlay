@@ -794,7 +794,7 @@ The header names the class and level it's showing. The grid lists each spell wit
 - **Known only** — hides spells you haven't learned yet.
 - **Search** — filter by cast-code or name.
 
-The **Success %** column is your **chance to land the cast** (as opposed to fizzling) — computed from your **Spellcasting** stat plus the spell's own difficulty, capped at 98% (100% for Kai). (It reads "Success %", not "Difficulty", because the number *is* your success chance — a higher value is better.) It's independent of your level: raising Spellcasting (or gear that boosts it) is what lifts it.
+The **Success %** column is your **chance to land the cast** (as opposed to fizzling) — computed from your **Spellcasting** stat plus the spell's own difficulty, capped at 98% on Stock (100% on Paradigm, and for Kai spells on either realm). (It reads "Success %", not "Difficulty", because the number *is* your success chance — a higher value is better.) It's independent of your level: raising Spellcasting (or gear that boosts it) is what lifts it.
 
 A spell shows **—** when no chance can be stated — you're not a caster class, or your stats haven't been read yet (type `stat` in the game to populate them). Reopen the book after a `stat` to refresh it.
 
@@ -2728,7 +2728,9 @@ Settings → Party.
 
 Your self-bless slots always fire, party or not.
 
-**Supersession:** if a whole-party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
+**Supersession:** if a whole-party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless** on Paradigm), then in a party the client **layers them when it can and covers only when it can't**:
+- **Stock, one-way remover** (your self-buff doesn't remove the party buff back) — both are kept: the party buff is cast first and your self-buff re-applied after it, since Stock only strips at the moment of cast.
+- **Paradigm, or a mutual pair on either realm** — the two can't coexist, so the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
 
 Any OTHER pair of configured buffs that remove each other this way — two self-cast buffs, two whole-party buffs, a whole-party buff removing a member's buff, and so on — aren't auto-resolved like this one case is; they instead get the **⚠** warning described in the **Buff Watchdog** section, so you know about the conflict without the client silently changing what it casts.
 

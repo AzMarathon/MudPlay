@@ -39,8 +39,8 @@ public static class GuardDoorCommandResolver
     private const int MaxDepth = 40;
 
     // Yield every guard-door command a monster's greet exposes for its own home
-    // room. greetNumber is Monsters.GreetTXT; monsterName is Monsters.Name (its
-    // last word becomes the `ask` noun); hostRoomNumber is the Room Number the
+    // room. greetNumber is Monsters.GreetTXT; monsterName is Monsters.Name (the
+    // `ask` target, see AskTarget); hostRoomNumber is the Room Number the
     // monster stands in (matched against each remoteaction's target room). Empty
     // when the greet exposes no keyword that operates a home-room exit.
     public static IEnumerable<GuardDoorCommand> Resolve(
@@ -49,7 +49,7 @@ public static class GuardDoorCommandResolver
         ArgumentNullException.ThrowIfNull(store);
         if (greetNumber <= 0 || hostRoomNumber <= 0) yield break;
 
-        string noun = LastWord(monsterName);
+        string noun = AskTarget(monsterName);
         if (noun.Length == 0) yield break;
 
         TBInfoEntry? greet = ResolveGreetBlock(store, greetNumber, new HashSet<int>());
@@ -172,16 +172,17 @@ public static class GuardDoorCommandResolver
         _ => null,
     };
 
-    // The MMUD `ask <noun> <keyword>` target noun: the last word of a monster's
-    // name ("shadow guard" → "guard"). The game's `ask` parser takes a single-word
-    // target and treats the rest as the keyword, so a multi-word name must be
-    // reduced to its noun. Shared with the path-item give router, which addresses a
-    // giver NPC through the same verb.
-    internal static string LastWord(string? name)
+    // The `ask <npc> <keyword>` target: the monster's full name ("shadow guard"),
+    // which the game always accepts — the last word alone isn't guaranteed to
+    // resolve. A leading article is dropped ("The Grey Lord" → "Grey Lord"): it's
+    // how the name is rendered, not part of what a player types. Shared with
+    // GreetTeleportResolver.
+    internal static string AskTarget(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return string.Empty;
-        string[] words = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        return words.Length == 0 ? string.Empty : words[^1];
+        List<string> words = new(name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        if (words.Count > 1 && words[0].ToLowerInvariant() is "the" or "a" or "an") words.RemoveAt(0);
+        return string.Join(' ', words);
     }
 
     // Strip the hidden-command '*' marker and take the first alternate before a

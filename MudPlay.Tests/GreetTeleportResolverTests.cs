@@ -69,7 +69,7 @@ public sealed class GreetTeleportResolverTests : IDisposable
         // The gated code/word topics are skipped; the return topic has no teleport
         // directive — so only the ungated `teleport` keyword survives.
         Assert.Single(teleports);
-        Assert.Equal("ask Lord teleport", teleports[0].Command);   // noun = last word of the name
+        Assert.Equal("ask Grey Lord teleport", teleports[0].Command);   // full name, leading article dropped
         Assert.Equal(new RoomKey(1, 224), teleports[0].Destination); // teleport <room> <map> → (map, room)
         Assert.Equal(0, teleports[0].MinLevel);
         Assert.Equal(0, teleports[0].RequiredClass);   // ungated by class
@@ -163,7 +163,7 @@ public sealed class GreetTeleportResolverTests : IDisposable
 
         var teleports = GreetTeleportResolver.Resolve(store, 20, "old sage").ToList();
         Assert.Single(teleports);
-        Assert.Equal("ask sage chime", teleports[0].Command);
+        Assert.Equal("ask old sage chime", teleports[0].Command);
         Assert.Equal(new RoomKey(2, 500), teleports[0].Destination);
         Assert.Equal(20, teleports[0].MinLevel);
     }
