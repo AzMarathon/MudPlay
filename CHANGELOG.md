@@ -1,5 +1,10 @@
 # Version history
 
+## 3.107.14
+
+- GAME_MECHANICS.md reorganised into 16 subject chapters with a linked contents list; duplicate and scattered entries merged into one topic each
+- Every topic now carries a status line (confidence, date, source, realm) and a Client use list; stale notes reconciled against the current code, open disagreements flagged for confirmation
+
 ## 3.107.13
 
 - New `@drop-all full` / `coins` / `keys` (bare `@drop-all` unchanged) with matching Drop Everything / Drop Coins / Drop Keys in the Action menu and a ▾ on the toolbar Drop All button
