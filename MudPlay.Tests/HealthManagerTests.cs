@@ -3182,6 +3182,89 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
+    public void Follower_FreshDropWhileStillSignaled_ReAsksForWait()
+    {
+        // The @ok waits for full rest-max, so the signal stays latched across a
+        // second drop — but the leader may have given up on the first wait by then
+        // (its "If leading, wait only" window). A fresh drop re-asks (report
+        // paradigm-20260925-210928).
+        int waits = 0;
+        using Harness h = new();
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => { });
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+
+        h.State.Hp = 50;             // below floor → @wait
+        h.State.Hp = 121;            // trigger+1: gate clears, still signaled (not at rest-max)
+        h.State.Hp = 60;             // dropped again → fresh drop re-asks
+        Assert.Equal(2, waits);
+    }
+
+    [Fact]
+    public void Follower_HpDropsWhileManaGateHeld_ReAsksForWait()
+    {
+        // The report's shape: the mana gate held for minutes, then HP dropped too —
+        // a fresh drop of the OTHER pool is still a new reason to stop the leader.
+        int waits = 0;
+        using Harness h = new();
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => { });
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);
+
+        h.State.Ma = 20;             // mana floor → @wait
+        Assert.True(h.ManaGateHeld);
+        h.State.Hp = 30;             // HP floor while mana still held → re-ask
+        Assert.Equal(2, waits);
+    }
+
+    [Fact]
+    public void Follower_DraggedWhileRecovering_ReAsksOncePerInterval()
+    {
+        int waits = 0;
+        using Harness h = new();
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => { });
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);
+        h.State.Ma = 20;             // mana floor → @wait
+        Assert.Equal(1, waits);
+
+        h.Clock += TimeSpan.FromSeconds(10);
+        h.Health.NoteRoomChanged();  // the leader walked us on — it isn't waiting
+        Assert.Equal(2, waits);
+        h.Health.NoteRoomChanged();  // same drag, next room — rate-limited
+        Assert.Equal(2, waits);
+
+        h.Clock += TimeSpan.FromSeconds(10);
+        h.Health.NoteRoomChanged();
+        Assert.Equal(3, waits);
+    }
+
+    [Fact]
+    public void Solo_Moving_NeverReAsksForWait()
+    {
+        int waits = 0;
+        using Harness h = new();
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => false,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => { });
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);
+        h.State.Ma = 20;
+        int afterDrop = waits;
+
+        h.Clock += TimeSpan.FromSeconds(10);
+        h.Health.NoteRoomChanged();
+        Assert.Equal(afterDrop, waits);
+    }
+
+    [Fact]
     public void Follower_DisabledMidRecovery_ReleasesOk()
     {
         int oks = 0;

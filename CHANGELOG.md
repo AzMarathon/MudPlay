@@ -1,5 +1,10 @@
 # Version history
 
+## 3.107.6
+
+- A follower re-sends `@wait` when it drops below a rest floor again or is walked on while still recovering, so a leader whose wait window ran out stops again instead of dragging it along mid-rest
+- bug reports addressed: paradigm-20260925-210928
+
 ## 3.107.5
 
 - A loop paused mid-move by a fight now fights it: combat no longer judges the room it just left (a non-lair / do-not-attack room) and stands there being hit

@@ -118,6 +118,32 @@ public sealed class PartyRestSyncTests
     }
 
     [Fact]
+    public void Resend_ReTelepathsAWaitAlreadyHeld_AndStillOnlyOneOk()
+    {
+        // The leader may have timed out the first wait; a resend re-asks. The reason
+        // is still tracked once, so a single @ok balances it.
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Leader";
+
+        sync.RequestWait(WaitReason.Health, resend: true);
+        sync.RequestWait(WaitReason.Health, resend: true);
+        Assert.Equal(2, wire.Count);
+        Assert.Equal("/Leader @wait\r", LastWire(wire));
+
+        sync.RequestOk(WaitReason.Health);
+        Assert.Equal("/Leader @ok\r", LastWire(wire));
+    }
+
+    [Fact]
+    public void Resend_Solo_SendsNothing()
+    {
+        var (sync, _, wire) = Setup();
+        sync.RequestWait(WaitReason.Health, resend: true);
+        Assert.Empty(wire);
+    }
+
+    [Fact]
     public void DuplicateWaitReason_SendsOneWait()
     {
         var (sync, party, wire) = Setup();
