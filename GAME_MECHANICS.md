@@ -2628,9 +2628,15 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 *Status: CONFIRMED (user; `failspell` 2026-07-28, report `paradigm-20260728-201619`; sunstone possession 2026-08-27, report `paradigm-20260827-112011`) · Realm: differs (Paradigm `failspell`, stock `checkspell`)*
 
 - **A TextBlock action guarded by a buff check — `checkspell` OR `failspell`** (a buff check, not an item check).
-  - `checkspell S T` = "if buff S is active, branch to TBInfo T (safe); else fall through (damage)."
-  - `failspell S T` is the sibling directive *([CONFIRMED by user 2026-07-28])*: "if buff S is **not** active, the damage fires."
-  - Either way the survival model is identical — the room punishes you unless buff S is up.
+  - `failspell S T` *([CONFIRMED by user 2026-07-28])*: "if buff S is **not** active, the damage fires."
+  - `checkspell S T` **also branches to T when buff S is ABSENT** — T is the damage branch, not a safe one
+    *([OBSERVED] 2026-09-26 — deduced from the data plus confirmed rules; Stock not yet seen live)*. Stock's
+    T for the desert (TB 2654) is `failitem 1180:cast 712:random 2655` / `checkitem 1180:random 2655`: it
+    casts the thirst damage (712) unless you hold the sunstone. Since the waterskin buff is confirmed to stop
+    that damage, 2654 can only be the no-buff branch. (An earlier note here defined `checkspell` as "if buff
+    S is active, branch to T (safe)" — wrong.)
+  - Either way the survival model is identical — the room punishes you unless buff S is up. The client's
+    `RoomHazardIndex` already reads both directives' T as the buff-absent branch.
 - **Worked example — Scorching Desert** `12/853` `Spell:683` → TextBlock **2653**: `failspell 711 2654:random 2655` on **Paradigm 1.9.1** — **`failspell`, not `checkspell`** — but `checkspell 711 2654:random 2655` on **stock v1.11p** *(DATA-VERIFIED — the directive differs by realm)*. The client's hazard parser first handled only `checkspell` and so walked the Paradigm desert unprotected (report `paradigm-20260728-201619`).
   - Map 12 also has a `failspell 711` variant on `Spell:684`.
   - Buff 711 "waterskin" (`Dur 600`) is conferred by **using** the *waterskin* (item 283, `Abil 43` CastsSp→711, 3 uses).
@@ -2644,7 +2650,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Routing model:** carry the source item(s), `use` on entering the first hazard room to raise the buff, and **re-`use` whenever the buff lapses while still inside a hazard room**, consuming a charge each time; when charges run out mid-stretch and no spare waterskin remains, halt rather than walking a room unprotected.
 - **There is NO wear-off message for the waterskin buff** *([CONFIRMED by user])*. So routine refresh cannot be reactive — the client **must TIME it** (predictively re-`use` a margin before the buff's `Dur` would expire; this is the PRIMARY refresh). The lapse prompt below is only a **reactive backstop**: when the timer's estimate is off and the buff drops early, the room re-emits the prompt and the client fires **exactly ONE** `use waterskin` to re-raise — not a client-side wear-off reaction (there's no such line), but a correction to a mistimed timer.
 - **Lapse / sandstorm spells are derivable from the checkspell chain.** `checkspell 711 2654` — the token's second int (2654) is the buff-ABSENT target TB; that block's `cast` is the lapse-damage spell. In the desert that's **spell 712 "desert damage"** (its CasterMessage is the thirst prompt); **spell 713 "desert sandstorm"** is the separate random-chance teleport, not a lapse signal.
-  - *([NEEDS CONFIRMATION] this contradicts the `checkspell S T` definition at the top of this topic ("if buff S is active, branch to T (safe)"). The data (2026-09-26): stock TB **2654** is `failitem 1180:cast 712:random 2655` / `checkitem 1180:random 2655` — the thirst-damage branch (casts 712 unless you hold the sunstone) — and TB 2658 → 2659 has the same shape. On Paradigm, TB 2654 and 2659 don't exist at all. So in both realms the second number points at the damage branch; is `checkspell` really "branch to T when the buff is **absent**"?)*
+  - Stock's TB 2658 → 2659 has the same shape. On **Paradigm**, TB 2654 and 2659 don't exist, so the thirst damage and sandstorm don't come from that branch there; holding the sunstone (not wearing it) still prevents **both** the thirst damage and the desert teleport *([CONFIRMED] 2026-09-26, user)* — see the possession bullet above.
 - **Trigger + confirmation messages** *([CONFIRMED by user])* — all in the Messages game-data table, so match by record number, not hardcoded realm text. **These lines are plain text with no `{s}` placeholder**, so they're matched by literal case-insensitive substring, not the caster-message regex:
   - Desert lapse prompt — drink now (Spells#712): `You suffer in the desert heat... you need water, soon!` The game's own signal that the buff has lapsed while still in the hazard. Fire ONE `use waterskin` on this line.
   - Self re-`use` success (Spells#711): `You take a swig of water from your waterskin.` Confirms a charge burned and buff 711 re-applied. A `use waterskin` that draws no such line before the NEXT lapse prompt means charges/waterskins are exhausted → halt, don't walk on unprotected.
