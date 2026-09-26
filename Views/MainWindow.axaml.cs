@@ -697,7 +697,7 @@ public partial class MainWindow : Window
 
     // A split toolbar button's ▾: pick which of its actions (ToolbarButtonItem
     // .SubActions — Drop All's unworn / everything / coins / keys, Equip's gear sets)
-    // the button runs. The current pick is ticked; picking one sets it AND runs it.
+    // the button runs. The current pick is ticked; picking one only sets it.
     private void OnToolbarSubActionsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (sender is not Button arrow
@@ -712,7 +712,7 @@ public partial class MainWindow : Window
                 ToggleType = MenuItemToggleType.Radio,
                 IsChecked = ReferenceEquals(action, item.SelectedSubAction),
             };
-            entry.Click += (_, _) => item.ChooseAndRun(picked);
+            entry.Click += (_, _) => item.Choose(picked);
             if (action.Tooltip is { Length: > 0 } tip) ToolTip.SetTip(entry, tip);
             flyout.Items.Add(entry);
         }

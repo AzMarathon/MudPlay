@@ -1,5 +1,9 @@
 # Version history
 
+## 3.110.7
+
+- Drop All / Hide All / Equip toolbar ▾ only changes what the button does; nothing is sent until you click the button
+
 ## 3.110.6
 
 - Action menu: Drop, Hide and Equip are submenus; Equip can wear any of your six gear sets

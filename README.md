@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.110.6**
-> - Action menu: Drop, Hide and Equip are submenus; Equip can wear any of your six gear sets
-> - Drop All / Hide All / Equip toolbar buttons: the ▾ now picks what the button does (and does it once), saved per character; a keybind on the button follows the pick
-> - Terminal right-click menu can hold ready-made Drop ▸ / Hide ▸ / Equip ▸ submenus, or just the single actions, including each gear set
+> **Version 3.110.7**
+> - Drop All / Hide All / Equip toolbar ▾ only changes what the button does; nothing is sent until you click the button
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
