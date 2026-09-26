@@ -29,7 +29,7 @@ public static class ShopPriceCalculator
     private static double Fix(double v) => Math.Truncate(v);
 
     // Charm multiplier applied to the buy price (both realms). charm 50 → 1.0
-    // (retail); below 50 discounts, above 50 marks up.
+    // (retail); above 50 discounts, below 50 marks up.
     public static double CharmBuyMod(int charm) => 1.0 - ((Fix(charm / 5.0) - 10.0) / 100.0);
 
     // Per-shop purchase cost in copper: base + shop markup, then charm-scaled.

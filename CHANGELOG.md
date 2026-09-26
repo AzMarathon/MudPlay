@@ -1,5 +1,9 @@
 # Version history
 
+## 3.107.14
+
+- Code comments corrected where they contradicted the code (shop charm pricing, held-member pause, buff timers across a reconnect, Stock buff-removal timing)
+
 ## 3.107.13
 
 - New `@drop-all full` / `coins` / `keys` (bare `@drop-all` unchanged) with matching Drop Everything / Drop Coins / Drop Keys in the Action menu and a ▾ on the toolbar Drop All button

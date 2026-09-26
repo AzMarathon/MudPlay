@@ -3719,8 +3719,8 @@ in the data means "unknown," so the client prices unknown Charm at 50.
   reduces to the friendliest denomination that keeps the value ≥ 10 (or copper when < 100).
 - **BUY (per shop; identical formula in both realms).** Markup first, then charm:
   `buy = baseCopper + Fix(baseCopper × Markup%/100)`; if Charm > 0,
-  `buy = (1 − ((Fix(Charm/5) − 10)/100)) × buy`. (`Fix` truncates toward zero.) Charm below 50
-  discounts, above 50 marks up, exactly 50 is retail.
+  `buy = (1 − ((Fix(Charm/5) − 10)/100)) × buy`. (`Fix` truncates toward zero.) Charm above 50
+  discounts, below 50 marks up, exactly 50 is retail.
 - **SELL (ignores markup → same at every shop for a given charm).**
   - **Stock:** `sell = Fix((Fix(Charm/2) + 25) × baseCopper / 100)`.
   - **Paradigm/GreaterMUD:** `sell = (baseCopper/2) × (1 + Fix((Charm − 50)/5)/100)`.

@@ -310,8 +310,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     {
         IReadOnlyList<ActiveBuffTimer> snap = _castDirector.SnapshotActiveBuffs();
         // While a disconnect has the timers paused, freeze the display at the drop instant
-        // (the 1s heartbeat is a wall clock that keeps firing offline) — the resume shift
-        // then keeps the on-screen remaining continuous across the gap.
+        // (the 1s heartbeat is a wall clock that keeps firing offline). On resume it
+        // catches up to the true remaining; the expiries were never shifted.
         DateTime now = _castDirector.PausedAtUtc ?? DateTime.UtcNow;
 
         // In a party, a self-buff a configured party-wide buff removes shows "covered by"
