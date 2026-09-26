@@ -36,9 +36,12 @@ public static class HelpContentRenderer
     private static readonly IBrush WarningBackground = new SolidColorBrush(Color.Parse("#22E0A030"));
     private static readonly IBrush WarningBorderBrush = new SolidColorBrush(Color.Parse("#80E0A030"));
 
-    // Search-box matches inside the body — the same amber as a matching topic in the
-    // tree, so the eye links the two.
-    private static readonly IBrush MatchBackground = new SolidColorBrush(Color.Parse("#99E0B040"));
+    // Search-box matches inside the body — the tree's amber, but solid, with dark text
+    // on it: a match inside a coloured run (teal code, blue field label) would
+    // otherwise sit coloured-on-amber and be hard to read. The run keeps its weight,
+    // slant and font; only the colours change.
+    private static readonly IBrush MatchBackground = new SolidColorBrush(Color.Parse("#E0B040"));
+    private static readonly IBrush MatchForeground = new SolidColorBrush(Color.Parse("#141414"));
 
     // One render's search text, and the first block holding a match (what the pane
     // scrolls to) — threaded through the block builders.
@@ -221,6 +224,7 @@ public static class HelpContentRenderer
                 if (match)
                 {
                     run.Background = MatchBackground;
+                    run.Foreground = MatchForeground;
                     ctx.FirstMatch ??= owner;
                 }
                 inlines.Add(run);
