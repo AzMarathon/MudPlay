@@ -14,4 +14,7 @@ public enum NavLineKind
     LoopBuilder,
     // An Auto-Lair run's route (MapControl.AutoLairWalkPen).
     AutoLair,
+    // The party leader's route we're following, rebuilt from their @path reply
+    // (MapControl.FollowRoutePen). Cyan by default so it never reads as a route we're driving.
+    FollowRoute,
 }

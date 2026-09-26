@@ -1,5 +1,10 @@
 # Version history
 
+## 3.109.0
+
+- An `@path` reply (e.g. from your party leader) draws their route on the Navigation map, CURRENT NAV rows and status line in cyan under a FOLLOWING badge, planned from the reply alone
+- The drawn route matches the steps they report left — trying teleports, gate items, avoided rooms and level/toll gates when your own route differs — and shortens as you follow
+
 ## 3.108.0
 
 - Monsters table gains Landmass / Region / Area columns, filled for every Paradigm monster with a spawn room or a known summoner

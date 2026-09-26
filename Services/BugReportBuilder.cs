@@ -1316,6 +1316,15 @@ public static class BugReportBuilder
 
         AppendLastRoutePlan(sb, svc);
 
+        // Another player's route drawn from their @path reply is rebuilt from this
+        // reply alone, so it's the input a "their route looks wrong" report needs.
+        Kv(sb, "Last @path reply",
+            svc.PathReply?.Last is { } p
+                ? $"from {p.Sender} {(DateTimeOffset.UtcNow - p.At).TotalSeconds:F0}s ago: at {p.Report.LeaderRoom}, "
+                  + (p.Report.Destination is { } pd ? $"walking to {pd}" : p.Report.LoopName is { } pl ? $"loop '{pl}'" : "no destination")
+                  + $", step {p.Report.Step}/{p.Report.TotalSteps}"
+                : "(none)");
+
         sb.Append("\n**Obstacle handlers (door / hidden exit / trap)**\n\n");
         Game.Map.DoorOpenManager door = svc.Door;
         Kv(sb, "Door FSM", $"{door.CurrentState}"

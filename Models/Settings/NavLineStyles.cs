@@ -11,6 +11,7 @@ public sealed class NavLineStyles
     public NavLineStyle? Preview { get; set; }
     public NavLineStyle? LoopBuilder { get; set; }
     public NavLineStyle? AutoLair { get; set; }
+    public NavLineStyle? FollowRoute { get; set; }
 
     public NavLineStyle? Get(NavLineKind kind) => kind switch
     {
@@ -19,6 +20,7 @@ public sealed class NavLineStyles
         NavLineKind.Preview     => Preview,
         NavLineKind.LoopBuilder => LoopBuilder,
         NavLineKind.AutoLair    => AutoLair,
+        NavLineKind.FollowRoute => FollowRoute,
         _                       => null,
     };
 
@@ -31,6 +33,7 @@ public sealed class NavLineStyles
             case NavLineKind.Preview:     Preview = style;     break;
             case NavLineKind.LoopBuilder: LoopBuilder = style; break;
             case NavLineKind.AutoLair:    AutoLair = style;    break;
+            case NavLineKind.FollowRoute: FollowRoute = style; break;
         }
     }
 
@@ -47,5 +50,6 @@ public sealed class NavLineStyles
     // the writer drop the whole object from Global settings rather than persist an
     // all-null husk.
     public bool IsEmpty =>
-        Goto is null && Loop is null && Preview is null && LoopBuilder is null && AutoLair is null;
+        Goto is null && Loop is null && Preview is null && LoopBuilder is null && AutoLair is null
+        && FollowRoute is null;
 }

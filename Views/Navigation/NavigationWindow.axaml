@@ -158,6 +158,11 @@
         <Style Selector="TextBlock.RailSectionHeader.CurrentNavWalk">
             <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
         </Style>
+        <!-- Following a party leader's @path route — the follower cyan, so a route we're
+             watching never reads as one we're driving. -->
+        <Style Selector="TextBlock.RailSectionHeader.CurrentNavFollow">
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+        </Style>
 
         <!-- Compact right-rail Expander — slimmer header, no chrome
              box, chevron on the right. HorizontalAlignment=Stretch +
@@ -266,6 +271,14 @@
         <Style Selector="Border.StatusBadge.LairState TextBlock">
             <Setter Property="Foreground" Value="#0E0E0E"/>
         </Style>
+        <!-- FOLLOWING — showing a party leader's @path route, not driving one: cyan. -->
+        <Style Selector="Border.StatusBadge.FollowingState">
+            <Setter Property="Background" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentCyanBrush}"/>
+        </Style>
+        <Style Selector="Border.StatusBadge.FollowingState TextBlock">
+            <Setter Property="Foreground" Value="#0E0E0E"/>
+        </Style>
         <!-- Tier overlays — engine-recovery gate state. Border-only;
              fill stays the engine colour. Tier 2 = gate watching for
              1-of-1 recovery (yellow); Tier 3 = backtrack recovery
@@ -327,6 +340,9 @@
         <Style Selector="Border.NavRow.Current">
             <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
         </Style>
+        <Style Selector="Border.NavRow.Current.Following">
+            <Setter Property="Background" Value="{StaticResource AccentCyanBrush}"/>
+        </Style>
         <Style Selector="Border.NavRow.Current TextBlock">
             <Setter Property="Foreground" Value="#0E0E0E"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -376,6 +392,7 @@
                         Classes.WalkingState="{Binding EngineActionIsWalking}"
                         Classes.LoopingState="{Binding EngineActionIsLooping}"
                         Classes.LairState="{Binding EngineActionIsLair}"
+                        Classes.FollowingState="{Binding ShowingLeaderRoute}"
                         Classes.Tier2State="{Binding IsTier2}"
                         Classes.Tier3State="{Binding IsTier3}">
                     <TextBlock Text="{Binding TopBarStatusBadge}"/>
@@ -676,6 +693,7 @@
                                  NavLineStyles="{Binding NavLineStyles}"
                                  WalkPath="{Binding WalkPath}"
                                  PreviewPath="{Binding PreviewPath}"
+                                 LeaderRoutePath="{Binding LeaderRouteLine}"
                                  LoopPath="{Binding LoopPath}"
                                  LoopBuilderPath="{Binding LoopBuilderPath}"
                                  LoopBuilderWaypoints="{Binding LoopBuilderWaypoints}"
@@ -1302,12 +1320,13 @@
                                          button only shows while a route is executing; a
                                          click on it opens the window without toggling the
                                          expander (Button consumes the pointer). -->
-                                    <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Stretch">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" HorizontalAlignment="Stretch">
                                         <TextBlock Grid.Column="0"
                                                    Classes="RailSectionHeader"
                                                    Classes.CurrentNavLair="{Binding EngineActionIsLair}"
                                                    Classes.CurrentNavLoop="{Binding EngineActionIsLooping}"
                                                    Classes.CurrentNavWalk="{Binding EngineActionIsWalking}"
+                                                   Classes.CurrentNavFollow="{Binding ShowingLeaderRoute}"
                                                    Text="CURRENT NAV"
                                                    VerticalAlignment="Center"
                                                    Margin="0"/>
@@ -1325,6 +1344,21 @@
                                                 VerticalAlignment="Center"
                                                 Margin="6,0,8,0"
                                                 ToolTip.Tip="Open the current route's full step plan, with the lair monsters at each room."/>
+                                        <!-- Another player's route shown from their @path reply. -->
+                                        <Button Grid.Column="2"
+                                                Content="Clear"
+                                                IsVisible="{Binding ShowingLeaderRoute}"
+                                                Command="{Binding ClearLeaderRouteCommand}"
+                                                Background="{StaticResource ChromeBgElevBrush}"
+                                                BorderBrush="{StaticResource ChromeBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="3"
+                                                Padding="8,2"
+                                                FontSize="11"
+                                                Foreground="{StaticResource ChromeFgBrush}"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,8,0"
+                                                ToolTip.Tip="Stop showing the route from the @path reply."/>
                                     </Grid>
                                 </Expander.Header>
                                 <StackPanel Spacing="4" HorizontalAlignment="Stretch">
@@ -1589,6 +1623,7 @@
                                                 ToolTip.Tip="{Binding RowTooltip}"
                                                 Classes.Completed="{Binding IsCompleted}"
                                                 Classes.Current="{Binding IsCurrent}"
+                                                Classes.Following="{Binding IsFollowing}"
                                                 Classes.Upcoming="{Binding IsUpcoming}"
                                                 Classes.Ready="{Binding IsReady}">
                                             <Panel>

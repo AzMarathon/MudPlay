@@ -704,6 +704,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetGoWalkOpener(GoWalkToRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
         AppServices.Current.SetHighlightWhereOpener(HighlightWhereRoomIfOpen);
+        AppServices.Current.SetLeaderRouteOpener(ShowLeaderRouteIfOpen);
         AppServices.Current.SetNavManagerOpener(OpenNavManager);
         AppServices.Current.SetTypedInputSender(SendUserText);
 
@@ -4877,6 +4878,14 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (_navigationWindow?.DataContext is ViewModels.Navigation.NavigationViewModel vm)
             vm.ShowWhereHighlight(key);
+    }
+
+    // Draw another player's route from their @path reply on the map, but only if it's
+    // open — same rule as the @where flash.
+    private void ShowLeaderRouteIfOpen(string sender, Game.Remote.PathReport report)
+    {
+        if (_navigationWindow?.DataContext is ViewModels.Navigation.NavigationViewModel vm)
+            vm.ShowLeaderRoute(sender, report);
     }
 
     // Toolbar Start, which doubles as Resume. USER-paused → resume. Idle with a

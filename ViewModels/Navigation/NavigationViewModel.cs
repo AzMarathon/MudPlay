@@ -166,6 +166,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _loopFilterDebounce?.Stop();
         _gotoFilterDebounce?.Stop();
         _whereHighlightPump?.Stop();
+        _leaderRouteTimer?.Stop();
         _services.Settings.GlobalSettingsChanged -= OnGlobalSettingsChanged;
         _services.RoomTracker.StateChanged -= OnTrackerStateChanged;
         _services.Recovery.TierChanged    -= OnRecoveryTierChanged;
@@ -910,6 +911,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private RoomKey? _currentRoomKey;
     partial void OnCurrentRoomKeyChanged(RoomKey? value)
     {
+        AdvanceLeaderRoute(value);
         // Don't recompute the armed goto/search preview on every room while a loop
         // or auto-lair is running. That recompute is an uncached full-graph BFS plus
         // a full-map repaint, and the loop is round-trip-driven on this same UI
@@ -3857,6 +3859,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                             ? $"Queued: walk to {qd} — {reason}"
                             : $"Queued: walk to {qd}";
                     }
+                    if (ShowingLeaderRoute) return _leaderStatus!;
                     Room? here = _services.RoomTracker.State.CurrentRoom;
                     return here is null ? "—" : FormatRoomRef(here.Key);
                 }
@@ -4005,7 +4008,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         NavigationEngineKind.Walking  => "WALKING",
         NavigationEngineKind.Looping  => "LOOPING",
         NavigationEngineKind.AutoLair => "AUTO-LAIR",
-        _                             => "IDLE",
+        _                             => ShowingLeaderRoute ? "FOLLOWING" : "IDLE",
     };
 
     // Boolean view-shaped helpers — drive the badge background class via
@@ -4079,6 +4082,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsRunningLoopEditable));
         OnPropertyChanged(nameof(ShowCurrentNavList));
         OnPropertyChanged(nameof(EngineActionIsLair));
+        OnPropertyChanged(nameof(ShowingLeaderRoute));
+        OnPropertyChanged(nameof(LeaderRouteLine));
         OnPropertyChanged(nameof(LoopModeButtonLabel));
         OnPropertyChanged(nameof(LoopModeButtonIsStop));
         OnPropertyChanged(nameof(LairModeButtonLabel));
@@ -4421,7 +4426,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // The Details… button shows whenever there's a route to detail — one the engine
     // is executing, OR a previewed walk-to armed via the search box (the red preview
     // line on the map).
-    public bool CanShowRouteDetails => IsAnyExecuting || PreviewPath is { Count: > 1 };
+    public bool CanShowRouteDetails =>
+        IsAnyExecuting || PreviewPath is { Count: > 1 } || LeaderRouteLine is { Count: > 1 };
 
     [RelayCommand]
     private void ShowRouteDetails()
@@ -4446,6 +4452,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private string RouteDetailsTitle()
     {
         bool executing = IsAnyExecuting;
+        if (!executing && PreviewPath is null && ShowingLeaderRoute) return LeaderRouteDetailsTitle();
         RoomKey? dest = executing ? DestinationRoomKey : QueuedDestination;
         string prefix = executing ? "Current route" : "Route preview";
         if (dest is { } d)
@@ -4466,7 +4473,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         EngineActionIsWalking ? WalkPath
         : EngineActionIsLooping ? LoopPath
         : EngineActionIsLair ? AutoLairApproachPath
-        : PreviewPath;
+        : PreviewPath ?? LeaderRouteLine;
 
     // Row the CURRENT NAV ListBox should keep in view — the active step
     // while walking, the next-ready lair while auto-lairing. The window
@@ -4508,7 +4515,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 if (total <= 0) return null;
                 return Math.Clamp((double)runner.CurrentIndex / total, 0, 1);
             }
-            return null;
+            return LeaderRouteProgress;
         }
     }
 
@@ -4594,6 +4601,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 RebuildRunningLoopRows(loop);
                 break;
             }
+            case NavigationEngineKind.Idle when ShowingLeaderRoute:
+                PopulateLeaderRows();
+                break;
         }
     }
 

@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.108.0**
-> - Monsters table gains Landmass / Region / Area columns, filled for every Paradigm monster with a spawn room or a known summoner
-> - A monster's record has Landmass / Region / Area type-ahead boxes for anything the shipped data leaves unset, saved to the tier you pick
+> **Version 3.109.0**
+> - An `@path` reply (e.g. from your party leader) draws their route on the Navigation map, CURRENT NAV rows and status line in cyan under a FOLLOWING badge, planned from the reply alone
+> - The drawn route matches the steps they report left — trying teleports, gate items, avoided rooms and level/toll gates when your own route differs — and shortens as you follow
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
