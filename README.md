@@ -1,13 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.107.5**
-> - A loop paused mid-move by a fight now fights it: combat no longer judges the room it just left (a non-lair / do-not-attack room) and stands there being hit
-> - The bug report's combat-suppression line shows the verdict the engine acts on and which room it judged
-> - Rest / heal / run thresholds count only Default-set gear you actually have (worn or carried), else your live max; each figure is tagged (def) or (live)
-> - Killing a monster whose death summons another (a stitched zombie's bone snake) re-checks the room even when the kill was inferred from the exp line
-> - Conversation auto-scroll no longer switches itself off when old lines are trimmed; only scrolling up yourself pauses it
-> - `@quest update` (and the login flag check) ticks an unfinished quest's checklist up to the step the flag shows
+> **Version 3.107.6**
+> - A follower re-sends `@wait` when it drops below a rest floor again or is walked on while still recovering, so a leader whose wait window ran out stops again instead of dragging it along mid-rest
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

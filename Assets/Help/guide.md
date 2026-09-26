@@ -2802,7 +2802,9 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 ### If leading, wait only (s)
 
 **Default:** `90` seconds
-**What it does:** As leader, how long you keep watching for a disconnected member to come back before giving up on them.
+**What it does:** As leader, how long you keep watching for a disconnected member to come back before giving up on them — and how long a member's `@wait` holds your automation before you give up and move on without their `@ok` (0 = wait until they send it).
+
+**As a follower:** your client sends the leader `@wait` when you drop below a rest floor, and asks again whenever you drop below one afresh (HP or mana) or get walked on while still recovering — so if the leader's wait window runs out while you're resting, the next drop or the next room you're pulled into re-asks instead of leaving you dragged along. `@ok` goes once you're back to full rest-max.
 
 ### Return distance (rooms)
 

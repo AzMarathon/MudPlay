@@ -49,11 +49,18 @@ public sealed class PartyRestSync : IDisposable
     // the reason is still tracked so a later RequestOk balances. Idempotent at
     // the protocol level — the receiving leader's PartyEssentialHandlers.OnWait
     // dedupes via a HashSet so repeat sends don't double-count.
-    public void RequestWait(WaitReason reason)
+    //
+    // resend: telepath @wait even though a reason already holds the wait. The leader
+    // gives up on a wait after its "If leading, wait only" window, so a wait we still
+    // count as held may no longer be holding it; an engine that knows it needs the
+    // leader to stop NOW (a fresh drop below a rest floor, or being dragged along
+    // while still recovering) re-asks. A duplicate @wait is harmless — the leader
+    // dedupes waiting members.
+    public void RequestWait(WaitReason reason, bool resend = false)
     {
         bool wasEmpty = _waitReasons.Count == 0;
-        if (!_waitReasons.Add(reason)) return;
-        if (!wasEmpty) return;
+        bool added = _waitReasons.Add(reason);
+        if (!resend && (!added || !wasEmpty)) return;
         if (!CanSignal()) return;
         Telepath(_party.LeaderName!, "@wait");
     }

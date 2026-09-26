@@ -142,6 +142,10 @@ public sealed class HealthManager : IDisposable
     private Func<int>? _realMaxMa;
     private bool _skipRestDeferredRecovery;     // a do-not-rest room made us skip a needed rest; re-arm on the next room change
     private bool _partyWaitSignaled;            // @wait sent, awaiting @ok
+    private bool _wasHpBelowFloor;              // HP recovery gate held at the last Evaluate
+    private bool _wasMaBelowFloor;              // mana recovery gate held at the last Evaluate
+    private DateTimeOffset _lastWaitResentAt;   // rate-limits the dragged-while-recovering re-ask
+    private static readonly TimeSpan WaitResendInterval = TimeSpan.FromSeconds(5);
     private bool _hpGateAsserted;
     private bool _maGateAsserted;
     // True once a just-asserted gate has survived one deferred dispatch-tick
@@ -914,10 +918,24 @@ public sealed class HealthManager : IDisposable
         // until BOTH pools reach the full rest-max ceiling — the level the
         // user considers "rested" — decoupled from the movement floor.
         // PartyRestSync self-gates on membership, so these no-op solo/as leader.
+        //
+        // A FRESH drop re-asks even while still signaled: the @ok waits for full
+        // rest-max, so the signal can stay latched across several separate drops,
+        // and the leader stops honouring a wait after its "If leading, wait only"
+        // window — a follower that never re-asked got walked off mid-rest (report
+        // paradigm-20260925-210928: mana gate held for minutes, HP re-dropped with no
+        // @wait, the leader moved on).
         bool droppedBelowFloor = _hpGateAsserted || _maGateAsserted;
-        if (droppedBelowFloor && !_partyWaitSignaled)
+        // Per pool: an HP re-drop while the mana gate is already held is still fresh.
+        bool freshDrop = (_hpGateAsserted && !_wasHpBelowFloor) || (_maGateAsserted && !_wasMaBelowFloor);
+        _wasHpBelowFloor = _hpGateAsserted;
+        _wasMaBelowFloor = _maGateAsserted;
+        if (droppedBelowFloor && (!_partyWaitSignaled || freshDrop))
         {
             _partyWaitSignaled = true;
+            _lastWaitResentAt = _now();
+            if (_isPartyFollower?.Invoke() == true)
+                _log?.Info(LogCategory, "dropped below a rest floor while following — asking the leader to @wait");
             _requestPartyWait?.Invoke();
         }
         else if (_partyWaitSignaled)
@@ -1834,6 +1852,19 @@ public sealed class HealthManager : IDisposable
             _restInFlight = false;
             _restConfirmedByPrompt = false;
             _log?.Combat(LogCategory, "rest-in-flight cleared on room change");
+        }
+
+        // Moved while still below a rest floor as a follower: our own movement is held
+        // by the recovery gate, so this is the leader walking on — it isn't (or no
+        // longer is) waiting for us. Re-ask, rate-limited so a multi-room drag sends
+        // one @wait, not one per room.
+        if (_partyWaitSignaled && (_hpGateAsserted || _maGateAsserted)
+            && _isPartyFollower?.Invoke() == true
+            && _now() - _lastWaitResentAt >= WaitResendInterval)
+        {
+            _lastWaitResentAt = _now();
+            _log?.Info(LogCategory, "moved while still recovering — the leader isn't waiting; re-sending @wait");
+            _requestPartyWait?.Invoke();
         }
 
         // A move re-observes the room, so any post-force-clear rest hold is resolved

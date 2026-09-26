@@ -3861,7 +3861,9 @@ public sealed class AppServices
         // it to SelfIsLeader so only the leader rests on a wait.
         Health.SetPartyRoleSync(
             isPartyFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
-            requestPartyWait: () => PartyRest.RequestWait(Game.WaitReason.Health),
+            // HealthManager decides when to (re-)ask; resend so a wait the leader has
+            // timed out on is re-sent rather than deduped as already held.
+            requestPartyWait: () => PartyRest.RequestWait(Game.WaitReason.Health, resend: true),
             requestPartyOk: () => PartyRest.RequestOk(Game.WaitReason.Health),
             isLeaderResting: () => PartyLeaderRest.LeaderIsResting,
             requestPartyHeal: () => PartyRest.RequestHeal(),
