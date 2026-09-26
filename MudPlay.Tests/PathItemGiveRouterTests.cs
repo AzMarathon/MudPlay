@@ -63,10 +63,10 @@ public sealed class PathItemGiveRouterTests
         public IReadOnlyList<byte[]> Sent => _sent;
 
         // One NPC giver (Gnome Commander) at GiverA, three steps out, four on to
-        // dest, asked "ask commander orb" (the ask noun is the name's last word).
+        // dest, asked "ask gnome commander orb" (the full name, as AppServices builds it).
         public Harness WithNpcGiver()
         {
-            Givers[42] = new List<GiveSource> { new(GiverA, "ask commander orb", "Gnome Commander") };
+            Givers[42] = new List<GiveSource> { new(GiverA, "ask gnome commander orb", "Gnome Commander") };
             Dist[(Cur, GiverA)] = 3;
             Dist[(GiverA, Dest)] = 4;
             return this;
@@ -100,7 +100,7 @@ public sealed class PathItemGiveRouterTests
 
         // The ask, then an inventory re-read — the hand-over line is per-giver
         // flavor text, so `i` is the reliable test of whether the give landed.
-        Assert.Equal(new[] { "ask commander orb", "i" }, h.Sent.Select(Decode).ToArray());
+        Assert.Equal(new[] { "ask gnome commander orb", "i" }, h.Sent.Select(Decode).ToArray());
     }
 
     [Fact]

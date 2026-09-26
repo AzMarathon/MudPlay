@@ -7836,6 +7836,12 @@ public sealed class AppServices
     // self-casting bless. Only PARTY-WIDE covers count: a single-target party buff never
     // lands on self, so it can't cover our self-cast. Drives the director's self-buff
     // suppression and the Buff Watchdog "covered by" label.
+    //
+    // Layer when possible, cover only when not: stock applies RemovesSpell only at cast,
+    // so a ONE-WAY remover (the self-buff doesn't remove the party buff back) layers —
+    // party buff first, then the self-buff (CollisionOrderConstraints orders them, and the
+    // clobber-clear re-arms the self-buff after each party recast). Only a mutual pair,
+    // or Paradigm's per-tick removal, can't coexist, so only those are covered.
     public IReadOnlyDictionary<string, string> SelfBuffCoverage()
     {
         Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
@@ -7865,6 +7871,7 @@ public sealed class AppServices
         if (selfBuffs.Count == 0) return map;
 
         if (buffs is null) return map;
+        bool layerOneWay = GameData.ActiveRealm != Game.RealmType.ParaMud;
         foreach (Models.Profile.BuffSlot pslot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;
@@ -7872,9 +7879,13 @@ public sealed class AppServices
             if (!IsPartyWideBuff(pslot.Spell)) continue;   // a single-target party buff never covers self
             HashSet<int> removed = RemovedSpellNumbers(pslot.Spell);
             if (removed.Count == 0) continue;
+            int partyNumber = Spellbook.FindByCastCode(pslot.Spell.Trim())?.Number ?? 0;
             foreach ((string code, int number) in selfBuffs)
-                if (removed.Contains(number) && !map.ContainsKey(code))
-                    map[code] = pslot.Spell.Trim();
+            {
+                if (!removed.Contains(number) || map.ContainsKey(code)) continue;
+                if (layerOneWay && !RemovedSpellNumbers(code).Contains(partyNumber)) continue;
+                map[code] = pslot.Spell.Trim();
+            }
         }
         return map;
     }
@@ -9458,11 +9469,10 @@ public sealed class AppServices
     // deterministic, keyword-carrying awards (a gated turn-in / purchase / quest
     // reward or a `random` roll isn't a reliable one-command hand-over), then
     // resolves each to a room + command: a Monster giver becomes
-    // `ask <noun> <keyword>` at each of its spawn rooms (Summoned By) — <noun> is
-    // the last word of the name, the game's `ask` parser taking a single-word
-    // target (shared GuardDoorCommandResolver.LastWord) — while a Room giver
-    // becomes the bare keyword typed verbatim in that room. The GiverName kept for
-    // the picker stays the full name (a readable "(ask Gnome Commander)" promise).
+    // `ask <name> <keyword>` at each of its spawn rooms (Summoned By) — the full
+    // name, which the game always accepts (shared GuardDoorCommandResolver.AskTarget)
+    // — while a Room giver becomes the bare keyword typed verbatim in that room. The
+    // GiverName kept for the picker is the display name ("(ask Gnome Commander)").
     // Computed lazily (only when a path-item need fires), so the fan-out is never
     // materialised at load time. Also decides DeterministicGiveExists, the
     // shop/drop stand-down.
@@ -9477,8 +9487,8 @@ public sealed class AppServices
             if (!g.Deterministic || g.Keyword.Length == 0) continue;
             if (g.Kind == ItemGiverKind.Monster)
             {
-                string noun = Game.Map.GuardDoorCommandResolver.LastWord(g.Name);
-                if (noun.Length == 0) continue;   // no addressable noun — can't ask
+                string noun = Game.Map.GuardDoorCommandResolver.AskTarget(g.Name);
+                if (noun.Length == 0) continue;   // no addressable name — can't ask
                 string command = $"ask {noun} {g.Keyword}";
                 foreach (Game.Map.RoomKey room in ItemSources.GiverMonsterRoomsOf(g.Number))
                     result.Add(new Game.Map.GiveSource(room, command, g.Name));

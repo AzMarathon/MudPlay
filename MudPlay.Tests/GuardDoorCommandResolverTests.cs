@@ -68,11 +68,11 @@ public sealed class GuardDoorCommandResolverTests : IDisposable
         Assert.All(cmds, c => Assert.Equal(133, c.AbilityGate));
 
         // The `ask` noun is the last word of the monster name.
-        Assert.Contains(cmds, c => c.Command == "ask guard morukai");
-        Assert.Contains(cmds, c => c.Command == "ask guard orfeo");
-        Assert.Contains(cmds, c => c.Command == "ask guard passage");
-        Assert.Contains(cmds, c => c.Command == "ask guard phoenix");
-        Assert.Contains(cmds, c => c.Command == "ask guard prophecy");
+        Assert.Contains(cmds, c => c.Command == "ask shadow guard morukai");
+        Assert.Contains(cmds, c => c.Command == "ask shadow guard orfeo");
+        Assert.Contains(cmds, c => c.Command == "ask shadow guard passage");
+        Assert.Contains(cmds, c => c.Command == "ask shadow guard phoenix");
+        Assert.Contains(cmds, c => c.Command == "ask shadow guard prophecy");
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public sealed class GuardDoorCommandResolverTests : IDisposable
 
         var cmds = GuardDoorCommandResolver.Resolve(store, 300, "gate keeper", 1500).ToList();
         Assert.Single(cmds);
-        Assert.Equal("ask keeper open", cmds[0].Command);
+        Assert.Equal("ask gate keeper open", cmds[0].Command);
         Assert.Equal(Direction.S, cmds[0].Direction);   // dir index 1 → S
         Assert.Equal(0, cmds[0].AbilityGate);            // no checkability
     }

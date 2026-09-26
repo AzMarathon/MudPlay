@@ -41,7 +41,7 @@ public sealed class RouteExpResolver : IDisposable
 
     // Per-monster facts the estimator needs. Exp is the true value EXP × ExpMulti
     // (bosses store the un-multiplied EXP with a separate multiplier). A boss —
-    // GameLimit 1 or a RegenTime of an hour or more — is killable only once per its
+    // GameLimit 1 (BossCatalog.IsBoss) — is killable only once per its
     // regen, so it's pulled out of the lair average and amortised over RegenHours.
     // DeathSpell is the spell fired when it dies (0 = none) — the summon-cascade root.
     private readonly record struct MonsterInfo(int Exp, bool IsBoss, int RegenHours, string Name, int DeathSpell);
@@ -269,7 +269,7 @@ public sealed class RouteExpResolver : IDisposable
                 string name = row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String
                     ? nm.GetString() ?? string.Empty : string.Empty;
                 int deathSpell = row.TryGetProperty("DeathSpell", out JsonElement ds) && ds.TryGetInt32(out int dv) ? dv : 0;
-                bool isBoss = limit == 1 || regen >= 1;   // RegenTime is in HOURS
+                bool isBoss = Game.GameData.BossCatalog.IsBoss(limit);
                 map[id] = new MonsterInfo(baseExp * multi, isBoss, Math.Max(1, regen), name, deathSpell);
             }
         }

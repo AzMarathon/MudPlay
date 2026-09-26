@@ -1411,7 +1411,7 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.NotNull(ex.MultiAction);
         Assert.Single(ex.MultiAction!.Actions);
         Assert.False(ex.MultiAction.HasRemoteActions);              // spoken here, no detour
-        Assert.Equal("ask guard morukai", ex.MultiAction.Actions[0].Commands[0]);
+        Assert.Equal("ask shadow guard morukai", ex.MultiAction.Actions[0].Commands[0]);
         Assert.Equal(0, ex.MultiAction.Actions[0].RequiredItemId);  // no held-item gate
     }
 
@@ -1504,7 +1504,7 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.Equal(RoomExitHint.Teleport, tele.Hint);
         Assert.Equal(new RoomKey(1, 224), tele.Target);          // ungated topic → Town Square
         Assert.NotNull(tele.TextCommands);
-        Assert.Equal("ask Lord teleport", tele.TextCommands![0]); // noun = last word of the name
+        Assert.Equal("ask Grey Lord teleport", tele.TextCommands![0]); // noun = last word of the name
         Assert.Equal(0, tele.MinLevel);
         // The synthetic edge never touches the cardinal fingerprint (only S).
         Assert.Equal(1u << (int)Direction.S, hall.ExitMask);

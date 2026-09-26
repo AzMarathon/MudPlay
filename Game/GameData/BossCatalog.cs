@@ -7,16 +7,16 @@ using MudPlay.Services;
 namespace MudPlay.Game.GameData;
 
 // One boss monster in the active set's Monsters table — a monster with GameLimit 1
-// (only one alive in the game at a time) or RegenTime >= 1 hour. RegenHours is the
-// respawn timer (RegenTime is HOURS for bosses; confirmed against the boss-timer
-// sheet). Mirrors BankCatalog: the "what is a boss" rule lives in one place.
+// (only one alive in the game at a time). RegenHours is its respawn timer
+// (RegenTime is HOURS; confirmed against the boss-timer sheet). Mirrors
+// BankCatalog: the "what is a boss" rule lives in one place.
 public readonly record struct BossMonster(int Number, string Name, int RegenHours);
 
 public static class BossCatalog
 {
-    // A monster is a boss if it's unique (GameLimit 1) or carries an hour-scale
-    // regen timer. Same rule RouteExpResolver applies inline for exp estimation.
-    public static bool IsBoss(int gameLimit, int regenTime) => gameLimit == 1 || regenTime >= 1;
+    // A boss is exactly GameLimit 1. A long RegenTime alone doesn't make one — a placed
+    // GameLimit-5 barmaid with RegenTime 1 still respawns the moment you re-enter.
+    public static bool IsBoss(int gameLimit) => gameLimit == 1;
 
     // Every boss monster in the active set, for a "seed against game data" pass.
     public static IReadOnlyList<BossMonster> Enumerate(GameDataCache gameData)
@@ -28,7 +28,7 @@ public static class BossCatalog
         foreach (JsonElement el in doc.RootElement.EnumerateArray())
         {
             int regen = GetInt(el, "RegenTime");
-            if (!IsBoss(GetInt(el, "GameLimit"), regen)) continue;
+            if (!IsBoss(GetInt(el, "GameLimit"))) continue;
             list.Add(new BossMonster(GetInt(el, "Number"), GetString(el, "Name"), Math.Max(0, regen)));
         }
         return list;
@@ -47,7 +47,7 @@ public static class BossCatalog
         {
             if (!string.Equals(GetString(el, "Name"), bossName, StringComparison.OrdinalIgnoreCase)) continue;
             int regen = GetInt(el, "RegenTime");
-            if (IsBoss(GetInt(el, "GameLimit"), regen)) return Math.Max(0, regen);
+            if (IsBoss(GetInt(el, "GameLimit"))) return Math.Max(0, regen);
         }
         return null;
     }

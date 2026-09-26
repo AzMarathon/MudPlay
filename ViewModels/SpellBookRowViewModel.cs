@@ -20,7 +20,8 @@ public sealed class SpellBookRowViewModel
         Func<int, string?>? resolveSpellName = null,
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts = null,
         int teachLevel = 0,
-        int spellcasting = 0)
+        int spellcasting = 0,
+        bool isParadigm = false)
     {
         Number = spell.Number;
         Short = spell.Short;
@@ -33,12 +34,12 @@ public sealed class SpellBookRowViewModel
         // Diff), null when we can't state one — a non-caster class, or the stat
         // line hasn't been read yet (Spellcasting 0). Level plays no part.
         bool isKai = spell.Magery == SpellCastChance.KaiMagery;
-        int? success = SpellCastChance.Compute(spellcasting, spell.Formula.Diff, isKai);
+        int? success = SpellCastChance.Compute(spellcasting, spell.Formula.Diff, isKai, isParadigm);
         SuccessSort = success ?? -1;
         SuccessText = success is { } pct
             ? $"{pct.ToString(System.Globalization.CultureInfo.InvariantCulture)}%"
             : "—";
-        SuccessTooltip = BuildSuccessTooltip(spellcasting, spell.Formula.Diff, isKai, success);
+        SuccessTooltip = BuildSuccessTooltip(spellcasting, spell.Formula.Diff, SpellCastChance.Cap(isKai, isParadigm), success);
 
         Mana = SpellCalculator.ManaCost(spell.Formula);
         ManaText = Mana.ToString();
@@ -91,7 +92,7 @@ public sealed class SpellBookRowViewModel
 
     // "Spellcasting 94 + spell difficulty (-5) = 89%" with the clamp spelled out,
     // or the reason there's no chance to state.
-    private static string BuildSuccessTooltip(int spellcasting, int diff, bool isKai, int? success)
+    private static string BuildSuccessTooltip(int spellcasting, int diff, int cap, int? success)
     {
         if (success is null)
             return "No cast chance yet — not a caster class, or your stats haven't been read "
@@ -100,7 +101,6 @@ public sealed class SpellBookRowViewModel
             return "Always succeeds — a utility spell that never fizzles.";
 
         var c = System.Globalization.CultureInfo.InvariantCulture;
-        int cap = isKai ? SpellCastChance.KaiCap : SpellCastChance.StockCap;
         int raw = spellcasting + diff;
         string signedDiff = diff >= 0 ? $"+{diff.ToString(c)}" : diff.ToString(c);
         string line = $"Spellcasting {spellcasting.ToString(c)} + spell difficulty ({signedDiff})"

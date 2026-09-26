@@ -7,8 +7,8 @@ it isn't here and you're unsure, ask.
 
 **Confidence tags**
 - **[CONFIRMED]** — the user confirmed it directly.
-- **[OBSERVED]** — grounded in the client's own parsers / message handling or a real
-  bug-report capture; strongly evidenced but not explicitly user-confirmed.
+- **[OBSERVED]** — grounded in a real bug-report capture, the imported game data, or the client's
+  own parsers / message handling; strongly evidenced but not explicitly user-confirmed.
 - **[NEEDS CONFIRMATION]** — the code currently relies on it, but it's unverified; ask before
   extending anything that depends on it.
 - **[CONFLICT — ask the user]** — two recorded statements disagree; both are kept until the user
@@ -21,14 +21,17 @@ it isn't here and you're unsure, ask.
 A status line with no `Realm:` part means the realm wasn't recorded — don't assume `both`.
 
 **Entry format.** Each `###` topic sits in the one chapter its subject belongs to, and reads:
-1. a status line — `*Status: CONFIRMED <date> (<source>; report \`<id>\`) · Realm: both | Paradigm | Stock*`;
+1. a status line — `*Status: CONFIRMED <date> (<source>; report \`<id>\`) · Realm: both | Paradigm | Stock | differs*`;
 2. the rules as bullets, each leading with the rule in **bold**, exact game text in backticks;
 3. a **Client use:** list when the client relies on the rule (the class / method, and the report that drove it).
 
 **Adding an entry.** Find the chapter by subject (the contents below) and extend the existing
 topic if there is one — search for the command, message text, or ability name first so a fact is
 never recorded twice. Start a new `###` topic only for a genuinely new subject. When a realm
-differs, say which in the status line or on the bullet.
+differs, say which in the status line or on the bullet. When new information contradicts an entry,
+rewrite it to the current truth and keep the old claim as a one-line superseded note. The full
+editing rules (what belongs here, chapter scopes, cross-references, renames) are in CLAUDE.md's
+*GAME_MECHANICS.md — the engine reference* section.
 
 ## Contents
 1. [Timing & rounds](#timing--rounds)
@@ -1260,7 +1263,7 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   branch caps at 100, and **GreaterMUD is Paradigm** *([CONFIRMED] 2026-09-26, user — "Paradigm" is
   the name the game goes by to players)*, so Paradigm's non-Kai cap is 100. An earlier note here said
   Paradigm "is a MajorMUD variant, not GreaterMUD" and shares the stock 98 — that was wrong.
-  - **Client gap:** `SpellCastChance.StockCap` (98) is still applied on Paradigm.
+  - **Client use:** `SpellCastChance.Cap` gives 98 on stock, 100 on Paradigm or for a Kai caster.
 - **Short-circuits:** `Diff ≥ 200` marks an always-succeeds utility spell → **100%**. A `Spellcasting`
   of **0** means the character isn't a caster (or the stat line isn't parsed yet) → **no stated chance**
   (the client shows "—", never a bogus 100%).
@@ -1908,7 +1911,7 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   - **`Spells.Targets` = 10 / 13 (Divided / Full Party Area) → a whole-party buff**, one cast with no target that blankets the party (`chant`, `mass frenzy`, `unholy fanaticism`, `rejuvenating field`). Lands on self too.
   - **Scope 0/1 (self-only), 4/8/9/12 (enemy), 7 (item) are NOT party buffs.**
 - **Single-target targeting is by selected member (given name), not class** — a slot blesses "all members" or a checklist of specific players, and only fires for a name that is a current `par` party member (never casts at someone uninvited). Targeting is by `par` membership, not room presence (`AppServices.IsGivenNameInRoom` is NOT a party-buff cast gate); a `You do not see <name> here!` reply backs that member off — see *Party → Targeted casts on a hiding member*.
-- **Supersession: a spell that carries RemovesSpell (Abil 122) removes the named spell** (the Spell Book renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g. **chant removes bless** — a Paradigm-only example), in a party we stop self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a single-target party buff can't cover self). (Paradigm 1.9.1 data has both directions — chant #23 removes bless and bless removes chant; see *`RemovesSpell` buff clobbering — literal lists, per-realm timing, shared wear-off*.) **Layer when possible, cover only when not** *([CONFIRMED] 2026-09-26, user)*: if the self-buff can be layered with the party buff (Stock, one-way remover — cast the party buff first, then the self-buff), layer them; only when layering is impossible (Paradigm's per-tick removal, or a mutual pair) cast the party buff and stop self-casting the one it removes. **Client gap:** `AppServices.SelfBuffCoverage` isn't realm-gated, so on Stock it still stops the self-cast for a one-way remover instead of layering.
+- **Supersession: a spell that carries RemovesSpell (Abil 122) removes the named spell** (the Spell Book renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g. **chant removes bless** — a Paradigm-only example), in a party we stop self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a single-target party buff can't cover self). (Paradigm 1.9.1 data has both directions — chant #23 removes bless and bless removes chant; see *`RemovesSpell` buff clobbering — literal lists, per-realm timing, shared wear-off*.) **Layer when possible, cover only when not** *([CONFIRMED] 2026-09-26, user)*: if the self-buff can be layered with the party buff (Stock, one-way remover — cast the party buff first, then the self-buff), layer them; only when layering is impossible (Paradigm's per-tick removal, or a mutual pair) cast the party buff and stop self-casting the one it removes. **Client use:** `AppServices.SelfBuffCoverage` covers only a mutual pair on Stock (a one-way remover layers, ordered by `CollisionOrderConstraints`); on Paradigm it covers every removed self-buff.
 - **Client use:**
   - `CastingDirector.PickUnifiedBuff` falls back to the self-bless timing gates for a `WholePartyOn` slot when `!PartyState.IsInParty`, instead of holding it forever behind "must be in a party" (report `paradigm-20260906-150624`: a whole-party item-cast buff, `platinum sceptre`, never fired outside a party).
   - **`WholePartyOn` remains the master enable**: the per-slot `CastSolo` option only extends an enabled slot to solo play and must not bypass an unchecked Party box. (2026-09-09, report `paradigm-20260909-220212`: unchecked whole-party rows kept casting solo through their default `CastSolo=true`, draining mana while the rest of the UI reported them off.)
@@ -2042,7 +2045,7 @@ Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in *NPC-pla
 *Status: CONFIRMED 2026-08-02 (user) · Realm: Stock (verified examples)*
 
 - **NPC-placed mobs regenerate on entry — effectively no respawn cap.** A monster placed via the room's **`NPC`** field (a fixture, distinct from a `Lair` group) with `RegenTime` 0-ish **regenerates the moment you (re-)enter the room after killing it** — no timer to wait out. These are the classic "rooming" targets (kill as fast as you can fight; bounded by kill speed, not respawn).
-- **Verified stock examples:** slime beast `1/1765` (`NPC=57`, `RegenTime 0`, 250 xp); cave worm `1/866` (`NPC=8`, `RegenTime 0`, 100 xp); barmaid `1/311` (`NPC=248`, `RegenTime 1`, **0 xp** — an evil-points target, not exp). Her regen timer follows the same mechanic as every other monster's, but she is also the room's placed `NPC`, so kill her, walk out and back in, and she is there again at once *([CONFIRMED] 2026-09-26, user)*. With `GameLimit 5` she is **not** a boss (see *Boss monsters*), so her placement respawns instantly like any other fixture. **Client gap:** `BossCatalog.IsBoss` and `RouteExpResolver` still count `RegenTime` ≥ 1 as a boss, so on stock the client treats her as one.
+- **Verified stock examples:** slime beast `1/1765` (`NPC=57`, `RegenTime 0`, 250 xp); cave worm `1/866` (`NPC=8`, `RegenTime 0`, 100 xp); barmaid `1/311` (`NPC=248`, `RegenTime 1`, **0 xp** — an evil-points target, not exp). Her regen timer follows the same mechanic as every other monster's, but she is also the room's placed `NPC`, so kill her, walk out and back in, and she is there again at once *([CONFIRMED] 2026-09-26, user)*. With `GameLimit 5` she is **not** a boss (see *Boss monsters*), so her placement respawns instantly like any other fixture. **Client use:** `BossCatalog.IsBoss` is `GameLimit == 1`, shared by `RouteExpResolver`, so she counts as an instant fixture.
 - **A room can carry both an NPC fixture and a `Lair` group** (cave-worm room `1/866` has `NPC=8` plus a lair), so a room's yield is the sum of its NPC target(s) + its lair contribution.
 - **In a loop, an instant mob still yields only once per lap** (bounded by lap time); only a stay-in-room **rooming** setup kills it every round.
 - **Exception — bosses:** a placed monster that qualifies as a boss is *not* instant; see *Boss monsters*.
@@ -2949,8 +2952,9 @@ Among protectable hazards, a further split governs whether the navigator may off
   - An older rule here said the parser takes ONE target token, so a multi-word name must reduce to its
     **last** word (`ask commander orb`, **not** `ask gnome commander orb`). That is superseded — the
     full name works — and the last word alone is **not** confirmed to work.
-  - **Client gap:** the guardian-door and greet-teleport resolvers send the last word
-    (`GuardDoorCommandResolver.LastWord`); the quest planner sends the full name.
+  - **Client use:** the guardian-door, greet-teleport and path-item give commands send the full name
+    with a leading article dropped (`GuardDoorCommandResolver.AskTarget`, formerly the last-word
+    `LastWord`); the quest planner also sends the full name.
 - **`ask` is the command for talking to an NPC through its keywords: `ask <npc name> <keyword>`** *([CONFIRMED] 2026-09-26, user)*. It runs whatever actions sit under that keyword.
   - Some keywords carry **checks with pass/fail criteria** and do different things depending on the result.
   - An NPC's keywords are listed in game data: the monster's `GreetTXT` textblock holds `keyword:textblock` lines. For example, Paradigm 1.9.1 gnome commander #332 has `GreetTXT` 809, which lists `dark-elf` / `plots` / `slaves` / `orb` / `passage`. `orb` → 814 → 815 `giveitem 807`, the item he drops, so `orb` is the keyword that hands over the orb. (The full dark-elf front-door chain is in *Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*; detecting the hand-over is in *Items, inventory & equipment → NPC keyword hand-over detection*.)

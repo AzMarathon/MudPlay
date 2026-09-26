@@ -10,7 +10,7 @@ namespace MudPlay.Game.Map;
 // a character to Town Square when asked). This is the teleport analogue of
 // GuardDoorCommandResolver, which decodes greet keywords that open a DOOR; the two
 // share the greet-chain reading primitives (ResolveGreetBlock / CleanKeyword /
-// LeadingInt / LastWord live on GuardDoorCommandResolver).
+// LeadingInt / AskTarget live on GuardDoorCommandResolver).
 //
 // A greet keyword points (through empty-Action LinkTo hops) at a directive block
 // carrying a `teleport <room> <map>` directive. We surface ONLY ungated teleports:
@@ -45,14 +45,14 @@ public static class GreetTeleportResolver
     private const int MaxDepth = 40;
 
     // Yield every ungated ask-transport a monster's greet exposes. greetNumber is
-    // Monsters.GreetTXT; monsterName is Monsters.Name (its last word becomes the
-    // `ask` noun). Empty when the greet exposes no ungated teleport keyword.
+    // Monsters.GreetTXT; monsterName is Monsters.Name (the `ask` target, see
+    // GuardDoorCommandResolver.AskTarget). Empty when the greet exposes no ungated teleport keyword.
     public static IEnumerable<GreetTeleport> Resolve(TBInfoStore store, int greetNumber, string? monsterName)
     {
         ArgumentNullException.ThrowIfNull(store);
         if (greetNumber <= 0) yield break;
 
-        string noun = GuardDoorCommandResolver.LastWord(monsterName);
+        string noun = GuardDoorCommandResolver.AskTarget(monsterName);
         if (noun.Length == 0) yield break;
 
         TBInfoEntry? greet = GuardDoorCommandResolver.ResolveGreetBlock(store, greetNumber, new HashSet<int>());

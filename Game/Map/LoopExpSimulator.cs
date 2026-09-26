@@ -23,9 +23,8 @@ public enum ExpCombatMode { SingleTarget, AreaAllTargets }
 
 // One exp target in a room: a lair group, an NPC fixture, or a boss.
 // RespawnSeconds 0 = an instant / NPC fixture (fires every pass). Included lets
-// the UI cherry-pick. A boss (IsBoss) is a monster with GameLimit 1 or a
-// RegenTime ≥ 1h: it's pulled OUT of the lair average and counted once across the
-// whole loop (deduped by MonsterId) at ExpPerMob ÷ (RespawnSeconds in hours) —
+// the UI cherry-pick. A boss (IsBoss) is a monster with GameLimit 1: it's pulled
+// OUT of the lair average and counted once across the whole loop (deduped by MonsterId) at ExpPerMob ÷ (RespawnSeconds in hours) —
 // killable only as often as its regen, so it adds a flat exp/hr, not a per-lap
 // clear. RespawnSeconds carries the boss's regen (hours×3600) for that math.
 //

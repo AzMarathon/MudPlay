@@ -31,7 +31,93 @@ The phased implementation plan is **complete** — the app is at **1.0.0** and i
   - **Feature reachability, not just dead code.** Dead-code scans only catch *unreferenced* symbols — they miss a feature that's been *half-disconnected*: its code is still referenced (so not "dead"), but a rework removed the entry point that let a human reach it. When a PR **removes or reworks an entry point** (menu item, button, window section, command binding, tab, right-click affordance), verify the feature it fronts is still **reachable and usable end-to-end** afterward — or is explicitly parked with a note. Flag "half-wired" surfaces: symbols still referenced but no longer reachable by a user, and empty-state traps (an affordance that only appears once content already exists, so the first item can never be created). This is the gap that stranded GOTO-favourites management for a long time.
 - **Push every commit to the open PR — but confirm it's still open first.** Before pushing follow-up work onto a branch with an existing PR, check the PR hasn't already merged (`gh pr view <n> --json state`). A merged PR means the branch is dead: new commits pushed to it strand outside `main`, so carry them to a fresh branch + PR instead. When the PR is confirmed open, every commit landed before it merges goes straight up — never accumulate local commits the user has to ask about. After each commit (or batch of related commits), `git push` so the PR on GitHub matches local HEAD. If the PR description's scope goes stale because of the new commits, refresh it via `gh pr edit` in the same push.
 - **Reproduce from a bug report.** Users capture client state via the in-app **Bug Report** (menu-bar button or terminal right-click → *Bug report…*), which writes a Markdown snapshot to their Desktop that they attach to a GitHub issue. When fixing a reported bug, start from that capture — its Movement / Player / Settings / Program-log / Scrollback sections pin the failing state at the moment of the problem. **Read every timestamped section newest-first: the report is captured right after the problem, so the incident lives at the END of any section that carries timestamps (Scrollback, Program-log, Movement, death history, and the like) — start at the latest timestamps and work back toward the earliest.** Entries near the top are old context, not the failure; never judge a report "not a bug / working as designed" off an early cycle — confirm against the last events. (Note the program-log window is often shorter than the scrollback and may not even reach the incident; cross-reference the timestamped sections against each other.)
-- **Never invent game mechanics.** MajorMUD / MegaMUD behavior is domain truth the code depends on — how a mechanic actually works (disarm/unequip effects, equip verbs, timers, message wording, stacking/immunity rules, party quirks, etc.) is **not** something to guess or infer from plausibility. A fabricated mechanic silently poisons every decision built on top of it — it's a dangerous path (e.g. assuming a "disarm / forced-unequip" effect exists when the game has none). If you're unsure how a game-engine mechanic behaves, **ask the user before building on it.** State the assumption explicitly, flag it as unverified, and get it confirmed. Confirmed mechanics get recorded in `GAME_MECHANICS.md` (the running reference of how the engine functions and what messages it emits) so the next session doesn't re-guess — read it before reasoning about engine behavior, and append to it when the user confirms something new.
+- **Never invent game mechanics.** MajorMUD / MegaMUD behavior is domain truth the code depends on — how a mechanic actually works (disarm/unequip effects, equip verbs, timers, message wording, stacking/immunity rules, party quirks, etc.) is **not** something to guess or infer from plausibility. A fabricated mechanic silently poisons every decision built on top of it — it's a dangerous path (e.g. assuming a "disarm / forced-unequip" effect exists when the game has none). If you're unsure how a game-engine mechanic behaves, **ask the user before building on it.** State the assumption explicitly, flag it as unverified, and get it confirmed. Confirmed mechanics get recorded in `GAME_MECHANICS.md` (the running reference of how the engine functions and what messages it emits) so the next session doesn't re-guess — read it before reasoning about engine behavior, and append to it when the user confirms something new. How to use and edit it: the next section.
+
+## GAME_MECHANICS.md — the engine reference
+
+`GAME_MECHANICS.md` (repo root) is the trusted record of how the MajorMUD engine behaves on Stock and Paradigm, and the exact text it prints. Facts in it are not re-derivable — each one came from the user, a bug-report capture, or the imported game data. Treat it like code: keep it structured, keep it true, never let it drift.
+
+### Looking something up
+
+- **Before reasoning about or building on any engine behavior**, look it up here. Find the chapter by subject in the Contents at the top, then **grep** for the exact thing: the message text, the command, a spell / item / monster / TBInfo number, an ability name or code, or a data field (`RegenTime`, `CastsSp`).
+- **Read the whole topic.** Check three things:
+  - the **status line**: how sure we are, when, from where, and which realm;
+  - the **inline tags** on individual bullets;
+  - the **Client use** list: which code already relies on the rule.
+- **A missing realm means "not recorded", not "both".** Never apply a rule to the other realm without checking. Stock and Paradigm differ in many places. Paradigm and GreaterMUD are the same game, and MMUD-Explorer's `bGreaterMUD` branch is Paradigm.
+- **Tagged facts need care before you build on them.**
+  - `[NEEDS CONFIRMATION]` or **Unrated**: check the code or data, or ask the user.
+  - `[CONFLICT — ask the user]`: always ask the user.
+
+### What belongs in it — and what doesn't
+
+**Belongs:**
+- engine behavior;
+- exact wire text, verbatim;
+- command syntax and verbs;
+- formulas;
+- game-data field meanings (ability codes, TBInfo directives, table columns);
+- realm differences;
+- timings and caps.
+
+Each fact carries its source: user confirmation, report ID, capture, or game-data lookup. A **Client use** note says which class/method relies on a rule, and the report that drove it. A **Client policy** note records a MudPlay design decision, and only when it sits beside the mechanic it acts on.
+
+**Doesn't belong:**
+- client architecture, UI or settings docs (settings go in the Help guide, `Assets/Help/guide.md`);
+- bug-fix narratives (one line plus the report ID at most);
+- speculation presented as fact;
+- `[[wiki-links]]` to private notes;
+- anything you inferred and nobody confirmed. If you must record a belief, tag it `[NEEDS CONFIRMATION]` with the question.
+
+### Structure
+
+- **Front matter:** title, purpose, the tag legend, the entry format, how to add an entry, and the Contents.
+- **16 fixed chapters, in this order.** Don't add or reorder chapters without asking:
+  1. **Timing & rounds** — combat and spell rounds, swings/fires per round, exp/hr ceilings, step time per room.
+  2. **Wire, prompt & command output** — prompt/statline, rate limiter, output formats of info commands, and the message catalogue (lines the client parses).
+  3. **Talk & chat channels** — say/gossip/gang/telepath forms, self-echo, telepath throttling.
+  4. **Character stats & progression** — CP, exp tables, trainers, and each stat's derived formulas.
+  5. **Armour, defence & to-hit** — AC/DR storage and sources, to-hit floors, dodge caps, reflect.
+  6. **Health, resting & recovery** — HP to 0, dropping, resting rules, regen, `look` wound bands.
+  7. **Combat** — attack announce/repeat, what breaks combat, the attack cascade, weapons, backstab, monster aggro and targeting, kill detection.
+  8. **Spells, buffs & conditions** — cast chance, resists, monster type tags, RemovesSpell, buff timers, ailments and cures, item-cast spells.
+  9. **Monsters, lairs & spawns** — lair/NPC/boss respawn, `Summoned By`, exp values, monster movement lines.
+  10. **Movement & navigation** — moves and bonks, dark/blind, light, stealth, doors/gates/winches, hidden exits, tolls, teleports, boats, hazards, route gates, `rm`.
+  11. **Items, inventory & equipment** — acquire/get/drop/batching, room item caps, equip/wear, slots, charges, chests, NPC hand-overs.
+  12. **Money, banks & shops** — denominations, coin wire text, stashing, bank commands, shop pricing, `price` directives.
+  13. **Party** — `par`, follow/drag, dropping, leader loss, training, ailment and `@`-signal exchange between party clients.
+  14. **Quests** — quest-flag values and the kill / dialogue step shapes.
+  15. **Death & corpse recovery** — death threshold and lines, the effect wipe, deathpile / corpse / spill-over, coins.
+  16. **Sysop commands** — `sys …` gating and output.
+- **Headings:** `##` is a chapter, `###` is a topic. Nothing deeper; use bullets and sub-bullets inside a topic. One `###` per subject. Never two topics on the same subject in different places.
+- **Topic shape:**
+  1. **Status line** directly under the heading:
+     `*Status: CONFIRMED 2026-09-26 (user; report \`paradigm-20260926-102406\`) · Realm: both | Paradigm | Stock | differs*`
+     When facts in one topic have different confidence, put the tag inline on each bullet instead.
+  2. **Rules as bullets**, each leading with the rule in **bold**, then the detail. Exact game text and commands go in backticks, verbatim, including case and trailing punctuation.
+  3. A **Client use:** list at the end, when code relies on the rule: class/method names plus the report that drove it.
+- **Tags:**
+  - `[CONFIRMED]` — the user said so.
+  - `[OBSERVED]` — a capture, the code, or a game-data lookup.
+  - `[NEEDS CONFIRMATION]` — unverified; add the question.
+  - `[CONFLICT — ask the user]` — two statements disagree; keep both until the user settles it.
+  - **Unrated** — no confidence was recorded.
+  - **Client policy** — a MudPlay design decision.
+- **Dates and IDs:** dates are absolute (`YYYY-MM-DD`), never "today". Report IDs stay backticked and complete (`paradigm-20260714-002413`, not `002413`).
+- **Cross-references** name the exact heading: *Chapter → Heading*, or just *Heading* within the same chapter. Never "see above / below / the next topic".
+
+### Adding or changing an entry
+
+1. **Search first.** Grep the command, message text, spell/item number and ability name, so a fact is never recorded twice. If the subject has a topic, **extend it**. Start a new `###` only for a genuinely new subject, in the chapter its subject belongs to.
+2. **One home per fact.** If a fact touches two chapters, put it where its subject lives and cross-reference it from the other. Don't copy it.
+3. **Settle what you can before asking.**
+   - Client-behavior questions: settle from the code.
+   - Data questions (ability codes, TBInfo chains, room exits, item fields): settle from the imported game data under the app folder's `game data/{set}/`.
+   - Only questions about how the game engine behaves go to the user.
+4. **When new information contradicts an entry**, rewrite the entry to the current truth. Keep the old claim as a one-line "(an earlier note said …; superseded <date>)". Never leave two live statements that disagree. If you can't tell which is right, mark `[CONFLICT — ask the user]` with the question.
+5. **Record user confirmations right away**, with the date and "user" as the source, when the answer arrives. Add a Client use line if code now depends on the rule.
+6. **Headings are referenced.** Code comments cite sections by heading (e.g. `GAME_MECHANICS "Winch gates"`), and so do other topics. When you rename a heading, grep both the repo and the file and update every reference in the same change.
+7. **Lose nothing.** Rewrites and merges keep every number, report ID, backticked term, date, source, caveat and Client use note. Before committing a restructuring edit, diff the backticked terms and report IDs against the previous version.
 
 ## Project structure
 
