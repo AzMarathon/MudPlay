@@ -1,12 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.107.19**
-> - On Stock, a whole-party buff that removes one of your self-buffs one way now layers with it (party buff first) instead of stopping the self-buff
-> - Spell Book Success % caps at 100% on Paradigm (98% stays for Stock)
-> - NPC `ask` commands (guardian doors, ask-transports, item givers) send the NPC's full name instead of only its last word
-> - A monster counts as a boss only when its GameLimit is 1, so placed fixtures like the stock barmaid are treated as instant respawns again
-> - CLAUDE.md gains a guide to using and editing GAME_MECHANICS.md
+> **Version 3.108.0**
+> - Monsters table gains Landmass / Region / Area columns, filled for every Paradigm monster that has a spawn room
+> - A monster's record has Landmass / Region / Area type-ahead boxes for anything the shipped data leaves unset, saved to the tier you pick
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

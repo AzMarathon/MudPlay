@@ -1,5 +1,10 @@
 # Version history
 
+## 3.108.0
+
+- Monsters table gains Landmass / Region / Area columns, filled for every Paradigm monster that has a spawn room
+- A monster's record has Landmass / Region / Area type-ahead boxes for anything the shipped data leaves unset, saved to the tier you pick
+
 ## 3.107.19
 
 - On Stock, a whole-party buff that removes one of your self-buffs one way now layers with it (party buff first) instead of stopping the self-buff
