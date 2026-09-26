@@ -87,6 +87,32 @@ public sealed class EmbeddedSeedsTests : IDisposable
     }
 
     [Fact]
+    public void ParadigmMonsterSeed_LandmassesArePlainPlaceNames()
+    {
+        // A landmass is a big named land (Mainland, Albion, Shadowmere…). A place reached
+        // through another one — a galleon, a cavern, a plane inside a fortress — is an
+        // area of that region, so no landmass may read "X (in Y)" or carry the word
+        // "Pocket" or "landmass".
+        AppPaths.ExtractEmbeddedSeeds(_dir);
+        using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(_dir, "MonsterOverlay.paradigm.seed.json")));
+
+        var landmasses = new System.Collections.Generic.SortedSet<string>(StringComparer.Ordinal);
+        foreach (System.Text.Json.JsonElement rec in doc.RootElement.EnumerateArray())
+            if (rec.TryGetProperty("Landmass", out System.Text.Json.JsonElement l) && l.GetString() is { Length: > 0 } name)
+                landmasses.Add(name);
+
+        Assert.Contains("Mainland", landmasses);
+        Assert.Contains("Albion", landmasses);
+        foreach (string name in landmasses)
+        {
+            Assert.DoesNotContain("(in ", name);
+            Assert.DoesNotContain("Pocket", name, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("landmass", name, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void ExtractEmbeddedNavSeed_UnzipsEachRealmTree()
     {
         // nav-seed ships as an embedded zip per realm; the extract must reconstruct

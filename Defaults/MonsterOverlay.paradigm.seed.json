@@ -2396,7 +2396,7 @@
     "Name": "Tyrannosaur",
     "Relationship": "Enemy",
     "Priority": "High",
-    "Landmass": "Temple Hallway / Temple, Stairwell",
+    "Landmass": "Dinos",
     "Region": "Timelord",
     "Area": "Forest Trail"
   },
@@ -2423,7 +2423,7 @@
     "Name": "ankylosaur",
     "Relationship": "Neutral",
     "Priority": "Normal",
-    "Landmass": "Temple Hallway / Temple, Stairwell",
+    "Landmass": "Dinos",
     "Region": "Timelord",
     "Area": "Forest Trail"
   },
@@ -2432,7 +2432,7 @@
     "Name": "stegosaur",
     "Relationship": "Neutral",
     "Priority": "Normal",
-    "Landmass": "Temple Hallway / Temple, Stairwell",
+    "Landmass": "Dinos",
     "Region": "Timelord",
     "Area": "Forest Trail"
   },
@@ -3434,7 +3434,7 @@
     "Name": "master assassin",
     "Relationship": "Enemy",
     "Priority": "High",
-    "Landmass": "Darkened Tunnels (in Black Fort)",
+    "Landmass": "Mainland",
     "Region": "Black Fort",
     "Area": "Darkened Tunnels"
   },
@@ -3449,7 +3449,7 @@
     "Name": "dying master assassin",
     "Relationship": "Friend",
     "Priority": "Normal",
-    "Landmass": "Darkened Tunnels (in Black Fort)",
+    "Landmass": "Mainland",
     "Region": "Black Fort",
     "Area": "Darkened Tunnels"
   },
@@ -3467,7 +3467,7 @@
     "Name": "massive white dragon",
     "Relationship": "Enemy",
     "Priority": "High",
-    "Landmass": "Black Ice Cavern (in Rocky Trail)",
+    "Landmass": "Mainland",
     "Region": "Rocky Trail",
     "Area": "Black Ice Cavern"
   },
@@ -4113,7 +4113,7 @@
     "Name": "Dread Captain",
     "Relationship": "Enemy",
     "Priority": "High",
-    "Landmass": "Ancient Galleon (in Arlysia)",
+    "Landmass": "Mainland",
     "Region": "Arlysia",
     "Area": "Ancient Galleon"
   },
@@ -4404,7 +4404,7 @@
     "Name": "triceratops",
     "Relationship": "Neutral",
     "Priority": "Normal",
-    "Landmass": "Temple Hallway / Temple, Stairwell",
+    "Landmass": "Dinos",
     "Region": "Timelord",
     "Area": "Forest Trail"
   },
@@ -4485,7 +4485,7 @@
     "Name": "baby white dragon",
     "Relationship": "Enemy",
     "Priority": "Low",
-    "Landmass": "Black Ice Cavern (in Rocky Trail)",
+    "Landmass": "Mainland",
     "Region": "Rocky Trail",
     "Area": "Black Ice Cavern"
   },
@@ -4494,7 +4494,7 @@
     "Name": "white dragon hatchling",
     "Relationship": "Enemy",
     "Priority": "Low",
-    "Landmass": "Black Ice Cavern (in Rocky Trail)",
+    "Landmass": "Mainland",
     "Region": "Rocky Trail",
     "Area": "Black Ice Cavern"
   },
@@ -5664,7 +5664,7 @@
     "Name": "spiked overlord",
     "Relationship": "Enemy",
     "Priority": "High",
-    "Landmass": "Burning Plains (in Ancient Fortress)",
+    "Landmass": "Mainland",
     "Region": "Ancient Fortress",
     "Area": "Burning Plains"
   },
@@ -6817,7 +6817,7 @@
     "Name": "First Mate Garn",
     "Relationship": "Enemy",
     "Priority": "High",
-    "Landmass": "Pirate Galleon (in Terra Fuego)",
+    "Landmass": "Terra Fuego",
     "Region": "Terra Fuego",
     "Area": "Pirate Galleon"
   },
@@ -6826,7 +6826,7 @@
     "Name": "Captain Flintlock",
     "Relationship": "Enemy",
     "Priority": "High",
-    "Landmass": "Pirate Galleon (in Terra Fuego)",
+    "Landmass": "Terra Fuego",
     "Region": "Terra Fuego",
     "Area": "Pirate Galleon"
   },
@@ -9398,7 +9398,7 @@
   {
     "Number": 608,
     "Name": "Sharh'Kur",
-    "Landmass": "Black Ice Cavern (in Rocky Trail)",
+    "Landmass": "Mainland",
     "Region": "Rocky Trail",
     "Area": "Black Ice Cavern"
   },
@@ -9818,42 +9818,42 @@
   {
     "Number": 737,
     "Name": "dark assassin",
-    "Landmass": "Darkened Tunnels (in Black Fort)",
+    "Landmass": "Mainland",
     "Region": "Black Fort",
     "Area": "Darkened Tunnels"
   },
   {
     "Number": 738,
     "Name": "dark stalker",
-    "Landmass": "Darkened Tunnels (in Black Fort)",
+    "Landmass": "Mainland",
     "Region": "Black Fort",
     "Area": "Darkened Tunnels"
   },
   {
     "Number": 739,
     "Name": "dark nightblade",
-    "Landmass": "Darkened Tunnels (in Black Fort)",
+    "Landmass": "Mainland",
     "Region": "Black Fort",
     "Area": "Darkened Tunnels"
   },
   {
     "Number": 741,
     "Name": "yeti",
-    "Landmass": "Black Ice Cavern (in Rocky Trail)",
+    "Landmass": "Mainland",
     "Region": "Rocky Trail",
     "Area": "Black Ice Cavern"
   },
   {
     "Number": 742,
     "Name": "ice golem",
-    "Landmass": "Black Ice Cavern (in Rocky Trail)",
+    "Landmass": "Mainland",
     "Region": "Rocky Trail",
     "Area": "Black Ice Cavern"
   },
   {
     "Number": 743,
     "Name": "ice wraith",
-    "Landmass": "Black Ice Cavern (in Rocky Trail)",
+    "Landmass": "Mainland",
     "Region": "Rocky Trail",
     "Area": "Black Ice Cavern"
   },
@@ -10511,14 +10511,14 @@
   {
     "Number": 978,
     "Name": "young white dragon",
-    "Landmass": "Black Ice Cavern (in Rocky Trail)",
+    "Landmass": "Mainland",
     "Region": "Rocky Trail",
     "Area": "Black Ice Cavern"
   },
   {
     "Number": 979,
     "Name": "adolescent white dragon",
-    "Landmass": "Black Ice Cavern (in Rocky Trail)",
+    "Landmass": "Mainland",
     "Region": "Rocky Trail",
     "Area": "Black Ice Cavern"
   },
@@ -11043,14 +11043,14 @@
   {
     "Number": 1243,
     "Name": "spiked juggernaut",
-    "Landmass": "Burning Plains (in Ancient Fortress)",
+    "Landmass": "Mainland",
     "Region": "Ancient Fortress",
     "Area": "Burning Plains"
   },
   {
     "Number": 1244,
     "Name": "fanged demon",
-    "Landmass": "Burning Plains (in Ancient Fortress)",
+    "Landmass": "Mainland",
     "Region": "Ancient Fortress",
     "Area": "Burning Plains"
   },
@@ -11169,7 +11169,7 @@
   {
     "Number": 1262,
     "Name": "wrackspawn",
-    "Landmass": "Chaotic Isle (in Shattered Expanse)",
+    "Landmass": "Shattered Expanse",
     "Region": "Shattered Expanse",
     "Area": "Chaotic Isle"
   },
@@ -12268,7 +12268,7 @@
   {
     "Number": 2412,
     "Name": "buccaneer",
-    "Landmass": "Pirate Galleon (in Terra Fuego)",
+    "Landmass": "Terra Fuego",
     "Region": "Terra Fuego",
     "Area": "Pirate Galleon"
   },
@@ -13941,7 +13941,7 @@
   {
     "Number": 2848,
     "Name": "wrackspawn",
-    "Landmass": "Chaotic Isle (in Shattered Expanse)",
+    "Landmass": "Shattered Expanse",
     "Region": "Shattered Expanse",
     "Area": "Chaotic Isle"
   },
@@ -14074,42 +14074,42 @@
   {
     "Number": 508,
     "Name": "young tyrannosaur",
-    "Landmass": "Temple Hallway / Temple, Stairwell",
+    "Landmass": "Dinos",
     "Region": "Timelord",
     "Area": "Forest Trail"
   },
   {
     "Number": 509,
     "Name": "tetraraptor",
-    "Landmass": "Temple Hallway / Temple, Stairwell",
+    "Landmass": "Dinos",
     "Region": "Timelord",
     "Area": "Forest Trail"
   },
   {
     "Number": 511,
     "Name": "zapsalis",
-    "Landmass": "Temple Hallway / Temple, Stairwell",
+    "Landmass": "Dinos",
     "Region": "Timelord",
     "Area": "Forest Trail"
   },
   {
     "Number": 512,
     "Name": "pteranodon",
-    "Landmass": "Temple Hallway / Temple, Stairwell",
+    "Landmass": "Dinos",
     "Region": "Timelord",
     "Area": "Forest Trail"
   },
   {
     "Number": 515,
     "Name": "deinodon",
-    "Landmass": "Temple Hallway / Temple, Stairwell",
+    "Landmass": "Dinos",
     "Region": "Timelord",
     "Area": "Forest Trail"
   },
   {
     "Number": 523,
     "Name": "deinonychus",
-    "Landmass": "Temple Hallway / Temple, Stairwell",
+    "Landmass": "Dinos",
     "Region": "Timelord",
     "Area": "Forest Trail"
   },
@@ -14179,7 +14179,7 @@
   {
     "Number": 612,
     "Name": "Sharh'Kur",
-    "Landmass": "Black Ice Cavern (in Rocky Trail)",
+    "Landmass": "Mainland",
     "Region": "Rocky Trail",
     "Area": "Black Ice Cavern"
   },
@@ -14200,7 +14200,7 @@
   {
     "Number": 875,
     "Name": "first mate",
-    "Landmass": "Ancient Galleon (in Arlysia)",
+    "Landmass": "Mainland",
     "Region": "Arlysia",
     "Area": "Ancient Galleon"
   },
@@ -14249,7 +14249,7 @@
   {
     "Number": 896,
     "Name": "skeletal parrot",
-    "Landmass": "Ancient Galleon (in Arlysia)",
+    "Landmass": "Mainland",
     "Region": "Arlysia",
     "Area": "Ancient Galleon"
   },
