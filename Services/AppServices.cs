@@ -176,6 +176,13 @@ public sealed class AppServices
     public void SetHighlightWhereOpener(Action<Game.Map.RoomKey> opener) => _highlightWhereOpener = opener;
     public void HighlightWhereRoom(Game.Map.RoomKey key) => _highlightWhereOpener?.Invoke(key);
 
+    // Shows another player's route from their @path reply on the Navigation map — ONLY
+    // if the window is already open, like the @where flash. Driven by PathReplyTracker.
+    // No-op until the main VM binds it.
+    private Action<string, Game.Remote.PathReport>? _leaderRouteOpener;
+    public void SetLeaderRouteOpener(Action<string, Game.Remote.PathReport> opener) => _leaderRouteOpener = opener;
+    public void ShowLeaderRoute(string sender, Game.Remote.PathReport report) => _leaderRouteOpener?.Invoke(sender, report);
+
     // Single source of truth for "are you sure?" prompts (exit /
     // hangup / save / delete). Lives at Global tier; mirrored from
     // SettingsService on startup and every save.
@@ -542,6 +549,7 @@ public sealed class AppServices
 
     // Recognises an @where reply telepath and flashes its room on the nav map.
     public Game.Remote.WhereReplyTracker WhereReply { get; private set; } = null!;
+    public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
 
     // Follower-side @comeback sender. Detects being left
     // behind (a movement-failure line just before "You are no longer
@@ -6616,6 +6624,11 @@ public sealed class AppServices
         // HighlightWhereRoom no-ops when the window is closed.
         WhereReply = new Game.Remote.WhereReplyTracker(Router, Log);
         WhereReply.TargetLocated += (_, room) => HighlightWhereRoom(room);
+
+        // @path reply → the other player's route on the nav map (see
+        // NavigationViewModel.LeaderRoute). Built from the reply alone; nothing is sent.
+        PathReply = new Game.Remote.PathReplyTracker(Router, Log);
+        PathReply.PathReported += ShowLeaderRoute;
 
         // Auto-deposit reroute. Built here
         // (after the movement engines) so it can snapshot / stop / restart

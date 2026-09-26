@@ -73,6 +73,13 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<IReadOnlyList<RoomKey>?> PreviewPathProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(PreviewPath));
 
+    // The party leader's route we're following, rebuilt from their @path reply.
+    // NavigationViewModel only sets it while our own engine is idle. Drawn in the
+    // follow pen (cyan by default) — never our own walk / loop colours — so it can't be
+    // mistaken for a route we're driving.
+    public static readonly StyledProperty<IReadOnlyList<RoomKey>?> LeaderRoutePathProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(LeaderRoutePath));
+
     // User-configured colour + thickness for each nav polyline (Settings → General,
     // Global tier). Null = every line draws its factory pen (NavLineDefaults). Bound
     // from NavigationViewModel, which keeps it live off the Global settings. Building
@@ -280,6 +287,12 @@ public sealed class MapControl : Control
     {
         get => GetValue(WalkPathProperty);
         set => SetValue(WalkPathProperty, value);
+    }
+
+    public IReadOnlyList<RoomKey>? LeaderRoutePath
+    {
+        get => GetValue(LeaderRoutePathProperty);
+        set => SetValue(LeaderRoutePathProperty, value);
     }
 
     public IReadOnlyList<RoomKey>? PreviewPath
@@ -722,8 +735,9 @@ public sealed class MapControl : Control
     // each map reflects the live Global settings; cached and rebuilt only when the
     // bound styles instance changes, so Render allocates no pens per frame. Default
     // colour rationale lives in NavLineDefaults — the engine schema is walk-to blue,
-    // loop green, preview / loop-builder red, auto-lair orange, and the loop colour
-    // is echoed by the Navigation rail headers + Loops/Auto-Lairs list rows.
+    // loop green, preview / loop-builder red, auto-lair orange, a followed leader's
+    // route cyan, and the loop colour is echoed by the Navigation rail headers +
+    // Loops/Auto-Lairs list rows.
     private NavLineStyles? _navPensBuiltFrom;
     private bool _navPensReady;
     private IPen _walkPathPen = null!;
@@ -731,8 +745,9 @@ public sealed class MapControl : Control
     private IPen _previewPathPen = null!;
     private IPen _loopBuilderPen = null!;
     private IPen _autoLairWalkPen = null!;
+    private IPen _followRoutePen = null!;
 
-    // Rebuild the five nav pens if the bound styles instance changed (or first draw).
+    // Rebuild the six nav pens if the bound styles instance changed (or first draw).
     private void EnsureNavPens()
     {
         if (_navPensReady && ReferenceEquals(_navPensBuiltFrom, NavLineStyles)) return;
@@ -743,6 +758,7 @@ public sealed class MapControl : Control
         _previewPathPen  = BuildNavPen(NavLineKind.Preview);
         _loopBuilderPen  = BuildNavPen(NavLineKind.LoopBuilder);
         _autoLairWalkPen = BuildNavPen(NavLineKind.AutoLair);
+        _followRoutePen  = BuildNavPen(NavLineKind.FollowRoute);
     }
 
     private IPen BuildNavPen(NavLineKind kind)
@@ -886,7 +902,7 @@ public sealed class MapControl : Control
             AutoLairWaypointsProperty, AutoLairApproachPathProperty,
             LoopApproachPreviewPathProperty, AvoidedRoomsProperty, LevelGatedRoomsProperty, StashRoomsProperty, GhRoomsProperty, GhFullRoomsProperty, LoopSequenceNumbersProperty,
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
-            PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty,
+            PreviewPathProperty, LeaderRoutePathProperty, TeleportRoomsProperty, DeathRoomsProperty,
             BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty,
             WhereTargetRoomsProperty, NavLineStylesProperty);
 
@@ -1382,6 +1398,7 @@ public sealed class MapControl : Control
         DrawPathPolyline(context, LoopBuilderPath,        _loopBuilderPen, tilePixels, cx, cy);
         DrawPathPolyline(context, LoopApproachPreviewPath, _loopBuilderPen, tilePixels, cx, cy);
         DrawPathPolyline(context, PreviewPath,            _previewPathPen, tilePixels, cx, cy);
+        DrawPathPolyline(context, LeaderRoutePath,        _followRoutePen, tilePixels, cx, cy);
         DrawPathPolyline(context, LoopPath,               _loopPathPen,    tilePixels, cx, cy);
         // When AutoLair is driving the walker, the dedicated approach
         // path renders the FULL leg in orange and stays stable across

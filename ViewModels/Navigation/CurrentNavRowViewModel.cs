@@ -37,6 +37,10 @@ public sealed class CurrentNavRowViewModel
     public bool IsCurrent   => Status == CurrentNavRowStatus.Current;
     public bool IsUpcoming  => Status == CurrentNavRowStatus.Upcoming;
     public bool IsReady     => Status == CurrentNavRowStatus.Ready;
+    // A step of a party leader's route we're following (not a route we're driving) —
+    // its current-row highlight is the follower cyan instead of green.
+    public bool IsFollowing { get; }
+
     public bool HasRemove   => RemoveKey is not null;
     public bool HasEdit     => EditKey   is not null;
 
@@ -46,7 +50,8 @@ public sealed class CurrentNavRowViewModel
         string? subLabel = null,
         RoomKey? removeKey = null,
         RoomKey? editKey = null,
-        bool isLoopSettingsEntry = false)
+        bool isLoopSettingsEntry = false,
+        bool isFollowing = false)
     {
         Index = index;
         Label = label;
@@ -55,6 +60,7 @@ public sealed class CurrentNavRowViewModel
         RemoveKey = removeKey;
         EditKey = editKey;
         IsLoopSettingsEntry = isLoopSettingsEntry;
+        IsFollowing = isFollowing;
     }
 }
 

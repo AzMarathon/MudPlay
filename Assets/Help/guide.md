@@ -364,6 +364,11 @@ The panel lists clickable links to everything attached to the room:
 
 `@where` several people and **each answered square lights up at once**, fading out on its own 15-second timer; the map re-centres on the **newest** reply as it lands, leaving the earlier flashes where they are. It only reacts while the Navigation window is open; a reply that lands with the map closed is ignored.
 
+**`@path` on the map.** Ask your party leader (or any MudPlay user) `@path` and their reply — `{walking to 6/1249; Rocky Path, Valley View (map 9, room 747); step 94/166}` — is drawn as **their route** while the Navigation window is open. Nothing extra is sent: MudPlay plans from the room they're in to where they're going and shows it where your own walk would show — the map line, the **CURRENT NAV** steps, the status line at the top, and **Details…** — all in **cyan**, with a cyan **FOLLOWING** badge in place of WALKING / LOOPING, so a route you're watching never reads as one you're driving. (The line's colour and thickness are the **Following line** under Settings → General, with the other nav lines.) It works whichever way the reply comes back (telepath, gangpath, say or a directed say), and it flashes the room they're standing in like `@where`.
+- **Matching their steps.** Your character isn't theirs — they may carry a key you don't, be above a level gate you're below, allow teleports, or skip rooms you avoid — so MudPlay tries each of those planning choices and keeps the route whose step count matches the steps they have left. The status line names the choice when it isn't your usual route (e.g. *route with teleports*); if nothing matches it draws the closest and says so (*closest route we can plan is 70 steps … vs their 73*).
+- **A loop** is drawn if you have a loop with the same name; otherwise the status line says you don't have it. Auto-lair and a boat leg have no destination in the reply, so there's nothing to draw beyond the room flash.
+- **While you follow**, a walk-to shortens behind you and the CURRENT NAV rows tick off; it clears when you arrive, when a newer `@path` reply lands, after 10 minutes without progress, or with **Clear** in the CURRENT NAV header. Start a walk or loop of your own and it takes those surfaces back.
+
 The **Overlays ▾** button layers lairs, shops, spell rooms, and **level gates** onto the map and toggles the **Legend** — which you can **drag anywhere on the map** (it remembers where you put it; toggle it off and back on and it snaps back into view if the window has since shrunk).
 
 The **Legend** keys every room-cell marker the map draws: the amber-ringed **current room**, the blue-ringed **walk-to destination**, room fills (lair, shop/bank, spell, auto-lair, up/down/up+down exit rooms), and the overlay glyphs — **deathpile** skull, **boss** crown (with a red halt ring when it's a *stop-before* boss), **trainer** chevrons, **gang-house** robot, **avoid** (red X), **stash** (gold X), the amber **level-gate** wedge, and the fading green **@where** result.
@@ -629,7 +634,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 | `@exp` | — | a session-progress line: exp **made** this session (zeroed by `@reset` / loop-start auto-reset), exp **needed** for the next level and which level that is (with the banked-levels ratio the status-bar TNL shows), the exp/hour rate, and the time to that level at the current rate (e.g. `Made: 474,216,179  Needed: 545,045,125 (L72, +2.14 lvls)  Rate: 14.3 m/hr  Will level in: 1d 14h 12m`) |
 | `@level` | — | level, current exp, and exp to next |
 | `@where` | — | room name, map/room, and exits |
-| `@path` | — | the movement engine's activity and step progress; when stopped/idle, names the last loop or auto-lair that was run (so you can help a dead player resume their circuit) |
+| `@path` | — | the movement engine's activity and step progress; when stopped/idle, names the last loop or auto-lair that was run (so you can help a dead player resume their circuit). The asker's map draws the route (see **`@path` on the map**) |
 | `@who` | — | other players / monsters in your room |
 | `@timer` | — or `<name>` | boss respawn timers (all, or matching a name) |
 | `@timer sync` | — | (client-to-client) replies with your active timers, compressed, for another MudPlay user's merge table — see "Sync boss timers" under the Bosses tab; same `@timer` permission |
@@ -1885,9 +1890,9 @@ With a real font selected (JetBrains Mono or a system font, not MX437), the zoom
 
 ### Navigation line appearance (color + thickness)
 
-**Default:** Go-to `#1E64DC` (blue), Loop `#7AB870` (green), Preview `#E66C5A` (orange-red), Loop-builder preview `#E66C5A`, Auto-Lair `#DC821E` (orange) — all 3.0 px thick.
+**Default:** Go-to `#1E64DC` (blue), Loop `#7AB870` (green), Preview `#E0A000` (amber), Loop-builder preview `#E66C5A` (orange-red), Auto-Lair `#DC821E` (orange), Following `#5FB3D9` (cyan) — all 3.0 px thick.
 **Available options:** Any RGB color via the color-picker; thickness 1.0–8.0 px in 0.5 steps.
-**What it does:** Sets the color and line thickness for each of the five distinct route lines the Navigation map draws — the active walk-to path, an active loop's route, a queued go-to preview, the in-progress loop-builder preview line, and an Auto-Lair run's route.
+**What it does:** Sets the color and line thickness for each of the six distinct route lines the Navigation map draws — the active walk-to path, an active loop's route, a queued go-to preview, the in-progress loop-builder preview line, an Auto-Lair run's route, and a party leader's route you're following (from their `@path` reply).
 **When you might change it:** Make the lines thicker or higher-contrast if you find the default map lines hard to see; give each route type a color you can tell apart at a glance.
 **Important notes:** This is a **Global-tier** setting — changing it changes the map for every character on the install, not just the current one. "Restore Defaults" resets every line at once, and each row has its own **Reset** button. Applies live — the Navigation map repaints immediately with no restart.
 

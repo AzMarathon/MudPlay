@@ -14,6 +14,7 @@ public static class NavLineDefaults
         NavLineKind.Preview     => ("#E0A000", 3.0, "Preview line"),
         NavLineKind.LoopBuilder => ("#E66C5A", 3.0, "Loop-builder preview line"),
         NavLineKind.AutoLair    => ("#DC821E", 3.0, "Auto-Lair line"),
+        NavLineKind.FollowRoute => ("#5FB3D9", 3.0, "Following line (a leader's @path route)"),
         _                       => ("#FFFFFF", 3.0, "?"),
     };
 
@@ -21,7 +22,7 @@ public static class NavLineDefaults
     public static readonly IReadOnlyList<NavLineKind> All = new[]
     {
         NavLineKind.Goto, NavLineKind.Loop, NavLineKind.Preview,
-        NavLineKind.LoopBuilder, NavLineKind.AutoLair,
+        NavLineKind.LoopBuilder, NavLineKind.AutoLair, NavLineKind.FollowRoute,
     };
 
     // Thickness bounds for the editor stepper (a hairline to a bold highlight).
