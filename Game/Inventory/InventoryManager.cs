@@ -156,6 +156,11 @@ public sealed partial class InventoryManager : IDisposable
     public event Action<string, int>? ItemSold;
     public event Action<string, int>? ItemDropped;
 
+    // Another player handed us an item: (item name, giver). Items only — a coin
+    // hand-off isn't raised. Lets death recovery treat gear a party member recovered
+    // for us and gave back as our deathpile coming home.
+    public event Action<string, string>? ItemReceived;
+
     // True after at least one successful full 'i' parse.
     public bool IsLoaded
     {
@@ -625,7 +630,10 @@ public sealed partial class InventoryManager : IDisposable
         Match received = ReceivedItemRegex().Match(line);
         if (received.Success)
         {
-            ApplyGiveTransfer(received.Groups[2].Value.TrimEnd(), +1);
+            string item = received.Groups[2].Value.TrimEnd();
+            ApplyGiveTransfer(item, +1);
+            if (!CurrencyTokenRegex().IsMatch(item))
+                ItemReceived?.Invoke(item, received.Groups[1].Value.Trim());
             return;
         }
 

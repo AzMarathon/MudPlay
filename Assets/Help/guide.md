@@ -1076,6 +1076,8 @@ Recovery matches your realm: on **Paradigm** it recovers your `corpse` in one co
 
 With **Auto-Equip on recovery** on, MudPlay re-wears everything you had on when you died — and if a hostile is in the room when the pile comes back, it does this **combat-aware**: grabbing the pile doesn't interrupt the fight, but wearing gear does, so it puts a few pieces on between combat rounds (weapon first, then armour heaviest-first) and keeps swinging in between, then equips whatever's left the moment the room clears.
 
+**Gear handed back by a party member.** In a party it's often the leader who recovers your corpse and gives the items back. Each item handed to you (*Nineteen just gave you shimmering white robes.*) is struck off your open deathpile; once the hand-off goes quiet the pile is marked **Recovered** (or **Partial** if pieces are still missing) with a note naming who returned it, and — with Auto-Equip on recovery on — the gear you were wearing goes back on, paced round by round if you're in a fight. Items that weren't part of the pile are ignored.
+
 On **Stock**, items that spilled into neighbouring rooms are chased down too:
 
 - A *deliberate* recovery — **Recover Now**, or an Auto-Recover walk-to that **ends** in the death room — looks through each exit, then walks to the rooms holding your items (disarming any traps in the way, and skipping a direction whose trap it can't get through), grabs your gear, and returns.

@@ -1092,6 +1092,22 @@ public sealed class InventoryManagerTests
         Assert.Contains("a brass key", Carried(h));
     }
 
+    // A hand-off raises ItemReceived (item, giver) so death recovery can count gear a
+    // party member gave back; a coin hand-off doesn't.
+    [Fact]
+    public void Receive_RaisesItemReceived_ForItemsNotCoins()
+    {
+        using Harness h = new();
+        FeedCarriedBaseline(h);
+        List<(string Item, string Giver)> got = new();
+        h.Inv.ItemReceived += (item, giver) => got.Add((item, giver));
+
+        h.Feed("Nineteen just gave you shimmering white robes.");
+        h.Feed("Nineteen just gave you 30 gold crowns.");
+
+        Assert.Equal(new[] { ("shimmering white robes", "Nineteen") }, got);
+    }
+
     // Giving coins adjusts the purse, not the pack — no phantom carried item.
     [Fact]
     public void GiveAway_Coins_AdjustsCurrencyNotCarried()

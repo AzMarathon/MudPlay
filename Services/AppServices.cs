@@ -5879,6 +5879,9 @@ public sealed class AppServices
                     && ac.TryGetInt32(out int acv) ? acv : 0);
         Tick.CombatTickElapsed += DeathRecovery.OnRecoveryCombatRound;
         Tick.HeartbeatElapsed += DeathRecovery.OnRecoveryHeartbeat;
+        // Gear a party member recovered for us and handed back counts as our deathpile
+        // coming home: struck off the pile and re-equipped (Auto-equip on recovery).
+        Inventory.ItemReceived += DeathRecovery.OnItemReceived;
         // Route walker over trapped exits through the TrapDisarmManager. The
         // walker only enqueues on a RoomExitHint.Trap — it already knows a trap
         // sits on the exit, so it disarms directly (trapKnown: true) instead of

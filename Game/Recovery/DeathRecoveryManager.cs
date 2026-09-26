@@ -67,6 +67,17 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // delegates are wired by AppServices after the combat engine exists; unbound
     // (tests / no hostile), ReequipAllWorn sends everything at once as before.
     private readonly Queue<DeathItem> _pendingEquip = new();
+
+    // Deathpile gear handed back by another player — a party member who recovered
+    // our corpse and gave the items over (a follower never walks back to its own
+    // pile; the leader does). Each received item is struck off the open pile as it
+    // lands; once the hand-off burst goes quiet the pile is finalised and the worn
+    // half re-equipped, exactly like recovering it ourselves (report
+    // paradigm-20260926-102406: gear given back sat unworn in the pack).
+    private DeathRecord? _handedBack;
+    private string _handedBackBy = "";
+    private int _handedBackSettleTicks;
+    private const int HandBackSettleTicks = 3;
     private (int Map, int Room)? _equipRoom;
     private bool _recoveryGateHeld;
     private Func<bool>? _hostilesPresent;
@@ -1041,7 +1052,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // combat round, so we don't fire it all at once — enqueue it and pace it across
     // rounds (OnRecoveryCombatRound), holding the CorpseRecovery gate meanwhile. No
     // hostile (or interleaving unbound) → put everything on at once, as before.
-    private void ReequipAllWorn(DeathRecord record)
+    // pacingRoom: the room a combat-paced re-equip belongs to — the death room by
+    // default (we recovered it there), or wherever we stood when the gear was handed
+    // back to us.
+    private void ReequipAllWorn(DeathRecord record, RoomKey? pacingRoom = null)
     {
         if (!AutoEquip || record.EquippedAtDeath is not { } worn || worn.Count == 0) return;
 
@@ -1055,11 +1069,13 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
         List<DeathItem> ordered = OrderForReequip(recovered, _armourClass);
 
-        if (_hostilesPresent?.Invoke() == true && record.Room is { } room)
+        (int Map, int Room)? paceIn = pacingRoom is { } pr ? (pr.Map, pr.Room)
+            : record.Room is { } dr ? (dr.Map, dr.Room) : null;
+        if (_hostilesPresent?.Invoke() == true && paceIn is { } room)
         {
             _pendingEquip.Clear();
             foreach (DeathItem item in ordered) _pendingEquip.Enqueue(item);
-            _equipRoom = (room.Map, room.Room);
+            _equipRoom = room;
             AssertRecoveryGate();
             _log?.Info(LogCategory,
                 $"auto-equip: hostile present — pacing {_pendingEquip.Count} piece(s) across combat rounds");
@@ -1129,6 +1145,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (_pendingEquip.Count > 0 && _hostilesPresent?.Invoke() != true)
             FlushEquipQueue();
 
+        if (_handedBack is { } returned && _handedBackSettleTicks > 0 && --_handedBackSettleTicks == 0)
+            OnHandBackSettled(returned);
+
         if (_sweep.Active) { _sweep.OnHeartbeat(); return; }          // LOOK phase paces looks
         if (_collectPhase != CollectPhase.None) { OnCollectHeartbeat(); return; }   // COLLECT paces walks
 
@@ -1191,6 +1210,48 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (!_recoveryGateHeld) return;
         _recoveryGateHeld = false;
         _clearRecoveryGate?.Invoke();
+    }
+
+    // Another player gave us an item. If it belongs to an open deathpile (Active /
+    // Partial), strike it off; the heartbeat settles the pile once the burst of
+    // "X just gave you …" lines goes quiet.
+    public void OnItemReceived(string itemName, string giver)
+    {
+        if (string.IsNullOrWhiteSpace(itemName)) return;
+        string got = ItemNameStore.Normalize(itemName);
+        foreach (DeathRecord rec in Records.Reverse())   // newest pile first
+        {
+            if (rec.Status is DeathRecoveryStatus.Recovered or DeathRecoveryStatus.Missing) continue;
+            rec.UnrecoveredItems ??= PileNames(rec);
+            int idx = rec.UnrecoveredItems.FindIndex(n =>
+                string.Equals(ItemNameStore.Normalize(n), got, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0) continue;
+
+            rec.UnrecoveredItems.RemoveAt(idx);
+            _handedBack = rec;
+            _handedBackBy = giver;
+            _handedBackSettleTicks = HandBackSettleTicks;
+            _log?.Info(LogCategory,
+                $"hand-back: {giver} gave us '{itemName}' from the {rec.RoomKeyText} deathpile "
+                + $"({rec.UnrecoveredItems.Count} item(s) still out)");
+            return;
+        }
+    }
+
+    // The hand-back burst went quiet: finalise the pile (all back, or only coins left)
+    // or hold it at Partial, then re-equip whatever worn gear came back — paced if a
+    // hostile's up, in the room we're in now rather than the death room.
+    private void OnHandBackSettled(DeathRecord record)
+    {
+        _handedBack = null;
+        string by = _handedBackBy;
+        if (FullyRecovered(record))
+            FinalizeRecovered(record, $"Handed back by {by}.");
+        else
+            SetStatus(record, DeathRecoveryStatus.Partial,
+                $"Handed back by {by} — {record.UnrecoveredItems?.Count ?? 0} item(s) still out.");
+        _profile.Save();
+        ReequipAllWorn(record, pacingRoom: _roomTracker.State.CurrentRoom?.Key);
     }
 
     private void FinalizeRecovered(DeathRecord record, string message)
