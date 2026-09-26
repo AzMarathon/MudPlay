@@ -257,7 +257,7 @@ public static class RemoteCommandCatalog
             ["@invite"]       = new("@invite", "asks you to invite the sender into your party"),
             ["@join"]         = new("@join", "asks you to join the sender's party"),
             ["@get-all"]      = new("@get-all", "pick up everything on the ground you can"),
-            ["@drop-all"]     = new("@drop-all", "drop everything unworn in your pack"),
+            ["@drop-all"]     = new("@drop-all [full|coins|keys]", "drop everything unworn in your pack; 'full' everything held (worn gear, light, keys, coins); 'coins' / 'keys' just those"),
             ["@deposit-all"]  = new("@deposit-all", "bank all excess coin"),
             ["@do"]           = new("@do <command>", "sends the command verbatim to the game (highest-trust)"),
             ["@kill"]         = new("@kill <target>", "retargets your combat onto the named monster this round"),

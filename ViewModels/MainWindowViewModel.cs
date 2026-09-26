@@ -1581,13 +1581,19 @@ public partial class MainWindowViewModel : ObservableObject
             // visual; everything else uses a single static glyph.
             string? alt = entry.ActionId == "ToggleConnection" ? "IconUnplug" : null;
 
+            List<ToolbarMenuAction>? subActions = entry.SubActions?
+                .Select(a => new ToolbarMenuAction(a.Label,
+                    GetType().GetProperty(a.CommandName)?.GetValue(this) as ICommand, a.Tooltip))
+                .ToList();
+
             ToolbarButtonItem row = new(
                 ToolbarItemKind.Button, entry.ActionId,
                 label: entry.Label,
                 iconResourceKey: entry.IconResourceKey,
                 tooltip: tooltip,
                 command: command,
-                alternateIconResourceKey: alt);
+                alternateIconResourceKey: alt,
+                subActions: subActions);
 
             ApplyToolbarRowState(row);
             ToolbarItems.Add(row);
@@ -5460,9 +5466,22 @@ public partial class MainWindowViewModel : ObservableObject
 
     // "Drop All" — drop every carried-but-unworn item.
     [RelayCommand]
-    private void DropAll() => AppServices.Current.Log.Info(
-        Game.Inventory.InventoryManager.LogCategory,
-        AppServices.Current.InventoryAction.DropAll());
+    private void DropAll() => RunDrop(Game.Remote.InventoryActionHandler.DropScope.Unworn);
+
+    // "Drop Everything" — everything held: worn gear, light, keys and coins too.
+    [RelayCommand]
+    private void DropEverything() => RunDrop(Game.Remote.InventoryActionHandler.DropScope.Full);
+
+    // "Drop Coins" / "Drop Keys" — just the coins / just the key ring.
+    [RelayCommand]
+    private void DropCoins() => RunDrop(Game.Remote.InventoryActionHandler.DropScope.Coins);
+
+    [RelayCommand]
+    private void DropKeys() => RunDrop(Game.Remote.InventoryActionHandler.DropScope.Keys);
+
+    private static void RunDrop(Game.Remote.InventoryActionHandler.DropScope scope) =>
+        AppServices.Current.Log.Info(Game.Inventory.InventoryManager.LogCategory,
+            AppServices.Current.InventoryAction.DropAll(scope));
 
     // "Deposit All" — bank wealth down to the keep-on-hand floor.
     [RelayCommand]

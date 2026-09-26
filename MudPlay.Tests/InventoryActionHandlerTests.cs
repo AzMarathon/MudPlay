@@ -38,7 +38,7 @@ public sealed class InventoryActionHandlerTests
         public required List<byte[]> WireSent { get; init; }
     }
 
-    private static Harness Setup()
+    private static Harness Setup(bool paradigm = false)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -52,7 +52,8 @@ public sealed class InventoryActionHandlerTests
         GroundItemTracker ground = new(router, new CurrencyNaming());
         CashSettings cash = new();
         List<byte[]> wire = new();
-        InventoryActionHandler handler = new(engine, inv, ground, party, () => cash, new CurrencyNaming());
+        InventoryActionHandler handler = new(engine, inv, ground, party, () => cash, new CurrencyNaming(),
+            isParadigm: () => paradigm);
         handler.SetWireSender(wire.Add);
         return new Harness
         {
@@ -223,6 +224,89 @@ public sealed class InventoryActionHandlerTests
             new[] { "drop rusty dagger", "drop healing potion", "drop jagged dagger" },
             Wire(h));
         Assert.Equal("dropping 3 carried items", Assert.Single(Replies(h.Engine)));
+    }
+
+    // A stacked pack entry: Stock has no item batching, so one `drop` per copy;
+    // Paradigm drops the stack with one counted command.
+    [Theory]
+    [InlineData(false, new[] { "drop black diamond", "drop black diamond", "drop black diamond" })]
+    [InlineData(true, new[] { "drop 3 black diamond" })]
+    public void DropAll_StackedItem_BatchesOnlyOnParadigm(bool paradigm, string[] expected)
+    {
+        Harness h = Setup(paradigm);
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+        Feed(h.Lines, "You are carrying 3 black diamond.");
+        Feed(h.Lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@drop-all"));
+
+        Assert.Equal(expected, Wire(h));
+    }
+
+    [Fact]
+    public void DropAllFull_DropsWornGearLightKeysAndCoins()
+    {
+        Harness h = Setup(paradigm: true);
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+        Feed(h.Lines, "You are carrying 2 runic coins, 94 gold crowns, a rusty dagger, "
+                    + "padded vest (Torso), torch (Readied/40).");
+        Feed(h.Lines, "You have the following keys: 3 black star key, gate key.");
+        Feed(h.Lines, "Wealth:    2009400 copper farthings");
+        Feed(h.Lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@drop-all full"));
+
+        string[] sent = Wire(h).ToArray();
+        Assert.Contains("drop rusty dagger", sent);
+        Assert.Contains("drop padded vest", sent);          // worn — dropped directly, no rem
+        Assert.Contains("drop torch", sent);                // the readied light
+        Assert.Contains("drop 3 black star key", sent);     // batched on Paradigm
+        Assert.Contains("drop gate key", sent);
+        Assert.Contains("drop 94 gold crown", sent);
+        Assert.Contains("drop 2 runic coin", sent);
+        Assert.StartsWith("dropping everything:", Assert.Single(Replies(h.Engine)));
+    }
+
+    [Fact]
+    public void DropAllCoins_DropsOnlyCoins()
+    {
+        Harness h = Setup();
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+        Feed(h.Lines, "You are carrying 94 gold crowns, 5 copper farthings, a rusty dagger.");
+        Feed(h.Lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@drop-all coins"));
+
+        Assert.Equal(new[] { "drop 5 copper farthing", "drop 94 gold crown" }, Wire(h));
+    }
+
+    [Fact]
+    public void DropAllKeys_OnStock_OneDropPerKey()
+    {
+        Harness h = Setup(paradigm: false);
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+        Feed(h.Lines, "You are carrying a rusty dagger.");
+        Feed(h.Lines, "You have the following keys: 2 black star key, gate key.");
+        Feed(h.Lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@drop-all keys"));
+
+        Assert.Equal(new[] { "drop black star key", "drop black star key", "drop gate key" }, Wire(h));
+        Assert.Equal("dropping 3 keys", Assert.Single(Replies(h.Engine)));
+    }
+
+    [Fact]
+    public void DropAll_UnknownScope_RepliesUsage_DropsNothing()
+    {
+        Harness h = Setup();
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+        Feed(h.Lines, "You are carrying a rusty dagger.");
+        Feed(h.Lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@drop-all everything"));
+
+        Assert.StartsWith("usage: @drop-all", Assert.Single(Replies(h.Engine)));
+        Assert.Empty(Wire(h));
     }
 
     // ----- @deposit-all ------------------------------------------------

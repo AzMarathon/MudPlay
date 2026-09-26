@@ -12,7 +12,9 @@ namespace MudPlay.Game.Remote;
 //   - @get-all — get <item> for every item on the room floor the
 //     GroundItemTracker last surveyed (cash is left for the cash policy engine).
 //   - @drop-all — drop <item> for every carried-but-unworn item (equipped gear
-//     is left worn).
+//     is left worn). @drop-all full drops everything held: worn gear too, plus
+//     the readied light, the key ring, and every coin; @drop-all coins / keys
+//     drop just the coins / just the key ring.
 //   - @deposit-all — bank the wealth above the per-denomination keep-on-hand
 //     floors, or withdraw up to them when the character is below. Amount is the
 //     copper-farthing total the game consolidates to the highest denomination on
@@ -39,6 +41,9 @@ public sealed class InventoryActionHandler : IDisposable
     private readonly PartyState _party;
     private readonly Func<CashSettings> _readCash;
     private readonly CurrencyNaming _naming;
+    // Paradigm batches a counted item command ("drop 3 black star key"); Stock needs
+    // one command per copy (CountedCommand). Unwired reads as Stock — the safe form.
+    private readonly Func<bool> _isParadigm;
     private Action<byte[]>? _wireSender;
     // A get-all that found an empty ground cache sent a re-survey CR and is waiting
     // for the next "You notice" survey to grab on. One-shot; reset on that survey.
@@ -51,8 +56,10 @@ public sealed class InventoryActionHandler : IDisposable
         GroundItemTracker ground,
         PartyState party,
         Func<CashSettings> readCash,
-        CurrencyNaming naming)
+        CurrencyNaming naming,
+        Func<bool>? isParadigm = null)
     {
+        _isParadigm = isParadigm ?? (() => false);
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(inventory);
         ArgumentNullException.ThrowIfNull(ground);
@@ -150,30 +157,101 @@ public sealed class InventoryActionHandler : IDisposable
         return $"getting {sent} ground item{(sent == 1 ? "" : "s")}";
     }
 
-    // @drop-all — drop <item> for every carried-but-unworn item.
-    // InventorySnapshot.CarriedItems already excludes worn gear (slot-suffixed
-    // lines land in EquippedItems) and currency tokens, so worn equipment and coin
-    // are never dropped. The leading article is stripped so the wire verb matches
-    // on the item's noun phrase ("a rusty dagger" → drop rusty dagger).
-    private void OnDropAll(RemoteCommandContext ctx) => ctx.Reply(DropAll());
+    // What a drop-all sweep drops. Unworn is the original @drop-all: the carried,
+    // unworn pack. Full is everything held — worn gear (a worn item drops with a
+    // plain `drop`, no `rem` first — see GAME_MECHANICS), the readied light, the key
+    // ring and every coin. Coins / Keys drop just that part.
+    public enum DropScope { Unworn, Full, Coins, Keys }
 
-    // Run the drop-all sweep and return the status line. Shared by the @drop-all
-    // remote handler and the local "Drop All" action. Emits a drop per
-    // carried-but-unworn item as a side effect.
-    public string DropAll()
+    // @drop-all [full|coins|keys] — bare is the unworn pack. InventorySnapshot
+    // .CarriedItems already excludes worn gear (slot-suffixed lines land in
+    // EquippedItems) and currency tokens. The leading article is stripped so the
+    // wire verb matches on the item's noun phrase ("a rusty dagger" → drop rusty
+    // dagger).
+    private void OnDropAll(RemoteCommandContext ctx)
+    {
+        if (ctx.Args.Count == 0) { ctx.Reply(DropAll()); return; }
+        if (ctx.Args.Count == 1 && TryParseScope(ctx.Args[0], out DropScope scope))
+        {
+            ctx.Reply(DropAll(scope));
+            return;
+        }
+        ctx.Reply("usage: @drop-all [full|coins|keys] (bare = unworn items)");
+    }
+
+    private static bool TryParseScope(string word, out DropScope scope)
+    {
+        switch (word.ToLowerInvariant())
+        {
+            case "full": scope = DropScope.Full; return true;
+            case "coins": scope = DropScope.Coins; return true;
+            case "keys": scope = DropScope.Keys; return true;
+            default: scope = DropScope.Unworn; return false;
+        }
+    }
+
+    // Run a drop-all sweep and return the status line. Shared by the @drop-all
+    // remote handler and the local Drop All actions. Emits the drops as a side
+    // effect. Coins go out as `drop N <coin noun>`, the same wording the cash
+    // Discard policy uses.
+    public string DropAll(DropScope scope = DropScope.Unworn)
     {
         if (!_inventory.IsLoaded) return "inventory not parsed yet (type i)";
-        IReadOnlyList<string> carried = _inventory.Snapshot.CarriedItems;
-        if (carried.Count == 0) return "nothing to drop";
+        InventorySnapshot snap = _inventory.Snapshot;
 
-        foreach (string item in carried)
+        int items = 0;
+        if (scope is DropScope.Unworn or DropScope.Full)
+            foreach (string item in snap.CarriedItems) items += DropNamed(item);
+        if (scope == DropScope.Full)
         {
-            string name = StripArticle(item);
-            if (name.Length == 0) continue;
-            Send($"drop {name}");
+            foreach (EquippedItem worn in snap.EquippedItems) items += DropNamed(worn.Name);
+            if (snap.ReadiedLight is { } light) items += DropNamed(light.Name);
         }
-        return $"dropping {carried.Count} carried item{(carried.Count == 1 ? "" : "s")}";
+        if (scope is DropScope.Full or DropScope.Keys && snap.Keys is { } keys)
+            foreach (string key in keys) items += DropNamed(key);
+
+        int coinKinds = 0;
+        if (scope is DropScope.Full or DropScope.Coins)
+        {
+            CurrencyHoldings c = snap.Currency;
+            coinKinds += DropCoins(c.Copper, "copper");
+            coinKinds += DropCoins(c.Silver, "silver");
+            coinKinds += DropCoins(c.Gold, "gold");
+            coinKinds += DropCoins(c.Platinum, "platinum");
+            coinKinds += DropCoins(c.Runic, _naming.RunicName);
+        }
+
+        if (items == 0 && coinKinds == 0) return "nothing to drop";
+        return scope switch
+        {
+            DropScope.Unworn => $"dropping {items} carried item{Plural(items)}",
+            DropScope.Keys => $"dropping {items} key{Plural(items)}",
+            DropScope.Coins => $"dropping all coins ({coinKinds} denomination{Plural(coinKinds)})",
+            _ => $"dropping everything: {items} item{Plural(items)}"
+                 + (coinKinds > 0 ? $" and all coins ({coinKinds} denomination{Plural(coinKinds)})" : ""),
+        };
     }
+
+    // Drop one pack / ring entry, which may be a stack ("43 black diamond"): one
+    // counted `drop` on Paradigm, one `drop` per copy on Stock (no item batching
+    // there). Returns how many copies it dropped.
+    private int DropNamed(string item)
+    {
+        (int count, string raw) = CountedCommand.SplitLeadingCount(item.Trim());
+        string name = StripArticle(raw);
+        if (name.Length == 0) return 0;
+        CountedCommand.Emit(Send, "drop", count, name, _isParadigm());
+        return count;
+    }
+
+    private int DropCoins(long count, string currency)
+    {
+        if (count <= 0) return 0;
+        Send($"drop {count} {_naming.WireNoun(currency)}");
+        return 1;
+    }
+
+    private static string Plural(int n) => n == 1 ? "" : "s";
 
     // @deposit-all — level the character's wealth to the raw keep-on-hand floor.
     // Over the floor → dep <excess>; under it → with <shortfall>; exactly on it →

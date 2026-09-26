@@ -687,7 +687,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 - `@trap <dir>` — search and disarm a trap in that direction; `@trap stop` aborts.
 - `@train` — trains (and applies your CP plan, if Auto-train-stats is on) — assumes you're already at a trainer.
 - `@equip-<set>` — wears one of your saved gear sets by keyword (e.g. `@equip-backstab`; `@equip-all` applies the Default set).
-- `@get-all` / `@drop-all` / `@deposit-all` — pick up everything on the ground / drop everything unworn / bank all excess coin.
+- `@get-all` / `@drop-all` / `@deposit-all` — pick up everything on the ground / drop everything unworn / bank all excess coin. `@drop-all full` drops **everything** held (worn gear, the readied light, keys and coins); `@drop-all coins` and `@drop-all keys` drop just those.
 - `@invite` / `@join` — ask you to invite the sender into your party, or to join theirs.
 - `@hangup` — drops your connection and stays down (no auto-reconnect), so you can read the screen and log back in by hand. `@relog` — the opposite: cleanly exits, then reconnects and auto-logs back in. Both need the **Hangup/disconnect** grant, and both are silenced while the toolbar's *Disable hangups* toggle is on.
 
@@ -1148,7 +1148,7 @@ Emergency survival is never held — a life-threatening heal, a flee, or an emer
 
 The **Action menu** also carries commands you fire once, on demand, rather than leaving running:
 
-- **Get All / Drop All / Equip All / Deposit All** — pick up everything on the floor, drop everything unworn, wear your Default gear set, or bank your wealth down to the keep-on-hand floor, right now. (These are the local twins of the `@get-all` / `@drop-all` / `@deposit-all` remote commands, and the toolbar Get / Drop / Equip / Deposit buttons drive the same actions.)
+- **Get All / Drop All / Equip All / Deposit All** — pick up everything on the floor, drop everything unworn, wear your Default gear set, or bank your wealth down to the keep-on-hand floor, right now. Drop All also comes in **Drop Everything** (worn gear, light, keys and coins too — no confirmation), **Drop Coins** and **Drop Keys**; on the toolbar they're behind the little **▾** beside the Drop All button. A stack goes in one counted `drop` on Paradigm and one `drop` per item on Stock. (These are the local twins of the `@get-all` / `@drop-all` / `@deposit-all` remote commands, and the toolbar Get / Drop / Equip / Deposit buttons drive the same actions.)
 - **Reset States** — the recovery escape hatch. Clears your own stuck ailments, waits, and movement holds **and every party member's ailment chips** (blind / poison / disease / confuse / held), returning you to an idle state — reach for it when an engine looks wedged (e.g. the walker parked "held" or "waiting" with nothing actually happening) or a party row is stuck showing a condition that's already gone. It also **re-equips your Default gear set** (undoing a stuck Pre-rest swap) and **re-polls `health`** — the game's compact one-line HP/pool readout, far less scroll than the full stat screen — so a drifted max HP/mana snaps back to the real value. (Typing `health` yourself re-anchors the same way.) It's also on the terminal's right-click menu.
 
 ## Base modes
