@@ -123,9 +123,30 @@ public sealed class GameDataTableSectionTests : IDisposable
         await vm.LoadAsync();
 
         vm.SearchText = "goblin";
+        vm.ApplySearchCommand.Execute(null);   // the box searches on Enter
 
         Assert.Equal(2, vm.FilteredRows.Count);
         Assert.All(vm.FilteredRows, r => Assert.Contains("Goblin", r.Get("Name")!));
+    }
+
+    [Fact]
+    public async Task SearchText_WaitsForEnter_ClearingReShowsAtOnce()
+    {
+        SeedMonsters("v1.11p",
+            "[{\"Id\":1,\"Name\":\"Goblin Warrior\"}," +
+             "{\"Id\":2,\"Name\":\"Orc Chieftain\"}]");
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        vm.SearchText = "goblin";                 // typing alone doesn't filter
+        Assert.Equal(2, vm.FilteredRows.Count);
+
+        vm.ApplySearchCommand.Execute(null);      // Enter
+        Assert.Single(vm.FilteredRows);
+
+        vm.SearchText = string.Empty;             // the clear button — no Enter needed
+        Assert.Equal(2, vm.FilteredRows.Count);
     }
 
     private static RangeFilter Range(MonstersSectionViewModel vm, string column)
@@ -146,10 +167,12 @@ public sealed class GameDataTableSectionTests : IDisposable
         await vm.LoadAsync();
 
         vm.SearchText = "weapon";          // ItemType 1 -> "Weapon"
+        vm.ApplySearchCommand.Execute(null);   // the box searches on Enter
         Assert.Single(vm.FilteredRows);
         Assert.Equal("long sword", vm.FilteredRows[0].Get("Name"));
 
         vm.SearchText = "feet";            // Worn 5 -> "Feet"
+        vm.ApplySearchCommand.Execute(null);   // the box searches on Enter
         Assert.Single(vm.FilteredRows);
         Assert.Equal("leather boots", vm.FilteredRows[0].Get("Name"));
     }
@@ -380,6 +403,7 @@ public sealed class GameDataTableSectionTests : IDisposable
         Assert.Contains("3 rows", vm.StatusText);
 
         vm.SearchText = "gob";
+        vm.ApplySearchCommand.Execute(null);   // the box searches on Enter
         Assert.Contains("1 / 3 rows", vm.StatusText);
     }
 }

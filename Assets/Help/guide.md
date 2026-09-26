@@ -1305,7 +1305,7 @@ Every numeric filter is a **min / max range** — either box can be blank for no
 
 ## Filtering a table
 
-Every table's **Filter…** box (top-left) *finds* rows in the current list as you type — it's live, no Enter needed, and clearing it shows everything again. By default it matches the **visible cell text** across **every** column, including the friendly label a formatter renders — so on the Items tab `Weapon`, `Plate`, or `Feet` match the type / armour / slot columns, and `Lawful Good` matches an alignment, not just the raw code behind it. On every imported table it also matches the **Use-tier badge**, so typing `Char`, `BBS`, `Glob`, or `Def` lists just the rows owned by that tier — a fast way to see only the records you've overridden.
+Every table's **Filter…** box (top-left) *finds* rows in the current list when you press **Enter** — typing alone doesn't re-filter, so even a big table stays responsive while you type — and clearing it shows everything again straight away. By default it matches the **visible cell text** across **every** column, including the friendly label a formatter renders — so on the Items tab `Weapon`, `Plate`, or `Feet` match the type / armour / slot columns, and `Lawful Good` matches an alignment, not just the raw code behind it. On every imported table it also matches the **Use-tier badge**, so typing `Char`, `BBS`, `Glob`, or `Def` lists just the rows owned by that tier — a fast way to see only the records you've overridden.
 
 Some tabs understand **special filter words** beyond that plain-text match:
 

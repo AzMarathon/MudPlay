@@ -478,7 +478,19 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         }
     }
 
+    // The Filter… box searches when Enter is pressed (ApplySearch), not on every
+    // keystroke — a full pass over a big table per character made typing lag. Emptying
+    // the box (its clear button, or a navigation that clears it) re-shows every row at
+    // once: that pass is free, the unfiltered view aliases AllRows.
     partial void OnSearchTextChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) ApplyFilter();
+        OnPropertyChanged(nameof(StatusText));
+    }
+
+    // Enter in the Filter… box.
+    [RelayCommand]
+    private void ApplySearch()
     {
         ApplyFilter();
         OnPropertyChanged(nameof(StatusText));
@@ -499,6 +511,12 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
             return;
         }
 
+        // Snapshot the active panel filters once for the pass, instead of re-walking
+        // every group's filters for every row.
+        _activeRanges = AllRangeFilters.Where(r => r.IsActive).ToArray();
+        _activeBools = AllBoolFilters.Where(b => b.IsActive).ToArray();
+        _activeCategories = AllCategoryFilters.Where(c => c.IsActive).ToArray();
+
         List<GameDataRow> matched = new();
         foreach (GameDataRow row in AllRows)
         {
@@ -507,6 +525,10 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         }
         FilteredRows = new ObservableCollection<GameDataRow>(matched);
     }
+
+    private RangeFilter[] _activeRanges = Array.Empty<RangeFilter>();
+    private BoolFilter[] _activeBools = Array.Empty<BoolFilter>();
+    private CategoryFilter[] _activeCategories = Array.Empty<CategoryFilter>();
 
     // ----- Curation filter panel (subclasses populate FilterGroups; empty = no panel) -----
     // A sidebar beside the grid: min/max ranges, checkboxes, and dropdowns, grouped
@@ -569,14 +591,14 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // category filters match the rendered display value.
     private bool PassesPanelFilters(GameDataRow row)
     {
-        foreach (RangeFilter r in AllRangeFilters)
-            if (r.IsActive && (!TryLeadingInt(row.Get(r.Column), out int v) || !r.Passes(v)))
+        foreach (RangeFilter r in _activeRanges)
+            if (!TryLeadingInt(row.Get(r.Column), out int v) || !r.Passes(v))
                 return false;
-        foreach (BoolFilter b in AllBoolFilters)
-            if (b.IsActive && !b.Passes(row.Get(b.Column)))
+        foreach (BoolFilter b in _activeBools)
+            if (!b.Passes(row.Get(b.Column)))
                 return false;
-        foreach (CategoryFilter c in AllCategoryFilters)
-            if (c.IsActive && !c.Passes(row.GetDisplay(c.Column)))
+        foreach (CategoryFilter c in _activeCategories)
+            if (!c.Passes(row.GetDisplay(c.Column)))
                 return false;
         return true;
     }
@@ -606,24 +628,28 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         if (!PassesPanelFilters(row)) return false;
         // Empty text box + active panel: the panel alone decides the match.
         if (filter.Length == 0) return true;
-        foreach (string column in Columns)
-        {
-            string? value = row.Get(column);
-            if (value is not null && value.Contains(filter, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        // Match the formatter-applied *display* label too, so a visible enum value
-        // the user sees ("Weapon", "Plate", "Feet", "Lawful Good") is searchable,
-        // not just its raw MDB code — Get above only sees the raw. The raw pass
-        // stays so numeric text ("300000") still matches a thousands-grouped cell.
-        foreach (GameDataCell cell in row.Cells)
-        {
-            if (cell.Value is { } display && display.Contains(filter, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
+        // One string per row holds everything the box searches — each shown column's raw
+        // value plus every cell's display label — built the first time the row is
+        // searched and reused after, so a search is one substring test per row. The
+        // display labels make a visible enum value ("Weapon", "Plate", "Lawful Good")
+        // searchable, not just its raw MDB code; the raw values keep numeric text
+        // ("300000") matching a thousands-grouped cell. A separator no one types keeps a
+        // hit from spanning two cells.
+        row.SearchIndex ??= BuildSearchIndex(row);
+        if (row.SearchIndex.Contains(filter, StringComparison.OrdinalIgnoreCase)) return true;
         // Also match against the Use-tier short label so the user can
         // filter by tier (e.g. typing "Char" surfaces every overridden row).
         return row.SourceTier.ToShortLabel().Contains(filter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string BuildSearchIndex(GameDataRow row)
+    {
+        System.Text.StringBuilder sb = new();
+        foreach (string column in Columns)
+            if (row.Get(column) is { Length: > 0 } value) sb.Append(value).Append('\u0001');
+        foreach (GameDataCell cell in row.Cells)
+            if (cell.Value is { Length: > 0 } display) sb.Append(display).Append('\u0001');
+        return sb.ToString();
     }
 
     // Join the labels of the enabled toggles into one compact, comma-separated cell
@@ -767,6 +793,10 @@ public sealed class GameDataRow
 
     // Short tier label rendered in the virtual "Use" column.
     public string UseLabel => SourceTier.ToShortLabel();
+
+    // The Filter… box's search text for this row (see RowMatches) — built on first search
+    // and kept, since a row's values don't change once loaded; a reload builds new rows.
+    public string? SearchIndex { get; set; }
 
     // Opaque per-section payload — used by sections (e.g. Messages) that need a direct handle
     // back to the source record after the user double-clicks. Lets the section avoid the
