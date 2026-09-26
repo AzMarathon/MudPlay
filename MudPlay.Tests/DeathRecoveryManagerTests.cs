@@ -241,6 +241,82 @@ public sealed class DeathRecoveryManagerTests
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
     }
 
+    // ----- gear handed back by a party member -------------------------
+
+    [Fact]
+    public void HandedBack_AllPileItems_FinalisesAndReequipsWorn()
+    {
+        // report paradigm-20260926-102406: the leader recovered the follower's corpse
+        // and gave the gear back; it sat unworn in the pack. Each "X just gave you …"
+        // strikes an item off the pile; once the burst goes quiet the pile finalises
+        // and the worn half goes back on.
+        using GraphHarness h = new();
+        Die(h, new[]
+        {
+            new EquippedItem("plate mail", "Torso"),
+            new EquippedItem("platinum mace", "Weapon Hand"),
+        }, new[] { "torch" });
+        h.Recovery.AutoEquip = true;
+
+        h.Recovery.OnItemReceived("plate mail", "Nineteen");
+        h.Recovery.OnItemReceived("platinum mace", "Nineteen");
+        h.Recovery.OnItemReceived("torch", "Nineteen");
+        Assert.Empty(h.Sent);                          // still settling — nothing worn yet
+
+        h.Heartbeat(); h.Heartbeat(); h.Heartbeat();   // the hand-off went quiet
+
+        Assert.Equal(new[] { "eq platinum mace", "wear plate mail" }, h.Sent.ToArray());
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Contains("Nineteen", h.Latest.RecoveryMessage);
+    }
+
+    [Fact]
+    public void HandedBack_SomeItems_HoldsPartial_AndReequipsWhatCameBack()
+    {
+        using GraphHarness h = new();
+        Die(h, new[]
+        {
+            new EquippedItem("plate mail", "Torso"),
+            new EquippedItem("steel helm", "Head"),
+        }, Array.Empty<string>());
+        h.Recovery.AutoEquip = true;
+
+        h.Recovery.OnItemReceived("plate mail", "Nineteen");
+        h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
+
+        Assert.Equal(new[] { "wear plate mail" }, h.Sent.ToArray());
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.Equal(new[] { "steel helm" }, h.Latest.UnrecoveredItems);
+    }
+
+    [Fact]
+    public void HandedBack_ItemNotFromThePile_Ignored()
+    {
+        using GraphHarness h = new();
+        Die(h, new[] { new EquippedItem("plate mail", "Torso") }, Array.Empty<string>());
+        h.Recovery.AutoEquip = true;
+
+        h.Recovery.OnItemReceived("loaf of bread", "Nineteen");
+        h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(DeathRecoveryStatus.Active, h.Latest.Status);
+    }
+
+    [Fact]
+    public void HandedBack_AutoEquipOff_FinalisesWithoutWearing()
+    {
+        using GraphHarness h = new();
+        Die(h, new[] { new EquippedItem("plate mail", "Torso") }, Array.Empty<string>());
+        h.Recovery.AutoEquip = false;
+
+        h.Recovery.OnItemReceived("plate mail", "Nineteen");
+        h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
     [Fact]
     public void AutoEquip_ReequipsHeldWeapon_WithEq_NotHold()
     {

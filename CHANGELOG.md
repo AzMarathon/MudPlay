@@ -1,5 +1,10 @@
 # Version history
 
+## 3.107.9
+
+- Gear a party member recovers and hands back to you now closes your deathpile and is re-worn (Auto-equip on recovery), instead of sitting unworn in your pack
+- bug reports addressed: paradigm-20260926-102406
+
 ## 3.107.8
 
 - Party followers now drink their waterskin (or other hazard-buff item) on entering a desert-heat room and on the heat prompt, like the leader's own walk does, and say "I'm out of waterskins!" when they run dry
