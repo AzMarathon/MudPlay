@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.107.14**
 > - GAME_MECHANICS.md reorganised into 16 subject chapters with a linked contents list; duplicate and scattered entries merged into one topic each
-> - Every topic now carries a status line (confidence, date, source, realm) and a Client use list; stale notes reconciled against the current code, open disagreements flagged for confirmation
+> - Every topic now carries a status line (confidence, date, source, realm) and a Client use list; stale notes reconciled against the current code; realm splits for monster targeting, RemovesSpell timing, and the Stock deathpile spill recorded
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

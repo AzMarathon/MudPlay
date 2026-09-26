@@ -1123,7 +1123,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **Hand-attacking a passive neutral.** If *you* hand-attack one (a manual swing or combat cast), it turns hostile per the mechanic above, so the client marks that instance user-engaged and the auto-combat engine **takes over finishing it** — treating it like an enemy until it dies (and holding the walker in the room) instead of stopping the moment you engaged it. It's keyed per-instance by name and pruned once the mob is gone, so it never leaks onto a freshly-arrived same-named passive neutral; the *other* un-engaged neutrals stay passive and rest-safe. `Enemy` monsters are unchanged.
 
 ### Monster target selection — who it swings at once fighting
-*Status: Stock CONFIRMED (stock DLL source, user-provided); Paradigm CONFIRMED (user writeup, Paradigm only); probabilistic-modifier summary untagged in source*
+*Status: Stock CONFIRMED (stock DLL source, user-provided); Paradigm CONFIRMED (user writeup, Paradigm only); realm split CONFIRMED 2026-09-26 (user) · Realm: differs — see bullets*
 
 - **Distinct from *whether* a monster opens on you:** once a monster is in a fight it picks **one target per beat**, and the two realms use different engines.
 - **Stock** *([CONFIRMED] — stock DLL source, user-provided)*. A stock monster attacks a single **locked target** at a time (not everyone it has aggroed). Each beat:
@@ -1135,13 +1135,15 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   - **Carve-out:** an evil NPC won't spread onto a fellow-evil player (`EvilPoints > 39`).
 - **Paradigm** *([CONFIRMED] — user writeup, Paradigm only)*. Paradigm rewrote target selection into a **weighted lottery** with no locked-target mechanic. Each player scores from a base **150**: `+ (10 − Charm/5)` (higher Charm lowers the score), `+` party position (frontrank 60 / midrank 30 / backrank 0; **solo = frontrank 60**), `+` recent aggro (last hitter **+30 × players-in-fight**, everyone else **−5 × players-in-fight**), **floored at 50**. The monster rolls a weighted lottery over the summed scores — bigger score = bigger slice, never a guarantee, never impossible.
 - **Charm and party position have no effect on stock target selection** — they are Paradigm-only.
-- **Monster targeting is probabilistic, not deterministic** *(no realm stated in source)*. A hostile NPC picks its target by **chance**; several factors apply hidden **modifiers** that make a party member more or less likely to be chosen — never guaranteed, and the modifier values aren't visible:
-  - **Party rank** — **frontrank** raises the odds of being targeted, **backrank** lowers them (midrank between). **[CONFLICT — ask the user]** This summary states no realm, while the stock rule above says party position has **no effect** on stock target selection (Paradigm-only).
+- **Targeting depends on the realm** *([CONFIRMED] 2026-09-26, user)* — the two models above never share a formula, and the Monster Aggro calculator shows each one.
+- **In plain terms, on Paradigm** (an older summary that named no realm; it describes the Paradigm lottery): a hostile NPC picks its target by **chance**; hidden **modifiers** make a party member more or less likely to be chosen — never guaranteed, and the modifier values aren't visible in game:
+  - **Party rank** — **frontrank** raises the odds of being targeted, **backrank** lowers them (midrank between).
   - **Attacking last** raises the odds; **attacking first** lowers them.
   - These stack: a **frontrank member attacking last** is the most likely target; a **backrank member attacking first** the least — but it's still a weighted roll.
+- **On Stock, rank doesn't matter**; "attacking last" works through the lock re-point and Follow% stickiness above, not a score.
 
 **Client use:**
-- Surfaced in the **Monster Aggro** calculator (Workshop → Calculators), which shows the loaded set's model.
+- Surfaced in the **Monster Aggro** calculator (Workshop → Calculators), which shows the loaded set's model: `StockAggroCalculator` (acquisition → spread pick → Follow% stickiness) or `ParadigmAggroCalculator` (weighted lottery).
 
 ### Per-monster overlay automation (client policy)
 *Status: CONFIRMED 2026-07-10 (user design); count-field reading is a client interpretation flagged for user confirmation*
@@ -1832,21 +1834,26 @@ only path that clears everything. The notes, oldest last:
   - **`Spells.Targets` = 10 / 13 (Divided / Full Party Area) → a whole-party buff**, one cast with no target that blankets the party (`chant`, `mass frenzy`, `unholy fanaticism`, `rejuvenating field`). Lands on self too.
   - **Scope 0/1 (self-only), 4/8/9/12 (enemy), 7 (item) are NOT party buffs.**
 - **Single-target targeting is by selected member (given name), not class** — a slot blesses "all members" or a checklist of specific players, and only fires for a name that is BOTH a current `par` party member AND in the room (never casts at someone absent / uninvited / in another room).
-- **Supersession: a spell that carries RemovesSpell (Abil 122) removes the named spell** (the Spell Book renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g. **chant removes bless**), in a party we stop self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a single-target party buff can't cover self). **[CONFLICT — ask the user]**: this example says chant removes bless, while the RemovesSpell topic below (CONFIRMED 2026-09-07) says on Paradigm 1.9.1 **bless removes chant**.
+- **Supersession: a spell that carries RemovesSpell (Abil 122) removes the named spell** (the Spell Book renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g. **chant removes bless**), in a party we stop self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a single-target party buff can't cover self). (Paradigm 1.9.1 data has both directions — chant #23 removes bless and bless removes chant; see the RemovesSpell topic below.)
 - **Client use:**
   - `CastingDirector.PickUnifiedBuff` falls back to the self-bless timing gates for a `WholePartyOn` slot when `!PartyState.IsInParty`, instead of holding it forever behind "must be in a party" (report `paradigm-20260906-150624`: a whole-party item-cast buff, `platinum sceptre`, never fired outside a party).
   - **`WholePartyOn` remains the master enable**: the per-slot `CastSolo` option only extends an enabled slot to solo play and must not bypass an unchecked Party box. (2026-09-09, report `paradigm-20260909-220212`: unchecked whole-party rows kept casting solo through their default `CastSolo=true`, draining mana while the rest of the UI reported them off.)
 
 ### RemovesSpell buffs clobber on cast; the wear-off line is shared
-*Status: CONFIRMED 2026-09-07 (user + game data) · Realm: direction is per realm; example is Paradigm 1.9.1*
+*Status: CONFIRMED 2026-09-07 (user + game data); realm timing CONFIRMED 2026-09-26 (user) · Realm: differs — Paradigm re-checks every tick, Stock only at cast*
 
 - **A spell that carries a RemovesSpell ability (Abil 122 → a target spell number) strips that target buff off you the instant it lands.**
-- **The direction is per the realm's data, so check it, don't assume** — on Paradigm 1.9.1 **bless removes chant** (confirmed 2026-09-07, user + game data). **[CONFLICT — ask the user]**: the party-buff-scope topic above gives the example "chant removes bless".
+- **The direction is per the realm's data, so check it, don't assume** — on Paradigm 1.9.1 **bless removes chant** (confirmed 2026-09-07, user + game data), and chant (#23) also removes bless, so the pair is mutual there. On Stock v1.11p the removal is one-way: bless removes chant, but chant (#23 / #825) removes only blight and curse.
+- **When the removal is checked depends on the realm** *([CONFIRMED] 2026-09-26, user)*:
+  - **Paradigm checks engine-side every tick** (~3s) and strips any buff a spell on you removes. Layering is impossible there: a one-way loser can never hold while its remover is up.
+  - **Stock checks only at the moment of cast.** A buff and its remover **can** be layered by casting in the right order — the remover first, then the buff it removes.
 - **Among a clashing set, whichever was cast LAST is the one actually on you**; the buffs it removes are gone.
 - **A wear-off line does fire when the buff is stripped — but it cannot be attributed to the right spell by text alone.** Bless and chant **share the same message records** (both the cast/applied line "You feel lucky!" *and* the wear-off "The effects of bless wear off!"), so a chant-being-stripped shows bless's wear-off text. A client keying timers off those shared lines mis-attributes — the cast confirm refreshes the wrong buff, and the wear-off clears the wrong one.
 - **The reliable signal is what we actually sent** (the distinct "You cast <spell> on …" / the pending self-buff short).
-- **Clobbering is a one-time effect at cast, not a standing suppression.** Casting a buff that the other removes, **after** it, simply re-applies — only the remover's cast strips.
+- **On Stock, clobbering is a one-time effect at cast, not a standing suppression.** Casting a buff that the other removes, **after** it, simply re-applies — only the remover's cast strips. (Not so on Paradigm — see the per-tick rule above.)
 - **Client use:**
+  - Paradigm: `BuffConflictAnalyzer.OneDirectionalLosers` flags a one-way loser, which is dropped rather than cast into a remover that re-strips it every tick. Mutual pairs stay last-cast-wins.
+  - Stock: `BuffConflictAnalyzer.OneDirectionalRemoverCodes` + `BuffPriorityOrder.OrderRemoversFirst` cast the remover ahead of its loser so both stay up.
   - The Buff Watchdog keys the timer off what was sent and, on a wear-off right after a clobbering cast, leaves both timers alone and **infers** the clobber from RemovesSpell + cast order (`Until − TotalSec` = each buff's cast instant), rendering the clobbered bar as **"conflict"** rather than a bogus countdown.
 
 ### Debuff slot spells — energy and targeting
@@ -2881,7 +2888,11 @@ Among protectable hazards, a further split governs whether the navigator may off
     `GreetTXT` are considered.
 
 ### Keyword command forms (`ask <noun> <keyword>` vs verbatim room CMD)
-*Status: `ask` noun rule — as for guardian doors; command-form split CONFIRMED 2026-07-23 (user)*
+*Status: `ask` noun rule — as for guardian doors; command-form split CONFIRMED 2026-07-23 (user); keyword model CONFIRMED 2026-09-26 (user)*
+
+- **`ask` is the command for talking to an NPC through its keywords: `ask <npc name> <keyword>`** *([CONFIRMED] 2026-09-26, user)*. It runs whatever actions sit under that keyword.
+  - Some keywords carry **checks with pass/fail criteria** and do different things depending on the result.
+  - An NPC's keywords are listed in game data: the monster's `GreetTXT` textblock holds `keyword:textblock` lines. For example, Paradigm 1.9.1 gnome commander #332 has `GreetTXT` 809, which lists `dark-elf` / `plots` / `slaves` / `orb` / `passage`. `orb` → 814 → 815 `giveitem 807`, the item he drops, so `orb` is the keyword that hands over the orb.
 
 - **The game's `ask` parser takes one target token and treats the rest as the keyword.** So a
   multi-word name (`Gnome Commander`) must reduce to its last-word noun (`ask commander orb`, **not**
@@ -2892,9 +2903,10 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **[CONFIRMED, user 2026-07-23] Keyword command form depends on the TBInfo trigger's root:** an
   **NPC-attached** keyword is issued as `ask <npc name> <keyword>` (e.g. `ask gnome orb`); a **room CMD**
   keyword is typed **verbatim** (e.g. `rub orb`, `touch statue`).
-- **[CONFLICT — ask the user]** The two statements above disagree on which word of the gnome
-  commander's name `ask` takes: the noun rule says it must reduce to the last word (`ask commander orb`),
-  while the 2026-07-23 note (and the dark-elf front-door walkthrough) gives `ask gnome orb`.
+- **Both forms are one target token, so they don't contradict the parser rule.** The rule only forbids the
+  two-word target (`ask gnome commander orb`). The 2026-07-23 note (and the dark-elf front-door
+  walkthrough) uses `ask gnome orb`; the client sends the last word (`ask commander orb`). Whether the game
+  accepts *any* single word of a multi-word name has not been confirmed separately *([NEEDS CONFIRMATION])*.
 - **Keyword strings are fixed in the TBInfo `Action`/keyword data, and the client can read them.** This
   supersedes the earlier note that keyword strings "come from the NPC's dialogue at play time".
 - **Client use:**
@@ -3376,9 +3388,9 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - `@drop-all full` / Drop Everything drops worn gear with the same `drop` it uses for the pack (InventoryActionHandler).
 
 ### Room item capacity: drop refusal
-*Status: CONFIRMED 2026-09-02 (user, live capture); per-object stacking 2026-09-03 (user; mechanism UNVERIFIED)*
+*Status: CONFIRMED 2026-09-02 (user, live capture); per-object stacking 2026-09-03 (user; mechanism UNVERIFIED); realm CONFIRMED 2026-09-26 (user) · Realm: Stock — Paradigm rooms have no item cap*
 
-A room holds a limited number of items. A `drop` into a room already at that limit is refused:
+On Stock, a room holds a limited number of items (Paradigm rooms have no item cap; the capture below didn't record its realm). The same cap drives the Stock deathpile spill-over (see *Death & corpse recovery → Deathpile*). A `drop` into a room already at that limit is refused:
 
 ```
 [HP=642/MA=265]:drop pend
@@ -4133,18 +4145,21 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
 - **The reliable death marker across all forms** is the `You have been killed!` line (DoT / no-named-killer deaths) alongside `You have been slain by <killer>.` (attacker-named deaths) — capture off those, not off the lives readout.
 
 ### Deathpile — where the items go
-*Per-fact status inline — the two sources disagree on Stock.*
-
-**[CONFLICT — ask the user]** The two statements below contradict each other about Stock:
+*Status: CONFIRMED 2026-08-24 (user); Stock spill mechanics CONFIRMED 2026-09-26 (user) · Realm: differs — Stock spills loose, Paradigm uses a corpse*
 
 - **Death-pile source differs by realm** *([CONFIRMED 2026-08-24, user])*:
   - on **Stock**, death drops **all your items loose on the ground** — they appear in the room's `You notice … here.` survey and, if the floor is already crowded, can **spill into adjacent rooms**; you recover each with `get <item>` (confirmed by `You took <item>.`);
   - on **Paradigm**, your items are held **inside a corpse** (`corpse of <given-name>` in the survey), recovered in one `recover corpse <name>` (confirmed by `You have recovered the corpse of <name>.`);
   - the combat-break rule (which re-times only the wear/eq burst) is realm-agnostic, so it applies to both.
-- **The deathpile is a `corpse` object, recovered with one `recover corpse <given-name>` command — NOT a per-item `get`** *([CONFIRMED] 2026-08-03, user + captures)*. This block states it corrects an earlier note that said stock drops items loose to the ground ("it does not").
+- **Stock spill-over, in detail** *([CONFIRMED] 2026-09-26, user)*:
+  - Dying on Stock spills the items you carried into **the death room**.
+  - If that room fills before all your items are down, the rest spill into **one connected room** through a cardinal or diagonal exit or up/down (N/S/E/W/NE/NW/SE/SW/U/D only). Once that room fills too, another exit is picked and the same happens.
+  - This repeats **up to roughly 5 rooms away**. Which exit is picked first is not known.
+  - It only happens on Stock, because **Paradigm rooms have no item cap**.
+- **On Paradigm, the deathpile is a `corpse` object, recovered with one `recover corpse <given-name>` command — NOT a per-item `get`** *([CONFIRMED] 2026-08-03, user + captures)*. This entry once described itself as correcting "stock drops items loose to the ground" ("it does not"). The 2026-08-24 and 2026-09-26 confirmations settle it: the corpse is Paradigm-only, and Stock does drop items loose.
 
 ### Corpse recovery (`recover corpse`)
-*Status: CONFIRMED 2026-08-03 (user + captures); realm scope per the conflict above*
+*Status: CONFIRMED 2026-08-03 (user + captures) · Realm: Paradigm (Stock has no corpse — see Deathpile above)*
 
 - **Non-loyal items and coins go into a corpse of <player>** on the death-room floor; loyal items stay on the player.
 - **The room's floor survey names it by the player's GIVEN name only**, no article: `You notice corpse of Ermias here.` (character "Ermias Asghedom" → the corpse reads "Ermias").
