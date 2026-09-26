@@ -244,9 +244,9 @@ public sealed class CastingDirector : IDisposable
     private string? _pendingManaRegenReroll;
 
     // Set when the live buff timers are frozen on an unexpected drop (carrier lost /
-    // keep-alive timeout). While set, a reconnect shifts every Until forward by the
-    // offline gap so each buff keeps the remaining it had at the drop instead of the
-    // clock counting down (server-side link-death holds the buffs). null = running.
+    // keep-alive timeout). The Untils are never shifted — each keeps its absolute
+    // expiry, and the reconnect drops only the ones that lapsed while offline.
+    // null = running.
     private DateTime? _pausedAt;
 
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
@@ -843,8 +843,8 @@ public sealed class CastingDirector : IDisposable
 
     // The instant the timers were frozen on a disconnect, or null while running. The
     // Buff Watchdog reads this so its display freezes at the drop (the heartbeat is a
-    // wall clock that keeps ticking while disconnected); the shift on resume then keeps
-    // the on-screen remaining continuous across the gap.
+    // wall clock that keeps ticking while disconnected). On resume the display catches
+    // up to the true remaining, since the timers ran on their absolute expiry.
     public DateTime? PausedAtUtc => _pausedAt;
 
     // Freeze the live buff timers on a disconnect — record when so the reconnect resumes

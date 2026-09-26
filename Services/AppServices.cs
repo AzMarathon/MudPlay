@@ -7887,8 +7887,8 @@ public sealed class AppServices
     // bless) are NOT suppressed — those are last-cast-wins, left to the normal clobber-clear.
     //
     // PARADIGM ONLY: Paradigm re-enforces a buff's RemovesSpell continuously (~3s), so the
-    // loser truly can't coexist. Stock is unverified (it may pace removes on cast, letting
-    // both stay), so this returns empty off Paradigm — don't suppress there.
+    // loser truly can't coexist. Stock checks RemovesSpell only at cast time, so cast order
+    // lets both stay (CollisionOrderConstraints) — this returns empty off Paradigm.
     //
     // Distinct from SelfBuffCoverage (which is the in-party, whole-party-covers-self case,
     // including mutual pairs): this is the general one-directional winner, self-cast winners
@@ -7897,8 +7897,8 @@ public sealed class AppServices
     public IReadOnlyDictionary<string, string> SuppressedBuffCoverage()
     {
         // PARADIGM ONLY: only there is a buff's RemovesSpell re-enforced continuously (~3s),
-        // so the one-directional loser truly can't coexist. Stock is unverified (may pace on
-        // cast, letting both stay), so suppress nothing there.
+        // so the one-directional loser truly can't coexist. Stock checks it only at cast
+        // time, so both can stay — suppress nothing there.
         if (GameData.ActiveRealm != Game.RealmType.ParaMud)
             return new Dictionary<string, string>();
         return Game.Spells.BuffConflictAnalyzer.OneDirectionalLosers(BuffSlotOverwritePairs());
