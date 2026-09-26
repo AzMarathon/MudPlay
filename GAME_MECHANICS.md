@@ -2042,7 +2042,7 @@ Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in *NPC-pla
 *Status: CONFIRMED 2026-08-02 (user) · Realm: Stock (verified examples)*
 
 - **NPC-placed mobs regenerate on entry — effectively no respawn cap.** A monster placed via the room's **`NPC`** field (a fixture, distinct from a `Lair` group) with `RegenTime` 0-ish **regenerates the moment you (re-)enter the room after killing it** — no timer to wait out. These are the classic "rooming" targets (kill as fast as you can fight; bounded by kill speed, not respawn).
-- **Verified stock examples:** slime beast `1/1765` (`NPC=57`, `RegenTime 0`, 250 xp); cave worm `1/866` (`NPC=8`, `RegenTime 0`, 100 xp); barmaid `1/311` (`NPC=248`, `RegenTime 1`, **0 xp** — an evil-points target, not exp). Her regen timer follows the same mechanic as every other monster's, but she is also the room's placed `NPC`, so kill her, walk out and back in, and she is there again at once *([CONFIRMED] 2026-09-26, user)*. *([NEEDS CONFIRMATION] that makes the boss test in *Boss monsters* — `GameLimit` 1 **or** `RegenTime` ≥ 1 — too broad for placed monsters: she has `GameLimit 5`, `RegenTime 1` and still respawns on entry, while the placed juggernaut (`GameLimit 1`) doesn't. Is a placed monster non-instant only when `GameLimit` is 1? The client's `BossCatalog.IsBoss` counts her as a boss on stock.)*
+- **Verified stock examples:** slime beast `1/1765` (`NPC=57`, `RegenTime 0`, 250 xp); cave worm `1/866` (`NPC=8`, `RegenTime 0`, 100 xp); barmaid `1/311` (`NPC=248`, `RegenTime 1`, **0 xp** — an evil-points target, not exp). Her regen timer follows the same mechanic as every other monster's, but she is also the room's placed `NPC`, so kill her, walk out and back in, and she is there again at once *([CONFIRMED] 2026-09-26, user)*. With `GameLimit 5` she is **not** a boss (see *Boss monsters*), so her placement respawns instantly like any other fixture. **Client gap:** `BossCatalog.IsBoss` and `RouteExpResolver` still count `RegenTime` ≥ 1 as a boss, so on stock the client treats her as one.
 - **A room can carry both an NPC fixture and a `Lair` group** (cave-worm room `1/866` has `NPC=8` plus a lair), so a room's yield is the sum of its NPC target(s) + its lair contribution.
 - **In a loop, an instant mob still yields only once per lap** (bounded by lap time); only a stay-in-room **rooming** setup kills it every round.
 - **Exception — bosses:** a placed monster that qualifies as a boss is *not* instant; see *Boss monsters*.
@@ -2065,12 +2065,12 @@ A monster's `Summoned By` field lists the rooms it appears in, each token tagged
 
 *Status: CONFIRMED 2026-08-03 (user + reports `paradigm-20260803-035136`, `-094657`)*
 
-- **A boss is a game-limited / long-regen singleton.** A monster is a **boss** if its **`GameLimit` is 1** (only one exists in the game at a time) OR its **`RegenTime` is ≥ 1 hour** — and this holds whether it's a **lair** member OR a **placed** monster (the room's `NPC` field).
+- **A boss is a game-limited singleton: `GameLimit` exactly 1** (only one exists in the game at a time) *([CONFIRMED] 2026-09-26, user — `GameLimit` = 1, not ≥; a long `RegenTime` does not by itself make a boss. An earlier rule here also counted any monster with `RegenTime` ≥ 1 hour.)* — and this holds whether it's a **lair** member OR a **placed** monster (the room's `NPC` field).
 - **A boss can be killed only as often as its regen timer.**
   - The crowned spider (`Number 929`, lair, `GameLimit 1`, `RegenTime 15`) is killable **once per 15 hours** and can spawn in **any** room of a multi-room lair.
   - The animated juggernaut (`Number 1211`, placed in `17/7055`, `GameLimit 1`, `RegenTime 3`, 1,300,000 exp) is killable **once per 3 hours**.
 - **A placed boss is NOT an instant fixture.** Normal `NPC`-placed monsters regenerate on entry (instant, every pass), but a *boss* placed monster is still gated by its regen, so it's amortised exactly like a lair boss, not grabbed every lap.
-- **A boss's `RegenTime` is in HOURS** (the Game-Data browser renders it "15 hour"), distinct from the lair-mob `AvgDelay`/`RegenTime` path in *Lair respawn timers*.
+- **A boss's `RegenTime` is in HOURS** (the Game-Data browser renders it "15 hour") — the same unit as every monster's `RegenTime` (see *Lair respawn timers*); a lair's `AvgDelay` is a separate field.
 - **Exp/hr estimation of a boss:** pull it OUT of its lair's per-mob average and add its amortised contribution **`boss exp ÷ regen-hours`, counted once** for the whole loop (a single time no matter how many rooms it can appear in) — `1,200,000 ÷ 15 = 80,000/hr`, not `1.2M` per lap in every room. The regular (non-boss) lair mobs still fire per-room on the room delay.
 
 ### Monster exp multiplier
