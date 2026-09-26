@@ -15,19 +15,19 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 
 ## Features
 
-- **Faithful terminal** — Telnet (NAWS + TERM-TYPE), explicit VT100/ANSI parsing, and a CP437 cell grid rendered by a custom Avalonia control that scales crisply. No host TTY dependency.
-- **Profiles & settings** — per-character profiles over a 4-tier hierarchy (defaults → all characters → BBS → character, deltas only), multiple BBSes with their own accounts, automated logon, and configurable redial/reconnect.
-- **Combat** — attack/spell ordering and priority, backstab, single- and area-target debuffs with an immunity-aware fallback cascade, crowd and rest-aware handling, and per-monster overrides.
-- **Healing & spells** — HP/mana thresholds, rest management, cures, buffs, mana-regen rerolls, a class-aware **Spell Book** (cast-success odds + damage calculator), and a **Buff Watchdog** with live recast timers.
-- **Navigation** — a room-graph map with go-to routing over saved GOTOs, runnable **loops** with exp/hour estimates, an **Auto-Lair** mode, trap / hazard / teleport route pickers, a level-gate overlay, and stash rooms.
-- **Party play** — tracking, coordinated healing/blessing, leader-aware wait/invite, reconnect handling, and remote `@`-commands over chat (query, move-me, act-for-me, coordinate) — each gated by per-player permissions.
-- **Cash & items** — automated loot / sell / buy / stash / discard, banking, and equipment sets with auto-equip triggers.
-- **Character Workshop** — live stats, **Equipment Manager** + an **Item Finder** for what-if gear comparisons, **CP-allocation** plans, level projection, quest / boss / death tracking (boss timers syncable between clients), calculators, and **Roomba** gang-house item sorting with an in-game `@roomba` location log.
-- **Game Data** — import MajorMUD `.MDB` sets and browse or override every record across the 4 tiers; filter-rich **Monsters / Items / Players** tables with **batch edit** to set many records at once; and a **Monster Intel** window that answers "can I safely fight this now?" (Hits-You-% vs your live AC, rounds-to-kill, and your combat history).
-- **Automation tools** — macros, aliases, triggers, and events; per-engine toggles with a one-press all-off kill switch; and a Sprint mode.
-- **Conversation & chat** — a dedicated pane with per-channel filtering, search, logging, and history.
-- **Tools & diagnostics** — full-ANSI scrollback (search/filter), a **Program Log**, **Session Stats**, a **Wire Inspector**, and a ***built-in bug reporter — use it when reporting issues; it captures far more than a screenshot***.
-- **Quality of life** — editable toolbar, rebindable keys, a customizable terminal right-click menu, edge-snapping windows that move as a cluster, font/nav styling, output scaling, and type-through so keystrokes keep reaching the terminal.
+- **Faithful terminal** — Telnet (NAWS, TERM-TYPE), full VT100/ANSI parsing, and crisp CP437 rendering.
+- **Profiles** — per-character profiles across multiple BBSes and accounts, auto-logon and auto-reconnect; settings layer defaults → all characters → BBS → character.
+- **Combat** — attack and spell priority, backstab, debuffs and room spells, immunity-aware fallbacks, and per-monster rules.
+- **Healing & buffs** — HP / mana thresholds, resting, cures, buff upkeep with a **Buff Watchdog**, and a **Spell Book** with cast odds and damage.
+- **Navigation** — a room map with go-to routing, loops, **Auto-Lair**, doors, traps, hazards, tolls, boats and teleports, plus exp/hour estimates.
+- **Party play** — shared healing and buffs, wait / follow coordination, party auto-train, and remote `@`-commands gated by per-player permissions.
+- **Items & cash** — auto loot / sell / buy / stash / bank, drop / hide / equip sweeps, and gear sets that swap themselves.
+- **Character Workshop** — stats, Equipment Manager and Item Finder, CP plans, level projection, quests, bosses, death recovery, and calculators.
+- **Game Data** — import MajorMUD `.mdb` sets; browse, filter and override every monster, item, spell and room; **Monster Intel** answers "can I fight this?".
+- **Automation** — macros, aliases, triggers, scheduled events, per-engine toggles, and a one-press kill switch.
+- **Chat** — a conversation window with channel filters, search and history.
+- **Help & diagnostics** — a built-in Help guide, first-run setup tour, update checker, scrollback search, program log, session stats, wire inspector, and a one-click **bug reporter**.
+- **Your layout** — editable toolbar, rebindable keys, a custom right-click menu, and windows that snap together.
 
 ## Getting started
 
@@ -53,6 +53,8 @@ If local state ever gets weird, `dotnet clean` and rebuild.
 3. **Add a character** under that board (Profile Management → Characters → **Add**).
 4. **Connect.** **Alt+H**, or File → Connect. You're in.
 5. **Want the automation?** Open **Game Data** → **Import .mdb** and pick a MajorMUD database. That fills the monster/item/spell/room tables the engines read from. The terminal works fine without it — the robots don't.
+
+On a fresh install a **setup tour** walks you through these steps. **Help → Help topics…** explains every feature and setting.
 
 ### Where your data lives
 
