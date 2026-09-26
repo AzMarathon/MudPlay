@@ -36,20 +36,35 @@ public static class HelpContentRenderer
     private static readonly IBrush WarningBackground = new SolidColorBrush(Color.Parse("#22E0A030"));
     private static readonly IBrush WarningBorderBrush = new SolidColorBrush(Color.Parse("#80E0A030"));
 
-    public static Control Render(string? body)
-    {
-        StackPanel panel = new() { Spacing = ParagraphGap };
-        if (string.IsNullOrWhiteSpace(body)) return panel;
+    // Search-box matches inside the body — the same amber as a matching topic in the
+    // tree, so the eye links the two.
+    private static readonly IBrush MatchBackground = new SolidColorBrush(Color.Parse("#99E0B040"));
 
-        string[] lines = body.Replace("\r\n", "\n").Split('\n');
-        int i = 0;
-        while (i < lines.Length)
+    // One render's search text, and the first block holding a match (what the pane
+    // scrolls to) — threaded through the block builders.
+    private sealed class RenderContext(string? highlight)
+    {
+        public string? Highlight { get; } = highlight;
+        public Control? FirstMatch { get; set; }
+    }
+
+    public static Control Render(string? body, string? highlight, out Control? firstMatch)
+    {
+        RenderContext ctx = new(string.IsNullOrWhiteSpace(highlight) ? null : highlight.Trim());
+        StackPanel panel = new() { Spacing = ParagraphGap };
+        if (!string.IsNullOrWhiteSpace(body))
         {
-            if (lines[i].Trim().Length == 0) { i++; continue; }
-            i = IsTableRow(lines[i]) ? AppendTable(panel, lines, i)
-              : IsBullet(lines[i])   ? AppendBullets(panel, lines, i)
-              :                        AppendParagraph(panel, lines, i);
+            string[] lines = body.Replace("\r\n", "\n").Split('\n');
+            int i = 0;
+            while (i < lines.Length)
+            {
+                if (lines[i].Trim().Length == 0) { i++; continue; }
+                i = IsTableRow(lines[i]) ? AppendTable(ctx, panel, lines, i)
+                  : IsBullet(lines[i])   ? AppendBullets(ctx, panel, lines, i)
+                  :                        AppendParagraph(ctx, panel, lines, i);
+            }
         }
+        firstMatch = ctx.FirstMatch;
         return panel;
     }
 
@@ -75,10 +90,10 @@ public static class HelpContentRenderer
     // ⚠️-led line gets a tinted callout box instead of a plain paragraph, so a
     // "not currently functional" note reads as a warning at a glance rather than
     // blending into the surrounding explanation.
-    private static int AppendParagraph(StackPanel panel, string[] lines, int i)
+    private static int AppendParagraph(RenderContext ctx, StackPanel panel, string[] lines, int i)
     {
         TextBlock tb = new() { TextWrapping = TextWrapping.Wrap, FontSize = BodyFontSize };
-        AppendRuns(tb.Inlines!, lines[i]);
+        AppendRuns(ctx, tb, lines[i]);
 
         if (IsWarning(lines[i]))
             panel.Children.Add(new Border
@@ -95,7 +110,7 @@ public static class HelpContentRenderer
         return i + 1;
     }
 
-    private static int AppendBullets(StackPanel panel, string[] lines, int i)
+    private static int AppendBullets(RenderContext ctx, StackPanel panel, string[] lines, int i)
     {
         StackPanel list = new() { Spacing = 5 };
         while (i < lines.Length && IsBullet(lines[i]))
@@ -108,7 +123,7 @@ public static class HelpContentRenderer
             };
             TextBlock dot = new() { Text = "•", Margin = new Thickness(0, 0, 6, 0), FontSize = BodyFontSize };
             TextBlock text = new() { TextWrapping = TextWrapping.Wrap, FontSize = BodyFontSize };
-            AppendRuns(text.Inlines!, item);
+            AppendRuns(ctx, text, item);
             Grid.SetColumn(text, 1);
             row.Children.Add(dot);
             row.Children.Add(text);
@@ -120,7 +135,7 @@ public static class HelpContentRenderer
     }
 
     // Markdown pipe table: header row, a "|---|" separator, then data rows.
-    private static int AppendTable(StackPanel panel, string[] lines, int i)
+    private static int AppendTable(RenderContext ctx, StackPanel panel, string[] lines, int i)
     {
         List<string[]> rows = new();
         while (i < lines.Length && IsTableRow(lines[i]))
@@ -146,7 +161,7 @@ public static class HelpContentRenderer
             {
                 string cell = c < rows[r].Length ? rows[r][c] : string.Empty;
                 TextBlock tb = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 5), FontSize = BodyFontSize - 1 };
-                AppendRuns(tb.Inlines!, cell, headerBold: r == 0);
+                AppendRuns(ctx, tb, cell, headerBold: r == 0);
                 Border box = new()
                 {
                     BorderBrush = GridLineBrush,
@@ -176,29 +191,40 @@ public static class HelpContentRenderer
         return t.Split('|').Select(c => c.Trim()).ToArray();
     }
 
-    private static void AppendRuns(InlineCollection inlines, string line, bool headerBold = false)
+    private static void AppendRuns(RenderContext ctx, TextBlock owner, string line, bool headerBold = false)
     {
+        InlineCollection inlines = owner.Inlines!;
         bool first = true;
         foreach (HelpInline seg in HelpMarkup.ParseInline(line))
         {
-            Run run = new(seg.Text);
-            switch (seg.Style)
-            {
-                case HelpInlineStyle.Bold: run.FontWeight = FontWeight.Bold; break;
-                case HelpInlineStyle.Italic: run.FontStyle = FontStyle.Italic; break;
-                case HelpInlineStyle.Code:
-                    run.FontFamily = MonoFont;
-                    run.Foreground = CodeBrush;
-                    break;
-            }
             // A bold run ending in ':' that opens the paragraph is a field label
             // ("Default:", "What it does:", "Important notes:", …) — accent it so
             // the field name is scannable at a glance, distinct from the value
             // text that follows on the same line.
-            if (first && seg.Style == HelpInlineStyle.Bold && seg.Text.TrimEnd().EndsWith(':'))
-                run.Foreground = LabelBrush;
-            if (headerBold) run.FontWeight = FontWeight.Bold;
-            inlines.Add(run);
+            bool label = first && seg.Style == HelpInlineStyle.Bold && seg.Text.TrimEnd().EndsWith(':');
+            // Each styled segment is split again around the search matches, so a hit
+            // inside bold or code text keeps its styling and gains the highlight.
+            foreach ((string text, bool match) in HelpMarkup.SplitMatches(seg.Text, ctx.Highlight))
+            {
+                Run run = new(text);
+                switch (seg.Style)
+                {
+                    case HelpInlineStyle.Bold: run.FontWeight = FontWeight.Bold; break;
+                    case HelpInlineStyle.Italic: run.FontStyle = FontStyle.Italic; break;
+                    case HelpInlineStyle.Code:
+                        run.FontFamily = MonoFont;
+                        run.Foreground = CodeBrush;
+                        break;
+                }
+                if (label) run.Foreground = LabelBrush;
+                if (headerBold) run.FontWeight = FontWeight.Bold;
+                if (match)
+                {
+                    run.Background = MatchBackground;
+                    ctx.FirstMatch ??= owner;
+                }
+                inlines.Add(run);
+            }
             first = false;
         }
     }

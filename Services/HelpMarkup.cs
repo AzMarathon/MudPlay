@@ -16,6 +16,28 @@ public sealed record HelpInline(string Text, HelpInlineStyle Style);
 // line.
 public static class HelpMarkup
 {
+    // Split text around every case-insensitive occurrence of query, so the Help
+    // content pane can highlight what the search box matched. A blank query, or one
+    // that isn't there, returns the whole text as a single non-match piece.
+    public static IReadOnlyList<(string Text, bool Match)> SplitMatches(string text, string? query)
+    {
+        List<(string, bool)> parts = new();
+        if (string.IsNullOrEmpty(text)) return parts;
+        string q = query?.Trim() ?? string.Empty;
+        if (q.Length == 0) { parts.Add((text, false)); return parts; }
+
+        int at = 0;
+        while (at < text.Length)
+        {
+            int hit = text.IndexOf(q, at, StringComparison.OrdinalIgnoreCase);
+            if (hit < 0) { parts.Add((text[at..], false)); break; }
+            if (hit > at) parts.Add((text[at..hit], false));
+            parts.Add((text.Substring(hit, q.Length), true));
+            at = hit + q.Length;
+        }
+        return parts;
+    }
+
     public static IReadOnlyList<HelpInline> ParseInline(string text)
     {
         List<HelpInline> segs = new();

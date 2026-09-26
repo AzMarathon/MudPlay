@@ -16,6 +16,10 @@ Don't want it? Click **Skip — don't show this again** and it won't return on l
 
 A Telnet terminal client for **MajorMUD / MegaMUD**-style BBS door games. It renders a faithful CP437/ANSI terminal and layers a large, tunable automation suite on top — auto-combat, healing, spellcasting, navigation and looping, party coordination, and coin/item collection. Play it as a plain terminal, or turn on as much automation as you like.
 
+## Using this help
+
+Pick a topic from the contents on the left; it opens on the right. The **Search help…** box above the contents doesn't hide anything — every topic stays where it is, and the ones whose title or text holds what you typed are **highlighted in amber**, with their sections opened so each hit is in view. The count under the contents says how many topics match. Open one and every occurrence in its text is highlighted too, with the page scrolled to the first. Clear the box and everything folds back up, leaving the topic you were reading open.
+
 ## Connecting to a BBS
 
 Two ways to connect:

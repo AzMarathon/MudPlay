@@ -7,17 +7,17 @@ namespace MudPlay.ViewModels.Help;
 
 // One node in the Help window's table-of-contents tree — a section or subsection
 // wrapping a HelpTopic. Carries the markdown body shown in the content pane, and
-// the IsVisible / IsExpanded state the search filter drives (the TreeViewItem
-// style binds IsVisible so a filter collapses non-matching branches without
-// rebuilding the tree, preserving the rest).
+// the IsMatch / IsExpanded state the search drives. Searching never hides a node:
+// the whole tree stays in place, matching topics are highlighted (IsMatch), and
+// the branches that hold a match open so every hit is in view.
 public sealed partial class HelpNodeViewModel : ObservableObject
 {
     public string Title { get; }
     public string Body { get; }
     public IReadOnlyList<HelpNodeViewModel> Children { get; }
 
-    // Bound by the TreeViewItem style — a filter hides non-matching nodes.
-    [ObservableProperty] private bool _isVisible = true;
+    // The node's own title or body contains the search text — highlighted in the tree.
+    [ObservableProperty] private bool _isMatch;
 
     // Bound TwoWay so the filter can auto-open branches with matches, and the
     // user can still expand/collapse freely when no filter is active.
@@ -35,30 +35,32 @@ public sealed partial class HelpNodeViewModel : ObservableObject
         Title.Contains(query, System.StringComparison.OrdinalIgnoreCase)
         || Body.Contains(query, System.StringComparison.OrdinalIgnoreCase);
 
-    // Apply the search filter to this subtree. Returns true when this node or any
-    // descendant matches. Sets IsVisible (kept if self or a descendant matches)
-    // and expands branches that hold a match so the hit is revealed. A blank
-    // query resets the whole subtree to visible + collapsed. A parent that
-    // matches by title does NOT force-show non-matching children — each child's
-    // visibility is decided independently, so results stay focused.
-    public bool ApplyFilter(string query)
+    // Apply the search to this subtree. Returns true when this node or any
+    // descendant matches. Marks IsMatch on the node's own hit and expands branches
+    // that hold a match below them, so every hit is revealed while the rest of the
+    // tree stays put. A blank query clears every mark and collapses the subtree.
+    public bool ApplySearch(string query)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
-            foreach (HelpNodeViewModel c in Children) c.ApplyFilter(query);
-            IsVisible = true;
+            foreach (HelpNodeViewModel c in Children) c.ApplySearch(query);
+            IsMatch = false;
             IsExpanded = false;
-            return true;
+            return false;
         }
 
+        string q = query.Trim();
         bool anyChild = false;
         foreach (HelpNodeViewModel c in Children)
-            anyChild |= c.ApplyFilter(query);
+            anyChild |= c.ApplySearch(q);
 
-        IsVisible = SelfMatches(query) || anyChild;
+        IsMatch = SelfMatches(q);
         IsExpanded = anyChild;
-        return IsVisible;
+        return IsMatch || anyChild;
     }
+
+    // How many nodes in this subtree (this one included) match the last search.
+    public int MatchCount() => (IsMatch ? 1 : 0) + Children.Sum(c => c.MatchCount());
 
     // Re-open the branch path down to `target`. Used after a filter clears (which
     // collapses every branch) so a still-selected subsection isn't left hidden

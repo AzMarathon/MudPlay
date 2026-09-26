@@ -24,12 +24,20 @@
         <TreeView.Styles>
           <Style Selector="TreeViewItem" x:DataType="vm:HelpNodeViewModel">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-            <Setter Property="IsVisible" Value="{Binding IsVisible}"/>
+          </Style>
+          <!-- A topic whose title or body holds the search text. -->
+          <Style Selector="Border.HelpMatch">
+            <Setter Property="Background" Value="#55E0B040"/>
+          </Style>
+          <Style Selector="Border.HelpMatch TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
           </Style>
         </TreeView.Styles>
         <TreeView.DataTemplates>
           <TreeDataTemplate DataType="vm:HelpNodeViewModel" ItemsSource="{Binding Children}">
-            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" Padding="0,2"/>
+            <Border Classes.HelpMatch="{Binding IsMatch}" CornerRadius="3" Padding="3,0">
+              <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" Padding="0,2"/>
+            </Border>
           </TreeDataTemplate>
         </TreeView.DataTemplates>
       </TreeView>
@@ -46,7 +54,8 @@
       <StackPanel Spacing="12" Margin="20,16,14,16">
         <TextBlock Text="{Binding SelectedTopic.Title}" FontSize="21" FontWeight="Bold"
                    TextWrapping="Wrap"/>
-        <ContentControl help:HelpMarkdown.Source="{Binding SelectedTopic.Body}"/>
+        <ContentControl help:HelpMarkdown.Source="{Binding SelectedTopic.Body}"
+                        help:HelpMarkdown.Highlight="{Binding SearchText}"/>
       </StackPanel>
     </ScrollViewer>
 

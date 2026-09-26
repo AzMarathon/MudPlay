@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.110.0**
-> - New `@hide-all [full|coins|keys]` and Hide All / Hide Everything / Hide Coins / Hide Keys actions (Action menu + a Hide All toolbar button): the Drop All sweeps, stashed with `hide` instead of dropped
-> - `@equip <set>` replaces `@equip-<set>` (the dashed form still works); sets answer to default / backstab / resthp / restma / moving / bossing
-> - `@equip <set> update` saves what you're wearing into that gear set
+> **Version 3.110.1**
+> - Help search no longer hides topics: matching topics are highlighted and opened in the contents, every match in the open topic's text is highlighted, and the page scrolls to the first
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

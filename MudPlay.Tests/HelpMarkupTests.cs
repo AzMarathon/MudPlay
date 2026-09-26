@@ -52,4 +52,29 @@ public sealed class HelpMarkupTests
         Assert.Equal("a * b", string.Concat(segs.Select(s => s.Text)));
         Assert.All(segs, s => Assert.Equal(HelpInlineStyle.Normal, s.Style));
     }
+
+    // ----- SplitMatches (search highlight) -----
+
+    [Fact]
+    public void SplitMatches_FindsEveryCaseInsensitiveHit()
+    {
+        var parts = HelpMarkup.SplitMatches("Loop the loop, LOOP!", "loop");
+        Assert.Equal(new (string, bool)[]
+        {
+            ("Loop", true), (" the ", false), ("loop", true), (", ", false), ("LOOP", true), ("!", false),
+        }, parts);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("absent")]
+    public void SplitMatches_NoQueryOrNoHit_IsOneUnmatchedPiece(string? query)
+        => Assert.Equal(new (string, bool)[] { ("walk to the bank", false) },
+                        HelpMarkup.SplitMatches("walk to the bank", query));
+
+    [Fact]
+    public void SplitMatches_TrimsTheQuery()
+        => Assert.Contains(("bank", true), HelpMarkup.SplitMatches("walk to the bank", "  bank "));
 }
