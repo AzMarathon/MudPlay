@@ -18,9 +18,10 @@ public static class ToolbarItemCatalogue
     // user's profile; CommandName is the MainWindowViewModel property the button
     // binds to (Avalonia resolves {Binding {CommandName}} via the DataContext).
     //
-    // SubActions makes the button a split button: its own click still runs
-    // CommandName, and a narrow ▾ beside it opens a menu of these related actions
-    // (e.g. Drop All's "Drop Everything" / coins / keys).
+    // SubActions makes the button a split button: the narrow ▾ beside it picks WHICH of
+    // these related actions the button runs (e.g. Drop All's unworn / everything / coins
+    // / keys, or which gear set Equip wears) — picking one also runs it once — and the
+    // button's own click runs the picked one from then on. The first is the default.
     public sealed record Entry(
         string ActionId,
         string Label,
@@ -32,7 +33,12 @@ public static class ToolbarItemCatalogue
 
     // One entry in a split button's ▾ menu: its label and the MainWindowViewModel
     // command it runs.
-    public sealed record SubAction(string Label, string CommandName, string? Tooltip = null);
+    // Parameter is passed to CommandName's command (e.g. the gear-set keyword for
+    // EquipSetCommand). Key is the stable id the character's pick is saved under.
+    public sealed record SubAction(string Label, string CommandName, string? Tooltip = null, string? Parameter = null)
+    {
+        public string Key => Parameter is null ? CommandName : $"{CommandName}:{Parameter}";
+    }
 
     private static readonly Entry[] _entries =
     {
@@ -105,7 +111,7 @@ public static class ToolbarItemCatalogue
             Tooltip: "Get All — pick up every item on the room floor"),
         new("ActionDropAll",      "Drop All",             "IconDropAll",
             "DropAllCommand",
-            Tooltip: "Drop All — drop every carried (unworn) item (▾ for everything / coins / keys)",
+            Tooltip: "Drop All — ▾ picks what it drops: unworn items, everything, coins or keys",
             SubActions: new SubAction[]
             {
                 new("Drop All (unworn items)", "DropAllCommand"),
@@ -116,7 +122,7 @@ public static class ToolbarItemCatalogue
             }),
         new("ActionHideAll",      "Hide All",             "IconHideAll",
             "HideAllCommand",
-            Tooltip: "Hide All — hide every carried (unworn) item in the room (▾ for everything / coins / keys)",
+            Tooltip: "Hide All — ▾ picks what it hides in the room: unworn items, everything, coins or keys",
             SubActions: new SubAction[]
             {
                 new("Hide All (unworn items)", "HideAllCommand"),
@@ -127,7 +133,16 @@ public static class ToolbarItemCatalogue
             }),
         new("ActionEquipAll",     "Equip All",            "IconEquipAll",
             "EquipAllCommand",
-            Tooltip: "Equip All — wear the Default gear set"),
+            Tooltip: "Equip — ▾ picks which gear set it wears (Default out of the box)",
+            SubActions: new SubAction[]
+            {
+                new("Default set", "EquipSetCommand", Parameter: "default"),
+                new("Backstab set", "EquipSetCommand", Parameter: "backstab"),
+                new("Pre-rest HP set", "EquipSetCommand", Parameter: "resthp"),
+                new("Pre-rest Mana set", "EquipSetCommand", Parameter: "restma"),
+                new("While Moving set", "EquipSetCommand", Parameter: "moving"),
+                new("Bossing set", "EquipSetCommand", Parameter: "bossing"),
+            }),
         new("ActionDepositAll",   "Deposit All",          "IconDepositAll",
             "DepositAllCommand",
             Tooltip: "Deposit All — bank wealth to the keep-on-hand floor"),

@@ -1584,9 +1584,11 @@ public partial class MainWindowViewModel : ObservableObject
 
             List<ToolbarMenuAction>? subActions = entry.SubActions?
                 .Select(a => new ToolbarMenuAction(a.Label,
-                    GetType().GetProperty(a.CommandName)?.GetValue(this) as ICommand, a.Tooltip))
+                    GetType().GetProperty(a.CommandName)?.GetValue(this) as ICommand, a.Tooltip,
+                    a.Key, a.Parameter))
                 .ToList();
 
+            string actionId = entry.ActionId;
             ToolbarButtonItem row = new(
                 ToolbarItemKind.Button, entry.ActionId,
                 label: entry.Label,
@@ -1594,11 +1596,41 @@ public partial class MainWindowViewModel : ObservableObject
                 tooltip: tooltip,
                 command: command,
                 alternateIconResourceKey: alt,
-                subActions: subActions);
+                subActions: subActions,
+                savedChoice: AppServices.Current.Profile.Current?.ToolbarSplitChoices is { } picks
+                             && picks.TryGetValue(actionId, out string? pick) ? pick : null,
+                saveChoice: key => SaveToolbarSplitChoice(actionId, key));
 
             ApplyToolbarRowState(row);
             ToolbarItems.Add(row);
         }
+    }
+
+    // Run whatever a split toolbar button is set to (its ▾ pick) — for a keybind on that
+    // button, so the hotkey does what the button does. Reads the live row when the button
+    // is on the toolbar, else the saved pick, else the button's first option.
+    public void RunToolbarPick(string actionId)
+    {
+        if (ToolbarItems.FirstOrDefault(r => r.ActionId == actionId && r.HasSubActions) is { Command: { } live })
+        {
+            live.Execute(null);
+            return;
+        }
+        if (ToolbarItemCatalogue.Find(actionId) is not { SubActions: { Count: > 0 } subs }) return;
+        string? saved = AppServices.Current.Profile.Current?.ToolbarSplitChoices is { } picks
+                        && picks.TryGetValue(actionId, out string? k) ? k : null;
+        ToolbarItemCatalogue.SubAction pick = subs.FirstOrDefault(s => s.Key == saved) ?? subs[0];
+        if (GetType().GetProperty(pick.CommandName)?.GetValue(this) is ICommand cmd && cmd.CanExecute(pick.Parameter))
+            cmd.Execute(pick.Parameter);
+    }
+
+    // A split toolbar button's ▾ pick, saved to the character so the button keeps it.
+    private static void SaveToolbarSplitChoice(string actionId, string key)
+    {
+        ProfileService profiles = AppServices.Current.Profile;
+        if (profiles.Current is not { } profile) return;
+        (profile.ToolbarSplitChoices ??= new())[actionId] = key;
+        profiles.Save();
     }
 
     // Mirrors current connection / capture state onto matching toolbar rows.
@@ -5532,6 +5564,25 @@ public partial class MainWindowViewModel : ObservableObject
             Game.Inventory.EquipResult.NotFound => "No default gear set configured.",
             Game.Inventory.EquipResult.Busy     => "Equip already in progress.",
             _ => null, // Applied — the engine logs the apply and the wire shows it.
+        };
+        if (note is not null)
+            AppServices.Current.Log.Info(Game.Inventory.EquipmentManager.LogCategory, note);
+    }
+
+    // Wear one of the six gear sets by its short name (default / backstab / resthp /
+    // restma / moving / bossing — EquipmentManager resolves them). Backs the Equip
+    // toolbar button's ▾ picks and the Action → Equip submenu.
+    [RelayCommand]
+    private void EquipSet(string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword)) return;
+        Game.Inventory.EquipResult result = AppServices.Current.Equipment.ApplyByKeyword(keyword);
+        string? note = result switch
+        {
+            Game.Inventory.EquipResult.NoChange => $"Gear set '{keyword}' already worn.",
+            Game.Inventory.EquipResult.NotFound => $"No gear set '{keyword}' configured.",
+            Game.Inventory.EquipResult.Busy     => "Equip already in progress.",
+            _ => null,
         };
         if (note is not null)
             AppServices.Current.Log.Info(Game.Inventory.EquipmentManager.LogCategory, note);

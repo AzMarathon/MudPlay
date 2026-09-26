@@ -140,6 +140,7 @@ The bottom of **Settings → Toolbar + Shortcuts** also lets you build the **ter
 
 - **Favorites / Recent destinations** — the GOTO walk fly-outs (your starred locations and the last places you walked, click one to walk there). They're at the top by default but you can move, rename, or remove them like anything else. Once placed they always show; on a new profile with an empty list the submenu just reads "(none yet)".
 - **Commands** — any individual command from the File / View / Action / Tools menus (window opens, one-shots like Get All / Reset States, utilities like Bug report / Program Log / Wire Inspector). Auto-engine toggles are deliberately left out — those belong on the toolbar / Action menu.
+- **Drop ▸ / Hide ▸ / Equip ▸** — ready-made submenus of the drop, hide and gear-set actions. Add the whole submenu, or just the single action you use (e.g. only **Drop Coins**, or **Equip Backstab set**) — both are in the pool.
 - **Workshop tabs** — a direct link that opens the Player Workshop straight to a chosen tab (Character Info, Equipment Manager, Calculators, Bosses, Roomba, …).
 - **Calculators** — a direct link that opens the Workshop on the **Calculators** tab with a chosen calculator (Hit / Movement / Swing / Backstab / Mana Regen / Realm Rankings / Monster Aggro) **expanded and centered** on screen.
 - **Settings tabs** — a direct link that opens the Settings window straight to a chosen tab (General, Combat, Health, Party, Statline, Auto-Lair, …) instead of wherever it was last. (The plain **Settings…** command opens the window on its last tab.)
@@ -824,7 +825,7 @@ With the collection engines on, MudPlay picks up coin and flagged items off the 
 
 In a **stash room** the client stashes your excess coin (and any auto-stash items) as you pass through, so it deliberately does **not** re-grab a pile it just hid — but only the coin a `search` *re-reveals* is skipped. Coin that's plainly visible when you walk in, or that a kill drops on the floor, is still collected there (and, of course, in every ordinary room, including the room right after a stash room).
 
-You don't have to wait for the engines, either: the **Action menu** (and the matching toolbar buttons) has **Get All**, **Drop All**, **Hide All** and **Equip All** to grab everything on the floor, drop or hide everything unworn, or re-wear your Default set on demand — the local twins of the `@get-all` / `@drop-all` / `@hide-all` remote commands.
+You don't have to wait for the engines, either: the **Action menu** (and the matching toolbar buttons) has **Get All** and the **Drop ▸**, **Hide ▸** and **Equip ▸** submenus to grab everything on the floor, drop or hide what you carry, or put on any gear set on demand — the local twins of the `@get-all` / `@drop-all` / `@hide-all` / `@equip` remote commands.
 
 ## Banking
 
@@ -1160,7 +1161,12 @@ Emergency survival is never held — a life-threatening heal, a flee, or an emer
 
 The **Action menu** also carries commands you fire once, on demand, rather than leaving running:
 
-- **Get All / Drop All / Equip All / Deposit All** — pick up everything on the floor, drop everything unworn, wear your Default gear set, or bank your wealth down to the keep-on-hand floor, right now. Drop All also comes in **Drop Everything** (worn gear, light, keys and coins too — no confirmation), **Drop Coins** and **Drop Keys**; on the toolbar they're behind the little **▾** beside the Drop All button. A stack goes in one counted `drop` on Paradigm and one `drop` per item on Stock. **Hide All** / **Hide Everything** / **Hide Coins** / **Hide Keys** do the same sweeps with `hide`, stashing everything in the room where only a search turns it up (a **Hide All** toolbar button with its own ▾ is in Settings → Toolbar). (These are the local twins of the `@get-all` / `@drop-all` / `@deposit-all` remote commands, and the toolbar Get / Drop / Equip / Deposit buttons drive the same actions.)
+- **Get All / Deposit All** — pick up everything on the floor, or bank your wealth down to the keep-on-hand floor, right now.
+- **Drop ▸** / **Hide ▸** — submenus with **All** (every carried, unworn item), **Everything** (worn gear, light, keys and coins too — no confirmation), **Coins** and **Keys**. Hide does the same sweeps with `hide`, stashing everything in the room where only a search turns it up. A stack goes in one counted command on Paradigm and one per item on Stock.
+- **Equip ▸** — wear any of your gear sets: **Default**, **Backstab**, **Pre-rest HP**, **Pre-rest Mana**, **While Moving** or **Bossing**.
+- (These are the local twins of the `@get-all` / `@drop-all` / `@hide-all` / `@equip` / `@deposit-all` remote commands.)
+
+**Toolbar split buttons.** The **Drop All**, **Hide All** and **Equip** toolbar buttons each have a small **▾** beside them. The ▾ picks **what the button does** — Drop All's unworn / everything / coins / keys, or which gear set Equip wears — and picking one also does it right away. From then on a click on the button does your pick (its tooltip names it), and the pick is saved to your character. A keybind on one of these buttons follows the same pick.
 - **Reset States** — the recovery escape hatch. Clears your own stuck ailments, waits, and movement holds **and every party member's ailment chips** (blind / poison / disease / confuse / held), returning you to an idle state — reach for it when an engine looks wedged (e.g. the walker parked "held" or "waiting" with nothing actually happening) or a party row is stuck showing a condition that's already gone. It also **re-equips your Default gear set** (undoing a stuck Pre-rest swap) and **re-polls `health`** — the game's compact one-line HP/pool readout, far less scroll than the full stat screen — so a drifted max HP/mana snaps back to the real value. (Typing `health` yourself re-anchors the same way.) It's also on the terminal's right-click menu.
 
 ## Base modes

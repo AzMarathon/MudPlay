@@ -35,6 +35,37 @@ public class MenuActionCatalogueTests
     }
 
     [Fact]
+    public void EverySubmenuChild_IsARealEntryAndAddableOnItsOwn()
+    {
+        var subs = MenuActionCatalogue.AllEntries.Where(e => e.EntryKind == MenuActionCatalogue.Kind.Submenu).ToList();
+        Assert.Contains(subs, e => e.Id == "action.drop");
+        Assert.Contains(subs, e => e.Id == "action.hide");
+        Assert.Contains(subs, e => e.Id == "action.equip");
+        foreach (MenuActionCatalogue.Entry sub in subs)
+        {
+            Assert.NotEmpty(sub.Children!);
+            foreach (string id in sub.Children!)
+            {
+                MenuActionCatalogue.Entry? child = MenuActionCatalogue.Find(id);
+                Assert.True(child is not null, $"{sub.Id}: child '{id}' isn't a catalogue entry");
+                Assert.Contains(child!, MenuActionCatalogue.AllEntries);   // the single action is offered too
+            }
+        }
+    }
+
+    [Fact]
+    public void EveryToolbarSubAction_ResolvesToAnICommandProperty()
+    {
+        foreach (ToolbarItemCatalogue.Entry e in ToolbarItemCatalogue.AllEntries.Where(e => e.SubActions is { Count: > 0 }))
+            foreach (ToolbarItemCatalogue.SubAction a in e.SubActions!)
+            {
+                PropertyInfo? p = Prop(a.CommandName);
+                Assert.True(p is not null && typeof(ICommand).IsAssignableFrom(p.PropertyType),
+                    $"{e.ActionId} ▾ '{a.Label}': no ICommand '{a.CommandName}' on MainWindowViewModel");
+            }
+    }
+
+    [Fact]
     public void EveryToggleEntry_ResolvesToABoolProperty()
     {
         foreach (MenuActionCatalogue.Entry e in MenuActionCatalogue.AllEntries
