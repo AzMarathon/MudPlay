@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.107.13**
-> - New `@drop-all full` / `coins` / `keys` (bare `@drop-all` unchanged) with matching Drop Everything / Drop Coins / Drop Keys in the Action menu and a ▾ on the toolbar Drop All button
-> - Drop All drops a stacked item one per copy on Stock (a counted drop only works on Paradigm)
+> **Version 3.107.14**
+> - Code comments corrected where they contradicted the code (shop charm pricing, held-member pause, buff timers across a reconnect, Stock buff-removal timing)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
