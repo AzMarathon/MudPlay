@@ -1,5 +1,9 @@
 # Version history
 
+## 3.110.5
+
+- Ancient Galleon, Black Ice Cavern, Burning Plains, Chaotic Isle, Darkened Tunnels and Pirate Galleon are areas of their real region, not landmasses, so the Landmass column and filter no longer list them; the temple landmass is named Dinos
+
 ## 3.110.4
 
 - Monsters the game marks out of play (In Game = 0, sysop-only or test NPCs) leave the Monsters table and are listed in the Unobtainable table instead
