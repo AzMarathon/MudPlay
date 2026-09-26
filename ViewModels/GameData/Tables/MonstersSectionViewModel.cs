@@ -29,6 +29,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     private readonly SettingsResolver? _resolverRef;
     private readonly MonsterOverlaySeedStore? _overlaySeed;
     private readonly RoomGraphManager? _roomGraph;
+    private readonly LocationFilters _location = new();
 
     public override string Id => "monsters";
     public override string Title => "Monsters";
@@ -173,6 +174,10 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         // cell's raw value (so "80/10" AC/DR reads 80). This absorbs Monster Intel's
         // filtering dimensions (elemental resists, spell immunity, magic-weapon
         // requirement, type/flags, loot). Live — editing any control re-filters.
+        // Where it lives comes first: it is the cut a player makes before any stat bracket
+        // ("what can I fight on this landmass / in this region / here?").
+        FilterGroups.Add(new FilterGroup("Location", categories: _location.All));
+
         FilterGroups.Add(new FilterGroup("Combat",
             ranges: new[]
             {
@@ -262,6 +267,12 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         BuildLairIndex();
         base.PopulateRows(rows);
     }
+
+    // The Location dropdowns offer the places the loaded monsters actually carry (seed plus
+    // the user's overrides), so a label typed into a record appears here after its reload.
+    protected override void OnRowsLoaded()
+        => _location.Load(AllRows.Select(r =>
+            (r.Get("Landmass") ?? string.Empty, r.Get("Region") ?? string.Empty, r.Get("Area") ?? string.Empty)));
 
     // Capture the room graph's immutable per-monster lair-size snapshot (built from
     // each room's lair tag). Empty when no graph is wired (e.g. tests) — the lair

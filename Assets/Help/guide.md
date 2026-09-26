@@ -1290,6 +1290,7 @@ On the **Monsters**, **Items**, and **Spells** tables you can also **rearrange t
 
 It also carries a **filter sidebar** on the right — drag its left edge to resize it — that **curates** which monsters are in the list. Edit the boxes, then press **Apply** to run them (a deliberate step, so a half-typed range never re-filters mid-edit); **Reset** clears every filter and the search box at once. It's split into labelled sections, all AND'd together:
 
+- **Location** — **Landmass**, **Region** and **Area** dropdowns that narrow each other: pick a landmass and the Region list shows only the regions on it, pick a region and the Area list shows only its areas (for example *Mainland → Volcano → Infernal Cavern*). Each list also has **(not set)** whenever some monsters in scope have no label yet, so you can find the ones still to be filed from their records. The lists are built from the monsters' own location labels (the shipped ones plus anything you have typed into a record), and a change you make in a record shows up here after its reload.
 - **Combat** — Exp, HP, Avg damage, Accuracy, Armour Class, Damage Resist, Dodge, Magic Resist.
 - **Elemental defenses** — Cold / Fire / Stone / Lightning / Water resist %. These are **signed**: a *negative* resist means the monster is **vulnerable** (takes extra of that element), so bracket the max at −1 to find things a given element shreds.
 - **Casting & immunity** — Magic-weapon requirement, Spell immunity level, and a **Casts spells** toggle.

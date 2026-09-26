@@ -1,5 +1,9 @@
 # Version history
 
+## 3.110.2
+
+- Monsters filter sidebar gains a Location section: Landmass / Region / Area dropdowns that narrow each other, with (not set) to find unfiled monsters
+
 ## 3.110.1
 
 - Help search no longer hides topics: matching topics are highlighted and opened in the contents, every match in the open topic's text is highlighted, and the page scrolls to the first
