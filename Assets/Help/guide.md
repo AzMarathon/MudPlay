@@ -1604,7 +1604,7 @@ Click **＋ Add buff** to open the Add-buff dialog:
 
 A mana-regen roll spell (nature tap, mana flux, profane link, and kin) rolls a random regen contribution each cast, so the "Cast before resting" condition also carries **reroll knobs** to chase a good roll:
 
-- **Reroll below abil 145** — a threshold: reroll while the spell's rolled contribution (read off `abil 145`) lands under it. That value can be negative, so "reroll below 0" chases a non-negative roll.
+- **Reroll below abil 145** — a threshold: reroll while the spell's rolled contribution (read off `abil 145`) lands under it. That value can be negative, so "reroll below 0" chases a non-negative roll. The box only accepts values the spell can actually roll **at your level** — the range is shown under it (e.g. *rolls -64 … 216 at your level* for mana flux), and it's the same for nature tap and every other roll spell. On **Stock** the threshold is a mana tick instead, set on a slider running from the worst to the best tick that roll range gives at your level.
 - **Max rerolls** — how many times to chase a better roll before accepting what landed.
 - **Reroll infinite** — a checkbox just below Max rerolls: keep re-casting until the roll clears the threshold, no cap (ticking it greys out Max rerolls).
 

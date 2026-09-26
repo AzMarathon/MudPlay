@@ -46,6 +46,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     private readonly Func<string?, bool> _isRollSpell;
     private readonly bool _isStockRealm;
     private readonly Func<string?, (int Worst, int Best)?>? _tickRange;
+    private readonly Func<string?, (int Min, int Max)?>? _rollRange;
 
     // Cached worst/best mana tick for the picked roll spell (Stock only), refreshed
     // when the spell changes so the slider bounds follow the pick.
@@ -61,6 +62,9 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     [NotifyPropertyChangedFor(nameof(TickBest))]
     [NotifyPropertyChangedFor(nameof(RerollBoundsText))]
     [NotifyPropertyChangedFor(nameof(RerollThresholdSlider))]
+    [NotifyPropertyChangedFor(nameof(RerollNumericMinimum))]
+    [NotifyPropertyChangedFor(nameof(RerollNumericMaximum))]
+    [NotifyPropertyChangedFor(nameof(RerollRollRangeText))]
     private string? _spell;
 
     partial void OnSpellChanged(string? value)
@@ -119,12 +123,32 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     public string RerollBoundsText =>
         _range is { } r ? $"worst {r.Worst} … best {r.Best} MP per tick" : string.Empty;
 
+    // Bounds for the numeric threshold box. On Paradigm the threshold is the rolled
+    // `abil 145` value, so the box spans exactly what the spell can roll at the
+    // character's level — negatives included (a flux roll can land well below zero).
+    // On Stock the box is the fallback for a tick threshold (no live tick bounds), which
+    // is never negative. With the roll range unknown, Paradigm allows ±999.
+    private (int Min, int Max)? RollRange => _isStockRealm ? null : _rollRange?.Invoke(Spell);
+    public decimal RerollNumericMinimum => _isStockRealm ? 0 : RollRange?.Min ?? -999;
+    public decimal RerollNumericMaximum => _isStockRealm ? 999 : RollRange?.Max ?? 999;
+    public string RerollRollRangeText =>
+        RollRange is { } r ? $"rolls {r.Min} … {r.Max} at your level" : string.Empty;
+
     // The slider's value, mapped onto the stored threshold (defaults to the worst
     // tick — i.e. accept anything — until the user drags it up).
+    //
+    // Writes only while the slider is the control on show. A hidden Slider keeps its
+    // TwoWay binding, and with no tick range its Maximum falls back to TickWorst + 1 =
+    // 1 — so on Paradigm (numeric field, slider hidden) every threshold typed into the
+    // numeric box was coerced to 1 by the invisible slider and pushed straight back
+    // (report paradigm-20260926-112808: "won't save anything above 1").
     public double RerollThresholdSlider
     {
         get => RerollThreshold ?? (int)TickWorst;
-        set => RerollThreshold = (int)System.Math.Round(value);
+        set
+        {
+            if (ShowRerollSlider) RerollThreshold = (int)System.Math.Round(value);
+        }
     }
 
     partial void OnRerollThresholdChanged(int? value) => OnPropertyChanged(nameof(RerollThresholdSlider));
@@ -143,7 +167,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         IReadOnlyList<BuffPickOption> pickOptions,
         Func<string?, bool> isLightSpell, Func<string?, bool> isRollSpell,
         bool isStockRealm = false, Func<string?, (int Worst, int Best)?>? tickRange = null,
-        AddBuffResult? initial = null)
+        AddBuffResult? initial = null, Func<string?, (int Min, int Max)?>? rollRange = null)
     {
         ArgumentNullException.ThrowIfNull(pickOptions);
         PickOptions = pickOptions;
@@ -151,6 +175,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         _isRollSpell = isRollSpell;
         _isStockRealm = isStockRealm;
         _tickRange = tickRange;
+        _rollRange = rollRange;
         IsEditing = initial is not null;
         if (initial is { } i)
         {

@@ -82,9 +82,14 @@
                                    FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"/>
                         <NumericUpDown Grid.Column="1" HorizontalAlignment="Left" Width="120"
                                        Value="{Binding RerollThreshold, Mode=TwoWay}"
-                                       Minimum="0" Maximum="999" Increment="1" FormatString="0"
+                                       Minimum="{Binding RerollNumericMinimum}"
+                                       Maximum="{Binding RerollNumericMaximum}"
+                                       Increment="1" FormatString="0"
                                        ToolTip.Tip="{Binding RerollThresholdTip}"/>
                     </Grid>
+                    <TextBlock Text="{Binding RerollRollRangeText}" FontSize="10" Margin="118,0,0,0"
+                               IsVisible="{Binding ShowRerollNumeric}"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
                     <!-- Stock tick slider — drag the reroll target between the worst and
                          best possible mana tick for this spell at your current gear. -->
