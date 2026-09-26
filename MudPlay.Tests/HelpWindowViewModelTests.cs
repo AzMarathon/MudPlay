@@ -71,4 +71,42 @@ public sealed class HelpWindowViewModelTests
 
         Assert.Same(navigation, vm.SelectedTopic);
     }
+
+    [Fact]
+    public void Search_HighlightsMatches_WithoutHidingTheRest()
+    {
+        HelpWindowViewModel vm = new(Book());
+        HelpNodeViewModel combat = vm.Topics[0];
+        HelpNodeViewModel targeting = combat.Children[0];
+        HelpNodeViewModel navigation = vm.Topics[1];
+
+        vm.SearchText = "priority";
+
+        Assert.True(targeting.IsMatch);
+        Assert.False(combat.IsMatch);        // its own text doesn't hold the query
+        Assert.True(combat.IsExpanded);      // but it opens to show the hit
+        Assert.False(navigation.IsMatch);
+        Assert.Equal(2, vm.Topics.Count);    // nothing filtered out
+        Assert.Equal("1 matching topic", vm.StatusText);
+    }
+
+    [Fact]
+    public void ClearingSearch_ClearsEveryMark()
+    {
+        HelpWindowViewModel vm = new(Book());
+        vm.SearchText = "o";
+        vm.SearchText = string.Empty;
+
+        Assert.All(vm.Topics, t => Assert.False(t.IsMatch));
+        Assert.False(vm.Topics[0].Children[0].IsMatch);
+        Assert.Equal("3 topics", vm.StatusText);
+    }
+
+    [Fact]
+    public void Search_NoMatch_SaysSo()
+    {
+        HelpWindowViewModel vm = new(Book());
+        vm.SearchText = "zzz";
+        Assert.Equal("No topics match", vm.StatusText);
+    }
 }

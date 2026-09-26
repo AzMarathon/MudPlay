@@ -1,5 +1,9 @@
 # Version history
 
+## 3.110.1
+
+- Help search no longer hides topics: matching topics are highlighted and opened in the contents, every match in the open topic's text is highlighted, and the page scrolls to the first
+
 ## 3.110.0
 
 - New `@hide-all [full|coins|keys]` and Hide All / Hide Everything / Hide Coins / Hide Keys actions (Action menu + a Hide All toolbar button): the Drop All sweeps, stashed with `hide` instead of dropped
