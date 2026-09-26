@@ -37,10 +37,19 @@ namespace MudPlay.Game.Map;
 //    / waterskins) and we HALT the walk rather than march deeper into a hazard we
 //    can no longer counter.
 //
+// A party FOLLOWER runs no walk of its own — the leader's route carries it — so
+// neither hook above would ever fire for it, and followers crossed the desert
+// taking heat damage while the leader drank (a party had to hand-write a
+// "You suffer in the desert heat... → use waterskin" trigger). While following,
+// arriving in a hazard room raises the buff (a follower can't see the leader's
+// next step, so it can't pre-empt; the per-item timer still spends one charge per
+// buff window), and the lapse prompt re-raises the same as on a walk.
+//
 // No master toggle: surviving a hazard room the route already commits to walking
 // is not opt-in (mirrors auto-light's "leave it off if you don't want it" — here
 // the equivalent is simply not routing through the hazard). It only ever acts when
-// a checkspell hazard and a carried source item coincide during a live walk.
+// a checkspell hazard and a carried source item coincide during a live walk — ours,
+// or the leader's we're following.
 public sealed class AutoHazardCounterProvisioner
 {
     // LogService category — [HazardCounter] rows per buff raise / skip.
@@ -65,6 +74,7 @@ public sealed class AutoHazardCounterProvisioner
     // the predictive timer keeps the buff up.
     private readonly Func<int, Func<string, bool>?>? _messageMatcherForSpell;
     private readonly Func<bool> _walkActive;
+    private readonly Func<bool> _followingLeader;
     private readonly Action<string>? _haltWalk;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
@@ -86,6 +96,11 @@ public sealed class AutoHazardCounterProvisioner
     // charges — so the walk halts instead of re-firing into the void.
     private bool _awaitingSwig;
 
+    // We've already told the room we're out of the buff's source item. Cleared once a
+    // `use` goes out again (a fresh one picked up / handed over), so a later run-out
+    // is announced anew — but a hazard stretch doesn't repeat it every lapse tick.
+    private bool _announcedOut;
+
     public AutoHazardCounterProvisioner(
         Func<RoomKey, Room?> resolveRoom,
         Func<int, RoomHazardIndex.RoomHazard?> hazardForSpell,
@@ -95,7 +110,8 @@ public sealed class AutoHazardCounterProvisioner
         Func<bool>? walkActive = null,
         Action<string>? haltWalk = null,
         Func<DateTimeOffset>? now = null,
-        LogService? log = null)
+        LogService? log = null,
+        Func<bool>? followingLeader = null)
     {
         ArgumentNullException.ThrowIfNull(resolveRoom);
         ArgumentNullException.ThrowIfNull(hazardForSpell);
@@ -107,6 +123,7 @@ public sealed class AutoHazardCounterProvisioner
         _itemName = itemName;
         _messageMatcherForSpell = messageMatcherForSpell;
         _walkActive = walkActive ?? (() => true);
+        _followingLeader = followingLeader ?? (() => false);
         _haltWalk = haltWalk;
         _now = now ?? (() => DateTimeOffset.UtcNow);
         _log = log;
@@ -130,6 +147,21 @@ public sealed class AutoHazardCounterProvisioner
         if (_resolveRoom(target) is not { } room) return;
         if (room.Spell <= 0) return;
         if (_hazardForSpell(room.Spell) is not { } hazard) return;
+        foreach (RoomHazardIndex.BuffCounter counter in hazard.BuffCounters)
+        {
+            Arm(counter);
+            TryRaiseBuff(counter);
+        }
+    }
+
+    // A follower just arrived in a room (the leader's move carried it). Raise the
+    // room's hazard buff the same way the approach hook does for our own walk. Our
+    // own walk, if one is running, already covered this room on approach.
+    public void OnArrivedInRoom(RoomKey room)
+    {
+        if (!_followingLeader() || _walkActive()) return;
+        if (_resolveRoom(room) is not { } r || r.Spell <= 0) return;
+        if (_hazardForSpell(r.Spell) is not { } hazard) return;
         foreach (RoomHazardIndex.BuffCounter counter in hazard.BuffCounters)
         {
             Arm(counter);
@@ -207,9 +239,10 @@ public sealed class AutoHazardCounterProvisioner
 
     private void HandleThirst(RoomHazardIndex.BuffCounter counter)
     {
-        // Only ever act on a live walk — a lapse line seen while idle is just the
-        // player standing in the room, not our route committing to march through.
-        if (!_walkActive()) return;
+        // Only ever act on a live walk — ours, or the leader's we're following. A
+        // lapse line seen while idle is just the player standing in the room, not a
+        // route committing to march through.
+        if (!_walkActive() && !_followingLeader()) return;
 
         // Immune via a passive guard — the lapse prompt can't actually harm us, so
         // neither re-`use` (pointless) nor halt (we're safe). Just walk on.
@@ -225,6 +258,7 @@ public sealed class AutoHazardCounterProvisioner
         // no longer counter, so halt instead of firing into the void.
         if (_awaitingSwig)
         {
+            AnnounceOut(counter);
             Halt($"buff {counter.BuffSpell}: lapse prompt with no swig — out of charges");
             return;
         }
@@ -232,6 +266,7 @@ public sealed class AutoHazardCounterProvisioner
         int pick = FirstCarried(counter.SourceItems);
         if (pick == 0)
         {
+            AnnounceOut(counter);
             Halt($"buff {counter.BuffSpell}: lapsed with no source item carried");
             return;
         }
@@ -256,13 +291,39 @@ public sealed class AutoHazardCounterProvisioner
         _wire.Send($"use {name}");
         _lastUsed[itemId] = now;
         _awaitingSwig = true;
+        _announcedOut = false;
         return name;
     }
 
+    // Tell the room we can no longer counter the hazard — out of the buff's source
+    // item — so the party knows why we're taking the damage (a follower can't stop
+    // the leader's route itself). Said once per run-out; the `.` precursor makes it
+    // a plain say whatever the line starts with.
+    private void AnnounceOut(RoomHazardIndex.BuffCounter counter)
+    {
+        if (_announcedOut) return;
+        _announcedOut = true;
+        string item = counter.SourceItems.Count > 0 && _itemName(counter.SourceItems[0]) is { Length: > 0 } n
+            ? n : "water";
+        string plural = item.EndsWith('s') ? item : item + "s";
+        _wire.Send($".I'm out of {plural}!");
+        _log?.Info(LogCategory, $"out of {plural} — told the room");
+    }
+
+    // Out of ways to raise the buff. Our own walk backs out rather than marching
+    // deeper; a follower has no walk to halt — the leader owns the route — so it only
+    // records it.
     private void Halt(string why)
     {
-        _log?.Info(LogCategory, $"halting walk — {why}");
-        _haltWalk?.Invoke(why);
+        if (_walkActive())
+        {
+            _log?.Info(LogCategory, $"halting walk — {why}");
+            _haltWalk?.Invoke(why);
+        }
+        else
+        {
+            _log?.Info(LogCategory, $"following through the hazard unprotected — {why}");
+        }
         Disarm();
     }
 

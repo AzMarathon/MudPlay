@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.107.7**
-> - The Conversation window's font picker lists every installed text font (proportional included) after the three bundled ones, with the terminal's 8–32pt size range
+> **Version 3.107.8**
+> - Party followers now drink their waterskin (or other hazard-buff item) on entering a desert-heat room and on the heat prompt, like the leader's own walk does, and say "I'm out of waterskins!" when they run dry
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

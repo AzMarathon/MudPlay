@@ -57,6 +57,7 @@ public sealed class AutoHazardCounterProvisionerTests
         public int Carried = 1;   // waterskins on hand
         public bool ImmuneCarried = false;   // wearing/holding the immunity guard
         public bool WalkActive = true;
+        public bool Following = false;   // in a party, not the leader
         public string? Halted;    // reason from the halt callback, null until halted
         public AutoHazardCounterProvisioner Engine { get; }
 
@@ -80,7 +81,8 @@ public sealed class AutoHazardCounterProvisionerTests
                 messageMatcherForSpell: matcher,
                 walkActive:     () => WalkActive,
                 haltWalk:       reason => Halted = reason,
-                now:            () => Now);
+                now:            () => Now,
+                followingLeader: () => Following);
             Engine.SetWireSender(_ => { });
         }
 
@@ -89,6 +91,8 @@ public sealed class AutoHazardCounterProvisionerTests
         public IReadOnlyList<string> Sent => Engine.LastSentForTests
             .Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'))
             .ToList();
+
+        public IReadOnlyList<string> Uses => Sent.Where(l => l.StartsWith("use ")).ToList();
     }
 
     [Fact]
@@ -205,7 +209,8 @@ public sealed class AutoHazardCounterProvisionerTests
         Harness h = new();
         h.Engine.OnApproachingRoom(HazardRoom);   // predictive use (#1), awaiting swig
         h.Engine.OnServerLine(ThirstLine);        // no swig seen → out of charges
-        Assert.Single(h.Sent);                    // no second `use` fired into the void
+        Assert.Single(h.Uses);                    // no second `use` fired into the void
+        Assert.Equal(".I'm out of waterskins!", h.Sent[^1]);
         Assert.NotNull(h.Halted);
     }
 
@@ -219,7 +224,7 @@ public sealed class AutoHazardCounterProvisionerTests
         h.Engine.OnServerLine(SwigLine);          // confirms #1
         h.Engine.OnServerLine(ThirstLine);        // lapse → use #2, awaiting swig
         h.Engine.OnServerLine(ThirstLine);        // no swig for #2 → halt
-        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal(2, h.Uses.Count);
         Assert.NotNull(h.Halted);
     }
 
@@ -231,7 +236,8 @@ public sealed class AutoHazardCounterProvisionerTests
         Harness h = new() { Carried = 0 };
         h.Engine.OnApproachingRoom(HazardRoom);   // armed, but nothing to `use`
         h.Engine.OnServerLine(ThirstLine);
-        Assert.Empty(h.Sent);
+        Assert.Empty(h.Uses);
+        Assert.Equal(new[] { ".I'm out of waterskins!" }, h.Sent);
         Assert.NotNull(h.Halted);
     }
 
@@ -247,5 +253,60 @@ public sealed class AutoHazardCounterProvisionerTests
         h.Engine.OnServerLine(ThirstLine);        // stray line — ignored
         Assert.Single(h.Sent);
         Assert.Null(h.Halted);
+    }
+
+    // ----- following a party leader (no walk of our own) -------------------
+
+    // The leader's route carries a follower into the desert; with no walk of its own
+    // the approach hook never fires, so it raises on arrival instead.
+    [Fact]
+    public void Follower_ArrivingInHazardRoom_RaisesBuff()
+    {
+        Harness h = new() { WalkActive = false, Following = true };
+        h.Engine.OnArrivedInRoom(HazardRoom);
+        Assert.Equal(new[] { "use waterskin" }, h.Sent);
+    }
+
+    [Fact]
+    public void Follower_NextHazardRoom_WithinWindow_SpendsNoSecondCharge()
+    {
+        Harness h = new() { WalkActive = false, Following = true };
+        h.Engine.OnArrivedInRoom(HazardRoom);
+        h.Advance(30);
+        h.Engine.OnArrivedInRoom(HazardRoom);
+        Assert.Single(h.Sent);
+    }
+
+    [Fact]
+    public void Follower_ThirstPrompt_ReRaises_AndOutOfCharges_OnlyLogs()
+    {
+        Harness h = new() { WalkActive = false, Following = true };
+        h.Engine.OnArrivedInRoom(HazardRoom);     // use #1
+        h.Engine.OnServerLine(SwigLine);          // confirmed
+        h.Engine.OnServerLine(ThirstLine);        // lapse → use #2
+        Assert.Equal(2, h.Sent.Count);
+        h.Engine.OnServerLine(ThirstLine);        // no swig for #2 → out of charges
+        Assert.Equal(".I'm out of waterskins!", h.Sent[^1]);   // tells the room
+        Assert.Null(h.Halted);                    // no walk of ours to halt
+        h.Engine.OnServerLine(ThirstLine);        // still out — said once, not every tick
+        Assert.Equal(3, h.Sent.Count);
+    }
+
+    [Fact]
+    public void NotFollowing_Arrival_DoesNothing()
+    {
+        // Solo / leading: our own walk's approach hook owns raising; an arrival alone
+        // (a hand-typed move) never spends a charge.
+        Harness h = new() { WalkActive = false, Following = false };
+        h.Engine.OnArrivedInRoom(HazardRoom);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void Follower_WithOwnWalkRunning_LeavesItToTheApproachHook()
+    {
+        Harness h = new() { WalkActive = true, Following = true };
+        h.Engine.OnArrivedInRoom(HazardRoom);
+        Assert.Empty(h.Sent);
     }
 }
