@@ -3811,6 +3811,15 @@ public sealed class AppServices
             // emergency-hangup floor is crossed.
             readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             selfIsPartyLeader: () => PartyState.IsInParty && PartyState.SelfIsLeader);
+        // The room we came from — the Backward flee's retreat when there's no trail
+        // to the loop's origin (we're standing on it).
+        Health.PreviousRoom = () =>
+        {
+            IReadOnlyList<Game.Map.RoomKey> history = RoomTracker.GetHistory();
+            for (int i = 1; i < history.Count; i++)
+                if (!history[i].Equals(history[0])) return history[i];
+            return null;
+        };
 
         // Late-wire the classifier's flee probe now that Health exists (it's
         // built after RoomClassifier). While fleeing, a monster that pursues us

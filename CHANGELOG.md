@@ -1,5 +1,12 @@
 # Version history
 
+## 3.110.17
+
+- Flee no longer gives up at a loop's start room: it falls back into the room you came from, and runs again if it lands on a monster while still under run-if-below
+- Equipment Manager: new Clear all button empties the selected gear set
+- Equipment Manager: ⚠ can't-wear marks clear when Update from live (or @equip … update) empties or re-picks the slot
+- bug reports addressed: paradigm-20260926-221012, paradigm-20260926-221353
+
 ## 3.110.14
 
 - Profile Management: New… starts the draft on the BBS you have selected, and Save As… names it there

@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.110.14**
-> - Profile Management: New… starts the draft on the BBS you have selected, and Save As… names it there
-> - Profile Management: new Copy button duplicates a character under a new name on the same BBS
-> - Paradigm: one-use items that don't recharge (learn-spell scrolls) are no longer looked at for charges
+> **Version 3.110.17**
+> - Flee no longer gives up at a loop's start room: it falls back into the room you came from, and runs again if it lands on a monster while still under run-if-below
+> - Equipment Manager: new Clear all button empties the selected gear set
+> - Equipment Manager: ⚠ can't-wear marks clear when Update from live (or @equip … update) empties or re-picks the slot
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

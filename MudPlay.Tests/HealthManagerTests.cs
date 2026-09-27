@@ -1876,6 +1876,7 @@ public sealed class HealthManagerTests
         Assert.Equal(Game.Map.Direction.N, h.Engine.SentBacktrackMoves[1]);
 
         // Capped at RunDistance=2 — the third planned move is never sent.
+        h.HostileInRoom = false;   // landed clear of the fight — nothing to re-flee from
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 2));
         Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
     }
@@ -1916,8 +1917,54 @@ public sealed class HealthManagerTests
         Assert.Equal(3, h.Engine.SentBacktrackMoves.Count);
         Assert.Equal(Game.Map.Direction.U, h.Engine.SentBacktrackMoves[2]);
 
+        h.HostileInRoom = false;   // landed clear of the fight — nothing to re-flee from
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 102));
         Assert.Equal(3, h.Engine.SentBacktrackMoves.Count);    // stopped
+    }
+
+    // Report paradigm-20260926-221012: a two-room loop, standing on its origin after
+    // one flee — no trail "back" to the origin, so fall back to the room we came from.
+    [Fact]
+    public void Flee_Backward_AtLoopOrigin_RetreatsToThePreviousRoom()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 2;
+        h.Engine!.JourneyOrigin = new Game.Map.RoomKey(1, 2150);
+        h.Health.PreviousRoom = () => new Game.Map.RoomKey(1, 2152);
+        h.ReversePath = (_, to) => to.Room == 2152 ? new[] { Game.Map.Direction.N } : null;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 2150));
+
+        h.State.MaxHp = 33;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.State.Hp = 5;
+
+        Assert.Equal(new[] { Game.Map.Direction.N }, h.Engine.SentBacktrackMoves);
+    }
+
+    // Same report: the flee landed on a monster and fought it at run-trigger HP.
+    [Fact]
+    public void Flee_LandsOnAHostile_StillUnderTrigger_FleesAgain()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 1;
+        h.Engine!.JourneyOrigin = new Game.Map.RoomKey(1, 0);
+        h.ReversePath = (_, _) => new[] { Game.Map.Direction.S };
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));
+        h.HostileInRoom = true;
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.State.Hp = 30;
+        Assert.Single(h.Engine.SentBacktrackMoves);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));   // landed — a rat is here
+
+        Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
     }
 
     [Fact]
@@ -1943,6 +1990,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 30;
 
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 100));
+        h.HostileInRoom = false;   // landed clear of the fight — nothing to re-flee from
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 101));   // beyond the cap
         Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
         Assert.Equal(
@@ -1977,6 +2025,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 30;
 
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 100));
+        h.HostileInRoom = false;   // landed clear of the fight — nothing to re-flee from
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 101));
 
         Assert.Equal(
@@ -2026,6 +2075,7 @@ public sealed class HealthManagerTests
         h.State.HasPromptData = true;
         h.State.Hp = 30;
 
+        h.HostileInRoom = false;   // landed clear of the fight — nothing to re-flee from
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 100));
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 101));
 

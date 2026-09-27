@@ -101,6 +101,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(DisableCommand))]
     [NotifyCanExecuteChangedFor(nameof(SnapshotCurrentCommand))]
     [NotifyCanExecuteChangedFor(nameof(ApplyNowCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearAllCommand))]
     [NotifyPropertyChangedFor(nameof(ShowCombatSwapOption))]
     [NotifyPropertyChangedFor(nameof(ShowMovementOptions))]
     private EquipmentSetRowViewModel? _selectedSetRow;
@@ -377,8 +378,39 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         finally { _suppress = false; }
 
         PersistRowsToSet();
+        RefreshSetBlocks();
         RebuildBonusRows();
         ApplyStatus = string.Empty;
+    }
+
+    // Empty every slot of the selected set (weapons and alternates included), after a
+    // confirm — a fresh start for a copied character's sets.
+    [RelayCommand(CanExecute = nameof(HasSet))]
+    private async Task ClearAll()
+    {
+        if (SelectedSet is not { } set) return;
+        if (!await AppServices.Current.Confirm.ConfirmAsync(
+                "Clear gear set", $"Clear every slot in '{set.Name}'?", "Clear all")) return;
+
+        _suppress = true;
+        try
+        {
+            foreach (EquipmentSlotRowViewModel row in Rows) row.Load(null);
+        }
+        finally { _suppress = false; }
+
+        PersistRowsToSet();
+        RefreshSetBlocks();
+        RebuildBonusRows();
+        ApplyStatus = $"Cleared '{set.Name}'.";
+    }
+
+    // Re-check the selected set's blocks after a bulk slot rewrite — a cleared or
+    // re-picked slot must drop the block raised on its old item.
+    private void RefreshSetBlocks()
+    {
+        if (SelectedSet is { } set) _equipment.RefreshBlocksForSet(set, announce: false);
+        RefreshRowBlocks();
     }
 
     partial void OnSelectedSetRowChanged(EquipmentSetRowViewModel? value)

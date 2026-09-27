@@ -301,6 +301,7 @@ public sealed class EquipmentManager
         }
         set.Slots = slots;
         _saveEquipment?.Invoke();
+        RefreshBlocksForSet(set, announce: false);
         _log?.Info(LogCategory, $"gear set '{set.Name}' updated from worn gear ({used.Count} slot(s))");
         SetsEdited?.Invoke();
         return new(EquipUpdateOutcome.Updated, set.Name, used.Count);
@@ -1160,6 +1161,17 @@ public sealed class EquipmentManager
     // blocked slots as a terminal notice. No-op without the restriction probe.
     public void RefreshBlocksForSet(EquipmentSet set, bool announce = true)
     {
+        // A block belongs to the item it was raised on. Sets store only filled
+        // slots, so a slot that's been cleared (or re-picked) never shows up in the
+        // loop below — drop those blocks here, refusal ones included: the item the
+        // game refused isn't the slot's pick any more (report paradigm-20260926-221353).
+        foreach ((string SetId, EquipmentSlot Slot) key in _blocked.Keys.Where(k => k.SetId == set.Id).ToList())
+        {
+            string? current = set.Slots.FirstOrDefault(e => e.Slot == key.Slot)?.ItemName?.Trim();
+            if (!string.Equals(current, _blocked[key].Name, StringComparison.OrdinalIgnoreCase))
+                RemoveBlock(key);
+        }
+
         if (_isEquipRestricted is null) return;
         foreach (EquipmentSlotEntry e in set.Slots)
         {

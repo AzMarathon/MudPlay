@@ -616,6 +616,11 @@ public sealed class HealthManager : IDisposable
     // which stays true for the rest of the combat even after the retreat ends.
     public bool IsFleeing => _fleeEngine is not null;
 
+    // The last confirmed room before the current one (RoomTracker history) — the
+    // Backward flee's fallback when there's no trail to the engine's origin (we're
+    // standing on it). Null in tests / when unknown.
+    public Func<Map.RoomKey?>? PreviousRoom { get; set; }
+
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -1681,6 +1686,19 @@ public sealed class HealthManager : IDisposable
                     for (int i = 0; i < path.Count && i < distance; i++)
                         steps.Add(path[i]);
                 }
+                else if (_findReversePath is not null
+                         && _lastKnownRoom is { } here
+                         && PreviousRoom?.Invoke() is { } prev
+                         && !prev.Equals(here)
+                         && _findReversePath(here, prev) is { Count: > 0 } toPrev)
+                {
+                    // Standing on the loop's origin (a two-room loop lands here
+                    // after one flee) leaves no trail "back" — retreat into the
+                    // room we came from instead of not fleeing at all (report
+                    // paradigm-20260926-221012).
+                    for (int i = 0; i < toPrev.Count && i < distance; i++)
+                        steps.Add(toPrev[i]);
+                }
                 else if (Reverse(_getLastSentDirection?.Invoke()) is { } back)
                 {
                     // No map to plan a multi-room retreat — step back into the
@@ -1852,6 +1870,15 @@ public sealed class HealthManager : IDisposable
             _log?.Combat(LogCategory,
                 $"flee step engine={_fleeEngine.Name} dir={next} " +
                 $"remaining={_fleeQueue.Count}");
+        }
+        else if (_fleeEngine is not null && _fledThisCombat)
+        {
+            // The flee's last step landed. If a hostile is waiting here (or walks in)
+            // and we're still under the run-trigger, that's a new fight to run from —
+            // re-arm the one-shot latch and re-check once the room has been read, or
+            // the engine fights it at run-trigger HP (report paradigm-20260926-221012).
+            _fledThisCombat = false;
+            _post(Evaluate);
         }
 
         if (_restInFlight)
