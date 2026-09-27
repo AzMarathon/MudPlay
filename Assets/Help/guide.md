@@ -2408,6 +2408,8 @@ Off (the default) is the current behavior: if you engage a room of 8 with Min se
 **What it does:** When on, attempts a backstab as the very first action when you enter a room with a sneakable target. Backstab only ever lands on that opening action — once anything else has happened in the room (a spell, a swing, another backstab attempt), the surprise is gone for that room until you leave and re-approach freshly.
 **Important notes:** A monster with the "see-hidden" ability reveals you before the opener, forcing a normal attack instead. A successful backstab is silent (no public "moves to attack" announcement) — you only know it worked from the "surprise" damage line.
 
+The backstab options that depend on it (*Don't BS if multi-attack room spell is firing*, *Run if BS fails*, *Hit and Run tactics*) sit indented beneath it and are greyed out while it's off. *Clear hostiles when sneak broken by see-hidden monster* is a separate combat-off stealth-running option, so it's listed on its own below them.
+
 ### Don't BS if multi-attack room spell is firing
 
 **Default:** On
@@ -2416,12 +2418,20 @@ Off (the default) is the current behavior: if you engage a room of 8 with Min se
 ### Run if BS fails
 
 **Default:** Off
-**What it does:** Automatically triggers flee behavior if your backstab attempt clearly failed (no "surprise" in the result line) — on the theory that a failed backstab means the target is now fully alert and the fight is riskier than planned. It also runs when your sneak breaks on the way in (`You make a sound as you enter the room!`): you entered seen, so the backstab would fail, and MudPlay runs instead of opening with a plain attack.
+**What it does:** Runs instead of fighting when your backstab opener can't work. A failed backstab leaves the target alert and swinging at you, so the fight is riskier than the one you planned. It covers two cases:
+- **The backstab swings without "surprise".** It missed its surprise and you're now in an ordinary fight. MudPlay waits for that round to finish, and doesn't run if the same round killed the target and nothing else is in the room.
+- **Your sneak broke on the way in.** Either `You make a sound as you enter the room!`, or the room showed up without the game's `Sneaking...` line (a silent break). You entered seen, so a backstab is bound to fail, and MudPlay runs rather than opening with a plain attack.
+
+It runs the way *Run distance* and *Go backwards if running* set for any flee, only sends `break` when you're actually engaged, and needs a running loop or walk. With it off, a room where your backstab couldn't or didn't work is simply fought. *Hit and Run tactics* doesn't step in there, since that's this option's call.
+
+**After any backstab** (landed or not), if the target is still standing and nothing's making you run, MudPlay re-announces the round's attack once that round is over: the spell your action order picks, or `a <target>`. The party then sees what you're fighting, since a backstab itself is silent. (With an *attack last* timing, other players' announces drive that re-attack instead.)
+
+**With Hit and Run tactics:** the two cover different moments, so turn both on for full hit-and-run play. *Hit and Run tactics* handles what happens **after a backstab lands**, plus any fight that would start with a plain attack (a monster walking in, one that chases you). *Run if BS fails* handles the backstab that **doesn't land**. On its own, *Run if BS fails* is a safety net for backstab openers: when one fails you back off, and otherwise you fight as normal.
 
 ### Hit and Run tactics / Give up and fight after N runs
 
 **Default:** Off / 3 runs
-**What it does:** Never fight without a backstab. Once a backstab lands, anything still standing — the monster you hit, or anything else in the room — is left for next time: you run, your loop or walk re-sneaks, comes back in and opens with another backstab. The same goes for any fight that would start with a plain attack: a monster that walks in after your backstab, one that chases you, a room you entered seen. It runs the way *Run distance* and *Go backwards if running* set for any flee, and needs **Do BS attacks** and a running loop or walk.
+**What it does:** Never fight without a backstab (pair it with *Run if BS fails*, which handles the backstab that doesn't land — a room where your backstab couldn't or didn't work is left to that option). Once a backstab lands, anything still standing — the monster you hit, or anything else in the room — is left for next time: you run, your loop or walk re-sneaks, comes back in and opens with another backstab. The same goes for any fight that would start with a plain attack: a monster that walks in after your backstab, one that chases you, a room you entered seen. It runs the way *Run distance* and *Go backwards if running* set for any flee, and needs **Do BS attacks** and a running loop or walk.
 
 It doesn't run where a backstab couldn't work anyway: a room with a see-hidden monster, or a monster marked *don't backstab*.
 
@@ -3125,6 +3135,7 @@ Settings → Auto-Trainer. Controls *how* auto-training behaves once it runs —
 If you're short it collects the difference first: your stash rooms, then your bank, or a combination, picking the bank branch nearest the trainer rather than nearest you. Pick up enough coin along the way and it abandons the errand and heads straight for the trainer. If everything you can reach still falls short, nothing is walked: it logs how far short you are and roughly how many laps of your loop will close the gap, and stays armed.
 **About stashed coin.** MudPlay tracks what it has hidden in each stash room, but any player who searches that room can take it — so a stash is only ever a good guess. The run confirms by searching when it arrives, and if the room has been emptied it simply re-prices from where it's standing and carries on to the bank.
 **Auto-Get Cash is borrowed, not changed.** A collection trip needs cash pickup on to work, so MudPlay switches it on for the duration and puts it back exactly as it found it. Your saved setting is never modified. Auto-stashing is suppressed for the same window, so the trip can't hide the coin it just came to collect.
+**Taking over cancels it.** If you stop the walk to the trainer, or start your own walk-to while it's heading there, the training run is cancelled and your loop stays stopped. MudPlay won't restart it and pull you away from wherever you went.
 **Banking on the way home.** If Auto-deposit is on, a run that trained something offers the purse to it once the loop is running again — so a withdraw-and-train trip banks the leftovers on the way back rather than carrying them round the circuit.
 
 ### Train once this many levels are stacked
@@ -3193,6 +3204,7 @@ These shape how the **leader** runs an Auto-train party trip (the level-11 rule 
 
 **Default:** every discovered trainer allowed
 **What it does:** A list of the trainers in your loaded game data that apply to you — the universal Training Room plus your own class's trainer — each with a checkbox controlling whether MudPlay is allowed to route to it. Uncheck a specific trainer to exclude it — useful if a trainer sits somewhere dangerous or inconvenient. A **Usable at my level** filter above the table narrows it to trainers whose level range covers your current level.
+**Which one gets walked to:** the nearest allowed trainer that serves your level, by steps from where you stand. When two are the same distance, the cheaper one (lower markup) wins. Each run logs its choice with every candidate's step count, or why it was skipped (`disabled`, `no path`), so the Program Log shows why a trainer was passed over. An unchecked row here shows up as `disabled`. Copying a profile copies this list too.
 
 ---
 

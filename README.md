@@ -1,11 +1,18 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.111.19**
-> - A step waits for the sneak to take (retrying up to 15s), including a loop's first step, instead of walking in unsneaked
-> - Entering a room without the game's "Sneaking..." line counts as a broken sneak: no backstab, and Run if BS fails / Hit and Run react
-> - A failed backstab only runs if something's still standing after that round, so no `break` + run when the swing killed it anyway
-> - Fixed a crash on startup from the new sneak wiring
+> **Version 3.111.29**
+> - Clearer Run if BS fails tooltip and Help: what it covers, when it holds back, and how it pairs with Hit and Run tactics
+> - Settings → Combat: backstab options grouped under Do BS attacks (greyed out while it's off); the combat-off stealth-running option sits on its own
+> - Settings → Combat: Kill all engaged moved inside the combat-profile box, since it's saved per combat profile
+> - Settings → Combat: the Spell combat table fits inside its combat-profile box (the "= mana / %" column no longer spills past it)
+> - Hit and Run no longer runs from a room your backstab couldn't (broken sneak) or didn't (no surprise) work in; that's Run if BS fails' call alone
+> - After a backstab round, if the target is still up and you're not running, the round's attack is re-announced (a spell, or `a <target>`), with the default attack timing
+> - The post-backstab check waits a beat for the round's kill lines, so it doesn't run (or `break`) from a monster the backstab already killed
+> - A flee holds the loop / walk until it lands even when combat already had it paused, so the route can't step on top of the flee
+> - Settings → Combat's weapon boxes follow the Default gear set when it's changed in the Workshop (Update from live etc.), and Save no longer writes the old weapon back
+> - Auto-train logs its trainer choice with every candidate's step count or skip reason, and the bug report shows it; equal-distance trainers go to the cheaper one
+> - Stopping or replacing auto-train's walk to the trainer (Stop, or your own walk-to) cancels the run and leaves the loop stopped, instead of restarting the loop from wherever you walked
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

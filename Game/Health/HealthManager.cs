@@ -1743,7 +1743,7 @@ public sealed class HealthManager : IDisposable
         // on top of our flee moves. Engine resumes via
         // ResumeAfterRecovery when HP climbs back above the
         // run-trigger (handled in Evaluate's recovery branch).
-        engine.PauseForRecovery($"flee — {reason}");
+        engine.PauseForFlee($"flee — {reason}");
 
         _fleeEngine = engine;
         _fleeQueue.Clear();

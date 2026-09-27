@@ -322,6 +322,22 @@ public sealed class AutoWalkManager : IRecoverableEngine
         EmitMoveBytes(bytes, $"tier3 backtrack {direction}");
     }
 
+    // See LoopRunner.PauseForFlee — the same hold against a gate clearing mid-flee.
+    public void PauseForFlee(string reason)
+    {
+        if (State is not (WalkState.Walking or WalkState.Paused)) return;
+        _fleeHolding = true;
+        PauseForRecovery(reason);
+    }
+
+    public void ResumeAfterFlee(RoomKey landedAt)
+    {
+        _fleeHolding = false;
+        ResumeAfterRecovery(landedAt);
+    }
+
+    private bool _fleeHolding;
+
     public void PauseForRecovery(string reason)
     {
         if (State != WalkState.Walking) return;
@@ -2867,6 +2883,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
+        if (State == WalkState.Paused && _fleeHolding)
+        {
+            _log?.Info("Walker", "coordinator resumed, but a flee holds the walk until it lands");
+            return;
+        }
         if (State == WalkState.Paused)
         {
             State = WalkState.Walking;
@@ -3083,6 +3104,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private void Reset()
     {
+        _fleeHolding = false;
         _recovery?.Detach();
         // Drain downstream FSMs that were running on our behalf — if a
         // walk is superseded mid-door-open or mid-hidden-search, the

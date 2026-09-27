@@ -925,6 +925,30 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Single(h.Sent);                                       // the step goes once settled
     }
 
+    // Report paradigm-20260927-023516: a flee started while combat had the loop paused;
+    // combat clearing mid-flee resumed the loop, which advanced its step on top of the
+    // flee's move. A flee now holds the loop until it lands.
+    [Fact]
+    public void PauseForFlee_WhileCombatPaused_HoldsThroughTheGateClearing()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        int sent = h.Sent.Count;
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);     // fight in the room
+        h.Runner.PauseForFlee("hit and run");                         // flee takes over
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);      // combat clears mid-flee
+        h.Drain();
+
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.Equal(sent, h.Sent.Count);                             // no step on top of the flee
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.ResumeAfterFlee(new RoomKey(1, 1));                  // it landed
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
     [Fact]
     public void RepeatedGenuineDesyncs_StillExhaustTheRecoveryBudget()
     {
