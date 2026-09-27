@@ -3268,8 +3268,11 @@ These shape how the **leader** runs an Auto-train party trip (the level-11 rule 
   - **A bank only.**
   - **Stash rooms only.**
   - **Don't fetch - keep looping until I have it:** auto-train stays armed and your loop carries on until your purse covers the training.
-- **Bank:** limits withdrawals to one bank, e.g. Bank of Rhudaur rather than Bank of Godfrey. **(Any bank)** uses whichever bank holds enough. Only a bank you've deposited at has a balance to draw on; see *Auto-train*.
-- **Stash:** limits collection to one of your flagged stash rooms, e.g. the one where your money sits. **(Any stash room)** uses any of them.
+- **Bank:** limits withdrawals to one bank room, listed the same way as Settings → Cash's bank picker (`(map/room) Room name - Bank name`).
+  - A bank with two branches is listed once per branch. For example, Bank of Godfrey appears for both Silvermere and Khazarad, so you pick which one to walk to. The branches share one balance.
+  - **(Any bank)** uses whichever bank holds enough.
+  - Only a bank you've deposited at has a balance to draw on; see *Auto-train*.
+- **Stash:** limits collection to one of your flagged stash rooms, e.g. the one where your money sits. It's listed as `(map/room) Room name - Stash`. **(Any stash room)** uses any of them.
 **Important notes:** A bank or stash the setting excludes is never planned, so the run reads as short and keeps looping. With banks excluded, MudPlay doesn't send `bank` to check balances.
 
 ### Discovered trainers table

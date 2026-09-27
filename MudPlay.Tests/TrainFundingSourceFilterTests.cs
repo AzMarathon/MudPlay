@@ -17,10 +17,12 @@ public sealed class TrainFundingSourceFilterTests
         new(TrainFundingSourceKind.Stash, new RoomKey(1, 200), "stash 1/200", 5_000);
     private static readonly TrainFundingSource Godfrey =
         new(TrainFundingSourceKind.Bank, new RoomKey(1, 297), "Bank of Godfrey", 50_000);
+    private static readonly TrainFundingSource GodfreyKhazarad =
+        new(TrainFundingSourceKind.Bank, new RoomKey(6, 1334), "Bank of Godfrey", 50_000);
     private static readonly TrainFundingSource Rhudaur =
-        new(TrainFundingSourceKind.Bank, new RoomKey(2, 50), "Bank of Rhudaur", 50_000);
+        new(TrainFundingSourceKind.Bank, new RoomKey(2, 2568), "Rhudaur Bank", 50_000);
 
-    private static readonly TrainFundingSource[] All = { StashA, StashB, Godfrey, Rhudaur };
+    private static readonly TrainFundingSource[] All = { StashA, StashB, Godfrey, GodfreyKhazarad, Rhudaur };
 
     private static List<TrainFundingSource> Kept(AutoTrainerSettings s) =>
         TrainFundingSourceFilter.Apply(All, s);
@@ -34,7 +36,7 @@ public sealed class TrainFundingSourceFilterTests
     [Fact]
     public void BankOnly_DropsStashes()
     {
-        Assert.Equal(new[] { Godfrey, Rhudaur },
+        Assert.Equal(new[] { Godfrey, GodfreyKhazarad, Rhudaur },
             Kept(new AutoTrainerSettings { FundingMode = TrainFundingMode.BankOnly }));
     }
 
@@ -53,13 +55,27 @@ public sealed class TrainFundingSourceFilterTests
     }
 
     [Fact]
-    public void ASpecificBank_IsTheOnlyBank_MatchedIgnoringCase()
+    public void ASpecificBankRoom_IsTheOnlyBank()
     {
-        List<TrainFundingSource> kept = Kept(new AutoTrainerSettings { FundingBank = "bank of rhudaur" });
+        List<TrainFundingSource> kept = Kept(new AutoTrainerSettings { FundingBankRoom = new RoomRef(2, 2568) });
 
         Assert.Contains(Rhudaur, kept);
         Assert.DoesNotContain(Godfrey, kept);
         Assert.Contains(StashA, kept);                  // stashes still allowed in this mode
+    }
+
+    [Fact]
+    public void ABankWithTwoBranches_OnlyThePickedBranchIsUsed()
+    {
+        // Bank of Godfrey is one bank (one balance) in Silvermere and Khazarad;
+        // picking Khazarad's room means the run walks there, not to Silvermere.
+        List<TrainFundingSource> kept = Kept(new AutoTrainerSettings
+        {
+            FundingMode = TrainFundingMode.BankOnly,
+            FundingBankRoom = new RoomRef(6, 1334),
+        });
+
+        Assert.Equal(new[] { GodfreyKhazarad }, kept);
     }
 
     [Fact]

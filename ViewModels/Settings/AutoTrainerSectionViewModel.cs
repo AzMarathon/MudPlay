@@ -92,7 +92,8 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     [ObservableProperty] private string? _selectedFundingBank = AnyBank;
     public ObservableCollection<string> FundingStashOptions { get; } = new();
     [ObservableProperty] private string? _selectedFundingStash = AnyStash;
-    // Stash dropdown label → room, rebuilt with the list.
+    // Dropdown label → room, rebuilt with each list.
+    private readonly Dictionary<string, RoomRef> _bankByLabel = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RoomRef> _stashByLabel = new(StringComparer.Ordinal);
 
     private TrainFundingMode SelectedMode =>
@@ -181,7 +182,9 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
             AnnounceChannel = AnnounceChannel,
             DisabledTrainers = disabled.Count == 0 ? null : disabled,
             FundingMode = SelectedMode,
-            FundingBank = SelectedFundingBank is { } fb && fb != AnyBank ? fb : null,
+            FundingBankRoom = SelectedFundingBank is { } fb && _bankByLabel.TryGetValue(fb, out RoomRef? bankRoom)
+                ? new RoomRef(bankRoom.Map, bankRoom.Room)
+                : null,
             FundingStash = SelectedFundingStash is { } fs && _stashByLabel.TryGetValue(fs, out RoomRef? room)
                 ? new RoomRef(room.Map, room.Room)
                 : null,
@@ -238,19 +241,29 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         SelectedFundingMode = FundingModeLabels.FirstOrDefault(m => m.Mode == dto.FundingMode).Label
                               ?? FundingModeLabels[0].Label;
 
+        // One entry per bank ROOM, labelled like Settings → Cash's bank picker, so a
+        // bank with two branches offers both.
+        _bankByLabel.Clear();
         FundingBankOptions.Clear();
         FundingBankOptions.Add(AnyBank);
-        foreach (string name in BankCatalog.Enumerate(_gameData)
-                     .Select(static b => b.Name)
-                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                     .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase))
-            FundingBankOptions.Add(name);
-        if (dto.FundingBank is { Length: > 0 } bank
-            && !FundingBankOptions.Contains(bank, StringComparer.OrdinalIgnoreCase))
-            FundingBankOptions.Add(bank);
-        SelectedFundingBank = dto.FundingBank is { Length: > 0 } b
-            ? FundingBankOptions.First(o => string.Equals(o, b, StringComparison.OrdinalIgnoreCase))
-            : AnyBank;
+        string? bankSelected = null;
+        foreach (BankShop bank in BankCatalog.Enumerate(_gameData))
+        {
+            string roomName = string.IsNullOrEmpty(bank.RoomName) ? "(unknown)" : bank.RoomName;
+            string label = string.Create(CultureInfo.InvariantCulture,
+                $"({bank.Map}/{bank.Room}) {roomName} - {bank.Name}");
+            if (!_bankByLabel.TryAdd(label, new RoomRef(bank.Map, bank.Room))) continue;
+            FundingBankOptions.Add(label);
+            if (dto.FundingBankRoom is { } want && want.Map == bank.Map && want.Room == bank.Room)
+                bankSelected = label;
+        }
+        if (bankSelected is null && dto.FundingBankRoom is { } stale)
+        {
+            bankSelected = string.Create(CultureInfo.InvariantCulture, $"({stale.Map}/{stale.Room}) (no longer a bank)");
+            _bankByLabel[bankSelected] = stale;
+            FundingBankOptions.Add(bankSelected);
+        }
+        SelectedFundingBank = bankSelected ?? AnyBank;
 
         _stashByLabel.Clear();
         FundingStashOptions.Clear();
@@ -269,11 +282,12 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         SelectedFundingStash = selected ?? AnyStash;
     }
 
+    // Labelled like Settings → Cash's stash entries: "(map/room) RoomName - Stash".
     private static string StashLabel(RoomRef r)
     {
-        string key = string.Create(CultureInfo.InvariantCulture, $"{r.Map}/{r.Room}");
-        return AppServices.CurrentOrNull?.RoomGraph?.GetRoom(new Game.Map.RoomKey(r.Map, r.Room))?.Name
-            is { Length: > 0 } name ? $"{key} - {name}" : key;
+        string roomName = AppServices.CurrentOrNull?.RoomGraph?.GetRoom(new Game.Map.RoomKey(r.Map, r.Room))?.Name
+            is { Length: > 0 } name ? name : "(unknown)";
+        return string.Create(CultureInfo.InvariantCulture, $"({r.Map}/{r.Room}) {roomName} - Stash");
     }
 
     private void RebuildTrainers(IReadOnlyCollection<string>? disabled)

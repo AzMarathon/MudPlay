@@ -84,9 +84,10 @@ public sealed class AutoTrainerSettings
     // bank, both, or nowhere (keep looping until the purse covers it).
     public TrainFundingMode FundingMode { get; set; }
 
-    // Only withdraw at this bank (its shop name, as `bank` lists it). null = any
-    // bank that holds enough.
-    public string? FundingBank { get; set; }
+    // Only withdraw at this bank room. A bank can have several branches (Bank of
+    // Godfrey in Silvermere and Khazarad) sharing one balance; this picks the one
+    // to walk to. null = any bank room whose bank holds enough.
+    public RoomRef? FundingBankRoom { get; set; }
 
     // Only collect from this flagged stash room. null = any stash room.
     public RoomRef? FundingStash { get; set; }

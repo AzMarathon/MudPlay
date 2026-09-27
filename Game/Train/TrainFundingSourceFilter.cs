@@ -25,8 +25,8 @@ public static class TrainFundingSourceFilter
                     && (settings.FundingStash is not { } stash
                         || (stash.Map == s.Room.Map && stash.Room == s.Room.Room)),
                 TrainFundingSourceKind.Bank => UsesBanks(settings.FundingMode)
-                    && (string.IsNullOrWhiteSpace(settings.FundingBank)
-                        || string.Equals(settings.FundingBank, s.Name, StringComparison.OrdinalIgnoreCase)),
+                    && (settings.FundingBankRoom is not { } bank
+                        || (bank.Map == s.Room.Map && bank.Room == s.Room.Room)),
                 _ => false,
             };
             if (allowed) kept.Add(s);

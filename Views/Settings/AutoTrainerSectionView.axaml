@@ -95,7 +95,7 @@
                           ItemsSource="{Binding FundingBankOptions}"
                           SelectedItem="{Binding SelectedFundingBank, Mode=TwoWay}"
                           IsEnabled="{Binding FundingUsesBank}"
-                          ToolTip.Tip="Withdraw only at this bank, or at any bank that holds enough. Only a bank you've deposited at has a balance to draw on."/>
+                          ToolTip.Tip="Withdraw only at this bank room, or at any bank that holds enough. A bank with two branches (Bank of Godfrey in Silvermere and Khazarad) is listed once per branch; the branches share one balance. Only a bank you've deposited at has a balance to draw on."/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" VerticalAlignment="Center">
                 <TextBlock Text="Stash" VerticalAlignment="Center" MinWidth="44"/>
