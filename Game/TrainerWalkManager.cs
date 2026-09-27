@@ -660,7 +660,7 @@ public sealed class TrainerWalkManager : IDisposable
         _partyDone = null;
         _loopTrain = loop;
         _cpOnlyRun = false;
-        _refundTried = false;
+        _refusal.Reset();
         _keepLevels = 0;
         _applyCp = applyCp;
         _reply = reply;
@@ -834,10 +834,11 @@ public sealed class TrainerWalkManager : IDisposable
     {
         if (_phase != Phase.Training) return;
 
-        if (!_refundTried && _funding is not null && _target is { } t
-            && _tracker.State.CurrentRoom is { } here)
+        bool canRecover = _funding is not null && _target is not null
+                          && _tracker.State.CurrentRoom is not null;
+        if (_refusal.TryClaimRecovery(canRecover)
+            && _target is { } t && _tracker.State.CurrentRoom is { } here)
         {
-            _refundTried = true;
             _log?.Info("AutoTrain",
                 "Trainer refused for money the purse said we had — re-reading the "
                 + "purse and looking for funds.");
@@ -853,8 +854,8 @@ public sealed class TrainerWalkManager : IDisposable
         StopLoop(StopReason.NoMoney);
     }
 
-    // One funding recovery per run, cleared with the run.
-    private bool _refundTried;
+    // One funding recovery per run, reset with the run.
+    private readonly Game.Train.TrainRefusalGate _refusal = new();
 
     private void StopLoop(StopReason reason)
     {
