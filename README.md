@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.114.5**
-> - Saving the Combat, Health or Spells tab no longer resets combat profiles on the next launch: every profile's Health, spell picks, weapons, action order and backstab settings were being overwritten with the active profile's
+> **Version 3.115.0**
+> - Every combat-profile group in Settings gets an "Include in combat profile" checkbox: uncheck it to share one set of values across every combat profile
+> - When running away, self bless timing, party healing and party bless now swap with the combat profile
+> - The Party tab refreshes after a combat-profile switch is saved, and its unsaved edits stay with the profile they were made on
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

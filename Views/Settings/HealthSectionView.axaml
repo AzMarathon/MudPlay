@@ -79,7 +79,12 @@
                                Foreground="{Binding ActiveProfileAccentBrush}"/>
 
                 <!-- ============ Health (HP) ============ -->
-                <TextBlock Classes="SectionHeader" Text="Health (HP)"/>
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                              IsChecked="{Binding HealthHpInProfile.IsIncluded, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding HealthHpInProfile.Tooltip}"/>
+                    <TextBlock Classes="SectionHeader" Text="Health (HP)"/>
+                </DockPanel>
 
                 <!-- Mode picker -->
                 <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
@@ -166,7 +171,12 @@
                 </Grid>
 
                 <!-- ============ Mana / Kai ============ -->
-                <TextBlock Classes="SectionHeader" Text="Mana / Kai"/>
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                              IsChecked="{Binding HealthManaInProfile.IsIncluded, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding HealthManaInProfile.Tooltip}"/>
+                    <TextBlock Classes="SectionHeader" Text="Mana / Kai"/>
+                </DockPanel>
 
                 <!-- Mode picker -->
                 <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
@@ -235,7 +245,12 @@
                 </Grid>
 
                 <!-- ============ Resting Options ============ -->
-                <TextBlock Classes="SectionHeader" Text="Resting Options"/>
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                              IsChecked="{Binding RestingOptionsInProfile.IsIncluded, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding RestingOptionsInProfile.Tooltip}"/>
+                    <TextBlock Classes="SectionHeader" Text="Resting Options"/>
+                </DockPanel>
                 <CheckBox Content="Use 'meditate' ability"
                           IsChecked="{Binding UseMeditateAbility, Mode=TwoWay}"
                           ToolTip.Tip="Use the class-specific meditate command on classes that have it."/>
@@ -250,7 +265,12 @@
                 <!-- ============ Emergency escape ============
                      Substitute for the low-HP hangup: break combat + sys goto to a
                      curated location. Gated on the active BBS's Sysop goto power. -->
-                <TextBlock Classes="SectionHeader" Text="Emergency escape"/>
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                              IsChecked="{Binding EmergencyEscapeInProfile.IsIncluded, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding EmergencyEscapeInProfile.Tooltip}"/>
+                    <TextBlock Classes="SectionHeader" Text="Emergency escape"/>
+                </DockPanel>
                 <CheckBox Content="Sys goto wimpy instead of hanging"
                           IsEnabled="{Binding SysGotoAvailable}"
                           IsChecked="{Binding SysGotoWimpyInsteadOfHanging, Mode=TwoWay}"
@@ -271,7 +291,12 @@
                 </Grid>
 
                 <!-- ============ Resting commands ============ -->
-                <TextBlock Classes="SectionHeader" Text="Resting commands"/>
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                              IsChecked="{Binding RestingCommandsInProfile.IsIncluded, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding RestingCommandsInProfile.Tooltip}"/>
+                    <TextBlock Classes="SectionHeader" Text="Resting commands"/>
+                </DockPanel>
                 <!-- Left-aligned, fixed-width boxes: a chained rest command is
                      short, so the box needn't stretch to the pane's right edge. -->
                 <Grid ColumnDefinitions="220,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,4">

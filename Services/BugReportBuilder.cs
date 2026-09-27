@@ -1668,7 +1668,11 @@ public static class BugReportBuilder
                 : $"profile {active + 1} ({profiles[active].Name.Trim()})")
             : "(none)";
         sb.Append(profiles.Count).Append(profiles.Count == 1 ? " profile" : " profiles")
-          .Append(". Active: ").Append(activeLabel).Append(".\n\n");
+          .Append(". Active: ").Append(activeLabel).Append(".\n");
+        System.Collections.Generic.IReadOnlyList<Models.Profile.CombatProfileGroup> shared =
+            svc.CombatProfiles.SharedGroups;
+        sb.Append("Shared by every profile (not in combat profile): ")
+          .Append(shared.Count == 0 ? "none" : string.Join(", ", shared)).Append(".\n\n");
 
         for (int i = 0; i < profiles.Count; i++)
         {

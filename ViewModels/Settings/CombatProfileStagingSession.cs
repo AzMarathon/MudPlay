@@ -10,10 +10,9 @@ using MudPlay.Services;
 namespace MudPlay.ViewModels.Settings;
 
 // The Settings window's shared staging buffer for the combat-profile list. A combat
-// profile now spans TWO Settings tabs — Combat (spell slots + attack verbs + room
-// thresholds + weapons + the profile name) and Health (the whole Health section) —
-// so the two section VMs edit ONE staged working list through this session instead
-// of each keeping its own. Nothing here touches the character profile until Commit;
+// profile spans several Settings tabs — Combat, Health and Spells edit ONE staged
+// working list through this session instead of each keeping its own; the Party tab
+// isn't staged and writes its live section ahead of the commit (Committing). Nothing here touches the character profile until Commit;
 // the window's Cancel path drops the edits (DiscardAndReset re-clones the persisted
 // state).
 //
@@ -38,6 +37,8 @@ public sealed class CombatProfileStagingSession : IDisposable
     private List<CombatSpellProfile> _profiles = new();
     private int _active;
     private bool _dirty;
+    // Staged "Include in combat profile" state: the groups taken out of profiles.
+    private HashSet<CombatProfileGroup> _shared = new();
 
     // Set by the Combat tab: builds the FULL Settings["Combat"] DTO — the shared
     // fields (targeting / backstab / action-order / display) plus the active
@@ -62,6 +63,11 @@ public sealed class CombatProfileStagingSession : IDisposable
     public event Action? ReloadAllRequested;
     // The list / active pointer / a name changed — rebuild the chip bar.
     public event Action? ChipsChanged;
+    // A group's "Include in combat profile" state changed (or was reseeded).
+    public event Action? SharedGroupsChanged;
+    // About to commit — a tab outside the staged list (Party) writes its pending
+    // edits first, so the commit folds them into the right profile.
+    public event Action? Committing;
     // Committed — tabs clear their own dirty flags.
     public event Action? Committed;
 
@@ -97,7 +103,32 @@ public sealed class CombatProfileStagingSession : IDisposable
         if (_profiles.Count == 0) _profiles.Add(new CombatSpellProfile());
         int active = _mgr.ActiveIndex;
         _active = Math.Clamp(active < 0 ? 0 : active, 0, _profiles.Count - 1);
+        _shared = new HashSet<CombatProfileGroup>(_profile.Current?.CombatProfiles?.SharedGroups ?? new());
         _dirty = false;
+    }
+
+    // Whether a group is shared by every profile ("Include in combat profile" off).
+    public bool IsShared(CombatProfileGroup group) => _shared.Contains(group);
+
+    // Stage a group in or out of combat profiles. Taking it out makes the active
+    // profile's values the one shared value: fold the tabs first so those are the
+    // values on screen, then copy them into every working profile. Putting it back
+    // changes nothing — every profile starts from the shared value.
+    public void SetShared(CombatProfileGroup group, bool shared)
+    {
+        if (IsShared(group) == shared) return;
+        if (shared)
+        {
+            CaptureRequested?.Invoke();
+            _shared.Add(group);
+            CombatProfileGroupCopy.SyncShared(new[] { group }, Active, _profiles);
+        }
+        else
+        {
+            _shared.Remove(group);
+        }
+        _dirty = true;
+        SharedGroupsChanged?.Invoke();
     }
 
     private void OnProfileReloaded(CharacterProfile _) => ReseedAndReloadTabs();
@@ -107,6 +138,7 @@ public sealed class CombatProfileStagingSession : IDisposable
     {
         Reseed();
         ChipsChanged?.Invoke();
+        SharedGroupsChanged?.Invoke();
         ReloadAllRequested?.Invoke();
     }
 
@@ -119,6 +151,7 @@ public sealed class CombatProfileStagingSession : IDisposable
     {
         if (index < 0 || index >= _profiles.Count || index == _active) return;
         CaptureRequested?.Invoke();
+        CombatProfileGroupCopy.SyncShared(_shared, Active, new[] { _profiles[index] });
         _active = index;
         LoadRequested?.Invoke();
         _dirty = true;
@@ -129,7 +162,9 @@ public sealed class CombatProfileStagingSession : IDisposable
     public void AddNew()
     {
         CaptureRequested?.Invoke();
-        _profiles.Add(new CombatSpellProfile());
+        CombatSpellProfile added = new();
+        CombatProfileGroupCopy.SyncShared(_shared, Active, new[] { added });
+        _profiles.Add(added);
         _active = _profiles.Count - 1;
         LoadRequested?.Invoke();
         _dirty = true;
@@ -166,7 +201,21 @@ public sealed class CombatProfileStagingSession : IDisposable
         if (!_dirty) return;
         if (_profile.Current is not { } profile) { _dirty = false; return; }
 
+        Committing?.Invoke();
         CaptureRequested?.Invoke();   // fold BOTH tabs into the working profiles
+
+        // The Party tab isn't staged here: the live Settings["Party"] belongs to the
+        // profile that was active when the window opened. Fold it into that profile's
+        // working copy, then keep every shared group identical across profiles — the
+        // Party groups from that profile, the rest from the active one's boxes.
+        string? persistedActiveId = _mgr.Active?.Id;
+        CombatSpellProfile partySource =
+            _profiles.FirstOrDefault(p => p.Id == persistedActiveId) ?? Active;
+        _mgr.CapturePartyInto(partySource);
+        foreach (CombatProfileGroup g in _shared)
+            CombatProfileGroupCopy.SyncShared(new[] { g }, IsPartyGroup(g) ? partySource : Active, _profiles);
+
+        bool sharedChanged = !_shared.SetEquals(_mgr.SharedGroups);
 
         profile.Settings ??= new();
         if (BuildFullCombat is { } build)
@@ -182,14 +231,22 @@ public sealed class CombatProfileStagingSession : IDisposable
             Profiles = _profiles.Select(p => p.Clone(newIdentity: false)).ToList(),
             ActiveId = Active.Id,
             SchemaVersion = profile.CombatProfiles?.SchemaVersion ?? 0,
+            SharedGroups = _shared.Count > 0 ? _shared.OrderBy(g => g).ToList() : null,
         };
         if (_equipment() is { } eq) EquipmentWeaponSync.WriteProfileWeapons(eq, Active);
+        // A chip switch in the window moved the active profile: its Party-tab subset
+        // goes live too, the way a switch from the toolbar does it.
+        if (!ReferenceEquals(partySource, Active)) _mgr.WritePartyFrom(Active);
         _profile.Save();
+        if (sharedChanged) _mgr.LogSharedGroups();
 
         _dirty = false;
         _mgr.RaiseChanged();      // refresh Action-menu / toolbar / Workshop marking from the committed state
         Committed?.Invoke();
     }
+
+    private static bool IsPartyGroup(CombatProfileGroup g) =>
+        g is CombatProfileGroup.PartyHealing or CombatProfileGroup.PartyBless;
 
     // Drop staged edits — re-clone from persisted and reload both tabs.
     public void DiscardAndReset() => ReseedAndReloadTabs();

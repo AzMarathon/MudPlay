@@ -16,7 +16,10 @@ namespace MudPlay.Game.Combat;
 //   - Health section (Settings["Health"]): write a clone of the profile's Health.
 //   - Weapons: write the profile's four weapon names into the Workshop Default
 //     gear set, the live surface EquipmentWeaponSync + AutoEquipCoordinator read.
-// Targeting / backstab / action-order stay shared across profiles.
+//   - Spells / Party sections: the profile's Spells-tab and Party-tab subsets.
+// Targeting stays shared. Any group can be taken out of profiles
+// (CombatProfileSettings.SharedGroups): every profile then holds the same copy of it,
+// so the switch — which applies the whole profile — leaves it as it was.
 //
 // The ACTIVE profile's weapons *are* the Default-set weapon slots, so a Workshop
 // edit made while a profile is active is snapshotted back into that profile on the
@@ -37,6 +40,8 @@ public sealed class CombatProfileManager
     private readonly Func<SpellsSettings> _readSpells;
     private readonly Action<SpellsSettings> _writeSpells;   // serialize Settings["Spells"] + Save
     private readonly Func<EquipmentSettings?> _equipment;   // the live per-char Equipment blob (mutated in place, persisted by Save)
+    private readonly Func<PartySettings>? _readParty;
+    private readonly Action<PartySettings>? _writeParty;     // serialize Settings["Party"] + Save
     private readonly Action _save;                           // Save only (metadata-only changes)
     private readonly LogService? _log;
 
@@ -57,7 +62,9 @@ public sealed class CombatProfileManager
         Action<SpellsSettings> writeSpells,
         Func<EquipmentSettings?> equipment,
         Action save,
-        LogService? log = null)
+        LogService? log = null,
+        Func<PartySettings>? readParty = null,
+        Action<PartySettings>? writeParty = null)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _readCombat = readCombat ?? throw new ArgumentNullException(nameof(readCombat));
@@ -69,6 +76,8 @@ public sealed class CombatProfileManager
         _equipment = equipment ?? throw new ArgumentNullException(nameof(equipment));
         _save = save ?? throw new ArgumentNullException(nameof(save));
         _log = log;
+        _readParty = readParty;
+        _writeParty = writeParty;
     }
 
     // Seed a first profile from the current combat settings when none exist, and
@@ -83,6 +92,7 @@ public sealed class CombatProfileManager
             CombatSpellProfile seed = CombatSpellProfile.Capture(string.Empty, _readCombat(), _readHealth());
             if (_equipment() is { } eq) EquipmentWeaponSync.CaptureDefaultWeapons(eq, seed);
             seed.Spells.CaptureFrom(_readSpells());
+            if (_readParty is not null) seed.Party.CaptureFrom(_readParty());
             store.Profiles.Add(seed);
             store.ActiveId = seed.Id;
             changed = true;
@@ -98,6 +108,7 @@ public sealed class CombatProfileManager
         }
         if (MigrateToFullLoadout(store)) changed = true;
         if (MigrateActionOrderPerProfile(store)) changed = true;
+        if (MigrateRunBlessPartyPerProfile(store)) changed = true;
         if (changed) _save();
         Changed?.Invoke();
     }
@@ -129,6 +140,31 @@ public sealed class CombatProfileManager
         store.SchemaVersion = CombatProfileSettings.PerProfileActionOrderVersion;
         _log?.Log(LogSeverity.Info, "CombatProfiles",
             $"Back-filled action order / backstab / kill-all-engaged onto {store.Profiles.Count} combat profile(s) from the live (previously shared) values — now per-profile");
+        return true;
+    }
+
+    // One-time back-fill for profiles created before run direction / break-before-
+    // running, self-bless timing and the Party-tab healing + bless became per-profile:
+    // seed every profile from the live (previously shared) values so the first switch
+    // doesn't flip them to defaults.
+    private bool MigrateRunBlessPartyPerProfile(CombatProfileSettings store)
+    {
+        if (store.SchemaVersion >= CombatProfileSettings.PerProfileRunBlessPartyVersion) return false;
+
+        CombatSettings live = _readCombat();
+        SpellsSettings spells = _readSpells();
+        PartySettings? party = _readParty?.Invoke();
+        foreach (CombatSpellProfile prof in store.Profiles)
+        {
+            prof.RunDirection = live.RunDirection;
+            prof.BreakBeforeFleeing = live.BreakBeforeFleeing;
+            prof.Spells.SelfBlessWhileResting = spells.SelfBlessWhileResting;
+            prof.Spells.SelfBlessDuringCombat = spells.SelfBlessDuringCombat;
+            if (party is not null) prof.Party.CaptureFrom(party);
+        }
+        store.SchemaVersion = CombatProfileSettings.PerProfileRunBlessPartyVersion;
+        _log?.Log(LogSeverity.Info, "CombatProfiles",
+            $"Back-filled run direction / break-before-running / self-bless timing / party healing + bless onto {store.Profiles.Count} combat profile(s) from the live values — now per-profile");
         return true;
     }
 
@@ -202,8 +238,13 @@ public sealed class CombatProfileManager
         int prev = IndexOfActive(s);
         if (prev >= 0 && prev != index)
         {
-            if (eq is not null) EquipmentWeaponSync.CaptureDefaultWeapons(eq, s.Profiles[prev]);
-            s.Profiles[prev].Spells.CaptureFrom(_readSpells());
+            CombatSpellProfile outgoing = s.Profiles[prev];
+            if (eq is not null) EquipmentWeaponSync.CaptureDefaultWeapons(eq, outgoing);
+            outgoing.Spells.CaptureFrom(_readSpells());
+            if (_readParty is not null) outgoing.Party.CaptureFrom(_readParty());
+            // Shared groups ride along unchanged: the incoming profile takes the
+            // outgoing one's copy (edits made on the Party / Spells tabs included).
+            CombatProfileGroupCopy.SyncShared(s.SharedGroups, outgoing, new[] { target });
         }
 
         s.ActiveId = target.Id;
@@ -213,11 +254,17 @@ public sealed class CombatProfileManager
         _writeHealth(target.Health.Clone());  // Save persists Settings["Health"] (clone so the profile keeps its own copy)
 
         // Overlay the incoming profile's spell subset onto the live Spells section,
-        // leaving the per-character fields (cures, bless timing, ailments, self-bless
-        // slots) intact.
+        // leaving the per-character fields (cures, ailments, self-bless slots) intact.
         SpellsSettings spells = _readSpells();
         target.Spells.WriteInto(spells);
         _writeSpells(spells);
+
+        if (_readParty is not null && _writeParty is not null)
+        {
+            PartySettings party = _readParty();
+            target.Party.WriteInto(party);
+            _writeParty(party);
+        }
 
         if (eq is not null)
         {
@@ -257,6 +304,34 @@ public sealed class CombatProfileManager
         if (s is null || s.Profiles.Count == 0) return null;
         int count = s.Profiles.Count;
         return SwitchToIndex((Math.Max(0, IndexOfActive(s)) - 1 + count) % count);
+    }
+
+    // The settings groups taken out of combat profiles ("Include in combat profile"
+    // unchecked), in enum order.
+    public IReadOnlyList<CombatProfileGroup> SharedGroups =>
+        Store()?.SharedGroups is { } g ? g : Array.Empty<CombatProfileGroup>();
+
+    public void LogSharedGroups() =>
+        _log?.Log(LogSeverity.Info, "CombatProfiles", SharedGroups.Count == 0
+            ? "Every settings group is per combat profile"
+            : "Shared by every combat profile: " + string.Join(", ", SharedGroups));
+
+    // The live Party-tab subset into a profile (the Settings window's staging never
+    // edits it, so the live section is its source of truth for the active profile).
+    public void CapturePartyInto(CombatSpellProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (_readParty is not null) profile.Party.CaptureFrom(_readParty());
+    }
+
+    // A profile's Party-tab subset onto the live section.
+    public void WritePartyFrom(CombatSpellProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (_readParty is null || _writeParty is null) return;
+        PartySettings party = _readParty();
+        profile.Party.WriteInto(party);
+        _writeParty(party);
     }
 
     // Fire Changed without a state change — the Combat tab calls this after Apply

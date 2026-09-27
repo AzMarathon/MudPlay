@@ -5162,7 +5162,16 @@ public sealed class AppServices
                 return p.Equipment ??= new Models.Profile.EquipmentSettings();
             },
             save: () => Profile.Save(),
-            log: Log);
+            log: Log,
+            // The Party-tab subset (party healing + bless) a profile can carry.
+            readParty: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
+            writeParty: party =>
+            {
+                if (Profile.Current is not { } p) return;
+                p.Settings ??= new();
+                p.Settings["Party"] = System.Text.Json.JsonSerializer.SerializeToElement(party);
+                Profile.Save();
+            });
         CombatProfiles.EnsureSeeded();
         Profile.ProfileLoaded += _ => CombatProfiles.EnsureSeeded();
         ProfileSwap = new Game.Remote.ProfileSwapHandler(RemoteCommands, CombatProfiles);

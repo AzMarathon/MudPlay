@@ -21,7 +21,7 @@ public sealed class CombatProfileStagingSessionTests
                 new CombatSpellProfile { Name = "melee", Health = new HealthSettings { RestMaxHp = 90 } },
                 new CombatSpellProfile { Name = "caster", Health = new HealthSettings { RestMaxHp = 60 } },
             },
-            SchemaVersion = CombatProfileSettings.PerProfileActionOrderVersion,
+            SchemaVersion = CombatProfileSettings.PerProfileRunBlessPartyVersion,
         };
         p.CombatProfiles.ActiveId = p.CombatProfiles.Profiles[0].Id;
         CombatProfileManager mgr = new(
@@ -48,7 +48,7 @@ public sealed class CombatProfileStagingSessionTests
         mgr.EnsureSeeded();      // what the next ProfileLoaded does
 
         CombatProfileSettings store = profile.Current!.CombatProfiles!;
-        Assert.Equal(CombatProfileSettings.PerProfileActionOrderVersion, store.SchemaVersion);
+        Assert.Equal(CombatProfileSettings.PerProfileRunBlessPartyVersion, store.SchemaVersion);
         Assert.Equal(60, store.Profiles.Single(x => x.Name == "caster").Health.RestMaxHp);
     }
 }

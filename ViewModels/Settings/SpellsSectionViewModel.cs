@@ -174,6 +174,11 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     public SpellsSectionViewModel()
         : this(AppServices.Current.Profile, CreateStandaloneSession()) { }
 
+    // "Include in combat profile" checkboxes, one per header on this tab.
+    public CombatProfileGroupToggle SpellPriorityInProfile { get; }
+    public CombatProfileGroupToggle HealingRegenInProfile { get; }
+    public CombatProfileGroupToggle BlessTimingInProfile { get; }
+
     public SpellsSectionViewModel(CombatProfileStagingSession session)
         : this(AppServices.Current.Profile, session) { }
 
@@ -198,6 +203,9 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         _session.ReloadAllRequested += OnSessionReloadAll;
         _session.ChipsChanged += OnSessionChipsChanged;
         _session.Committed += OnSessionCommitted;
+        SpellPriorityInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.SpellPriority, MarkDirty);
+        HealingRegenInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.HealingRegen, MarkDirty);
+        BlessTimingInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.BlessTiming, MarkDirty);
 
         OnDispose(() =>
         {
@@ -210,6 +218,9 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
             _session.ReloadAllRequested -= OnSessionReloadAll;
             _session.ChipsChanged -= OnSessionChipsChanged;
             _session.Committed -= OnSessionCommitted;
+            SpellPriorityInProfile.Dispose();
+            HealingRegenInProfile.Dispose();
+            BlessTimingInProfile.Dispose();
         });
         _suppressDirty = true;
         LoadFromProfile();                       // full: per-character from Settings["Spells"]
@@ -223,7 +234,8 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     // ----- Shared-session participation -----------------------------
 
-    // Fold the per-profile boxes (priority ranks + self-heal / HP-regen picks) into
+    // Fold the per-profile boxes (priority ranks, self-heal / HP-regen picks, self-bless
+    // timing) into
     // the active working profile — mutates in place, leaving the profile's other
     // sections (its Health / Combat / weapons) untouched.
     private void CaptureSpellBoxesToActive()
@@ -242,10 +254,12 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         s.MajorHealSpell = NullIfBlank(MajorHealSpell);
         s.EmergencyHealSpell = NullIfBlank(EmergencyHealSpell);
         s.HpRegenSpell   = NullIfBlank(HpRegenSpell);
+        s.SelfBlessWhileResting = SelfBlessWhileResting;
+        s.SelfBlessDuringCombat = SelfBlessDuringCombat;
     }
 
     // Chip switch: load only the per-profile boxes from the active profile, leaving
-    // the per-character boxes (cures / bless timing / ailments) as they are.
+    // the per-character boxes (cures / ailments) as they are.
     private void OnSessionLoadPerProfile()
     {
         _suppressDirty = true;
@@ -283,6 +297,8 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         MajorHealSpell = s.MajorHealSpell;
         EmergencyHealSpell = s.EmergencyHealSpell;
         HpRegenSpell   = s.HpRegenSpell;
+        SelfBlessWhileResting = s.SelfBlessWhileResting;
+        SelfBlessDuringCombat = s.SelfBlessDuringCombat;
     }
 
     private void OnSessionChipsChanged()

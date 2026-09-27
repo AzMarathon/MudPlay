@@ -215,4 +215,15 @@
         <Setter Property="Margin" Value="0,6,0,0"/>
     </Style>
 
+    <!-- "Include in combat profile" toggle, docked right of a group header on the
+         Combat / Health / Spells / Party tabs. Bottom-aligned so it sits on the
+         header's baseline rather than centring in the header's leading gap. -->
+    <Style Selector="CheckBox.ProfileInclude">
+        <Setter Property="Content" Value="Include in combat profile"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+        <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        <Setter Property="VerticalAlignment" Value="Bottom"/>
+        <Setter Property="Margin" Value="12,0,0,0"/>
+    </Style>
+
 </Styles>
