@@ -36,6 +36,9 @@ public sealed class LoopRunner : IRecoverableEngine
     private readonly IRoomFilter? _filter;
     private Action<byte[]>? _wireSender;
     private Action? _preMoveHook;
+    // StealthManager.ReadyToMoveSneaking — false = hold the step (a sneak is settling).
+    private Func<bool>? _moveReadyCheck;
+    public void SetMoveReadyCheck(Func<bool> check) => _moveReadyCheck = check;
     private Action<RoomKey>? _approachRoomHook;
 
     // (source, dest) → teleport keyword resolver, mirroring the walker's
@@ -1175,6 +1178,9 @@ public sealed class LoopRunner : IRecoverableEngine
         }
 
         LoopStep step = _expandedSteps[_index];
+        // Auto-sneak wants a sneak in place before we step; it holds the coordinator
+        // meanwhile and the resume re-drives this step.
+        if (step is MoveLoopStep && _moveReadyCheck?.Invoke() == false) return;
         switch (step)
         {
             case MoveLoopStep move:    SendMove(move);    break;

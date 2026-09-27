@@ -94,19 +94,56 @@ public sealed class StealthManager : IDisposable
     // of "You may not sneak right now!" and walked in seen). The pre-move sn isn't
     // held — the move is already going out behind it, and a sn that takes carries
     // into the next room.
+    // Per answer: each soft-failed sn that's retried restarts it — a retry IS the
+    // answer arriving (report paradigm-20260927-014032: the timer ran out on retry 2
+    // of 10 and the loop stepped in seen). SneakSettleTotalCap bounds all the retries.
     private static readonly TimeSpan SneakSettleCap = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan SneakSettleTotalCap = TimeSpan.FromSeconds(15);
+    private DateTimeOffset _settleSince;
     private bool _settleHold;
     private Avalonia.Threading.DispatcherTimer? _settleTimer;
 
     public bool IsHoldingForSneakAnswer => _settleHold;
 
+    // Set when a sneak attempt ends without taking (retries spent, no answer, cooldown
+    // cap) — the next step goes unsneaked rather than re-trying forever.
+    private bool _moveUnsneakedOnce;
+
+    // Asked by the walker / loop before a planned step goes out. Not sneaking and
+    // able to: send sn, hold movement until the answer, and say "not yet" — the
+    // engine resumes the step once the hold clears (report paradigm-20260927-013820:
+    // the pre-move sn went out with the move and was refused, so we walked in seen).
+    // Flee moves don't ask.
+    public bool ReadyToMoveSneaking()
+    {
+        if (_isAutoSneakEnabled?.Invoke() != true || _coordinator is null) return true;
+        if (_settleHold || _cooldownHoldSince is not null) return false;
+        if (IsStealthed || _stateValue == StealthState.AttemptingSneak) return true;
+        if (_moveUnsneakedOnce) { _moveUnsneakedOnce = false; return true; }
+        if (_state.InCombat || _isSneakBlockedByRoom?.Invoke() == true) return true;
+        if (_stateValue is not (StealthState.Idle or StealthState.Failed)) return true;
+        TryBeginAutoSneak("before the step");
+        return !_settleHold;
+    }
+
     private void BeginSettleHold()
     {
         if (_coordinator is null || _settleHold) return;
         _settleHold = true;
+        _settleSince = NowProvider();
         _coordinator.AssertGate(MovementCoordinator.SneakSettleGate, nameof(StealthManager), "waiting for the sn answer");
+        StartSettleTimer();
+    }
+
+    private void StartSettleTimer()
+    {
+        _settleTimer?.Stop();
         _settleTimer = new Avalonia.Threading.DispatcherTimer(SneakSettleCap,
-            Avalonia.Threading.DispatcherPriority.Background, (_, _) => ReleaseSettleHold("no answer in time"));
+            Avalonia.Threading.DispatcherPriority.Background, (_, _) =>
+            {
+                _moveUnsneakedOnce = true;
+                ReleaseSettleHold("no answer in time");
+            });
         _settleTimer.Start();
     }
 
@@ -201,6 +238,23 @@ public sealed class StealthManager : IDisposable
     public bool IsStealthed =>
         _stateValue == StealthState.Sneaking || _stateValue == StealthState.Hidden;
 
+    // A sneaked move is out and the new room's "Sneaking..." hasn't come yet. It
+    // arrives between the move and the room display, so a display without it means
+    // the sneak silently broke (GAME_MECHANICS "Sneaking…"; report
+    // paradigm-20260927-014325: `sn` was acknowledged, we walked in, no "Sneaking...",
+    // and the backstab still went out). The old room's `sn` acknowledgement doesn't
+    // count for the new one.
+    private bool _awaitingArrivalConfirm;
+
+    // Stealthed in THIS room: hidden, or sneaking with the arrival confirmed. The
+    // backstab opener reads this, so a silent break never opens with `bs`.
+    // A refused move never left the room, so there's no new room to confirm.
+    public void NoteMoveBlocked() => _awaitingArrivalConfirm = false;
+
+    public bool IsStealthedHere =>
+        _stateValue == StealthState.Hidden
+        || (_stateValue == StealthState.Sneaking && !_awaitingArrivalConfirm);
+
     // True only while actively StealthState.Sneaking (not Hidden). Kept distinct
     // from IsStealthed because sneak carries a per-room re-confirm + silent-loss
     // watchdog that hide doesn't. The backstab opener gates on IsStealthed (either
@@ -227,7 +281,7 @@ public sealed class StealthManager : IDisposable
         if (_stateValue == StealthState.Hidden)
             NoteHideBroken();
 
-        if (_stateValue == StealthState.Sneaking && !_sneakConfirmedThisRoom)
+        if (_stateValue == StealthState.Sneaking && (!_sneakConfirmedThisRoom || _awaitingArrivalConfirm))
         {
             _log?.Info(LogCategory, "silent sneak loss — new room without 'Sneaking...' confirm");
             Transition(StealthState.Idle);
@@ -248,6 +302,7 @@ public sealed class StealthManager : IDisposable
             Transition(StealthState.Idle);
         }
         _sneakConfirmedThisRoom = false;
+        _awaitingArrivalConfirm = false;
 
         // Auto-sneak: fires after the silent-loss check so a just-lost
         // sneak immediately re-attempts. This is the reactive path —
@@ -321,7 +376,13 @@ public sealed class StealthManager : IDisposable
     // line confirms it). No-op when auto-sneak is off, we're already sneaking /
     // hidden or mid-attempt, or we're in combat (the walker is gated out of moving
     // while a hostile holds the Combat gate anyway).
-    public void RequestPreMoveStealth() => TryBeginAutoSneak("pre-move");
+    public void RequestPreMoveStealth()
+    {
+        TryBeginAutoSneak("pre-move");
+        // Whatever we had, the room we're stepping into has to confirm it.
+        if (_stateValue is StealthState.Sneaking or StealthState.AttemptingSneak)
+            _awaitingArrivalConfirm = true;
+    }
 
     // Shared auto-sneak entry point. Sends sn exactly once from a settled
     // non-stealth state (StealthState.Idle / StealthState.Failed) when auto-sneak
@@ -426,6 +487,7 @@ public sealed class StealthManager : IDisposable
     {
         // `Sneaking...` on room entry — post-move confirmation we
         // arrived unseen. Re-arms the silent-loss watchdog.
+        _awaitingArrivalConfirm = false;
         EstablishSneaking();
     }
 
@@ -434,6 +496,7 @@ public sealed class StealthManager : IDisposable
     // counter.
     private void EstablishSneaking()
     {
+        _moveUnsneakedOnce = false;
         // A sneak that's since taken supersedes an earlier loud entry — that break
         // belonged to a room we've left (report paradigm-20260927-011624).
         _sneakBrokeOnEntryAt = DateTimeOffset.MinValue;
@@ -472,6 +535,14 @@ public sealed class StealthManager : IDisposable
     {
         bool broke = NowProvider() - _sneakBrokeOnEntryAt <= SneakBrokeWindow;
         _sneakBrokeOnEntryAt = DateTimeOffset.MinValue;
+        // A sneaked move whose room showed up without "Sneaking..." broke silently —
+        // the same guaranteed backstab failure as a loud entry.
+        if (!broke && _awaitingArrivalConfirm
+            && _stateValue is StealthState.Sneaking or StealthState.AttemptingSneak)
+        {
+            _log?.Info(LogCategory, "silent sneak loss — the room showed without 'Sneaking...'");
+            broke = true;
+        }
         return broke;
     }
 
@@ -484,14 +555,22 @@ public sealed class StealthManager : IDisposable
         Transition(StealthState.Failed);
         if (_isAutoSneakEnabled?.Invoke() == true
          && !_state.InCombat
-         && _sneakRetries < MaxSneakRetries)
+         && (_sneakRetries < MaxSneakRetries || _settleHold))
         {
+            if (_settleHold && NowProvider() - _settleSince >= SneakSettleTotalCap)
+            {
+                _moveUnsneakedOnce = true;
+                ReleaseSettleHold($"still not sneaking after {SneakSettleTotalCap.TotalSeconds:0}s — moving on unsneaked");
+                return;
+            }
             _sneakRetries++;
             _log?.Info(LogCategory, $"sneak rejected — resending sn (retry {_sneakRetries}/{MaxSneakRetries})");
             Transition(StealthState.AttemptingSneak);
+            if (_settleHold) StartSettleTimer();
             Send("sn");
             return;
         }
+        _moveUnsneakedOnce = true;
         ReleaseSettleHold("sneak rejected, retries spent");
     }
 
@@ -541,6 +620,7 @@ public sealed class StealthManager : IDisposable
         }
         if (NowProvider() - since >= SneakCooldownCap)
         {
+            _moveUnsneakedOnce = true;
             ReleaseCooldownHold($"still refused after {SneakCooldownCap.TotalSeconds:0}s — moving on unsneaked");
             return;
         }

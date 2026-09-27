@@ -4400,6 +4400,8 @@ public sealed class AppServices
         // suppress the doomed `sn` instead of firing it into a rejection.
         Stealth.SetSneakBlockCheck(() => CombatTracker.HasRoomNpc);
         Stealth.SetMovementCoordinator(MovementCoordinator);
+        // A refused move never left the room — Stealth drops its arrival-confirm wait.
+        RoomTracker.MoveBlocked += Stealth.NoteMoveBlocked;
         // Auto-hide is suppressed in a party — a hidden member falls off the
         // Also-here line and can't be single-target-healed/buffed until revealed.
         Stealth.SetPartyCheck(() => PartyState.IsInParty);
@@ -4415,7 +4417,7 @@ public sealed class AppServices
         // when a seehidden monster is present (which reveals us to the whole room).
         SeeHidden = new Game.Combat.SeeHiddenIndex(GameData);
         Combat.SetBackstabHooks(
-            isStealthed:  () => Stealth.IsStealthed,
+            isStealthed:  () => Stealth.IsStealthedHere,
             hasSeeHidden: n => SeeHidden.Has(n));
         Combat.SetSneakBrokeOnEntryProbe(Stealth.TakeSneakBrokeOnEntry);
         // Self-defense stands down only while ACTIVELY walking a plain walk-to (travel):
@@ -5946,6 +5948,7 @@ public sealed class AppServices
         // must land before the sn (weapon → armor → sn → move). PrepBackstabForMove
         // no-ops unless backstab is enabled. Non-blocking; the settled-state
         // guard in StealthManager prevents a double sn when both paths fire.
+        Walker.SetMoveReadyCheck(Stealth.ReadyToMoveSneaking);
         Walker.SetPreMoveHook(() =>
         {
             // Swap gear BEFORE the step (queues ahead of the move on the serialized
@@ -6348,6 +6351,7 @@ public sealed class AppServices
         LoopRunner.SetConfusedCheck(() => Conditions.IsConfused);
         // Same proactive pre-move approach sequence for loop circuits — backstab
         // gear before the sneak (equipping breaks sneak), then the move.
+        LoopRunner.SetMoveReadyCheck(Stealth.ReadyToMoveSneaking);
         LoopRunner.SetPreMoveHook(() =>
         {
             // Pre-step gear swap for a boss / lair room on a loop lap (see the walker

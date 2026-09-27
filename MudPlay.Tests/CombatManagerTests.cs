@@ -2451,6 +2451,27 @@ public sealed class CombatManagerTests
         Assert.NotNull(h.Combat.CurrentTarget);
     }
 
+    // Report paradigm-20260927-013856: the backstab failed but the same round killed
+    // the rat — the run (and its `break`) was for nothing.
+    [Fact]
+    public void Backstab_Failure_TargetDiesSameRound_DoesNotRun()
+    {
+        using Harness h = new() { DeferUi = true };
+        h.Settings.DoBackstab = true;
+        h.Settings.RunIfBackstabFails = true;
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+        bool fled = false;
+        h.Combat.SetBackstabFailureFlee(() => fled = true);
+
+        h.Feed("Also here: giant rat.");
+        h.Feed("You whap giant rat for 8 damage!");
+        h.Feed("You gain 9 experience.");
+        h.PumpUi();
+
+        Assert.False(fled);
+    }
+
     [Fact]
     public void Backstab_Failure_Whiff_TriggersFlee()
     {

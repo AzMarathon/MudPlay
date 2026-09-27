@@ -58,6 +58,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action? _onLeaderPartySplit;
     private Action? _onPartySplitAbort;
     private Action? _preMoveHook;
+    // StealthManager.ReadyToMoveSneaking — false = hold the step (a sneak is settling).
+    private Func<bool>? _moveReadyCheck;
+    public void SetMoveReadyCheck(Func<bool> check) => _moveReadyCheck = check;
     private Action<RoomKey>? _approachRoomHook;
     private Action<IReadOnlyList<int>>? _pathItemAnnouncer;
     private Action<IReadOnlyList<RoomKey>>? _routeAnnouncer;
@@ -1651,6 +1654,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (HeldForGateItem(_path[_index])) return;
 
         WalkStep step = _path[_index];
+        // Auto-sneak wants a sneak in place before we step; it holds the coordinator
+        // meanwhile and the resume re-drives this step.
+        if (step is MoveStep && _moveReadyCheck?.Invoke() == false) return;
         switch (step)
         {
             case MoveStep move:

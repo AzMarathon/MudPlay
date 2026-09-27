@@ -3047,7 +3047,14 @@ public sealed partial class CombatManager : IDisposable
 
         _log?.Info(LogCategory, $"backstab failed (no surprise) vs '{species}'");
         if (_readSettings().RunIfBackstabFails)
-            _backstabFailureFlee?.Invoke();
+        {
+            // Settle the round first, like a landed backstab: the rest of that swing
+            // can still kill the target (report paradigm-20260927-013856: the second
+            // hit dropped the rat, and the run — and its `break` — were for nothing).
+            string? bsTarget = _currentTarget;
+            _hitAndRunSettlePending = true;
+            _post(() => SettleFailedBackstab(bsTarget));
+        }
     }
 
     // A landed backstab's round has settled: report whether anything is still standing.
@@ -3072,6 +3079,29 @@ public sealed partial class CombatManager : IDisposable
             ? $"hit and run — backstab landed; {(targetAlive ? "target still up" : "")}{(targetAlive && others > 0 ? ", " : "")}{(others > 0 ? $"{others} other hostile(s) here" : "")} — running to re-sneak"
             : "hit and run — backstab landed and cleared the room");
         _hitAndRunBackstabLanded(runNow);
+    }
+
+    // A failed backstab's round has settled: run only if something is still standing.
+    private void SettleFailedBackstab(string? bsTarget)
+    {
+        _hitAndRunSettlePending = false;
+        if (_disposed) return;
+        bool targetAlive = bsTarget is not null
+            && string.Equals(_currentTarget, bsTarget, StringComparison.OrdinalIgnoreCase);
+        int others = 0;
+        if (_classifier.Current is { } obs)
+        {
+            others = CountEngageable(obs);
+            if (bsTarget is not null && obs.Entities.Any(e => e.Kind == EntityKind.Monster
+                    && string.Equals(e.RawName, bsTarget, StringComparison.OrdinalIgnoreCase)))
+                others--;
+        }
+        if (!targetAlive && others <= 0)
+        {
+            _log?.Info(LogCategory, "backstab failed, but the round killed the target and the room is clear — not running");
+            return;
+        }
+        _backstabFailureFlee?.Invoke();
     }
 
     // Disarm the surprise-round watch. Called on resolution and on every signal
