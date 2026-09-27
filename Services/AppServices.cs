@@ -1219,8 +1219,11 @@ public sealed class AppServices
                     sources.Add(new(Game.Train.TrainFundingSourceKind.Bank, b.Key, b.Name, deposit));
         }
 
-        return sources;
+        return Game.Train.TrainFundingSourceFilter.Apply(sources, ReadAutoTrainerSettings());
     }
+
+    private Models.Profile.AutoTrainerSettings ReadAutoTrainerSettings() =>
+        ReadSection<Models.Profile.AutoTrainerSettings>(Profile.Current, "AutoTrainer");
 
     // Observes the "You have been slain by..."
     // line and emits Game.Combat.DeathLineWatcher.PlayerDied.
@@ -6707,7 +6710,9 @@ public sealed class AppServices
                              cash.KeepOnHandDenomination);
             },
             requestInventory: () => SendGameCommand("i"),
-            bankBalancesKnown: () => BankBalance.HasListing,
+            // A run that may not draw on a bank has no use for a `bank` listing.
+            bankBalancesKnown: () => BankBalance.HasListing
+                || !Game.Train.TrainFundingSourceFilter.UsesBanks(ReadAutoTrainerSettings().FundingMode),
             // `bank` is a global query, so this needs no walk. The probe completes on
             // its reply window; the router hears it back on the UI thread.
             requestBankBalances: () => _ = BankBalance.QueryAsync().ContinueWith(

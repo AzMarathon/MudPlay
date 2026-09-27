@@ -1,11 +1,12 @@
 # Version history
 
-## 3.112.7
+## 3.113.0
 
 - Auto-train confirms your purse with `i` before it travels, so a stale coin count no longer sends it to a trainer it can't pay; while you're clearly short it doesn't keep re-reading
 - A trainer's "not enough money" refusal re-reads the purse and fetches the difference from the bank once; if nothing covers it the run backs off instead of walking back and forth
 - Auto-train keeps your Settings → Cash keep-on-hand amount: it tops up from the bank rather than spend below it, and under the floor it withdraws enough to restore it and pay the bill
 - When your purse is short, auto-train checks your bank balance with `bank` once a session, so it can plan a withdrawal instead of giving up
+- New Settings → Auto-Trainer "When short on cash": fetch from stash rooms and/or a bank, pick one bank or stash room, or don't fetch and keep looping until the purse covers it
 - bug reports addressed: paradigm-20260927-105726, paradigm-20260927-105932
 
 ## 3.112.3

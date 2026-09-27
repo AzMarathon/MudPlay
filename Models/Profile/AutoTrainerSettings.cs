@@ -79,4 +79,15 @@ public sealed class AutoTrainerSettings
     // allowed set) keeps the JSON small and means newly-discovered trainers
     // default to allowed. null / empty = every discovered trainer is allowed.
     public List<string>? DisabledTrainers { get; set; }
+
+    // Where a run that's short on cash may fetch the difference from: stashes, a
+    // bank, both, or nowhere (keep looping until the purse covers it).
+    public TrainFundingMode FundingMode { get; set; }
+
+    // Only withdraw at this bank (its shop name, as `bank` lists it). null = any
+    // bank that holds enough.
+    public string? FundingBank { get; set; }
+
+    // Only collect from this flagged stash room. null = any stash room.
+    public RoomRef? FundingStash { get; set; }
 }

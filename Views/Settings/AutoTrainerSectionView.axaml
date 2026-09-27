@@ -78,6 +78,34 @@
                           IsEnabled="{Binding AnnounceLevelUps}"/>
             </StackPanel>
 
+            <!-- When short on cash: where a run may fetch the difference. Saved per
+                 character like the rest of this tab; the bank / stash pickers only
+                 apply while the chosen source includes them. -->
+            <TextBlock Classes="SectionHeader" Text="WHEN SHORT ON CASH"/>
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Fetch the difference from" VerticalAlignment="Center"/>
+                <ComboBox MinWidth="300" VerticalAlignment="Center"
+                          ItemsSource="{Binding FundingModeOptions}"
+                          SelectedItem="{Binding SelectedFundingMode, Mode=TwoWay}"
+                          ToolTip.Tip="When your purse (above keep-on-hand) can't pay for the training, where auto-train may collect the rest before walking to the trainer. 'Don't fetch' leaves it armed and looping until your purse covers it."/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Bank" VerticalAlignment="Center" MinWidth="44"/>
+                <ComboBox MinWidth="300" VerticalAlignment="Center"
+                          ItemsSource="{Binding FundingBankOptions}"
+                          SelectedItem="{Binding SelectedFundingBank, Mode=TwoWay}"
+                          IsEnabled="{Binding FundingUsesBank}"
+                          ToolTip.Tip="Withdraw only at this bank, or at any bank that holds enough. Only a bank you've deposited at has a balance to draw on."/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Stash" VerticalAlignment="Center" MinWidth="44"/>
+                <ComboBox MinWidth="300" VerticalAlignment="Center"
+                          ItemsSource="{Binding FundingStashOptions}"
+                          SelectedItem="{Binding SelectedFundingStash, Mode=TwoWay}"
+                          IsEnabled="{Binding FundingUsesStash}"
+                          ToolTip.Tip="Collect only from this stash room, or from any of your flagged stash rooms that holds coin."/>
+            </StackPanel>
+
             <!-- Party auto-train options. The on/off switch is the "Auto-train party"
                  box on the CP Allocation tab; these shape how the leader runs it. -->
             <TextBlock Classes="SectionHeader" Text="PARTY (Auto-train party on the CP Allocation tab)"/>

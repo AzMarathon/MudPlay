@@ -74,6 +74,32 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     [ObservableProperty] private int _partyLevelGap;
     [ObservableProperty] private bool _partySkipLevel11;
 
+    // When short on cash: where a run may fetch the difference, and optionally the
+    // one bank / stash room to use. The first entry of each list means "any".
+    public const string AnyBank = "(Any bank)";
+    public const string AnyStash = "(Any stash room)";
+    private static readonly (TrainFundingMode Mode, string Label)[] FundingModeLabels =
+    {
+        (TrainFundingMode.StashAndBank, "Stash rooms first, then a bank"),
+        (TrainFundingMode.BankOnly, "A bank only"),
+        (TrainFundingMode.StashOnly, "Stash rooms only"),
+        (TrainFundingMode.None, "Don't fetch - keep looping until I have it"),
+    };
+    public IReadOnlyList<string> FundingModeOptions { get; } =
+        FundingModeLabels.Select(static m => m.Label).ToArray();
+    [ObservableProperty] private string _selectedFundingMode = FundingModeLabels[0].Label;
+    public ObservableCollection<string> FundingBankOptions { get; } = new();
+    [ObservableProperty] private string? _selectedFundingBank = AnyBank;
+    public ObservableCollection<string> FundingStashOptions { get; } = new();
+    [ObservableProperty] private string? _selectedFundingStash = AnyStash;
+    // Stash dropdown label → room, rebuilt with the list.
+    private readonly Dictionary<string, RoomRef> _stashByLabel = new(StringComparer.Ordinal);
+
+    private TrainFundingMode SelectedMode =>
+        FundingModeLabels.FirstOrDefault(m => m.Label == SelectedFundingMode).Mode;
+    public bool FundingUsesBank => Game.Train.TrainFundingSourceFilter.UsesBanks(SelectedMode);
+    public bool FundingUsesStash => Game.Train.TrainFundingSourceFilter.UsesStashes(SelectedMode);
+
     // Channel choices for the announce dropdown.
     public IReadOnlyList<AnnounceChannel> AnnounceChannels { get; } =
         (AnnounceChannel[])Enum.GetValues(typeof(AnnounceChannel));
@@ -92,6 +118,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         "do not train above", "level ceiling", "max level", "stop at level",
         "levels stacked", "train once stacked", "fire at banked levels", "batch training",
         "party", "party train", "auto-train party", "members ready", "quorum", "power level", "level gap", "level 11",
+        "short on cash", "funding", "withdraw", "bank", "stash", "keep looping",
     };
 
     public AutoTrainerSectionViewModel()
@@ -153,6 +180,11 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
             AnnounceLevelUps = AnnounceLevelUps,
             AnnounceChannel = AnnounceChannel,
             DisabledTrainers = disabled.Count == 0 ? null : disabled,
+            FundingMode = SelectedMode,
+            FundingBank = SelectedFundingBank is { } fb && fb != AnyBank ? fb : null,
+            FundingStash = SelectedFundingStash is { } fs && _stashByLabel.TryGetValue(fs, out RoomRef? room)
+                ? new RoomRef(room.Map, room.Room)
+                : null,
         };
 
         profile.Settings ??= new();
@@ -193,7 +225,55 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         PartyMinReady = Math.Clamp(dto.PartyMinReady, 1, 6);
         PartyLevelGap = Math.Max(0, dto.PartyLevelGap);
         PartySkipLevel11 = dto.PartySkipLevel11;
+        LoadFunding(dto);
         RebuildTrainers(dto.DisabledTrainers);
+    }
+
+    // Fill the bank / stash dropdowns from the active set's banks and the
+    // character's flagged stash rooms, then select what's saved. A saved bank or
+    // stash that's no longer offered is kept as its own entry, so a Save doesn't
+    // quietly widen the choice back to "any".
+    private void LoadFunding(AutoTrainerSettings dto)
+    {
+        SelectedFundingMode = FundingModeLabels.FirstOrDefault(m => m.Mode == dto.FundingMode).Label
+                              ?? FundingModeLabels[0].Label;
+
+        FundingBankOptions.Clear();
+        FundingBankOptions.Add(AnyBank);
+        foreach (string name in BankCatalog.Enumerate(_gameData)
+                     .Select(static b => b.Name)
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase))
+            FundingBankOptions.Add(name);
+        if (dto.FundingBank is { Length: > 0 } bank
+            && !FundingBankOptions.Contains(bank, StringComparer.OrdinalIgnoreCase))
+            FundingBankOptions.Add(bank);
+        SelectedFundingBank = dto.FundingBank is { Length: > 0 } b
+            ? FundingBankOptions.First(o => string.Equals(o, b, StringComparison.OrdinalIgnoreCase))
+            : AnyBank;
+
+        _stashByLabel.Clear();
+        FundingStashOptions.Clear();
+        FundingStashOptions.Add(AnyStash);
+        List<RoomRef> stashes = new(_profile.Current?.StashRooms ?? new List<RoomRef>());
+        if (dto.FundingStash is { } saved && !stashes.Any(r => r.Map == saved.Map && r.Room == saved.Room))
+            stashes.Add(saved);
+        string? selected = null;
+        foreach (RoomRef r in stashes)
+        {
+            string label = StashLabel(r);
+            if (!_stashByLabel.TryAdd(label, r)) continue;
+            FundingStashOptions.Add(label);
+            if (dto.FundingStash is { } want && want.Map == r.Map && want.Room == r.Room) selected = label;
+        }
+        SelectedFundingStash = selected ?? AnyStash;
+    }
+
+    private static string StashLabel(RoomRef r)
+    {
+        string key = string.Create(CultureInfo.InvariantCulture, $"{r.Map}/{r.Room}");
+        return AppServices.CurrentOrNull?.RoomGraph?.GetRoom(new Game.Map.RoomKey(r.Map, r.Room))?.Name
+            is { Length: > 0 } name ? $"{key} - {name}" : key;
     }
 
     private void RebuildTrainers(IReadOnlyCollection<string>? disabled)
@@ -271,6 +351,14 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     }
 
     partial void OnAnnounceLevelUpsChanged(bool value) => MarkDirty();
+    partial void OnSelectedFundingModeChanged(string value)
+    {
+        OnPropertyChanged(nameof(FundingUsesBank));
+        OnPropertyChanged(nameof(FundingUsesStash));
+        MarkDirty();
+    }
+    partial void OnSelectedFundingBankChanged(string? value) => MarkDirty();
+    partial void OnSelectedFundingStashChanged(string? value) => MarkDirty();
     partial void OnAnnounceChannelChanged(AnnounceChannel value) => MarkDirty();
     partial void OnPartySkipLevel11Changed(bool value) => MarkDirty();
 
