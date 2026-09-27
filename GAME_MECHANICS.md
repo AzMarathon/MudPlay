@@ -2207,6 +2207,9 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - The capture: `u` / `Sneaking...` / `A large giant rat creeps into the room from the above!`, then the Narrow Road display.
   - The rat came *down* into the Arena as we went up. `bs large giant rat` in Narrow Road got `Your command had no effect.`, and on stepping back down, `Also here: large giant rat.` listed it in the Arena.
   - **Client use:** `CombatManager` holds an arrival-driven first engage while our move is in flight (`SetMoveInFlightProbe`, RoomTracker Pending). The landing room's display decides; a refused move (`NoteMoveRefused`) engages it.
+- **A command sent while a move is in flight runs in the room you land in.** *([OBSERVED] Paradigm, report `paradigm-20260927-121050`.)*
+  - The capture: `d` / `Sneaking...` / `smit` / `sn`, then the Arena display (`Also here: big carrion beast.`), *then* `You cast smite on Raijin!` and `You may not sneak right now!`. The cast went off in the Arena and broke sneak there.
+  - **Client use:** `StealthCastHold.ShouldHold` holds sneak-maintenance casts while our move is in flight (RoomTracker Pending), via `CastingDirector.SetStealthMaintenanceDeferGate`.
 
 ### Refused ("bonked") moves
 *Status: CONFIRMED*

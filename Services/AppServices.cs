@@ -4129,11 +4129,18 @@ public sealed class AppServices
         // exposed mid-cast in a hostile room. While IsBackstabOpenerPending holds we
         // keep deferring even in an engaging fight; the moment the opener fires
         // (_backstabOpenerConsumed) or the room clears, maintenance casting resumes.
+        //
+        // Also held while our own move is in flight (RoomTracker Pending): the server
+        // runs commands in order, so a cast sent then lands in the room we're ENTERING,
+        // unseen — it broke sneak on arrival next to a carrion beast (report
+        // paradigm-20260927-121050). Once we land, the rule above decides.
         CastDirector.SetStealthMaintenanceDeferGate(
-            () => ReadAutoModeFlag(d => d.AutoSneak)
-               && CombatTracker.HasRoomNpc
-               && (!(ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom())
-                   || Combat.IsBackstabOpenerPending()));
+            () => Game.Spells.StealthCastHold.ShouldHold(
+                autoSneak: ReadAutoModeFlag(d => d.AutoSneak),
+                moveInFlight: RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending,
+                npcInRoom: CombatTracker.HasRoomNpc,
+                combatWillClearRoom: ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
+                backstabOpenerPending: Combat.IsBackstabOpenerPending()));
         // Suppress ALL auto-casts while the `train stats` full-screen menu has
         // character-mode input armed — otherwise a cast's letters get typed raw
         // into the character-creation form (the "bles" family-name corruption).

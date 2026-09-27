@@ -107,8 +107,9 @@ public sealed class CastingDirector : IDisposable
     private Func<bool>? _buffStripRoom;
     private Func<bool>? _tokenBuffPause;
     // True when sneak-maintenance casts (buffs + cures) should be HELD for the
-    // next empty room: auto-sneak is on, auto-combat won't clear the current room,
-    // and an NPC is present. Casting breaks sneak (GAME_MECHANICS) and you can't
+    // next empty room: auto-sneak is on, and either our move is in flight (a cast
+    // would land in the room we're entering) or auto-combat won't clear the current
+    // room and an NPC is present. Casting breaks sneak (GAME_MECHANICS) and you can't
     // re-sneak with an NPC in the room, so a stealth runner defers the cast until
     // a room it can cast in and re-sneak. Null / unwired → never defer (tests +
     // non-stealth play behave exactly as before). Emergency survival casts are
