@@ -1179,6 +1179,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Emit @wait when we start resting and @ok when we finish, so
         // the party leader's pause-gate can react.
         AppServices.Current.PartyRest.SetWireSender(engineSend);
+        AppServices.Current.TooHeavyWait.SetWireSender(engineSend);
         // Outbound ailment-sync — the say-announce (".@poisoned" etc.)
         // rides the same engine sender; the @wait/@ok side routes through
         // PartyRest's sender bound just above.

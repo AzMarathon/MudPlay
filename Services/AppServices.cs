@@ -385,6 +385,8 @@ public sealed class AppServices
     // leader when the local character enters / leaves a rest state.
     // Receive side lives in Game.Remote.PartyEssentialHandlers.
     public Game.PartyRestSync PartyRest { get; }
+    // Built beside Inventory; wire bound in MainWindowViewModel.
+    public Game.TooHeavyWaitSignal TooHeavyWait { get; private set; } = null!;
 
     // One-to-many @-command sender. Used for Auto-Exp-Reset
     // (@Reset broadcast on loop / Auto-Lair start) and the
@@ -4631,6 +4633,7 @@ public sealed class AppServices
                 ? Game.Inventory.EquipmentSlotMap.InventorySlotForWornCode(worn)
                 : null);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
+        TooHeavyWait = new Game.TooHeavyWaitSignal(Router, Inventory, PartyRest, Log);
 
         // Equipment-driven max HP/mana pool sync. A worn item can carry a flat
         // pool bonus (Items.Abil 88 = +Max HP, Abil 69 = +Max Mana — e.g. the
@@ -6625,6 +6628,8 @@ public sealed class AppServices
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
+        // Their pending @wait would park the walk back to them behind the party-wait gate.
+        Party.MemberLeftBehind += PartyEssentials.ReleaseWait;
 
         // @where reply → nav-map flash. Recognises the wrapped location reply an
         // @where'd MudPlay client telepaths back and routes it to the (open) map;

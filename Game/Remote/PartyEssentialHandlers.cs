@@ -738,6 +738,16 @@ public sealed class PartyEssentialHandlers : IDisposable
         _wireSender(Encoding.Latin1.GetBytes($"/{senderGiven} @ok\r"));
     }
 
+    // Drop one member's @wait without their @ok — they fell out of the party (left
+    // behind), so holding the leader in place can't help them; going back for them
+    // does, and their rejoin re-applies the hold (PartyAilmentTracker.NoteInferredHold).
+    public void ReleaseWait(string member)
+    {
+        bool wasPaused = IsPaused;
+        if (!WaitingMembers.Remove(member) && !WaitingMembers.Remove(GivenName(member))) return;
+        if (wasPaused && !IsPaused) PauseGateChanged?.Invoke(false);
+    }
+
     // Force-release every outstanding @wait at once — the second release path
     // beside a per-member @ok. The leader's wait timer expired
     // (PartyWaitMovementGate), so we stop holding for members who never sent

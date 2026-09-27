@@ -268,6 +268,7 @@ public static class BugReportBuilder
         // Leader-side recovery state — who (if anyone) we're currently walking to
         // re-collect, and the reach cap that gates it. A "leader never came back
         // for me" report needs both.
+        Kv(sb, "Too heavy to move (waiting on weight)", svc.TooHeavyWait.IsTooHeavy.ToString());
         Kv(sb, "Party @wait holding for", svc.PartyEssentials.WaitingMembers.Count == 0
             ? "(nobody)"
             : string.Join(", ", svc.PartyEssentials.WaitingMembers.Select(m =>

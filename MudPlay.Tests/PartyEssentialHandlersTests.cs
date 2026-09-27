@@ -985,6 +985,21 @@ public sealed class PartyEssentialHandlersTests
     }
 
     [Fact]
+    public void ReleaseWait_DropsOnlyThatMember()
+    {
+        var (engine, handlers, _, party, _, _) = Setup();
+        SeedPartyMember(party, "Follower");
+        SeedPartyMember(party, "Other");
+        engine.DispatchForTests(Telepath("Follower", "@wait (too heavy to move)"));
+        engine.DispatchForTests(Telepath("Other", "@wait"));
+
+        handlers.ReleaseWait("Follower");
+
+        Assert.DoesNotContain("Follower", handlers.WaitingMembers);
+        Assert.True(handlers.IsPaused);   // Other still holds it
+    }
+
+    [Fact]
     public void OkedWithin_TracksTheLastOk()
     {
         var (engine, handlers, _, party, _, _) = Setup();

@@ -2841,6 +2841,8 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 
 **Left behind by a hold.** If a follower can't move when your walk, loop or Auto-Lair steps on — held or knocked down — the game drops them from the party (`<name> is no longer following you.`; with one follower the whole party disbands). With **Re-invite lost party members** on, you stop, backtrack to find them, and re-invite them. Once they follow, their party row shows **Held** and you hold the full window again, or until their `@ok`. Their client is sent `@waiting` so it knows you're holding: a MudPlay follower answers `@ok` at once if nothing still holds it, or as soon as the hold clears. If they were left behind within a few seconds of sending `@ok`, that `@ok` evidently didn't mean they could move, so this time you wait the **full** window and ignore their `@ok`.
 
+**Too heavy to move.** A debuff such as *frail* lowers how much you can carry, so a follower near the limit can suddenly see `You are too heavy to move`. That isn't a hold: freedom and cure paralysis don't help. Your client telepaths the leader `@wait (too heavy to move)` and reads `i` every 15 seconds. It sends `@ok` once you're back under your (lowered) max, either because you dropped something or because the debuff wore off.
+
 **As a follower:** your client sends the leader `@wait` when you drop below a rest floor, and asks again whenever you drop below one afresh (HP or mana) or get walked on while still recovering — so if the leader's wait window runs out while you're resting, the next drop or the next room you're pulled into re-asks instead of leaving you dragged along. `@ok` goes once you're back to full rest-max.
 
 ### Return distance (rooms)
