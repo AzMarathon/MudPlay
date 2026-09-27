@@ -212,6 +212,8 @@ Exemptions: monsters whose Game Data relationship is **Flee** or **Hangup** (you
 
 Self-defense is also suppressed while you're on a **walk-to** — an evil character crossing a guarded town, say, keeps running to their destination rather than stopping to fight the guards (a losing trade at low levels). It stays active when you're **idle, looping, or Auto-Lairing** (all farming/holding, where fighting back is what you want).
 
+**Monsters that pass you in a doorway.** A monster can enter the room you're just leaving after you've sent your move but before the next room appears. That monster is in the room behind you, so MudPlay doesn't attack it, and the room you arrive in decides what you fight. If your move is refused and you stay put, it attacks the arrival as normal.
+
 ## Targeting
 
 When several hostiles share a room, **Target order** and **Target priority** decide who gets hit first — the highest-priority monster by default, or a "follow the party's target" mode. Per-monster priority is ranked in Game Data.
@@ -1209,6 +1211,7 @@ An engine only acts while it's on, and each has a matching Settings tab for its 
 - After any automated cast it **re-issues sneak in place**, so you don't walk on exposed.
 - While sneaking with **Auto-Combat off** — slipping past rooms rather than fighting them — a due buff, cure, or top-off heal is **held until you reach an empty room** (no monsters, so the cast can be followed by a clean re-sneak) instead of stripping sneak in a room you're only passing through.
 - While sneaking with **Auto-Combat *and* Backstab on**, a maintenance cast is likewise **held until you've thrown your backstab opener** (or the room is empty). `bs` has to be your first move from stealth, so letting a buff go out first would break sneak, forfeit the surprise round, *and* leave you mid-cast in a hostile room. Once the opener lands the hold lifts and buffing resumes for the rest of the fight. (Without Backstab, an engaging fight casts normally — you're trading blows either way, so there's no surprise round to protect.)
+- While sneaking, a maintenance cast is also **held while you're mid-step**, from when a move is sent until the next room appears. The game carries out commands in order, so a cast sent then would go off in the room you're walking into, unseen, and you'd arrive unsneaked, possibly next to a monster. Once you're in, the rules above decide.
 - If a **see-hidden** monster forces a fight (with *Clear hostiles when sneak broken by see-hidden monster* on), the now-cleared room becomes that opportunity: the held casts fire there, you re-sneak, and the walk continues.
 
 Emergency survival is never held — a life-threatening heal, a flee, or an emergency hangup always fires immediately. Turn Auto-Sneak **off** and this all stops: casts simply go out on schedule, wherever you are.

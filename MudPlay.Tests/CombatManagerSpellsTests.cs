@@ -489,6 +489,48 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(string.Empty, h.LastSent);              // = the bare CR (trimmed to empty)
     }
 
+    // Report paradigm-20260927-095328: the loop sent `u`, and before the new room
+    // displayed a rat "crept into the room from the above" — into the room we were
+    // leaving. Engaging it sent `bs large giant rat` into the next room. While our
+    // move is in flight the settle holds; the new room's display decides.
+    [Fact]
+    public void ArrivalSettle_OurMoveInFlight_HoldsForTheNewRoom()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        bool moving = true;
+        h.Combat.SetMoveInFlightProbe(() => moving);
+
+        h.Arrive("giant rat");
+        h.FireSettle();
+
+        Assert.Equal(string.Empty, h.LastSent);   // nothing swung at the room we're leaving
+
+        moving = false;                            // landed: the new room shows nobody
+        h.Classifier.NoteRoomChanged();
+        h.Combat.NoteMoveRefused();                // a stray refusal after landing does nothing
+        Assert.Equal(string.Empty, h.LastSent);
+    }
+
+    [Fact]
+    public void ArrivalSettle_OurMoveRefused_EngagesTheRoomWeStayedIn()
+    {
+        // The move bounced, so we never left: the held arrival is in our room.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        bool moving = true;
+        h.Combat.SetMoveInFlightProbe(() => moving);
+
+        h.Arrive("giant rat");
+        h.FireSettle();
+        Assert.Equal(string.Empty, h.LastSent);
+
+        moving = false;
+        h.Combat.NoteMoveRefused();
+
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
     // Post-kill re-engage race (reports 081053, 081654, 103708, 135433). Each realm
     // gives monsters custom death messages we can't map to the flavored target, so
     // the specific-death matcher misses and combat used to re-cast at the corpse on

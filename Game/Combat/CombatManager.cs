@@ -336,6 +336,32 @@ public sealed partial class CombatManager : IDisposable
         _isFleeInFlight = isFleeInFlight;
     }
 
+    // Our own move is in flight: sent, and the new room hasn't displayed yet
+    // (RoomTracker Pending). Anything that "creeps into the room" in that gap arrived
+    // in the room we're LEAVING — the server prints the new room only once we're in
+    // it — so an arrival-driven first engage then would land its attack in the next
+    // room ("Your command had no effect."; report paradigm-20260927-095328, a rat
+    // coming down as we went up). The new room's display decides instead; a refused
+    // move (NoteMoveRefused) means we're still here, and the held arrival engages.
+    private Func<bool>? _isMoveInFlight;
+    private bool _arrivalHeldForMove;
+    public void SetMoveInFlightProbe(Func<bool> isMoveInFlight)
+    {
+        ArgumentNullException.ThrowIfNull(isMoveInFlight);
+        _isMoveInFlight = isMoveInFlight;
+    }
+
+    public void NoteMoveRefused()
+    {
+        if (_disposed || !_arrivalHeldForMove) return;
+        _arrivalHeldForMove = false;
+        if (_classifier.Current is not { } cur) return;
+        _log?.Combat(LogCategory, "arrival held for our move: the move was refused — engaging the room we're still in");
+        _arrivalSettleBypass = true;
+        try { OnEntitiesObserved(cur); }
+        finally { _arrivalSettleBypass = false; }
+    }
+
     // Surprise-round resolution watch. Armed the instant a `bs` goes out
     // (DispatchRoundAction) and disarmed by the first of OUR own combat-result
     // lines that names the target: a line carrying "surprise" means the opener
@@ -1307,6 +1333,14 @@ public sealed partial class CombatManager : IDisposable
             TrySendRoomRefresh("kill during arrival-settle");
             return;
         }
+        if (_isMoveInFlight?.Invoke() == true)
+        {
+            _arrivalHeldForMove = true;
+            _log?.Combat(LogCategory,
+                "arrival-settle: our move is in flight — that arrival is in the room we're leaving; "
+                + "the new room's display decides");
+            return;
+        }
         _log?.Combat(LogCategory,
             "arrival-settle: window elapsed with no room re-display — engaging the accumulated room");
         _arrivalSettleBypass = true;
@@ -1316,6 +1350,11 @@ public sealed partial class CombatManager : IDisposable
 
     private void OnEntitiesObserved(RoomEntitiesObservation obs)
     {
+        // A room display (or the room-change wipe) supersedes an arrival held for our
+        // move: we've landed, and what's here is on the new roster.
+        if (obs.Source is RoomObservationSource.AlsoHere or RoomObservationSource.RoomChange)
+            _arrivalHeldForMove = false;
+
         CombatSettings settings = _readSettings();
 
         // Fresh observation of the room — any pending follow / not-last deferral from
