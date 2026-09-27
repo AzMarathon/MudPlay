@@ -61,6 +61,11 @@ public interface IRecoverableEngine
     // somewhere off-path). Idempotent.
     void ResumeAfterRecovery(RoomKey recoveredAnchor);
 
+    // Resume after a flee landed us somewhere on purpose (HealthManager). By default
+    // the same as a recovery; an engine whose recovery counts failed attempts
+    // overrides it so a deliberate retreat isn't charged as a desync.
+    void ResumeAfterFlee(RoomKey landedAt) => ResumeAfterRecovery(landedAt);
+
     // Terminal failure: the gate's tier-3 backtrack exhausted without
     // uniquely identifying a room. The engine should stop everything and
     // raise its own Failed event. The gate also pops a modeless "Lost"

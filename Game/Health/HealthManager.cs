@@ -1048,7 +1048,7 @@ public sealed class HealthManager : IDisposable
                 _log?.Combat(LogCategory,
                     $"flee complete — resuming engine={_fleeEngine.Name} at {room} " +
                     $"(HP {_state.Hp}/{_state.MaxHp} > {hpRunTrigger}, MA {_state.Ma}/{_state.MaxMa} > {maRunTrigger})");
-                _fleeEngine.ResumeAfterRecovery(room);
+                _fleeEngine.ResumeAfterFlee(room);
                 _fleeEngine = null;
             }
         }

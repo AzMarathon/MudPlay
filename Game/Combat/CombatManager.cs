@@ -316,6 +316,10 @@ public sealed partial class CombatManager : IDisposable
     // with a plain attack, and returns true when it started a retreat instead.
     private Action<bool>? _hitAndRunBackstabLanded;
     private Func<string, bool>? _hitAndRunInsteadOfFight;
+    // Between a landed backstab and its settle check (one dispatch turn), hold any new
+    // engage — the settle decides whether we run, and a plain attack sent first would
+    // read as "fought without a backstab" (report paradigm-20260927-000454).
+    private bool _hitAndRunSettlePending;
 
     // Surprise-round resolution watch. Armed the instant a `bs` goes out
     // (DispatchRoundAction) and disarmed by the first of OUR own combat-result
@@ -1797,6 +1801,12 @@ public sealed partial class CombatManager : IDisposable
         // when a backstab couldn't work here anyway (a see-hidden monster, a
         // don't-backstab target), and HealthManager lets it fight once the run budget
         // is spent or no retreat can start.
+        if (settings.HitAndRunTactics && _hitAndRunSettlePending)
+        {
+            _log?.Combat(LogCategory, $"hit and run — holding {picked.RawName} until the backstab's round settles");
+            _currentTarget = null;
+            return;
+        }
         if (settings.DoBackstab && settings.HitAndRunTactics && _currentTarget is null
             && !backstabPending && !picked.DontBackstab && !RoomHasSeeHidden(obs)
             && _hitAndRunInsteadOfFight?.Invoke($"{picked.RawName} would be fought without a backstab") == true)
@@ -3006,6 +3016,10 @@ public sealed partial class CombatManager : IDisposable
             // anything else in the room — is left for the next sneak-in.
             if (_readSettings().HitAndRunTactics && _hitAndRunBackstabLanded is not null)
             {
+                // The landing itself starts the run count over — now, not at the settle,
+                // so a walk-in engaged in the meantime sees a fresh budget.
+                _hitAndRunBackstabLanded(false);
+                _hitAndRunSettlePending = true;
                 string? bsTarget = _currentTarget;
                 _post(() => SettleHitAndRun(bsTarget));
             }
@@ -3022,6 +3036,7 @@ public sealed partial class CombatManager : IDisposable
     // a corpse the roster hasn't dropped yet doesn't count.
     private void SettleHitAndRun(string? bsTarget)
     {
+        _hitAndRunSettlePending = false;
         if (_disposed || _hitAndRunBackstabLanded is null) return;
         bool targetAlive = bsTarget is not null
             && string.Equals(_currentTarget, bsTarget, StringComparison.OrdinalIgnoreCase);

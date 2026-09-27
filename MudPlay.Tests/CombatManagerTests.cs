@@ -2512,7 +2512,7 @@ public sealed class CombatManagerTests
         h.Feed("You gain 13 experience.");       // the kill, same round
         h.PumpUi();
 
-        Assert.Equal(new[] { false }, landed);
+        Assert.Equal(new[] { false, false }, landed);   // reset at the landing; nothing left to run from
     }
 
     [Fact]
@@ -2527,7 +2527,7 @@ public sealed class CombatManagerTests
         h.Feed("You surprise punch orc rogue for 30 damage!");
         h.PumpUi();
 
-        Assert.Equal(new[] { true }, landed);
+        Assert.Equal(new[] { false, true }, landed);    // reset at the landing, then run at the settle
     }
 
     [Fact]
@@ -2544,7 +2544,29 @@ public sealed class CombatManagerTests
         h.Feed("You gain 9 experience.");
         h.PumpUi();
 
-        Assert.Equal(new[] { true }, landed);
+        Assert.Equal(new[] { false, true }, landed);    // reset at the landing, then run at the settle
+    }
+
+    // Report paradigm-20260927-000454: the backstab killed the target and combat re-picked
+    // a walk-in in the same instant — it must wait for the settle, which runs from it,
+    // instead of swinging first (with a spent budget) and then breaking to run.
+    [Fact]
+    public void HitAndRun_WalkInDuringTheBackstabRound_WaitsForTheSettle()
+    {
+        (Harness h, List<bool> landed, List<string> runs) = HitAndRunHarness(deferUi: true, allowRun: false);
+        using Harness _h = h;
+        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(2, "lashworm", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: giant rat, lashworm.");
+        h.Feed("You surprise whap giant rat for 21 damage!");
+        h.Feed("You gain 9 experience.");             // the rat died; combat would re-pick the worm
+        Assert.Empty(runs);                              // held — no "fought without a backstab" ask
+        Assert.Null(h.Combat.CurrentTarget);
+
+        h.PumpUi();
+        Assert.Equal(new[] { false, true }, landed);     // reset at the landing, then run at the settle
     }
 
     // Report paradigm-20260926-233241: a monster walked in after the backstab kill and
