@@ -434,6 +434,9 @@ public sealed class StealthManager : IDisposable
     // counter.
     private void EstablishSneaking()
     {
+        // A sneak that's since taken supersedes an earlier loud entry — that break
+        // belonged to a room we've left (report paradigm-20260927-011624).
+        _sneakBrokeOnEntryAt = DateTimeOffset.MinValue;
         ReleaseSettleHold("sneaking");
         ReleaseCooldownHold("sneaking");
         _sneakConfirmedThisRoom = true;

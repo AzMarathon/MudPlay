@@ -2060,6 +2060,69 @@ public sealed class HealthManagerTests
         Assert.Equal(new Game.Map.RoomKey(1, 48), h.Engine.ResumedAtRoom);
     }
 
+    // Report paradigm-20260927-011624: a failed-backstab flee (healthy HP) "completed"
+    // before its move landed. Every flee now resumes only after landing.
+    [Fact]
+    public void BackstabFailFlee_ResumesOnlyAfterLanding()
+    {
+        using FleeHarness h = HitAndRunFlee();
+
+        h.Health.RunFromBackstabFailure();
+        h.State.Hp = 199;                                           // an Evaluate in flight
+        Assert.Null(h.Engine!.ResumedAtRoom);
+        Assert.True(h.Health.IsFleeInFlight);
+
+        h.HostileInRoom = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));
+        Assert.Equal(new Game.Map.RoomKey(1, 49), h.Engine.ResumedAtRoom);
+    }
+
+    // Report paradigm-20260927-011659: one retreat at a time.
+    [Fact]
+    public void Flee_WhileAnotherIsInFlight_DoesNotSendASecondMove()
+    {
+        using FleeHarness h = HitAndRunFlee();
+
+        h.Health.RunFromBackstabFailure();
+        h.Health.RunFromBackstabFailure();
+
+        Assert.Single(h.Engine!.SentBacktrackMoves);
+    }
+
+    // Same report: a flee whose move was refused waited forever for a landing.
+    [Fact]
+    public void Flee_MoveRefused_StopsTheRetreatHere()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.HitAndRunMaxRuns = 1;
+
+        h.Health.BackstabLanded(runNow: true);                      // run 1 of 1
+        h.Health.NoteMoveBlocked();
+
+        Assert.False(h.Health.IsFleeInFlight);
+        Assert.False(h.Health.RunInsteadOfFight("acid slime"));      // budget spent — fight
+    }
+
+    // Same report: the loop's step carried us out of the fight room while a run was
+    // held for it — nothing to run from where it landed, and "back" leads to the fight.
+    [Fact]
+    public void HeldFlee_LandingRoomHasNoHostile_IsDropped()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        bool pending = true;
+        h.Health.IsMovePending = () => pending;
+
+        h.Health.RunFromBackstabFailure();                           // held for the move
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+
+        pending = false;
+        h.HostileInRoom = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));
+
+        Assert.Empty(h.Engine.SentBacktrackMoves);
+        Assert.False(h.Health.IsFleeInFlight);
+    }
+
     // HitAndRunMaxRuns caps the runs between backstabs (the first included); then fight.
     [Fact]
     public void HitAndRun_RunsUntilTheBudget_ThenFights_AndABackstabResetsIt()
@@ -2247,8 +2310,10 @@ public sealed class HealthManagerTests
         h.State.InCombat = true;
         h.State.HasPromptData = true;
         h.State.Hp = 30;
-        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 100));   // record room
         Assert.NotNull(h.Engine!.PausedReason);
+        h.HostileInRoom = false;                                  // landed clear of the fight
+        h.State.InCombat = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 100));   // the flee lands
 
         // HP climbs back above 20% (default RunIfBelowHp).
         h.State.Hp = 150;

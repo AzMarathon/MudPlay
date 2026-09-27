@@ -2599,6 +2599,23 @@ public sealed class CombatManagerTests
         Assert.Equal("kobold thief", h.Combat.CurrentTarget);
     }
 
+    // Report paradigm-20260927-011624: a swipe on the way out of a fled room drew a
+    // `bs` that landed in the next room. Mid-flee, nothing is engaged.
+    [Fact]
+    public void FleeInFlight_HoldsEveryEngage()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.AddMonster(1, "nasty filthbug", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+        h.Combat.SetFleeInFlightProbe(() => true);
+
+        h.Feed("Also here: nasty filthbug.");
+
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.Empty(h.Sent);
+    }
+
     [Fact]
     public void HitAndRun_SettingOff_FightsNormally()
     {

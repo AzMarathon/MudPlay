@@ -409,6 +409,20 @@ public sealed class StealthManagerTests
         Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
     }
 
+    // Report paradigm-20260927-011624: a loud entry into an empty room was still "the
+    // sneak broke" two seconds later, after we'd snuck cleanly into the next one.
+    [Fact]
+    public void SneakBrokeOnEntry_ClearedByALaterSneak()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Feed("Sneaking...");
+        h.Feed("You make a sound as you enter the room!");
+        h.Feed("Attempting to sneak...");                  // re-snuck
+        h.Feed("Sneaking...");                             // entered the next room unseen
+
+        Assert.False(h.Stealth.TakeSneakBrokeOnEntry());
+    }
+
     [Fact]
     public void AutoSneak_OnRoomChange_SendsSneak()
     {

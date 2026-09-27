@@ -631,6 +631,14 @@ public sealed class HealthManager : IDisposable
 
     // The room the flee's latest step left from — a "change" back to it isn't a landing.
     private Map.RoomKey? _fleeFromRoom;
+
+    // The flee's last step has landed. Until then the engine stays paused whatever the
+    // pools read — a flee at healthy HP (hit and run, a failed backstab) would otherwise
+    // "complete" while its move is still in flight (report paradigm-20260927-011624).
+    private bool _fleeLanded;
+
+    // A flee is moving and hasn't landed yet — combat holds its engages meanwhile.
+    public bool IsFleeInFlight => (_fleeEngine is not null && !_fleeLanded) || _deferredFleeReason is not null;
     private string? _deferredFleeReason;
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
@@ -1041,7 +1049,7 @@ public sealed class HealthManager : IDisposable
         // A hit-and-run retreat runs at healthy HP, so "recovered" is already true the
         // moment it starts — hold the resume until its last step has actually landed.
         if (_fleeEngine is not null && _fleeQueue.Count == 0 && _state.MaxHp > 0
-            && !_hitAndRunRetreating)
+            && _fleeLanded)
         {
             int hpRunTrigger = ResolveHpThreshold(s.HpThresholdMode, s.RunIfBelowHp);
             int maRunTrigger = ResolveMaThreshold(s.MaThresholdMode, s.RunIfBelowMa);
@@ -1649,7 +1657,6 @@ public sealed class HealthManager : IDisposable
     // re-stealthing isn't going to happen, so we stand and fight. A landed backstab
     // starts the count over.
     private int _hitAndRunRuns;
-    private bool _hitAndRunRetreating;   // a hit-and-run retreat is under way and hasn't landed
 
     public int HitAndRunRuns => _hitAndRunRuns;
 
@@ -1668,7 +1675,7 @@ public sealed class HealthManager : IDisposable
         // paradigm-20260927-003304: the held run's engage asked again, found the
         // budget spent, attacked — then the held run fired anyway).
         if (_deferredFleeReason is not null || (_fleeEngine is not null && _fleeQueue.Count > 0)
-            || _hitAndRunRetreating)
+            || IsFleeInFlight)
         {
             _log?.Combat(LogCategory, $"hit and run — already running; not engaging ({reason})");
             return true;
@@ -1681,10 +1688,8 @@ public sealed class HealthManager : IDisposable
             return false;
         }
         _hitAndRunRuns++;
-        _hitAndRunRetreating = true;
         if (TryFlee($"hit and run {_hitAndRunRuns}/{maxRuns} — {reason}")) return true;
         _hitAndRunRuns--;
-        _hitAndRunRetreating = false;
         return false;
     }
 
@@ -1695,6 +1700,14 @@ public sealed class HealthManager : IDisposable
     // whether a flee started (or is held for the move in flight to land).
     private bool TryFlee(string reason)
     {
+        // One retreat at a time: a second one started mid-flight plans from a room we
+        // haven't confirmed leaving and sends its own move on top.
+        if (_fleeEngine is not null && !_fleeLanded)
+        {
+            _log?.Combat(LogCategory, $"already fleeing — {reason}");
+            return true;
+        }
+
         Map.IRecoverableEngine? engine = _getActiveMovementEngine?.Invoke();
         if (engine is null)
         {
@@ -1743,6 +1756,7 @@ public sealed class HealthManager : IDisposable
             SendCommand("break");
 
         _fleeFromRoom = _lastKnownRoom;
+        _fleeLanded = false;
         Map.Direction first = _fleeQueue.Dequeue();
         _log?.Combat(LogCategory,
             $"flee start engine={engine.Name} mode={combat.RunDirection} " +
@@ -1944,6 +1958,19 @@ public sealed class HealthManager : IDisposable
 
     public void NoteRoomChanged() => NoteRoomChanged(newRoom: null);
 
+    // A flee move was refused — the route ran into a wall. Stop the retreat where we
+    // stand rather than wait forever for a landing that can't come (report
+    // paradigm-20260927-011659: stuck "already running" beside an acid slime).
+    public void NoteMoveBlocked()
+    {
+        if (_fleeEngine is null || _fleeLanded) return;
+        _log?.Combat(LogCategory, "flee move refused — stopping the retreat here");
+        _fleeQueue.Clear();
+        _fleeLanded = true;
+        _fledThisCombat = false;
+        _post(Evaluate);
+    }
+
     // Overload that captures the new room key so the flee path can (a) step its
     // multi-move queue on every arrival and (b) call
     // IRecoverableEngine.ResumeAfterRecovery with the correct anchor once HP
@@ -1968,8 +1995,17 @@ public sealed class HealthManager : IDisposable
         if (_deferredFleeReason is { } heldReason && _fleeEngine is null)
         {
             _deferredFleeReason = null;
-            TryFlee(heldReason);
-            startedHeldFlee = _fleeEngine is not null;
+            // The move in flight may have carried us OUT of the fight (the loop's step
+            // leaving the room as a monster walked in) — then there's nothing here to
+            // run from, and "back" would lead straight to it (report
+            // paradigm-20260927-011659: a held run sent us back down into the kobold).
+            if (_hasHostileInRoom?.Invoke() == false)
+                _log?.Combat(LogCategory, $"held flee dropped — no hostile where the move landed ({heldReason})");
+            else
+            {
+                TryFlee(heldReason);
+                startedHeldFlee = _fleeEngine is not null;
+            }
         }
 
         // Flee step continuation — fire BEFORE the rest-latch reset
@@ -1998,7 +2034,7 @@ public sealed class HealthManager : IDisposable
             // The same re-check resumes the engine when nothing's wrong — a hit-and-run
             // retreat after a landed backstab has no HP change to wake it otherwise.
             _fledThisCombat = false;
-            _hitAndRunRetreating = false;
+            _fleeLanded = true;
             _post(Evaluate);
         }
 

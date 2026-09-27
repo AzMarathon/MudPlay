@@ -176,6 +176,10 @@ public sealed class RoomTracker
     // step. The engines' own moves are echo-claimed and never fire this.
     public event Action? ManualMoveObserved;
 
+    // The server refused the move just sent ("There is no exit in that direction!" and
+    // the like) — raised after the tracker has un-counted it.
+    public event Action? MoveBlocked;
+
     // Optional authoritative-position resync hook (Paradigm `rm`). Invoked when the
     // tracker drops to Suspect on an AMBIGUOUS observation it can't self-resolve —
     // e.g. a forced, non-directional transport (a boat disembark, a teleport-trap
@@ -882,6 +886,7 @@ public sealed class RoomTracker
                 : RoomConfidence.Pending;
             SetConfidence(target, when, "move blocked");
         }
+        MoveBlocked?.Invoke();
     }
 
     // How recently the most-recent move must have been sent for a "command

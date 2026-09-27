@@ -321,6 +321,16 @@ public sealed partial class CombatManager : IDisposable
     // read as "fought without a backstab" (report paradigm-20260927-000454).
     private bool _hitAndRunSettlePending;
 
+    // HealthManager.IsFleeInFlight — while a flee's move is on its way, don't open a
+    // fight in the room we're leaving (a swipe on the way out would draw a `bs` that
+    // lands in the next room).
+    private Func<bool>? _isFleeInFlight;
+    public void SetFleeInFlightProbe(Func<bool> isFleeInFlight)
+    {
+        ArgumentNullException.ThrowIfNull(isFleeInFlight);
+        _isFleeInFlight = isFleeInFlight;
+    }
+
     // Surprise-round resolution watch. Armed the instant a `bs` goes out
     // (DispatchRoundAction) and disarmed by the first of OUR own combat-result
     // lines that names the target: a line carrying "surprise" means the opener
@@ -1721,6 +1731,15 @@ public sealed partial class CombatManager : IDisposable
         // never-BS target. If every actionable monster is flagged we don't skip
         // the room — fall back to the highest-priority actionable one and open
         // with a normal attack (the chooser's BS gate suppresses the bs there).
+        // Mid-flee: don't open anything in the room we're leaving (a swipe on the way
+        // out would draw an attack — or a `bs` — that lands in the next room).
+        if (_isFleeInFlight?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory, "fleeing — not engaging on the way out");
+            _currentTarget = null;
+            return;
+        }
+
         // We snuck in for a backstab but made a sound entering: the surprise is gone
         // and the backstab would fail, so with "run if backstab fails" on, run now
         // rather than open with a plain swing (report paradigm-20260926-222210).

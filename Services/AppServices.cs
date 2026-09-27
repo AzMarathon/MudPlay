@@ -3815,6 +3815,7 @@ public sealed class AppServices
         // to the loop's origin (we're standing on it).
         Health.IsMovePending = () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending;
         Health.IsServerEngaged = () => CombatTracker.IsServerEngaged;
+        RoomTracker.MoveBlocked += Health.NoteMoveBlocked;
         Health.PreviousRoom = () =>
         {
             IReadOnlyList<Game.Map.RoomKey> history = RoomTracker.GetHistory();
@@ -4442,6 +4443,7 @@ public sealed class AppServices
         // the failed surprise round; HealthManager owns the flee route + engine.
         Combat.SetBackstabFailureFlee(() => Health.RunFromBackstabFailure());
         Combat.SetHitAndRunHooks(Health.BackstabLanded, Health.RunInsteadOfFight);
+        Combat.SetFleeInFlightProbe(() => Health.IsFleeInFlight);
 
         // ShadowRest (Paradigm): classes carrying ability code 1103 can rest while
         // hidden/sneaking in a room with monsters without being attacked. The rest
