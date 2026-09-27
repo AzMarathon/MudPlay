@@ -280,10 +280,11 @@
                                   ToolTip.Tip="Skip the BS attempt when the multi-attack room spell is going off this round."/>
                         <CheckBox Content="Run if BS fails"
                                   IsChecked="{Binding RunIfBackstabFails, Mode=TwoWay}"
-                                  ToolTip.Tip="Run instead of fighting when your backstab opener can't work: the backstab swings without &quot;surprise&quot;, or your sneak broke on the way in (&quot;You make a sound…&quot;, or no &quot;Sneaking...&quot; on arrival). Holds back if that same round killed the target and the room is clear. Turn it on with Hit and Run tactics for full hit-and-run play — Hit and Run covers what happens after a backstab lands; this covers the backstab that doesn't."/>
+                                  IsEnabled="{Binding IsRunIfBackstabFailsEditable}"
+                                  ToolTip.Tip="Run instead of fighting when your backstab opener can't work: the backstab swings without &quot;surprise&quot;, or your sneak broke on the way in (&quot;You make a sound…&quot;, or no &quot;Sneaking...&quot; on arrival). Holds back if that same round killed the target and the room is clear. Greyed out while Hit and Run tactics is on: Hit and Run already does all of this."/>
                         <CheckBox Content="Hit and Run tactics"
                                   IsChecked="{Binding HitAndRunTactics, Mode=TwoWay}"
-                                  ToolTip.Tip="Never fight without a backstab: once a backstab lands, anything still standing — and any monster that walks in or chases you — is run from instead. Your loop or walk re-sneaks and comes back to backstab again. Needs Do BS attacks and a running loop / walk."/>
+                                  ToolTip.Tip="Backstab everything, as many times as it takes. Carries on only when a backstab kills the target and nothing else is in the room. Otherwise it runs, re-sneaks and comes back: the backstab missed (no surprise), the target survived it, others are in the room, the sneak broke on the way in, or a monster walked in or chased you. Includes everything Run if BS fails does. Needs Do BS attacks and a running loop / walk."/>
                         <StackPanel Orientation="Horizontal" Spacing="6" Margin="24,0,0,0"
                                     IsEnabled="{Binding HitAndRunTactics}">
                             <TextBlock Classes="FieldLabel" Text="Give up and fight after" VerticalAlignment="Center"/>
