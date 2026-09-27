@@ -460,7 +460,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         using Harness h = NewHarness();
         h.Comeback.SetWireSender(_ => { });
         List<string> held = new();
-        h.Comeback.LeftBehindRejoined = held.Add;
+        h.Comeback.LeftBehindRejoined = (g, _) => held.Add(g);
         h.Tracker.SetLocated(new RoomKey(1, 2));   // where Tank is left
         StartLair(h);                               // we've moved on to 1/1
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -478,12 +478,38 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.True(h.Lair.IsActive);   // resumed — the party @wait gate holds it
     }
 
+    // Report paradigm-20260926-195517: the follower's @ok landed a second before
+    // our move left them behind — so a fresh @ok proves nothing.
+    [Fact]
+    public void LeftBehind_RightAfterTheirOk_WaitsTheFullWindow()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        List<(string, bool)> held = new();
+        h.Comeback.LeftBehindRejoined = (g, ignoreOk) => held.Add((g, ignoreOk));
+        h.Comeback.OkedWithin = (_, _) => true;
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Players.Players.Add(new MudPlay.Models.GameData.PlayerRecord(
+            GivenName: "Tank", FamilyName: "", Class: "Warrior", Race: "Human", Alignment: "Neutral",
+            Title: null, Gang: null, Role: null, FirstSeenUtc: DateTime.UtcNow, LastSeenUtc: DateTime.UtcNow));
+        h.Router.Dispatch(Line("Also here: Tank."));
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        Assert.Equal(new[] { ("Tank", true) }, held);
+        Assert.False(Sent(h, "/Tank @waiting"));
+        Assert.True(Sent(h, "too early"));
+    }
+
     [Fact]
     public void Comeback_Rejoins_DoesNotInferAHold()
     {
         using Harness h = NewHarness();
         List<string> held = new();
-        h.Comeback.LeftBehindRejoined = held.Add;
+        h.Comeback.LeftBehindRejoined = (g, _) => held.Add(g);
         SeatFollower(h, "Tank");
         StartLair(h);
         h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/1"));

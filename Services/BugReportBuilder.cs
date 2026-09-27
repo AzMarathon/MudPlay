@@ -268,6 +268,10 @@ public static class BugReportBuilder
         // Leader-side recovery state — who (if anyone) we're currently walking to
         // re-collect, and the reach cap that gates it. A "leader never came back
         // for me" report needs both.
+        Kv(sb, "Party @wait holding for", svc.PartyEssentials.WaitingMembers.Count == 0
+            ? "(nobody)"
+            : string.Join(", ", svc.PartyEssentials.WaitingMembers.Select(m =>
+                svc.PartyEssentials.OkDistrusted.Contains(m) ? $"{m} (full window, @ok ignored)" : m)));
         Kv(sb, "Recovering member", svc.PartyComeback.RecoveringMember is { } rec
             ? (svc.PartyComeback.RecoveringLeftBehind ? $"{rec} (left behind by our move)" : rec)
             : "(none in flight)");

@@ -6623,7 +6623,8 @@ public sealed class AppServices
             RemoteCommands, Party, RoomTracker, RoomClassifier, Walker, LoopRunner, AutoLair, Router, Bfs, Log);
         // A follower we backtracked for couldn't move — hold for their @ok as if
         // they'd sent @held (chip + full wait window).
-        PartyComeback.LeftBehindRejoined = given => PartyAilment?.NoteInferredHold(given);
+        PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
+        PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
 
         // @where reply → nav-map flash. Recognises the wrapped location reply an
         // @where'd MudPlay client telepaths back and routes it to the (open) map;

@@ -107,12 +107,21 @@ public sealed class PartyComebackManager : IDisposable
     private Action<string> _reply = static _ => { };
     private readonly List<RoomKey> _backtrack = new();
     private int _backtrackIndex;
-    // The recovery in flight is for a follower our move left behind (path C).
+    // The recovery in flight is for a follower our move left behind (path C), and
+    // whether their @ok landed just before that move (so it can't be trusted).
     private bool _leftBehind;
+    private bool _okPremature;
 
-    // Raised with the given name when a left-behind follower re-follows, before the
-    // engine resumes — AppServices treats them as held (chip + wait for @ok).
-    public Action<string>? LeftBehindRejoined { get; set; }
+    // A member left behind this soon after their own @ok wasn't really free to move.
+    private static readonly TimeSpan PrematureOkWindow = TimeSpan.FromSeconds(5);
+
+    // Raised with the given name (and whether their @ok was premature) when a
+    // left-behind follower re-follows, before the engine resumes — AppServices
+    // treats them as held (chip + wait for @ok, or the full window if premature).
+    public Action<string, bool>? LeftBehindRejoined { get; set; }
+
+    // Whether a member sent @ok within a window of now (PartyEssentialHandlers.OkedWithin).
+    public Func<string, TimeSpan, bool>? OkedWithin { get; set; }
 
     // Consecutive recovery walks that couldn't REACH a member, keyed by given name.
     // A follower stranded past a gate the leader can't cross (an item / key / toll
@@ -369,8 +378,10 @@ public sealed class PartyComebackManager : IDisposable
             return;
         }
         _log?.Info(LogCategory, $"{given} was left behind by our move — going back for them.");
+        bool premature = OkedWithin?.Invoke(given, PrematureOkWindow) == true;
         BeginRecovery(given, null, TelepathReply(given));
         _leftBehind = _busy && string.Equals(_senderGiven, given, StringComparison.OrdinalIgnoreCase);
+        _okPremature = _leftBehind && premature;
     }
 
     // ----- shared recovery decision + drive --------------------------
@@ -559,6 +570,7 @@ public sealed class PartyComebackManager : IDisposable
     {
         _busy = false;
         _leftBehind = false;
+        _okPremature = false;
         _phase = ComebackPhase.Idle;
         _followTimer.Stop();
         _backtrack.Clear();
@@ -690,9 +702,18 @@ public sealed class PartyComebackManager : IDisposable
             // Whatever held them may still hold them: wait the full window for their
             // @ok, and tell them so — a hold that cleared while they were out of the
             // party never sent one.
-            LeftBehindRejoined?.Invoke(_senderGiven);
-            _wire.Send($"/{_senderGiven} @waiting");
-            _reply("got you — waiting for your @ok");
+            LeftBehindRejoined?.Invoke(_senderGiven, _okPremature);
+            if (_okPremature)
+            {
+                // Their @ok came a moment before they were left behind, so another
+                // one proves nothing — sit out the whole window instead.
+                _reply($"got you — your last @ok was too early, waiting the full {FollowWaitWindow.TotalSeconds:0}s");
+            }
+            else
+            {
+                _wire.Send($"/{_senderGiven} @waiting");
+                _reply("got you — waiting for your @ok");
+            }
         }
         else
         {

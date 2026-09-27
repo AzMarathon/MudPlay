@@ -968,6 +968,38 @@ public sealed class PartyEssentialHandlersTests
     }
 
     [Fact]
+    public void DistrustedOk_DoesNotRelease_UntilTheWindowClears()
+    {
+        var (engine, handlers, _, party, _, _) = Setup();
+        SeedPartyMember(party, "Follower");
+        handlers.NotePause("Follower", ignoreOk: true);
+
+        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        Assert.True(handlers.IsPaused);
+
+        handlers.ClearAllWaits();   // the wait window ran out
+        Assert.False(handlers.IsPaused);
+        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        Assert.False(handlers.IsPaused);   // trusted again next time
+    }
+
+    [Fact]
+    public void OkedWithin_TracksTheLastOk()
+    {
+        var (engine, handlers, _, party, _, _) = Setup();
+        SeedPartyMember(party, "Follower");
+        DateTime now = new(2026, 9, 26, 19, 54, 30, DateTimeKind.Utc);
+        handlers.NowProvider = () => now;
+
+        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        now = now.AddSeconds(1);
+        Assert.True(handlers.OkedWithin("Follower", TimeSpan.FromSeconds(5)));
+        now = now.AddSeconds(10);
+        Assert.False(handlers.OkedWithin("Follower", TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public void Wait_FromNonPartyMember_IsIgnored()
     {
         // @wait is party-whitelist-gated by the engine; the wait-set

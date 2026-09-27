@@ -4014,11 +4014,19 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 - **When the leader moves, only the followers who can move go with them.** A follower who is held or knocked down stays in the room and drops out of the party. *([CONFIRMED] user, 2026-09-26.)* A cure such as *freedom* or *cure paralysis* may free them, depending on the hold.
 - **The leader sees `<name> is no longer following you.`** *([OBSERVED] report `paradigm-20260926-195517`.)*
 - **With only one follower, the party then disbands: `Your party has been disbanded.`** *([OBSERVED] same report; see Party size bounds — a party needs 2.)*
-- **Nothing tells the leader why.** A held follower's `@wait` may never arrive before the leader's next step. In the report above it didn't, although the same follower had sent `@wait (can't move)` / `@ok` a minute earlier.
+- **Nothing tells the leader why.** A held follower's `@wait` may never arrive before the leader's next step.
+  - In the report above, the follower telepathed `@wait (can't move)` at 19:54:29, cast `freedom` on themselves, and sent `@ok` at 19:54:30. They were still left behind by the leader's next step at 19:54:31, and again at 19:55:11 with no `@wait`.
+  - Each drop came right after `<name> kneels to meditate.`
+- **[OBSERVED] What in that area could hold, per the Paradigm 1.9.1 data (2026-09-26):**
+  - The room was 17/391 (Eastern Road). Its lair includes the boneless zombie (#803), and the lair at 17/395 includes the giant locust (#923), fought at 19:54:10. Both hit with **knockdown #318**: HoldPerson (74), `Dur` 4. The room sees `{target} is knocked flat!`.
+  - The fight at 19:54:24 was a tall nightshade and a vampire fledgling. Their hit spells (frail #949, absorb #950, spear of dark energy #5103, drain life #361, disease #5120) carry **no hold**.
+  - No `is knocked flat!` line for the follower appears in the capture. Several holds have no witness line at all (e.g. gust of wind #1255, frigid blast of wind #900), so a hold on a party member can land unseen.
+- **[NEEDS CONFIRMATION]** Whether a hold that `freedom` / `cure paralysis` can't clear exists, and whether `freedom` fully clears knockdown #318. The data files freedom (81) as clearing HoldPerson (74) wholesale, and the leader's client logged the cure as confirmed.
 
 **Client use:**
 - `PartyManager.OnLeftBehind` → `MemberLeftBehind` → `PartyComebackManager` path C: backtrack, re-invite, then `PartyAilmentTracker.NoteInferredHold` (Held chip + `@wait` pause over the full "If leading, wait only" window) and a `@waiting` telepath the follower answers with `@ok` once nothing holds it (`PartyEssentialHandlers.OnWaiting`).
 - **Client policy** (user, 2026-09-26): gated on *Re-invite lost party members*; only a running walk / loop / Auto-Lair goes back.
+- **Client policy** (user, 2026-09-26): a member left behind within 5 s of their own `@ok` (`PartyEssentialHandlers.OkedWithin`) gets the full wait window after rejoining, and their `@ok` is ignored for it (`NotePause(ignoreOk)`). No `@waiting` is sent in that case.
 
 ### Losing the leader disbands the party
 *Status: CONFIRMED*
