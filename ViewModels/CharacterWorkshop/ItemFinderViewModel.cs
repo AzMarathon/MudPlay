@@ -74,6 +74,8 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         ("EncumText",      static e => e.EncumText),
         ("DamageText",     static e => e.DamageText),
         ("SwingSpeedText", static e => e.SwingSpeedText),
+        ("DamagePerRoundText", static e => e.DamagePerRoundText),
+        ("EstBsText",      static e => e.EstBsText),
         ("AccuracyText",   static e => e.AccuracyText),
         ("CritsText",      static e => e.CritsText),
         ("HitMagicText",   static e => e.HitMagicText),
@@ -132,11 +134,12 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     public event Action? ColumnLayoutChanged;
 
     // Attack-type dropdown labels; "Attack" is the plain base swing, the rest map
-    // to MudAttackType via AttackTypeFor. Bash / Smash recompute every weapon's
-    // swing rate; the three martial-arts types append one bare-handed attack row.
+    // to MudAttackType via AttackTypeFor. Backstab is one strike with a backstab-
+    // capable weapon; Bash / Smash recompute every weapon's swing rate; the three
+    // martial-arts types append one bare-handed attack row.
     private const string AttackBase = "Attack";
     private static readonly string[] AttackTypes =
-        { AttackBase, "Bash", "Smash", "Punch", "Kick", "Jumpkick" };
+        { AttackBase, "Backstab", "Bash", "Smash", "Punch", "Kick", "Jumpkick" };
 
     private readonly GameDataCache _gameData;
     private readonly InventoryManager _inventory;
@@ -153,6 +156,10 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     private Dictionary<string, ItemFinderEntry> _entryByName = new(StringComparer.OrdinalIgnoreCase);
     // The live character's swing inputs, snapshot at open; reused on every rebuild.
     private readonly ItemFinderEntry.SwingContext? _swing;
+    // The live character's damage inputs (stats + the gear worn besides the weapon),
+    // snapshot at open like _swing; drives the Dmg/Rnd + Est. BS Dmg columns and the
+    // damage-based Find Best criteria. Null without a usable character.
+    private readonly ItemDamageModel? _damage;
     private readonly Dictionary<string, EquipmentSlot> _slotByLabel = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _weaponCodeByLabel = new(StringComparer.Ordinal);
     // Negate dropdown label ("<spell> #<id>") → spell id, so the filter matches by
@@ -314,7 +321,8 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         // static browse aid, so the Swings column reflects the character as they are
         // when it's opened rather than tracking mid-browse stat changes.
         _swing = BuildSwingContext(gameData, stats, inventory);
-        _all = ItemFinderEntry.BuildCatalog(gameData, _swing);
+        _damage = BuildDamageModel(gameData, stats, inventory);
+        _all = ItemFinderEntry.BuildCatalog(gameData, _swing, damage: _damage);
         IndexCatalog();
 
         RowsView = new DataGridCollectionView(_all) { Filter = PassesFilter };
@@ -372,6 +380,50 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
             combatLevel, stats.Level, stats.Agility, stats.Strength,
             encum.CurrentWeight, encum.MaxWeight, gameData.ActiveRealm);
     }
+
+    // The live character's damage inputs: stats, class stealth, encumbrance, and the
+    // worn gear split into the weapon in hand vs everything else (plus race / class
+    // abilities), the same aggregation Monster Intel's attack profile uses. Null when
+    // no character is loaded or the class combat level can't be resolved.
+    private static ItemDamageModel? BuildDamageModel(
+        GameDataCache gameData, PlayerStats stats, InventoryManager inventory)
+    {
+        if (stats.Level <= 0) return null;
+        JsonElement? classRow = gameData.FindRowByName("Classes", stats.Class);
+        JsonElement? raceRow = gameData.FindRowByName("Races", stats.Race);
+        int combatLevel = ReadInt(classRow, "CombatLVL");
+        if (combatLevel <= 0) return null;
+
+        IReadOnlyList<EquippedItem> worn = inventory.Snapshot.EquippedItems;
+        EquipmentStatBreakdown rest = CharacterCalculator.AggregateEquipmentStats(
+            worn.Where(static w => w.Slot != WeaponHandSlot).ToList(), gameData);
+        if (raceRow is JsonElement r) CharacterCalculator.ApplyAbilityBonuses(rest, r, stats.Race);
+        if (classRow is JsonElement c) CharacterCalculator.ApplyAbilityBonuses(rest, c, stats.Class);
+        EquipmentStatSummary o = rest.Totals;
+
+        ItemDamageModel.WeaponInputs? current = null;
+        if (worn.FirstOrDefault(static w => w.Slot == WeaponHandSlot) is { Name: not null } hand
+            && gameData.FindRowByName("Items", hand.Name) is JsonElement weaponRow)
+        {
+            EquipmentStatSummary w = CharacterCalculator.AggregateItemRow(weaponRow, hand.Name, WeaponHandSlot).Totals;
+            current = new ItemDamageModel.WeaponInputs(
+                w.WeaponMin, w.WeaponMax, w.WeaponSpeed, w.WeaponStrReq, w.PlusMinDamage, w.PlusMaxDamage,
+                w.PlusCrits, w.PlusBSMin, w.PlusBSMax, CanBackstab: false,
+                w.PlusStrength, w.PlusAgility, w.PlusStealth);
+        }
+
+        EncumbranceReading encum = inventory.Snapshot.Encumbrance;
+        return new ItemDamageModel(
+            gameData.ActiveRealm, stats.Level, combatLevel, stats.Strength, stats.Agility, stats.Stealth,
+            ClassCapabilities.ClassHasStealth(classRow), encum.CurrentWeight, encum.MaxWeight,
+            new ItemDamageModel.RestBonuses(
+                o.PlusMinDamage, o.PlusMaxDamage, o.PlusCrits, o.PlusBSMin, o.PlusBSMax,
+                o.PlusPunchDmg, o.PlusKickDmg, o.PlusJumpKickDmg),
+            current);
+    }
+
+    // EquippedItem.Slot tag InventoryManager gives the wielded weapon.
+    private const string WeaponHandSlot = "Weapon Hand";
 
     private static int ReadInt(JsonElement? row, string property)
     {
@@ -482,7 +534,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     private void RebuildForAttackType()
     {
         _filterSuspended = true;
-        _all = ItemFinderEntry.BuildCatalog(_gameData, _swing, AttackTypeFor(SelectedAttackType));
+        _all = ItemFinderEntry.BuildCatalog(_gameData, _swing, AttackTypeFor(SelectedAttackType), _damage);
         IndexCatalog();
         RowsView = new DataGridCollectionView(_all) { Filter = PassesFilter };
         _filterSuspended = false;
@@ -491,6 +543,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
 
     private static MudAttackType AttackTypeFor(string? label) => label switch
     {
+        "Backstab" => MudAttackType.Backstab,
         "Bash" => MudAttackType.Bash,
         "Smash" => MudAttackType.Smash,
         "Punch" => MudAttackType.Punch,

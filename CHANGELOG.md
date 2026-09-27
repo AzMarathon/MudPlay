@@ -1,5 +1,11 @@
 # Version history
 
+## 3.112.0
+
+- Item Finder: new Backstab attack type — one strike with a backstab-capable weapon
+- Item Finder: Dmg/Rnd column (average damage per round for the selected attack, crits included) and Est. BS Dmg column (your backstab min-max and average per weapon)
+- Gear Finder: Find Best by computed Backstab Dmg (min / max / avg) and by Damage / Round for the selected attack
+
 ## 3.111.29
 
 - Clearer Run if BS fails tooltip and Help: what it covers, when it holds back, and how it pairs with Hit and Run tactics

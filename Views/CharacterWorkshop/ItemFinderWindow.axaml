@@ -87,7 +87,7 @@
                                     <ComboBox ItemsSource="{Binding AttackTypeOptions}"
                                               SelectedItem="{Binding SelectedAttackType, Mode=TwoWay}"
                                               HorizontalAlignment="Stretch"
-                                              ToolTip.Tip="Which attack the Swings column models. Bash / Smash recompute each weapon; Punch / Kick / Jumpkick add a bare-handed row."/>
+                                              ToolTip.Tip="Which attack the Swings and Dmg/Rnd columns model. Backstab is one strike with a backstab-capable weapon; Bash / Smash recompute each weapon; Punch / Kick / Jumpkick add a bare-handed row."/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -270,6 +270,8 @@
                         <DataGridTextColumn Header="Enc"        Binding="{ReflectionBinding EncumText}"      SortMemberPath="Encum"      Width="58"  Tag="EncumText"/>
                         <DataGridTextColumn Header="Dmg"        Binding="{ReflectionBinding DamageText}"     SortMemberPath="MaxDmg"     Width="78"  Tag="DamageText"/>
                         <DataGridTextColumn Header="Swings (W. Spd)" Binding="{ReflectionBinding SwingSpeedText}" SortMemberPath="AvgSwings" Width="112" Tag="SwingSpeedText"/>
+                        <DataGridTextColumn Header="Dmg/Rnd"    Binding="{ReflectionBinding DamagePerRoundText}" SortMemberPath="DamagePerRound" Width="80" Tag="DamagePerRoundText"/>
+                        <DataGridTextColumn Header="Est. BS Dmg" Binding="{ReflectionBinding EstBsText}"     SortMemberPath="EstBsMax"   Width="120" Tag="EstBsText"/>
                         <DataGridTextColumn Header="Accy"       Binding="{ReflectionBinding AccuracyText}"   SortMemberPath="Accuracy"   Width="66"  Tag="AccuracyText"/>
                         <DataGridTextColumn Header="Crit"       Binding="{ReflectionBinding CritsText}"      SortMemberPath="Crits"      Width="62"  Tag="CritsText"/>
                         <DataGridTextColumn Header="Hit Magic"  Binding="{ReflectionBinding HitMagicText}"   SortMemberPath="HitMagic"   Width="92"  Tag="HitMagicText"/>
