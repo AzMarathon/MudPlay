@@ -18,6 +18,14 @@ public sealed class CombatProfileSettings
     // Id of the active profile. Empty / unknown resolves to the first profile.
     public string ActiveId { get; set; } = string.Empty;
 
+    // Groups the user has taken out of combat profiles ("Include in combat profile"
+    // unchecked): one value for the whole character. Kept true by holding every
+    // profile's copy of a shared group identical, so a switch changes nothing there.
+    // Null / empty = every group is per profile.
+    public List<CombatProfileGroup>? SharedGroups { get; set; }
+
+    public bool IsShared(CombatProfileGroup group) => SharedGroups?.Contains(group) == true;
+
     // Schema version, so a one-time back-fill can run when the shape of a profile
     // grows. Profiles from before combat profiles became a full loadout carry only
     // the spell config; their Health / weapon / Spells-subset fields default to
@@ -35,4 +43,9 @@ public sealed class CombatProfileSettings
     // the enum default, which would overwrite the character's real (previously shared)
     // action order on the first switch — so it's back-filled from the live value once.
     public const int PerProfileActionOrderVersion = 2;
+
+    // Run direction / break-before-running, self-bless timing and the Party-tab
+    // healing + bless became per-profile at this version; back-filled from the live
+    // values once, like PerProfileActionOrderVersion.
+    public const int PerProfileRunBlessPartyVersion = 3;
 }

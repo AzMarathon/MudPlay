@@ -731,7 +731,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 - `@atkprio` — Target Priority: bare reports it; `1` Default, `2` follow-leader, `3 <name>` attack-what-player.
 - `@atkorder` — Attack Order: bare reports it; `1` Default, `2` last-party, `3` last-room, `4 <name>` attack-after, `5` not-last.
 - `@divert <player>` — forwards your incoming telepaths to another player; bare `@divert` stops.
-- `@profile <n|name>` — swaps your active combat profile (spells + verbs + room thresholds + weapons + the whole Health tab); bare `@profile` reports the roster (see **Combat profiles** under Settings → Combat).
+- `@profile <n|name>` — swaps your active combat profile (every group with **Include in combat profile** checked); bare `@profile` reports the roster (see **Combat profiles** under Settings → Combat).
 - `@reset` — zeroes your Session Stats counters.
 
 ### Do something on my behalf
@@ -2537,21 +2537,23 @@ Either way a flee only ever sends plain compass moves, so it **stops short at an
 **What it does:** Saves a whole combat posture under a name so you can keep **several** and switch between them in one click. This helps when different fights want different setups — a fire loadout for most monsters, a cold one for the fire-immune, a cautious "bossing" loadout with a two-hander and a lower flee threshold. Rather than re-tuning your Combat and Health tabs each time, you save each as a profile and flip between them.
 
 **What a profile remembers (a full loadout):**
-- the **six spell slots** + their per-slot gates, the mana-threshold mode, and the drain settings;
-- the **attack commands** (normal / alternate);
-- the **room thresholds** — min / max monsters and run distance;
-- the **primary & alternate weapons** (+ their off-hands);
+- on the **Combat tab**: the **action order** (spells-first / physical-first / custom cycle), the **weapons & attack commands** (primary / alternate + off-hands and the normal / alternate verbs), the **backstab options** (including stealth running), the **room thresholds** (min / max monsters, run distance, **kill all engaged**, and **when running away** — go backwards, break before running), and the **spell combat** slots with their per-slot gates, the mana-threshold mode and the drain settings;
 - the **entire Health tab** — rest / heal / flee / hangup thresholds, meditate / shadowrest, the emergency escape, and the pre-/post-rest commands;
-- on the **Spells tab**, the **between-round spell-type priority order** and the **healing / regeneration picks** (Minor heal, Major heal, Emergency heal, HP Regen). The rest of the Spells tab (cures, bless timing, ailment gates) and the Buff Watchdog self-bless slots stay per-character.
+- on the **Spells tab**: the **between-round spell-type priority order**, the **healing / regeneration picks** (Minor heal, Major heal, Emergency heal, HP Regen), and **bless timing** (bless self while resting / during combat);
+- on the **Party tab**: **party healing** (the Minor / Major single-target and party (AOE) heals, their thresholds, and how many members switch to the AOE heal) and **party bless** (bless party while resting / during combat).
 
-Every group that swaps with the profile is wrapped in a **coloured "Combat profile: `<name>`" border** on the Combat, Health and Spells tabs, so you can see at a glance which settings are per-profile. On the Combat tab the per-profile settings — spells, weapons + verbs, **action order** (spells-first / physical-first / custom cycle), **backstab options**, room thresholds, and **kill-all-engaged** — sit at the **top**; the **shared** settings (targeting, display; and on the Spells tab the cures / bless timing / ailment gates) sit at the **bottom** under a **"Shared combat settings"** divider. Shared settings apply to every combat profile and don't swap with the chip.
+The rest stays per-character and never swaps: targeting and display on the Combat tab, the cures and ailment gates on the Spells tab, the Buff Watchdog self-bless slots, and the Party tab's **Rank** and options.
+
+**Include in combat profile.** Each of those groups has an **Include in combat profile** checkbox at the right of its header, checked by default. Uncheck it and that group stops swapping: **one set of values is shared by every combat profile**, and switching profiles leaves it as it is. The values you're looking at when you uncheck it become the shared ones. Check it again and every profile starts from that shared value, which you can then change per profile. The checkboxes belong to the character, not to a profile, and like everything else on these tabs they're saved with **Apply** / **OK**.
+
+Every group that swaps with the profile is wrapped in a **coloured "Combat profile: `<name>`" border** or sits under a header with the checkbox, so you can see at a glance which settings are per-profile. On the Combat tab the per-profile settings sit at the **top**; the **shared** settings (targeting, display) sit at the **bottom** under a **"Shared combat settings"** divider. Shared settings apply to every combat profile and don't swap with the chip.
 
 **Each profile has its own colour.** Add a second profile and its chip picks up a distinct colour; the third another, and so on. That colour tints the profile's chip, all of its bordered groups (across the Combat, Health and Spells tabs), and the Workshop's Default-set weapon rows — so it's always obvious which profile you're looking at.
 
 **Weapons — how they stay in sync:** a profile's weapons *are* the Workshop → Equipment Manager **Default** gear set's weapon slots (the surface the combat engine actually reads). So editing a profile's weapon pickers here and editing the Default set's Weapon / Off-Hand / Alt rows in the Workshop are the **same loadout, kept in sync** — and the Workshop shows a matching amber "Combat profile: `<name>`" marker over those rows. Switching a profile writes its stored weapons into the Default set, so your equipped weapon changes with the profile. (Backstab gear stays global on the Backstab set.)
 
 **Setting them up (in Settings → Combat):** your current setup is already **Profile 1** — you always have at least one. The **Combat profile** selector sits near the top of the tab:
-- Numbered **chips** (`1 2 3 …`) are your profiles; the **active one is gold**. Click a chip to load that profile into every bordered group (on both the Combat and Health tabs).
+- Numbered **chips** (`1 2 3 …`) are your profiles; the **active one is gold**. Click a chip to load that profile into every per-profile group (on the Combat, Health and Spells tabs; Party-tab values follow once you press **Apply**).
 - **＋** adds a new, empty profile and switches to it, ready to fill in; **✕** removes the one you're on (the last one can't be removed).
 - The **name box** just below the chips names the profile you're viewing.
 

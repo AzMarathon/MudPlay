@@ -92,7 +92,12 @@
 
 
                 <!-- ============ Spell type priority (per profile) ============ -->
-                <TextBlock Classes="SectionHeader" Text="Spell type priority (between-round casting order)"/>
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                              IsChecked="{Binding SpellPriorityInProfile.IsIncluded, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding SpellPriorityInProfile.Tooltip}"/>
+                    <TextBlock Classes="SectionHeader" Text="Spell type priority (between-round casting order)"/>
+                </DockPanel>
                 <Border Classes="ProfileGroup"
                         Background="{Binding ActiveProfileAccentSoftBrush}"
                         BorderBrush="{Binding ActiveProfileAccentBrush}">
@@ -111,7 +116,12 @@
                 </Border>
 
                 <!-- ============ Healing / regeneration (per profile) ============ -->
-                <TextBlock Classes="SectionHeader" Text="Healing / regeneration"/>
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                              IsChecked="{Binding HealingRegenInProfile.IsIncluded, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding HealingRegenInProfile.Tooltip}"/>
+                    <TextBlock Classes="SectionHeader" Text="Healing / regeneration"/>
+                </DockPanel>
                 <Border Classes="ProfileGroup"
                         Background="{Binding ActiveProfileAccentSoftBrush}"
                         BorderBrush="{Binding ActiveProfileAccentBrush}">
@@ -237,7 +247,12 @@
                      the Party tab). Defaults reproduce the old behaviour — cast
                      out of combat, including while resting — so a profile that
                      leaves these alone is unchanged. -->
-                <TextBlock Classes="SectionHeader" Text="Bless timing"/>
+                <DockPanel>
+                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                              IsChecked="{Binding BlessTimingInProfile.IsIncluded, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding BlessTimingInProfile.Tooltip}"/>
+                    <TextBlock Classes="SectionHeader" Text="Bless timing"/>
+                </DockPanel>
                 <CheckBox Content="Bless self while resting" IsChecked="{Binding SelfBlessWhileResting, Mode=TwoWay}"
                           ToolTip.Tip="When checked (default): keep self-buffs up while resting. Uncheck to hold self-bless casts during rest."/>
                 <CheckBox Content="Bless self during combat" IsChecked="{Binding SelfBlessDuringCombat, Mode=TwoWay}"

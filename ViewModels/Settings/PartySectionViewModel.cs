@@ -148,21 +148,44 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _blessWhileResting = true;
     [ObservableProperty] private bool _blessDuringCombat = true;
 
-    public PartySectionViewModel() : this(AppServices.Current.Profile) { }
+    // "Include in combat profile" for the party healing and party bless groups —
+    // staged in the Settings window's combat-profile session with the other tabs'.
+    // Null when the tab is built without a session.
+    private readonly CombatProfileStagingSession? _session;
+    public CombatProfileGroupToggle? PartyHealingInProfile { get; }
+    public CombatProfileGroupToggle? PartyBlessInProfile { get; }
 
-    public PartySectionViewModel(ProfileService profile)
+    public PartySectionViewModel(CombatProfileStagingSession? session = null)
+        : this(AppServices.Current.Profile, session) { }
+
+    public PartySectionViewModel(ProfileService profile, CombatProfileStagingSession? session = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         _profile = profile;
+        _session = session;
         _spellbook = AppServices.Current.Spellbook;
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedExternally;
         _spellbook.Changed += OnSpellbookChanged;
+        if (session is not null)
+        {
+            PartyHealingInProfile = new CombatProfileGroupToggle(session, CombatProfileGroup.PartyHealing, MarkDirty);
+            PartyBlessInProfile = new CombatProfileGroupToggle(session, CombatProfileGroup.PartyBless, MarkDirty);
+            session.Committing += OnSessionCommitting;
+            session.Committed += OnSessionCommitted;
+        }
         OnDispose(() =>
         {
             _profile.ProfileLoaded -= OnProfileChanged;
             _profile.ProfileClosed -= OnProfileClosedExternally;
             _spellbook.Changed -= OnSpellbookChanged;
+            PartyHealingInProfile?.Dispose();
+            PartyBlessInProfile?.Dispose();
+            if (_session is not null)
+            {
+                _session.Committing -= OnSessionCommitting;
+                _session.Committed -= OnSessionCommitted;
+            }
         });
         _suppressDirty = true;
         LoadFromProfile();
@@ -172,6 +195,37 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     private void OnSpellbookChanged() => OnPropertyChanged(nameof(SpellSuggestions));
 
     public override void Apply()
+    {
+        // A pending combat-profile commit writes this tab first (OnSessionCommitting)
+        // and reloads it afterwards.
+        if (_session is { IsDirty: true })
+        {
+            _session.CommitIfDirty();
+            return;
+        }
+        Write();
+        ClearDirty();
+    }
+
+    // The combat-profile commit folds Settings["Party"] into the profile the tab was
+    // showing, so this tab's edits must land there before it runs — the Health tab's
+    // Apply can trigger the commit before this tab's own Apply comes round.
+    private void OnSessionCommitting()
+    {
+        if (IsDirty) Write();
+    }
+
+    // A chip switch in the window can make another profile's party healing / bless
+    // live on commit; reload so the tab shows it.
+    private void OnSessionCommitted()
+    {
+        _suppressDirty = true;
+        LoadFromProfile();
+        _suppressDirty = false;
+        ClearDirty();
+    }
+
+    private void Write()
     {
         if (_profile.Current is not { } profile) return;
 
@@ -217,8 +271,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         // Push to live services so the user's edit takes effect without
         // requiring a profile-reload.
         ApplyToServices(dto);
-
-        ClearDirty();
     }
 
     public override void Discard()

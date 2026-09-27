@@ -10,7 +10,8 @@ namespace MudPlay.Models.Profile;
 // Switching a profile swaps all of it at once, INCLUDING the action order (spells-
 // first / physical-first / the custom round cycle) — a magic profile and a physical
 // profile want opposite orders, so it's per-profile (report paradigm-20260922-141201).
-// Targeting / backstab stay shared across profiles on the live CombatSettings.
+// Targeting stays shared across profiles on the live CombatSettings. Any group can
+// be taken out of profiles instead (CombatProfileSettings.SharedGroups).
 //
 // Stored per character in the top-level CharacterProfile.CombatProfiles blob
 // (like Equipment / PartyBuffs), never a tier-merged Settings section.
@@ -66,6 +67,10 @@ public sealed class CombatSpellProfile
     public bool ClearHostilesWhenSeenHidden { get; set; }
     public bool KillAllEngaged { get; set; }
 
+    // When running away (the Room thresholds group, beside Run distance).
+    public RunDirection RunDirection { get; set; } = RunDirection.Backward;
+    public bool BreakBeforeFleeing { get; set; } = true;
+
     // Per-profile primary/alternate weapons + off-hands. The ACTIVE profile's weapons
     // live in the Workshop Default gear set (the live surface combat + the auto-equip
     // coordinator read); these stored fields are the per-profile memory for when the
@@ -87,6 +92,9 @@ public sealed class CombatSpellProfile
     // per-character and is preserved across a switch (WriteInto touches only these
     // fields).
     public CombatProfileSpells Spells { get; set; } = new();
+
+    // The Party-tab subset a profile carries (party healing + party bless).
+    public CombatProfileParty Party { get; set; } = new();
 
     // Snapshot the Combat-tab + Health-tab fields into a fresh profile. Weapons are
     // NOT captured here — they live in the gear set, so the caller (the manager)
@@ -126,6 +134,8 @@ public sealed class CombatSpellProfile
             HitAndRunMaxRuns = src.HitAndRunMaxRuns,
             ClearHostilesWhenSeenHidden = src.ClearHostilesWhenSeenHidden,
             KillAllEngaged = src.KillAllEngaged,
+            RunDirection = src.RunDirection,
+            BreakBeforeFleeing = src.BreakBeforeFleeing,
             Health = health.Clone(),
         };
     }
@@ -165,6 +175,8 @@ public sealed class CombatSpellProfile
         dst.HitAndRunMaxRuns = HitAndRunMaxRuns;
         dst.ClearHostilesWhenSeenHidden = ClearHostilesWhenSeenHidden;
         dst.KillAllEngaged = KillAllEngaged;
+        dst.RunDirection = RunDirection;
+        dst.BreakBeforeFleeing = BreakBeforeFleeing;
     }
 
     // Overwrite just the Combat-tab fields (spells + verbs + room thresholds) from a
@@ -203,6 +215,8 @@ public sealed class CombatSpellProfile
         HitAndRunMaxRuns = src.HitAndRunMaxRuns;
         ClearHostilesWhenSeenHidden = src.ClearHostilesWhenSeenHidden;
         KillAllEngaged = src.KillAllEngaged;
+        RunDirection = src.RunDirection;
+        BreakBeforeFleeing = src.BreakBeforeFleeing;
     }
 
     // A deep copy of the whole profile (new Id) — backs "add a copy" style flows
@@ -239,20 +253,23 @@ public sealed class CombatSpellProfile
         HitAndRunMaxRuns = HitAndRunMaxRuns,
         ClearHostilesWhenSeenHidden = ClearHostilesWhenSeenHidden,
         KillAllEngaged = KillAllEngaged,
+        RunDirection = RunDirection,
+        BreakBeforeFleeing = BreakBeforeFleeing,
         NormalWeapon = NormalWeapon,
         NormalOffHand = NormalOffHand,
         AlternateWeapon = AlternateWeapon,
         AlternateOffHand = AlternateOffHand,
         Health = Health.Clone(),
         Spells = Spells.Clone(),
+        Party = Party.Clone(),
     };
 }
 
 // The Spells-tab subset a combat profile carries: the between-round category
-// priority order (1-7 per category) + the self-heal / HP-regen picks. Everything
-// else on the Spells tab (cures, self-bless timing, ailment gates) and the Buff
-// Watchdog self-bless slots stay per-character — WriteInto touches only these
-// fields, so a switch never disturbs them.
+// priority order, the self-heal / HP-regen picks and the self-bless timing.
+// Everything else on the Spells tab (cures, ailment gates) and the Buff Watchdog
+// self-bless slots stay per-character — WriteInto touches only these fields, so a
+// switch never disturbs them.
 public sealed class CombatProfileSpells
 {
     public int PriorityEmergencyHeal { get; set; } = 1;
@@ -272,6 +289,10 @@ public sealed class CombatProfileSpells
     public string? EmergencyHealSpell { get; set; }
     public string? HpRegenSpell { get; set; }
 
+    // Bless timing (self).
+    public bool SelfBlessWhileResting { get; set; }
+    public bool SelfBlessDuringCombat { get; set; }
+
     // Snapshot the profile-owned fields off a live SpellsSettings.
     public void CaptureFrom(SpellsSettings src)
     {
@@ -289,6 +310,8 @@ public sealed class CombatProfileSpells
         MajorHealSpell = src.MajorHealSpell;
         EmergencyHealSpell = src.EmergencyHealSpell;
         HpRegenSpell = src.HpRegenSpell;
+        SelfBlessWhileResting = src.SelfBlessWhileResting;
+        SelfBlessDuringCombat = src.SelfBlessDuringCombat;
     }
 
     // Overlay them onto a live SpellsSettings, leaving every per-character field
@@ -309,6 +332,8 @@ public sealed class CombatProfileSpells
         dst.MajorHealSpell = MajorHealSpell;
         dst.EmergencyHealSpell = EmergencyHealSpell;
         dst.HpRegenSpell = HpRegenSpell;
+        dst.SelfBlessWhileResting = SelfBlessWhileResting;
+        dst.SelfBlessDuringCombat = SelfBlessDuringCombat;
     }
 
     public CombatProfileSpells Clone() => new()
@@ -326,5 +351,7 @@ public sealed class CombatProfileSpells
         MajorHealSpell = MajorHealSpell,
         EmergencyHealSpell = EmergencyHealSpell,
         HpRegenSpell = HpRegenSpell,
+        SelfBlessWhileResting = SelfBlessWhileResting,
+        SelfBlessDuringCombat = SelfBlessDuringCombat,
     };
 }

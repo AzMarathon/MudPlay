@@ -283,12 +283,13 @@ public sealed class CombatSpellProfileTests
     [Fact]
     public void ProfileSpells_CaptureFrom_WriteInto_RoundTrips_AndPreservesPerCharacter()
     {
-        // The profile subset captures the priority order + self-heal / HP-regen picks.
+        // The profile subset captures the priority order, the self-heal / HP-regen
+        // picks and the self-bless timing.
         var live = new SpellsSettings
         {
             PriorityMinorPartyHeal = 3, PriorityCuring = 1, PriorityDebuffing = 7,
             MinorHealSpell = "mihe", MajorHealSpell = "cs", EmergencyHealSpell = "lastr",
-            HpRegenSpell = "rege",
+            HpRegenSpell = "rege", SelfBlessWhileResting = true,
         };
         var subset = new CombatProfileSpells();
         subset.CaptureFrom(live);
@@ -301,7 +302,7 @@ public sealed class CombatSpellProfileTests
         // WriteInto overlays the subset but leaves per-character fields intact.
         var dst = new SpellsSettings
         {
-            CurePoisonSpell = "cure", SelfBlessDuringCombat = true, IgnorePoison = true,
+            CurePoisonSpell = "cure", IgnorePoison = true,
             PriorityMinorPartyHeal = 99, MinorHealSpell = "wrong",   // per-profile — will be overwritten
             EmergencyHealSpell = "wrong-too",
         };
@@ -311,8 +312,8 @@ public sealed class CombatSpellProfileTests
         Assert.Equal(3, dst.PriorityMinorPartyHeal);   // per-profile overwritten
         Assert.Equal("mihe", dst.MinorHealSpell);
         Assert.Equal("lastr", dst.EmergencyHealSpell);
+        Assert.True(dst.SelfBlessWhileResting);        // bless timing is per-profile now
         Assert.Equal("cure", dst.CurePoisonSpell);     // per-character preserved
-        Assert.True(dst.SelfBlessDuringCombat);
         Assert.True(dst.IgnorePoison);
         Assert.Equal("prot", dst.BlessSlots[1]);       // self-bless slots untouched
     }
@@ -440,7 +441,7 @@ public sealed class CombatSpellProfileTests
 
         mgr.EnsureSeeded();
 
-        Assert.Equal(CombatProfileSettings.PerProfileActionOrderVersion, profile.CombatProfiles.SchemaVersion);
+        Assert.Equal(CombatProfileSettings.PerProfileRunBlessPartyVersion, profile.CombatProfiles.SchemaVersion);
         foreach (CombatSpellProfile p in profile.CombatProfiles.Profiles)
         {
             Assert.Equal(88, p.Health.RestMaxHp);          // health back-filled (not the 95 default)

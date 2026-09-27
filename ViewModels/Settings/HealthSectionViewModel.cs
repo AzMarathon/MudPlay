@@ -140,6 +140,13 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
 
     // Convenience for SettingsWindowViewModel, which builds the shared session and
     // passes the same instance to both the Combat and Health section VMs.
+    // "Include in combat profile" checkboxes, one per header on this tab.
+    public CombatProfileGroupToggle HealthHpInProfile { get; }
+    public CombatProfileGroupToggle HealthManaInProfile { get; }
+    public CombatProfileGroupToggle RestingOptionsInProfile { get; }
+    public CombatProfileGroupToggle EmergencyEscapeInProfile { get; }
+    public CombatProfileGroupToggle RestingCommandsInProfile { get; }
+
     public HealthSectionViewModel(CombatProfileStagingSession session) : this(
         session,
         AppServices.Current.Profile,
@@ -177,6 +184,11 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         _session.ReloadAllRequested += OnSessionLoad;
         _session.ChipsChanged += OnSessionChipsChanged;
         _session.Committed += OnSessionCommitted;
+        HealthHpInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.HealthHp, MarkDirty);
+        HealthManaInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.HealthMana, MarkDirty);
+        RestingOptionsInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.RestingOptions, MarkDirty);
+        EmergencyEscapeInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.EmergencyEscape, MarkDirty);
+        RestingCommandsInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.RestingCommands, MarkDirty);
 
         RefreshShadowRestAvailability();
         OnDispose(() =>
@@ -191,6 +203,11 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
             _session.ReloadAllRequested -= OnSessionLoad;
             _session.ChipsChanged -= OnSessionChipsChanged;
             _session.Committed -= OnSessionCommitted;
+            HealthHpInProfile.Dispose();
+            HealthManaInProfile.Dispose();
+            RestingOptionsInProfile.Dispose();
+            EmergencyEscapeInProfile.Dispose();
+            RestingCommandsInProfile.Dispose();
         });
         _suppressDirty = true;
         LoadHealthBoxesFrom(_session.Active.Health);

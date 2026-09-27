@@ -539,6 +539,13 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     // Convenience for SettingsWindowViewModel, which builds the shared session and
     // passes the same instance to both the Combat and Health section VMs.
+    // "Include in combat profile" checkboxes, one per header on this tab.
+    public CombatProfileGroupToggle ActionOrderInProfile { get; }
+    public CombatProfileGroupToggle WeaponsInProfile { get; }
+    public CombatProfileGroupToggle BackstabInProfile { get; }
+    public CombatProfileGroupToggle RoomThresholdsInProfile { get; }
+    public CombatProfileGroupToggle SpellCombatInProfile { get; }
+
     public CombatSectionViewModel(CombatProfileStagingSession session)
         : this(AppServices.Current.Profile, session) { }
 
@@ -567,6 +574,11 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         _session.ReloadAllRequested += OnSessionReloadAll;
         _session.ChipsChanged += RebuildProfileChips;
         _session.Committed += OnSessionCommitted;
+        ActionOrderInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.ActionOrder, MarkDirty);
+        WeaponsInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.WeaponsAndCommands, MarkDirty);
+        BackstabInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.Backstab, MarkDirty);
+        RoomThresholdsInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.RoomThresholds, MarkDirty);
+        SpellCombatInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.SpellCombat, MarkDirty);
 
         OnDispose(() =>
         {
@@ -582,6 +594,11 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             _session.ReloadAllRequested -= OnSessionReloadAll;
             _session.ChipsChanged -= RebuildProfileChips;
             _session.Committed -= OnSessionCommitted;
+            ActionOrderInProfile.Dispose();
+            WeaponsInProfile.Dispose();
+            BackstabInProfile.Dispose();
+            RoomThresholdsInProfile.Dispose();
+            SpellCombatInProfile.Dispose();
         });
 
         RefreshWeaponSuggestions();
