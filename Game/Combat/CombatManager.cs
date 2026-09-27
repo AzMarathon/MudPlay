@@ -2988,13 +2988,16 @@ public sealed partial class CombatManager : IDisposable
         if (text.IndexOf("surprise", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             _log?.Combat(LogCategory, $"backstab landed (surprise) vs '{species}'");
-            // Hit and run: the room held a pack when we snuck in, so take the free
-            // surprise and leave rather than trade rounds with all of them — even if
-            // the backstab killed one and only one is left (user's rule).
-            if (_readSettings().RunAfterBackstabIfMultiple && _backstabRoomHostiles >= 2)
+            // Hit and run: the room held a pack when we snuck in — or one walked in
+            // while the backstab was in flight — so take the free surprise and leave
+            // rather than trade rounds with all of them, even if the backstab killed
+            // one and only one is left (user's rule; report paradigm-20260926-230605).
+            int hostilesNow = _classifier.Current is { } nowObs ? CountEngageable(nowObs) : 0;
+            int pack = Math.Max(_backstabRoomHostiles, hostilesNow);
+            if (_readSettings().RunAfterBackstabIfMultiple && pack >= 2)
             {
                 _log?.Info(LogCategory,
-                    $"backstab landed in a room of {_backstabRoomHostiles} hostiles — running to re-sneak (hit and run)");
+                    $"backstab landed — {_backstabRoomHostiles} hostile(s) at the opener, {hostilesNow} now; running to re-sneak (hit and run)");
                 _backstabRunFlee?.Invoke();
             }
             return;

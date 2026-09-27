@@ -2505,6 +2505,27 @@ public sealed class CombatManagerTests
         Assert.True(ran);
     }
 
+    // Report paradigm-20260926-230605: one monster at the opener, a second crept in
+    // before the backstab landed — the room is a pack by then.
+    [Fact]
+    public void BackstabLanded_SecondMonsterArrivedMidBackstab_Runs()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.Settings.RunAfterBackstabIfMultiple = true;
+        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(4, "carrion beast", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+        bool ran = false;
+        h.Combat.SetBackstabRunFlee(() => ran = true);
+
+        h.Feed("Also here: giant rat.");
+        h.Feed("Also here: giant rat, carrion beast.");
+        h.Feed("You surprise whap giant rat for 18 damage!");
+
+        Assert.True(ran);
+    }
+
     [Fact]
     public void BackstabLanded_LoneMonster_DoesNotRun()
     {

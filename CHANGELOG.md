@@ -1,9 +1,12 @@
 # Version history
 
-## 3.111.0
+## 3.111.2
 
 - New Combat option "BS then run if multiple monsters in room": hit-and-run backstabbing. Run once the backstab lands, then re-sneak and come back for another
 - Hit and run re-runs from a monster that chases you, up to "Give up and fight after N runs" (default 3)
+- Hit and run also counts a monster that walks in while the backstab is in flight
+- A flee that starts while a move is still landing waits for it, then runs back from the right room (no more fleeing off the loop)
+- bug reports addressed: paradigm-20260926-230605, paradigm-20260926-230835
 
 ## 3.110.18
 

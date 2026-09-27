@@ -2419,7 +2419,7 @@ Off (the default) is the current behavior: if you engage a room of 8 with Min se
 ### BS then run if multiple monsters in room / Give up and fight after N runs
 
 **Default:** Off / 3 runs
-**What it does:** Hit-and-run backstabbing. When the room held **two or more** monsters as you snuck in, you run as soon as the backstab lands, even if it killed one and only one is left. Your loop or walk then re-sneaks, comes back in and opens with another backstab, so you never trade rounds with a whole pack. It runs the same way *Run distance* and *Go backwards if running* set for any flee, and needs a running loop or walk.
+**What it does:** Hit-and-run backstabbing. When the room held **two or more** monsters as you snuck in (or holds that many by the time the backstab lands, because one walked in mid-backstab), you run as soon as the backstab lands, even if it killed one and only one is left. Your loop or walk then re-sneaks, comes back in and opens with another backstab, so you never trade rounds with a whole pack. It runs the same way *Run distance* and *Go backwards if running* set for any flee, and needs a running loop or walk.
 
 Monsters sometimes chase. If one follows you into the room you ran to, you run again. **Give up and fight after N runs** caps how many runs one backstab may take, the first included; once they're spent you stand and fight rather than keep hunting for an empty room to re-sneak in. The count starts over when you shake them (your loop moves on without a chaser) or when your next backstab lands.
 
@@ -2440,7 +2440,7 @@ This works whether **Auto-Combat is on or off**: the whole point is to clear the
 **Default:** On (backward)
 **What it does:** When fleeing, `Backward` retraces the rooms you just came through (safer — you already know what's there); unchecked (`Forward`) instead keeps pushing along your planned route into unexplored territory (faster, riskier).
 
-Backward heads for where your loop or walk started. If you're already standing there (a short loop after one flee), it falls back into the room you just came from. If a flee lands on a monster while you're still under *run if below*, it runs again instead of fighting it.
+Backward heads for where your loop or walk started. If you're already standing there (a short loop after one flee), it falls back into the room you just came from. If a flee lands on a monster while you're still under *run if below*, it runs again instead of fighting it. A flee that's decided the instant you walk into a room waits for that move to land first, so it always retreats from the room you're really in.
 
 Either way a flee only ever sends plain compass moves, so it **stops short at anything that isn't one**: a lever or door step, or a teleport hop (the way in and out of somewhere like the Negative Power Plane). It retreats as far as the ordinary moves go and re-checks there rather than trying to cross it mid-fight — and if the very first step out is a teleport, it doesn't run at all and your other low-HP reactions take over. The program log names the step that cut the retreat short.
 

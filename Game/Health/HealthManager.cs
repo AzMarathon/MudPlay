@@ -621,6 +621,11 @@ public sealed class HealthManager : IDisposable
     // standing on it). Null in tests / when unknown.
     public Func<Map.RoomKey?>? PreviousRoom { get; set; }
 
+    // True while a move is sent but its landing isn't confirmed (RoomTracker Pending).
+    // A flee started then is held until the room confirms (see TryFlee).
+    public Func<bool>? IsMovePending { get; set; }
+    private string? _deferredFleeReason;
+
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -973,6 +978,15 @@ public sealed class HealthManager : IDisposable
         // Subsequent steps advance one per NoteRoomChanged; the paused engine
         // auto-resumes once BOTH pools climb back above their run-triggers
         // (recovery branch below).
+        // A flee held for a move that never confirmed (a bonk demotes the tracker
+        // without a room change) — once nothing is in flight, start it anyway.
+        if (_deferredFleeReason is { } stuckReason && _fleeEngine is null
+            && IsMovePending?.Invoke() != true)
+        {
+            _deferredFleeReason = null;
+            _post(() => TryFlee(stuckReason));
+        }
+
         // ----- hit-and-run chasers ---------------------------------
         if (_hitAndRunActive && _hitAndRunLanded)
         {
@@ -1690,6 +1704,18 @@ public sealed class HealthManager : IDisposable
             return;
         }
 
+        // A flee decided on a room display that arrived ahead of its move's confirm
+        // would plan its route from the room we just LEFT — and that route's first
+        // step walks us straight on past (report paradigm-20260926-230835: "back"
+        // from the old room was D, sent from the new one, into a room off the loop).
+        // Wait for the move to land, then plan from where we really are.
+        if (_fleeEngine is null && IsMovePending?.Invoke() == true)
+        {
+            _deferredFleeReason = reason;
+            _log?.Combat(LogCategory, $"flee waits for the move in flight to land — {reason}");
+            return;
+        }
+
         Models.Profile.CombatSettings combat = _readCombatSettings?.Invoke()
             ?? new Models.Profile.CombatSettings();
 
@@ -1922,6 +1948,17 @@ public sealed class HealthManager : IDisposable
     {
         if (newRoom is { } r) _lastKnownRoom = r;
 
+        // A flee held for the move in flight: that move just landed, so start it now,
+        // routed from this room. This arrival is the flee's starting point, not one of
+        // its steps (and not the hit-and-run engine "moving on").
+        bool startedHeldFlee = false;
+        if (_deferredFleeReason is { } heldReason && _fleeEngine is null)
+        {
+            _deferredFleeReason = null;
+            TryFlee(heldReason);
+            startedHeldFlee = _fleeEngine is not null;
+        }
+
         // The engine resumed and moved on without a chaser catching us — the
         // hit-and-run cycle is over; the next landed backstab starts a fresh count.
         if (_hitAndRunActive && _fleeEngine is null)
@@ -1933,7 +1970,11 @@ public sealed class HealthManager : IDisposable
         // Flee step continuation — fire BEFORE the rest-latch reset
         // so the engine's pause flag doesn't get cleared by a
         // racing post-flee rest cycle.
-        if (_fleeEngine is not null && _fleeQueue.Count > 0)
+        if (startedHeldFlee)
+        {
+            // Nothing to step or land yet — the held flee's first move just went out.
+        }
+        else if (_fleeEngine is not null && _fleeQueue.Count > 0)
         {
             Map.Direction next = _fleeQueue.Dequeue();
             _fleeEngine.SendBacktrackMove(next);

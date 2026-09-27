@@ -2045,6 +2045,33 @@ public sealed class HealthManagerTests
         Assert.False(h.Health.HitAndRunActive);
     }
 
+    // Report paradigm-20260926-230835: the flee fired on a room display that beat its
+    // move's confirm, planned "back" from the room we'd just left, and walked on past.
+    [Fact]
+    public void Flee_WhileAMoveIsInFlight_WaitsAndRoutesFromTheLandingRoom()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 1;
+        h.Engine!.JourneyOrigin = new Game.Map.RoomKey(1, 2146);
+        h.ReversePath = (from, _) => from.Room == 2150 ? new[] { Game.Map.Direction.U } : new[] { Game.Map.Direction.D };
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 2146));   // loop sends d → 1/2150
+        bool pending = true;
+        h.Health.IsMovePending = () => pending;
+        h.State.MaxHp = 33;
+        h.State.HasPromptData = true;
+        h.State.Hp = 32;
+
+        h.Health.RunFromBackstabFailure();                           // display beat the confirm
+        Assert.Empty(h.Engine.SentBacktrackMoves);
+
+        pending = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 2150));   // the d lands
+
+        Assert.Equal(new[] { Game.Map.Direction.U }, h.Engine.SentBacktrackMoves);
+    }
+
     [Fact]
     public void Flee_Backward_ReversePathCapsAtRunDistance()
     {
