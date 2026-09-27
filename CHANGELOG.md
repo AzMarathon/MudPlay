@@ -1,5 +1,12 @@
 # Version history
 
+## 3.111.18
+
+- A step waits for the sneak to take (retrying up to 15s), including a loop's first step, instead of walking in unsneaked
+- Entering a room without the game's "Sneaking..." line counts as a broken sneak: no backstab, and Run if BS fails / Hit and Run react
+- A failed backstab only runs if something's still standing after that round, so no `break` + run when the swing killed it anyway
+- bug reports addressed: paradigm-20260927-013820, paradigm-20260927-013856, paradigm-20260927-014032, paradigm-20260927-014105, paradigm-20260927-014325
+
 ## 3.111.13
 
 - New Combat option "Hit and Run tactics": never fight without a backstab. Once a backstab lands, anything still standing is run from, and so is any fight that would open with a plain attack (a walk-in, a chaser); the loop re-sneaks and comes back to backstab again

@@ -2367,13 +2367,14 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - `Sneaking...` — emitted on each room entry while sneak holds; post-move confirmation you arrived unseen.
   - `You make a sound as you enter the room!` — loud loss of sneak. You enter seen, so a backstab opened in that room would fail. *([CONFIRMED] user, 2026-09-26; report `paradigm-20260926-222210`.)*
   - `You may not sneak right now!` — a **combat cooldown**: you can't sneak for a few seconds after being in combat or attacked, and a retry shortly after works. *([CONFIRMED] user, 2026-09-26; report `paradigm-20260926-233357`. An earlier note called it a hard block with no auto-retry; superseded 2026-09-26.)*
-- **Sneak breaks *silently* when you move into a room that doesn't re-emit `Sneaking...`** *([OBSERVED])* — no failure line, the stealth is just gone.
+- **Sneak breaks *silently* when you move into a room that doesn't re-emit `Sneaking...`** *([OBSERVED])* — no failure line, the stealth is just gone. `Sneaking...` arrives between the move and the new room's display, and the old room's `Attempting to sneak...` doesn't carry over. A room shown without it is a guaranteed backstab failure *([CONFIRMED] user, 2026-09-27; report `paradigm-20260927-014325`)*.
 - **Any NPC in the room prevents a sneak from taking** *([OBSERVED])* — an `sn` is wasted while a monster shares the room.
 
 **Client use:**
 - The backstab loadout is applied in the walker's pre-move step, ahead of the `sn`, rather than raced at room-clear (because of the equip-before-sneak rule).
 - `StealthManager.TakeSneakBrokeOnEntry` → `CombatManager`: with *Run if backstab fails* on, a loud entry runs instead of opening with a plain swing.
 - `StealthManager` holds movement (`SneakCooldownGate`) on `You may not sneak right now!` while Auto-Sneak is on. It retries `sn` every 2 s and releases once sneaking, or after 15 s.
+- `StealthManager.IsStealthedHere` (the backstab gate) counts a sneak only once the new room has confirmed it. `ReadyToMoveSneaking` holds a planned step until a sneak settles (`SneakSettleGate`, retries up to 15 s).
 
 ### Observing another player's failed sneak into your room
 *Status: CONFIRMED 2026-07-12 (user)*

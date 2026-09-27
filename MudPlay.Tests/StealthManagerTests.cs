@@ -423,6 +423,74 @@ public sealed class StealthManagerTests
         Assert.False(h.Stealth.TakeSneakBrokeOnEntry());
     }
 
+    // Report paradigm-20260927-014325: `sn` acknowledged, walked in, no "Sneaking..." —
+    // a silent break; the backstab must not count on it.
+    [Fact]
+    public void SneakedMove_WithoutArrivalConfirm_IsASilentBreak()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Feed("Attempting to sneak...");                  // acknowledged in the old room
+        h.Stealth.RequestPreMoveStealth();                 // the move goes out
+
+        Assert.False(h.Stealth.IsStealthedHere);           // the new room hasn't confirmed
+        Assert.True(h.Stealth.TakeSneakBrokeOnEntry());
+    }
+
+    [Fact]
+    public void SneakedMove_ArrivalConfirmed_IsStealthedHere()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Feed("Attempting to sneak...");
+        h.Stealth.RequestPreMoveStealth();
+        h.Feed("Sneaking...");                             // the new room confirms
+
+        Assert.True(h.Stealth.IsStealthedHere);
+        Assert.False(h.Stealth.TakeSneakBrokeOnEntry());
+    }
+
+    // Report paradigm-20260927-013820: the loop's first step went out with the `sn`
+    // and walked in seen when it was refused. The step now waits for the answer.
+    [Fact]
+    public void ReadyToMoveSneaking_NotSneaking_SneaksAndHolds()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        Assert.False(h.Stealth.ReadyToMoveSneaking());
+        Assert.Equal("sn", h.LastSent());
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+
+        h.Feed("Attempting to sneak...");
+        Assert.True(h.Stealth.ReadyToMoveSneaking());
+    }
+
+    // Report paradigm-20260927-014032: the answer timer ran out on retry 2 and the loop
+    // stepped in seen. Retries keep the route held until the sneak takes (or 15s).
+    [Fact]
+    public void ReadyToMoveSneaking_SoftFailures_KeepHoldingAndRetrying()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+        DateTimeOffset now = new(2026, 9, 27, 1, 40, 26, TimeSpan.Zero);
+        h.Stealth.NowProvider = () => now;
+
+        h.Stealth.ReadyToMoveSneaking();
+        for (int i = 0; i < 12; i++)
+        {
+            now = now.AddMilliseconds(600);
+            h.Feed("Attempting to sneak...You don't think you're sneaking.");
+        }
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+        Assert.False(h.Stealth.ReadyToMoveSneaking());
+
+        now = now.AddSeconds(10);                           // past the 15s total
+        h.Feed("Attempting to sneak...You don't think you're sneaking.");
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+        Assert.True(h.Stealth.ReadyToMoveSneaking());       // moves on unsneaked, once
+    }
+
     [Fact]
     public void AutoSneak_OnRoomChange_SendsSneak()
     {

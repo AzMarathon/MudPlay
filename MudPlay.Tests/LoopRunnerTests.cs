@@ -903,6 +903,28 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    // Report paradigm-20260927-013820: a step waits while auto-sneak settles, then the
+    // resume sends it.
+    [Fact]
+    public void MoveReadyCheck_HoldsTheStep_UntilTheSneakSettles()
+    {
+        Harness h = NewHarness();
+        bool ready = false;
+        h.Runner.SetMoveReadyCheck(() =>
+        {
+            if (!ready) h.Coordinator.AssertGate(MovementCoordinator.SneakSettleGate);
+            return ready;
+        });
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Empty(h.Sent);                                        // held for the sneak
+
+        ready = true;
+        h.Coordinator.ClearGate(MovementCoordinator.SneakSettleGate);
+        h.Drain();
+        Assert.Single(h.Sent);                                       // the step goes once settled
+    }
+
     [Fact]
     public void RepeatedGenuineDesyncs_StillExhaustTheRecoveryBudget()
     {
