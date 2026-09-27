@@ -3327,7 +3327,11 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 ### @trap max disarms
 
 **Default:** 5
-**What it does:** Caps how many times MudPlay retries disarming a trap before giving up, whether for your own walk or a remote `@trap` command. MudPlay never searches for a trap first. `disarm trap <dir>` works on the trap directly, and your game data already says which exits are trapped.
+**What it does:** Caps how many times MudPlay tries to disarm a trap before giving up, whether for your own walk or a remote `@trap` command.
+- **A failed disarm sets the trap off** (`You try to disarm the trap, but instead trigger it!`), so each retry risks its damage again.
+- **After the cap,** a walk stops at that exit rather than walking into the trap.
+- **No trap that way** (the game answers `Your command had no effect.`): there's nothing to disarm, and the walk just carries on.
+- **No searching:** MudPlay never searches for a trap first. `disarm trap <dir>` works on the trap directly, and your game data already says which exits are trapped.
 
 ### Door max pick
 

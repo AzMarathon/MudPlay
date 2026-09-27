@@ -497,6 +497,7 @@ public static class KnownPatterns
     public const string TrapFoundInSearch     = "trap.found-in-search";   // "You found a trap to the <dir>!"
     public const string TrapNoneInSearch      = "trap.none-in-search";    // "You notice nothing different to the <dir>."
     public const string TrapDisarmedSuccess   = "trap.disarmed-success";  // "You successfully disarmed the trap to the <dir>."
+    public const string TrapDisarmTriggered   = "trap.disarm-triggered";  // "You try to disarm the trap, but instead trigger it!" (no direction)
 
     // Empty result of a room-wide `sea` — nothing concealed here. Lets AutoSearch
     // release its hold the instant an empty room's search comes back, instead of

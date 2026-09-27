@@ -2125,10 +2125,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
-        // Success message from the TrapDisarmManager:
-        //   "Trap to the {direction} disarmed."
-        bool disarmed = reply.Contains("disarmed", StringComparison.OrdinalIgnoreCase);
-        if (!disarmed)
+        // TrapDisarmManager's "Trap to the {direction} disarmed." or "No trap to the
+        // {direction} to disarm." both leave the exit clear to take.
+        bool clear = reply.Contains("disarmed", StringComparison.OrdinalIgnoreCase)
+                     || reply.StartsWith("No trap", StringComparison.OrdinalIgnoreCase);
+        if (!clear)
         {
             Raise(new WalkEvent(WalkEventKind.Failed,
                 $"trap disarm failed: {reply}", _destination));

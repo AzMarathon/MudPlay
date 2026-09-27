@@ -234,6 +234,61 @@ public sealed class TrapDisarmManagerTests : IDisposable
         Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
     }
 
+    // Paradigm capture (2026-09-27): a failed disarm prints
+    // "You try to disarm the trap, but instead trigger it!" (no direction), and
+    // `disarm trap <dir>` with no trap that way prints "Your command had no effect."
+
+    [Fact]
+    public void DisarmTriggered_TriesAgain()
+    {
+        var (mgr, router, _, wire) = Setup();
+        mgr.Enqueue("w", "Raijin", _ => { });
+        wire.Clear();
+
+        Dispatch(router, "You try to disarm the trap, but instead trigger it!");
+
+        Assert.Equal("disarm trap w\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
+    }
+
+    [Fact]
+    public void DisarmTriggered_AtTheCap_GivesUpAndReports()
+    {
+        var (mgr, router, _, wire) = Setup();
+        mgr.MaxDisarmAttempts = 2;
+        string? reply = null;
+        mgr.Enqueue("w", "Raijin", t => reply = t);
+
+        Dispatch(router, "You try to disarm the trap, but instead trigger it!");   // attempt 1 failed → 2nd
+        Dispatch(router, "You try to disarm the trap, but instead trigger it!");   // attempt 2 failed → stop
+
+        Assert.Equal(2, wire.Count);
+        Assert.Equal("Couldn't disarm the trap to the w (2 attempts).", reply);
+        Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
+    }
+
+    [Fact]
+    public void NoEffect_MeansNoTrap_AndTheExitIsClear()
+    {
+        var (mgr, router, _, _) = Setup();
+        string? reply = null;
+        mgr.Enqueue("e", "walker", t => reply = t);
+
+        Dispatch(router, "Your command had no effect.");
+
+        Assert.Equal("No trap to the e to disarm.", reply);
+        Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
+    }
+
+    [Fact]
+    public void NoEffect_WhileIdle_IsSomeoneElsesRefusal()
+    {
+        var (mgr, router, _, wire) = Setup();
+        Dispatch(router, "Your command had no effect.");
+        Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
+        Assert.Empty(wire);
+    }
+
     // ===== Queue =====
 
     [Fact]

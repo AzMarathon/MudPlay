@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.114.3**
+> **Version 3.114.4**
 > - @trap and the walker disarm a trap directly with `disarm trap <dir>` instead of searching for it first; the dead "@trap max searches" setting is removed
+> - A failed trap disarm (the trap goes off) is retried up to "@trap max disarms", then the walk stops; "Your command had no effect." means no trap there, and the walk carries on
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -25,8 +25,8 @@ namespace MudPlay.Game;
 // silent; Telepath → reply) since the channel context lives at handler dispatch
 // time.
 //
-// The only stop conditions are the configurable attempt cap (MaxDisarmAttempts)
-// and a successful disarm observation.
+// A request ends on a successful disarm, on "no effect" (no trap that way), or
+// once MaxDisarmAttempts disarms have all set the trap off.
 public sealed class TrapDisarmManager : IDisposable
 {
     private readonly MessageRouter _router;
@@ -34,6 +34,8 @@ public sealed class TrapDisarmManager : IDisposable
     private readonly GameDataCache _gameData;
     private readonly LogService? _log;
     private readonly IDisposable _disarmedSub;
+    private readonly IDisposable _triggeredSub;
+    private readonly IDisposable _noEffectSub;
     private readonly WireSender _wire = new();
     private bool _disposed;
 
@@ -87,6 +89,8 @@ public sealed class TrapDisarmManager : IDisposable
         _log      = log;
 
         _disarmedSub = _router.Subscribe(KnownPatterns.TrapDisarmedSuccess, OnDisarmedSuccess);
+        _triggeredSub = _router.Subscribe(KnownPatterns.TrapDisarmTriggered, OnDisarmTriggered);
+        _noEffectSub = _router.Subscribe(KnownPatterns.CommandNoEffect, OnNoEffect);
     }
 
     // Bind the wire-sender. Same shape as the rest of the engine-side handlers —
@@ -101,6 +105,8 @@ public sealed class TrapDisarmManager : IDisposable
         if (_disposed) return;
         _disposed = true;
         _disarmedSub.Dispose();
+        _triggeredSub.Dispose();
+        _noEffectSub.Dispose();
     }
 
     // Queue a new @trap <direction> request. direction must already be normalised
@@ -189,6 +195,40 @@ public sealed class TrapDisarmManager : IDisposable
         if (!MatchesCurrentDirection(result)) return;
 
         cur.Reply($"Trap to the {cur.Direction} disarmed.");
+        CompleteCurrent();
+    }
+
+    // The disarm failed and set the trap off (Paradigm capture 2026-09-27:
+    // `You try to disarm the trap, but instead trigger it!`). The line names no
+    // direction, so it's taken for the disarm we have pending. Try again up to
+    // MaxDisarmAttempts, then give up and report it — the walker stops rather
+    // than walk into a trap it couldn't clear.
+    private void OnDisarmTriggered(MatchResult _)
+    {
+        if (_state != State.DisarmPending) return;
+        if (_current is not { } cur) return;
+        if (_disarmAttempts >= MaxDisarmAttempts)
+        {
+            _log?.Log(LogSeverity.Info, "Trap",
+                $"Disarm {cur.Direction} set the trap off {_disarmAttempts} time(s) — giving up.");
+            cur.Reply($"Couldn't disarm the trap to the {cur.Direction} ({_disarmAttempts} attempts).");
+            CompleteCurrent();
+            return;
+        }
+        _log?.Log(LogSeverity.Info, "Trap", $"Disarm {cur.Direction} set the trap off — trying again.");
+        SendDisarm();
+    }
+
+    // `disarm trap <dir>` answered "Your command had no effect.": there's no trap
+    // that way (already disarmed, or not set right now), so there's nothing to do
+    // and the exit is clear. Only read while our disarm is pending — the same line
+    // answers any other command the server refuses.
+    private void OnNoEffect(MatchResult _)
+    {
+        if (_state != State.DisarmPending) return;
+        if (_current is not { } cur) return;
+        _log?.Log(LogSeverity.Info, "Trap", $"No trap to the {cur.Direction} — nothing to disarm.");
+        cur.Reply($"No trap to the {cur.Direction} to disarm.");
         CompleteCurrent();
     }
 
