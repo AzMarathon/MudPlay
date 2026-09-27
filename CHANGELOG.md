@@ -1,9 +1,11 @@
 # Version history
 
-## 3.111.21
+## 3.111.23
 
 - Clearer Run if BS fails tooltip and Help: what it covers, when it holds back, and how it pairs with Hit and Run tactics
 - Settings → Combat: backstab options grouped under Do BS attacks (greyed out while it's off); the combat-off stealth-running option sits on its own
+- Settings → Combat: Kill all engaged moved inside the combat-profile box, since it's saved per combat profile
+- Settings → Combat: the Spell combat table fits inside its combat-profile box (the "= mana / %" column no longer spills past it)
 
 ## 3.111.19
 
