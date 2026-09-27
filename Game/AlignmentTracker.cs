@@ -23,6 +23,13 @@ public sealed class AlignmentTracker : IDisposable
     // True when a dark-cloud line has fired since the last `who` refresh.
     public bool IsStale { get; private set; }
 
+    // Our own alignment word as a `who` showed it this profile session, or null until
+    // one has. The saved players list is per BBS and persists, so our row there can be
+    // hours old, or written by a same-named character of ours on another realm of the
+    // board: a Good paladin was read as Villain and its Good-only gear blocked (report
+    // paradigm-20260927-134201). Whatever gates on our alignment reads this instead.
+    public string? SelfAlignment { get; private set; }
+
     // Raised whenever IsStale changes.
     public event Action? StaleChanged;
 
@@ -44,13 +51,19 @@ public sealed class AlignmentTracker : IDisposable
     // recorded under), case-insensitively.
     private void OnObservationRecorded(string givenName)
     {
-        if (!IsStale) return;
         (string self, _) = PlayerObservation.SplitName(_stats.Name);
-        if (!string.IsNullOrEmpty(self)
-            && string.Equals(self, givenName, StringComparison.OrdinalIgnoreCase))
-        {
-            SetStale(false);
-        }
+        if (string.IsNullOrEmpty(self)
+            || !string.Equals(self, givenName, StringComparison.OrdinalIgnoreCase))
+            return;
+        SelfAlignment = _players.Find(_stats.Name)?.Alignment;
+        SetStale(false);
+    }
+
+    // A new profile is a new character: forget what the last `who` said about us.
+    public void ResetForProfile()
+    {
+        SelfAlignment = null;
+        SetStale(false);
     }
 
     private void SetStale(bool value)

@@ -1,5 +1,10 @@
 # Version history
 
+## 3.115.12
+
+- Good-only / Evil-only gear is no longer flagged "unable to wear" from a stale alignment: your alignment only counts once a `who` shows you this session (a same-named character on another realm of the same BBS was overwriting it)
+- bug reports addressed: paradigm-20260927-134201
+
 ## 3.115.11
 
 - Health, Spells and Party tabs get the combat-profile chips at the top, with add / remove, so profiles can be switched, compared, added and removed from any of them

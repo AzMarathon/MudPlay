@@ -2577,9 +2577,9 @@ public sealed class AppServices
         //
         // Alignment comes from the SAME source as the Equipment Manager's own
         // GoodOnly/EvilOnly gating (CanCharacterEquipItem / IsEquipRestricted
-        // above) — the `who`-observed title on our own Players row, not the
-        // stat screen (which doesn't report alignment at all). Unknown until a
-        // `who` has actually shown our own row this session, in which case
+        // above) — AlignmentTracker.SelfAlignment, our own row as a `who` showed it
+        // this session, not the stat screen (which doesn't report alignment at
+        // all). Unknown until a `who` has shown our own row, in which case
         // charAlign stays 0 and IsUsable skips alignment filtering entirely
         // rather than guessing.
         void SeedSpellbook(Models.Profile.LastKnownStats? snap, bool reseed = false)
@@ -2587,7 +2587,7 @@ public sealed class AppServices
             int classNumber = snap is null ? 0 : SpellCatalog.ResolveClassNumber(snap.Class) ?? 0;
             int level = snap?.Level ?? 0;
             Game.Calculators.AlignmentBucket? alignment = Game.Inventory.ItemEquipFilter.BucketForWord(
-                Players.Find(PlayerStats.Name)?.Alignment);
+                Alignment.SelfAlignment);
             int charAlign = Game.Spells.KnownSpellCatalog.CharAlignFor(alignment);
             // reseed = the active game-data set changed under us: force a rebuild
             // even when the class number is unchanged, since the Spells table
@@ -5208,7 +5208,11 @@ public sealed class AppServices
         // attempt; a refusal ("You may not wear that item!" armor / "You may not
         // use that weapon." weapon) blocks the slot it concerns so a swap stops
         // re-bonking a piece the character can't wear (e.g. after an EP-zap).
-        Profile.ProfileLoaded += _ => Equipment.ResetBlocks();
+        Profile.ProfileLoaded += _ =>
+        {
+            Alignment.ResetForProfile();
+            Equipment.ResetBlocks();
+        };
         Players.ObservationRecorded += givenName =>
         {
             (string self, _) = Models.GameData.PlayerRecord.SplitName(PlayerStats.Name);
@@ -7546,7 +7550,7 @@ public sealed class AppServices
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
         Game.Calculators.AlignmentBucket? bucket =
-            Game.Inventory.ItemEquipFilter.BucketForWord(Players.Find(PlayerStats.Name)?.Alignment);
+            Game.Inventory.ItemEquipFilter.BucketForWord(Alignment.SelfAlignment);
         return Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket);
     }
 
@@ -7562,7 +7566,7 @@ public sealed class AppServices
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
         Game.Calculators.AlignmentBucket? bucket =
-            Game.Inventory.ItemEquipFilter.BucketForWord(Players.Find(PlayerStats.Name)?.Alignment);
+            Game.Inventory.ItemEquipFilter.BucketForWord(Alignment.SelfAlignment);
         return !Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket);
     }
 
@@ -8979,7 +8983,7 @@ public sealed class AppServices
     // can't cross and leaves an unknown member for the walker to halt on at the gate.
     private System.Collections.Generic.IReadOnlyList<int?> PartyAlignmentValues()
     {
-        var vals = new System.Collections.Generic.List<int?> { AlignmentValueOf(PlayerStats.Name) };
+        var vals = new System.Collections.Generic.List<int?> { Game.Calculators.AlignmentBands.ValueOf(Alignment.SelfAlignment) };
         if (PartyState.IsInParty && PartyState.SelfIsLeader)
             foreach (Game.PartyMember m in PartyState.Members)
             {

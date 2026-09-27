@@ -498,11 +498,11 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // RemovesSpell tie-break has no way to know which of the two is even usable.
     private void RefreshSelfBlessCandidates(HashSet<string> slotted)
     {
-        // Same source CharacterInfo/Equipment already trust for "what's my current
-        // alignment": our own `who` row. Null when we haven't been seen in a `who`
-        // yet — IsAlignmentEligible treats that as "don't know, don't filter".
+        // Our own alignment as a `who` showed it this session — the same source the
+        // Equipment Manager trusts. Null until then; IsAlignmentEligible treats that
+        // as "don't know, don't filter".
         AlignmentBucket? alignment = ItemEquipFilter.BucketForWord(
-            AppServices.Current.Players.Find(AppServices.Current.PlayerStats.Name)?.Alignment);
+            AppServices.Current.Alignment.SelfAlignment);
 
         List<Game.Spells.SelfBlessCandidate> pool = _spellbook.Available
             .Where(s => BuffClassifier.IsAnyBuff(s)

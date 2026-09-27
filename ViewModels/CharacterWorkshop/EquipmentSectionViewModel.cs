@@ -130,6 +130,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     // Null at design time. Subscribed so a profile switch (chip / @profile / toolbar)
     // re-labels the marker while the Workshop is open.
     private readonly Game.Combat.CombatProfileManager? _combatProfiles = AppServices.CurrentOrNull?.CombatProfiles;
+    private readonly Game.AlignmentTracker? _alignment = AppServices.CurrentOrNull?.Alignment;
 
     // The active combat profile's accent colour — the marker label + border use it so
     // the Workshop matches the Combat tab's per-profile colouring. 1-based number.
@@ -595,17 +596,10 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
                 EquipmentSlotMap.GetItemsForSlot(_gameData, row.Slot, level, cls, bucket));
     }
 
-    // Our own character appears in our own `who`, so PlayerDatabase already carries
-    // our alignment word; match it by given name.
-    private string? LocalAlignmentWord()
-    {
-        if (string.IsNullOrEmpty(_stats.Name)) return null;
-        (string given, _) = PlayerRecord.SplitName(_stats.Name);
-        foreach (PlayerRecord r in _players.Players)
-            if (string.Equals(r.GivenName, given, StringComparison.OrdinalIgnoreCase))
-                return r.Alignment;
-        return null;
-    }
+    // Our alignment as a `who` showed it this session (AlignmentTracker) — the saved
+    // players row can be stale or another same-named character's. Null until then,
+    // which leaves the pickers unfiltered by alignment.
+    private string? LocalAlignmentWord() => _alignment?.SelfAlignment;
 
     // ----- equipment bonuses ----------------------------------------------
 
