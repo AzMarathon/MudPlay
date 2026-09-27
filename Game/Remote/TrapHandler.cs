@@ -4,7 +4,7 @@ using MudPlay.Services;
 namespace MudPlay.Game.Remote;
 
 // Consumer of RemoteCommandManager for @trap <direction> and @trap stop. The
-// actual search → disarm state machine lives in TrapDisarmManager; this handler
+// actual disarm state machine lives in TrapDisarmManager; this handler
 // is the auth + queue boundary.
 //
 // Two responsibilities:

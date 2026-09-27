@@ -5,19 +5,17 @@ using MudPlay.Services.Patterns;
 namespace MudPlay.Game;
 
 // State machine that drives the auto-disarm flow for @trap <direction> remote
-// commands. Owns the per-request search → disarm loop, the queue of pending
-// requests, and the telepath-the-sender-on-completion contract.
+// commands and the walker's trapped exits. Owns the queue of pending requests
+// and the telepath-the-sender-on-completion contract.
 //
-// One request is in flight at a time. The state machine cycles
-// Idle → Searching → DisarmPending → Done per direction; subsequent
-// @trap <dir> calls queue FIFO. A @trap stop aborts whatever's in flight, drains
-// the queue, telepaths each queued sender that their trap was cancelled, and
-// returns to State.Idle.
+// One request is in flight at a time: Idle → DisarmPending → Idle per direction;
+// later requests queue FIFO. A @trap stop aborts whatever's in flight, drains the
+// queue, telepaths each queued sender that their trap was cancelled, and returns
+// to State.Idle.
 //
-// A request enqueued with trapKnown=true skips the Searching phase and enters
-// DisarmPending straight away — the walker already knows a trap sits on the exit
-// (RoomExitHint.Trap), and `disarm trap <dir>` works directly on a known trap, so
-// the confirming search is a wasted round.
+// Every request disarms directly with `disarm trap <dir>`: the game accepts it
+// without searching for the trap first (GAME_MECHANICS "Trapped exits"), so a
+// confirming `search` would only waste rounds.
 //
 // The capability gate (CanDisarm) lives in this manager so the handler can
 // interrogate it before deciding whether to enqueue or send a denial reply. It
@@ -35,8 +33,6 @@ public sealed class TrapDisarmManager : IDisposable
     private readonly PlayerStats _stats;
     private readonly GameDataCache _gameData;
     private readonly LogService? _log;
-    private readonly IDisposable _foundSub;
-    private readonly IDisposable _noneSub;
     private readonly IDisposable _disarmedSub;
     private readonly WireSender _wire = new();
     private bool _disposed;
@@ -46,15 +42,10 @@ public sealed class TrapDisarmManager : IDisposable
     // The currently-in-flight request, or null when idle.
     private TrapRequest? _current;
     private State _state = State.Idle;
-    private int _searchAttempts;
     private int _disarmAttempts;
 
-    // Max sea <dir> attempts before giving up on the current request. Default 20;
-    // pushed from Models.Profile.OtherSettings.MaxTrapSearchAttempts.
-    public int MaxSearchAttempts { get; set; } = 20;
-
-    // Max disarm trap <dir> attempts after a successful search before giving up.
-    // Default 5; pushed from Models.Profile.OtherSettings.MaxTrapDisarmAttempts.
+    // Max disarm trap <dir> attempts before giving up. Default 5; pushed from
+    // Models.Profile.OtherSettings.MaxTrapDisarmAttempts.
     public int MaxDisarmAttempts { get; set; } = 5;
 
     // True when the local character has the Traps skill — either a positive parsed
@@ -95,8 +86,6 @@ public sealed class TrapDisarmManager : IDisposable
         _gameData = gameData;
         _log      = log;
 
-        _foundSub    = _router.Subscribe(KnownPatterns.TrapFoundInSearch,   OnSearchFound);
-        _noneSub     = _router.Subscribe(KnownPatterns.TrapNoneInSearch,    OnSearchNone);
         _disarmedSub = _router.Subscribe(KnownPatterns.TrapDisarmedSuccess, OnDisarmedSuccess);
     }
 
@@ -111,25 +100,18 @@ public sealed class TrapDisarmManager : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _foundSub.Dispose();
-        _noneSub.Dispose();
         _disarmedSub.Dispose();
     }
 
     // Queue a new @trap <direction> request. direction must already be normalised
     // to the short form ("n" / "ne" / "u" / etc.). reply is the per-request
     // channel-bound callback the handler captured at dispatch time; the manager
-    // invokes it once on terminal state (success / max-attempts / stop).
-    //
-    // trapKnown=true means the caller already knows a trap sits on this exit (the
-    // walker acting on a RoomExitHint.Trap): the search phase is skipped and the
-    // request disarms directly. The @trap remote path leaves it false so an unseen
-    // exit is confirmed by search before a disarm attempt is spent.
+    // invokes it once on terminal state (success / stop).
     //
     // Same-direction duplicate while already in-flight or queued is silently
     // ignored — we're already on it; sending a second {Trap to the N disarmed.}
     // would be misleading.
-    public void Enqueue(string direction, string sender, Action<string> reply, bool trapKnown = false)
+    public void Enqueue(string direction, string sender, Action<string> reply)
     {
         if (string.IsNullOrEmpty(direction)) return;
         ArgumentNullException.ThrowIfNull(reply);
@@ -152,9 +134,9 @@ public sealed class TrapDisarmManager : IDisposable
             }
         }
 
-        _queue.Enqueue(new TrapRequest(direction, sender, reply, trapKnown));
+        _queue.Enqueue(new TrapRequest(direction, sender, reply));
         _log?.Log(LogSeverity.Info, "Trap",
-            $"@trap {direction} queued (sender={sender}, depth={_queue.Count}, known={trapKnown}).");
+            $"@trap {direction} queued (sender={sender}, depth={_queue.Count}).");
         TryStartNext();
     }
 
@@ -175,7 +157,6 @@ public sealed class TrapDisarmManager : IDisposable
             q.Reply("Trap flow stopped.");
         }
         _state = State.Idle;
-        _searchAttempts = 0;
         _disarmAttempts = 0;
         _log?.Log(LogSeverity.Info, "Trap", "Trap flow stopped — queue drained.");
     }
@@ -187,30 +168,9 @@ public sealed class TrapDisarmManager : IDisposable
         if (_state != State.Idle) return;
         if (_queue.Count == 0) return;
         _current = _queue.Dequeue();
-        _searchAttempts = 0;
         _disarmAttempts = 0;
-        // A known trap (walker, RoomExitHint.Trap) disarms directly — the
-        // search phase only exists to confirm an unseen trap for the @trap
-        // remote path.
-        if (_current.TrapKnown)
-        {
-            _state = State.DisarmPending;
-            SendDisarm();
-        }
-        else
-        {
-            _state = State.Searching;
-            SendSearch();
-        }
-    }
-
-    private void SendSearch()
-    {
-        if (_current is not { } cur) return;
-        _searchAttempts++;
-        _wire.Send($"sea {cur.Direction}");
-        _log?.Log(LogSeverity.Info, "Trap",
-            $"Searching {cur.Direction} (attempt {_searchAttempts}/{MaxSearchAttempts}).");
+        _state = State.DisarmPending;
+        SendDisarm();
     }
 
     private void SendDisarm()
@@ -220,31 +180,6 @@ public sealed class TrapDisarmManager : IDisposable
         _wire.Send($"disarm trap {cur.Direction}");
         _log?.Log(LogSeverity.Info, "Trap",
             $"Disarming {cur.Direction} (attempt {_disarmAttempts}/{MaxDisarmAttempts}).");
-    }
-
-    private void OnSearchNone(MatchResult result)
-    {
-        if (_state != State.Searching) return;
-        if (_current is not { } cur) return;
-        if (!MatchesCurrentDirection(result)) return;
-
-        if (_searchAttempts >= MaxSearchAttempts)
-        {
-            cur.Reply($"Couldn't find trap to the {cur.Direction} ({_searchAttempts} attempts).");
-            CompleteCurrent();
-            return;
-        }
-        SendSearch();
-    }
-
-    private void OnSearchFound(MatchResult result)
-    {
-        if (_state != State.Searching) return;
-        if (_current is null) return;
-        if (!MatchesCurrentDirection(result)) return;
-
-        _state = State.DisarmPending;
-        SendDisarm();
     }
 
     private void OnDisarmedSuccess(MatchResult result)
@@ -263,9 +198,8 @@ public sealed class TrapDisarmManager : IDisposable
     // enqueue either form: the @trap handler passes the short form it parsed,
     // but the walker enqueues the long-form direction word. Normalising only the
     // observed side left a walker-enqueued "southeast" never matching the game's
-    // "You found a trap to the southeast!", so the disarm stalled in Searching
-    // after a successful search. Normalising the stored side too makes the match
-    // robust to whichever form the caller queued.
+    // long-form reply, so the flow stalled (report 132150). Normalising the stored
+    // side too makes the match robust to whichever form the caller queued.
     private bool MatchesCurrentDirection(MatchResult result)
     {
         if (_current is null) return false;
@@ -281,7 +215,6 @@ public sealed class TrapDisarmManager : IDisposable
     {
         _current = null;
         _state = State.Idle;
-        _searchAttempts = 0;
         _disarmAttempts = 0;
         TryStartNext();
     }
@@ -313,7 +246,6 @@ public sealed class TrapDisarmManager : IDisposable
     public enum State
     {
         Idle,
-        Searching,
         DisarmPending,
     }
 
@@ -321,5 +253,5 @@ public sealed class TrapDisarmManager : IDisposable
     // the handler captured from RemoteCommandContext at dispatch time — invoking
     // it later telepaths / says-back to the original sender on the same channel
     // they used.
-    private sealed record TrapRequest(string Direction, string Sender, Action<string> Reply, bool TrapKnown);
+    private sealed record TrapRequest(string Direction, string Sender, Action<string> Reply);
 }

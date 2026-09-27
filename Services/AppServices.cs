@@ -577,12 +577,10 @@ public sealed class AppServices
     // reconnect waits for them to return and re-party instead of stranding them.
     public Game.Remote.PartyReformCoordinator PartyReform { get; private set; } = null!;
 
-    // Drives the @trap <direction> auto-disarm flow:
-    // search → disarm state machine + FIFO request queue + Stats-
-    // skill gate. Bound by TrapRemote's handler at
-    // dispatch time, configured via the
-    // Models.Profile.OtherSettings.MaxTrapSearchAttempts
-    // / MaxTrapDisarmAttempts knobs in Settings → Other.
+    // Drives the @trap <direction> / walker auto-disarm flow: direct
+    // `disarm trap <dir>` + FIFO request queue + Traps-skill gate. Bound by
+    // TrapRemote's handler at dispatch time, configured via
+    // Models.Profile.OtherSettings.MaxTrapDisarmAttempts in Settings → Other.
     public Game.TrapDisarmManager TrapDisarm { get; }
 
     // Party-member trap delegation — when the local character can't
@@ -5956,12 +5954,9 @@ public sealed class AppServices
         // Gear a party member recovered for us and handed back counts as our deathpile
         // coming home: struck off the pile and re-equipped (Auto-equip on recovery).
         Inventory.ItemReceived += DeathRecovery.OnItemReceived;
-        // Route walker over trapped exits through the TrapDisarmManager. The
-        // walker only enqueues on a RoomExitHint.Trap — it already knows a trap
-        // sits on the exit, so it disarms directly (trapKnown: true) instead of
-        // searching first.
-        Walker.SetTrapEnqueuer((dir, sender, reply) =>
-            TrapDisarm.Enqueue(dir, sender, reply, trapKnown: true));
+        // Route walker over trapped exits (RoomExitHint.Trap) through the
+        // TrapDisarmManager.
+        Walker.SetTrapEnqueuer(TrapDisarm.Enqueue);
         // Settings → Other "Utilize disarm traps if able": gate the
         // walker's trap-disarm on the toggle AND a real local capability
         // (a positive Traps stat, or a class/race game-data trap-skill
@@ -10278,7 +10273,6 @@ public sealed class AppServices
         Models.Profile.OtherSettings dto = ReadSection<Models.Profile.OtherSettings>(Profile.Current, "Other");
         RemoteCommands.MaxSuicideLivesThreshold = Math.Clamp(dto.MaxSuicideLivesThreshold, 0, 9);
         // @trap auto-disarm attempt caps.
-        TrapDisarm.MaxSearchAttempts = Math.Clamp(dto.MaxTrapSearchAttempts, 1, 100);
         TrapDisarm.MaxDisarmAttempts = Math.Clamp(dto.MaxTrapDisarmAttempts, 1, 50);
         // Leader-side @comeback backtrack budget.
         PartyComeback.MaxBacktrackRooms = Math.Clamp(dto.MaxComebackBacktrackRooms, 1, 50);
@@ -10292,7 +10286,6 @@ public sealed class AppServices
     {
         Models.Profile.OtherSettings defaults = new();
         RemoteCommands.MaxSuicideLivesThreshold = defaults.MaxSuicideLivesThreshold;
-        TrapDisarm.MaxSearchAttempts = defaults.MaxTrapSearchAttempts;
         TrapDisarm.MaxDisarmAttempts = defaults.MaxTrapDisarmAttempts;
         PartyComeback.MaxBacktrackRooms = defaults.MaxComebackBacktrackRooms;
         ComebackRequest.Enabled = defaults.AutoRequestComebackWhenLeftBehind;

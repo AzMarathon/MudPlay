@@ -29,12 +29,6 @@ public sealed class OtherSettings
     // because the "if able" capability check rides on top of this on/off switch.
     public bool UtilizeDisarmTrapsIfAble { get; set; } = true;
 
-    // Caps the search loop in the @trap handler — how many sea <dir> attempts
-    // we'll make before giving up and telepathing the sender that we couldn't
-    // find a trap. Default 20, range 1..100. Surfaced above the disarm-attempts
-    // row in Settings → Other.
-    public int MaxTrapSearchAttempts { get; set; } = 20;
-
     // Caps the disarm-retry loop in the @trap handler — how many disarm trap
     // <dir> attempts we'll make after the trap has been spotted before giving
     // up. Default 5, range 1..50. Damage-aware abort (stop early if the trap

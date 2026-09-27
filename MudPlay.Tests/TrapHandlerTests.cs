@@ -59,14 +59,14 @@ public sealed class TrapHandlerTests
     // ===== Happy path =====
 
     [Fact]
-    public void Trap_FromAuthorisedSenderWithSkill_QueuesAndSendsSearch()
+    public void Trap_FromAuthorisedSenderWithSkill_QueuesAndSendsDisarm()
     {
         var (engine, _, _, players, wire) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
 
         engine.DispatchForTests(Telepath("Raijin", "@trap n"));
 
-        Assert.Equal("sea n\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.Equal("disarm trap n\r", Encoding.Latin1.GetString(Assert.Single(wire)));
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class TrapHandlerTests
 
         engine.DispatchForTests(Telepath("Raijin", "@trap northeast"));
 
-        Assert.Equal("sea ne\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.Equal("disarm trap ne\r", Encoding.Latin1.GetString(Assert.Single(wire)));
     }
 
     // ===== Missing / bad direction =====

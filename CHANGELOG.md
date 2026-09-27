@@ -1,5 +1,9 @@
 # Version history
 
+## 3.114.3
+
+- @trap and the walker disarm a trap directly with `disarm trap <dir>` instead of searching for it first; the dead "@trap max searches" setting is removed
+
 ## 3.114.2
 
 - Hit and Run tactics now also runs when the sneak breaks on the way in or the backstab misses (no surprise), not just after a backstab lands; it only stays when a backstab kills the lone target

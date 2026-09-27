@@ -19,7 +19,6 @@ public sealed class OtherSectionViewModelTests
         {
             MaxSuicideLivesThreshold = 7,
             UtilizeDisarmTrapsIfAble = false,
-            MaxTrapSearchAttempts = 30,
             MaxTrapDisarmAttempts = 8,
         };
 
@@ -29,7 +28,6 @@ public sealed class OtherSectionViewModelTests
         Assert.NotNull(back);
         Assert.Equal(7, back!.MaxSuicideLivesThreshold);
         Assert.False(back.UtilizeDisarmTrapsIfAble);
-        Assert.Equal(30, back.MaxTrapSearchAttempts);
         Assert.Equal(8,  back.MaxTrapDisarmAttempts);
     }
 
@@ -56,7 +54,6 @@ public sealed class OtherSectionViewModelTests
         // attempts). @trap auto-disarm attempt caps — user-spec
         // defaults: 20 search retries, 5 disarm retries.
         Assert.True(dto.UtilizeDisarmTrapsIfAble);
-        Assert.Equal(20, dto.MaxTrapSearchAttempts);
         Assert.Equal(5,  dto.MaxTrapDisarmAttempts);
     }
 }

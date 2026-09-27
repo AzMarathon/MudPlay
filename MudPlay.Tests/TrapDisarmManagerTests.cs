@@ -167,59 +167,28 @@ public sealed class TrapDisarmManagerTests : IDisposable
     }
 
     // ===== Single-request happy path =====
+    // Every request disarms directly: `disarm trap <dir>` fires against the trap in
+    // that direction without searching for it first (user, 2026-09-27).
 
     [Fact]
-    public void Enqueue_StartsSearchImmediately_WhenIdle()
+    public void Enqueue_DisarmsImmediately_WhenIdle()
     {
         var (mgr, _, _, wire) = Setup();
         string? reply = null;
         mgr.Enqueue("n", "Raijin", text => reply = text);
 
-        Assert.Single(wire);
-        Assert.Equal("sea n\r", Encoding.Latin1.GetString(wire[0]));
-        Assert.Equal(TrapDisarmManager.State.Searching, mgr.CurrentState);
+        Assert.Equal("disarm trap n\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
         Assert.Equal("n", mgr.CurrentDirection);
         Assert.Null(reply);   // no terminal state yet
     }
 
     [Fact]
-    public void Enqueue_TrapKnown_SkipsSearchAndDisarmsImmediately()
+    public void Enqueue_NeverSearches()
     {
-        // The walker enqueues with trapKnown=true because it only reaches the
-        // trap path on a RoomExitHint.Trap — the trap is already known, so the
-        // confirming `sea <dir>` is a wasted round and we go straight to disarm.
         var (mgr, _, _, wire) = Setup();
-        mgr.Enqueue("se", "walker", _ => { }, trapKnown: true);
-
-        Assert.Equal("disarm trap se\r", Encoding.Latin1.GetString(Assert.Single(wire)));
-        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
-        Assert.Equal("se", mgr.CurrentDirection);
-    }
-
-    [Fact]
-    public void Enqueue_TrapKnown_DisarmSuccess_RepliesAndReturnsToIdle()
-    {
-        var (mgr, router, _, _) = Setup();
-        string? reply = null;
-        mgr.Enqueue("se", "walker", t => reply = t, trapKnown: true);
-
-        Dispatch(router, "You successfully disarmed the trap to the southeast.");
-
-        Assert.Equal("Trap to the se disarmed.", reply);
-        Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
-    }
-
-    [Fact]
-    public void SearchSuccess_TransitionsToDisarmAndSendsDisarmCommand()
-    {
-        var (mgr, router, _, wire) = Setup();
         mgr.Enqueue("n", "Raijin", _ => { });
-        wire.Clear();
-
-        Dispatch(router, "You found a trap to the north!");
-
-        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
-        Assert.Equal("disarm trap n\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.DoesNotContain(wire, b => Encoding.Latin1.GetString(b).StartsWith("sea "));
     }
 
     [Fact]
@@ -228,7 +197,6 @@ public sealed class TrapDisarmManagerTests : IDisposable
         var (mgr, router, _, _) = Setup();
         string? reply = null;
         mgr.Enqueue("n", "Raijin", text => reply = text);
-        Dispatch(router, "You found a trap to the north!");
 
         Dispatch(router, "You successfully disarmed the trap to the north.");
 
@@ -238,74 +206,27 @@ public sealed class TrapDisarmManagerTests : IDisposable
     }
 
     [Fact]
-    public void SearchFailure_RetriesUntilSuccess()
+    public void DisarmSuccess_IgnoresWrongDirection()
     {
-        var (mgr, router, _, wire) = Setup();
+        // Defensive: we're disarming north, the server printed a line for east
+        // (another player's disarm, leftover output). Don't complete.
+        var (mgr, router, _, _) = Setup();
         mgr.Enqueue("n", "Raijin", _ => { });
-        wire.Clear();
 
-        // Two failures, then a success.
-        Dispatch(router, "You notice nothing different to the north.");
-        Dispatch(router, "You notice nothing different to the north.");
-        Dispatch(router, "You found a trap to the north!");
+        Dispatch(router, "You successfully disarmed the trap to the east.");
 
-        Assert.Equal(3, wire.Count);
-        Assert.Equal("sea n\r",          Encoding.Latin1.GetString(wire[0]));
-        Assert.Equal("sea n\r",          Encoding.Latin1.GetString(wire[1]));
-        Assert.Equal("disarm trap n\r",  Encoding.Latin1.GetString(wire[2]));
         Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
     }
 
     [Fact]
-    public void SearchFailure_HitsMaxAttempts_ReplyAndIdle()
+    public void LongFormDirection_DisarmsAndMatchesTheSuccessLine()
     {
-        var (mgr, router, _, _) = Setup();
-        mgr.MaxSearchAttempts = 3;
-        string? reply = null;
-        mgr.Enqueue("n", "Raijin", text => reply = text);
-
-        // Three nothing-different lines should hit the cap (first
-        // attempt was the immediate-send from Enqueue, then two retries).
-        Dispatch(router, "You notice nothing different to the north.");
-        Dispatch(router, "You notice nothing different to the north.");
-        Dispatch(router, "You notice nothing different to the north.");
-
-        Assert.NotNull(reply);
-        Assert.Contains("Couldn't find trap to the n", reply);
-        Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
-    }
-
-    [Fact]
-    public void SearchMatch_IgnoresWrongDirection()
-    {
-        // Defensive: we asked for north, server happened to print a line
-        // for east (different request, leftover output, etc.). Don't
-        // transition.
-        var (mgr, router, _, _) = Setup();
-        mgr.Enqueue("n", "Raijin", _ => { });
-
-        Dispatch(router, "You found a trap to the east!");
-
-        // Still searching for north — east match was ignored.
-        Assert.Equal(TrapDisarmManager.State.Searching, mgr.CurrentState);
-    }
-
-    [Fact]
-    public void LongFormDirection_MatchesSearchThenDisarmThenSuccess()
-    {
-        // Regression: the walker enqueues the LONG-form direction word
-        // ("southeast"), not the short form the @trap handler parses. The
-        // game replies in the long form too. Direction matching must
-        // normalise BOTH sides — otherwise a successful search never
-        // advances past Searching and the disarm stalls (the reported bug).
+        // The walker enqueues the LONG-form direction word ("southeast"), not the
+        // short form the @trap handler parses; the game replies long-form too.
+        // Matching normalises both sides (report 132150).
         var (mgr, router, _, wire) = Setup();
         string? reply = null;
         mgr.Enqueue("southeast", "walker", t => reply = t);
-        Assert.Equal("sea southeast\r", Encoding.Latin1.GetString(Assert.Single(wire)));
-        wire.Clear();
-
-        Dispatch(router, "You found a trap to the southeast!");
-        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
         Assert.Equal("disarm trap southeast\r", Encoding.Latin1.GetString(Assert.Single(wire)));
 
         Dispatch(router, "You successfully disarmed the trap to the southeast.");
@@ -318,15 +239,15 @@ public sealed class TrapDisarmManagerTests : IDisposable
     [Fact]
     public void Enqueue_DuringInFlight_QueuesRequest()
     {
-        var (mgr, router, _, wire) = Setup();
+        var (mgr, _, _, wire) = Setup();
         mgr.Enqueue("n", "Raijin", _ => { });
         // Second request — should queue, not interrupt.
         mgr.Enqueue("e", "Helper", _ => { });
 
-        Assert.Equal(TrapDisarmManager.State.Searching, mgr.CurrentState);
+        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
         Assert.Equal("n", mgr.CurrentDirection);
         Assert.Equal(1, mgr.QueueDepth);
-        // Only the first request's search command landed.
+        // Only the first request's disarm landed.
         Assert.Single(wire);
     }
 
@@ -339,18 +260,13 @@ public sealed class TrapDisarmManagerTests : IDisposable
         mgr.Enqueue("e", "Helper", t => secondReply = t);
         wire.Clear();
 
-        // Complete the first one.
-        Dispatch(router, "You found a trap to the north!");
         Dispatch(router, "You successfully disarmed the trap to the north.");
 
         Assert.NotNull(firstReply);
-        Assert.Equal(TrapDisarmManager.State.Searching, mgr.CurrentState);
+        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
         Assert.Equal("e", mgr.CurrentDirection);
-        // Second request's search command was just dispatched.
-        Assert.Equal("sea e\r", Encoding.Latin1.GetString(wire[^1]));
+        Assert.Equal("disarm trap e\r", Encoding.Latin1.GetString(wire[^1]));
 
-        // Finish the second one too.
-        Dispatch(router, "You found a trap to the east!");
         Dispatch(router, "You successfully disarmed the trap to the east.");
 
         Assert.Equal("Trap to the e disarmed.", secondReply);
@@ -436,8 +352,8 @@ public sealed class TrapDisarmManagerTests : IDisposable
 
         mgr.Enqueue("e", "Helper", _ => { });
 
-        Assert.Equal("sea e\r", Encoding.Latin1.GetString(Assert.Single(wire)));
-        Assert.Equal(TrapDisarmManager.State.Searching, mgr.CurrentState);
+        Assert.Equal("disarm trap e\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
     }
 
     // ===== Dispose =====
@@ -445,15 +361,14 @@ public sealed class TrapDisarmManagerTests : IDisposable
     [Fact]
     public void Dispose_UnsubscribesPatterns()
     {
-        var (mgr, router, _, wire) = Setup();
-        mgr.Enqueue("n", "Raijin", _ => { });
-        wire.Clear();
+        var (mgr, router, _, _) = Setup();
+        string? reply = null;
+        mgr.Enqueue("n", "Raijin", t => reply = t);
 
         mgr.Dispose();
-        // After dispose, dispatching wouldn't transition state — verify
-        // by ensuring no new wire-send fires.
-        Dispatch(router, "You found a trap to the north!");
+        Dispatch(router, "You successfully disarmed the trap to the north.");
 
-        Assert.Empty(wire);
+        Assert.Null(reply);
+        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
     }
 }

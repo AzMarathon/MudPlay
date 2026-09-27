@@ -60,7 +60,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Utilize self or party members to disarm traps";
             yield return "Disarm traps";
             yield return "Traps";
-            yield return "@trap max searches";
             yield return "@trap max disarms";
             yield return "Pyramid solver";
             yield return "Great Pyramid climb";
@@ -102,7 +101,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // in the local Traps-skill capability check.
     [ObservableProperty] private bool _utilizeDisarmTrapsIfAble = true;
 
-    [ObservableProperty] private int _maxTrapSearchAttempts = 20;
     [ObservableProperty] private int _maxTrapDisarmAttempts = 5;
 
     // ----- Door open/bash/pick caps -----
@@ -277,7 +275,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         {
             MaxSuicideLivesThreshold = Math.Clamp(MaxSuicideLivesThreshold, 0, 9),
             UtilizeDisarmTrapsIfAble = UtilizeDisarmTrapsIfAble,
-            MaxTrapSearchAttempts = Math.Clamp(MaxTrapSearchAttempts, 1, 100),
             MaxTrapDisarmAttempts = Math.Clamp(MaxTrapDisarmAttempts, 1, 50),
             MaxPickAttempts       = Math.Clamp(MaxPickAttempts,       1, 100),
             PicklocksOverBash     = PicklocksOverBash,
@@ -352,7 +349,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         OtherSettings dto = ReadOrDefault();
         MaxSuicideLivesThreshold = dto.MaxSuicideLivesThreshold;
         UtilizeDisarmTrapsIfAble = dto.UtilizeDisarmTrapsIfAble;
-        MaxTrapSearchAttempts = dto.MaxTrapSearchAttempts;
         MaxTrapDisarmAttempts = dto.MaxTrapDisarmAttempts;
         MaxPickAttempts       = dto.MaxPickAttempts;
         PicklocksOverBash     = dto.PicklocksOverBash;
@@ -397,7 +393,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         svcs.RemoteCommands.MaxSuicideLivesThreshold = Math.Clamp(dto.MaxSuicideLivesThreshold, 0, 9);
         // @trap attempt caps — push into the live manager so the next
         // queued @trap honours the edit without a profile reload.
-        svcs.TrapDisarm.MaxSearchAttempts = Math.Clamp(dto.MaxTrapSearchAttempts, 1, 100);
         svcs.TrapDisarm.MaxDisarmAttempts = Math.Clamp(dto.MaxTrapDisarmAttempts, 1, 50);
         // @comeback backtrack budget — live-mirror so the next stranded-
         // follower pickup honours the edit without a profile reload.
@@ -421,7 +416,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnMaxSuicideLivesThresholdChanged(int value) => MarkDirty();
     partial void OnPlayerCleanupDaysChanged(int value)   => MarkDirty();
     partial void OnUtilizeDisarmTrapsIfAbleChanged(bool value) => MarkDirty();
-    partial void OnMaxTrapSearchAttemptsChanged(int value) => MarkDirty();
     partial void OnMaxTrapDisarmAttemptsChanged(int value) => MarkDirty();
     partial void OnMaxPickAttemptsChanged(int value)       => MarkDirty();
     partial void OnPicklocksOverBashChanged(bool value)    => MarkDirty();

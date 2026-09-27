@@ -509,10 +509,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         => Raise(new WalkEvent(WalkEventKind.Finished, "pyramid climb: arrived", destination));
 
     // Bind the trap-disarm enqueuer. Production wires this to
-    // TrapDisarmManager.Enqueue with trapKnown=true — a walker step only reaches
-    // here on a RoomExitHint.Trap, so the trap is already known and disarms
-    // directly (no confirming search) before the move goes out. Tests pass a
-    // capture-and-fire delegate.
+    // TrapDisarmManager.Enqueue, which disarms directly before the move goes out.
+    // Tests pass a capture-and-fire delegate.
     //
     // Signature: (direction, sender, reply). The walker passes the
     // lowercase direction word, the literal string "walker", and a reply
