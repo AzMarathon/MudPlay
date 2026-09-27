@@ -174,10 +174,14 @@ public sealed class CombatProfileStagingSession : IDisposable
         if (BuildFullSpells is { } buildSpells)
             profile.Settings["Spells"] = JsonSerializer.SerializeToElement(buildSpells());
         profile.Settings["Health"] = JsonSerializer.SerializeToElement(Active.Health.Clone());
+        // Carry the stored schema version: a blob written back at version 0 re-runs the
+        // one-time back-fills on the next load, overwriting every profile's own values
+        // with the active one's.
         profile.CombatProfiles = new CombatProfileSettings
         {
             Profiles = _profiles.Select(p => p.Clone(newIdentity: false)).ToList(),
             ActiveId = Active.Id,
+            SchemaVersion = profile.CombatProfiles?.SchemaVersion ?? 0,
         };
         if (_equipment() is { } eq) EquipmentWeaponSync.WriteProfileWeapons(eq, Active);
         _profile.Save();

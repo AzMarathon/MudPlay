@@ -1,5 +1,9 @@
 # Version history
 
+## 3.114.5
+
+- Saving the Combat, Health or Spells tab no longer resets combat profiles on the next launch: every profile's Health, spell picks, weapons, action order and backstab settings were being overwritten with the active profile's
+
 ## 3.114.4
 
 - @trap and the walker disarm a trap directly with `disarm trap <dir>` instead of searching for it first; the dead "@trap max searches" setting is removed

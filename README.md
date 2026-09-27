@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.114.4**
-> - @trap and the walker disarm a trap directly with `disarm trap <dir>` instead of searching for it first; the dead "@trap max searches" setting is removed
-> - A failed trap disarm is retried up to "@trap max disarms": Paradigm then stops the walk, Stock (whose failure line also means "no trap") then walks on; Paradigm's "Your command had no effect." means no trap, and the walk carries on
+> **Version 3.114.5**
+> - Saving the Combat, Health or Spells tab no longer resets combat profiles on the next launch: every profile's Health, spell picks, weapons, action order and backstab settings were being overwritten with the active profile's
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
