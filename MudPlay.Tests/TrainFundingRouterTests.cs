@@ -392,6 +392,10 @@ public sealed class TrainFundingRouterTests
         Assert.Contains("i", h.Sent);
         Assert.Empty(h.Walked);                              // nothing committed yet
         Assert.Null(h.Result);
+        Assert.True(h.Router.IsAwaitingInventory);           // the owner logs "re-reading", not "collecting"
+
+        h.Router.NoteInventoryRefreshed();
+        Assert.False(h.Router.IsAwaitingInventory);
     }
 
     [Fact]

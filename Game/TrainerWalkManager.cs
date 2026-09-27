@@ -228,7 +228,6 @@ public sealed class TrainerWalkManager : IDisposable
     public void TrainNow()
     {
         if (IsBusy || !_wire.IsBound) return;
-        _refundTried = false;
         // An explicit click overrides any funding back-off the armed path is sitting
         // on — the user asking to train now has better information than our
         // projection of when they'd be able to afford it.
@@ -520,7 +519,7 @@ public sealed class TrainerWalkManager : IDisposable
         if (levels <= 0) return false;
 
         IReadOnlyList<Game.Train.TrainSegment> itinerary = Game.Train.TrainItineraryPlanner.Build(
-            TrainerCatalog.Enumerate(_gameData), _stats.Level, levels, ResolveClassNumber(),
+            TrainerCatalog.Enumerate(_gameData), RunLevel, levels, ResolveClassNumber(),
             ReadDisabledTrainers(), from, (a, b) => _bfs.DistanceBetween(a, b));
         long cost = Game.Train.TrainItineraryPlanner.TotalCost(itinerary);
         if (cost <= 0) return false;
@@ -536,7 +535,9 @@ public sealed class TrainerWalkManager : IDisposable
                 _phase = Phase.Funding;
                 _log?.Info("AutoTrain",
                     $"Training {levels} level(s) across {itinerary.Count} trainer(s) costs {cost:N0} copper — "
-                    + "collecting the difference first.");
+                    + (_funding.IsAwaitingInventory
+                        ? "re-reading the purse before deciding."
+                        : "collecting the difference first."));
                 StateChanged?.Invoke();
                 return true;
 
@@ -580,6 +581,7 @@ public sealed class TrainerWalkManager : IDisposable
             return;
         }
 
+        _fundingRetryAt = DateTimeOffset.MinValue;
         // Re-select from where the errand left us: the bank we withdrew at may sit
         // nearer a different branch of the same trainer.
         _target = SelectNearest(cur.Key) ?? t;
@@ -590,11 +592,16 @@ public sealed class TrainerWalkManager : IDisposable
     private int LevelsThisRun()
     {
         AutoTrainerSettings s = ReadSettings();
-        int levels = Math.Max(0, CountBankableAbove(_stats.Level) - Math.Max(0, _keepLevels));
+        int levels = Math.Max(0, CountBankableAbove(RunLevel) - Math.Max(0, _keepLevels));
         int ceiling = Math.Max(0, s.DoNotTrainAbove);
-        if (ceiling > 0) levels = Math.Min(levels, Math.Max(0, ceiling - _stats.Level));
+        if (ceiling > 0) levels = Math.Min(levels, Math.Max(0, ceiling - RunLevel));
         return levels;
     }
+
+    // The level the run stands at: the last one attained this run, else the stat
+    // screen's. PlayerStats.Level isn't re-polled between trains, so pricing a
+    // mid-run refusal off it would bill the levels already bought again.
+    private int RunLevel => _attainedLevel > 0 ? _attainedLevel : _stats.Level;
 
     // CP reconcile: walk to a trainer and apply the current level's CP plan without
     // training a new level. Sends no `train` — on arrival it refreshes `stat`
@@ -653,6 +660,7 @@ public sealed class TrainerWalkManager : IDisposable
         _partyDone = null;
         _loopTrain = loop;
         _cpOnlyRun = false;
+        _refundTried = false;
         _keepLevels = 0;
         _applyCp = applyCp;
         _reply = reply;

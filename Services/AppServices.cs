@@ -6707,9 +6707,10 @@ public sealed class AppServices
                              cash.KeepOnHandDenomination);
             },
             requestInventory: () => SendGameCommand("i"));
-        // The parse that answers that `i`. Harmless at any other time: the router
-        // only listens while it is holding for one.
-        Inventory.Changed += () => TrainFunding.NoteInventoryRefreshed();
+        // The full parse that answers that `i`: an incremental pickup / drop patch is
+        // exactly the drifting figure the refresh exists to replace. Harmless at any
+        // other time, since the router only listens while it is holding for one.
+        Inventory.FullInventoryParsed += () => TrainFunding.NoteInventoryRefreshed();
 
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
             RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log);

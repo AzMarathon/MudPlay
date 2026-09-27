@@ -104,6 +104,9 @@ public sealed class TrainFundingRouter
 
     public bool IsBusy => _phase != Phase.Idle;
 
+    // Begin is holding for the `i` that re-anchors the purse; nothing is priced yet.
+    public bool IsAwaitingInventory => _phase == Phase.AwaitingInventory;
+
     public TrainFundingRouter(
         Func<RoomKey?> currentRoom,
         Func<long> onHandCopper,
