@@ -97,6 +97,13 @@ public sealed class MovementCoordinator
     // Pause / Stop, so the user's own Pause/Resume face is untouched.
     public const string AutoAllGate = "AutoAll";
 
+    // Asserted by StealthManager while auto-sneak is on and the game refuses a sneak
+    // on its post-combat cooldown ("You may not sneak right now!"): the loop / walk
+    // holds instead of stepping on unsneaked, while `sn` is retried every couple of
+    // seconds. Clears when the sneak takes, or after a cap so a stuck cooldown can't
+    // strand the route. Engine-wait tier.
+    public const string SneakCooldownGate = "SneakCooldown";
+
     // Asserted by the in-room acquisition engine while the loot step runs
     // after a fight clears; clears when all flagged ground items + coins are
     // resolved. This is the get-clear contributor to the in-room loop's

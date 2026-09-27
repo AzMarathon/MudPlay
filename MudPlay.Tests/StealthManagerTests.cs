@@ -317,6 +317,56 @@ public sealed class StealthManagerTests
         public void Dispose() => Stealth.Dispose();
     }
 
+    // Report paradigm-20260926-233357: "You may not sneak right now!" is a post-combat
+    // cooldown. Hold the route and retry sn instead of walking on unsneaked.
+    [Fact]
+    public void SneakCooldown_HoldsMovement_RetriesUntilItTakes()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        h.Stealth.NoteRoomChanged();                     // sn on arrival
+        h.Feed("You may not sneak right now!");
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+
+        h.Sent.Clear();
+        h.Stealth.RetrySneakAfterCooldownForTests();     // 2s later
+        Assert.Equal("sn", h.LastSent());
+
+        h.Feed("Attempting to sneak...");                 // it took
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+    }
+
+    [Fact]
+    public void SneakCooldown_GivesUpAfterTheCap()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+        DateTimeOffset now = new(2026, 9, 26, 23, 33, 53, TimeSpan.Zero);
+        h.Stealth.NowProvider = () => now;
+
+        h.Stealth.NoteRoomChanged();
+        h.Feed("You may not sneak right now!");
+        now = now.AddSeconds(16);
+        h.Stealth.RetrySneakAfterCooldownForTests();
+
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+    }
+
+    [Fact]
+    public void SneakCooldown_AutoSneakOff_NoHold()
+    {
+        using AutoHarness h = new() { AutoSneakOn = false };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        h.Feed("You may not sneak right now!");
+
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+    }
+
     [Fact]
     public void AutoSneak_OnRoomChange_SendsSneak()
     {

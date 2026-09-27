@@ -4397,6 +4397,7 @@ public sealed class AppServices
         // Any NPC in the room prevents sneak, so
         // suppress the doomed `sn` instead of firing it into a rejection.
         Stealth.SetSneakBlockCheck(() => CombatTracker.HasRoomNpc);
+        Stealth.SetMovementCoordinator(MovementCoordinator);
         // Auto-hide is suppressed in a party — a hidden member falls off the
         // Also-here line and can't be single-target-healed/buffed until revealed.
         Stealth.SetPartyCheck(() => PartyState.IsInParty);
@@ -4439,7 +4440,7 @@ public sealed class AppServices
         // Backstab-failure flee (CombatSettings.RunIfBackstabFails). Combat detects
         // the failed surprise round; HealthManager owns the flee route + engine.
         Combat.SetBackstabFailureFlee(() => Health.RunFromBackstabFailure());
-        Combat.SetBackstabRunFlee(() => Health.RunAfterBackstab());
+        Combat.SetHitAndRunHooks(Health.BackstabLanded, Health.RunInsteadOfFight);
 
         // ShadowRest (Paradigm): classes carrying ability code 1103 can rest while
         // hidden/sneaking in a room with monsters without being attacked. The rest

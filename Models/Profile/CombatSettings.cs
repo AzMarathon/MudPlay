@@ -80,7 +80,7 @@ public sealed class CombatSettings
     // Hit-and-run backstabbing: when the room held two or more hostiles as we snuck
     // in, run once the backstab lands, so the loop / walk re-sneaks and comes back
     // for another one instead of slugging it out with the pack. Default false.
-    public bool RunAfterBackstabIfMultiple { get; set; }
+    public bool HitAndRunTactics { get; set; }
 
     // How many runs one hit-and-run backstab may take, the first included: a monster
     // that chases us into the retreat room is run from again until this is spent, then

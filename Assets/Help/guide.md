@@ -1150,6 +1150,8 @@ Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, 
 
 An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates the combat/spell tuning. But **Auto-Bless stands alone** — self and party buffing is controlled by the Auto-Bless toggle and nothing else, so turning off Auto-Combat or Auto-Rest/Heal never stops your blessing.
 
+**Sneak cooldown.** Right after a fight the game won't let you sneak for a few seconds (`You may not sneak right now!`). With **Auto-Sneak on**, your loop or walk waits instead of stepping on unsneaked: it retries the sneak every two seconds and moves once it takes, or after 15 seconds goes on unsneaked. The status bar reads *Waiting — sneak on cooldown* meanwhile.
+
 **Sneak-aware casting.** Casting a spell breaks Sneak (and Hide), so when **Auto-Sneak is on** MudPlay times its maintenance casts around your stealth:
 
 - After any automated cast it **re-issues sneak in place**, so you don't walk on exposed.
@@ -2416,12 +2418,14 @@ Off (the default) is the current behavior: if you engage a room of 8 with Min se
 **Default:** Off
 **What it does:** Automatically triggers flee behavior if your backstab attempt clearly failed (no "surprise" in the result line) — on the theory that a failed backstab means the target is now fully alert and the fight is riskier than planned. It also runs when your sneak breaks on the way in (`You make a sound as you enter the room!`): you entered seen, so the backstab would fail, and MudPlay runs instead of opening with a plain attack.
 
-### BS then run if multiple monsters in room / Give up and fight after N runs
+### Hit and Run tactics / Give up and fight after N runs
 
 **Default:** Off / 3 runs
-**What it does:** Hit-and-run backstabbing. When the room held **two or more** monsters as you snuck in (or holds that many by the time the backstab lands, because one walked in mid-backstab), you run as soon as the backstab lands, even if it killed one and only one is left. Your loop or walk then re-sneaks, comes back in and opens with another backstab, so you never trade rounds with a whole pack. It runs the same way *Run distance* and *Go backwards if running* set for any flee, and needs a running loop or walk.
+**What it does:** Never fight without a backstab. Once a backstab lands, anything still standing — the monster you hit, or anything else in the room — is left for next time: you run, your loop or walk re-sneaks, comes back in and opens with another backstab. The same goes for any fight that would start with a plain attack: a monster that walks in after your backstab, one that chases you, a room you entered seen. It runs the way *Run distance* and *Go backwards if running* set for any flee, and needs **Do BS attacks** and a running loop or walk.
 
-Monsters sometimes chase. If one follows you into the room you ran to, you run again. **Give up and fight after N runs** caps how many runs one backstab may take, the first included; once they're spent you stand and fight rather than keep hunting for an empty room to re-sneak in. The count starts over when you shake them (your loop moves on without a chaser) or when your next backstab lands.
+It doesn't run where a backstab couldn't work anyway: a room with a see-hidden monster, or a monster marked *don't backstab*.
+
+**Give up and fight after N runs** caps the runs between backstabs, the first included. Once they're spent you stand and fight rather than keep hunting for a chance to re-sneak. A landed backstab starts the count over.
 
 ### Clear hostiles when sneak broken by see-hidden monster
 
@@ -3594,7 +3598,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Do BS attacks | `false` | bool | `DoBackstab` | Models/Profile/CombatSettings.cs |
 | Don't BS if multi-attack | `true` | bool | `SkipBackstabIfMultiAttack` | Models/Profile/CombatSettings.cs |
 | Run if BS fails | `false` | bool | `RunIfBackstabFails` | Models/Profile/CombatSettings.cs |
-| BS then run if multiple monsters in room / Give up and fight after N runs | `false` / 3 | bool / 1–20 | `RunAfterBackstabIfMultiple` / `HitAndRunMaxRuns` | Models/Profile/CombatSettings.cs |
+| Hit and Run tactics / Give up and fight after N runs | `false` / 3 | bool / 1–20 | `HitAndRunTactics` / `HitAndRunMaxRuns` | Models/Profile/CombatSettings.cs |
 | Clear hostiles when seen hidden | `false` | bool | `ClearHostilesWhenSeenHidden` | Models/Profile/CombatSettings.cs |
 | Target order | `Normal` | Normal / Reverse | `TargetOrder` | Models/Profile/CombatSettings.cs |
 | Target Priority (+ member name) | `Default` / `null` | Default / FollowLeader / FollowMember | `TargetPriority` / `TargetPriorityMemberName` | Models/Profile/CombatSettings.cs |

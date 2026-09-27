@@ -121,7 +121,7 @@ public sealed class CombatProfileManager
             prof.DoBackstab = live.DoBackstab;
             prof.SkipBackstabIfMultiAttack = live.SkipBackstabIfMultiAttack;
             prof.RunIfBackstabFails = live.RunIfBackstabFails;
-            prof.RunAfterBackstabIfMultiple = live.RunAfterBackstabIfMultiple;
+            prof.HitAndRunTactics = live.HitAndRunTactics;
             prof.HitAndRunMaxRuns = live.HitAndRunMaxRuns;
             prof.ClearHostilesWhenSeenHidden = live.ClearHostilesWhenSeenHidden;
             prof.KillAllEngaged = live.KillAllEngaged;

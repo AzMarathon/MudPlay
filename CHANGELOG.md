@@ -1,12 +1,12 @@
 # Version history
 
-## 3.111.2
+## 3.111.4
 
-- New Combat option "BS then run if multiple monsters in room": hit-and-run backstabbing. Run once the backstab lands, then re-sneak and come back for another
-- Hit and run re-runs from a monster that chases you, up to "Give up and fight after N runs" (default 3)
-- Hit and run also counts a monster that walks in while the backstab is in flight
+- New Combat option "Hit and Run tactics": never fight without a backstab. Once a backstab lands, anything still standing is run from, and so is any fight that would open with a plain attack (a walk-in, a chaser); the loop re-sneaks and comes back to backstab again
+- "Give up and fight after N runs" (default 3) caps the runs between backstabs
 - A flee that starts while a move is still landing waits for it, then runs back from the right room (no more fleeing off the loop)
-- bug reports addressed: paradigm-20260926-230605, paradigm-20260926-230835
+- With Auto-Sneak on, the route waits out the post-combat sneak cooldown (retrying sn) instead of walking on unsneaked
+- bug reports addressed: paradigm-20260926-222210, paradigm-20260926-230605, paradigm-20260926-230835, paradigm-20260926-233241, paradigm-20260926-233357
 
 ## 3.110.18
 

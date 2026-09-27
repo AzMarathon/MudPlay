@@ -84,6 +84,8 @@ public static class NavActivity
             return ("Waiting — sorting items (Roomba)", NavActivityKind.Waiting);
         if (gates.Contains(MovementCoordinator.GearSwapGate))
             return ("Waiting — changing gear", NavActivityKind.Waiting);
+        if (gates.Contains(MovementCoordinator.SneakCooldownGate))
+            return ("Waiting — sneak on cooldown", NavActivityKind.Waiting);
 
         // Brief per-room settle beats while a room reveals a late-arriving hostile.
         // They're a moment in the middle of moving, not a real stop, so they read as

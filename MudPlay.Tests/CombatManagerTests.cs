@@ -2485,79 +2485,112 @@ public sealed class CombatManagerTests
         Assert.False(fled);
     }
 
-    // Hit and run (report paradigm-20260926-222210): a room of two or more hostiles at
-    // the opener runs once the backstab lands, so the loop can re-sneak and come back.
-    [Fact]
-    public void BackstabLanded_RoomOfTwo_RunAfterBackstab_Runs()
+    // Hit and Run tactics — never fight without a backstab (reports
+    // paradigm-20260926-222210 / -230605 / -233241).
+    private static (Harness H, List<bool> Landed, List<string> Runs) HitAndRunHarness(
+        bool deferUi, bool allowRun = true)
     {
-        using Harness h = new();
+        Harness h = new() { DeferUi = deferUi };
         h.Settings.DoBackstab = true;
-        h.Settings.RunAfterBackstabIfMultiple = true;
-        h.AddMonster(1, "orc rogue", killable: true);
-        h.AddMonster(2, "goblin", killable: true);
-        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
-        bool ran = false;
-        h.Combat.SetBackstabRunFlee(() => ran = true);
-
-        h.Feed("Also here: orc rogue, goblin.");
-        h.Feed("You surprise punch orc rogue for 30 damage!");
-
-        Assert.True(ran);
-    }
-
-    // Report paradigm-20260926-230605: one monster at the opener, a second crept in
-    // before the backstab landed — the room is a pack by then.
-    [Fact]
-    public void BackstabLanded_SecondMonsterArrivedMidBackstab_Runs()
-    {
-        using Harness h = new();
-        h.Settings.DoBackstab = true;
-        h.Settings.RunAfterBackstabIfMultiple = true;
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(4, "carrion beast", killable: true);
-        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
-        bool ran = false;
-        h.Combat.SetBackstabRunFlee(() => ran = true);
-
-        h.Feed("Also here: giant rat.");
-        h.Feed("Also here: giant rat, carrion beast.");
-        h.Feed("You surprise whap giant rat for 18 damage!");
-
-        Assert.True(ran);
+        h.Settings.HitAndRunTactics = true;
+        List<bool> landed = new();
+        List<string> runs = new();
+        h.Combat.SetHitAndRunHooks(landed.Add, reason => { runs.Add(reason); return allowRun; });
+        return (h, landed, runs);
     }
 
     [Fact]
-    public void BackstabLanded_LoneMonster_DoesNotRun()
+    public void HitAndRun_BackstabKillsTheOnlyMonster_NoRun()
     {
-        using Harness h = new();
-        h.Settings.DoBackstab = true;
-        h.Settings.RunAfterBackstabIfMultiple = true;
+        (Harness h, List<bool> landed, _) = HitAndRunHarness(deferUi: true);
+        using Harness _h = h;
+        h.AddMonster(1, "kobold thief", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: kobold thief.");
+        h.Feed("You surprise whap kobold thief for 22 damage!");
+        h.Feed("You gain 13 experience.");       // the kill, same round
+        h.PumpUi();
+
+        Assert.Equal(new[] { false }, landed);
+    }
+
+    [Fact]
+    public void HitAndRun_TargetSurvivesTheBackstab_RunsNow()
+    {
+        (Harness h, List<bool> landed, _) = HitAndRunHarness(deferUi: true);
+        using Harness _h = h;
         h.AddMonster(1, "orc rogue", killable: true);
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
-        bool ran = false;
-        h.Combat.SetBackstabRunFlee(() => ran = true);
 
         h.Feed("Also here: orc rogue.");
         h.Feed("You surprise punch orc rogue for 30 damage!");
+        h.PumpUi();
 
-        Assert.False(ran);
+        Assert.Equal(new[] { true }, landed);
     }
 
     [Fact]
-    public void BackstabLanded_RoomOfTwo_SettingOff_DoesNotRun()
+    public void HitAndRun_AnotherMonsterInTheRoom_RunsNow()
+    {
+        (Harness h, List<bool> landed, _) = HitAndRunHarness(deferUi: true);
+        using Harness _h = h;
+        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(4, "carrion beast", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: giant rat, carrion beast.");
+        h.Feed("You surprise whap giant rat for 18 damage!");
+        h.Feed("You gain 9 experience.");
+        h.PumpUi();
+
+        Assert.Equal(new[] { true }, landed);
+    }
+
+    // Report paradigm-20260926-233241: a monster walked in after the backstab kill and
+    // was fought — it would open without a backstab, so run instead.
+    [Fact]
+    public void HitAndRun_UnstealthedEngage_RunsInsteadOfAttacking()
+    {
+        (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false);
+        using Harness _h = h;
+        h.AddMonster(1, "kobold thief", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: kobold thief.");
+
+        Assert.Single(runs);
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    [Fact]
+    public void HitAndRun_BudgetSpent_Fights()
+    {
+        (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false, allowRun: false);
+        using Harness _h = h;
+        h.AddMonster(1, "kobold thief", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: kobold thief.");
+
+        Assert.Single(runs);
+        Assert.Equal("kobold thief", h.Combat.CurrentTarget);
+    }
+
+    [Fact]
+    public void HitAndRun_SettingOff_FightsNormally()
     {
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "orc rogue", killable: true);
-        h.AddMonster(2, "goblin", killable: true);
-        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
-        bool ran = false;
-        h.Combat.SetBackstabRunFlee(() => ran = true);
+        h.AddMonster(1, "kobold thief", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
+        List<string> runs = new();
+        h.Combat.SetHitAndRunHooks(_ => { }, r => { runs.Add(r); return true; });
 
-        h.Feed("Also here: orc rogue, goblin.");
-        h.Feed("You surprise punch orc rogue for 30 damage!");
+        h.Feed("Also here: kobold thief.");
 
-        Assert.False(ran);
+        Assert.Empty(runs);
+        Assert.Equal("kobold thief", h.Combat.CurrentTarget);
     }
 
     [Fact]
