@@ -1219,8 +1219,11 @@ public sealed class AppServices
                     sources.Add(new(Game.Train.TrainFundingSourceKind.Bank, b.Key, b.Name, deposit));
         }
 
-        return sources;
+        return Game.Train.TrainFundingSourceFilter.Apply(sources, ReadAutoTrainerSettings());
     }
+
+    private Models.Profile.AutoTrainerSettings ReadAutoTrainerSettings() =>
+        ReadSection<Models.Profile.AutoTrainerSettings>(Profile.Current, "AutoTrainer");
 
     // Observes the "You have been slain by..."
     // line and emits Game.Combat.DeathLineWatcher.PlayerDied.
@@ -6694,7 +6697,31 @@ public sealed class AppServices
             reconcileStash: (room, copper) => StashBalances.Reconcile(room, copper),
             autoGetCash: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
             setAutoGetCash: on => _autoGetCashOverride = on ? true : null,
-            log: Log);
+            log: Log,
+            // Keep-on-hand is an amount of a chosen denomination; the router wants it
+            // in copper. The same conversion AutoDepositManager uses for the deposit
+            // floor, so the two agree on what "keep" means.
+            reserveCopper: () =>
+            {
+                Models.Profile.CashSettings cash =
+                    ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+                return (long)cash.KeepOnHandWealth
+                       * Game.Inventory.CurrencyHoldings.CopperUnit(
+                             cash.KeepOnHandDenomination);
+            },
+            requestInventory: () => SendGameCommand("i"),
+            // A run that may not draw on a bank has no use for a `bank` listing.
+            bankBalancesKnown: () => BankBalance.HasListing
+                || !Game.Train.TrainFundingSourceFilter.UsesBanks(ReadAutoTrainerSettings().FundingMode),
+            // `bank` is a global query, so this needs no walk. The probe completes on
+            // its reply window; the router hears it back on the UI thread.
+            requestBankBalances: () => _ = BankBalance.QueryAsync().ContinueWith(
+                _ => Avalonia.Threading.Dispatcher.UIThread.Post(() => TrainFunding.NoteBankRefreshed()),
+                TaskScheduler.Default));
+        // The full parse that answers that `i`: an incremental pickup / drop patch is
+        // exactly the drifting figure the refresh exists to replace. Harmless at any
+        // other time, since the router only listens while it is holding for one.
+        Inventory.FullInventoryParsed += () => TrainFunding.NoteInventoryRefreshed();
 
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
             RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log);

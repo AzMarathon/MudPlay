@@ -30,6 +30,18 @@ public sealed class TrainFundingRouterTests
         public bool AutoGetCash;
         public List<bool> AutoGetCashWrites = new();
 
+        // Keep-on-hand floor in copper, and whether Begin re-anchors the purse
+        // with an `i` first. Both default to the old behaviour so the existing
+        // cases are untouched.
+        public long Reserve;
+        public bool RefreshInventory;
+        public int InventoryRequests;
+
+        // Whether a `bank` listing has been seen this session, and how often one was
+        // asked for. Wired only alongside the `i` refresh.
+        public bool BankKnown = true;
+        public int BankRequests;
+
         // Timers fire only when the test says so, so each leg's settle window is an
         // explicit step rather than a race.
         private readonly List<Action> _timers = new();
@@ -42,8 +54,10 @@ public sealed class TrainFundingRouterTests
 
         public readonly TrainFundingRouter Router;
 
-        public Harness()
+        // refresh: wire the `i` re-read, so Begin holds for a fresh purse.
+        public Harness(bool refresh = false)
         {
+            RefreshInventory = refresh;
             Router = new TrainFundingRouter(
                 currentRoom: () => Room,
                 onHandCopper: () => Purse,
@@ -59,7 +73,15 @@ public sealed class TrainFundingRouterTests
                 armTimer: (_, a) => _timers.Add(a),
                 reconcileStash: (k, c) => Reconciled.Add((k, c)),
                 autoGetCash: () => AutoGetCash,
-                setAutoGetCash: v => { AutoGetCash = v; AutoGetCashWrites.Add(v); });
+                setAutoGetCash: v => { AutoGetCash = v; AutoGetCashWrites.Add(v); },
+                reserveCopper: () => Reserve,
+                requestInventory: refresh
+                    ? () => { InventoryRequests++; Sent.Add("i"); }
+                    : null,
+                bankBalancesKnown: () => BankKnown,
+                requestBankBalances: refresh
+                    ? () => { BankRequests++; Sent.Add("bank"); }
+                    : null);
             Router.Finished += r => Result = r;
         }
 
@@ -329,4 +351,220 @@ public sealed class TrainFundingRouterTests
         Assert.Null(h.Result);
         Assert.False(h.Router.IsBusy);
     }
+    [Fact]
+    public void TheKeepOnHandFloor_IsNotSpentOnTraining()
+    {
+        // 5,000 carried against a 4,500 bill looks funded — until the user has
+        // asked to keep 1,000 on hand, which leaves 4,000 spendable. The gap has to
+        // come from the bank, not out of the reserve.
+        Harness h = new() { Purse = 5_000, Reserve = 1_000 };
+        h.Sources.Add(Bank(10_000));
+
+        TrainFundingStart start = h.Router.Begin(4_500, Trainer);
+
+        Assert.Equal(TrainFundingStart.Collecting, start);
+        Assert.Equal(new[] { BankRoom }, h.Walked);
+    }
+
+    [Fact]
+    public void WithNoFloorSet_TheWholePurseIsSpendable()
+    {
+        Harness h = new() { Purse = 5_000, Reserve = 0 };
+
+        Assert.Equal(TrainFundingStart.Funded, h.Router.Begin(4_500, Trainer));
+        Assert.Empty(h.Walked);
+    }
+
+    [Fact]
+    public void UnderTheFloor_TheShortfallIncludesTheDeficit()
+    {
+        // Report paradigm-20260927-105726: 16,040 carried, keep 20,000, a 100 bill.
+        // Paying it without dipping into the floor needs 20,100 on hand, so it's
+        // 4,060 short, not "no shortfall" and not 100.
+        Harness h = new() { Purse = 16_040, Reserve = 20_000 };
+
+        Assert.Equal(TrainFundingStart.Short, h.Router.Begin(100, Trainer));
+        Assert.Equal(4_060, h.Result!.Value.ShortfallCopper);
+    }
+
+    [Fact]
+    public void UnderTheFloor_TheWithdrawalRestoresItAndPaysTheBill()
+    {
+        // Withdrawing only the bill would leave the purse still under the floor,
+        // still "short", and the bank already visited.
+        Harness h = new() { Purse = 16_040, Reserve = 20_000 };
+        h.Sources.Add(Bank(50_000));
+        h.Router.Begin(100, Trainer);
+
+        h.ArriveAtLastWalk();
+        Assert.Contains("with 4060", h.Sent);
+
+        h.Purse = 20_100;
+        h.FireTimers();
+        Assert.True(h.Result!.Value.Funded);
+    }
+
+    [Fact]
+    public void AFloorBiggerThanThePurse_LeavesNothingSpendable()
+    {
+        // Nothing to draw on either, so this is the honest "can\'t afford it" answer
+        // rather than a walk.
+        Harness h = new() { Purse = 800, Reserve = 1_000 };
+
+        Assert.Equal(TrainFundingStart.Short, h.Router.Begin(100, Trainer));
+        Assert.Empty(h.Walked);
+        Assert.False(h.Result!.Value.Funded);
+    }
+
+    [Fact]
+    public void Begin_AsksForAFreshPurse_BeforePricing()
+    {
+        // The snapshot is authoritative only on a full `i`. Pricing the train against
+        // a drifted one is what walks to a trainer we cannot pay.
+        Harness h = new(refresh: true) { Purse = 10_000 };
+
+        TrainFundingStart start = h.Router.Begin(4_500, Trainer);
+
+        Assert.Equal(TrainFundingStart.Collecting, start);   // holding for the parse
+        Assert.Equal(1, h.InventoryRequests);
+        Assert.Contains("i", h.Sent);
+        Assert.Empty(h.Walked);                              // nothing committed yet
+        Assert.Null(h.Result);
+        Assert.True(h.Router.IsCheckingFunds);           // the owner logs "re-reading", not "collecting"
+
+        h.Router.NoteInventoryRefreshed();
+        Assert.False(h.Router.IsCheckingFunds);
+    }
+
+    [Fact]
+    public void ARunningPurseThatIsClearlyShort_AnswersWithoutAnInventory()
+    {
+        // Report paradigm-20260927-105932: every lapse of the back-off re-sent `i`
+        // while the purse was plainly under keep-on-hand plus the bill. Only a
+        // run that would actually travel is worth verifying first.
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000 };
+
+        Assert.Equal(TrainFundingStart.Short, h.Router.Begin(100, Trainer));
+        Assert.Equal(0, h.InventoryRequests);
+        Assert.False(h.Router.IsCheckingFunds);
+    }
+
+    [Fact]
+    public void AShortPurseWithABankThatCoversIt_VerifiesBeforeWalking()
+    {
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000 };
+        h.Sources.Add(Bank(50_000));
+
+        Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(100, Trainer));
+        Assert.Equal(1, h.InventoryRequests);
+        Assert.Empty(h.Walked);
+    }
+
+    [Fact]
+    public void ShortWithNoBankListing_ChecksTheBankBeforeDeciding()
+    {
+        // Without a `bank` listing this session no deposit is a funding source, so
+        // a short purse would read as short even with money in the bank.
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000, BankKnown = false };
+
+        Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(100, Trainer));
+        Assert.Equal(1, h.BankRequests);
+        Assert.True(h.Router.IsCheckingFunds);
+        Assert.Null(h.Result);
+    }
+
+    [Fact]
+    public void TheBankListingShowsMoney_VerifiesThePurseThenGoesToWithdraw()
+    {
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000, BankKnown = false };
+        h.Router.Begin(100, Trainer);
+
+        h.BankKnown = true;
+        h.Sources.Add(Bank(50_000));                         // what the listing revealed
+        h.Router.NoteBankRefreshed();
+        Assert.Equal(1, h.InventoryRequests);                 // verify before travelling
+
+        h.Router.NoteInventoryRefreshed();
+        Assert.Equal(new[] { BankRoom }, h.Walked);
+    }
+
+    [Fact]
+    public void ABankNeverUsed_ListsNothing_AndTheRunIsShort()
+    {
+        // A character that has never used a bank gets no reply to `bank` at all, so
+        // the window closes on an empty listing. That's an answer, not a failure.
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000, BankKnown = false };
+        h.Router.Begin(100, Trainer);
+
+        h.BankKnown = true;
+        h.FireTimers();
+
+        Assert.False(h.Result!.Value.Funded);
+        Assert.Equal(4_060, h.Result!.Value.ShortfallCopper);
+        Assert.Equal(0, h.InventoryRequests);
+    }
+
+    [Fact]
+    public void ABankListingAlreadySeen_IsNotAskedForAgain()
+    {
+        // The armed trigger re-checks every time its back-off lapses; once the
+        // session has a listing, deposits and withdrawals keep it current.
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000, BankKnown = true };
+
+        Assert.Equal(TrainFundingStart.Short, h.Router.Begin(100, Trainer));
+        Assert.Equal(0, h.BankRequests);
+    }
+
+    [Fact]
+    public void AFreshPurseThatCoversIt_ReportsFunded()
+    {
+        Harness h = new(refresh: true) { Purse = 10_000 };
+        h.Router.Begin(4_500, Trainer);
+
+        h.Router.NoteInventoryRefreshed();
+
+        Assert.True(h.Result!.Value.Funded);
+        Assert.Empty(h.Walked);                              // straight to the trainer
+    }
+
+    [Fact]
+    public void AFreshPurseThatIsShorterThanWeThought_GoesToTheBank()
+    {
+        // The case behind the report: the stale figure said 10,000, the real purse
+        // holds 200, and the bank can cover the rest. Previously this walked to the
+        // trainer and was refused there.
+        Harness h = new(refresh: true) { Purse = 10_000 };
+        h.Sources.Add(Bank(10_000));
+        h.Router.Begin(4_500, Trainer);
+
+        h.Purse = 200;                                       // what the `i` reveals
+        h.Router.NoteInventoryRefreshed();
+
+        Assert.Equal(new[] { BankRoom }, h.Walked);
+        Assert.Null(h.Result);                               // errand still running
+    }
+
+    [Fact]
+    public void NoInventoryComesBack_PricesAgainstWhatWeHave()
+    {
+        // The window has to close on its own, or a dropped parse strands the run.
+        Harness h = new(refresh: true) { Purse = 10_000 };
+        h.Router.Begin(4_500, Trainer);
+
+        h.FireTimers();
+
+        Assert.True(h.Result!.Value.Funded);
+    }
+
+    [Fact]
+    public void ARefreshNotificationWhenNothingIsWaiting_IsIgnored()
+    {
+        Harness h = new(refresh: true) { Purse = 10_000 };
+
+        h.Router.NoteInventoryRefreshed();
+
+        Assert.Null(h.Result);
+        Assert.Empty(h.Walked);
+    }
+
 }

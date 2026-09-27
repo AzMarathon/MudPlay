@@ -3825,6 +3825,9 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 **`bank` — the balance readout:**
 - **`bank` is a self-only, global account query.** It lists the character's balance at **every bank they have ever deposited at**, from any room. It is NOT a room action like `dep`/`with`, which do require standing at the bank.
 - **A bank the character has never used stays hidden; one used and then fully withdrawn shows with a zero balance.**
+  - A character that has never used any bank gets **no output at all** from `bank`, just the next prompt. *([CONFIRMED] 2026-09-27, user screenshot.)*
+  - A bank shows from the first deposit on, even once it's back to zero. *([CONFIRMED] 2026-09-27, user.)*
+  - So an empty reply is an answer (no deposits anywhere), not a failure.
 - **It never shows party members' banks.** Bank balances can only be seen for yourself. Party on-hand cash is visible separately via `@wealth`, which reports **carried** coin only, never deposits.
 - **Output is one two-line block per bank, repeated** — a `Your balance at …` header, then
   `On deposit: <N> copper farthings [<G> gold crowns]`:
@@ -3860,6 +3863,7 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 
 **Client use:**
 - BankBalanceProbe.
+- TrainFundingRouter asks for one `bank` listing per session before planning a withdrawal. Until a listing is seen, no deposit is a funding source. An empty reply counts as the listing (`BankBalanceProbe.HasListing`). Report `paradigm-20260927-105932`.
 
 ### Shop prices — buy & sell
 *Status: CONFIRMED (extracted from the MMUD Explorer data viewer) · Realm: both (SELL formula differs Stock vs Paradigm)*

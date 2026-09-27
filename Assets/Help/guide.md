@@ -2958,7 +2958,9 @@ Settings → Cash + Items.
 ### Minimum cash to keep on hand (deposit)
 
 **Default:** `0`
-**What it does:** The minimum cash to leave in your pocket after an **auto-deposit** — an amount plus a denomination, so you can type `1` and pick **Runic** to always keep 1 runic (1,000,000 copper) on hand. The deposit sends everything above this floor. `0` deposits everything. This applies to **banking only** — stashing is governed by the coin-type filter below.
+**What it does:** The minimum cash to leave in your pocket after an **auto-deposit** — an amount plus a denomination, so you can type `1` and pick **Runic** to always keep 1 runic (1,000,000 copper) on hand. The deposit sends everything above this floor. `0` deposits everything.
+**Auto-train keeps it too.** It won't spend below this floor to pay for training: it counts only what's above it, and withdraws the rest from your bank.
+Stashing isn't affected; it's governed by the coin-type filter below.
 
 ### Only stash coin up to (stash)
 
@@ -3182,9 +3184,14 @@ Settings → Auto-Trainer. Controls *how* auto-training behaves once it runs —
 **Default:** Off
 **What it does:** The master auto-leveling switch. When on, and you're running a Loop or Auto-Lair, the moment your banked experience makes a new level trainable, MudPlay automatically pauses, detours to an allowed trainer, trains every level you can, then resumes what it was doing.
 **Solo only:** training briefly drops you out of and back into the realm, which disbands a party server-side — so an armed Auto-train never fires while you're grouped. To train while grouped, turn on **Auto-train party** (below). One exception: **leading** with Auto-train party on when nobody else in the party uses it, Auto-train runs as your normal solo trip — the members follow, and they're re-invited once you've trained.
-**It checks it can pay first.** Before walking anywhere, MudPlay prices the whole run — including the second trainer when your banked levels span two level bands, since each charges its own markup — and compares it to the coin you're carrying.
+**It checks it can pay first.** Before walking anywhere, MudPlay prices the whole run and compares it to the coin you're carrying:
+- **The whole run is priced**, including the second trainer when your banked levels span two level bands, since each charges its own markup.
+- **The purse is confirmed before it travels.** MudPlay tracks your coin from each inventory read plus what you pick up. It only sends `i` when that figure says the run can go, so it checks against what you really hold before walking. While you're clearly short, it doesn't keep re-reading.
+- **Your bank is checked once.** If your purse can't cover it and your bank balance hasn't been read this session, MudPlay sends `bank` before deciding. `bank` works from any room. After that, your deposits and withdrawals keep the balance current, so it doesn't ask again. A character that has never used a bank gets no reply, which simply means there's nothing to withdraw.
+- **Keep-on-hand is left alone.** Coin up to your **Minimum cash to keep on hand** (Settings → Cash) doesn't count toward the bill.
+- **If the trainer still refuses for money**, MudPlay re-reads the purse and fetches the difference from your bank. It does that once per run. If it's refused again, the run stops and stays armed.
 
-If you're short it collects the difference first: your stash rooms, then your bank, or a combination, picking the bank branch nearest the trainer rather than nearest you. Pick up enough coin along the way and it abandons the errand and heads straight for the trainer. If everything you can reach still falls short, nothing is walked: it logs how far short you are and roughly how many laps of your loop will close the gap, and stays armed.
+If you're short it collects the difference first: your stash rooms, then your bank, or a combination, picking the bank branch nearest the trainer rather than nearest you. **Settings → Auto-Trainer → When short on cash** narrows where it may fetch from (a bank only, stashes only, one named bank or stash room), or tells it not to fetch and keep looping instead. Pick up enough coin along the way and it abandons the errand and heads straight for the trainer. If everything you can reach still falls short, nothing is walked: it logs how far short you are and roughly how many laps of your loop will close the gap, and stays armed.
 **About stashed coin.** MudPlay tracks what it has hidden in each stash room, but any player who searches that room can take it — so a stash is only ever a good guess. The run confirms by searching when it arrives, and if the room has been emptied it simply re-prices from where it's standing and carries on to the bank.
 **Auto-Get Cash is borrowed, not changed.** A collection trip needs cash pickup on to work, so MudPlay switches it on for the duration and puts it back exactly as it found it. Your saved setting is never modified. Auto-stashing is suppressed for the same window, so the trip can't hide the coin it just came to collect.
 **Taking over cancels it.** If you stop the walk to the trainer, or start your own walk-to while it's heading there, the training run is cancelled and your loop stays stopped. MudPlay won't restart it and pull you away from wherever you went.
@@ -3251,6 +3258,22 @@ These shape how the **leader** runs an Auto-train party trip (the level-11 rule 
 - **Go once at least N party members are ready to train** — default `2`, range 1–6. The leader counts as one. Members who don't report, or are skipped by the level gap, don't count — and if everyone who does count is ready, the trip goes even when that's fewer than N.
 - **Don't wait for anyone more than N levels above the party** — default `5`, `0` = off. A member who isn't ready and is this far above the rest of the party (a power-leveler — the leader included) is never waited for.
 - **Leave the level 11 train to a solo trip** — default on. Party trips train no higher than level 10; the step to 11 is a solo effort, so take it on your own.
+
+### When short on cash
+
+**Default:** Stash rooms first, then a bank · any bank · any stash room
+**What it does:** Decides where auto-train may fetch the difference when your purse, above keep-on-hand, can't pay for the training.
+- **Fetch the difference from:**
+  - **Stash rooms first, then a bank:** the original behavior.
+  - **A bank only.**
+  - **Stash rooms only.**
+  - **Don't fetch - keep looping until I have it:** auto-train stays armed and your loop carries on until your purse covers the training.
+- **Bank:** limits withdrawals to one bank room, listed the same way as Settings → Cash's bank picker (`(map/room) Room name - Bank name`).
+  - A bank with two branches is listed once per branch. For example, Bank of Godfrey appears for both Silvermere and Khazarad, so you pick which one to walk to. The branches share one balance.
+  - **(Any bank)** uses whichever bank holds enough.
+  - Only a bank you've deposited at has a balance to draw on; see *Auto-train*.
+- **Stash:** limits collection to one of your flagged stash rooms, e.g. the one where your money sits. It's listed as `(map/room) Room name - Stash`. **(Any stash room)** uses any of them.
+**Important notes:** A bank or stash the setting excludes is never planned, so the run reads as short and keeps looping. With banks excluded, MudPlay doesn't send `bank` to check balances.
 
 ### Discovered trainers table
 

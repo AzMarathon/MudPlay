@@ -519,7 +519,7 @@ public sealed class TrainerWalkManager : IDisposable
         if (levels <= 0) return false;
 
         IReadOnlyList<Game.Train.TrainSegment> itinerary = Game.Train.TrainItineraryPlanner.Build(
-            TrainerCatalog.Enumerate(_gameData), _stats.Level, levels, ResolveClassNumber(),
+            TrainerCatalog.Enumerate(_gameData), RunLevel, levels, ResolveClassNumber(),
             ReadDisabledTrainers(), from, (a, b) => _bfs.DistanceBetween(a, b));
         long cost = Game.Train.TrainItineraryPlanner.TotalCost(itinerary);
         if (cost <= 0) return false;
@@ -535,7 +535,9 @@ public sealed class TrainerWalkManager : IDisposable
                 _phase = Phase.Funding;
                 _log?.Info("AutoTrain",
                     $"Training {levels} level(s) across {itinerary.Count} trainer(s) costs {cost:N0} copper — "
-                    + "collecting the difference first.");
+                    + (_funding.IsCheckingFunds
+                        ? "checking the purse and bank before deciding."
+                        : "collecting the difference first."));
                 StateChanged?.Invoke();
                 return true;
 
@@ -579,6 +581,7 @@ public sealed class TrainerWalkManager : IDisposable
             return;
         }
 
+        _fundingRetryAt = DateTimeOffset.MinValue;
         // Re-select from where the errand left us: the bank we withdrew at may sit
         // nearer a different branch of the same trainer.
         _target = SelectNearest(cur.Key) ?? t;
@@ -589,11 +592,16 @@ public sealed class TrainerWalkManager : IDisposable
     private int LevelsThisRun()
     {
         AutoTrainerSettings s = ReadSettings();
-        int levels = Math.Max(0, CountBankableAbove(_stats.Level) - Math.Max(0, _keepLevels));
+        int levels = Math.Max(0, CountBankableAbove(RunLevel) - Math.Max(0, _keepLevels));
         int ceiling = Math.Max(0, s.DoNotTrainAbove);
-        if (ceiling > 0) levels = Math.Min(levels, Math.Max(0, ceiling - _stats.Level));
+        if (ceiling > 0) levels = Math.Min(levels, Math.Max(0, ceiling - RunLevel));
         return levels;
     }
+
+    // The level the run stands at: the last one attained this run, else the stat
+    // screen's. PlayerStats.Level isn't re-polled between trains, so pricing a
+    // mid-run refusal off it would bill the levels already bought again.
+    private int RunLevel => _attainedLevel > 0 ? _attainedLevel : _stats.Level;
 
     // CP reconcile: walk to a trainer and apply the current level's CP plan without
     // training a new level. Sends no `train` — on arrival it refreshes `stat`
@@ -652,6 +660,7 @@ public sealed class TrainerWalkManager : IDisposable
         _partyDone = null;
         _loopTrain = loop;
         _cpOnlyRun = false;
+        _refusal.Reset();
         _keepLevels = 0;
         _applyCp = applyCp;
         _reply = reply;
@@ -812,7 +821,41 @@ public sealed class TrainerWalkManager : IDisposable
         return true;
     }
 
-    private void OnNoMoney(MatchResult m) => StopLoop(StopReason.NoMoney);
+    // The server is the authority on the purse, and it has just said no. The
+    // client only got here because its own figure said yes, so the figure was
+    // wrong: re-anchor it and price again, which is also what finds the bank trip
+    // that would settle the bill. Once per run — a second refusal after a funding
+    // errand has already run means the money is not there, and repeating would be
+    // the walk-back-and-forth this exists to stop.
+    //
+    // Without the hold on the give-up path the armed trigger re-fires on the next
+    // kill and walks to the trainer again, refused again, forever.
+    private void OnNoMoney(MatchResult m)
+    {
+        if (_phase != Phase.Training) return;
+
+        bool canRecover = _funding is not null && _target is not null
+                          && _tracker.State.CurrentRoom is not null;
+        if (_refusal.TryClaimRecovery(canRecover)
+            && _target is { } t && _tracker.State.CurrentRoom is { } here)
+        {
+            _log?.Info("AutoTrain",
+                "Trainer refused for money the purse said we had — re-reading the "
+                + "purse and looking for funds.");
+            if (BeginFunding(here.Key, t))
+            {
+                _phase = Phase.Funding;
+                StateChanged?.Invoke();
+                return;
+            }
+        }
+
+        HoldFundingRetry(_lastFundingShortfall);
+        StopLoop(StopReason.NoMoney);
+    }
+
+    // One funding recovery per run, reset with the run.
+    private readonly Game.Train.TrainRefusalGate _refusal = new();
 
     private void StopLoop(StopReason reason)
     {
