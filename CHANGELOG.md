@@ -1,11 +1,17 @@
 # Version history
 
-## 3.111.23
+## 3.111.27
 
 - Clearer Run if BS fails tooltip and Help: what it covers, when it holds back, and how it pairs with Hit and Run tactics
 - Settings → Combat: backstab options grouped under Do BS attacks (greyed out while it's off); the combat-off stealth-running option sits on its own
 - Settings → Combat: Kill all engaged moved inside the combat-profile box, since it's saved per combat profile
 - Settings → Combat: the Spell combat table fits inside its combat-profile box (the "= mana / %" column no longer spills past it)
+- Hit and Run no longer runs from a room your backstab couldn't (broken sneak) or didn't (no surprise) work in; that's Run if BS fails' call alone
+- After a backstab round, if the target is still up and you're not running, the round's attack is re-announced (a spell, or `a <target>`), with the default attack timing
+- The post-backstab check waits a beat for the round's kill lines, so it doesn't run (or `break`) from a monster the backstab already killed
+- A flee holds the loop / walk until it lands even when combat already had it paused, so the route can't step on top of the flee
+- Settings → Combat's weapon boxes follow the Default gear set when it's changed in the Workshop (Update from live etc.), and Save no longer writes the old weapon back
+- bug reports addressed: paradigm-20260927-023118, paradigm-20260927-023144, paradigm-20260927-023326, paradigm-20260927-023516
 
 ## 3.111.19
 

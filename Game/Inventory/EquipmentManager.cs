@@ -134,9 +134,14 @@ public sealed class EquipmentManager
     public string? CurrentSetId { get; private set; }
     public event Action? CurrentSetChanged;
 
-    // Fires after UpdateSetFromWorn rewrites a set's slots, so an open Workshop
-    // Equipment tab reloads instead of later saving its stale rows back over the update.
+    // Fires after a gear set's slots are rewritten — by UpdateSetFromWorn, or by the
+    // Workshop Equipment tab (NotifySetsEdited) — so other open editors reload instead
+    // of later saving stale values back over the change: the Workshop tab, and the
+    // Settings Combat tab's weapon boxes (the Default set holds the active combat
+    // profile's weapons).
     public event Action? SetsEdited;
+
+    public void NotifySetsEdited() => SetsEdited?.Invoke();
 
     // Persists the character profile after a set is rewritten. Null until wired.
     private Action? _saveEquipment;

@@ -489,6 +489,31 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         _suppressDirty = false;
     }
 
+    // A gear set changed elsewhere (Workshop Update from live / Clear all / a slot edit,
+    // `@equip <set> update`). The live combat profile's weapons live in the Default
+    // set, so pull them into the staged profile and the boxes — otherwise the boxes
+    // show the old weapon and a Save writes it back over the change (report
+    // paradigm-20260927-023326). Only for the profile that's live: a different staged
+    // chip's weapons aren't in the set.
+    private void OnGearSetsEdited()
+    {
+        if (_profile.Current is not { } profile || profile.Equipment is not { } eq) return;
+        if (profile.CombatProfiles?.ActiveId is { } liveId && _session.Active.Id != liveId) return;
+        EquipmentWeaponSync.CaptureDefaultWeapons(eq, _session.Active);
+        bool was = _suppressDirty;
+        _suppressDirty = true;
+        LoadWeaponBoxesFromActive();
+        _suppressDirty = was;
+    }
+
+    private readonly MudPlay.Game.Inventory.EquipmentManager? _equipment;
+
+    private static MudPlay.Game.Inventory.EquipmentManager? TryGetEquipment()
+    {
+        try { return AppServices.Current.Equipment; }
+        catch (NullReferenceException) { return null; }   // design-time / tests: no services
+    }
+
     private void LoadWeaponBoxesFromActive()
     {
         CombatSpellProfile p = _session.Active;
@@ -526,6 +551,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         _spellbook.Changed += OnSpellbookChanged;
         if (_state is not null) _state.PropertyChanged += OnPlayerStateChanged;
         if (_gameData is not null) _gameData.ActiveSetChanged += OnActiveSetChangedRefreshWeapons;
+        _equipment = TryGetEquipment();
+        if (_equipment is not null) _equipment.SetsEdited += OnGearSetsEdited;
 
         // This tab drives the shared session; the Health tab folds its own section in
         // on the same events.
@@ -543,6 +570,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             _spellbook.Changed -= OnSpellbookChanged;
             if (_state is not null) _state.PropertyChanged -= OnPlayerStateChanged;
             if (_gameData is not null) _gameData.ActiveSetChanged -= OnActiveSetChangedRefreshWeapons;
+            if (_equipment is not null) _equipment.SetsEdited -= OnGearSetsEdited;
             _session.BuildFullCombat = null;
             _session.CaptureRequested -= CaptureCombatBoxesToActive;
             _session.LoadRequested -= OnSessionLoadPerProfile;

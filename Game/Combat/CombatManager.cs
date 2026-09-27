@@ -321,6 +321,11 @@ public sealed partial class CombatManager : IDisposable
     // read as "fought without a backstab" (report paradigm-20260927-000454).
     private bool _hitAndRunSettlePending;
 
+    // Our backstab couldn't work here (the sneak broke on the way in) or didn't (it
+    // swung without surprise) — this room's fight is Run if BS fails' call, not Hit
+    // and Run's. Reset on the room change.
+    private bool _backstabFailedHere;
+
     // HealthManager.IsFleeInFlight — while a flee's move is on its way, don't open a
     // fight in the room we're leaving (a swipe on the way out would draw a `bs` that
     // lands in the next room).
@@ -1351,6 +1356,7 @@ public sealed partial class CombatManager : IDisposable
         if (obs.Source == RoomObservationSource.RoomChange)
         {
             _backstabOpenerConsumed = false;
+            _backstabFailedHere = false;
             // The old room's surprise round is moot once we've moved on — drop any
             // unresolved watch so a missed resolution line can't strand the re-fire
             // suppression across rooms.
@@ -1743,13 +1749,22 @@ public sealed partial class CombatManager : IDisposable
         // We snuck in for a backstab but made a sound entering: the surprise is gone
         // and the backstab would fail, so with "run if backstab fails" on, run now
         // rather than open with a plain swing (report paradigm-20260926-222210).
-        if (settings.DoBackstab && settings.RunIfBackstabFails && !_backstabOpenerConsumed && _currentTarget is null
+        //
+        // That call is Run if BS fails' alone: with it off we fight here normally, and
+        // Hit and Run doesn't step in (report paradigm-20260927-023118 — the user keeps
+        // "my backstab can't work" and "after my backstab" as two separate choices).
+        if (settings.DoBackstab && !_backstabOpenerConsumed && _currentTarget is null
             && _takeSneakBrokeOnEntry?.Invoke() == true)
         {
             _backstabOpenerConsumed = true;
-            _log?.Info(LogCategory, "sneak broke entering the room — backstab would fail; running");
-            _backstabFailureFlee?.Invoke();
-            return;
+            _backstabFailedHere = true;
+            if (settings.RunIfBackstabFails)
+            {
+                _log?.Info(LogCategory, "sneak broke entering the room — backstab would fail; running");
+                _backstabFailureFlee?.Invoke();
+                return;
+            }
+            _log?.Info(LogCategory, "sneak broke entering the room — Run if BS fails is off; fighting");
         }
 
         bool backstabPending = BackstabPending(settings, obs);
@@ -1827,7 +1842,7 @@ public sealed partial class CombatManager : IDisposable
             return;
         }
         if (settings.DoBackstab && settings.HitAndRunTactics && _currentTarget is null
-            && !backstabPending && !picked.DontBackstab && !RoomHasSeeHidden(obs)
+            && !_backstabFailedHere && !backstabPending && !picked.DontBackstab && !RoomHasSeeHidden(obs)
             && _hitAndRunInsteadOfFight?.Invoke($"{picked.RawName} would be fought without a backstab") == true)
         {
             return;
@@ -3027,65 +3042,48 @@ public sealed partial class CombatManager : IDisposable
         // First qualifying swing resolves the round exactly once.
         ClearBackstabResolution();
 
-        if (text.IndexOf("surprise", StringComparison.OrdinalIgnoreCase) >= 0)
+        bool landed = text.IndexOf("surprise", StringComparison.OrdinalIgnoreCase) >= 0;
+        if (landed)
         {
             _log?.Combat(LogCategory, $"backstab landed (surprise) vs '{species}'");
-            // Hit and run never fights without a backstab: once the round's kill line
-            // (if any) has settled, anything still standing — the target itself, or
-            // anything else in the room — is left for the next sneak-in.
-            if (_readSettings().HitAndRunTactics && _hitAndRunBackstabLanded is not null)
-            {
-                // The landing itself starts the run count over — now, not at the settle,
-                // so a walk-in engaged in the meantime sees a fresh budget.
-                _hitAndRunBackstabLanded(false);
-                _hitAndRunSettlePending = true;
-                string? bsTarget = _currentTarget;
-                _post(() => SettleHitAndRun(bsTarget));
-            }
-            return;
+            // The landing itself starts the hit-and-run count over — now, not at the
+            // settle, so a walk-in engaged in the meantime sees a fresh budget.
+            if (_readSettings().HitAndRunTactics) _hitAndRunBackstabLanded?.Invoke(false);
+        }
+        else
+        {
+            _log?.Info(LogCategory, $"backstab failed (no surprise) vs '{species}'");
         }
 
-        _log?.Info(LogCategory, $"backstab failed (no surprise) vs '{species}'");
-        if (_readSettings().RunIfBackstabFails)
-        {
-            // Settle the round first, like a landed backstab: the rest of that swing
-            // can still kill the target (report paradigm-20260927-013856: the second
-            // hit dropped the rat, and the run — and its `break` — were for nothing).
-            string? bsTarget = _currentTarget;
-            _hitAndRunSettlePending = true;
-            _post(() => SettleFailedBackstab(bsTarget));
-        }
+        // Decide what comes next once the round's lines have settled — the rest of that
+        // swing can still kill the target (report paradigm-20260927-013856). New engages
+        // hold until then.
+        //
+        // A beat, not a dispatch turn: the kill lines can land on a later turn than the
+        // surprise line (report paradigm-20260927-023516 — the settle read "target still
+        // up", ran from a filthbug the same round had killed, and sent a `break` ahead of
+        // its *Combat Off*). Uses the same delay scheduler as the arrival settle.
+        string? bsTarget = _currentTarget;
+        _hitAndRunSettlePending = true;
+        if (_scheduleArrivalSettle is { } later) later(BackstabSettleDelay, () => SettleBackstab(bsTarget, landed));
+        else _post(() => SettleBackstab(bsTarget, landed));
     }
 
-    // A landed backstab's round has settled: report whether anything is still standing.
-    // The target died when the kill inference dropped it (or we've moved to another);
-    // a corpse the roster hasn't dropped yet doesn't count.
-    private void SettleHitAndRun(string? bsTarget)
-    {
-        _hitAndRunSettlePending = false;
-        if (_disposed || _hitAndRunBackstabLanded is null) return;
-        bool targetAlive = bsTarget is not null
-            && string.Equals(_currentTarget, bsTarget, StringComparison.OrdinalIgnoreCase);
-        int others = 0;
-        if (_classifier.Current is { } obs)
-        {
-            others = CountEngageable(obs);
-            if (bsTarget is not null && obs.Entities.Any(e => e.Kind == EntityKind.Monster
-                    && string.Equals(e.RawName, bsTarget, StringComparison.OrdinalIgnoreCase)))
-                others--;
-        }
-        bool runNow = targetAlive || others > 0;
-        _log?.Info(LogCategory, runNow
-            ? $"hit and run — backstab landed; {(targetAlive ? "target still up" : "")}{(targetAlive && others > 0 ? ", " : "")}{(others > 0 ? $"{others} other hostile(s) here" : "")} — running to re-sneak"
-            : "hit and run — backstab landed and cleared the room");
-        _hitAndRunBackstabLanded(runNow);
-    }
+    private static readonly TimeSpan BackstabSettleDelay = TimeSpan.FromMilliseconds(600);
 
-    // A failed backstab's round has settled: run only if something is still standing.
-    private void SettleFailedBackstab(string? bsTarget)
+    // A backstab's round has settled. Run if the options say so — Hit and Run after a
+    // landed one with anything still standing, Run if BS fails after a failed one — and
+    // otherwise, with the target still up, re-announce the round's own action. A
+    // backstab is silent and the server just keeps swinging, so without this the
+    // configured action (a spell first, or the `a <target>` fallback) never goes out
+    // and the party never sees what we're fighting (report paradigm-20260927-023144).
+    // The target died when the kill inference dropped it; a corpse the roster hasn't
+    // dropped yet doesn't count.
+    private void SettleBackstab(string? bsTarget, bool landed)
     {
         _hitAndRunSettlePending = false;
         if (_disposed) return;
+        CombatSettings settings = _readSettings();
         bool targetAlive = bsTarget is not null
             && string.Equals(_currentTarget, bsTarget, StringComparison.OrdinalIgnoreCase);
         int others = 0;
@@ -3096,12 +3094,46 @@ public sealed partial class CombatManager : IDisposable
                     && string.Equals(e.RawName, bsTarget, StringComparison.OrdinalIgnoreCase)))
                 others--;
         }
-        if (!targetAlive && others <= 0)
+        bool standing = targetAlive || others > 0;
+
+        if (landed)
         {
-            _log?.Info(LogCategory, "backstab failed, but the round killed the target and the room is clear — not running");
-            return;
+            if (settings.HitAndRunTactics && _hitAndRunBackstabLanded is not null)
+            {
+                _log?.Info(LogCategory, standing
+                    ? $"hit and run — backstab landed; {(targetAlive ? "target still up" : "")}{(targetAlive && others > 0 ? ", " : "")}{(others > 0 ? $"{others} other hostile(s) here" : "")} — running to re-sneak"
+                    : "hit and run — backstab landed and cleared the room");
+                _hitAndRunBackstabLanded(standing);
+            }
         }
-        _backstabFailureFlee?.Invoke();
+        else
+        {
+            // A failed backstab makes this room Run if BS fails' call alone — Hit and
+            // Run doesn't then run from the fight that follows.
+            _backstabFailedHere = true;
+            if (settings.RunIfBackstabFails)
+            {
+                if (standing) _backstabFailureFlee?.Invoke();
+                else _log?.Info(LogCategory, "backstab failed, but the round killed the target and the room is clear — not running");
+            }
+        }
+
+        if (_isFleeInFlight?.Invoke() == true) return;   // we're leaving
+        // The attack-order timings re-fire on other players' announces to stay last;
+        // a settle re-announce of our own would break that ordering.
+        if (settings.AttackTiming != AttackTiming.Default) return;
+        if (targetAlive && _classifier.Current is { } live)
+        {
+            _log?.Combat(LogCategory, $"backstab round over ({(landed ? "landed" : "failed")}) — re-announcing the round's attack on {bsTarget}");
+            _resumeBypassEngagedGuard = true;
+            _followDeferBypass = true;
+            try { OnEntitiesObserved(live); }
+            finally
+            {
+                _resumeBypassEngagedGuard = false;
+                _followDeferBypass = false;
+            }
+        }
     }
 
     // Disarm the surprise-round watch. Called on resolution and on every signal

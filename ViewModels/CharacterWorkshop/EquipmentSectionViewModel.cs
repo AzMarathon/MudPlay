@@ -457,7 +457,14 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         if (SelectedSet is not { } set) return;
         set.Slots = Rows.Select(r => r.ToEntry()).OfType<EquipmentSlotEntry>().ToList();
         _profile.Save();
+        // Tell the other open editors (Settings → Combat's weapon boxes) — but not
+        // ourselves: our rows already are the new state.
+        _notifyingSetsEdited = true;
+        try { _equipment.NotifySetsEdited(); }
+        finally { _notifyingSetsEdited = false; }
     }
+
+    private bool _notifyingSetsEdited;
 
     // ----- load / rebuild -------------------------------------------------
 
@@ -753,7 +760,11 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
 
     // A party member's @equip <set> update rewrote a set — reload so the rows show it
     // and a later edit here doesn't save the stale rows back over it.
-    private void OnSetsEdited() => ReloadFromProfile();
+    private void OnSetsEdited()
+    {
+        if (_notifyingSetsEdited) return;
+        ReloadFromProfile();
+    }
 
     private void OnActiveSetChanged(string? _)
     {

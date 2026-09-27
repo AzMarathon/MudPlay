@@ -66,6 +66,12 @@ public interface IRecoverableEngine
     // overrides it so a deliberate retreat isn't charged as a desync.
     void ResumeAfterFlee(RoomKey landedAt) => ResumeAfterRecovery(landedAt);
 
+    // A flee (HealthManager) takes over movement. Unlike a recovery pause this holds
+    // even when the engine is already paused by another gate (combat), so a gate
+    // clearing mid-flee can't resume the engine's own route on top of the flee's
+    // moves; ResumeAfterFlee releases it.
+    void PauseForFlee(string reason) => PauseForRecovery(reason);
+
     // Terminal failure: the gate's tier-3 backtrack exhausted without
     // uniquely identifying a room. The engine should stop everything and
     // raise its own Failed event. The gate also pops a modeless "Lost"

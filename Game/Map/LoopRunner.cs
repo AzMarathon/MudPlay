@@ -409,8 +409,23 @@ public sealed class LoopRunner : IRecoverableEngine
     // complete. Resume the same way, but don't charge the reroute against the
     // recovery budget (report paradigm-20260927-000542: three hit-and-runs "exhausted"
     // recovery and failed the loop).
+    // Report paradigm-20260927-023516: a flee started while combat already had the loop
+    // paused; PauseForRecovery no-ops unless Running, so when combat cleared the loop
+    // resumed, advanced its step on top of the flee's in-flight move, and later tried
+    // that step from the room the flee landed in ("no exit U").
+    public void PauseForFlee(string reason)
+    {
+        if (_loop is null) return;
+        _fleeHolding = true;
+        if (State == LoopState.Running) PauseForRecovery(reason);
+        else _log?.Info("LoopRunner", $"flee takes over while paused at step {_index + 1}; reason={reason}");
+    }
+
+    private bool _fleeHolding;
+
     public void ResumeAfterFlee(RoomKey landedAt)
     {
+        _fleeHolding = false;
         _resumingAfterFlee = true;
         try { ResumeAfterRecovery(landedAt); }
         finally { _resumingAfterFlee = false; }
@@ -1987,6 +2002,11 @@ public sealed class LoopRunner : IRecoverableEngine
             Raise(new LoopEvent(LoopEventKind.Resumed, "coordinator resumed (approach)"));
             return;
         }
+        if (State == LoopState.Paused && _fleeHolding)
+        {
+            _log?.Info("LoopRunner", "coordinator resumed, but a flee holds the loop until it lands");
+            return;
+        }
         if (State == LoopState.Paused)
         {
             _log?.Info("LoopRunner",
@@ -2209,6 +2229,7 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private void Reset()
     {
+        _fleeHolding = false;
         _recovery?.Detach();
         StopDelayTimer();
         DisarmStallWatchdog();
