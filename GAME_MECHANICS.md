@@ -2203,6 +2203,10 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - **`go`/teleport is a commanded, echoed text-exit move** (`go vortex`, `go man`, `go path`); it can land you in a distant unrelated room (`You step into the swirling vortex, and find yourself... elsewhere.`).
   - **There is no random "flee"** — "flee" is a user-sent directional run-away (commanded + echoed).
   - **No engine recall** — sys-goto resolves to a known destination room (goto table), and Paradigm teleport tokens are player-only (not engine-consumed; `rm` fixes position on Paradigm).
+- **Room events printed between a move's echo and its landing display belong to the room being left.** *([OBSERVED] Paradigm, report `paradigm-20260927-095328`.)*
+  - The capture: `u` / `Sneaking...` / `A large giant rat creeps into the room from the above!`, then the Narrow Road display.
+  - The rat came *down* into the Arena as we went up. `bs large giant rat` in Narrow Road got `Your command had no effect.`, and on stepping back down, `Also here: large giant rat.` listed it in the Arena.
+  - **Client use:** `CombatManager` holds an arrival-driven first engage while our move is in flight (`SetMoveInFlightProbe`, RoomTracker Pending). The landing room's display decides; a refused move (`NoteMoveRefused`) engages it.
 
 ### Refused ("bonked") moves
 *Status: CONFIRMED*

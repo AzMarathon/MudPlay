@@ -1,5 +1,10 @@
 # Version history
 
+## 3.113.1
+
+- Auto-combat no longer attacks a monster that enters the room you're leaving as you step out (it sent `bs <rat>` into the next room); the room you arrive in decides
+- bug reports addressed: paradigm-20260927-095328
+
 ## 3.113.0
 
 - Auto-train confirms your purse with `i` before it travels, so a stale coin count no longer sends it to a trainer it can't pay; while you're clearly short it doesn't keep re-reading

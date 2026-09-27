@@ -4449,6 +4449,8 @@ public sealed class AppServices
         Combat.SetBackstabFailureFlee(() => Health.RunFromBackstabFailure());
         Combat.SetHitAndRunHooks(Health.BackstabLanded, Health.RunInsteadOfFight);
         Combat.SetFleeInFlightProbe(() => Health.IsFleeInFlight);
+        Combat.SetMoveInFlightProbe(() => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending);
+        RoomTracker.MoveBlocked += () => Combat.NoteMoveRefused();
 
         // ShadowRest (Paradigm): classes carrying ability code 1103 can rest while
         // hidden/sneaking in a room with monsters without being attacked. The rest

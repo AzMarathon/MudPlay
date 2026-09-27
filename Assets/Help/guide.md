@@ -212,6 +212,8 @@ Exemptions: monsters whose Game Data relationship is **Flee** or **Hangup** (you
 
 Self-defense is also suppressed while you're on a **walk-to** — an evil character crossing a guarded town, say, keeps running to their destination rather than stopping to fight the guards (a losing trade at low levels). It stays active when you're **idle, looping, or Auto-Lairing** (all farming/holding, where fighting back is what you want).
 
+**Monsters that pass you in a doorway.** A monster can enter the room you're just leaving after you've sent your move but before the next room appears. That monster is in the room behind you, so MudPlay doesn't attack it, and the room you arrive in decides what you fight. If your move is refused and you stay put, it attacks the arrival as normal.
+
 ## Targeting
 
 When several hostiles share a room, **Target order** and **Target priority** decide who gets hit first — the highest-priority monster by default, or a "follow the party's target" mode. Per-monster priority is ranked in Game Data.
