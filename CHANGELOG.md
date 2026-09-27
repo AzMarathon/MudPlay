@@ -1,6 +1,6 @@
 # Version history
 
-## 3.111.8
+## 3.111.9
 
 - New Combat option "Hit and Run tactics": never fight without a backstab. Once a backstab lands, anything still standing is run from, and so is any fight that would open with a plain attack (a walk-in, a chaser); the loop re-sneaks and comes back to backstab again
 - "Give up and fight after N runs" (default 3) caps the runs between backstabs
@@ -11,6 +11,7 @@
 - Flees only send `break` when you're actually engaged (no "Your command had no effect" after a backstab kill)
 - The sneak sent on arrival holds movement until the game answers it, so a resuming route can't walk in unsneaked
 - Hit and run: a fight that starts while a run is already under way doesn't attack or spend another run
+- Picture emotes in the Conversation window are drawn a bit larger, so they're no longer squashed to text height
 - bug reports addressed: paradigm-20260926-222210, paradigm-20260926-230605, paradigm-20260926-230835, paradigm-20260926-233241, paradigm-20260926-233357, paradigm-20260927-000454, paradigm-20260927-000542, paradigm-20260927-003231, paradigm-20260927-003304
 
 ## 3.110.18
