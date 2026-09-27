@@ -77,6 +77,16 @@ public sealed class CombatSettings
     // Trigger flee behavior on a failed BS roll. Default false.
     public bool RunIfBackstabFails { get; set; }
 
+    // Hit-and-run backstabbing: when the room held two or more hostiles as we snuck
+    // in, run once the backstab lands, so the loop / walk re-sneaks and comes back
+    // for another one instead of slugging it out with the pack. Default false.
+    public bool RunAfterBackstabIfMultiple { get; set; }
+
+    // How many runs one hit-and-run backstab may take, the first included: a monster
+    // that chases us into the retreat room is run from again until this is spent, then
+    // we stand and fight instead of hunting for an empty room to re-sneak in.
+    public int HitAndRunMaxRuns { get; set; } = 3;
+
     // Combat-off override for stealth runners. When sprinting a walk-to route
     // with combat OFF and AutoSneak ON (stealthing as much of the route as
     // possible), a room holding a SeeHidden monster breaks sneak — running

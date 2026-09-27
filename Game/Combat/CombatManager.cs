@@ -310,6 +310,12 @@ public sealed partial class CombatManager : IDisposable
     // is on, so a failed backstab otherwise just logs and the fight continues.
     private Action? _backstabFailureFlee;
 
+    // Hit-and-run flee after a LANDED backstab (CombatSettings.RunAfterBackstabIfMultiple),
+    // bound to HealthManager.RunAfterBackstab. _backstabRoomHostiles is how many hostiles
+    // the room held when the opener went out — the "multiple monsters" test.
+    private Action? _backstabRunFlee;
+    private int _backstabRoomHostiles;
+
     // Surprise-round resolution watch. Armed the instant a `bs` goes out
     // (DispatchRoundAction) and disarmed by the first of OUR own combat-result
     // lines that names the target: a line carrying "surprise" means the opener
@@ -1019,6 +1025,15 @@ public sealed partial class CombatManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(flee);
         _backstabFailureFlee = flee;
+    }
+
+    // Wire the hit-and-run flee — bound to HealthManager.RunAfterBackstab. Invoked on
+    // a landed backstab when RunAfterBackstabIfMultiple is on and the room held two
+    // or more hostiles at the opener.
+    public void SetBackstabRunFlee(Action flee)
+    {
+        ArgumentNullException.ThrowIfNull(flee);
+        _backstabRunFlee = flee;
     }
 
     // Wire the combat-off "clear hostiles when seen Hidden" override:
@@ -2716,6 +2731,7 @@ public sealed partial class CombatManager : IDisposable
             _currentTarget = target;
             _awaitingBackstabResolution = true;
             _pendingBackstabSpecies = ResolveSpeciesByName(target);
+            _backstabRoomHostiles = CountEngageable(liveObs);
             _backstabOpenerConsumed = true;
             return;
         }
@@ -2972,6 +2988,15 @@ public sealed partial class CombatManager : IDisposable
         if (text.IndexOf("surprise", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             _log?.Combat(LogCategory, $"backstab landed (surprise) vs '{species}'");
+            // Hit and run: the room held a pack when we snuck in, so take the free
+            // surprise and leave rather than trade rounds with all of them — even if
+            // the backstab killed one and only one is left (user's rule).
+            if (_readSettings().RunAfterBackstabIfMultiple && _backstabRoomHostiles >= 2)
+            {
+                _log?.Info(LogCategory,
+                    $"backstab landed in a room of {_backstabRoomHostiles} hostiles — running to re-sneak (hit and run)");
+                _backstabRunFlee?.Invoke();
+            }
             return;
         }
 

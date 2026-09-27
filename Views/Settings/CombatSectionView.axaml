@@ -278,6 +278,17 @@
                     <CheckBox Content="Run if BS fails"
                               IsChecked="{Binding RunIfBackstabFails, Mode=TwoWay}"
                               ToolTip.Tip="Trigger flee behaviour on a failed BS roll."/>
+                    <CheckBox Content="BS then run if multiple monsters in room"
+                              IsChecked="{Binding RunAfterBackstabIfMultiple, Mode=TwoWay}"
+                              ToolTip.Tip="Hit and run: when the room held two or more monsters as you snuck in, run once the backstab lands. Your loop or walk re-sneaks and comes back for another backstab. Needs a running loop / walk to run with."/>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="24,0,0,0"
+                                IsEnabled="{Binding RunAfterBackstabIfMultiple}">
+                        <TextBlock Classes="FieldLabel" Text="Give up and fight after" VerticalAlignment="Center"/>
+                        <NumericUpDown Value="{Binding HitAndRunMaxRuns, Mode=TwoWay}"
+                                       Minimum="1" Maximum="20" FormatString="0" Increment="1" Width="110"
+                                       ToolTip.Tip="Runs one hit-and-run backstab may take, the first included. A monster that follows you into the room you ran to gets run from again until this is spent; then you stand and fight."/>
+                        <TextBlock Classes="FieldLabel" Text="runs" VerticalAlignment="Center"/>
+                    </StackPanel>
                     <CheckBox Content="Clear hostiles when sneak broken by see-hidden monster"
                               IsChecked="{Binding ClearHostilesWhenSeenHidden, Mode=TwoWay}"
                               ToolTip.Tip="Combat-off override for stealth runners. When sprinting a walk-to route with combat OFF and auto-sneak ON, a room holding a see-hidden monster breaks sneak. With this on, the engine force-clears every hostile in that room (bypassing the Min/Max gate) so the route can resume sneaking — preventing monsters from dragging and stacking across rooms. Off by default."/>

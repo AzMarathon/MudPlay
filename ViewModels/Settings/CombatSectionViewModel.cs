@@ -131,6 +131,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _doBackstab;
     [ObservableProperty] private bool _skipBackstabIfMultiAttack = true;
     [ObservableProperty] private bool _runIfBackstabFails;
+    [ObservableProperty] private bool _runAfterBackstabIfMultiple;
+    [ObservableProperty] private int _hitAndRunMaxRuns = 3;
     [ObservableProperty] private bool _clearHostilesWhenSeenHidden;
 
     // ----- Targeting ------------------------------------------------
@@ -602,6 +604,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             DoBackstab                   = DoBackstab,
             SkipBackstabIfMultiAttack    = SkipBackstabIfMultiAttack,
             RunIfBackstabFails           = RunIfBackstabFails,
+            RunAfterBackstabIfMultiple   = RunAfterBackstabIfMultiple,
+            HitAndRunMaxRuns             = Math.Clamp(HitAndRunMaxRuns, 1, 20),
             ClearHostilesWhenSeenHidden  = ClearHostilesWhenSeenHidden,
 
             TargetOrder              = TargetOrderReverse ? TargetOrder.Reverse : TargetOrder.Normal,
@@ -758,6 +762,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         DoBackstab                  = dto.DoBackstab;
         SkipBackstabIfMultiAttack   = dto.SkipBackstabIfMultiAttack;
         RunIfBackstabFails          = dto.RunIfBackstabFails;
+        RunAfterBackstabIfMultiple  = dto.RunAfterBackstabIfMultiple;
+        HitAndRunMaxRuns            = dto.HitAndRunMaxRuns;
         ClearHostilesWhenSeenHidden = dto.ClearHostilesWhenSeenHidden;
 
         TargetOrderNormal  = dto.TargetOrder == TargetOrder.Normal;
@@ -869,6 +875,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     partial void OnDoBackstabChanged(bool value)                    => MarkDirty();
     partial void OnSkipBackstabIfMultiAttackChanged(bool value)     => MarkDirty();
     partial void OnRunIfBackstabFailsChanged(bool value)            => MarkDirty();
+    partial void OnRunAfterBackstabIfMultipleChanged(bool value)    => MarkDirty();
+    partial void OnHitAndRunMaxRunsChanged(int value)               => MarkDirty();
     partial void OnClearHostilesWhenSeenHiddenChanged(bool value)   => MarkDirty();
 
     // Targeting

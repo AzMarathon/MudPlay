@@ -434,6 +434,7 @@ public sealed partial class CombatManager
                 _pendingBackstabSpecies = string.IsNullOrEmpty(picked.ResolvedName)
                     ? picked.RawName
                     : picked.ResolvedName;
+                _backstabRoomHostiles = enemyCount;
                 break;
 
             default:

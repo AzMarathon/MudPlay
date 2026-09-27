@@ -2485,6 +2485,60 @@ public sealed class CombatManagerTests
         Assert.False(fled);
     }
 
+    // Hit and run (report paradigm-20260926-222210): a room of two or more hostiles at
+    // the opener runs once the backstab lands, so the loop can re-sneak and come back.
+    [Fact]
+    public void BackstabLanded_RoomOfTwo_RunAfterBackstab_Runs()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.Settings.RunAfterBackstabIfMultiple = true;
+        h.AddMonster(1, "orc rogue", killable: true);
+        h.AddMonster(2, "goblin", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+        bool ran = false;
+        h.Combat.SetBackstabRunFlee(() => ran = true);
+
+        h.Feed("Also here: orc rogue, goblin.");
+        h.Feed("You surprise punch orc rogue for 30 damage!");
+
+        Assert.True(ran);
+    }
+
+    [Fact]
+    public void BackstabLanded_LoneMonster_DoesNotRun()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.Settings.RunAfterBackstabIfMultiple = true;
+        h.AddMonster(1, "orc rogue", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+        bool ran = false;
+        h.Combat.SetBackstabRunFlee(() => ran = true);
+
+        h.Feed("Also here: orc rogue.");
+        h.Feed("You surprise punch orc rogue for 30 damage!");
+
+        Assert.False(ran);
+    }
+
+    [Fact]
+    public void BackstabLanded_RoomOfTwo_SettingOff_DoesNotRun()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.AddMonster(1, "orc rogue", killable: true);
+        h.AddMonster(2, "goblin", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+        bool ran = false;
+        h.Combat.SetBackstabRunFlee(() => ran = true);
+
+        h.Feed("Also here: orc rogue, goblin.");
+        h.Feed("You surprise punch orc rogue for 30 damage!");
+
+        Assert.False(ran);
+    }
+
     [Fact]
     public void Backstab_Failure_NoFlee_WhenSettingOff()
     {

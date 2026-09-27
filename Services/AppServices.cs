@@ -4438,6 +4438,7 @@ public sealed class AppServices
         // Backstab-failure flee (CombatSettings.RunIfBackstabFails). Combat detects
         // the failed surprise round; HealthManager owns the flee route + engine.
         Combat.SetBackstabFailureFlee(() => Health.RunFromBackstabFailure());
+        Combat.SetBackstabRunFlee(() => Health.RunAfterBackstab());
 
         // ShadowRest (Paradigm): classes carrying ability code 1103 can rest while
         // hidden/sneaking in a room with monsters without being attacked. The rest

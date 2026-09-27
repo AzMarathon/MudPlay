@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.110.18**
-> - Flee no longer gives up at a loop's start room: it falls back into the room you came from, and runs again if it lands on a monster while still under run-if-below
-> - Equipment Manager: new Clear all button empties the selected gear set
-> - Equipment Manager: ⚠ can't-wear marks clear when Update from live (or @equip … update) empties or re-picks the slot
-> - Run if BS fails now also runs when your sneak breaks on the way in ("You make a sound…"), instead of opening with a plain attack
+> **Version 3.111.0**
+> - New Combat option "BS then run if multiple monsters in room": hit-and-run backstabbing. Run once the backstab lands, then re-sneak and come back for another
+> - Hit and run re-runs from a monster that chases you, up to "Give up and fight after N runs" (default 3)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

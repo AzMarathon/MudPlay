@@ -480,6 +480,9 @@ public static class BugReportBuilder
         // ShadowRest hold explains a stealthed character resting instead of
         // engaging a monster in the room (combat stands down while true).
         Kv(sb, "ShadowRest holding", svc.Health.ShadowRestHolding.ToString());
+        Kv(sb, "Hit and run", svc.Health.HitAndRunActive
+            ? $"active, run {svc.Health.HitAndRunRuns} of {Math.Max(1, svc.Resolver.Resolve<Models.Profile.CombatSettings>("Combat").HitAndRunMaxRuns)}"
+            : "idle");
 
         return sb.ToString();
     }

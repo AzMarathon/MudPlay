@@ -973,6 +973,32 @@ public sealed class HealthManager : IDisposable
         // Subsequent steps advance one per NoteRoomChanged; the paused engine
         // auto-resumes once BOTH pools climb back above their run-triggers
         // (recovery branch below).
+        // ----- hit-and-run chasers ---------------------------------
+        if (_hitAndRunActive && _hitAndRunLanded)
+        {
+            if (!_state.InCombat)
+            {
+                _hitAndRunChaseArmed = true;
+            }
+            else if (_hitAndRunChaseArmed && _fleeQueue.Count == 0)
+            {
+                _hitAndRunChaseArmed = false;
+                int maxRuns = Math.Max(1, (_readCombatSettings?.Invoke() ?? new Models.Profile.CombatSettings()).HitAndRunMaxRuns);
+                if (_hitAndRunRuns < maxRuns)
+                {
+                    _hitAndRunRuns++;
+                    _hitAndRunLanded = false;
+                    string chaseReason = $"hit and run — a monster followed (run {_hitAndRunRuns}/{maxRuns})";
+                    _post(() => TryFlee(chaseReason));
+                }
+                else
+                {
+                    _log?.Info(LogCategory, $"hit and run — still chased after {maxRuns} run(s); standing to fight");
+                    EndHitAndRun();
+                }
+            }
+        }
+
         if (!_state.InCombat)
         {
             _fledThisCombat = false;
@@ -1017,7 +1043,10 @@ public sealed class HealthManager : IDisposable
         // (when the character has a caster pool) stops us resuming straight
         // into another mana-triggered flee. Backward mode retraces its path
         // from the current room; Forward continues toward the destination.
-        if (_fleeEngine is not null && _fleeQueue.Count == 0 && _state.MaxHp > 0)
+        // A hit-and-run retreat runs at healthy HP, so "recovered" is already true the
+        // moment it starts — hold the resume until its last step has actually landed.
+        if (_fleeEngine is not null && _fleeQueue.Count == 0 && _state.MaxHp > 0
+            && !(_hitAndRunActive && !_hitAndRunLanded))
         {
             int hpRunTrigger = ResolveHpThreshold(s.HpThresholdMode, s.RunIfBelowHp);
             int maRunTrigger = ResolveMaThreshold(s.MaThresholdMode, s.RunIfBelowMa);
@@ -1614,6 +1643,39 @@ public sealed class HealthManager : IDisposable
     // RunDirection / RunDistance — so a hand-walked failure just logs and no-ops.
     public void RunFromBackstabFailure() => TryFlee("backstab failed");
 
+    // Hit-and-run (CombatSettings.RunAfterBackstabIfMultiple): the backstab landed in a
+    // room of several hostiles, so retreat like any flee — the engine resumes once the
+    // run-trigger is clear, walks back in sneaking, and opens with another backstab.
+    public void RunAfterBackstab()
+    {
+        _hitAndRunActive = true;
+        _hitAndRunLanded = false;
+        _hitAndRunChaseArmed = false;
+        _hitAndRunRuns = 1;
+        TryFlee("backstab landed — hit and run");
+    }
+
+    private void EndHitAndRun()
+    {
+        _hitAndRunActive = false;
+        _hitAndRunLanded = false;
+        _hitAndRunChaseArmed = false;
+        _hitAndRunRuns = 0;
+    }
+
+    // Hit-and-run cycle: from a landed backstab's retreat until the resumed engine
+    // moves on (shook them), the next backstab, or the run budget is spent. A monster
+    // that follows us into the retreat room is run from again, up to
+    // CombatSettings.HitAndRunMaxRuns runs per backstab — past that, re-stealthing
+    // isn't going to happen, so we stand and fight.
+    private bool _hitAndRunActive;
+    private bool _hitAndRunLanded;       // the latest hit-and-run retreat has landed
+    private bool _hitAndRunChaseArmed;   // out of combat since landing — the next engage is a chaser
+    private int _hitAndRunRuns;
+
+    public bool HitAndRunActive => _hitAndRunActive;
+    public int HitAndRunRuns => _hitAndRunRuns;
+
     // Try to begin a flee. No-ops (with a log line) when no movement engine is
     // active or when no flee direction can be resolved. On success it pauses the
     // engine, queues the full flee route, optionally sends `break`, and dispatches
@@ -1860,6 +1922,14 @@ public sealed class HealthManager : IDisposable
     {
         if (newRoom is { } r) _lastKnownRoom = r;
 
+        // The engine resumed and moved on without a chaser catching us — the
+        // hit-and-run cycle is over; the next landed backstab starts a fresh count.
+        if (_hitAndRunActive && _fleeEngine is null)
+        {
+            _log?.Combat(LogCategory, $"hit and run — shook them after {_hitAndRunRuns} run(s)");
+            EndHitAndRun();
+        }
+
         // Flee step continuation — fire BEFORE the rest-latch reset
         // so the engine's pause flag doesn't get cleared by a
         // racing post-flee rest cycle.
@@ -1871,13 +1941,20 @@ public sealed class HealthManager : IDisposable
                 $"flee step engine={_fleeEngine.Name} dir={next} " +
                 $"remaining={_fleeQueue.Count}");
         }
-        else if (_fleeEngine is not null && _fledThisCombat)
+        else if (_fleeEngine is not null)
         {
             // The flee's last step landed. If a hostile is waiting here (or walks in)
             // and we're still under the run-trigger, that's a new fight to run from —
             // re-arm the one-shot latch and re-check once the room has been read, or
             // the engine fights it at run-trigger HP (report paradigm-20260926-221012).
+            // The same re-check resumes the engine when nothing's wrong — a hit-and-run
+            // retreat after a landed backstab has no HP change to wake it otherwise.
             _fledThisCombat = false;
+            if (_hitAndRunActive)
+            {
+                _hitAndRunLanded = true;
+                _hitAndRunChaseArmed = !_state.InCombat;
+            }
             _post(Evaluate);
         }
 

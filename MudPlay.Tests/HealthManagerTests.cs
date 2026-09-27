@@ -1967,6 +1967,84 @@ public sealed class HealthManagerTests
         Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
     }
 
+    // A hit-and-run retreat (healthy HP) resumes the loop once it lands, so it can
+    // walk back in sneaking for the next backstab.
+    [Fact]
+    public void RunAfterBackstab_LandsHealthy_ResumesTheEngine()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 1;
+        h.Engine!.JourneyOrigin = new Game.Map.RoomKey(1, 0);
+        h.ReversePath = (_, _) => new[] { Game.Map.Direction.S };
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 200;
+
+        h.Health.RunAfterBackstab();
+        Assert.Equal(new[] { Game.Map.Direction.S }, h.Engine.SentBacktrackMoves);
+
+        h.HostileInRoom = false;
+        h.State.InCombat = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));
+
+        Assert.Equal(new Game.Map.RoomKey(1, 49), h.Engine.ResumedAtRoom);
+    }
+
+    // Hit and run: a monster that chases us into the retreat room is run from again,
+    // until HitAndRunMaxRuns (first run included) is spent — then we stand and fight.
+    [Fact]
+    public void RunAfterBackstab_Chased_RunsAgain_UntilTheBudget_ThenFights()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 1;
+        h.Combat.HitAndRunMaxRuns = 3;
+        h.Engine!.JourneyOrigin = new Game.Map.RoomKey(1, 0);
+        h.ReversePath = (_, _) => new[] { Game.Map.Direction.S };
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 200;
+
+        h.Health.RunAfterBackstab();                              // run 1
+        for (int room = 49, expected = 2; expected <= 4; room--, expected++)
+        {
+            h.State.InCombat = false;
+            h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, room));  // landed
+            h.State.InCombat = true;                                // a chaser engages
+            int runs = h.Engine.SentBacktrackMoves.Count;
+            if (expected <= 3) Assert.Equal(expected, runs);        // runs 2 and 3
+            else Assert.Equal(3, runs);                             // budget spent — fight
+        }
+        Assert.False(h.Health.HitAndRunActive);
+    }
+
+    [Fact]
+    public void RunAfterBackstab_ShookThem_EndsTheCycle()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 1;
+        h.Engine!.JourneyOrigin = new Game.Map.RoomKey(1, 0);
+        h.ReversePath = (_, _) => new[] { Game.Map.Direction.S };
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 200;
+        h.HostileInRoom = false;
+
+        h.Health.RunAfterBackstab();
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));   // landed, engine resumes
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));   // the loop walks back in
+
+        Assert.False(h.Health.HitAndRunActive);
+    }
+
     [Fact]
     public void Flee_Backward_ReversePathCapsAtRunDistance()
     {
