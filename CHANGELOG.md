@@ -1,6 +1,6 @@
 # Version history
 
-## 3.111.28
+## 3.111.29
 
 - Clearer Run if BS fails tooltip and Help: what it covers, when it holds back, and how it pairs with Hit and Run tactics
 - Settings → Combat: backstab options grouped under Do BS attacks (greyed out while it's off); the combat-off stealth-running option sits on its own
@@ -12,7 +12,8 @@
 - A flee holds the loop / walk until it lands even when combat already had it paused, so the route can't step on top of the flee
 - Settings → Combat's weapon boxes follow the Default gear set when it's changed in the Workshop (Update from live etc.), and Save no longer writes the old weapon back
 - Auto-train logs its trainer choice with every candidate's step count or skip reason, and the bug report shows it; equal-distance trainers go to the cheaper one
-- bug reports addressed: paradigm-20260927-023118, paradigm-20260927-023144, paradigm-20260927-023326, paradigm-20260927-023516, paradigm-20260927-030929
+- Stopping or replacing auto-train's walk to the trainer (Stop, or your own walk-to) cancels the run and leaves the loop stopped, instead of restarting the loop from wherever you walked
+- bug reports addressed: paradigm-20260927-023118, paradigm-20260927-023144, paradigm-20260927-023326, paradigm-20260927-023516, paradigm-20260927-030929, paradigm-20260927-032602
 
 ## 3.111.19
 

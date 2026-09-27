@@ -666,21 +666,35 @@ public sealed class TrainerWalkManager : IDisposable
     private void OnWalkEvent(WalkEvent e)
     {
         if (_phase != Phase.Walking) return;
+        RoomKey? trainerRoom = _target is { } t ? new RoomKey(t.Map, t.Room) : null;
+        // Events for some other walk (a user walk-to that replaced ours, a detour
+        // leg) aren't this run's. Treating that walk's arrival as ours aborted the
+        // run from wherever the user went and restarted the loop, dragging them
+        // back out (report paradigm-20260927-032602).
+        bool ours = e.Destination is null || e.Destination == trainerRoom;
         if (e.Kind == WalkEventKind.Finished)
         {
-            if (_target is { } t && _tracker.State.CurrentRoom?.Key == new RoomKey(t.Map, t.Room))
+            if (trainerRoom is { } room && _tracker.State.CurrentRoom?.Key == room)
             {
                 // CP-only reconcile skips `train` and goes straight to a stat refresh
                 // → train-stats screen; every other run trains on arrival.
                 if (_cpOnlyRun) SendStatRefresh();
                 else SendTrain();
             }
-            else
+            else if (ours)
                 Finish("Walk finished away from the trainer — aborting.");
         }
-        else if (e.Kind == WalkEventKind.Failed)
+        else if (e.Kind == WalkEventKind.Failed && ours)
         {
             Finish("Couldn't reach the trainer — aborting.");
+        }
+        else if (e.Kind == WalkEventKind.Stopped && ours)
+        {
+            // Someone stopped the trainer walk: a Stop, a user walk-to replacing it,
+            // or a death. They've taken over, so end the run and leave the engine
+            // stopped instead of resuming the loop under them.
+            _resume = default;
+            Finish($"Walk to the trainer stopped ({e.Detail}) — run cancelled; the loop stays stopped.");
         }
     }
 
