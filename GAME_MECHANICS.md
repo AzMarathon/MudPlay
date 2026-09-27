@@ -2480,7 +2480,13 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A failed disarm sets the trap off.** *([OBSERVED] Paradigm, user screenshot 2026-09-27.)*
   - `disarm trap w` → `You try to disarm the trap, but instead trigger it!`, and the trap's damage lands (HP 302 → 222). The line names no direction.
   - `disarm trap <dir>` where there's no trap that way → `Your command had no effect.`
-  - `[NEEDS CONFIRMATION]` Stock wording, and whether a triggered trap is still there to disarm again.
+  - **Stock 1.11p wording differs.** *([OBSERVED] game-data: `wccmmud.dll` string table, 1.11p, from github.com/lucid2310/Majormud.)*
+    - Success is the same: `You successfully disarmed the trap to the %s.`
+    - Failure: `You failed to disarm any trap to the %s.`, with a direction and no trigger text.
+    - Stock has no separate "no trap here" string around `_cmd_disarm`, only `There is no exit in that direction!` for a wall. So the one failure line probably covers both a fumbled disarm and no trap at all.
+    - `[NEEDS CONFIRMATION]` Does a Stock failed disarm set the trap off, and does `You failed to disarm any trap to the <dir>.` also come back when there's no trap that way?
+  - `[NEEDS CONFIRMATION]` Whether a triggered trap (Paradigm) is still there to disarm again.
+  - The Stock DLL also spells search hits for up/down as `You found a trap above you!` / `You found a trap below you!`.
 - **A trap search reports the found trap with the LONG-form direction word.** Searching a trapped exit is `sea <dir>`; on a hit the game replies `You found a trap to the <dir>!` where `<dir>` is spelled out long — `You found a trap to the southeast!` (confirmed on the wire, alongside the outbound `sea southeast` that produced it).
 - **Whether `disarm trap <longdir>` (e.g. `disarm trap southeast`) is accepted the same way `sea <longdir>` is has NOT been directly wire-confirmed** (the reported capture stalled before the disarm went out); it is the walker's existing send shape and is flagged for live verification.
 - **Trap-disarm capability can be inferred from the character's race and class via game data — the parsed Traps stat is not the only signal** *(report 131801)*.
