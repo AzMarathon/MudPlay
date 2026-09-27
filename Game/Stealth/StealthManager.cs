@@ -401,8 +401,26 @@ public sealed class StealthManager : IDisposable
     private void OnNotSneaking(MatchResult _)
     {
         if (_stateValue == StealthState.Idle && !_state.IsSneaking) return;
+        _sneakBrokeOnEntryAt = NowProvider();
         Transition(StealthState.Idle);
         _state.IsSneaking = false;
+    }
+
+    // "You make a sound as you enter the room!" lands just before the room display,
+    // and it means the backstab we snuck in for would fail. Combat asks once, while
+    // it decides the room's opener; the window keeps a stale break from a quiet room
+    // from applying to a later, unrelated one.
+    private static readonly TimeSpan SneakBrokeWindow = TimeSpan.FromSeconds(3);
+    private DateTimeOffset _sneakBrokeOnEntryAt = DateTimeOffset.MinValue;
+
+    public Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.UtcNow;
+
+    // True (once) when our sneak broke entering the current room.
+    public bool TakeSneakBrokeOnEntry()
+    {
+        bool broke = NowProvider() - _sneakBrokeOnEntryAt <= SneakBrokeWindow;
+        _sneakBrokeOnEntryAt = DateTimeOffset.MinValue;
+        return broke;
     }
 
     private void OnSneakFailed(MatchResult _)

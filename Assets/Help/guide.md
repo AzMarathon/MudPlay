@@ -2414,7 +2414,7 @@ Off (the default) is the current behavior: if you engage a room of 8 with Min se
 ### Run if BS fails
 
 **Default:** Off
-**What it does:** Automatically triggers flee behavior if your backstab attempt clearly failed (no "surprise" in the result line) — on the theory that a failed backstab means the target is now fully alert and the fight is riskier than planned.
+**What it does:** Automatically triggers flee behavior if your backstab attempt clearly failed (no "surprise" in the result line) — on the theory that a failed backstab means the target is now fully alert and the fight is riskier than planned. It also runs when your sneak breaks on the way in (`You make a sound as you enter the room!`): you entered seen, so the backstab would fail, and MudPlay runs instead of opening with a plain attack.
 
 ### Clear hostiles when sneak broken by see-hidden monster
 

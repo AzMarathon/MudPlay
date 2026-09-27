@@ -1,11 +1,12 @@
 # Version history
 
-## 3.110.17
+## 3.110.18
 
 - Flee no longer gives up at a loop's start room: it falls back into the room you came from, and runs again if it lands on a monster while still under run-if-below
 - Equipment Manager: new Clear all button empties the selected gear set
 - Equipment Manager: ⚠ can't-wear marks clear when Update from live (or @equip … update) empties or re-picks the slot
-- bug reports addressed: paradigm-20260926-221012, paradigm-20260926-221353
+- Run if BS fails now also runs when your sneak breaks on the way in ("You make a sound…"), instead of opening with a plain attack
+- bug reports addressed: paradigm-20260926-221012, paradigm-20260926-221353, paradigm-20260926-222210
 
 ## 3.110.14
 

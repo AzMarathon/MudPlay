@@ -4413,6 +4413,7 @@ public sealed class AppServices
         Combat.SetBackstabHooks(
             isStealthed:  () => Stealth.IsStealthed,
             hasSeeHidden: n => SeeHidden.Has(n));
+        Combat.SetSneakBrokeOnEntryProbe(Stealth.TakeSneakBrokeOnEntry);
         // Self-defense stands down only while ACTIVELY walking a plain walk-to (travel):
         // the walker is stepping AND we're neither looping nor Auto-Lairing. Looping and
         // Auto-Lair are farming modes where we want to fight back; a plain destination walk

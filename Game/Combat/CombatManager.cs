@@ -149,6 +149,8 @@ public sealed partial class CombatManager : IDisposable
     // — which is what makes it the right witness for a no-effect line.
     private Func<string?>? _readWornWeapon;
     private Func<bool>? _isStealthed;
+    // StealthManager.TakeSneakBrokeOnEntry — our sneak broke entering this room.
+    private Func<bool>? _takeSneakBrokeOnEntry;
     // True while a plain walk-to (travel) drives — self-defense stands down then.
     private Func<bool>? _selfDefenseSuppressedByTravel;
     private Func<int, bool>? _hasSeeHidden;
@@ -988,6 +990,15 @@ public sealed partial class CombatManager : IDisposable
         _hasSeeHidden = hasSeeHidden;
     }
 
+    // Wire the sneak-broke-on-entry probe (StealthManager.TakeSneakBrokeOnEntry): with
+    // RunIfBackstabFails on, a sneak that broke on the way in is a backstab that would
+    // fail, so we run instead of opening with a plain attack.
+    public void SetSneakBrokeOnEntryProbe(Func<bool> takeSneakBrokeOnEntry)
+    {
+        ArgumentNullException.ThrowIfNull(takeSneakBrokeOnEntry);
+        _takeSneakBrokeOnEntry = takeSneakBrokeOnEntry;
+    }
+
     // Wire the self-defense travel gate: returns true while a PLAIN walk-to (travel
     // to a destination) is driving — as opposed to looping / Auto-Lair (farming) or
     // idle. While travelling, self-defense stands down so an evil character running
@@ -1690,6 +1701,18 @@ public sealed partial class CombatManager : IDisposable
         // never-BS target. If every actionable monster is flagged we don't skip
         // the room — fall back to the highest-priority actionable one and open
         // with a normal attack (the chooser's BS gate suppresses the bs there).
+        // We snuck in for a backstab but made a sound entering: the surprise is gone
+        // and the backstab would fail, so with "run if backstab fails" on, run now
+        // rather than open with a plain swing (report paradigm-20260926-222210).
+        if (settings.DoBackstab && settings.RunIfBackstabFails && !_backstabOpenerConsumed && _currentTarget is null
+            && _takeSneakBrokeOnEntry?.Invoke() == true)
+        {
+            _backstabOpenerConsumed = true;
+            _log?.Info(LogCategory, "sneak broke entering the room — backstab would fail; running");
+            _backstabFailureFlee?.Invoke();
+            return;
+        }
+
         bool backstabPending = BackstabPending(settings, obs);
         EngageableCandidate? choice = null;
         EngageableCandidate? actionableFallback = null;
