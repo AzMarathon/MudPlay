@@ -821,11 +821,18 @@ public sealed class CombatStateTracker : IDisposable
         if (_state.InCombat) _state.InCombat = false;
     }
 
+    // The server's own auto-attack state: *Combat Engaged* → true, *Combat Off* →
+    // false. Unlike InCombat (held until the room is clear) this says whether a
+    // `break` would do anything — HealthManager's flee skips it when we're not
+    // swinging (a `break` then only draws "Your command had no effect.").
+    public bool IsServerEngaged { get; private set; }
+
     private void OnCombatStatus(MatchResult match)
     {
         // (?<status>Engaged|Off) capture in DefaultPatterns.
         if (match.Groups.Count == 0) return;
         string status = match.Groups[0];
+        IsServerEngaged = string.Equals(status, "Engaged", StringComparison.OrdinalIgnoreCase);
 
         // Only Engaged matters — when the server says we're now in
         // combat, mirror that. We do NOT flip to false on

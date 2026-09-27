@@ -338,6 +338,48 @@ public sealed class StealthManagerTests
         Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
     }
 
+    // Report paradigm-20260927-003304: an arrival sn must hold movement until the game
+    // answers it, so a resuming engine can't walk on ahead of the answer.
+    [Fact]
+    public void ArrivalSneak_HoldsMovementUntilTheAnswer()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        h.Stealth.NoteRoomChanged();                     // sn on arrival
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+
+        h.Feed("Attempting to sneak...");                 // answered — it took
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+    }
+
+    [Fact]
+    public void ArrivalSneak_Refused_HandsOverToTheCooldownHold()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        h.Stealth.NoteRoomChanged();
+        h.Feed("You may not sneak right now!");
+
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+    }
+
+    [Fact]
+    public void PreMoveSneak_DoesNotHold()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        h.Stealth.RequestPreMoveStealth();
+
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+    }
+
     [Fact]
     public void SneakCooldown_GivesUpAfterTheCap()
     {

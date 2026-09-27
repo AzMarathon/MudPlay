@@ -2000,6 +2000,33 @@ public sealed class HealthManagerTests
         Assert.Equal(new Game.Map.RoomKey(1, 49), h.Engine.ResumedAtRoom);
     }
 
+    // Report paradigm-20260927-003231: the backstab killed its target (*Combat Off*),
+    // a rat walked in and we ran — but "break" went out with nothing to break.
+    [Fact]
+    public void Flee_NotEngaged_SkipsTheBreak()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.BreakBeforeFleeing = true;
+        h.Health.IsServerEngaged = () => false;
+
+        Assert.True(h.Health.RunInsteadOfFight("walk-in"));
+
+        Assert.DoesNotContain("break", h.SentLines);
+        Assert.Single(h.Engine!.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_Engaged_SendsTheBreak()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.BreakBeforeFleeing = true;
+        h.Health.IsServerEngaged = () => true;
+
+        Assert.True(h.Health.RunInsteadOfFight("survivor"));
+
+        Assert.Contains("break", h.SentLines);
+    }
+
     // HitAndRunMaxRuns caps the runs between backstabs (the first included); then fight.
     [Fact]
     public void HitAndRun_RunsUntilTheBudget_ThenFights_AndABackstabResetsIt()
@@ -2007,14 +2034,31 @@ public sealed class HealthManagerTests
         using FleeHarness h = HitAndRunFlee();
 
         h.Health.BackstabLanded(runNow: true);                     // run 1
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));     // landed
         Assert.True(h.Health.RunInsteadOfFight("chaser"));         // run 2
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 48));
         Assert.True(h.Health.RunInsteadOfFight("chaser"));         // run 3
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 47));
         Assert.False(h.Health.RunInsteadOfFight("chaser"));        // spent — fight
         Assert.Equal(3, h.Engine!.SentBacktrackMoves.Count);
 
         h.Health.BackstabLanded(runNow: false);                    // a clean backstab
         Assert.Equal(0, h.Health.HitAndRunRuns);
         Assert.True(h.Health.RunInsteadOfFight("walk-in"));
+    }
+
+    // Report paradigm-20260927-003304: an engage while a run is already under way (or
+    // held for a move to land) must not fight or spend another run.
+    [Fact]
+    public void HitAndRun_AlreadyRunning_DoesNotFightOrChargeTheBudget()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.HitAndRunMaxRuns = 1;
+
+        h.Health.BackstabLanded(runNow: true);                     // run 1 of 1, not landed yet
+        Assert.True(h.Health.RunInsteadOfFight("walk-in"));        // still running — no fight
+        Assert.Equal(1, h.Health.HitAndRunRuns);
+        Assert.Single(h.Engine!.SentBacktrackMoves);
     }
 
     // Report paradigm-20260926-230835: the flee fired on a room display that beat its

@@ -1150,7 +1150,7 @@ Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, 
 
 An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates the combat/spell tuning. But **Auto-Bless stands alone** — self and party buffing is controlled by the Auto-Bless toggle and nothing else, so turning off Auto-Combat or Auto-Rest/Heal never stops your blessing.
 
-**Sneak cooldown.** Right after a fight the game won't let you sneak for a few seconds (`You may not sneak right now!`). With **Auto-Sneak on**, your loop or walk waits instead of stepping on unsneaked: it retries the sneak every two seconds and moves once it takes, or after 15 seconds goes on unsneaked. The status bar reads *Waiting — sneak on cooldown* meanwhile.
+**Sneak cooldown.** Right after a fight the game won't let you sneak for a few seconds (`You may not sneak right now!`). With **Auto-Sneak on**, your loop or walk waits instead of stepping on unsneaked: it retries the sneak every two seconds and moves once it takes, or after 15 seconds goes on unsneaked. The status bar reads *Waiting — sneak on cooldown* meanwhile. Each time you arrive in a room, the route also waits (up to 3 seconds) for the game's answer to its sneak before moving on (*Waiting — sneaking*).
 
 **Sneak-aware casting.** Casting a spell breaks Sneak (and Hide), so when **Auto-Sneak is on** MudPlay times its maintenance casts around your stealth:
 

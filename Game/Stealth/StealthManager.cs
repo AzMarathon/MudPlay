@@ -87,6 +87,37 @@ public sealed class StealthManager : IDisposable
     private Avalonia.Threading.DispatcherTimer? _cooldownTimer;
 
     public bool IsHoldingForSneakCooldown => _cooldownHoldSince is not null;
+
+    // ----- sneak-settle hold -----------------------------------------------
+    // An arrival sn holds movement until its answer lands (report
+    // paradigm-20260927-003304: a flee resumed the walker, whose move went out ahead
+    // of "You may not sneak right now!" and walked in seen). The pre-move sn isn't
+    // held — the move is already going out behind it, and a sn that takes carries
+    // into the next room.
+    private static readonly TimeSpan SneakSettleCap = TimeSpan.FromSeconds(3);
+    private bool _settleHold;
+    private Avalonia.Threading.DispatcherTimer? _settleTimer;
+
+    public bool IsHoldingForSneakAnswer => _settleHold;
+
+    private void BeginSettleHold()
+    {
+        if (_coordinator is null || _settleHold) return;
+        _settleHold = true;
+        _coordinator.AssertGate(MovementCoordinator.SneakSettleGate, nameof(StealthManager), "waiting for the sn answer");
+        _settleTimer = new Avalonia.Threading.DispatcherTimer(SneakSettleCap,
+            Avalonia.Threading.DispatcherPriority.Background, (_, _) => ReleaseSettleHold("no answer in time"));
+        _settleTimer.Start();
+    }
+
+    private void ReleaseSettleHold(string why)
+    {
+        _settleTimer?.Stop();
+        _settleTimer = null;
+        if (!_settleHold) return;
+        _settleHold = false;
+        _coordinator?.ClearGate(MovementCoordinator.SneakSettleGate, nameof(StealthManager), why);
+    }
     private bool _disposed;
 
     // Current FSM state. Backed by PlayerState.IsSneaking / PlayerState.IsHidden
@@ -187,6 +218,7 @@ public sealed class StealthManager : IDisposable
     {
         // We moved anyway (a manual step, a flee) — the hold was for the room we left.
         ReleaseCooldownHold("moved");
+        ReleaseSettleHold("moved");
 
         // Moving breaks hide — you can't move while hidden, so a confirmed room
         // change means any optimistic hidden state is gone. Cleared before the
@@ -319,6 +351,7 @@ public sealed class StealthManager : IDisposable
         _log?.Info(LogCategory, $"auto-sneak triggered ({reason})");
         _sneakRetries = 0;
         Transition(StealthState.AttemptingSneak);
+        if (reason != "pre-move") BeginSettleHold();
         Send("sn");
         return true;
     }
@@ -401,6 +434,7 @@ public sealed class StealthManager : IDisposable
     // counter.
     private void EstablishSneaking()
     {
+        ReleaseSettleHold("sneaking");
         ReleaseCooldownHold("sneaking");
         _sneakConfirmedThisRoom = true;
         _sneakRetries = 0;
@@ -453,11 +487,14 @@ public sealed class StealthManager : IDisposable
             _log?.Info(LogCategory, $"sneak rejected — resending sn (retry {_sneakRetries}/{MaxSneakRetries})");
             Transition(StealthState.AttemptingSneak);
             Send("sn");
+            return;
         }
+        ReleaseSettleHold("sneak rejected, retries spent");
     }
 
     private void OnCantSneak(MatchResult _)
     {
+        ReleaseSettleHold("cooldown");   // the cooldown hold below takes over
         Transition(StealthState.Failed);
         if (_isAutoSneakEnabled?.Invoke() != true || _coordinator is null) return;
         if (_cooldownHoldSince is null)
@@ -563,5 +600,6 @@ public sealed class StealthManager : IDisposable
         _hideInitiateSub.Dispose();
         _hideFailedSub.Dispose();
         ReleaseCooldownHold("disposed");
+        ReleaseSettleHold("disposed");
     }
 }

@@ -624,6 +624,10 @@ public sealed class HealthManager : IDisposable
     // True while a move is sent but its landing isn't confirmed (RoomTracker Pending).
     // A flee started then is held until the room confirms (see TryFlee).
     public Func<bool>? IsMovePending { get; set; }
+
+    // True while the server is auto-attacking (CombatStateTracker.IsServerEngaged).
+    // Null (tests) keeps the old always-break behavior.
+    public Func<bool>? IsServerEngaged { get; set; }
     private string? _deferredFleeReason;
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
@@ -1656,6 +1660,16 @@ public sealed class HealthManager : IDisposable
     // when the run budget is spent or no flee can start (no engine, no route).
     public bool RunInsteadOfFight(string reason)
     {
+        // Already running (a flee under way, or one held for a move to land) — that
+        // IS the answer; don't fight, and don't charge the budget twice (report
+        // paradigm-20260927-003304: the held run's engage asked again, found the
+        // budget spent, attacked — then the held run fired anyway).
+        if (_deferredFleeReason is not null || (_fleeEngine is not null && _fleeQueue.Count > 0)
+            || _hitAndRunRetreating)
+        {
+            _log?.Combat(LogCategory, $"hit and run — already running; not engaging ({reason})");
+            return true;
+        }
         int maxRuns = Math.Max(1, (_readCombatSettings?.Invoke() ?? new Models.Profile.CombatSettings()).HitAndRunMaxRuns);
         if (_hitAndRunRuns >= maxRuns)
         {
@@ -1719,7 +1733,10 @@ public sealed class HealthManager : IDisposable
         _fleeQueue.Clear();
         foreach (Map.Direction d in steps) _fleeQueue.Enqueue(d);
 
-        if (combat.BreakBeforeFleeing)
+        // Only break a fight the server is actually swinging in — after the backstab
+        // already killed its target, *Combat Off* has ended it and a `break` is just
+        // noise (report paradigm-20260927-003231).
+        if (combat.BreakBeforeFleeing && IsServerEngaged?.Invoke() != false)
             SendCommand("break");
 
         Map.Direction first = _fleeQueue.Dequeue();

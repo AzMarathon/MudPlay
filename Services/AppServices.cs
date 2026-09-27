@@ -3814,6 +3814,7 @@ public sealed class AppServices
         // The room we came from — the Backward flee's retreat when there's no trail
         // to the loop's origin (we're standing on it).
         Health.IsMovePending = () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending;
+        Health.IsServerEngaged = () => CombatTracker.IsServerEngaged;
         Health.PreviousRoom = () =>
         {
             IReadOnlyList<Game.Map.RoomKey> history = RoomTracker.GetHistory();

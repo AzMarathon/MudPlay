@@ -104,6 +104,11 @@ public sealed class MovementCoordinator
     // strand the route. Engine-wait tier.
     public const string SneakCooldownGate = "SneakCooldown";
 
+    // Asserted by StealthManager from an arrival auto-sneak `sn` until the game answers
+    // it (sneaking, refused, cooldown) — so a resuming engine can't send its move ahead
+    // of the answer and walk on unsneaked. Capped at a few seconds. Engine-wait tier.
+    public const string SneakSettleGate = "SneakSettle";
+
     // Asserted by the in-room acquisition engine while the loot step runs
     // after a fight clears; clears when all flagged ground items + coins are
     // resolved. This is the get-clear contributor to the in-room loop's
