@@ -1137,6 +1137,68 @@ public sealed class EquipmentManagerTests
     }
 
     [Fact]
+    public void BuildEquipCommands_TwoHanderWorn_DoesNotFillOffHand()
+    {
+        // Report paradigm-20260926-194514: a staff in hand, the set's off-hand left
+        // {no change}, and a carried tome — the fill must not try to wear the tome.
+        EquipmentSet set = Set("default", "Default",
+            new EquipmentSlotEntry { Slot = EquipmentSlot.Weapon, ItemName = "vortex staff" });
+        var carried = new[] { "arcane tome", "iron helm" };
+        Func<string, EquipmentSlot?> resolve = Resolver(
+            ("arcane tome", EquipmentSlot.OffHand), ("iron helm", EquipmentSlot.Head));
+
+        List<string> cmds = EquipmentManager.BuildEquipCommands(
+            set, carried, WornList(("vortex staff", "Weapon Hand")), resolve, EquipAll,
+            isTwoHanded: n => n == "vortex staff");
+
+        Assert.Equal(new[] { "wear iron helm" }, cmds);
+    }
+
+    [Fact]
+    public void BuildEquipCommands_OneHanderWorn_StillFillsOffHand()
+    {
+        EquipmentSet set = Set("default", "Default");
+        var carried = new[] { "arcane tome" };
+        Func<string, EquipmentSlot?> resolve = Resolver(("arcane tome", EquipmentSlot.OffHand));
+
+        List<string> cmds = EquipmentManager.BuildEquipCommands(
+            set, carried, WornList(("long sword", "Weapon Hand")), resolve, EquipAll,
+            isTwoHanded: n => n == "vortex staff");
+
+        Assert.Equal(new[] { "wear arcane tome" }, cmds);
+    }
+
+    [Fact]
+    public void BuildEquipCommands_FillsTwoHander_ThenBlocksOffHand()
+    {
+        // Empty hands, tome listed before the staff: the staff still wins the hands.
+        EquipmentSet set = Set("default", "Default");
+        var carried = new[] { "arcane tome", "vortex staff" };
+        Func<string, EquipmentSlot?> resolve = Resolver(
+            ("arcane tome", EquipmentSlot.OffHand), ("vortex staff", EquipmentSlot.Weapon));
+
+        List<string> cmds = EquipmentManager.BuildEquipCommands(
+            set, carried, WornList(), resolve, EquipAll,
+            isTwoHanded: n => n == "vortex staff");
+
+        Assert.Equal(new[] { "eq vortex staff" }, cmds);
+    }
+
+    [Fact]
+    public void BuildEquipCommands_OffHandWorn_DoesNotFillTwoHander()
+    {
+        EquipmentSet set = Set("default", "Default");
+        var carried = new[] { "vortex staff" };
+        Func<string, EquipmentSlot?> resolve = Resolver(("vortex staff", EquipmentSlot.Weapon));
+
+        List<string> cmds = EquipmentManager.BuildEquipCommands(
+            set, carried, WornList(("arcane tome", "Off-Hand")), resolve, EquipAll,
+            isTwoHanded: n => n == "vortex staff");
+
+        Assert.Empty(cmds);
+    }
+
+    [Fact]
     public void BuildEquipCommands_Weapon_UsesEqVerb()
     {
         EquipmentSet set = Set("default", "Default");

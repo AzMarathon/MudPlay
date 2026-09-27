@@ -94,6 +94,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _skipCollectIfMakesLight;
     [ObservableProperty] private bool _skipCollectIfMakesMedium;
     [ObservableProperty] private bool _skipCollectIfMakesHeavy;
+    [ObservableProperty] private bool _skipCollectPast90Percent;
     [ObservableProperty] private bool _collectAfterCombatFinished;
     [ObservableProperty] private bool _dropSmallerForLarger;
 
@@ -102,6 +103,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _skipGetItemIfMakesLight;
     [ObservableProperty] private bool _skipGetItemIfMakesMedium;
     [ObservableProperty] private bool _skipGetItemIfMakesHeavy;
+    [ObservableProperty] private bool _skipGetItemPast90Percent;
 
     // Static list of policy choices for the per-currency ComboBoxes. The view
     // binds ItemsSource to this.
@@ -169,12 +171,14 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
             SkipCollectIfMakesLight    = SkipCollectIfMakesLight,
             SkipCollectIfMakesMedium   = SkipCollectIfMakesMedium,
             SkipCollectIfMakesHeavy    = SkipCollectIfMakesHeavy,
+            SkipCollectPast90Percent   = SkipCollectPast90Percent,
             CollectAfterCombatFinished = CollectAfterCombatFinished,
             DropSmallerForLarger       = DropSmallerForLarger,
 
             SkipGetItemIfMakesLight    = SkipGetItemIfMakesLight,
             SkipGetItemIfMakesMedium   = SkipGetItemIfMakesMedium,
             SkipGetItemIfMakesHeavy    = SkipGetItemIfMakesHeavy,
+            SkipGetItemPast90Percent   = SkipGetItemPast90Percent,
         };
 
         profile.Settings ??= new();
@@ -238,12 +242,14 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         SkipCollectIfMakesLight    = dto.SkipCollectIfMakesLight;
         SkipCollectIfMakesMedium   = dto.SkipCollectIfMakesMedium;
         SkipCollectIfMakesHeavy    = dto.SkipCollectIfMakesHeavy;
+        SkipCollectPast90Percent   = dto.SkipCollectPast90Percent;
         CollectAfterCombatFinished = dto.CollectAfterCombatFinished;
         DropSmallerForLarger       = dto.DropSmallerForLarger;
 
         SkipGetItemIfMakesLight    = dto.SkipGetItemIfMakesLight;
         SkipGetItemIfMakesMedium   = dto.SkipGetItemIfMakesMedium;
         SkipGetItemIfMakesHeavy    = dto.SkipGetItemIfMakesHeavy;
+        SkipGetItemPast90Percent   = dto.SkipGetItemPast90Percent;
     }
 
     private CashSettings ReadOrDefault()
@@ -312,6 +318,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         if (value) SkipCollectIfMakesMedium = true;   // cascades Heavy on
         OnPropertyChanged(nameof(SkipMediumEnabled));
         OnPropertyChanged(nameof(SkipHeavyEnabled));
+        OnPropertyChanged(nameof(SkipPast90Enabled));
         MarkDirty();
     }
 
@@ -319,10 +326,21 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     {
         if (value) SkipCollectIfMakesHeavy = true;
         OnPropertyChanged(nameof(SkipHeavyEnabled));
+        OnPropertyChanged(nameof(SkipPast90Enabled));
         MarkDirty();
     }
 
-    partial void OnSkipCollectIfMakesHeavyChanged(bool value)          => MarkDirty();
+    // The 90% gate is the loosest: any bracket gate already caps below it.
+    public bool SkipPast90Enabled => !(SkipCollectIfMakesLight || SkipCollectIfMakesMedium || SkipCollectIfMakesHeavy);
+
+    partial void OnSkipCollectIfMakesHeavyChanged(bool value)
+    {
+        if (value) SkipCollectPast90Percent = true;
+        OnPropertyChanged(nameof(SkipPast90Enabled));
+        MarkDirty();
+    }
+
+    partial void OnSkipCollectPast90PercentChanged(bool value)         => MarkDirty();
     partial void OnCollectAfterCombatFinishedChanged(bool value)      => MarkDirty();
     partial void OnDropSmallerForLargerChanged(bool value)            => MarkDirty();
 
@@ -342,6 +360,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         if (value) SkipGetItemIfMakesMedium = true;   // cascades Heavy on
         OnPropertyChanged(nameof(GetItemMediumEnabled));
         OnPropertyChanged(nameof(GetItemHeavyEnabled));
+        OnPropertyChanged(nameof(GetItemPast90Enabled));
         MarkDirty();
     }
 
@@ -349,10 +368,20 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     {
         if (value) SkipGetItemIfMakesHeavy = true;
         OnPropertyChanged(nameof(GetItemHeavyEnabled));
+        OnPropertyChanged(nameof(GetItemPast90Enabled));
         MarkDirty();
     }
 
-    partial void OnSkipGetItemIfMakesHeavyChanged(bool value)         => MarkDirty();
+    public bool GetItemPast90Enabled => !(SkipGetItemIfMakesLight || SkipGetItemIfMakesMedium || SkipGetItemIfMakesHeavy);
+
+    partial void OnSkipGetItemIfMakesHeavyChanged(bool value)
+    {
+        if (value) SkipGetItemPast90Percent = true;
+        OnPropertyChanged(nameof(GetItemPast90Enabled));
+        MarkDirty();
+    }
+
+    partial void OnSkipGetItemPast90PercentChanged(bool value)        => MarkDirty();
     partial void OnSelectedBankChanged(BankChoice? value)
     {
         if (value is not null) BankRoomKey = value.Value;

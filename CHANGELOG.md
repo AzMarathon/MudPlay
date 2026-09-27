@@ -1,5 +1,17 @@
 # Version history
 
+## 3.110.11
+
+- Drop All / Hide All / Equip toolbar ▾ only changes what the button does; nothing is sent until you click the button
+- Equip All / Equip Now no longer fill an empty off-hand from your pack under a two-handed weapon, including one they just wielded
+- A follower left behind by a hold (can't move) is no longer walked away from: the leader backtracks, re-invites them and holds for their @ok
+- A follower left behind right after their own @ok gets the full wait window next time; that @ok is ignored
+- Too heavy to move (e.g. frail cut your carry max) now telepaths the leader @wait (too heavy to move), and @ok once `i` shows you back under your max
+- Cash + Items: new "Don't collect / get item past 90% encumbrance" gates, to load up but keep headroom
+- `@loop send` with no name offers the loop you're running instead of refusing
+- Recovery's wait for a re-invited member to follow again now uses "If leading, wait only" instead of a fixed 20s
+- bug reports addressed: paradigm-20260926-194514, paradigm-20260926-195517
+
 ## 3.110.6
 
 - Action menu: Drop, Hide and Equip are submenus; Equip can wear any of your six gear sets

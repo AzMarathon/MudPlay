@@ -164,6 +164,11 @@ public sealed partial class PartyManager : IDisposable
     // the probe short-circuits. Not fired when we're a follower of someone else.
     public event Action<string>? MemberReturned;
 
+    // Fires with the given name of a follower left behind by our move while we
+    // lead (see OnLeftBehind) — PartyComebackManager rides it to backtrack and
+    // re-invite them. Gated on AutoInviteEnabled at the raise site.
+    public event Action<string>? MemberLeftBehind;
+
     // Fires on a leader-side reconnect reform with the given names of the followers we
     // were leading when we dropped. A leader disconnect DISSOLVES the party, and the
     // followers stay put in the room (they never left, so no "entered the Realm" auto-
@@ -277,6 +282,7 @@ public sealed partial class PartyManager : IDisposable
         _subs.Add(_router.Subscribe(KnownPatterns.PartyFollowsYou,     OnFollowsYou));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyYouFollowing,   OnYouFollowing));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyStopsFollowing, OnStopsFollowing));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyLeftBehind,     OnLeftBehind));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyYouInvited,     OnYouInvited));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyHeader,         OnParHeader));
         // Disconnect / death / reconnect grace window. We watch every "X just
@@ -606,6 +612,22 @@ public sealed partial class PartyManager : IDisposable
         // them up.
         _recentlyDisconnected[name] = NowProvider();
         RemoveMember(name);
+    }
+
+    // "X is no longer following you." — a follower who couldn't move when we did
+    // (held, knocked down) is left in the room we walked out of and dropped from
+    // the party; with only one follower the whole party disbands. Same roster
+    // treatment as OnStopsFollowing, plus MemberLeftBehind so the leader goes back
+    // for them rather than walking on.
+    private void OnLeftBehind(MatchResult result)
+    {
+        if (result.Groups.Count == 0) return;
+        string name = result.Groups[0];
+        if (string.IsNullOrEmpty(name)) return;
+        bool leading = State.SelfIsLeader;
+        _recentlyDisconnected[name] = NowProvider();
+        RemoveMember(name);
+        if (leading && AutoInviteEnabled) MemberLeftBehind?.Invoke(GivenNameOf(name));
     }
 
     // "X has been removed from your followers." — fires on the LEADER's side

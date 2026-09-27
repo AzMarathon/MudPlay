@@ -9,6 +9,7 @@ namespace MudPlay.Game.Remote;
 //
 //   @loop send <name>   → we best-match the name and offer it:
 //                         {preparing to send: <loop>, yes to confirm, no to deny}
+//   @loop send          → the same offer, for the loop we're running right now
 //   @loop send yes      → we send the offered loop as `@loopdata` lines (see
 //                         LoopShareCodec), paced like an @roomba sync reply
 //   @loop send no       → we drop the offer
@@ -27,36 +28,48 @@ public sealed class LoopShareHandler
     private readonly LoopManager _loops;
     private readonly PacedReplySender _sender;
     private readonly Func<DateTimeOffset> _now;
+    private readonly Func<Loop?> _runningLoop;
     private readonly LogService? _log;
     private readonly Dictionary<string, (Loop Loop, DateTimeOffset Expires)> _offers =
         new(StringComparer.OrdinalIgnoreCase);
 
     public LoopShareHandler(LoopManager loops, LogService? log = null,
-        Action<TimeSpan, Action>? paceScheduler = null, Func<DateTimeOffset>? clock = null)
+        Action<TimeSpan, Action>? paceScheduler = null, Func<DateTimeOffset>? clock = null,
+        Func<Loop?>? runningLoop = null)
     {
         ArgumentNullException.ThrowIfNull(loops);
         _loops = loops;
         _log = log;
         _sender = new PacedReplySender(paceScheduler, log);
         _now = clock ?? (() => DateTimeOffset.Now);
+        _runningLoop = runningLoop ?? (static () => null);
     }
 
     // Poke from the rate-limit-line watcher, same as the @roomba sync sender.
     public void NoteRateLimitClobber() => _sender.NoteClobber();
 
-    // `@loop send <rest>` — rest is a loop name, "yes", or "no".
+    // `@loop send <rest>` — rest is a loop name, "yes", "no", or empty for the loop
+    // we're running.
     public void OnSend(RemoteCommandContext ctx, string rest)
     {
+        Loop? loop;
         if (rest.Length == 0)
         {
-            ctx.Reply("@loop send needs a loop name, then @loop send yes or no");
-            return;
+            loop = _runningLoop();
+            if (loop is null)
+            {
+                ctx.Reply("not running a loop — @loop send <name> for a saved one");
+                return;
+            }
+        }
+        else
+        {
+            if (IsConfirm(rest)) { Confirm(ctx); return; }
+            if (IsWord(rest, "no", "n")) { Deny(ctx); return; }
+            loop = MovePlayerHandler.ResolveSavedLoop(ctx, _loops, rest);
+            if (loop is null) return;
         }
 
-        if (IsConfirm(rest)) { Confirm(ctx); return; }
-        if (IsWord(rest, "no", "n")) { Deny(ctx); return; }
-
-        if (MovePlayerHandler.ResolveSavedLoop(ctx, _loops, rest) is not { } loop) return;
         _offers[ctx.Sender] = (loop, _now() + OfferLifetime);
         _log?.Info("LoopShare", $"{ctx.Sender} asked for loop '{loop.Name}' — awaiting their yes/no.");
         ctx.Reply($"preparing to send: {loop.Name}, yes to confirm, no to deny");

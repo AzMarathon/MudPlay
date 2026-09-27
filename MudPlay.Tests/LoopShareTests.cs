@@ -202,7 +202,23 @@ public sealed class LoopShareTests : IDisposable
 
         Assert.Equal("no saved loop named 'dragon'", replies[0]);
         Assert.StartsWith("'sewer' matches 2 loops:", replies[1]);
-        Assert.Equal("@loop send needs a loop name, then @loop send yes or no", replies[2]);
+        Assert.Equal("not running a loop — @loop send <name> for a saved one", replies[2]);
+    }
+
+    [Fact]
+    public void Send_Bare_OffersTheRunningLoop_ThenSendsOnYes()
+    {
+        LoopManager loops = NewLoops();
+        Loop running = SampleLoop("Ad-hoc grind");
+        LoopShareHandler share = new(loops, clock: () => _now, runningLoop: () => running);
+        List<string> replies = new();
+
+        share.OnSend(Ctx("Raijin", replies), "");
+        Assert.Equal("preparing to send: Ad-hoc grind, yes to confirm, no to deny", replies.Single());
+
+        replies.Clear();
+        share.OnSend(Ctx("Raijin", replies), "yes");
+        Assert.StartsWith("sending loop 'Ad-hoc grind' (3 rooms, ", replies[0]);
     }
 
     // ----- Receiver (LoopShareReceiver) ------------------------------

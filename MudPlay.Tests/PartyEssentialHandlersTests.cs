@@ -27,7 +27,8 @@ public sealed class PartyEssentialHandlersTests
         MessageFlags ailments = MessageFlags.None,
         Func<MudPlay.Game.Map.Room?>? readCurrentRoom = null,
         Func<string, Action<MudPlay.Game.Map.RoomKey>, Action, bool>? requestPositionRefix = null,
-        bool fleeing = false)
+        bool fleeing = false,
+        bool holdingWait = false)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -42,7 +43,8 @@ public sealed class PartyEssentialHandlersTests
             readMovement: () => movement ?? default,
             readDraggedBy: readDraggedBy,
             readAilments: () => ailments,
-            readFleeing: () => fleeing);
+            readFleeing: () => fleeing,
+            readHoldingWait: () => holdingWait);
         if (requestPositionRefix is not null) handlers.SetPositionRefix(requestPositionRefix);
         List<byte[]> relayCapture = new();
         handlers.SetWireSender(relayCapture.Add);
@@ -74,9 +76,9 @@ public sealed class PartyEssentialHandlersTests
     public void Ctor_RegistersAllCommands()
     {
         var (engine, _, _, _, _, _) = Setup();
-        // 12 commands: @version @health @status @where @who @path @party
-        // @wait @ok @lives @invite @join
-        Assert.Equal(12, engine.HandlerCount);
+        // 13 commands: @version @health @status @where @who @path @party
+        // @wait @ok @waiting @lives @invite @join
+        Assert.Equal(13, engine.HandlerCount);
     }
 
     [Fact]
@@ -924,6 +926,92 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Follower", "@ok"));
         Assert.DoesNotContain("Follower", handlers.WaitingMembers);
+    }
+
+    // @waiting — the leader re-collected us after a hold left us behind and is
+    // holding for our @ok (report paradigm-20260926-195517).
+    [Fact]
+    public void Waiting_FromOurLeader_NothingHoldingUs_SendsOk()
+    {
+        var (engine, _, _, party, _, relay) = Setup();
+        SeedPartyMember(party, "Boss", isLeader: true);
+        party.LeaderName = "Boss";
+
+        engine.DispatchForTests(Telepath("Boss", "@waiting"));
+
+        Assert.Equal("/Boss @ok\r", Encoding.Latin1.GetString(relay[^1]));
+    }
+
+    [Fact]
+    public void Waiting_StillHeld_SendsNothingYet()
+    {
+        var (engine, _, _, party, _, relay) = Setup(holdingWait: true);
+        SeedPartyMember(party, "Boss", isLeader: true);
+        party.LeaderName = "Boss";
+
+        engine.DispatchForTests(Telepath("Boss", "@waiting"));
+
+        Assert.Empty(relay);
+    }
+
+    [Fact]
+    public void Waiting_FromSomeoneNotOurLeader_IsIgnored()
+    {
+        var (engine, _, _, party, _, relay) = Setup();
+        SeedPartyMember(party, "Boss", isLeader: true);
+        SeedPartyMember(party, "Other");
+        party.LeaderName = "Boss";
+
+        engine.DispatchForTests(Telepath("Other", "@waiting"));
+
+        Assert.Empty(relay);
+    }
+
+    [Fact]
+    public void DistrustedOk_DoesNotRelease_UntilTheWindowClears()
+    {
+        var (engine, handlers, _, party, _, _) = Setup();
+        SeedPartyMember(party, "Follower");
+        handlers.NotePause("Follower", ignoreOk: true);
+
+        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        Assert.True(handlers.IsPaused);
+
+        handlers.ClearAllWaits();   // the wait window ran out
+        Assert.False(handlers.IsPaused);
+        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        Assert.False(handlers.IsPaused);   // trusted again next time
+    }
+
+    [Fact]
+    public void ReleaseWait_DropsOnlyThatMember()
+    {
+        var (engine, handlers, _, party, _, _) = Setup();
+        SeedPartyMember(party, "Follower");
+        SeedPartyMember(party, "Other");
+        engine.DispatchForTests(Telepath("Follower", "@wait (too heavy to move)"));
+        engine.DispatchForTests(Telepath("Other", "@wait"));
+
+        handlers.ReleaseWait("Follower");
+
+        Assert.DoesNotContain("Follower", handlers.WaitingMembers);
+        Assert.True(handlers.IsPaused);   // Other still holds it
+    }
+
+    [Fact]
+    public void OkedWithin_TracksTheLastOk()
+    {
+        var (engine, handlers, _, party, _, _) = Setup();
+        SeedPartyMember(party, "Follower");
+        DateTime now = new(2026, 9, 26, 19, 54, 30, DateTimeKind.Utc);
+        handlers.NowProvider = () => now;
+
+        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        now = now.AddSeconds(1);
+        Assert.True(handlers.OkedWithin("Follower", TimeSpan.FromSeconds(5)));
+        now = now.AddSeconds(10);
+        Assert.False(handlers.OkedWithin("Follower", TimeSpan.FromSeconds(5)));
     }
 
     [Fact]

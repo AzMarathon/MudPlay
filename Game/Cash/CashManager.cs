@@ -831,7 +831,8 @@ public sealed class CashManager : IDisposable
             settings.SkipCollectIfMakesLight,
             settings.SkipCollectIfMakesMedium,
             settings.SkipCollectIfMakesHeavy,
-            enc);
+            enc,
+            settings.SkipCollectPast90Percent);
         CurrencyHoldings c = snap.Currency;
         long[] rawHeld = { c.Copper, c.Silver, c.Gold, c.Platinum, c.Runic };
         long rawTotal = 0;

@@ -45,14 +45,15 @@ public sealed class ToolbarSplitButtonTests
     }
 
     [Fact]
-    public void ChooseAndRun_SetsSavesAndRunsNow_ThenClicksFollowIt()
+    public void Choose_SetsAndSavesWithoutRunning_ThenClicksFollowIt()
     {
         (ToolbarButtonItem item, List<string> ran, List<string> saved) = Build(null);
 
-        item.ChooseAndRun(item.SubActions[1]);
+        item.Choose(item.SubActions[1]);
+        Assert.Empty(ran);
         item.Command!.Execute(null);
 
-        Assert.Equal(new[] { "everything", "everything" }, ran);   // the pick ran, then the click
+        Assert.Equal(new[] { "everything" }, ran);
         Assert.Equal(new[] { "Drop:everything" }, saved);
         Assert.Same(item.SubActions[1], item.SelectedSubAction);
     }

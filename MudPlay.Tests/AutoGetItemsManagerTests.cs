@@ -62,6 +62,7 @@ public sealed class AutoGetItemsManagerTests
         public bool GateLight { get; set; }
         public bool GateMedium { get; set; }
         public bool GateHeavy { get; set; }
+        public bool Gate90 { get; set; }
 
         public Harness()
         {
@@ -74,7 +75,7 @@ public sealed class AutoGetItemsManagerTests
                 isPeekSuppressed: () => PeekSuppressed,
                 heldCount: id => Held.GetValueOrDefault(id),
                 encumbrance: () => Enc,
-                itemEncGates: () => (GateLight, GateMedium, GateHeavy),
+                itemEncGates: () => (GateLight, GateMedium, GateHeavy, Gate90),
                 log: Log,
                 isParadigm: () => Paradigm);
             Items.SetWireSender(b => Sent.Add(b));

@@ -56,13 +56,17 @@ public sealed class PartyRestSync : IDisposable
     // leader to stop NOW (a fresh drop below a rest floor, or being dragged along
     // while still recovering) re-asks. A duplicate @wait is harmless — the leader
     // dedupes waiting members.
-    public void RequestWait(WaitReason reason, bool resend = false)
+    //
+    // note: an optional reason shown after the token ("@wait (too heavy to move)"),
+    // the same shape MegaMUD uses for "@wait (can't move)"; the leader keys only on
+    // the token.
+    public void RequestWait(WaitReason reason, bool resend = false, string? note = null)
     {
         bool wasEmpty = _waitReasons.Count == 0;
         bool added = _waitReasons.Add(reason);
         if (!resend && (!added || !wasEmpty)) return;
         if (!CanSignal()) return;
-        Telepath(_party.LeaderName!, "@wait");
+        Telepath(_party.LeaderName!, note is null ? "@wait" : $"@wait {note}");
     }
 
     // Engine-callable entry point — clear a wait reason and telepath @ok to the
@@ -76,6 +80,9 @@ public sealed class PartyRestSync : IDisposable
         if (!CanSignal()) return;
         Telepath(_party.LeaderName!, "@ok");
     }
+
+    // True while any wait reason (a rest, a hold, a blinding…) still stands.
+    public bool IsHoldingWait => _waitReasons.Count > 0;
 
     // Broadcast @heal to the whole party (gangpath) — the flee-side signal a
     // low-HP follower emits instead of running. A follower that ran off alone

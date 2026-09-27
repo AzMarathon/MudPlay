@@ -602,6 +602,8 @@ public static class DefaultPatterns
             @"^\s*--\s*Following your Party leader\s+(?<dir>northeast|northwest|southeast|southwest|north|south|east|west|up|down)\s*--\s*$");
         yield return new RegexPattern(KnownPatterns.PartyStopsFollowing,
             @"^(?<player>\w+) (?:stops following you|has stopped following you)\.?");
+        yield return new RegexPattern(KnownPatterns.PartyLeftBehind,
+            @"^(?<player>\w+) is no longer following you\.?\s*$");
         // Outbound-invite confirmation — the server echoes this every
         // time we (or AutoPartyManager / RemoteCommandManager invite
         // handler) sends `invite X` on the wire. PartyManager adds an

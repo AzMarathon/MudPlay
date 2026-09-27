@@ -30,4 +30,9 @@ public enum WaitReason
     // the balanced @ok-on-last-clear so a held player who is also poisoned doesn't
     // release the wait prematurely.
     Held,
+
+    // Local character is over its max encumbrance ("You are too heavy to move") —
+    // a lowered max from a debuff, not a hold. Cleared once a fresh `i` shows the
+    // weight back under the max (TooHeavyWaitSignal).
+    TooHeavy,
 }

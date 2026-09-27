@@ -68,13 +68,12 @@ public sealed partial class ToolbarButtonItem : ObservableObject
     // Saves a pick (the sub-action's Key) to the character. Null in tests.
     private readonly Action<string>? _saveChoice;
 
-    // The ▾ menu's pick: the button runs this action from now on, and runs it now too —
-    // choosing it from the menu means "do this".
-    public void ChooseAndRun(ToolbarMenuAction action)
+    // The ▾ menu's pick only re-points the button: nothing is sent until the button
+    // itself is clicked, so a sweep like Drop everything can't fire off a mis-pick.
+    public void Choose(ToolbarMenuAction action)
     {
         SelectedSubAction = action;
         _saveChoice?.Invoke(action.Key);
-        RunSelected();
     }
 
     private void RunSelected()

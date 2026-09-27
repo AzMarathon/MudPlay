@@ -606,6 +606,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@loop 5/10 5/11 5/12` — an ad-hoc loop from two or more `map/room` coordinates
 - `@loop last` — re-run the last loop run this session
 - `@loop send kings road` — ask the player for a copy of their saved loop (they offer it; answer `@loop send yes` or `@loop send no`)
+- `@loop send` — the same, for the loop they're running right now
 - `@lair mud men` — start an Auto-Lair (a setup name or coordinates)
 - `@timer dragon` — boss timers whose name matches "dragon" (bare `@timer` lists them all). Each line gives the full respawn plus every un-passed early-spawn window — on Paradigm all three (`-20%` / `-10%` / `-5%`), on Stock the single `87.5%`
 - `@death all` — every unrecovered death (bare `@death` gives just the latest)
@@ -661,7 +662,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 | Command | Args | Does |
 |---|---|---|
 | `@goto` | `<destination>` | walks you to a saved GOTO favorite, a searched room (coords / name / acronym), or a boss |
-| `@loop` | `<name>`, ≥2 coords, `last`, or `send <name>` / `send yes` / `send no` | starts a saved loop, an ad-hoc coordinate loop, or (`@loop last`) re-runs the last loop run this session — including an ad-hoc one that was never saved. `@loop send` asks for a copy of one of their loops instead (see *Getting a loop from another player* below) |
+| `@loop` | `<name>`, ≥2 coords, `last`, or `send [name]` / `send yes` / `send no` | starts a saved loop, an ad-hoc coordinate loop, or (`@loop last`) re-runs the last loop run this session — including an ad-hoc one that was never saved. `@loop send` asks for a copy of one of their loops instead (see *Getting a loop from another player* below) |
 | `@lair` | `<name>` or coords | starts an Auto-Lair setup |
 | `@stop` | — | pauses your movement |
 | `@rego` | — | resumes it |
@@ -672,7 +673,7 @@ A new movement command overrides an `@stop`: after `@stop`, an `@goto` / `@loop`
 
 Another MudPlay player who grants you **Move player** (the same grant `@loop` needs) can send you a copy of one of their saved loops over chat:
 
-1. Send them **`@loop send <name>`** — the name matches the same way `@loop` does (exact name first, otherwise every word you type, in any order; apostrophes are optional, so `kings road` finds *King's Road*). They reply **`{preparing to send: King's Road, yes to confirm, no to deny}`**, or tell you the name matched nothing or several loops.
+1. Send them **`@loop send <name>`** — the name matches the same way `@loop` does (exact name first, otherwise every word you type, in any order; apostrophes are optional, so `kings road` finds *King's Road*). They reply **`{preparing to send: King's Road, yes to confirm, no to deny}`**, or tell you the name matched nothing or several loops. A bare **`@loop send`** offers the loop they're running right now (or says they aren't running one).
 2. Answer **`@loop send yes`** to receive it, or **`@loop send no`** to call it off (they reply that it was cancelled). The offer lapses after two minutes.
 3. On yes they reply how many rooms and lines are coming, then send the loop as a few encoded `@loopdata` lines, paced so they don't crowd out anything else. Your client puts it back together and saves it to your Loops list, with a note in the terminal.
 
@@ -717,6 +718,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 ### Party coordination — any active party member, no grant needed
 
 - `@wait` — hold: automation pauses until you `@ok` (which releases it).
+- `@waiting` — sent by your leader after going back for you: it's holding for your `@ok`, which your client sends once nothing holds you.
 - `@comeback` (optionally `<map/room>`) — a stranded member asks the party to come recover them; `@forget` calls that recovery off.
 - `@share` — splits your held coin evenly across the party.
 - `@ptrain` — the **Auto-train party** handshake between MudPlay clients (readiness reports, and the leader's give / withdraw / train orders during a party training trip). You never type it; a client only acts on it while its own *Auto-train party* box is on, and only on orders from its current leader. See **Auto-train party** under Settings → Auto-Trainer.
@@ -1166,7 +1168,7 @@ The **Action menu** also carries commands you fire once, on demand, rather than 
 - **Equip ▸** — wear any of your gear sets: **Default**, **Backstab**, **Pre-rest HP**, **Pre-rest Mana**, **While Moving** or **Bossing**.
 - (These are the local twins of the `@get-all` / `@drop-all` / `@hide-all` / `@equip` / `@deposit-all` remote commands.)
 
-**Toolbar split buttons.** The **Drop All**, **Hide All** and **Equip** toolbar buttons each have a small **▾** beside them. The ▾ picks **what the button does** — Drop All's unworn / everything / coins / keys, or which gear set Equip wears — and picking one also does it right away. From then on a click on the button does your pick (its tooltip names it), and the pick is saved to your character. A keybind on one of these buttons follows the same pick.
+**Toolbar split buttons.** The **Drop All**, **Hide All** and **Equip** toolbar buttons each have a small **▾** beside them. The ▾ picks **what the button does** — Drop All's unworn / everything / coins / keys, or which gear set Equip wears. Picking one only changes the button; nothing is sent until you click it. From then on a click on the button does your pick (its tooltip names it), and the pick is saved to your character. A keybind on one of these buttons follows the same pick.
 - **Reset States** — the recovery escape hatch. Clears your own stuck ailments, waits, and movement holds **and every party member's ailment chips** (blind / poison / disease / confuse / held), returning you to an idle state — reach for it when an engine looks wedged (e.g. the walker parked "held" or "waiting" with nothing actually happening) or a party row is stuck showing a condition that's already gone. It also **re-equips your Default gear set** (undoing a stuck Pre-rest swap) and **re-polls `health`** — the game's compact one-line HP/pool readout, far less scroll than the full stat screen — so a drifted max HP/mana snaps back to the real value. (Typing `health` yourself re-anchors the same way.) It's also on the terminal's right-click menu.
 
 ## Base modes
@@ -2794,7 +2796,7 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 ### Re-invite lost party members
 
 **Default:** On
-**What it does:** Leader-only. If a party member disconnects and reconnects within the grace window (see "If leading, wait only" below), you automatically re-invite them instead of having to notice and do it manually.
+**What it does:** Leader-only. If a party member disconnects and reconnects within the grace window (see "If leading, wait only" below), you automatically re-invite them instead of having to notice and do it manually. It also covers a follower your move left behind because they couldn't move (held, knocked down): you go back for them and re-invite them (see "If leading, wait only").
 
 ### Send @join nags to invited members
 
@@ -2832,7 +2834,15 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 ### If leading, wait only (s)
 
 **Default:** `90` seconds
-**What it does:** As leader, how long you keep watching for a disconnected member to come back before giving up on them — and how long a member's `@wait` holds your automation before you give up and move on without their `@ok` (0 = wait until they send it).
+**What it does:** As leader, the one window every party wait uses (0 = wait until they send it / come back):
+- how long you keep watching for a disconnected member to come back before giving up on them;
+- how long a member's `@wait` (or `@held`) holds your automation before you move on without their `@ok`;
+- how long you wait for a member you went back for to follow you again;
+- how long you hold for a member you left behind (below) after they rejoin.
+
+**Left behind by a hold.** If a follower can't move when your walk, loop or Auto-Lair steps on — held or knocked down — the game drops them from the party (`<name> is no longer following you.`; with one follower the whole party disbands). With **Re-invite lost party members** on, you stop, backtrack to find them, and re-invite them. Once they follow, their party row shows **Held** and you hold the full window again, or until their `@ok`. Their client is sent `@waiting` so it knows you're holding: a MudPlay follower answers `@ok` at once if nothing still holds it, or as soon as the hold clears. If they were left behind within a few seconds of sending `@ok`, that `@ok` evidently didn't mean they could move, so this time you wait the **full** window and ignore their `@ok`.
+
+**Too heavy to move.** A debuff such as *frail* lowers how much you can carry, so a follower near the limit can suddenly see `You are too heavy to move`. That isn't a hold: freedom and cure paralysis don't help. Your client telepaths the leader `@wait (too heavy to move)` and reads `i` every 15 seconds. It sends `@ok` once you're back under your (lowered) max, either because you dropped something or because the debuff wore off.
 
 **As a follower:** your client sends the leader `@wait` when you drop below a rest floor, and asks again whenever you drop below one afresh (HP or mana) or get walked on while still recovering — so if the leader's wait window runs out while you're resting, the next drop or the next room you're pulled into re-asks instead of leaving you dragged along. `@ok` goes once you're back to full rest-max.
 
@@ -2891,6 +2901,12 @@ Settings → Cash + Items.
 **What it does:** Skips picking up a coin if doing so would push your encumbrance into the named bracket. The three are nested by strictness — checking "Light" implies "Medium" and "Heavy" are also refused, since those are looser thresholds.
 **When you might change it:** Turn on "Don't make you Medium" if you want to stay light on your feet while exploring or fighting.
 
+### Don't collect past 90% encumbrance
+
+**Default:** Off
+**What it does:** Lets you pick up coin all the way into Heavy, but stops at 90% of your max carry weight. The spare 10% is there because a debuff such as *frail* can lower your max mid-fight. If you're filled to the brim, that leaves you **too heavy to move** until you drop something or it wears off (see *If leading, wait only*).
+**Important notes:** Any bracket gate above already stops lower, so turning one on ticks and locks this box.
+
 ### Collect after combat finished (Cash and Items)
 
 **Default:** Off
@@ -2904,7 +2920,7 @@ Settings → Cash + Items.
 ### Don't get item if it makes you Light / Medium / Heavy
 
 **Default:** all Off
-**What it does:** Same nested-strictness idea as the coin version above, but applied to picking up ground *items* instead of coin.
+**What it does:** Same nested-strictness idea as the coin version above, but applied to picking up ground *items* instead of coin. **Don't get item past 90% encumbrance** is the item twin of *Don't collect past 90% encumbrance*.
 
 ---
 

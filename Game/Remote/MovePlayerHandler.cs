@@ -268,8 +268,9 @@ public sealed class MovePlayerHandler : IDisposable
         string raw = string.Join(' ', ctx.Args).Trim();
         if (raw.Length == 0) { ctx.Reply("@loop requires a name, coordinate list, or 'last'"); return; }
 
-        // "@loop send <name>" hands the sender a copy of one of our saved loops, after
-        // we confirm with "@loop send yes" / "no" — see LoopShareHandler.
+        // "@loop send [name]" hands the sender a copy of one of our saved loops (bare:
+        // the one we're running), after we confirm with "@loop send yes" / "no" — see
+        // LoopShareHandler.
         if (ctx.Args[0].Equals(LoopShareHandler.SendVerb, StringComparison.OrdinalIgnoreCase))
         {
             _share.OnSend(ctx, string.Join(' ', ctx.Args.Skip(1)).Trim());

@@ -353,6 +353,7 @@ public static class KnownPatterns
     // to Lost. Group 0 captures the long-form direction word.
     public const string PartyFollowMove     = "party.follow-move";
     public const string PartyStopsFollowing = "party.stops-following";   // "X has stopped following you." / "X stops following you."
+    public const string PartyLeftBehind     = "party.left-behind";       // "X is no longer following you." — leader's view of a follower who couldn't move with us (held / knocked down)
     public const string PartyYouInvited     = "party.you-invited";       // "You have invited X to follow you." — our own outbound invite confirmation
     public const string PartyHeader         = "party.par-header";        // "The following people are in your travel party:" — anchors the par-block state machine
     public const string PartyMemberDeath    = "party.member-death";      // "X has been slain by Y" — conservative kill-attribution match

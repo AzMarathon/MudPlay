@@ -385,6 +385,8 @@ public sealed class AppServices
     // leader when the local character enters / leaves a rest state.
     // Receive side lives in Game.Remote.PartyEssentialHandlers.
     public Game.PartyRestSync PartyRest { get; }
+    // Built beside Inventory; wire bound in MainWindowViewModel.
+    public Game.TooHeavyWaitSignal TooHeavyWait { get; private set; } = null!;
 
     // One-to-many @-command sender. Used for Auto-Exp-Reset
     // (@Reset broadcast on loop / Auto-Lair start) and the
@@ -2436,7 +2438,8 @@ public sealed class AppServices
             readAilments: () => Conditions?.ActiveFlags ?? Models.GameData.MessageFlags.None,
             // HealthManager is built later in OnGameDataLoaded; the lambda reads it
             // lazily so a @status arriving after startup sees the live flee state.
-            readFleeing: () => Health?.IsFleeing ?? false);
+            readFleeing: () => Health?.IsFleeing ?? false,
+            readHoldingWait: () => PartyRest?.IsHoldingWait ?? false);
         // Drives the on-join @health exchange + the
         // periodic par poll. Wire-sender + cadence-from-settings hookup
         // happens in MainWindowViewModel.
@@ -4630,6 +4633,7 @@ public sealed class AppServices
                 ? Game.Inventory.EquipmentSlotMap.InventorySlotForWornCode(worn)
                 : null);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
+        TooHeavyWait = new Game.TooHeavyWaitSignal(Router, Inventory, PartyRest, Log);
 
         // Equipment-driven max HP/mana pool sync. A worn item can carry a flat
         // pool bonus (Items.Abil 88 = +Max HP, Abil 69 = +Max Mana — e.g. the
@@ -5406,7 +5410,8 @@ public sealed class AppServices
             {
                 Models.Profile.CashSettings c =
                     ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
-                return (c.SkipGetItemIfMakesLight, c.SkipGetItemIfMakesMedium, c.SkipGetItemIfMakesHeavy);
+                return (c.SkipGetItemIfMakesLight, c.SkipGetItemIfMakesMedium, c.SkipGetItemIfMakesHeavy,
+                        c.SkipGetItemPast90Percent);
             },
             log: Log,
             isParadigm: onParadigm);
@@ -6597,7 +6602,8 @@ public sealed class AppServices
         // @loop send — sender side paces its @loopdata lines the same way as @roomba sync; the
         // receiver saves a loop we asked for (window opened by our own outbound
         // `@loop send yes`, wired from the outbound-chat watcher in MainWindowViewModel).
-        LoopShare = new Game.Remote.LoopShareHandler(Loops, Log, paceScheduler: pacedReplyScheduler);
+        LoopShare = new Game.Remote.LoopShareHandler(Loops, Log, paceScheduler: pacedReplyScheduler,
+            runningLoop: () => LoopRunner.State is not Game.Map.LoopState.Idle ? LoopRunner.CurrentLoop : null);
         LoopShareInbox = new Game.Remote.LoopShareReceiver(Chat, Loops,
             notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)), Log);
 
@@ -6620,6 +6626,12 @@ public sealed class AppServices
         // from Settings → Other by ApplyOtherFromActiveProfile on load.
         PartyComeback = new Game.Remote.PartyComebackManager(
             RemoteCommands, Party, RoomTracker, RoomClassifier, Walker, LoopRunner, AutoLair, Router, Bfs, Log);
+        // A follower we backtracked for couldn't move — hold for their @ok as if
+        // they'd sent @held (chip + full wait window).
+        PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
+        PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
+        // Their pending @wait would park the walk back to them behind the party-wait gate.
+        Party.MemberLeftBehind += PartyEssentials.ReleaseWait;
 
         // @where reply → nav-map flash. Recognises the wrapped location reply an
         // @where'd MudPlay client telepaths back and routes it to the (open) map;
@@ -10075,6 +10087,8 @@ public sealed class AppServices
         // Same window holds movement for a dropped follower to reconnect and
         // re-party before we resume.
         PartyDisconnectMovement.GraceWindow = TimeSpan.FromSeconds(Math.Clamp(dto.IfLeadingWaitTotalSec, 0, 3600));
+        // And how long a recovery waits for a re-invited follower to follow again.
+        PartyComeback.FollowWaitWindow = TimeSpan.FromSeconds(Math.Clamp(dto.IfLeadingWaitTotalSec, 0, 3600));
         // Leader-side recovery reach — the farthest we'll BFS-walk to re-collect a
         // returning member before declining via @forget.
         PartyComeback.ReturnDistanceRooms = Math.Clamp(dto.ReturnDistanceRooms, 1, 500);
@@ -10107,6 +10121,7 @@ public sealed class AppServices
         AutoParty.InviteWaitWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
         PartyWaitMovement.WaitWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
         PartyDisconnectMovement.GraceWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
+        PartyComeback.FollowWaitWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
         PartyComeback.ReturnDistanceRooms = defaults.ReturnDistanceRooms;
         Party.LocalRankPreference = defaults.Rank;
         PartyBroadcaster.AutoExpResetEnabled = defaults.ResetStatisticsOnLoopStart;

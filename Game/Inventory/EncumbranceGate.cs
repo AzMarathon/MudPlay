@@ -17,14 +17,20 @@ public static class EncumbranceGate
     public const int StockMediumStartPct = 34;
     public const int StockHeavyStartPct  = 67;
 
+    // The "leave headroom" ceiling: the most a character may load, as a percent of
+    // max, when the 90% gate is on.
+    public const int HeadroomCapPct = 90;
+
     // Tightest cap weight across the enabled gate flags. Each gate caps
     // collection at the highest weight that still displays one bracket below it
-    // (so a Light gate keeps the character in None). No flags set → full
-    // MaxWeight, which by itself is the hard "can't exceed capacity" cap.
+    // (so a Light gate keeps the character in None). The 90% gate caps at 90% of
+    // max. No flags set → full MaxWeight, which by itself is the hard "can't
+    // exceed capacity" cap.
     public static long ComputeCapWeight(bool skipLight, bool skipMedium, bool skipHeavy,
-                                        EncumbranceReading enc)
+                                        EncumbranceReading enc, bool skipPast90 = false)
     {
         long cap = enc.MaxWeight;
+        if (skipPast90) cap = Math.Min(cap, (long)enc.MaxWeight * HeadroomCapPct / 100);
         if (skipHeavy)  cap = Math.Min(cap, GateBoundaryCap(enc.MaxWeight, StockHeavyStartPct));
         if (skipMedium) cap = Math.Min(cap, GateBoundaryCap(enc.MaxWeight, StockMediumStartPct));
         if (skipLight)  cap = Math.Min(cap, GateBoundaryCap(enc.MaxWeight, StockLightStartPct));

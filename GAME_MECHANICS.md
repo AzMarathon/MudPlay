@@ -2214,6 +2214,21 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - `MovementRefusalDetector` matches the refusal lines and calls `RoomTracker.NoteMoveBlocked` (which drops the pending move and re-confirms at the source).
 - The tracker ignores a source-room redisplay while a move is pending and keeps waiting for the move's real outcome (a different room), rather than inferring a refusal from the redisplay alone.
 
+### Too heavy to move (over max encumbrance)
+*Status: CONFIRMED 2026-09-26 (user; report `paradigm-20260926-195517`) · Realm: Paradigm (not recorded for Stock)*
+
+- **A character carrying more than their max encumbrance can't move and sees `You are too heavy to move`.** *([CONFIRMED] user; trailing punctuation not recorded — the client matches the phrase `too heavy to move` on an unquoted line.)*
+- **It is not a hold.** `freedom` / `cure paralysis` don't clear it.
+- **It clears one of two ways:** drop items until the weight is under the (lowered) max shown by `i`, or wait for the debuff that lowered the max to wear off.
+- **A debuff can lower the max mid-fight.** *([OBSERVED] Paradigm 1.9.1 data, 2026-09-26.)* **frail #949** carries **Encum% (96) −5**, beside AC −10, Accuracy −10, AlterDR% −15, Crits −5 and MaxDamage −2, with `Dur` 15.
+  - Its apply and wear-off lines are target-only: `You feel weak and powerless` / `You feel your strength return`. The caster, target-seen and witness lines are all `{null}`, so nobody else sees it land.
+  - The vampire fledgling (#808) carries it on its second punch (`AttHitSpell-1`), and the nightshade (#810 / #2586) on its first claw.
+- **A follower in this state is left behind when the leader moves** (see *Party → A follower who can't move is left behind*).
+
+**Client use:**
+- `TooHeavyWaitSignal` (follower side): on the line it telepaths the leader `@wait (too heavy to move)` (`WaitReason.TooHeavy`) and sends `i` every 15 s. It sends `@ok` once a fresh `i` shows current ≤ max.
+- `ComebackRequester` counts the line as a left-behind cause.
+
 ### Per-hop movement speed
 *Status: CONFIRMED 2026-07-22 (user) · Realm: both (realm-specific)*
 
@@ -3558,6 +3573,11 @@ There is no room to drop amethyst pendant here.
   - An item whose MDB `Worn` code is Off-Hand (12) can still print under the generic `(Worn)` bucket in the game's own `i` text (e.g. a *red skull*, a worn charm/skull item).
   - Such an item still mechanically fills the off-hand and blocks a 2H wield exactly the same way: `You may not ready a 2-handed weapon with your <item> worn!`, naming the blocking item. The client's own `EquippedItems.Slot` label is taken verbatim from the game's `i` text, so it can disagree with what actually blocks a 2H equip.
 - **The item's declared MDB `Worn` code is the authoritative signal, not its display bucket.**
+- **[OBSERVED report `paradigm-20260926-194514`, Paradigm] The reverse is blocked too.** Wearing an off-hand item while a two-hander is wielded is refused with `You may not wear an off-hand item while you have a 2-handed weapon readied.`
+
+**Client use:**
+- `EquipmentManager.PrependTwoHandOffHandConflictRems` rems the conflicting piece before a set that changes the hands.
+- `EquipmentManager.BuildEquipCommands` never fills an empty off-hand from the pack under a two-hander, and never fills a two-hander beside an off-hand (report `paradigm-20260926-194514`).
 
 ### Worn state: no forced unequip, persists across login (EP-zap exception)
 *Status: CONFIRMED*
@@ -4003,6 +4023,27 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - The client keys on the follow line to stay located; without it the tracker keeps its old anchor, reads every new room as a mismatch and falls to Lost within a few rooms.
   - The follow line is handled via `FollowMoveObserver` → `RoomTracker.NoteFollowMove`. `NoteFollowMove` wraps `RoomTracker.NoteMoveSent`'s prediction core but flags the move as a follow-drag, so its near-instant arrival isn't taken for a passive re-look.
 
+### A follower who can't move is left behind
+*Status: CONFIRMED 2026-09-26 (user; report `paradigm-20260926-195517`) · Realm: Paradigm (wire text observed there; Stock not recorded)*
+
+- **When the leader moves, only the followers who can move go with them.** A follower who is held, knocked down or too heavy to move stays in the room and drops out of the party. *([CONFIRMED] user, 2026-09-26.)* A cure such as *freedom* or *cure paralysis* may free a held follower, depending on the hold. It does nothing for one who is too heavy.
+- **The leader sees `<name> is no longer following you.`** *([OBSERVED] report `paradigm-20260926-195517`.)*
+- **With only one follower, the party then disbands: `Your party has been disbanded.`** *([OBSERVED] same report; see Party size bounds — a party needs 2.)*
+- **Nothing tells the leader why.** A held follower's `@wait` may never arrive before the leader's next step.
+  - In the report above, the follower telepathed `@wait (can't move)` at 19:54:29, cast `freedom` on themselves, and sent `@ok` at 19:54:30. They were still left behind by the leader's next step at 19:54:31, and again at 19:55:11 with no `@wait`.
+  - Each drop came right after `<name> kneels to meditate.`
+- **[OBSERVED] What in that area could hold, per the Paradigm 1.9.1 data (2026-09-26):**
+  - The room was 17/391 (Eastern Road). Its lair includes the boneless zombie (#803), and the lair at 17/395 includes the giant locust (#923), fought at 19:54:10. Both hit with **knockdown #318**: HoldPerson (74), `Dur` 4. The room sees `{target} is knocked flat!`.
+  - The fight at 19:54:24 was a tall nightshade and a vampire fledgling. Their hit spells (frail #949, absorb #950, spear of dark energy #5103, drain life #361, disease #5120) carry **no hold**.
+  - No `is knocked flat!` line for the follower appears in the capture. Several holds have no witness line at all (e.g. gust of wind #1255, frigid blast of wind #900), so a hold on a party member can land unseen.
+- **Likely cause in that report: too heavy, not held** *(user, 2026-09-26)*. The fledgling's punches landed on the follower at 19:54:24, and its second punch carries frail's carry-weight cut, which nobody else sees land. Being over max encumbrance isn't a hold, so the follower's `freedom` couldn't fix it and their `@ok` was premature. See *Movement & navigation → Too heavy to move (over max encumbrance)*.
+- **[NEEDS CONFIRMATION]** Whether `freedom` fully clears knockdown #318. The data files freedom (81) as clearing HoldPerson (74) wholesale.
+
+**Client use:**
+- `PartyManager.OnLeftBehind` → `MemberLeftBehind` → `PartyComebackManager` path C: backtrack, re-invite, then `PartyAilmentTracker.NoteInferredHold` (Held chip + `@wait` pause over the full "If leading, wait only" window) and a `@waiting` telepath the follower answers with `@ok` once nothing holds it (`PartyEssentialHandlers.OnWaiting`).
+- **Client policy** (user, 2026-09-26): gated on *Re-invite lost party members*; only a running walk / loop / Auto-Lair goes back.
+- **Client policy** (user, 2026-09-26): a member left behind within 5 s of their own `@ok` (`PartyEssentialHandlers.OkedWithin`) gets the full wait window after rejoining, and their `@ok` is ignored for it (`NotePause(ignoreOk)`). No `@waiting` is sent in that case.
+
 ### Losing the leader disbands the party
 *Status: CONFIRMED*
 
@@ -4132,6 +4173,7 @@ This covers how a client learns which ailments afflict itself and its party memb
   - The timer is the "If leading, wait only (s)" cap (`PartySettings.IfLeadingWaitTotalSec`).
   - On expiry the leader gives up and resumes, so a dropped / AFK member can't strand the party forever.
 - **The leader-side "ignore @wait when leading" opt-out drops inbound `@wait` before it ever pauses.**
+- **`@waiting` (leader → follower, TELEPATH) is MudPlay's nudge that the leader is holding for an `@ok`.** It is sent after re-collecting a follower who was left behind (see *A follower who can't move is left behind*). *(**Client policy**, user, 2026-09-26.)*
 - **Held follows the same `@wait` / `@ok` flow and cannot be suppressed.** A held member can't move, so the party waits for them. Held has no `Ignore` gate, so it is never suppressible.
   - **Both signals pause the leader.** A held member telepaths `@wait`/`@ok` *in addition to* announcing its `.@held` on say: the say lights the member's chip, and the `@wait` pauses the leader. The inbound `@held` say also routes through the same pause (`PartyEssentialHandlers.NotePause`), and that member's `@ok` on cure releases it.
 - **All of this is party-only.** Solo (no party / no leader / you ARE the leader), nothing is telepathed. Self recognition and clearing run entirely off the apply/wear-off spell messages.

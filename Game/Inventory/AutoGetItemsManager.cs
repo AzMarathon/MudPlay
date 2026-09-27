@@ -55,7 +55,7 @@ public sealed class AutoGetItemsManager : IDisposable
     private readonly Func<bool> _isParadigm;
     private readonly Func<bool> _isPeekSuppressed;
     private readonly Func<EncumbranceReading> _encumbrance;
-    private readonly Func<(bool Light, bool Medium, bool Heavy)> _itemEncGates;
+    private readonly Func<(bool Light, bool Medium, bool Heavy, bool Past90)> _itemEncGates;
     private readonly LogService? _log;
     private readonly IDisposable _noticeSub;
     private readonly IDisposable _gotSub;
@@ -106,7 +106,7 @@ public sealed class AutoGetItemsManager : IDisposable
         Func<bool>? isPeekSuppressed = null,
         Func<int, int>? heldCount = null,
         Func<EncumbranceReading>? encumbrance = null,
-        Func<(bool Light, bool Medium, bool Heavy)>? itemEncGates = null,
+        Func<(bool Light, bool Medium, bool Heavy, bool Past90)>? itemEncGates = null,
         LogService? log = null,
         Func<bool>? isParadigm = null)
     {
@@ -135,7 +135,7 @@ public sealed class AutoGetItemsManager : IDisposable
         // the parsed InventorySnapshot.Encumbrance and the per-character item
         // bracket gates (the "Cash + Items" tab checkboxes).
         _encumbrance = encumbrance ?? (static () => EncumbranceReading.Empty);
-        _itemEncGates = itemEncGates ?? (static () => (false, false, false));
+        _itemEncGates = itemEncGates ?? (static () => (false, false, false, false));
         _log = log;
 
         _noticeSub = router.Subscribe(KnownPatterns.YouNoticeRoom, OnYouNoticeRoom);
@@ -399,8 +399,8 @@ public sealed class AutoGetItemsManager : IDisposable
         long capWeight = long.MaxValue;
         if (encKnown)
         {
-            (bool gL, bool gM, bool gH) = _itemEncGates();
-            capWeight = EncumbranceGate.ComputeCapWeight(gL, gM, gH, enc);
+            (bool gL, bool gM, bool gH, bool g90) = _itemEncGates();
+            capWeight = EncumbranceGate.ComputeCapWeight(gL, gM, gH, enc, g90);
         }
         long projectedWeight = enc.CurrentWeight;
 

@@ -18,7 +18,8 @@ namespace MudPlay.Game.Remote;
 //     moves in lock-step; `meditate`→`medi` and `go <dir>`→bare-direction are the
 //     only token rewrites.
 //   - Receive-only signalling — @wait / @ok. Recorded in WaitingMembers, which
-//     the pause-gate reads to decide whether to hold automation.
+//     the pause-gate reads to decide whether to hold automation. @waiting is the
+//     leader's nudge back: it's holding for our @ok.
 //
 // Lifetime: registered once at AppServices construction after the engine ships.
 // Disposal unregisters every command so repeated AppServices builds in tests
@@ -29,7 +30,7 @@ public sealed class PartyEssentialHandlers : IDisposable
     private static readonly string[] RegisteredCommands =
     {
         "@version", "@health", "@status", "@where", "@who", "@path",
-        "@party", "@wait", "@ok",
+        "@party", "@wait", "@ok", "@waiting",
         "@lives", "@invite", "@join",
     };
 
@@ -43,6 +44,7 @@ public sealed class PartyEssentialHandlers : IDisposable
     private readonly Func<string?>? _readDraggedBy;
     private readonly Func<MessageFlags>? _readAilments;
     private readonly Func<bool>? _readFleeing;
+    private readonly Func<bool>? _readHoldingWait;
     private Action<byte[]>? _wireSender;
 
     // Paradigm-only authoritative position re-fix seam. Bound by AppServices to
@@ -81,6 +83,21 @@ public sealed class PartyEssentialHandlers : IDisposable
     // subscribe to PauseGateChanged for edge-triggered notification.
     public bool IsPaused => WaitingMembers.Count > 0;
 
+    // Members whose @ok we won't take this wait — their last one came just before
+    // our move left them behind, so it didn't mean they could move. Only the wait
+    // window releases them. Cleared with the wait.
+    private readonly HashSet<string> _okDistrusted = new(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyCollection<string> OkDistrusted => _okDistrusted;
+
+    // When each member last sent @ok (given name), to spot a premature one.
+    private readonly Dictionary<string, DateTime> _lastOkAt = new(StringComparer.OrdinalIgnoreCase);
+
+    public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;
+
+    // Whether member sent @ok within window of now.
+    public bool OkedWithin(string member, TimeSpan window)
+        => _lastOkAt.TryGetValue(GivenName(member), out DateTime at) && NowProvider() - at <= window;
+
     // Fires on every transition of IsPaused. Lets the pause-gate consumer drop a
     // single subscription instead of polling.
     public event Action<bool>? PauseGateChanged;
@@ -95,7 +112,8 @@ public sealed class PartyEssentialHandlers : IDisposable
         Func<MovementStatus>? readMovement = null,
         Func<string?>? readDraggedBy = null,
         Func<MessageFlags>? readAilments = null,
-        Func<bool>? readFleeing = null)
+        Func<bool>? readFleeing = null,
+        Func<bool>? readHoldingWait = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(player);
@@ -110,6 +128,7 @@ public sealed class PartyEssentialHandlers : IDisposable
         _readDraggedBy = readDraggedBy;
         _readAilments = readAilments;
         _readFleeing = readFleeing;
+        _readHoldingWait = readHoldingWait;
 
         // Categories sourced from RemoteCommandCatalog — single source of truth
         // for every documented @-command's required permission category.
@@ -125,6 +144,7 @@ public sealed class PartyEssentialHandlers : IDisposable
         Register("@party",   OnParty);
         Register("@wait",    OnWait);
         Register("@ok",      OnOk);
+        Register("@waiting", OnWaiting);
         Register("@lives",   OnLives);
         Register("@invite",  OnInvite);
         Register("@join",    OnJoin);
@@ -681,7 +701,7 @@ public sealed class PartyEssentialHandlers : IDisposable
     // an explicit @wait would, and the member's eventual @ok (sent by their own
     // AilmentSyncEngine on last-clear) releases it via OnOk. Honours the
     // leader-side PartySettings.IgnoreWaitWhenLeading opt-out.
-    public void NotePause(string member)
+    public void NotePause(string member, bool ignoreOk = false)
     {
         // Leader-side opt-out: when we're leading and the user has set
         // "ignore @wait when leading", a follower's @wait must not pause
@@ -690,15 +710,41 @@ public sealed class PartyEssentialHandlers : IDisposable
             return;
         bool wasPaused = IsPaused;
         WaitingMembers.Add(member);
+        if (ignoreOk) _okDistrusted.Add(GivenName(member));
         SetMemberWaitFlag(member, true);
         if (!wasPaused && IsPaused) PauseGateChanged?.Invoke(true);
     }
 
     private void OnOk(RemoteCommandContext ctx)
     {
+        _lastOkAt[GivenName(ctx.Sender)] = NowProvider();
+        if (_okDistrusted.Contains(GivenName(ctx.Sender))) return;
         bool wasPaused = IsPaused;
         WaitingMembers.Remove(ctx.Sender);
         SetMemberWaitFlag(ctx.Sender, false);
+        if (wasPaused && !IsPaused) PauseGateChanged?.Invoke(false);
+    }
+
+    // @waiting — our leader is holding for our @ok. It sends this after re-collecting
+    // us from a room we were left in (held / knocked down): we fell out of the party
+    // there, so a hold that cleared while we were out never sent its @ok. Answer
+    // @ok now when nothing still holds us; otherwise the @ok goes out when the last
+    // hold clears (PartyRestSync.RequestOk), since we're back in the party.
+    private void OnWaiting(RemoteCommandContext ctx)
+    {
+        string senderGiven = GivenName(ctx.Sender);
+        if (!IsBelievedLeader(senderGiven) || _wireSender is null) return;
+        if (_readHoldingWait?.Invoke() == true) return;
+        _wireSender(Encoding.Latin1.GetBytes($"/{senderGiven} @ok\r"));
+    }
+
+    // Drop one member's @wait without their @ok — they fell out of the party (left
+    // behind), so holding the leader in place can't help them; going back for them
+    // does, and their rejoin re-applies the hold (PartyAilmentTracker.NoteInferredHold).
+    public void ReleaseWait(string member)
+    {
+        bool wasPaused = IsPaused;
+        if (!WaitingMembers.Remove(member) && !WaitingMembers.Remove(GivenName(member))) return;
         if (wasPaused && !IsPaused) PauseGateChanged?.Invoke(false);
     }
 
@@ -709,6 +755,7 @@ public sealed class PartyEssentialHandlers : IDisposable
     // transition so the movement bridge resumes. No-op when nobody is waiting.
     public void ClearAllWaits()
     {
+        _okDistrusted.Clear();
         if (WaitingMembers.Count == 0) return;
         foreach (string member in WaitingMembers) SetMemberWaitFlag(member, false);
         WaitingMembers.Clear();

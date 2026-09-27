@@ -78,6 +78,11 @@ public sealed class CashSettings
     // Skip a coin pickup that would push past Medium → Heavy.
     public bool SkipCollectIfMakesHeavy { get; set; }
 
+    // Skip a coin pickup that would carry the character past 90% of max — lets
+    // them load up (Heavy included) while keeping headroom, so a carry-cutting
+    // debuff doesn't tip them over max and strand them "too heavy to move".
+    public bool SkipCollectPast90Percent { get; set; }
+
     // Defer pickups until the room's combat finishes before sending gets.
     // Shared by CashManager and the AutoGetItemsManager item engine.
     public bool CollectAfterCombatFinished { get; set; }
@@ -101,6 +106,10 @@ public sealed class CashSettings
 
     // Skip a ground-item pickup that would push past Medium → Heavy.
     public bool SkipGetItemIfMakesHeavy { get; set; }
+
+    // Skip a ground-item pickup that would carry the character past 90% of max
+    // (see SkipCollectPast90Percent).
+    public bool SkipGetItemPast90Percent { get; set; }
 }
 
 // Per-currency pickup decision.
