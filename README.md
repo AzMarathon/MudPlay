@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.112.3**
-> - Dark rooms: auto-combat reacts to a monster that only misses, and to one with a proper name (no leading article)
-> - Dark rooms: the attacker's name is matched against game data longest-first, so an attack line's verb isn't read as part of the name
-> - A target the server refuses with `You do not see <X> here!` is dropped, as `You don't see` already was, so a dead or departed dark-room target no longer blocks every later reveal
-> - Bug report shows the dark-room watcher's last reveal and last hold-off reason
+> **Version 3.112.4**
+> - Auto-train re-reads your purse with `i` before pricing a run, so a stale coin count no longer sends it to a trainer it can't pay
+> - A trainer's "not enough money" refusal re-reads the purse and fetches the difference from the bank once; if nothing covers it the run backs off instead of walking back and forth
+> - Auto-train keeps your Settings → Cash keep-on-hand amount: it tops up from the bank rather than spend below it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

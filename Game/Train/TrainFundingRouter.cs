@@ -50,10 +50,18 @@ public sealed class TrainFundingRouter
     // signal — there is no error line to watch for.
     public TimeSpan WithdrawWindow { get; set; } = TimeSpan.FromSeconds(4);
 
-    private enum Phase { Idle, WalkingToLeg, Collecting, Withdrawing }
+    // How long to wait for the `i` that re-anchors the purse. The snapshot is
+    // only authoritative on a full parse and drifts between them, so pricing a
+    // train against the last one walks to a trainer we cannot pay. On timeout we
+    // price against what we have rather than stalling the run.
+    public TimeSpan InventoryWindow { get; set; } = TimeSpan.FromSeconds(3);
+
+    private enum Phase { Idle, AwaitingInventory, WalkingToLeg, Collecting, Withdrawing }
 
     private readonly Func<RoomKey?> _currentRoom;
     private readonly Func<long> _onHandCopper;
+    private readonly Func<long>? _reserveCopper;
+    private readonly Action? _requestInventory;
     private readonly Func<IReadOnlyList<TrainFundingSource>> _sources;
     private readonly Func<RoomKey, RoomKey, int?> _distance;
     private readonly Func<RoomKey, bool> _walkTo;
@@ -107,7 +115,16 @@ public sealed class TrainFundingRouter
         Action<RoomKey, long> reconcileStash,
         Func<bool> autoGetCash,
         Action<bool> setAutoGetCash,
-        LogService? log = null)
+        LogService? log = null,
+        // The keep-on-hand floor, in copper. Money the user has asked to keep is
+        // not available to spend on training, so it is subtracted before the bill
+        // is compared and a withdrawal tops up to cover the bill WITHOUT eating
+        // into it. Null or zero means everything carried is spendable.
+        Func<long>? reserveCopper = null,
+        // Asks for a fresh `i`. Wired, Begin re-anchors the purse before pricing
+        // and the owner reports the parse through NoteInventoryRefreshed. Unwired,
+        // pricing uses the last snapshot as it always did.
+        Action? requestInventory = null)
     {
         _autoGetCash = autoGetCash ?? throw new ArgumentNullException(nameof(autoGetCash));
         _setAutoGetCash = setAutoGetCash ?? throw new ArgumentNullException(nameof(setAutoGetCash));
@@ -120,6 +137,8 @@ public sealed class TrainFundingRouter
         _armTimer = armTimer ?? throw new ArgumentNullException(nameof(armTimer));
         _reconcileStash = reconcileStash ?? throw new ArgumentNullException(nameof(reconcileStash));
         _log = log;
+        _reserveCopper = reserveCopper;
+        _requestInventory = requestInventory;
     }
 
     // Price the bill against everything reachable and act on the answer.
@@ -133,7 +152,42 @@ public sealed class TrainFundingRouter
         _visited.Clear();
         _session++;
 
-        return Advance(firstCall: true);
+        if (_requestInventory is null) return Advance(firstCall: true);
+
+        // PRICE AGAINST A FRESH PURSE. The carried-coin snapshot is authoritative
+        // only on a full `i` and drifts between them, so a stale figure can read as
+        // covering a bill it does not: the run then walks to the trainer, is refused
+        // there, and the withdrawal that would have fixed it was never considered.
+        // The answer arrives through NoteInventoryRefreshed, or the window closes
+        // and we price with what we have.
+        _phase = Phase.AwaitingInventory;
+        int session = _session;
+        _requestInventory();
+        _armTimer(InventoryWindow, () =>
+        {
+            if (_session != session || _phase != Phase.AwaitingInventory) return;
+            _log?.Info(LogCategory, "No inventory came back in time — pricing the "
+                + "train against the last known purse.");
+            PriceNow();
+        });
+        return TrainFundingStart.Collecting;
+    }
+
+    // A full `i` landed. Only interesting while Begin is holding for one.
+    public void NoteInventoryRefreshed()
+    {
+        if (_phase != Phase.AwaitingInventory) return;
+        PriceNow();
+    }
+
+    // Decide with the purse we now believe in. Advance reports Collecting and
+    // Short itself (the latter through Fail); a Funded answer reached this way has
+    // no synchronous caller left to return to, so it is announced here.
+    private void PriceNow()
+    {
+        _phase = Phase.Idle;
+        if (Advance(firstCall: true) == TrainFundingStart.Funded)
+            Finished?.Invoke(new(true, 0, "funded"));
     }
 
     // Abandon the errand — the owner's engine was stopped externally, or the run
@@ -154,7 +208,10 @@ public sealed class TrainFundingRouter
     private TrainFundingStart Advance(bool firstCall)
     {
         long onHand = _onHandCopper();
-        if (onHand >= _cost)
+        // What the user asked to keep is not available for the bill.
+        long reserve = Math.Max(0, _reserveCopper?.Invoke() ?? 0);
+        long spendable = Math.Max(0, onHand - reserve);
+        if (spendable >= _cost)
         {
             // Includes the happy accident the user asked for: coin picked up during
             // the errand can settle the bill mid-route, and the run should go
@@ -163,7 +220,9 @@ public sealed class TrainFundingRouter
             RestoreAutoGetCash();
             if (!firstCall)
             {
-                _log?.Info(LogCategory, $"Funded en route ({onHand:N0} copper on hand) — heading to the trainer.");
+                _log?.Info(LogCategory,
+                    $"Funded en route ({onHand:N0} copper on hand, {spendable:N0} "
+                    + "spendable) — heading to the trainer.");
                 Finished?.Invoke(new(true, 0, "funded"));
             }
             return TrainFundingStart.Funded;
@@ -186,7 +245,7 @@ public sealed class TrainFundingRouter
             if (!_visited.Contains(s.Room)) fresh.Add(s);
 
         TrainFundingPlan plan = TrainFundingPlanner.Plan(
-            _cost, onHand, fresh, here, _trainerRoom, _distance);
+            _cost, spendable, fresh, here, _trainerRoom, _distance);
 
         if (!plan.Affordable || plan.Legs.Count == 0)
         {

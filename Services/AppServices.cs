@@ -6694,7 +6694,22 @@ public sealed class AppServices
             reconcileStash: (room, copper) => StashBalances.Reconcile(room, copper),
             autoGetCash: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
             setAutoGetCash: on => _autoGetCashOverride = on ? true : null,
-            log: Log);
+            log: Log,
+            // Keep-on-hand is an amount of a chosen denomination; the router wants it
+            // in copper. The same conversion AutoDepositManager uses for the deposit
+            // floor, so the two agree on what "keep" means.
+            reserveCopper: () =>
+            {
+                Models.Profile.CashSettings cash =
+                    ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+                return (long)cash.KeepOnHandWealth
+                       * Game.Inventory.CurrencyHoldings.CopperUnit(
+                             cash.KeepOnHandDenomination);
+            },
+            requestInventory: () => SendGameCommand("i"));
+        // The parse that answers that `i`. Harmless at any other time: the router
+        // only listens while it is holding for one.
+        Inventory.Changed += () => TrainFunding.NoteInventoryRefreshed();
 
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
             RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log);

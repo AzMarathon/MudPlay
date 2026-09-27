@@ -228,6 +228,7 @@ public sealed class TrainerWalkManager : IDisposable
     public void TrainNow()
     {
         if (IsBusy || !_wire.IsBound) return;
+        _refundTried = false;
         // An explicit click overrides any funding back-off the armed path is sitting
         // on — the user asking to train now has better information than our
         // projection of when they'd be able to afford it.
@@ -812,7 +813,40 @@ public sealed class TrainerWalkManager : IDisposable
         return true;
     }
 
-    private void OnNoMoney(MatchResult m) => StopLoop(StopReason.NoMoney);
+    // The server is the authority on the purse, and it has just said no. The
+    // client only got here because its own figure said yes, so the figure was
+    // wrong: re-anchor it and price again, which is also what finds the bank trip
+    // that would settle the bill. Once per run — a second refusal after a funding
+    // errand has already run means the money is not there, and repeating would be
+    // the walk-back-and-forth this exists to stop.
+    //
+    // Without the hold on the give-up path the armed trigger re-fires on the next
+    // kill and walks to the trainer again, refused again, forever.
+    private void OnNoMoney(MatchResult m)
+    {
+        if (_phase != Phase.Training) return;
+
+        if (!_refundTried && _funding is not null && _target is { } t
+            && _tracker.State.CurrentRoom is { } here)
+        {
+            _refundTried = true;
+            _log?.Info("AutoTrain",
+                "Trainer refused for money the purse said we had — re-reading the "
+                + "purse and looking for funds.");
+            if (BeginFunding(here.Key, t))
+            {
+                _phase = Phase.Funding;
+                StateChanged?.Invoke();
+                return;
+            }
+        }
+
+        HoldFundingRetry(_lastFundingShortfall);
+        StopLoop(StopReason.NoMoney);
+    }
+
+    // One funding recovery per run, cleared with the run.
+    private bool _refundTried;
 
     private void StopLoop(StopReason reason)
     {

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.112.4
+
+- Auto-train re-reads your purse with `i` before pricing a run, so a stale coin count no longer sends it to a trainer it can't pay
+- A trainer's "not enough money" refusal re-reads the purse and fetches the difference from the bank once; if nothing covers it the run backs off instead of walking back and forth
+- Auto-train keeps your Settings → Cash keep-on-hand amount: it tops up from the bank rather than spend below it
+
 ## 3.112.3
 
 - Dark rooms: auto-combat reacts to a monster that only misses, and to one with a proper name (no leading article)
