@@ -263,7 +263,7 @@ public static class RemoteCommandCatalog
             ["@deposit-all"]  = new("@deposit-all", "bank all excess coin"),
             ["@do"]           = new("@do <command>", "sends the command verbatim to the game (highest-trust)"),
             ["@kill"]         = new("@kill <target>", "retargets your combat onto the named monster this round"),
-            ["@trap"]         = new("@trap <dir>", "search and disarm a trap in that direction; @trap stop aborts"),
+            ["@trap"]         = new("@trap <dir>", "disarm a trap in that direction; @trap stop aborts"),
             ["@train"]        = new("@train", "trains (and applies your CP plan if Auto-train-stats is on); assumes you're at a trainer"),
             ["@equip"]        = new("@equip <set> [update] | @equip-all", "wears a saved gear set (default / backstab / resthp / restma / moving / bossing, or its keyword); 'update' saves what you're wearing into that set; @equip-all wears the Default set"),
             ["@goto"]         = new("@goto <destination>", "walks you to a GOTO favorite, a searched room (coords/name/acronym), or a boss"),

@@ -2474,6 +2474,17 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 ### Exit traps — search and disarm
 *Status: CONFIRMED (capture 2026-07-15, reports 132150 and 131801); `disarm trap <longdir>` acceptance NOT wire-confirmed*
 
+- **A trap never has to be searched for before it's disarmed.** *([CONFIRMED] 2026-09-27, user.)*
+  - `disarm trap <dir>`, sent in the trapped room toward the trap's direction, fires against the trap directly.
+  - `sea <dir>` is player flavour: it tells a player where a trap is, from the days of reading room descriptions for clues. Now that trapped exits come from the game data, the client never searches for a trap.
+- **A failed disarm may or may not set the trap off, on both realms.** *([CONFIRMED] 2026-09-27, user.)*
+- **Disarm replies differ by realm.** *(Paradigm: [OBSERVED] user screenshot 2026-09-27, meanings [CONFIRMED] user. Stock: [OBSERVED] `wccmmud.dll` 1.11p string table from github.com/lucid2310/Majormud, plus a user screenshot; meaning [CONFIRMED] user.)*
+  - **Success, both realms:** `You successfully disarmed the trap to the <dir>.`
+  - **Paradigm, no trap that way:** `Your command had no effect.`
+  - **Paradigm, failed disarm:** `You try to disarm the trap, but instead trigger it!`. It names no direction. The capture came from a character with Traps skill 0, a guaranteed failure; the trap fired, HP 302 → 222.
+  - **Stock, failed disarm OR no trap that way:** `You failed to disarm any trap to the <dir>.`, e.g. `disarm trap e` with no trap east. It's the only failure string near `_cmd_disarm`, along with `There is no exit in that direction!` for a wall, so it can't tell a fumble from an empty exit.
+  - `[NEEDS CONFIRMATION]` Does a Paradigm failed disarm that *doesn't* fire the trap print a different line? And is a fired trap still there to disarm again?
+  - The Stock DLL also spells search hits for up/down as `You found a trap above you!` / `You found a trap below you!`.
 - **A trap search reports the found trap with the LONG-form direction word.** Searching a trapped exit is `sea <dir>`; on a hit the game replies `You found a trap to the <dir>!` where `<dir>` is spelled out long — `You found a trap to the southeast!` (confirmed on the wire, alongside the outbound `sea southeast` that produced it).
 - **Whether `disarm trap <longdir>` (e.g. `disarm trap southeast`) is accepted the same way `sea <longdir>` is has NOT been directly wire-confirmed** (the reported capture stalled before the disarm went out); it is the walker's existing send shape and is flagged for live verification.
 - **Trap-disarm capability can be inferred from the character's race and class via game data — the parsed Traps stat is not the only signal** *(report 131801)*.
@@ -2482,8 +2493,11 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - The Traps *value* itself still comes only from the `stat` screen's `Traps:` row — the single-line `exp` output (`Exp: N Level: M Exp needed for next level: ...`) reports only progression and never carries it.
 
 **Client use:**
-- The client keys on the trap-found line to drive `TrapDisarmManager`'s search→disarm loop.
-- **Direction matching must normalise both sides.** The @trap remote handler enqueues the short form it parsed, but the walker enqueues the long-form direction word — and the game's reply is long-form. Comparing a short-normalised observed direction against an un-normalised stored one (long-form from the walker) never matched, so a successful search stalled in *Searching* and the disarm never fired (the reported bug). Both the observed and the stored/enqueued direction are now normalised to the short form before compare.
+- `TrapDisarmManager` disarms every request directly (`disarm trap <dir>`), with no search phase, for both the walker's trapped exits and remote `@trap`. The trap-found line is no longer acted on.
+  - **Paradigm trigger line:** it retries up to `MaxTrapDisarmAttempts`, then reports failure, and the walker stops.
+  - **Paradigm `Your command had no effect.` while a disarm is pending:** read as "no trap", and the walker moves on.
+  - **Stock `You failed to disarm any trap to the <dir>.`:** it retries up to the cap, then takes the exit as clear and walks on. That's the user's call: the worst case is walking into a live trap, which a failed disarm risks anyway. (An earlier note said the manager ran a search→disarm loop for `@trap`; superseded 2026-09-27.)
+- **Direction matching must normalise both sides.** The @trap remote handler enqueues the short form it parsed, but the walker enqueues the long-form direction word — and the game's reply is long-form. Comparing a short-normalised observed direction against an un-normalised stored one (long-form from the walker) never matched, so the flow stalled (the reported bug, report 132150, when it still searched first). Both the observed and the stored/enqueued direction are now normalised to the short form before compare.
 - **The disarm send stays long-form** — kept long-form by analogy with `sea` (`sea southeast` is wire-confirmed, matching the confirmed search); unverified for `disarm` itself. The walker keeps sending the long form it enqueued rather than re-shortening it.
 - Trap-skill grant check: `AbilityNames.HasTrapAbility` — the same grant the party-delegation capability check already reads for other players.
 - When the Traps value hasn't been captured yet (a freshly loaded profile with no `stat` this session, or a new character), the client falls back to the race/class game-data grant to decide capability: the walker self-disarms if the selected class or race grants Traps, rather than deciding on a defaulted-zero value and waltzing through. A positive parsed Traps value remains the primary signal.

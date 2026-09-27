@@ -85,25 +85,15 @@
                       IsChecked="{Binding UtilizeDisarmTrapsIfAble, Mode=TwoWay}"
                       ToolTip.Tip="When checked (default): at a trapped exit the walker tries to disarm before moving — first yourself if you have the Traps skill, otherwise it delegates to a capable party member via @trap on say. When unchecked: the walker walks straight through trapped exits with no disarm attempt."/>
 
-            <!-- @trap auto-disarm attempt caps. Search-attempts row sits
-                 ABOVE disarm-attempts per user spec — the search runs
-                 first, then disarm. -->
-            <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto" Margin="0,12,0,0" ColumnSpacing="8" RowSpacing="4">
-                <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="@trap max searches"/>
+            <!-- @trap auto-disarm attempt cap. -->
+            <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto" Margin="0,12,0,0" ColumnSpacing="8" RowSpacing="4">
+                <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="@trap max disarms"/>
                 <NumericUpDown Grid.Row="0" Grid.Column="1"
-                               Value="{Binding MaxTrapSearchAttempts, Mode=TwoWay}"
-                               Minimum="1" Maximum="100" Increment="1"
-                               FormatString="0" ShowButtonSpinner="True"
-                               Width="120" MinWidth="120"
-                               ToolTip.Tip="Caps the `sea &lt;dir&gt;` retry loop when handling an @trap. After this many failed searches we give up and telepath the sender. Default 20."/>
-
-                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="@trap max disarms"/>
-                <NumericUpDown Grid.Row="1" Grid.Column="1"
                                Value="{Binding MaxTrapDisarmAttempts, Mode=TwoWay}"
                                Minimum="1" Maximum="50" Increment="1"
                                FormatString="0" ShowButtonSpinner="True"
                                Width="120" MinWidth="120"
-                               ToolTip.Tip="Caps the `disarm trap &lt;dir&gt;` retry loop after the trap has been spotted. Default 5."/>
+                               ToolTip.Tip="Caps the `disarm trap &lt;dir&gt;` retry loop. Default 5."/>
             </Grid>
 
             <!-- Walker door pick cap + verb preference. Bashing has no cap: a

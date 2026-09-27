@@ -664,7 +664,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@dupe Moron` — copy the sender's query, roomba, and quest permissions onto Moron (Elevated; once per player; telepath / gangpath only)
 - `@profile 2` · `@profile backstab` — swap combat profile by number or name
 - `@kill goblin shaman` — retarget your combat onto that monster this round
-- `@trap north` — search and disarm a trap that way (`@trap stop` aborts)
+- `@trap north` — disarm a trap that way (`@trap stop` aborts)
 - `@equip backstab` — wear the saved gear set whose keyword is "backstab"
 - `@equip restma update` — save what you're wearing right now into your Pre-rest Mana set
 - `@do rest` — send `rest` to the game verbatim (highest-trust)
@@ -739,7 +739,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 - `@do <command>` — sends the command verbatim to the game (the highest-trust command).
 - `@kill <target>` — retargets your combat onto the named monster this round.
 - `@heal` — asks a configured party healer to heal whoever's low (only a healer responds).
-- `@trap <dir>` — search and disarm a trap in that direction; `@trap stop` aborts.
+- `@trap <dir>` — disarm a trap in that direction; `@trap stop` aborts.
 - `@train` — trains (and applies your CP plan, if Auto-train-stats is on) — assumes you're already at a trainer.
 - `@equip <set>` — wears one of your saved gear sets. Name it by its keyword, its name, or the short names **default**, **backstab**, **resthp**, **restma**, **moving** and **bossing** (e.g. `@equip backstab`). `@equip-all` wears the Default set. (The older dashed `@equip-backstab` still works, for party members on earlier versions.)
 - `@equip <set> update` — rewrites that set to **exactly what you're wearing right now**: every worn piece fills its slot (a second ring or bracelet takes slot 2), every unworn slot goes back to *no change*, and the set's alternate-weapon entries are left as they were. It's saved to your character at once, and an open Equipment Manager tab refreshes to show it. It won't run mid gear-swap, or before your inventory has been read once (an `i`) — an unread inventory would empty the set.
@@ -3324,10 +3324,16 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **Default:** On
 **What it does:** When the walker's route crosses a trapped exit, MudPlay tries to disarm it (using your own Traps skill) before stepping through. Turning this off makes the walker just walk through and eat any trap damage.
 
-### @trap max searches / @trap max disarms
+### @trap max disarms
 
-**Default:** 20 / 5
-**What it does:** Caps how many times MudPlay retries searching for a trap (in response to a remote `@trap` command), and separately how many times it retries actually disarming one, before giving up.
+**Default:** 5
+**What it does:** Caps how many times MudPlay tries to disarm a trap before giving up, whether for your own walk or a remote `@trap` command.
+- **A failed disarm can set the trap off,** so each retry risks its damage again.
+- **Paradigm:**
+  - A failure prints `You try to disarm the trap, but instead trigger it!`. After the cap, a walk stops at that exit rather than walking into the trap.
+  - `Your command had no effect.` means there's no trap that way, and the walk carries on.
+- **Stock:** `You failed to disarm any trap to the <dir>.` means either a failed disarm or no trap there; the game doesn't say which. MudPlay retries up to the cap, and if it's still getting that answer it takes the exit as clear and walks on.
+- **No searching:** MudPlay never searches for a trap first. `disarm trap <dir>` works on the trap directly, and your game data already says which exits are trapped.
 
 ### Door max pick
 
@@ -3793,7 +3799,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Discovered trainers "Use?" | all allowed | bool per trainer (disabled-list) | `DisabledTrainers` | Models/Profile/AutoTrainerSettings.cs |
 | Block @suicide when lives ≤ | `5` | 0–9 | `OtherSettings.MaxSuicideLivesThreshold` | Models/Profile/OtherSettings.cs |
 | Utilize disarm traps | `true` | bool | `OtherSettings.UtilizeDisarmTrapsIfAble` | Models/Profile/OtherSettings.cs |
-| @trap max searches / disarms | 20 / 5 | 1–100 / 1–50 | `MaxTrapSearchAttempts` / `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |
+| @trap max disarms | 5 | 1–50 | `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |
 | Door max bash / pick / Pick over bash | 10/10/false | 1–100 / 1–100 / bool | `MaxBashAttempts`, `MaxPickAttempts`, `PicklocksOverBash` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
 | @comeback backtrack rooms / auto-request | 10 / true | 1–50 / bool | `MaxComebackBacktrackRooms` / `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |

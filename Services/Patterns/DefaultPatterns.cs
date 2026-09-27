@@ -815,6 +815,14 @@ public static class DefaultPatterns
             @"^You notice nothing different to the (?<dir>\w+)\.?\s*$");
         yield return new RegexPattern(KnownPatterns.TrapDisarmedSuccess,
             @"^You successfully disarmed the trap to the (?<dir>\w+)\.?\s*$");
+        // A failed disarm sets the trap off (and hurts). It names no direction;
+        // TrapDisarmManager only reads it while its own disarm is pending.
+        yield return new RegexPattern(KnownPatterns.TrapDisarmTriggered,
+            @"^You try to disarm the trap, but instead trigger it!?\s*$");
+        // Stock's one disarm-failure line, which also answers a direction with no
+        // trap — see TrapDisarmManager.OnDisarmFailedAny.
+        yield return new RegexPattern(KnownPatterns.TrapDisarmFailedAny,
+            @"^You failed to disarm any trap to the (?<dir>\w+)\.?\s*$");
 
         // ----- Door handling --------------------------------------------
         // Single-shot match — DoorOpenManager runs one request at a time,

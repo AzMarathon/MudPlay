@@ -509,10 +509,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         => Raise(new WalkEvent(WalkEventKind.Finished, "pyramid climb: arrived", destination));
 
     // Bind the trap-disarm enqueuer. Production wires this to
-    // TrapDisarmManager.Enqueue with trapKnown=true — a walker step only reaches
-    // here on a RoomExitHint.Trap, so the trap is already known and disarms
-    // directly (no confirming search) before the move goes out. Tests pass a
-    // capture-and-fire delegate.
+    // TrapDisarmManager.Enqueue, which disarms directly before the move goes out.
+    // Tests pass a capture-and-fire delegate.
     //
     // Signature: (direction, sender, reply). The walker passes the
     // lowercase direction word, the literal string "walker", and a reply
@@ -2127,10 +2125,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
-        // Success message from the TrapDisarmManager:
-        //   "Trap to the {direction} disarmed."
-        bool disarmed = reply.Contains("disarmed", StringComparison.OrdinalIgnoreCase);
-        if (!disarmed)
+        // TrapDisarmManager's "Trap to the {direction} disarmed." or "No trap to the
+        // {direction} to disarm." both leave the exit clear to take.
+        bool clear = reply.Contains("disarmed", StringComparison.OrdinalIgnoreCase)
+                     || reply.StartsWith("No trap", StringComparison.OrdinalIgnoreCase);
+        if (!clear)
         {
             Raise(new WalkEvent(WalkEventKind.Failed,
                 $"trap disarm failed: {reply}", _destination));
