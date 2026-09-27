@@ -404,10 +404,9 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // name; the Health tab owns the Health section of the same working profiles.
     private readonly CombatProfileStagingSession _session;
 
-    // One numbered chip per working profile; the active one is highlighted gold.
-    // Clicking a chip STAGES a switch through the shared session (folds both tabs'
-    // boxes into the outgoing profile, loads the selected one) — no persistence.
-    public ObservableCollection<ViewModels.CombatProfileMenuItem> ProfileChips { get; } = new();
+    // The profile chips (shared with the Health / Spells / Party tabs). Clicking one
+    // STAGES a switch through the session — no persistence.
+    public CombatProfileChipBar ChipBar { get; }
 
     // The active profile's name — the textbox below the chips. Staged like the rest.
     [ObservableProperty] private string _activeProfileName = string.Empty;
@@ -420,7 +419,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     // The active profile's distinct accent colour — each profile reads as its own,
     // so the per-profile borders + header recolour on a chip switch to match the
-    // active chip. Raised alongside ActiveProfileLabel from RebuildProfileChips.
+    // active chip. Raised alongside ActiveProfileLabel from OnChipsChanged.
     public Avalonia.Media.IBrush ActiveProfileAccentBrush =>
         CombatProfilePalette.SolidBrush(_session.ActiveIndex + 1);
     public Avalonia.Media.IBrush ActiveProfileAccentSoftBrush =>
@@ -434,17 +433,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         MarkDirty();
     }
 
-    private void RebuildProfileChips()
+    private void OnChipsChanged()
     {
-        ProfileChips.Clear();
-        IReadOnlyList<CombatSpellProfile> profiles = _session.Profiles;
-        for (int i = 0; i < profiles.Count; i++)
-        {
-            int index = i;
-            ProfileChips.Add(new ViewModels.CombatProfileMenuItem(
-                number: i + 1, name: profiles[i].Name, isActive: i == _session.ActiveIndex,
-                switchCommand: new RelayCommand(() => _session.SwitchTo(index))));
-        }
         OnPropertyChanged(nameof(ActiveProfileLabel));
         OnPropertyChanged(nameof(ActiveProfileAccentBrush));
         OnPropertyChanged(nameof(ActiveProfileAccentSoftBrush));
@@ -572,8 +562,9 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         _session.CaptureRequested += CaptureCombatBoxesToActive;
         _session.LoadRequested += OnSessionLoadPerProfile;
         _session.ReloadAllRequested += OnSessionReloadAll;
-        _session.ChipsChanged += RebuildProfileChips;
+        _session.ChipsChanged += OnChipsChanged;
         _session.Committed += OnSessionCommitted;
+        ChipBar = new CombatProfileChipBar(_session);
         ActionOrderInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.ActionOrder, MarkDirty);
         WeaponsInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.WeaponsAndCommands, MarkDirty);
         BackstabInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.Backstab, MarkDirty);
@@ -592,8 +583,9 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             _session.CaptureRequested -= CaptureCombatBoxesToActive;
             _session.LoadRequested -= OnSessionLoadPerProfile;
             _session.ReloadAllRequested -= OnSessionReloadAll;
-            _session.ChipsChanged -= RebuildProfileChips;
+            _session.ChipsChanged -= OnChipsChanged;
             _session.Committed -= OnSessionCommitted;
+            ChipBar.Dispose();
             ActionOrderInProfile.Dispose();
             WeaponsInProfile.Dispose();
             BackstabInProfile.Dispose();
@@ -606,7 +598,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         LoadFromProfile();                // shared + active per-profile from Settings["Combat"]
         LoadWeaponBoxesFromActive();      // weapons from the session's active profile
         ActiveProfileName = _session.Active.Name;
-        RebuildProfileChips();
+        OnChipsChanged();
         _suppressDirty = false;
     }
 

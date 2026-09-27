@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
+             xmlns:vmroot="using:MudPlay.ViewModels"
+             x:Class="MudPlay.Views.Settings.CombatProfileChipBar"
+             x:DataType="vm:CombatProfileChipBar">
+
+    <UserControl.Styles>
+        <!-- A compact numbered button tinted its own profile colour (Background /
+             Foreground / BorderBrush bound per item), so the profiles read as
+             distinct; the active chip gets a solid-colour ring. -->
+        <Style Selector="Button.ProfileChip">
+            <Setter Property="Padding" Value="9,2"/>
+            <Setter Property="MinWidth" Value="30"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+    </UserControl.Styles>
+
+    <ItemsControl ItemsSource="{Binding Chips}" VerticalAlignment="Center">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="3"/>
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vmroot:CombatProfileMenuItem">
+                <Button Classes="ProfileChip" Classes.Active="{Binding IsActive}"
+                        Background="{Binding ChipBackground}"
+                        Foreground="{Binding ChipForeground}"
+                        BorderBrush="{Binding ChipBorder}"
+                        Content="{Binding Number}" Command="{Binding SwitchCommand}"
+                        ToolTip.Tip="{Binding Display}"/>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

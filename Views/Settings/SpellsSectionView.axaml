@@ -73,6 +73,12 @@
                 <TextBlock Classes="SettingsSectionSub"
                            Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
                 <Border Classes="SettingsSectionRule"/>
+                <!-- Switch combat profiles from this tab too (the Combat tab's chips), to
+                     compare or set profiles without going back and forth. -->
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                    <TextBlock Classes="FieldLabel" Text="Combat profile:" VerticalAlignment="Center"/>
+                    <settings:CombatProfileChipBar DataContext="{Binding ChipBar}"/>
+                </StackPanel>
 
 
 

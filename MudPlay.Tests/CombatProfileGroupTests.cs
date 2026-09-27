@@ -239,10 +239,11 @@ public sealed class CombatProfileGroupTests
     }
 
     [Fact]
-    public void Staging_PartyEditWrittenOnCommitting_LandsInTheProfileItWasMadeFor()
+    public void Staging_PartyTabFollowsTheChips()
     {
-        // A Party-tab edit made before a chip switch belongs to the profile that was
-        // live; after the commit the switched-to profile's party values go live.
+        // The Party tab stages its party healing like the other tabs: an edit made
+        // before a chip switch stays with that profile, the switch loads the other
+        // profile's value into the tab, and the commit makes the active one live.
         ProfileService profile = new();
         profile.LoadBlank();
         var (store, _, _, _) = TwoProfiles();
@@ -256,12 +257,38 @@ public sealed class CombatProfileGroupTests
             equipment: () => null, save: () => { },
             readParty: () => live, writeParty: p => live = p);
         using CombatProfileStagingSession session = new(bound, profile, () => null);
-        session.Committing += () => live.AoeMinMembers = 3;   // the Party tab's pending edit
+        int partyBox = live.AoeMinMembers;                        // the tab's box, loaded from live
+        session.CaptureRequested += () => session.Active.Party.AoeMinMembers = partyBox;
+        session.LoadRequested += () => partyBox = session.Active.Party.AoeMinMembers;
 
+        partyBox = 3;                                             // edited on profile 1
         session.SwitchTo(1);
-        session.CommitIfDirty();
+        Assert.Equal(4, partyBox);                                // the tab now shows profile 2's
 
+        session.CommitIfDirty();
         Assert.Equal(3, profile.Current.CombatProfiles!.Profiles[0].Party.AoeMinMembers);
         Assert.Equal(4, live.AoeMinMembers);
+    }
+
+    [Fact]
+    public void Staging_StartsTheActiveProfileFromTheLiveParty()
+    {
+        // A live Party-tab value the profile copy hasn't caught up with is what the
+        // tab shows, so the working copy starts from it.
+        ProfileService profile = new();
+        profile.LoadBlank();
+        var (store, _, _, _) = TwoProfiles();
+        profile.Current!.CombatProfiles = store.CombatProfiles;
+        PartySettings live = new() { AoeMinMembers = 5 };
+        CombatProfileManager bound = new(
+            profile: () => profile.Current,
+            readCombat: () => new CombatSettings(), writeCombat: _ => { },
+            readHealth: () => new HealthSettings(), writeHealth: _ => { },
+            readSpells: () => new SpellsSettings(), writeSpells: _ => { },
+            equipment: () => null, save: () => { },
+            readParty: () => live, writeParty: p => live = p);
+        using CombatProfileStagingSession session = new(bound, profile, () => null);
+
+        Assert.Equal(5, session.Active.Party.AoeMinMembers);
     }
 }

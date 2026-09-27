@@ -1,5 +1,10 @@
 # Version history
 
+## 3.115.10
+
+- Health, Spells and Party tabs get the combat-profile chips at the top, so profiles can be switched and compared from any of them
+- The Party tab's party healing and party bless follow the chips like the other tabs, instead of waiting for Apply
+
 ## 3.115.8
 
 - A disarm that sets the trap off is recognised by every trap's own failure line, on both realms (Stock's walker no longer stalls on one)

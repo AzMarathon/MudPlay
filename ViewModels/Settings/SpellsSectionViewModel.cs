@@ -175,6 +175,8 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         : this(AppServices.Current.Profile, CreateStandaloneSession()) { }
 
     // "Include in combat profile" checkboxes, one per header on this tab.
+    // The profile chips, so profiles can be switched from this tab too.
+    public CombatProfileChipBar ChipBar { get; }
     public CombatProfileGroupToggle SpellPriorityInProfile { get; }
     public CombatProfileGroupToggle HealingRegenInProfile { get; }
     public CombatProfileGroupToggle BlessTimingInProfile { get; }
@@ -203,6 +205,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         _session.ReloadAllRequested += OnSessionReloadAll;
         _session.ChipsChanged += OnSessionChipsChanged;
         _session.Committed += OnSessionCommitted;
+        ChipBar = new CombatProfileChipBar(_session);
         SpellPriorityInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.SpellPriority, MarkDirty);
         HealingRegenInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.HealingRegen, MarkDirty);
         BlessTimingInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.BlessTiming, MarkDirty);
@@ -218,6 +221,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
             _session.ReloadAllRequested -= OnSessionReloadAll;
             _session.ChipsChanged -= OnSessionChipsChanged;
             _session.Committed -= OnSessionCommitted;
+            ChipBar.Dispose();
             SpellPriorityInProfile.Dispose();
             HealingRegenInProfile.Dispose();
             BlessTimingInProfile.Dispose();

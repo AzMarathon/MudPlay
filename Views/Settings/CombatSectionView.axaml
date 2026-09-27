@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:MudPlay.ViewModels.Settings"
              xmlns:vmroot="using:MudPlay.ViewModels"
+             xmlns:settings="using:MudPlay.Views.Settings"
              xmlns:spells="using:MudPlay.Game.Spells"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -21,14 +22,6 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!-- Combat-profile chips: a compact numbered button tinted its own profile
-             colour (Background / Foreground / BorderBrush bound per-item), so the
-             profiles read as distinct; the active chip gets a solid-colour ring. -->
-        <Style Selector="Button.ProfileChip">
-            <Setter Property="Padding" Value="9,2"/>
-            <Setter Property="MinWidth" Value="30"/>
-            <Setter Property="BorderThickness" Value="1"/>
-        </Style>
 
         <!-- Unlearned dropdown row: struck through + dimmed. -->
         <Style Selector="TextBlock.unlearnedPick">
@@ -92,35 +85,16 @@
                            Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
                 <Border Classes="SettingsSectionRule"/>
 
-                <!-- Combat-profile selector. A combat profile is a full quick-swap
-                     loadout: the spell setup, attack commands, room thresholds, the
-                     primary/alternate WEAPONS, and the whole Health tab. Numbered
-                     chips switch the active profile (the active one is gold); +/✕
-                     add an empty profile or remove the active one; the name box
-                     renames it. Every amber-bordered group below (here and on the
-                     Health tab) belongs to the active profile — switching a chip is
-                     a live swap; the name + edits save with the tab. -->
+                <!-- Combat-profile selector. The chips (also at the top of the Health,
+                     Spells and Party tabs) switch the staged active profile; +/✕ add an
+                     empty profile or remove the active one, and the name box renames it
+                     — those stay here. Every bordered group on those tabs belongs to
+                     the active profile; the edits save with the window. -->
                 <TextBlock Classes="SectionHeader" Text="Combat profile" Margin="0,10,0,4"/>
                 <StackPanel Spacing="4" Margin="0,0,0,6">
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <TextBlock Classes="FieldLabel" Text="Profile:" VerticalAlignment="Center"/>
-                        <ItemsControl ItemsSource="{Binding ProfileChips}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" Spacing="3"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vmroot:CombatProfileMenuItem">
-                                    <Button Classes="ProfileChip" Classes.Active="{Binding IsActive}"
-                                            Background="{Binding ChipBackground}"
-                                            Foreground="{Binding ChipForeground}"
-                                            BorderBrush="{Binding ChipBorder}"
-                                            Content="{Binding Number}" Command="{Binding SwitchCommand}"
-                                            ToolTip.Tip="{Binding Display}"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <settings:CombatProfileChipBar DataContext="{Binding ChipBar}"/>
                         <Button Content="+" Command="{Binding AddProfileCommand}"
                                 ToolTip.Tip="Add a new (empty) profile"/>
                         <Button Content="✕" Command="{Binding RemoveActiveProfileCommand}"
