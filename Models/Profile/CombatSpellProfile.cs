@@ -61,6 +61,8 @@ public sealed class CombatSpellProfile
     public bool DoBackstab { get; set; }
     public bool SkipBackstabIfMultiAttack { get; set; } = true;
     public bool RunIfBackstabFails { get; set; }
+    public bool HitAndRunTactics { get; set; }
+    public int HitAndRunMaxRuns { get; set; } = 3;
     public bool ClearHostilesWhenSeenHidden { get; set; }
     public bool KillAllEngaged { get; set; }
 
@@ -120,6 +122,8 @@ public sealed class CombatSpellProfile
             DoBackstab = src.DoBackstab,
             SkipBackstabIfMultiAttack = src.SkipBackstabIfMultiAttack,
             RunIfBackstabFails = src.RunIfBackstabFails,
+            HitAndRunTactics = src.HitAndRunTactics,
+            HitAndRunMaxRuns = src.HitAndRunMaxRuns,
             ClearHostilesWhenSeenHidden = src.ClearHostilesWhenSeenHidden,
             KillAllEngaged = src.KillAllEngaged,
             Health = health.Clone(),
@@ -157,6 +161,8 @@ public sealed class CombatSpellProfile
         dst.DoBackstab = DoBackstab;
         dst.SkipBackstabIfMultiAttack = SkipBackstabIfMultiAttack;
         dst.RunIfBackstabFails = RunIfBackstabFails;
+        dst.HitAndRunTactics = HitAndRunTactics;
+        dst.HitAndRunMaxRuns = HitAndRunMaxRuns;
         dst.ClearHostilesWhenSeenHidden = ClearHostilesWhenSeenHidden;
         dst.KillAllEngaged = KillAllEngaged;
     }
@@ -193,6 +199,8 @@ public sealed class CombatSpellProfile
         DoBackstab = src.DoBackstab;
         SkipBackstabIfMultiAttack = src.SkipBackstabIfMultiAttack;
         RunIfBackstabFails = src.RunIfBackstabFails;
+        HitAndRunTactics = src.HitAndRunTactics;
+        HitAndRunMaxRuns = src.HitAndRunMaxRuns;
         ClearHostilesWhenSeenHidden = src.ClearHostilesWhenSeenHidden;
         KillAllEngaged = src.KillAllEngaged;
     }
@@ -227,6 +235,8 @@ public sealed class CombatSpellProfile
         DoBackstab = DoBackstab,
         SkipBackstabIfMultiAttack = SkipBackstabIfMultiAttack,
         RunIfBackstabFails = RunIfBackstabFails,
+        HitAndRunTactics = HitAndRunTactics,
+        HitAndRunMaxRuns = HitAndRunMaxRuns,
         ClearHostilesWhenSeenHidden = ClearHostilesWhenSeenHidden,
         KillAllEngaged = KillAllEngaged,
         NormalWeapon = NormalWeapon,

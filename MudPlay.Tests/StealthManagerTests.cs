@@ -317,6 +317,112 @@ public sealed class StealthManagerTests
         public void Dispose() => Stealth.Dispose();
     }
 
+    // Report paradigm-20260926-233357: "You may not sneak right now!" is a post-combat
+    // cooldown. Hold the route and retry sn instead of walking on unsneaked.
+    [Fact]
+    public void SneakCooldown_HoldsMovement_RetriesUntilItTakes()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        h.Stealth.NoteRoomChanged();                     // sn on arrival
+        h.Feed("You may not sneak right now!");
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+
+        h.Sent.Clear();
+        h.Stealth.RetrySneakAfterCooldownForTests();     // 2s later
+        Assert.Equal("sn", h.LastSent());
+
+        h.Feed("Attempting to sneak...");                 // it took
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+    }
+
+    // Report paradigm-20260927-003304: an arrival sn must hold movement until the game
+    // answers it, so a resuming engine can't walk on ahead of the answer.
+    [Fact]
+    public void ArrivalSneak_HoldsMovementUntilTheAnswer()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        h.Stealth.NoteRoomChanged();                     // sn on arrival
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+
+        h.Feed("Attempting to sneak...");                 // answered — it took
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+    }
+
+    [Fact]
+    public void ArrivalSneak_Refused_HandsOverToTheCooldownHold()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        h.Stealth.NoteRoomChanged();
+        h.Feed("You may not sneak right now!");
+
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+    }
+
+    [Fact]
+    public void PreMoveSneak_DoesNotHold()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        h.Stealth.RequestPreMoveStealth();
+
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+    }
+
+    [Fact]
+    public void SneakCooldown_GivesUpAfterTheCap()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+        DateTimeOffset now = new(2026, 9, 26, 23, 33, 53, TimeSpan.Zero);
+        h.Stealth.NowProvider = () => now;
+
+        h.Stealth.NoteRoomChanged();
+        h.Feed("You may not sneak right now!");
+        now = now.AddSeconds(16);
+        h.Stealth.RetrySneakAfterCooldownForTests();
+
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+    }
+
+    [Fact]
+    public void SneakCooldown_AutoSneakOff_NoHold()
+    {
+        using AutoHarness h = new() { AutoSneakOn = false };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+
+        h.Feed("You may not sneak right now!");
+
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+    }
+
+    // Report paradigm-20260927-011624: a loud entry into an empty room was still "the
+    // sneak broke" two seconds later, after we'd snuck cleanly into the next one.
+    [Fact]
+    public void SneakBrokeOnEntry_ClearedByALaterSneak()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Feed("Sneaking...");
+        h.Feed("You make a sound as you enter the room!");
+        h.Feed("Attempting to sneak...");                  // re-snuck
+        h.Feed("Sneaking...");                             // entered the next room unseen
+
+        Assert.False(h.Stealth.TakeSneakBrokeOnEntry());
+    }
+
     [Fact]
     public void AutoSneak_OnRoomChange_SendsSneak()
     {

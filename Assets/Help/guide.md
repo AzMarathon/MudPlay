@@ -1150,6 +1150,8 @@ Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, 
 
 An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates the combat/spell tuning. But **Auto-Bless stands alone** — self and party buffing is controlled by the Auto-Bless toggle and nothing else, so turning off Auto-Combat or Auto-Rest/Heal never stops your blessing.
 
+**Sneak cooldown.** Right after a fight the game won't let you sneak for a few seconds (`You may not sneak right now!`). With **Auto-Sneak on**, your loop or walk waits instead of stepping on unsneaked: it retries the sneak every two seconds and moves once it takes, or after 15 seconds goes on unsneaked. The status bar reads *Waiting — sneak on cooldown* meanwhile. Each time you arrive in a room, the route also waits (up to 3 seconds) for the game's answer to its sneak before moving on (*Waiting — sneaking*).
+
 **Sneak-aware casting.** Casting a spell breaks Sneak (and Hide), so when **Auto-Sneak is on** MudPlay times its maintenance casts around your stealth:
 
 - After any automated cast it **re-issues sneak in place**, so you don't walk on exposed.
@@ -2416,6 +2418,15 @@ Off (the default) is the current behavior: if you engage a room of 8 with Min se
 **Default:** Off
 **What it does:** Automatically triggers flee behavior if your backstab attempt clearly failed (no "surprise" in the result line) — on the theory that a failed backstab means the target is now fully alert and the fight is riskier than planned. It also runs when your sneak breaks on the way in (`You make a sound as you enter the room!`): you entered seen, so the backstab would fail, and MudPlay runs instead of opening with a plain attack.
 
+### Hit and Run tactics / Give up and fight after N runs
+
+**Default:** Off / 3 runs
+**What it does:** Never fight without a backstab. Once a backstab lands, anything still standing — the monster you hit, or anything else in the room — is left for next time: you run, your loop or walk re-sneaks, comes back in and opens with another backstab. The same goes for any fight that would start with a plain attack: a monster that walks in after your backstab, one that chases you, a room you entered seen. It runs the way *Run distance* and *Go backwards if running* set for any flee, and needs **Do BS attacks** and a running loop or walk.
+
+It doesn't run where a backstab couldn't work anyway: a room with a see-hidden monster, or a monster marked *don't backstab*.
+
+**Give up and fight after N runs** caps the runs between backstabs, the first included. Once they're spent you stand and fight rather than keep hunting for a chance to re-sneak. A landed backstab starts the count over.
+
 ### Clear hostiles when sneak broken by see-hidden monster
 
 **Default:** Off
@@ -2433,7 +2444,7 @@ This works whether **Auto-Combat is on or off**: the whole point is to clear the
 **Default:** On (backward)
 **What it does:** When fleeing, `Backward` retraces the rooms you just came through (safer — you already know what's there); unchecked (`Forward`) instead keeps pushing along your planned route into unexplored territory (faster, riskier).
 
-Backward heads for where your loop or walk started. If you're already standing there (a short loop after one flee), it falls back into the room you just came from. If a flee lands on a monster while you're still under *run if below*, it runs again instead of fighting it.
+Backward heads for where your loop or walk started. If you're already standing there (a short loop after one flee), it falls back into the room you just came from. If a flee lands on a monster while you're still under *run if below*, it runs again instead of fighting it. A flee that's decided the instant you walk into a room waits for that move to land first, so it always retreats from the room you're really in.
 
 Either way a flee only ever sends plain compass moves, so it **stops short at anything that isn't one**: a lever or door step, or a teleport hop (the way in and out of somewhere like the Negative Power Plane). It retreats as far as the ordinary moves go and re-checks there rather than trying to cross it mid-fight — and if the very first step out is a teleport, it doesn't run at all and your other low-HP reactions take over. The program log names the step that cut the retreat short.
 
@@ -3587,6 +3598,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Do BS attacks | `false` | bool | `DoBackstab` | Models/Profile/CombatSettings.cs |
 | Don't BS if multi-attack | `true` | bool | `SkipBackstabIfMultiAttack` | Models/Profile/CombatSettings.cs |
 | Run if BS fails | `false` | bool | `RunIfBackstabFails` | Models/Profile/CombatSettings.cs |
+| Hit and Run tactics / Give up and fight after N runs | `false` / 3 | bool / 1–20 | `HitAndRunTactics` / `HitAndRunMaxRuns` | Models/Profile/CombatSettings.cs |
 | Clear hostiles when seen hidden | `false` | bool | `ClearHostilesWhenSeenHidden` | Models/Profile/CombatSettings.cs |
 | Target order | `Normal` | Normal / Reverse | `TargetOrder` | Models/Profile/CombatSettings.cs |
 | Target Priority (+ member name) | `Default` / `null` | Default / FollowLeader / FollowMember | `TargetPriority` / `TargetPriorityMemberName` | Models/Profile/CombatSettings.cs |

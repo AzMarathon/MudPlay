@@ -2485,6 +2485,153 @@ public sealed class CombatManagerTests
         Assert.False(fled);
     }
 
+    // Hit and Run tactics — never fight without a backstab (reports
+    // paradigm-20260926-222210 / -230605 / -233241).
+    private static (Harness H, List<bool> Landed, List<string> Runs) HitAndRunHarness(
+        bool deferUi, bool allowRun = true)
+    {
+        Harness h = new() { DeferUi = deferUi };
+        h.Settings.DoBackstab = true;
+        h.Settings.HitAndRunTactics = true;
+        List<bool> landed = new();
+        List<string> runs = new();
+        h.Combat.SetHitAndRunHooks(landed.Add, reason => { runs.Add(reason); return allowRun; });
+        return (h, landed, runs);
+    }
+
+    [Fact]
+    public void HitAndRun_BackstabKillsTheOnlyMonster_NoRun()
+    {
+        (Harness h, List<bool> landed, _) = HitAndRunHarness(deferUi: true);
+        using Harness _h = h;
+        h.AddMonster(1, "kobold thief", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: kobold thief.");
+        h.Feed("You surprise whap kobold thief for 22 damage!");
+        h.Feed("You gain 13 experience.");       // the kill, same round
+        h.PumpUi();
+
+        Assert.Equal(new[] { false, false }, landed);   // reset at the landing; nothing left to run from
+    }
+
+    [Fact]
+    public void HitAndRun_TargetSurvivesTheBackstab_RunsNow()
+    {
+        (Harness h, List<bool> landed, _) = HitAndRunHarness(deferUi: true);
+        using Harness _h = h;
+        h.AddMonster(1, "orc rogue", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: orc rogue.");
+        h.Feed("You surprise punch orc rogue for 30 damage!");
+        h.PumpUi();
+
+        Assert.Equal(new[] { false, true }, landed);    // reset at the landing, then run at the settle
+    }
+
+    [Fact]
+    public void HitAndRun_AnotherMonsterInTheRoom_RunsNow()
+    {
+        (Harness h, List<bool> landed, _) = HitAndRunHarness(deferUi: true);
+        using Harness _h = h;
+        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(4, "carrion beast", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: giant rat, carrion beast.");
+        h.Feed("You surprise whap giant rat for 18 damage!");
+        h.Feed("You gain 9 experience.");
+        h.PumpUi();
+
+        Assert.Equal(new[] { false, true }, landed);    // reset at the landing, then run at the settle
+    }
+
+    // Report paradigm-20260927-000454: the backstab killed the target and combat re-picked
+    // a walk-in in the same instant — it must wait for the settle, which runs from it,
+    // instead of swinging first (with a spent budget) and then breaking to run.
+    [Fact]
+    public void HitAndRun_WalkInDuringTheBackstabRound_WaitsForTheSettle()
+    {
+        (Harness h, List<bool> landed, List<string> runs) = HitAndRunHarness(deferUi: true, allowRun: false);
+        using Harness _h = h;
+        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(2, "lashworm", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: giant rat, lashworm.");
+        h.Feed("You surprise whap giant rat for 21 damage!");
+        h.Feed("You gain 9 experience.");             // the rat died; combat would re-pick the worm
+        Assert.Empty(runs);                              // held — no "fought without a backstab" ask
+        Assert.Null(h.Combat.CurrentTarget);
+
+        h.PumpUi();
+        Assert.Equal(new[] { false, true }, landed);     // reset at the landing, then run at the settle
+    }
+
+    // Report paradigm-20260926-233241: a monster walked in after the backstab kill and
+    // was fought — it would open without a backstab, so run instead.
+    [Fact]
+    public void HitAndRun_UnstealthedEngage_RunsInsteadOfAttacking()
+    {
+        (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false);
+        using Harness _h = h;
+        h.AddMonster(1, "kobold thief", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: kobold thief.");
+
+        Assert.Single(runs);
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    [Fact]
+    public void HitAndRun_BudgetSpent_Fights()
+    {
+        (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false, allowRun: false);
+        using Harness _h = h;
+        h.AddMonster(1, "kobold thief", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: kobold thief.");
+
+        Assert.Single(runs);
+        Assert.Equal("kobold thief", h.Combat.CurrentTarget);
+    }
+
+    // Report paradigm-20260927-011624: a swipe on the way out of a fled room drew a
+    // `bs` that landed in the next room. Mid-flee, nothing is engaged.
+    [Fact]
+    public void FleeInFlight_HoldsEveryEngage()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.AddMonster(1, "nasty filthbug", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+        h.Combat.SetFleeInFlightProbe(() => true);
+
+        h.Feed("Also here: nasty filthbug.");
+
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void HitAndRun_SettingOff_FightsNormally()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.AddMonster(1, "kobold thief", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
+        List<string> runs = new();
+        h.Combat.SetHitAndRunHooks(_ => { }, r => { runs.Add(r); return true; });
+
+        h.Feed("Also here: kobold thief.");
+
+        Assert.Empty(runs);
+        Assert.Equal("kobold thief", h.Combat.CurrentTarget);
+    }
+
     [Fact]
     public void Backstab_Failure_NoFlee_WhenSettingOff()
     {

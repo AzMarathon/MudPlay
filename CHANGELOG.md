@@ -1,5 +1,24 @@
 # Version history
 
+## 3.111.13
+
+- New Combat option "Hit and Run tactics": never fight without a backstab. Once a backstab lands, anything still standing is run from, and so is any fight that would open with a plain attack (a walk-in, a chaser); the loop re-sneaks and comes back to backstab again
+- "Give up and fight after N runs" (default 3) caps the runs between backstabs
+- A flee that starts while a move is still landing waits for it, then runs back from the right room (no more fleeing off the loop)
+- With Auto-Sneak on, the route waits out the post-combat sneak cooldown (retrying sn) instead of walking on unsneaked
+- Hit and run: a monster that walks in during the backstab is run from once it lands (no stray attack + break first)
+- Loops no longer fail after repeated flees: a deliberate retreat isn't counted as a lost position
+- Flees only send `break` when you're actually engaged (no "Your command had no effect" after a backstab kill)
+- The sneak sent on arrival holds movement until the game answers it, so a resuming route can't walk in unsneaked
+- Hit and run: a fight that starts while a run is already under way doesn't attack or spend another run
+- After a flee the loop re-plans straight from the room it landed in, with no `rm` check (no more "getting lost" pauses each lap)
+- A flee only counts as landed on a real arrival somewhere new, so it can't "finish" in the fight room and swing at the monster it's running from
+- Every flee waits to land before the route resumes, one flee runs at a time, and nothing is engaged on the way out (no stray `bs` landing in the next room)
+- A flee whose move is refused stops where it stands instead of hanging; a held run is dropped when the move carried you out of the fight
+- A sneak that takes clears an earlier loud entry, so a clean sneak-in isn't mistaken for a failed one
+- Picture emotes in the Conversation window are drawn a bit larger, so they're no longer squashed to text height
+- bug reports addressed: paradigm-20260926-222210, paradigm-20260926-230605, paradigm-20260926-230835, paradigm-20260926-233241, paradigm-20260926-233357, paradigm-20260927-000454, paradigm-20260927-000542, paradigm-20260927-003231, paradigm-20260927-003304, paradigm-20260927-010144, paradigm-20260927-010239, paradigm-20260927-011624, paradigm-20260927-011659
+
 ## 3.110.18
 
 - Flee no longer gives up at a loop's start room: it falls back into the room you came from, and runs again if it lands on a monster while still under run-if-below

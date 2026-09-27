@@ -864,6 +864,64 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    // Report paradigm-20260927-000542: hit and run flees back out of the step's
+    // target lap after lap, so the step never completes — each flee resume read as a
+    // desync and three of them "exhausted" recovery and failed the loop.
+    [Fact]
+    public void RepeatedFleeResumes_DoNotExhaustTheRecoveryBudget()
+    {
+        Harness h = NewHarness();
+        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 6; i++)
+        {
+            h.Coordinator.AssertGate(MovementCoordinator.CombatGate);   // a fight at the step's target
+            h.Tracker.SetLocated(new RoomKey(1, 1));                      // the flee put us back
+            h.Runner.ResumeAfterFlee(new RoomKey(1, 1));
+            h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        }
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    // Report paradigm-20260927-010144: every flee resume paused to `rm` — the flee's
+    // own move had just confirmed the room, so there's nothing to check.
+    [Fact]
+    public void FleeResume_AtAConfirmedRoom_SkipsTheRmResync()
+    {
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.ResumeAfterFlee(new RoomKey(1, 1));
+
+        Assert.Empty(h.ResyncReasons);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void RepeatedGenuineDesyncs_StillExhaustTheRecoveryBudget()
+    {
+        Harness h = NewHarness();
+        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 6; i++)
+        {
+            h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+            h.Tracker.SetLocated(new RoomKey(1, 1));
+            h.Runner.ResumeAfterRecovery(new RoomKey(1, 1));
+            h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        }
+
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
     [Fact]
     public void BlockedAtSource_WhileConfused_DoesNotExhaustBudget()
     {

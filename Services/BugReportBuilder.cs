@@ -480,6 +480,10 @@ public static class BugReportBuilder
         // ShadowRest hold explains a stealthed character resting instead of
         // engaging a monster in the room (combat stands down while true).
         Kv(sb, "ShadowRest holding", svc.Health.ShadowRestHolding.ToString());
+        Kv(sb, "Sneak-cooldown hold", svc.Stealth.IsHoldingForSneakCooldown.ToString());
+        Kv(sb, "Hit and run", svc.Health.HitAndRunRuns > 0
+            ? $"{svc.Health.HitAndRunRuns} of {Math.Max(1, svc.Resolver.Resolve<Models.Profile.CombatSettings>("Combat").HitAndRunMaxRuns)} run(s) since the last backstab"
+            : "no runs since the last backstab");
 
         return sb.ToString();
     }

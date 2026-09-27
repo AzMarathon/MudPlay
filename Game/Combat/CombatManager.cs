@@ -310,6 +310,27 @@ public sealed partial class CombatManager : IDisposable
     // is on, so a failed backstab otherwise just logs and the fight continues.
     private Action? _backstabFailureFlee;
 
+    // Hit and Run tactics (CombatSettings.HitAndRunTactics), bound to HealthManager:
+    // _hitAndRunBackstabLanded reports each landed backstab (true = something is still
+    // standing, run now); _hitAndRunInsteadOfFight is asked before any fight would open
+    // with a plain attack, and returns true when it started a retreat instead.
+    private Action<bool>? _hitAndRunBackstabLanded;
+    private Func<string, bool>? _hitAndRunInsteadOfFight;
+    // Between a landed backstab and its settle check (one dispatch turn), hold any new
+    // engage — the settle decides whether we run, and a plain attack sent first would
+    // read as "fought without a backstab" (report paradigm-20260927-000454).
+    private bool _hitAndRunSettlePending;
+
+    // HealthManager.IsFleeInFlight — while a flee's move is on its way, don't open a
+    // fight in the room we're leaving (a swipe on the way out would draw a `bs` that
+    // lands in the next room).
+    private Func<bool>? _isFleeInFlight;
+    public void SetFleeInFlightProbe(Func<bool> isFleeInFlight)
+    {
+        ArgumentNullException.ThrowIfNull(isFleeInFlight);
+        _isFleeInFlight = isFleeInFlight;
+    }
+
     // Surprise-round resolution watch. Armed the instant a `bs` goes out
     // (DispatchRoundAction) and disarmed by the first of OUR own combat-result
     // lines that names the target: a line carrying "surprise" means the opener
@@ -1021,6 +1042,15 @@ public sealed partial class CombatManager : IDisposable
         _backstabFailureFlee = flee;
     }
 
+    // Wire Hit and Run tactics — HealthManager.BackstabLanded / RunInsteadOfFight.
+    public void SetHitAndRunHooks(Action<bool> backstabLanded, Func<string, bool> runInsteadOfFight)
+    {
+        ArgumentNullException.ThrowIfNull(backstabLanded);
+        ArgumentNullException.ThrowIfNull(runInsteadOfFight);
+        _hitAndRunBackstabLanded = backstabLanded;
+        _hitAndRunInsteadOfFight = runInsteadOfFight;
+    }
+
     // Wire the combat-off "clear hostiles when seen Hidden" override:
     // seeHiddenClearActive reports whether CombatStateTracker has latched a
     // force-clear for the current room (stealth runner hit a SeeHidden monster
@@ -1701,6 +1731,15 @@ public sealed partial class CombatManager : IDisposable
         // never-BS target. If every actionable monster is flagged we don't skip
         // the room — fall back to the highest-priority actionable one and open
         // with a normal attack (the chooser's BS gate suppresses the bs there).
+        // Mid-flee: don't open anything in the room we're leaving (a swipe on the way
+        // out would draw an attack — or a `bs` — that lands in the next room).
+        if (_isFleeInFlight?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory, "fleeing — not engaging on the way out");
+            _currentTarget = null;
+            return;
+        }
+
         // We snuck in for a backstab but made a sound entering: the surprise is gone
         // and the backstab would fail, so with "run if backstab fails" on, run now
         // rather than open with a plain swing (report paradigm-20260926-222210).
@@ -1773,6 +1812,25 @@ public sealed partial class CombatManager : IDisposable
                 $"re-pick: target '{_currentTarget}' not in engageable — " +
                 $"switching to {picked.RawName} (engageable=[" +
                 $"{string.Join(",", engageable.Select(e => e.RawName))}])");
+        }
+
+        // Hit and Run tactics: never open a fight without a backstab. A monster that
+        // walks in after our backstab, one that chased us, a room we entered seen —
+        // run, re-sneak and come back instead (report paradigm-20260926-233241). Not
+        // when a backstab couldn't work here anyway (a see-hidden monster, a
+        // don't-backstab target), and HealthManager lets it fight once the run budget
+        // is spent or no retreat can start.
+        if (settings.HitAndRunTactics && _hitAndRunSettlePending)
+        {
+            _log?.Combat(LogCategory, $"hit and run — holding {picked.RawName} until the backstab's round settles");
+            _currentTarget = null;
+            return;
+        }
+        if (settings.DoBackstab && settings.HitAndRunTactics && _currentTarget is null
+            && !backstabPending && !picked.DontBackstab && !RoomHasSeeHidden(obs)
+            && _hitAndRunInsteadOfFight?.Invoke($"{picked.RawName} would be fought without a backstab") == true)
+        {
+            return;
         }
 
         // ShadowRest hold: a solo, stealthed ShadowRest character below a rest
@@ -2972,12 +3030,48 @@ public sealed partial class CombatManager : IDisposable
         if (text.IndexOf("surprise", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             _log?.Combat(LogCategory, $"backstab landed (surprise) vs '{species}'");
+            // Hit and run never fights without a backstab: once the round's kill line
+            // (if any) has settled, anything still standing — the target itself, or
+            // anything else in the room — is left for the next sneak-in.
+            if (_readSettings().HitAndRunTactics && _hitAndRunBackstabLanded is not null)
+            {
+                // The landing itself starts the run count over — now, not at the settle,
+                // so a walk-in engaged in the meantime sees a fresh budget.
+                _hitAndRunBackstabLanded(false);
+                _hitAndRunSettlePending = true;
+                string? bsTarget = _currentTarget;
+                _post(() => SettleHitAndRun(bsTarget));
+            }
             return;
         }
 
         _log?.Info(LogCategory, $"backstab failed (no surprise) vs '{species}'");
         if (_readSettings().RunIfBackstabFails)
             _backstabFailureFlee?.Invoke();
+    }
+
+    // A landed backstab's round has settled: report whether anything is still standing.
+    // The target died when the kill inference dropped it (or we've moved to another);
+    // a corpse the roster hasn't dropped yet doesn't count.
+    private void SettleHitAndRun(string? bsTarget)
+    {
+        _hitAndRunSettlePending = false;
+        if (_disposed || _hitAndRunBackstabLanded is null) return;
+        bool targetAlive = bsTarget is not null
+            && string.Equals(_currentTarget, bsTarget, StringComparison.OrdinalIgnoreCase);
+        int others = 0;
+        if (_classifier.Current is { } obs)
+        {
+            others = CountEngageable(obs);
+            if (bsTarget is not null && obs.Entities.Any(e => e.Kind == EntityKind.Monster
+                    && string.Equals(e.RawName, bsTarget, StringComparison.OrdinalIgnoreCase)))
+                others--;
+        }
+        bool runNow = targetAlive || others > 0;
+        _log?.Info(LogCategory, runNow
+            ? $"hit and run — backstab landed; {(targetAlive ? "target still up" : "")}{(targetAlive && others > 0 ? ", " : "")}{(others > 0 ? $"{others} other hostile(s) here" : "")} — running to re-sneak"
+            : "hit and run — backstab landed and cleared the room");
+        _hitAndRunBackstabLanded(runNow);
     }
 
     // Disarm the surprise-round watch. Called on resolution and on every signal

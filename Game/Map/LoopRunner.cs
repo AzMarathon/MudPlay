@@ -401,6 +401,20 @@ public sealed class LoopRunner : IRecoverableEngine
         Raise(new LoopEvent(LoopEventKind.Paused, $"recovery: {reason}"));
     }
 
+    // A flee (HealthManager) retreated on purpose — often right back out of the room
+    // the step was headed for, and hit-and-run does it lap after lap before a step can
+    // complete. Resume the same way, but don't charge the reroute against the
+    // recovery budget (report paradigm-20260927-000542: three hit-and-runs "exhausted"
+    // recovery and failed the loop).
+    public void ResumeAfterFlee(RoomKey landedAt)
+    {
+        _resumingAfterFlee = true;
+        try { ResumeAfterRecovery(landedAt); }
+        finally { _resumingAfterFlee = false; }
+    }
+
+    private bool _resumingAfterFlee;
+
     public void ResumeAfterRecovery(RoomKey recoveredAnchor)
     {
         if (_loop is null) return;
@@ -469,8 +483,12 @@ public sealed class LoopRunner : IRecoverableEngine
         // expected target. Rather than fail to Idle, reroute the loop from where we
         // actually ended up (the gate call is terminal — FinishTier3Success does
         // nothing after this, so detaching + re-planning here is safe).
-        _log?.Warn("LoopRunner",
-            $"ResumeAfterRecovery: desync at step {_index + 1} — recovered at {recoveredAnchor} but expected {_expectedMoveTarget}; rerouting from re-determined room");
+        if (_resumingAfterFlee)
+            _log?.Info("LoopRunner",
+                $"ResumeAfterFlee: landed at {recoveredAnchor} (step {_index + 1} was headed for {_expectedMoveTarget}); re-planning from here");
+        else
+            _log?.Warn("LoopRunner",
+                $"ResumeAfterRecovery: desync at step {_index + 1} — recovered at {recoveredAnchor} but expected {_expectedMoveTarget}; rerouting from re-determined room");
         EnterRecovery($"step {_index + 1} desynced (recovered at {recoveredAnchor})");
     }
 
@@ -1776,7 +1794,8 @@ public sealed class LoopRunner : IRecoverableEngine
         // next block or mismatch re-enters, by which time a resync may have landed
         // or the character may actually have moved.
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        if (_recoverAttempts > 0 && now - _lastRecoveryAttemptAt < _recoveryAttemptSpacing)
+        if (!_resumingAfterFlee
+            && _recoverAttempts > 0 && now - _lastRecoveryAttemptAt < _recoveryAttemptSpacing)
         {
             _log?.Debug("LoopRunner",
                 $"recovery re-entered {(now - _lastRecoveryAttemptAt).TotalMilliseconds:F0}ms after the "
@@ -1785,7 +1804,11 @@ public sealed class LoopRunner : IRecoverableEngine
         }
 
         bool confused = _isConfused?.Invoke() == true;
-        if (!confused)
+        if (_resumingAfterFlee)
+        {
+            _log?.Info("LoopRunner", $"rerouting after a flee — not a failed recovery ({reason})");
+        }
+        else if (!confused)
         {
             _lastRecoveryAttemptAt = now;
             _recoverAttempts++;
@@ -1826,6 +1849,14 @@ public sealed class LoopRunner : IRecoverableEngine
         // reads whatever room the tracker holds at that moment, corrected or not —
         // so a failed/unavailable resync (stock realm, no wire, throttled) falls
         // through to exactly the prior behavior.
+        // A flee's own move just landed and confirmed the room — there's no doubt to
+        // settle, so skip the `rm` (report paradigm-20260927-010144: every hit-and-run
+        // lap paused to "check the room").
+        if (_resumingAfterFlee && _tracker.State.Confidence == RoomConfidence.Confirmed)
+        {
+            RerouteFromCurrentRoom();
+            return;
+        }
         if (_recovery?.TryResyncOnce?.Invoke(reason, _ => RerouteFromCurrentRoom(), RerouteFromCurrentRoom) == true)
         {
             _log?.Warn("LoopRunner",

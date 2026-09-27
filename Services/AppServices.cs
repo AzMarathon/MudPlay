@@ -3813,6 +3813,9 @@ public sealed class AppServices
             selfIsPartyLeader: () => PartyState.IsInParty && PartyState.SelfIsLeader);
         // The room we came from — the Backward flee's retreat when there's no trail
         // to the loop's origin (we're standing on it).
+        Health.IsMovePending = () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending;
+        Health.IsServerEngaged = () => CombatTracker.IsServerEngaged;
+        RoomTracker.MoveBlocked += Health.NoteMoveBlocked;
         Health.PreviousRoom = () =>
         {
             IReadOnlyList<Game.Map.RoomKey> history = RoomTracker.GetHistory();
@@ -4396,6 +4399,7 @@ public sealed class AppServices
         // Any NPC in the room prevents sneak, so
         // suppress the doomed `sn` instead of firing it into a rejection.
         Stealth.SetSneakBlockCheck(() => CombatTracker.HasRoomNpc);
+        Stealth.SetMovementCoordinator(MovementCoordinator);
         // Auto-hide is suppressed in a party — a hidden member falls off the
         // Also-here line and can't be single-target-healed/buffed until revealed.
         Stealth.SetPartyCheck(() => PartyState.IsInParty);
@@ -4438,6 +4442,8 @@ public sealed class AppServices
         // Backstab-failure flee (CombatSettings.RunIfBackstabFails). Combat detects
         // the failed surprise round; HealthManager owns the flee route + engine.
         Combat.SetBackstabFailureFlee(() => Health.RunFromBackstabFailure());
+        Combat.SetHitAndRunHooks(Health.BackstabLanded, Health.RunInsteadOfFight);
+        Combat.SetFleeInFlightProbe(() => Health.IsFleeInFlight);
 
         // ShadowRest (Paradigm): classes carrying ability code 1103 can rest while
         // hidden/sneaking in a room with monsters without being attacked. The rest
