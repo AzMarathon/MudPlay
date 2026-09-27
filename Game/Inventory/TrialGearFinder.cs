@@ -46,6 +46,14 @@ public static class TrialGearFinder
         new TrialFindFilter("BS Accuracy",      e => e.BsAccuracy),
         new TrialFindFilter("BS Min Damage",    e => e.BsMin),
         new TrialFindFilter("BS Max Damage",    e => e.BsMax),
+        // Computed backstab damage for the live character (ItemDamageModel): a
+        // weapon's own backstab range, other gear by what it adds to it, so stealth,
+        // strength and +max damage count as well as the +BS min / max bonuses above.
+        new TrialFindFilter("Backstab Dmg (min)", e => e.BsScoreMin),
+        new TrialFindFilter("Backstab Dmg (max)", e => e.BsScoreMax),
+        new TrialFindFilter("Backstab Dmg (avg)", e => e.BsScoreAvg),
+        // Damage per round for whichever attack type the finder is set to.
+        new TrialFindFilter("Damage / Round (attack type)", e => e.DamagePerRoundScore),
         new TrialFindFilter("Punch Accuracy",   e => e.PunchAccy),
         new TrialFindFilter("Punch Damage",     e => e.PunchDmg),
         new TrialFindFilter("Kick Accuracy",    e => e.KickAccy),

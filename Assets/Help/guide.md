@@ -878,6 +878,13 @@ This matters most for **alignment**: MajorMUD force-removes an alignment-restric
 
 The **Item Finder** button (in Equipment Manager) opens a searchable catalog of every equippable item, with columns for damage, AC, resists, stat bonuses, and more. Filter it by class, slot, level, or any stat, and sort by any column. A **Negates** column lists the spells an item cancels while worn, and the **Negates** dropdown in the stats filters lets you narrow to items that negate a particular spell (it's populated with every spell any item in the set negates; the default `(none)` doesn't filter).
 
+**Attack type and damage columns.** The **Attack type** dropdown (Attack, Backstab, Bash, Smash, Punch, Kick, Jumpkick) sets which attack the weapon columns model, using your current stats and the rest of the gear you're wearing:
+- **Swings (W. Spd)**: swings per round with that weapon. Under **Backstab** it reads 1 on backstab-capable weapons, since a backstab is one strike, and blank on the rest.
+- **Dmg/Rnd**: average damage per round with that weapon for the selected attack, crits included. It assumes every swing lands: there's no monster to roll against, so treat it as a comparison figure. Monster Intel does the per-monster version.
+- **Est. BS Dmg**: your backstab damage range and average with that weapon (e.g. `62-118 (90)`), shown on every backstab-capable weapon whatever the attack type. It uses the same backstab formula as Monster Intel and the Calculators tab. It's different from **BS Min-Max**, which is only the item's own +BS bonus.
+
+A weapon's own +Strength / +Agility / +Stealth replaces your current weapon's in these numbers rather than adding to it.
+
 It's a **reference tool**: double-click a row to see the item's full data record, and use the **Gear Finder** panel (with **Find Best**) to plan a loadout and read its projected stats. To actually equip something you found, note its name and type it into that slot's **Item** box back in Equipment Manager.
 
 **Find Best searches whatever the results grid currently shows** — not the whole catalog. Leave every filter at its default and it searches everything; narrow the grid first and it searches only that. This is deliberate: a plate-capable class's "best AC" is plate almost by construction (nothing else comes close on raw AC), so without a way to narrow the search there'd be no way to ask for anything more specific.
@@ -887,6 +894,10 @@ Want the best AC available in **Leather** even though your class could wear Plat
 - **Hold** a slot first to protect its current pick from the next Find Best pass, so you can layer several searches into one loadout (e.g. Find Best AC for armour slots, then switch the filter and Find Best again for the weapon).
 - **Hovering an item inside the open dropdown** (not just the current pick) shows its full stat line, so you can see why Find Best chose something — or compare an alternative — without selecting it first.
 - **The Find Best dropdown** covers every worn-stat column in the grid — AC/DR (flat, blur, and combined), Dodge, Magic Resist, ShockShield, VileWard, damage/accuracy (including backstab and the three martial-arts strikes), every attribute and regen, and every skill/resist/protection stat. (VileWard's magnitude is shown as the item's raw value — its actual AC effect scales with your own evil in a way the client doesn't model, so treat "higher" as "more VileWard on the item," not a guaranteed AC number.)
+- **Computed damage criteria.** These rank on the damage you'd actually deal, not on one raw stat:
+  - **Backstab Dmg (min)**, **(max)** and **(avg)**: your computed backstab damage. The weapon slot gets the best backstab-capable weapon. Other slots get whatever adds the most backstab damage over your current gear: +BS min/max, +max damage, Stealth, and Strength all count, through the real formula.
+  - **Damage / Round (attack type)**: the same idea for damage per round with whichever **Attack type** is selected.
+  - The plain **BS Min Damage** / **BS Max Damage** criteria still rank on the item's own +BS bonus alone.
 
 **Effective AC vs Evil** is a separate criterion from plain **Armour Class**: Prot-Evil is a confirmed 1 AC per point against evil monsters (most of what you'll fight), so an item with modest raw AC but a big Prot-Evil bonus can be the better pick even though plain AC sorting would rank it low — this criterion scores `AC + Prot-Evil` so that item shows up where it belongs.
 

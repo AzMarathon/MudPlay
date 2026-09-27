@@ -201,6 +201,23 @@ public sealed record ItemFinderEntry
     // Shown next to the modelled swing count in the Swings column.
     public int WeaponSpeed { get; init; }
 
+    // The live character's computed backstab range with this weapon in hand
+    // (ItemDamageModel.Backstab). 0 / 0 when it can't backstab, isn't a weapon, or
+    // the finder opened without a usable character.
+    public int EstBsMin { get; init; }
+    public int EstBsMax { get; init; }
+
+    // Average damage per round for the selected attack type, assuming every swing
+    // lands. Weapons and the bare-handed martial-arts row only; 0 elsewhere.
+    public double DamagePerRound { get; init; }
+
+    // Find Best scores: a weapon's own computed value, or for other gear how much it
+    // adds over the current loadout. Recomputed with the attack type, like Swings.
+    public double BsScoreMin { get; init; }
+    public double BsScoreMax { get; init; }
+    public double BsScoreAvg { get; init; }
+    public double DamagePerRoundScore { get; init; }
+
     // True for the bare-handed attack rows (Punch / Kick / Jumpkick) the catalog
     // synthesises under a martial-arts attack type — these aren't real items, so
     // they carry no slot / type / equip data and bypass the item filters.
@@ -280,6 +297,14 @@ public sealed record ItemFinderEntry
         ? $"{AvgSwings.ToString("0.0", CultureInfo.InvariantCulture)} ({WeaponSpeed.ToString(CultureInfo.InvariantCulture)})"
         : string.Empty;
 
+    // Computed backstab range with its midpoint, e.g. "62-118 (90)".
+    public string EstBsText => EstBsMax > 0
+        ? $"{EstBsMin.ToString(CultureInfo.InvariantCulture)}-{EstBsMax.ToString(CultureInfo.InvariantCulture)} ({((EstBsMin + EstBsMax) / 2.0).ToString("0", CultureInfo.InvariantCulture)})"
+        : string.Empty;
+    public string DamagePerRoundText => DamagePerRound > 0
+        ? DamagePerRound.ToString("0.0", CultureInfo.InvariantCulture)
+        : string.Empty;
+
     private static string Plain(int v) => v != 0 ? v.ToString(CultureInfo.InvariantCulture) : string.Empty;
     private static string Signed(int v) => v != 0 ? v.ToString("+0;-0", CultureInfo.InvariantCulture) : string.Empty;
     private static string Decimal(double v) => v != 0 ? v.ToString("0.#", CultureInfo.InvariantCulture) : string.Empty;
@@ -295,7 +320,8 @@ public sealed record ItemFinderEntry
     // bare-handed attack row (Punch / Kick / Jumpkick), since those don't use a
     // weapon.
     public static IReadOnlyList<ItemFinderEntry> BuildCatalog(
-        GameDataCache cache, SwingContext? swing = null, MudAttackType attackType = MudAttackType.Normal)
+        GameDataCache cache, SwingContext? swing = null, MudAttackType attackType = MudAttackType.Normal,
+        ItemDamageModel? damage = null)
     {
         ArgumentNullException.ThrowIfNull(cache);
         JsonDocument? doc = cache.GetRawTable("Items");
@@ -339,8 +365,14 @@ public sealed record ItemFinderEntry
             // A martial-arts attack doesn't swing the weapon, so real items carry no
             // swing count under those types — only the appended bare-handed row does.
             double avgSwings = isWeapon && !martialArts && swing is { } ctx
-                ? ctx.AvgSwingsFor(GetInt(row, "Speed"), strReq, attackType)
+                ? attackType == MudAttackType.Backstab
+                    ? (backstab && ctx.IsUsable ? 1 : 0)   // a backstab is a single strike
+                    : ctx.AvgSwingsFor(GetInt(row, "Speed"), strReq, attackType)
                 : 0;
+
+            DamageEstimate est = damage is { IsUsable: true } model
+                ? Estimate(model, t, isWeapon, GetInt(row, "Speed"), strReq, backstab, attackType)
+                : default;
 
             list.Add(new ItemFinderEntry
             {
@@ -413,6 +445,13 @@ public sealed record ItemFinderEntry
                 ShadowResist = t.PlusShadowResist,
                 AvgSwings = avgSwings,
                 WeaponSpeed = isWeapon ? GetInt(row, "Speed") : 0,
+                EstBsMin = est.BsMin,
+                EstBsMax = est.BsMax,
+                DamagePerRound = est.PerRound,
+                BsScoreMin = est.ScoreMin,
+                BsScoreMax = est.ScoreMax,
+                BsScoreAvg = est.ScoreAvg,
+                DamagePerRoundScore = est.PerRoundScore,
                 Negates = ScanNegates(row, cache),
                 Row = row,
             });
@@ -423,7 +462,7 @@ public sealed record ItemFinderEntry
         // Kick / Jumpkick) modelling that attack's own swing rate. Only with a usable
         // character context; without one there's no rate to show, so nothing is added.
         if (martialArts && swing is { IsUsable: true } maCtx)
-            list.Add(BuildMartialArtsRow(attackType, maCtx));
+            list.Add(BuildMartialArtsRow(attackType, maCtx, damage));
 
         list.Sort(static (a, b) =>
         {
@@ -431,6 +470,34 @@ public sealed record ItemFinderEntry
             return c != 0 ? c : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
         });
         return list;
+    }
+
+    private readonly record struct DamageEstimate(
+        int BsMin, int BsMax, double PerRound, double ScoreMin, double ScoreMax, double ScoreAvg, double PerRoundScore);
+
+    // A weapon is valued on its own (it replaces the one in hand); any other piece by
+    // what it adds to the current loadout — the per-slot figure Find Best ranks on.
+    private static DamageEstimate Estimate(
+        ItemDamageModel model, EquipmentStatSummary t, bool isWeapon, int speed, int strReq,
+        bool canBackstab, MudAttackType attackType)
+    {
+        if (isWeapon)
+        {
+            var weapon = new ItemDamageModel.WeaponInputs(
+                t.WeaponMin, t.WeaponMax, speed, strReq, t.PlusMinDamage, t.PlusMaxDamage, t.PlusCrits,
+                t.PlusBSMin, t.PlusBSMax, canBackstab, t.PlusStrength, t.PlusAgility, t.PlusStealth);
+            BSDamageResult? bs = model.Backstab(weapon);
+            double perRound = model.DamagePerRound(weapon, attackType);
+            return new DamageEstimate(
+                bs?.MinDamage ?? 0, bs?.MaxDamage ?? 0, perRound,
+                bs?.MinDamage ?? 0, bs?.MaxDamage ?? 0, bs?.AvgDamage ?? 0, perRound);
+        }
+
+        var delta = new ItemDamageModel.GearDelta(
+            t.PlusStrength, t.PlusAgility, t.PlusStealth, t.PlusMinDamage, t.PlusMaxDamage, t.PlusCrits,
+            t.PlusBSMin, t.PlusBSMax, t.PlusPunchDmg, t.PlusKickDmg, t.PlusJumpKickDmg);
+        (double min, double max, double avg) = model.BackstabGain(delta);
+        return new DamageEstimate(0, 0, 0, min, max, avg, model.DamagePerRoundGain(delta, attackType));
     }
 
     // Spell names the item negates — one per non-zero NegateSpell-0..9, resolved
@@ -470,7 +537,8 @@ public sealed record ItemFinderEntry
     // It's not a real item — no slot, damage, or equip data — just the attack's name
     // and its modelled swing rate, so IsSynthetic lets it bypass every item filter and
     // the double-click-to-record jump. Sorts among weapons (Slot = Weapon) by name.
-    private static ItemFinderEntry BuildMartialArtsRow(MudAttackType attackType, SwingContext ctx) => new()
+    private static ItemFinderEntry BuildMartialArtsRow(
+        MudAttackType attackType, SwingContext ctx, ItemDamageModel? damage) => new()
     {
         Name = attackType switch
         {
@@ -486,6 +554,7 @@ public sealed record ItemFinderEntry
         ArmourType = -1,
         AvgSwings = ctx.AvgSwingsForMartialArts(attackType),
         WeaponSpeed = CombatCalculator.MartialArtsSpeed(attackType, ctx.Realm),
+        DamagePerRound = damage?.MartialArtsPerRound(attackType) ?? 0,
         IsSynthetic = true,
         Row = default,
     };

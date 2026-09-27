@@ -33,7 +33,7 @@ public partial class ItemFinderWindow : Window
     private static readonly string[] _armourLead =
         { "slot", "name", "TypeLabel", "LevelReqText", "EncumText", "AcText", "DrText" };
     private static readonly string[] _weaponLead =
-        { "name", "TypeLabel", "LevelReqText", "StrReqText", "DamageText", "SwingSpeedText", "HitMagicText", "EncumText" };
+        { "name", "TypeLabel", "LevelReqText", "StrReqText", "DamageText", "SwingSpeedText", "DamagePerRoundText", "EstBsText", "HitMagicText", "EncumText" };
 
     // Column lookup keyed as above, built once from the fixed column set.
     private Dictionary<string, DataGridColumn>? _columnByKey;
