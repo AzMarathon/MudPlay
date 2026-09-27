@@ -48,11 +48,11 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
-        labels.OnBbsPinApplied(_scratchBbs);
+        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         ItemNameStore itemNames = new(new GameDataCache());
         GhItemLocationStore locations = new(itemNames);
-        locations.OnBbsPinApplied(_scratchBbs);
+        locations.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         _ = new RoombaQueryHandler(engine, locations, labels);
 
@@ -112,10 +112,10 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
-        labels.OnBbsPinApplied(_scratchBbs);
+        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         GhItemLocationStore locations = new(itemNames);
-        locations.OnBbsPinApplied(_scratchBbs);
+        locations.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         _ = new RoombaQueryHandler(engine, locations, labels);
 

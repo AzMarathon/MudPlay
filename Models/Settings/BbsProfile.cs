@@ -2,10 +2,10 @@ using System.Text.Json;
 
 namespace MudPlay.Models.Settings;
 
-// Root DTO for Data/BBS/{bbs-name}.json — the BBS tier of the settings
-// hierarchy. Connection info plus deltas the user pinned to "only for this
-// BBS." Per-character credentials are stored separately under each
-// CharacterProfile; this file describes the BBS itself.
+// Root DTO for BBS/{bbs}/bbs.json — the board itself: connection, retry and
+// display settings, plus the realms it hosts (RealmProfile), which carry
+// everything specific to one version of the game on the board. Per-character
+// credentials are stored separately under each CharacterProfile.
 public sealed class BbsProfile
 {
     // JSON schema version (see GlobalSettings.SchemaVersion for the contract).
@@ -14,14 +14,6 @@ public sealed class BbsProfile
     // Display name + filename key for this BBS.
     public string Name { get; set; } = string.Empty;
 
-    // Imported game-data set folder this BBS uses by default. Tracked at
-    // BBS scope (not per character) because every character on the same
-    // realm shares the same MajorMUD MDB, and switching realms almost
-    // always means switching BBSes. The folder name is one of the
-    // subdirectories under AppPaths.GameDataRoot. null falls back to
-    // GlobalSettings.DefaultGameDataSet. Surfaced + writable via the
-    // File → Game Data → Active set menu.
-    public string? ActiveGameDataSet { get; set; }
 
     // Hostname or IP address the Telnet client connects to.
     public string Host { get; set; } = string.Empty;
@@ -92,58 +84,6 @@ public sealed class BbsProfile
     // CleanupPeriodMinutes). One toggle governs both.
     public bool ReconnectAfterCleanup { get; set; }
 
-    // ----- Game-menu commands -----
-    // The two commands the client sends at the MajorMUD main menu to
-    // enter / leave the realm. Stored per-BBS rather than per-character
-    // because the menu key bindings are a property of the realm /
-    // front-end, not the character — every character on the same BBS
-    // uses the same picks. Defaults are the standard MajorMUD picks
-    // ("E" = enter the realm, "=x" = log off from the main menu).
-
-    // Sent at the main menu to enter the realm. Default "E". Consumed by
-    // MainMenuEntryAutomation when the client detects the main menu after a
-    // (re)connect.
-    public string GameEntryCommand { get; set; } = "E";
-
-    // Sent at the main menu to log off. Default "=x". Fired by
-    // HangupHandler on a permitted @hangup and by the cleanup-warning
-    // logout flow.
-    public string GameExitCommand { get; set; } = "=x";
-
-    // ----- Realm mechanics -----
-
-    // The negative-HP floor at which a MajorMUD character actually dies.
-    // Hitting 0 HP only *drops* you (bleeding out — can't move/fight/cast,
-    // but revivable and still able to hang up); death happens when HP falls
-    // to this value. Stored per-BBS because the floor is a realm balance
-    // knob, not a per-character stat. Seeded at the standard -25; clamp
-    // consumers treat any positive value as 0. The emergency auto-hangup
-    // reads this so it keeps firing through the whole bleeding-out window
-    // (from the hang-trigger down to — but not past — this floor).
-    public int PlayerDiesAtHp { get; set; } = -25;
-
-    // Let the client trace the realm's true death floor from observed *slow*
-    // deaths and refine PlayerDiesAtHp toward it. The seed (-25) is only a
-    // guess; a bleed-out crosses the floor one tick at a time and lands right
-    // at it, so its HP reading is an accurate measurement. When on, the death-
-    // floor tracer overwrites PlayerDiesAtHp from such deaths (an overkill's
-    // over-negative reading is discarded and never refines). Off pins the
-    // user's manual value. Default on — the whole point of the setting is to
-    // start from a guess and let real deaths correct it.
-    public bool AutoRefineDeathFloor { get; set; } = true;
-
-    // The BBS's nightly cleanup wall-clock time. Some bosses ("Respawns @ Cleanup"
-    // in the boss table) reset only at this daily cleanup, not on a kill countdown —
-    // a marked one reads DEAD until the next cleanup, then ALIVE. Format "HH:mm" in
-    // CleanupTimeZoneId's zone. Stored per-BBS because cleanup timing is a board
-    // property. Blank disables cleanup-boss timers.
-    public string CleanupTimeOfDay { get; set; } = "21:00";
-
-    // Time-zone id CleanupTimeOfDay is expressed in. Defaults to the computer's own
-    // zone (auto-detected); the settings dropdown lets the user override it. Invalid
-    // / empty falls back to the local zone.
-    public string CleanupTimeZoneId { get; set; } = TimeZoneInfo.Local.Id;
-
     // Board-specific player-disconnect line, matched IN ADDITION to the
     // built-in "X just disconnected!!!" / "X just hung up!!!" forms. Some
     // boards (Playpen) don't emit those and instead print a custom BBS-level
@@ -158,15 +98,22 @@ public sealed class BbsProfile
     //   ►►► [{name}] logs OFF*
     public string? DisconnectPattern { get; set; }
 
-    // Per-BBS name for the top (runic) denomination. Some realms relabel
-    // "runic" to a board-specific word — which changes the coin wording the
-    // server sends AND the bare keyword the client keys currency commands on
-    // (get/drop/deposit). Only the runic token varies; the "coin"/"coins"
-    // noun-suffix and the other four denominations are stable. Stored per-BBS
-    // because it's a realm property, not a per-character one. Blank/whitespace
-    // falls back to "runic". Consumed via CurrencyNaming, which every coin
-    // parser/formatter/command-builder reads instead of a hardcoded literal.
-    public string RunicCurrencyName { get; set; } = "runic";
+
+    // ----- Realms -----
+
+    // The realms this board hosts (a BBS can offer several versions of the game
+    // from its menu). Always at least one once loaded — BbsProfileStore adds a
+    // realm named after the BBS when there's none. Each character profile names
+    // its realm (CharacterProfile.Realm); a missing / unknown name means the first.
+    public List<RealmProfile> Realms { get; set; } = new();
+
+    // The realm a character assigned to realmName plays on: that realm, or the
+    // first when the name is blank / unknown. Null only when Realms is empty.
+    public RealmProfile? RealmFor(string? realmName) =>
+        (string.IsNullOrWhiteSpace(realmName)
+            ? null
+            : Realms.FirstOrDefault(r => string.Equals(r.Name, realmName, StringComparison.OrdinalIgnoreCase)))
+        ?? Realms.FirstOrDefault();
 
     // ----- Terminal dimensions (NAWS, RFC 1073) -----
 

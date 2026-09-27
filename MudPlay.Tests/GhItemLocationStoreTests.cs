@@ -39,7 +39,7 @@ public sealed class GhItemLocationStoreTests : IDisposable
     {
         ItemNameStore itemNames = new(new GameDataCache());
         GhItemLocationStore store = new(itemNames);
-        store.OnBbsPinApplied(_scratchBbs);
+        store.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         return store;
     }
 
@@ -63,7 +63,7 @@ public sealed class GhItemLocationStoreTests : IDisposable
         itemNames.OnActiveSetChanged("alpha");
 
         GhItemLocationStore store = new(itemNames);
-        store.OnBbsPinApplied(_scratchBbs);
+        store.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         return (store, itemNames);
     }
 
@@ -196,7 +196,7 @@ public sealed class GhItemLocationStoreTests : IDisposable
     public void RecordRoom_WithoutBbsPin_IsNoOp()
     {
         ItemNameStore itemNames = new(new GameDataCache());
-        GhItemLocationStore store = new(itemNames);   // no OnBbsPinApplied
+        GhItemLocationStore store = new(itemNames);   // no OnRealmChanged
 
         store.RecordRoom(new RoomKey(1, 100), new[] { "torch" });
 
@@ -212,18 +212,18 @@ public sealed class GhItemLocationStoreTests : IDisposable
 
         ItemNameStore itemNames = new(new GameDataCache());
         GhItemLocationStore second = new(itemNames);
-        second.OnBbsPinApplied(_scratchBbs);
+        second.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         Assert.Equal(2, second.FindSightings("torch").Count);
     }
 
     [Fact]
-    public void OnBbsPinApplied_ClearingPin_ResetsInMemoryState()
+    public void OnRealmChanged_ClearingPin_ResetsInMemoryState()
     {
         GhItemLocationStore store = NewPinnedStore();
         store.RecordRoom(new RoomKey(1, 100), new[] { "torch" });
 
-        store.OnBbsPinApplied(null);
+        store.OnRealmChanged(null);
 
         Assert.Empty(store.FindSightings("torch"));
     }

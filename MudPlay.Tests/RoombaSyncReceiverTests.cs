@@ -60,10 +60,10 @@ public sealed class RoombaSyncReceiverTests : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
-        labels.OnBbsPinApplied(_scratchBbs);
+        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         GhItemLocationStore locations = new(itemNames);
-        locations.OnBbsPinApplied(_scratchBbs);
+        locations.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         return (router, chat, locations, labels);
     }

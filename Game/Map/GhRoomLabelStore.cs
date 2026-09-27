@@ -5,14 +5,13 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
 
-// Per-BBS gang-house (GH) room label set for Roomba Mode, persisted to
-// Data/BBS/{bbs}/roomba.json. A BBS ties to one game-data set and every
-// character on it shares the same gang house, so labels + the sweep-tuning
-// knobs are board-wide: label a room once on any character and every other
-// character on that BBS sees it too. Mirrors RoomBlacklistStore's per-BBS
-// load/persist shape (OnBbsPinApplied + a Changed event), not
-// SettingsResolver's tiered-delta merge — this is a single BBS-scoped file,
-// not a per-tab settings override.
+// Per-realm gang-house (GH) room label set for Roomba Mode, persisted to the
+// realm's roomba.json. Every character on a realm shares the same gang house, so
+// labels + the sweep-tuning knobs are realm-wide: label a room once on any
+// character and every other character on that realm sees it too. Mirrors
+// RoomBlacklistStore's per-realm load/persist shape (OnRealmChanged + a Changed
+// event), not SettingsResolver's tiered-delta merge — this is a single file, not
+// a per-tab settings override.
 public sealed class GhRoomLabelStore
 {
     // Default when RoombaSettings.SearchesPerRoom is unset.
@@ -20,16 +19,16 @@ public sealed class GhRoomLabelStore
 
     private readonly ProfileService _profile;
     private readonly LogService? _log;
-    private string? _activeBbs;
+    private string? _realmFolder;
     private RoombaSettings _settings = new();
     private readonly Dictionary<RoomKey, GhRoomLabel> _labels = new();
 
-    // Fires after every mutation, including a BBS-pin reload.
+    // Fires after every mutation, including a realm reload.
     public event Action? Changed;
 
     // profile is retained only to read (and, once, clear) the legacy
     // per-character GH fields during the one-time migration below — the store's
-    // own state is otherwise entirely BBS-scoped.
+    // own state is otherwise entirely realm-scoped.
     public GhRoomLabelStore(ProfileService profile, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -51,7 +50,7 @@ public sealed class GhRoomLabelStore
 
     public void SetSearchesPerRoom(int count)
     {
-        if (_activeBbs is null) return;
+        if (_realmFolder is null) return;
         _settings.SearchesPerRoom = Math.Max(1, count);
         Persist();
         _log?.Info("GhSweep", $"searches per room set to {_settings.SearchesPerRoom}");
@@ -60,7 +59,7 @@ public sealed class GhRoomLabelStore
 
     public void SetSearchForHidden(bool on)
     {
-        if (_activeBbs is null) return;
+        if (_realmFolder is null) return;
         _settings.SearchForHidden = on;
         Persist();
         _log?.Info("GhSweep", $"search for hidden items {(on ? "enabled" : "disabled")}");
@@ -78,7 +77,7 @@ public sealed class GhRoomLabelStore
     // Persists immediately.
     public void SetLabel(RoomKey key, IReadOnlyList<GhCategoryRule> rules, bool isCatchAll)
     {
-        if (_activeBbs is null) return;
+        if (_realmFolder is null) return;
 
         GhRoomLabel label = new(key.Map, key.Room) { Rules = rules.ToList(), IsCatchAll = isCatchAll };
         _labels[key] = label;
@@ -95,7 +94,7 @@ public sealed class GhRoomLabelStore
     // Clear key's label. Persists immediately.
     public void ClearLabel(RoomKey key)
     {
-        if (_activeBbs is null) return;
+        if (_realmFolder is null) return;
         if (!_labels.Remove(key)) return;
 
         _settings.RoomLabels?.RemoveAll(l => l.Map == key.Map && l.Room == key.Room);
@@ -112,7 +111,7 @@ public sealed class GhRoomLabelStore
     public int MergeSyncLabels(IReadOnlyList<GhRoomLabel> incoming)
     {
         ArgumentNullException.ThrowIfNull(incoming);
-        if (_activeBbs is null || incoming.Count == 0) return 0;
+        if (_realmFolder is null || incoming.Count == 0) return 0;
 
         int added = 0;
         foreach (GhRoomLabel lbl in incoming)
@@ -142,16 +141,16 @@ public sealed class GhRoomLabelStore
         return added;
     }
 
-    // Load the Roomba settings for the active BBS. Called by AppServices on
-    // ProfileService.ProfileLoaded / BbsPinApplied with the resolved active BBS
-    // name; resets the in-memory store when the pin clears (bbs is null / blank).
-    public void OnBbsPinApplied(string? bbs)
+    // Load the Roomba settings for the active realm. Called by AppServices on
+    // ProfileService.ProfileLoaded / BbsPinApplied with the active realm's folder;
+    // resets the in-memory store when there's none (null / blank).
+    public void OnRealmChanged(string? realmFolder)
     {
-        if (string.IsNullOrWhiteSpace(bbs))
+        if (string.IsNullOrWhiteSpace(realmFolder))
         {
-            if (_activeBbs is not null)
+            if (_realmFolder is not null)
             {
-                _activeBbs = null;
+                _realmFolder = null;
                 _settings = new RoombaSettings();
                 _labels.Clear();
                 Changed?.Invoke();
@@ -159,28 +158,28 @@ public sealed class GhRoomLabelStore
             return;
         }
 
-        _activeBbs = bbs;
-        _settings = JsonStore.Load<RoombaSettings>(AppPaths.BbsRoombaFile(bbs)) ?? new RoombaSettings();
+        _realmFolder = realmFolder;
+        _settings = JsonStore.Load<RoombaSettings>(AppPaths.RealmRoombaFile(realmFolder)) ?? new RoombaSettings();
         MigrateLegacyCharacterData();
         RebuildLabelIndex();
         Changed?.Invoke();
     }
 
-    // One-time lift of a pre-upgrade character's GH data into this BBS's
-    // roomba.json: only runs when the BBS file is still empty AND the currently
+    // One-time lift of a pre-upgrade character's GH data into this realm's
+    // roomba.json: only runs when the realm file is still empty AND the currently
     // loaded character profile still carries the legacy fields. Clears the
     // character-tier copy afterward (and saves) so this never re-fires and the
     // old data doesn't linger duplicated in two places.
     //
-    // First-writer-wins by design: if several characters on one BBS each labeled
-    // rooms before the per-character → per-BBS move, the first to load seeds the
+    // First-writer-wins by design: if several characters on one realm each labeled
+    // rooms before the per-character → shared move, the first to load seeds the
     // shared file and later characters' distinct labels aren't merged in (their
     // legacy fields just sit unread). Collapsing per-char data into one shared
     // gang house can't preserve conflicting sets, and in practice one character
     // does the labeling — an accepted tradeoff, not a bug to reconcile.
     private void MigrateLegacyCharacterData()
     {
-        if (_settings.RoomLabels is { Count: > 0 }) return;   // BBS file already has real data
+        if (_settings.RoomLabels is { Count: > 0 }) return;   // realm file already has real data
         if (_profile.Current is not { } current) return;
         if (current.GhRoomLabels is not { Count: > 0 } legacyLabels) return;
 
@@ -195,7 +194,7 @@ public sealed class GhRoomLabelStore
         _profile.Save();
 
         _log?.Info("GhSweep",
-            $"migrated {legacyLabels.Count} legacy per-character GH room label(s) to BBS '{_activeBbs}'");
+            $"migrated {legacyLabels.Count} legacy per-character GH room label(s) to '{_realmFolder}'");
     }
 
     private void RebuildLabelIndex()
@@ -207,7 +206,7 @@ public sealed class GhRoomLabelStore
 
     private void Persist()
     {
-        if (_activeBbs is null) return;
-        JsonStore.Save(AppPaths.BbsRoombaFile(_activeBbs), _settings);
+        if (_realmFolder is null) return;
+        JsonStore.Save(AppPaths.RealmRoombaFile(_realmFolder), _settings);
     }
 }

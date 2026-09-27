@@ -9,13 +9,14 @@ using MudPlay.Models.Profile;
 
 namespace MudPlay.Services;
 
-// Persisted per-set boss kill-times. On a confirmed boss kill (a specific
+// Persisted per-realm boss kill-times. On a confirmed boss kill (a specific
 // MonsterDied identity that matches a tracked boss AND lands in one of that boss's
-// rooms) the kill time is stamped and written to {set}/boss-timers.json, so a long
-// respawn timer survives an app restart. Timer VALUES aren't stored — the full
-// respawn hours are resolved live from game data (BossCatalog), and the realm's
-// early-window model comes from BossTimerMath. Realm-wide like BossStore: keyed to
-// the active set, shared across the user's characters.
+// rooms) the kill time is stamped and written to the realm's boss-timers.json, so
+// a long respawn timer survives an app restart. Timer VALUES aren't stored — the
+// full respawn hours are resolved live from game data (BossCatalog), and the
+// realm's early-window model comes from BossTimerMath. Kill-times are observed in
+// play, so they belong to the realm (two realms on the same game data don't share
+// them); every character on the realm shares them.
 //
 // Kill detection matches the in-game signal: we were ENGAGED with a monster by
 // name, then it died (awarded exp). Monster numbers aren't observable in-game, so
@@ -50,12 +51,14 @@ public sealed class BossTimerStore
     // Grab-All isn't double-fired.
     private static readonly TimeSpan FallbackDedupeWindow = TimeSpan.FromSeconds(6);
 
-    // Active BBS's nightly-cleanup config (time-of-day + zone) for "Respawns @
-    // Cleanup" bosses. Resolved live so a BBS / setting change takes effect without
+    // Active realm's nightly-cleanup config (time-of-day + zone) for "Respawns @
+    // Cleanup" bosses. Resolved live so a realm / setting change takes effect without
     // re-wiring; null when unset or unparseable → cleanup bosses can't auto-flip.
     private Func<BossCleanupConfig?>? _cleanupConfig;
 
-    public string? ActiveSet { get; private set; }
+    // Folder of the realm whose kill-times are loaded — timers are observed in play,
+    // so they belong to the realm. null disables persistence.
+    public string? ActiveRealmFolder { get; private set; }
 
     public void SetCleanupConfig(Func<BossCleanupConfig?> resolver)
     {
@@ -76,12 +79,12 @@ public sealed class BossTimerStore
         _log = log;
     }
 
-    public void OnActiveSetChanged(string? setName)
+    public void OnRealmChanged(string? realmFolder)
     {
-        ActiveSet = string.IsNullOrWhiteSpace(setName) ? null : setName;
+        ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
         _killed = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
-        if (ActiveSet is not null &&
-            JsonStore.Load<Dictionary<string, DateTimeOffset>>(AppPaths.BossTimersFile(ActiveSet)) is { } loaded)
+        if (ActiveRealmFolder is not null &&
+            JsonStore.Load<Dictionary<string, DateTimeOffset>>(AppPaths.RealmBossTimersFile(ActiveRealmFolder)) is { } loaded)
         {
             foreach ((string name, DateTimeOffset at) in loaded) _killed[name] = at;
         }
@@ -318,7 +321,7 @@ public sealed class BossTimerStore
 
     private void Persist()
     {
-        if (ActiveSet is null) return;
+        if (ActiveRealmFolder is null) return;
 
         // Boss-timer persistence is convenience bookkeeping fired from the combat
         // death-line path — a write failure (transient IO, a filesystem hiccup)
@@ -326,7 +329,7 @@ public sealed class BossTimerStore
         // timer still stands and the next kill/reset re-attempts the write.
         try
         {
-            JsonStore.Save(AppPaths.BossTimersFile(ActiveSet), _killed);
+            JsonStore.Save(AppPaths.RealmBossTimersFile(ActiveRealmFolder), _killed);
         }
         catch (Exception ex)
         {

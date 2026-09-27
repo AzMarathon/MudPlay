@@ -152,6 +152,10 @@ public static class BugReportBuilder
         Kv(sb, "Active game-data set", svc.GameData.ActiveSet ?? "(none)");
         Kv(sb, "Character", svc.Profile.CurrentProfileName ?? "(none loaded)");
         Kv(sb, "BBS", svc.Profile.CurrentBbsName ?? "(none)");
+        Kv(sb, "BBS realm", svc.ResolveActiveRealm() is { } bbsRealm
+            ? $"{bbsRealm.Realm.Name} (game data {bbsRealm.Realm.ActiveGameDataSet ?? "global default"}; "
+              + $"{bbsRealm.Bbs.Realms.Count} realm(s) on the BBS)"
+            : "(none)");
         // Retry/reconnect config for the active BBS. A "won't stop redialing" or
         // "never reconnected" report hinges on whether InfiniteRetries is on (which
         // overrides the count+pause to unlimited @ 3s) and which triggers are armed.

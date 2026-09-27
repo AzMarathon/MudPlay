@@ -53,6 +53,10 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private ProfileManagerRow? _selectedProfile;
 
     [ObservableProperty] private string? _assignTargetBbs;
+
+    // Realms of the selected BBS, for "Assign to realm" (edited under Settings → BBS).
+    public ObservableCollection<string> Realms { get; } = new();
+    [ObservableProperty] private string? _assignTargetRealm;
     [ObservableProperty] private bool _isProfilesEmpty = true;
     [ObservableProperty] private string _currentProfileLabel = "No character loaded";
 
@@ -127,6 +131,9 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
 
     partial void OnSelectedBbsChanged(string? value) => ReloadProfiles();
 
+    partial void OnSelectedProfileChanged(ProfileManagerRow? value) =>
+        AssignTargetRealm = value?.Realm;
+
     private void RefreshCurrentLabel() =>
         CurrentProfileLabel = _profile.Current is null
             ? "No character loaded"
@@ -153,18 +160,36 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private void ReloadProfiles()
     {
         Profiles.Clear();
+        Realms.Clear();
         if (SelectedBbs is { } bbs)
         {
+            Models.Settings.BbsProfile? board = _bbs.Get(bbs);
+            foreach (Models.Settings.RealmProfile realm in board?.Realms ?? new())
+                Realms.Add(realm.Name);
             foreach (ProfileRef r in _profile.ListAll()
                          .Where(r => string.Equals(r.Bbs, bbs, StringComparison.OrdinalIgnoreCase))
                          .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
             {
                 bool isCurrent = string.Equals(_profile.CurrentBbsName, r.Bbs, StringComparison.OrdinalIgnoreCase)
                                  && string.Equals(_profile.CurrentProfileName, r.Name, StringComparison.Ordinal);
-                Profiles.Add(new ProfileManagerRow(r, isCurrent));
+                Profiles.Add(new ProfileManagerRow(r, isCurrent, board?.RealmFor(_profile.RealmOf(r))?.Name));
             }
         }
         IsProfilesEmpty = Profiles.Count == 0;
+    }
+
+    // Put the selected character on the picked realm of its BBS. The loaded one
+    // must be disconnected first, since its game data and realm stores switch.
+    [RelayCommand]
+    private void AssignToRealm()
+    {
+        if (SelectedProfile is not { } row || AssignTargetRealm is not { } realm) return;
+        if (string.Equals(row.Realm, realm, StringComparison.OrdinalIgnoreCase)) return;
+        if (row.IsCurrent && !EnsureDisconnected("move the loaded character to another realm")) return;
+        _profile.AssignRealm(row.Ref, realm);
+        if (row.IsCurrent) _profile.NotifyBbsPinApplied();
+        _log?.Info("Profile", $"Assigned '{row.Name}' to realm '{realm}' on '{row.Ref.Bbs}'.");
+        ReloadProfiles();
     }
 
     // Refuse an op that would strand the live in-game session, pointing the user
@@ -430,6 +455,8 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
 
         bool wasCurrent = row.IsCurrent;
         _profile.MoveProfile(fromBbs, name, toBbs, targetName);
+        // Realm names belong to the old board: start on the new board's first realm.
+        _profile.AssignRealm(new ProfileRef(toBbs, targetName), null);
         if (wasCurrent) { _profile.NotifyMutated(); _profile.NotifyBbsPinApplied(); }   // active BBS changed
         _log?.Info("Profile", targetName == name
             ? $"Assigned '{name}' to BBS '{toBbs}'."

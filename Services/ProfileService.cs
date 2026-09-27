@@ -402,6 +402,67 @@ public sealed class ProfileService
         }
     }
 
+    // The realm a saved character is assigned to (CharacterProfile.Realm; null =
+    // the BBS's first). The loaded character answers from memory.
+    public string? RealmOf(ProfileRef reference)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        if (IsCurrent(reference)) return Current?.Realm;
+        return JsonStore.Load<CharacterProfile>(AppPaths.CharacterProfileFile(reference.Bbs, reference.Name))?.Realm;
+    }
+
+    // Assign a saved character to a realm of its BBS. The loaded character is
+    // updated in memory and saved (callers re-pin so the realm's data follows).
+    public void AssignRealm(ProfileRef reference, string? realm)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        if (IsCurrent(reference))
+        {
+            if (Current is null) return;
+            Current.Realm = realm;
+            Save();
+            return;
+        }
+        string path = AppPaths.CharacterProfileFile(reference.Bbs, reference.Name);
+        if (JsonStore.Load<CharacterProfile>(path) is not { } profile) return;
+        profile.Realm = realm;
+        JsonStore.Save(path, profile);
+    }
+
+    private bool IsCurrent(ProfileRef reference) =>
+        CurrentProfileName is not null
+        && string.Equals(reference.Bbs, CurrentBbsName, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(reference.Name, CurrentProfileName, StringComparison.Ordinal);
+
+    // Re-point every character on a BBS assigned to realm oldRealm at newRealm —
+    // a realm renamed, or removed (newRealm null: back to the BBS's first realm).
+    // The loaded profile is updated in memory and saved; the rest on disk.
+    public void RenameRealm(string bbs, string oldRealm, string? newRealm)
+    {
+        if (string.IsNullOrWhiteSpace(bbs) || string.IsNullOrWhiteSpace(oldRealm)) return;
+        bool Assigned(CharacterProfile p) =>
+            string.Equals(p.Realm, oldRealm, StringComparison.OrdinalIgnoreCase);
+        bool currentOnBbs = string.Equals(CurrentBbsName, bbs, StringComparison.OrdinalIgnoreCase);
+
+        foreach (ProfileRef reference in ListAll())
+        {
+            if (!string.Equals(reference.Bbs, bbs, StringComparison.OrdinalIgnoreCase)) continue;
+            if (currentOnBbs && CurrentProfileName is not null
+                && string.Equals(reference.Name, CurrentProfileName, StringComparison.Ordinal))
+                continue;   // authored from the in-memory copy below
+            string path = AppPaths.CharacterProfileFile(reference.Bbs, reference.Name);
+            if (JsonStore.Load<CharacterProfile>(path) is not { } profile || !Assigned(profile)) continue;
+            profile.Realm = newRealm;
+            JsonStore.Save(path, profile);
+        }
+
+        if (currentOnBbs && Current is { } current && Assigned(current))
+        {
+            current.Realm = newRealm;
+            Save();
+        }
+    }
+
     // Move a BbsCredentials entry from oldBbs to newBbs on a profile's
     // case-insensitive credential map. Returns true if anything changed.
     private static bool RekeyBbsCredentials(CharacterProfile profile, string oldBbs, string newBbs)

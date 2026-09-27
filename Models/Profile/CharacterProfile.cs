@@ -3,7 +3,7 @@ using MudPlay.Game.Map;
 
 namespace MudPlay.Models.Profile;
 
-// Root DTO for Data/profiles/{char-name}.json — the Character tier of the
+// Root DTO for BBS/{bbs}/profiles/{char}/profile.json — the Character tier of the
 // settings hierarchy. Per-character workspace: auth info, settings deltas,
 // macros / triggers / events / death records / equipment sets / build presets /
 // quest state / etc.
@@ -26,6 +26,12 @@ public sealed class CharacterProfile
     // may give two profiles the same in-game name on different BBSes (same
     // character name across two unrelated realms).
     public string Name { get; set; } = string.Empty;
+
+    // The realm on its BBS this character plays (a RealmProfile name). The realm
+    // picks the game data, menu commands and death floor, and where everything
+    // collected while playing is stored, shared with the other characters on the
+    // same realm. null / unknown means the BBS's first realm.
+    public string? Realm { get; set; }
 
     // Per-tab settings deltas at the Character tier — same shape as
     // GlobalSettings.Settings. Anything the user pinned to "only for this

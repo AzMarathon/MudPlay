@@ -213,14 +213,61 @@
                                TextWrapping="Wrap"
                                Text="Columns / rows are advertised via Telnet NAWS. MajorMUD renders against a fixed 80×25 grid and won't reflow if you push higher; non-game BBS doors usually do reflow."/>
 
-                    <!-- ===== Game-menu commands (per-BBS) =====
-                         The two main-menu picks for entering / leaving the
-                         realm. Stored on the BbsProfile because the menu key
-                         bindings belong to the realm / front-end, not the
-                         character — every character on the same BBS uses the
-                         same picks. Bind directly (no HasProfile gate): these
-                         live on the selected BBS, not the loaded character. -->
-                    <TextBlock Classes="GroupHeader" Text="Game-menu commands"/>
+                    <!-- ===== Board disconnect line (per-BBS) =====
+                         Additive to the built-in "X just disconnected!!!" /
+                         "X just hung up!!!" forms. Some boards (Playpen) emit a
+                         custom BBS-level logoff line keyed on the ACCOUNT name,
+                         not the character name — this teaches the client that
+                         line so a party member's drop is caught. {name} captures
+                         the disconnecting player (matched against a player's
+                         account-name override, else their character name); *
+                         swallows a varying run (e.g. a trailing user count). -->
+                    <TextBlock Classes="GroupHeader" Text="Board disconnect line"/>
+                    <TextBlock Classes="FieldLabel"
+                               Margin="0,4,0,0" TextWrapping="Wrap"
+                               Text="Extra logoff line to watch, on top of the built-in &quot;just disconnected&quot; / &quot;just hung up&quot; forms. Use {name} for the player and * for a varying run. Leave blank on boards that use the standard lines."/>
+                    <TextBox Text="{Binding DisconnectPattern, Mode=TwoWay}"
+                             Margin="0,6,0,0" MaxWidth="420" HorizontalAlignment="Left"
+                             FontFamily="{StaticResource FontMono}"
+                             PlaceholderText="e.g.  ►►► [{name}] logs OFF*"
+                             ToolTip.Tip="Optional board-specific disconnect line. {name} captures the disconnecting player — matched against each party member's account-name override (Game Data → Players) if set, else their character name. * matches any varying text (like Playpen's trailing 'Lines in Use: N'). Empty = only the built-in disconnect/hang-up lines are watched."/>
+
+                    <!-- ===== Realms =====
+                         A board can host several versions of the game, picked from
+                         its menu, and each usually differs (often its own MDB
+                         export). Each realm has the settings below and its own
+                         store of collected data (players seen, blacklist,
+                         leaderboard, roomba, quests, realm game-data edits, boss
+                         timers), shared by the characters assigned to it. -->
+                    <TextBlock Classes="GroupHeader" Text="Realms"/>
+                    <TextBlock Classes="FieldLabel" Margin="0,4,0,0" TextWrapping="Wrap"
+                               Text="The versions of the game this BBS hosts. Each realm has its own game data and settings, and keeps its own players, blacklist, leaderboard, roomba, quests and boss timers, shared by the characters playing it. Assign a character to a realm below (or in Profile Management)."/>
+                    <Grid ColumnDefinitions="200,Auto" Margin="0,6,0,0" ColumnSpacing="8">
+                        <ListBox Grid.Column="0" ItemsSource="{Binding RealmNames}"
+                                 SelectedItem="{Binding SelectedRealmName, Mode=TwoWay}"
+                                 MaxHeight="120"/>
+                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Top">
+                            <Button Content="Add realm" Command="{Binding AddRealmCommand}"
+                                    ToolTip.Tip="Add a realm to this BBS. It starts with default settings and no collected data."/>
+                            <Button Content="Remove realm" Command="{Binding RemoveRealmCommand}"
+                                    ToolTip.Tip="Remove the selected realm (a BBS keeps at least one). Its characters move to the first realm when you press OK; its collected data stays on disk."/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
+                          Margin="0,10,0,0" ColumnSpacing="8" RowSpacing="4">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Realm name"/>
+                        <TextBox   Grid.Row="0" Grid.Column="1" Width="220"
+                                   Text="{Binding RealmName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                   ToolTip.Tip="The selected realm's name (also its data folder's). Renaming it keeps its data and its characters."/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Game data"/>
+                        <ComboBox  Grid.Row="1" Grid.Column="1" Width="260"
+                                   ItemsSource="{Binding GameDataSetOptions}"
+                                   SelectedItem="{Binding RealmGameDataSet, Mode=TwoWay}"
+                                   ToolTip.Tip="The imported game data (MDB) this realm uses. Global default follows File → Game Data's default set."/>
+                    </Grid>
+
+                    <TextBlock Classes="FieldLabel" FontWeight="SemiBold" Margin="0,12,0,0" Text="Game-menu commands"/>
 
                     <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
                           Margin="0,6,0,0" ColumnSpacing="8" RowSpacing="4">
@@ -228,22 +275,20 @@
                         <TextBox   Grid.Row="0" Grid.Column="1"
                                    Text="{Binding GameEntryCommand, Mode=TwoWay}"
                                    Width="120" FontFamily="{StaticResource FontMono}"
-                                   ToolTip.Tip="Sent at the MajorMUD main menu to enter the realm. Default 'E'."/>
+                                   ToolTip.Tip="Sent at the MajorMUD main menu to enter this realm. Default 'E'."/>
 
                         <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Game exit command"/>
                         <TextBox   Grid.Row="1" Grid.Column="1"
                                    Text="{Binding GameExitCommand, Mode=TwoWay}"
                                    Width="120" FontFamily="{StaticResource FontMono}"
-                                   ToolTip.Tip="Sent at the MajorMUD main menu to log off. Default '=x'. Fires immediately when a permitted player telepaths @hangup; full cleanup-warning automation ships in a follow-up PR."/>
+                                   ToolTip.Tip="Sent at the MajorMUD main menu to log off. Default '=x'. Also sent when a permitted player telepaths @hangup and by the cleanup log-off."/>
                     </Grid>
 
-                    <!-- ===== Realm mechanics (per-BBS) =====
-                         The negative-HP death floor. 0 HP only drops a character
+                    <!-- The negative-HP death floor. 0 HP only drops a character
                          into a revivable bleed-out; death happens at this value.
-                         Stored per-BBS because it's a realm balance knob. The
-                         emergency auto-hangup reads it so the disconnect keeps
+                         The emergency auto-hangup reads it so the disconnect keeps
                          firing all the way through the bleeding-out window. -->
-                    <TextBlock Classes="GroupHeader" Text="Realm mechanics"/>
+                    <TextBlock Classes="FieldLabel" FontWeight="SemiBold" Margin="0,12,0,0" Text="Realm mechanics"/>
 
                     <Grid ColumnDefinitions="180,Auto,*" Margin="0,6,0,0" ColumnSpacing="8">
                         <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Player dies at (HP):"/>
@@ -283,35 +328,16 @@
                                   ToolTip.Tip="Time zone the cleanup time is in. Defaults to your computer's own zone; change it to override (e.g. if the board's cleanup runs on a different zone)."/>
                     </Grid>
 
-                    <!-- ===== Board disconnect line (per-BBS) =====
-                         Additive to the built-in "X just disconnected!!!" /
-                         "X just hung up!!!" forms. Some boards (Playpen) emit a
-                         custom BBS-level logoff line keyed on the ACCOUNT name,
-                         not the character name — this teaches the client that
-                         line so a party member's drop is caught. {name} captures
-                         the disconnecting player (matched against a player's
-                         account-name override, else their character name); *
-                         swallows a varying run (e.g. a trailing user count). -->
-                    <TextBlock Classes="GroupHeader" Text="Board disconnect line"/>
-                    <TextBlock Classes="FieldLabel"
-                               Margin="0,4,0,0" TextWrapping="Wrap"
-                               Text="Extra logoff line to watch, on top of the built-in &quot;just disconnected&quot; / &quot;just hung up&quot; forms. Use {name} for the player and * for a varying run. Leave blank on boards that use the standard lines."/>
-                    <TextBox Text="{Binding DisconnectPattern, Mode=TwoWay}"
-                             Margin="0,6,0,0" MaxWidth="420" HorizontalAlignment="Left"
-                             FontFamily="{StaticResource FontMono}"
-                             PlaceholderText="e.g.  ►►► [{name}] logs OFF*"
-                             ToolTip.Tip="Optional board-specific disconnect line. {name} captures the disconnecting player — matched against each party member's account-name override (Game Data → Players) if set, else their character name. * matches any varying text (like Playpen's trailing 'Lines in Use: N'). Empty = only the built-in disconnect/hang-up lines are watched."/>
-
-                    <!-- ===== Realm-specific naming (per-BBS) =====
-                         Per-BBS label for the runic currency. Some realms
-                         relabel "runic" to a board-specific word, which
-                         changes the coin wording the server sends — so the
-                         pickup/drop/hide parsers have to match the custom
-                         name, not the literal "runic". -->
-                    <TextBlock Classes="GroupHeader" Text="Runic currency name"/>
-                    <TextBox Text="{Binding RunicCurrencyName, Mode=TwoWay}"
-                             Margin="0,6,0,0" Width="220" HorizontalAlignment="Left"
-                             ToolTip.Tip="Saved to the BBS settings — different realms relabel the runic currency, so this is per-BBS, not per-character. Blank falls back to 'runic'."/>
+                    <!-- The realm's label for the runic currency. Some realms
+                         relabel "runic", which changes the coin wording the server
+                         sends — so the pickup/drop/hide parsers have to match the
+                         custom name, not the literal "runic". -->
+                    <Grid ColumnDefinitions="180,Auto,*" Margin="0,12,0,0" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Runic currency name"/>
+                        <TextBox Grid.Column="1" Text="{Binding RunicCurrencyName, Mode=TwoWay}"
+                                 Width="220" HorizontalAlignment="Left"
+                                 ToolTip.Tip="What this realm calls the runic currency, if it relabels it. Blank falls back to 'runic'."/>
+                    </Grid>
 
                     <!-- ============================================================
                          SECTION 2 — Character profile settings (per-character).
@@ -323,6 +349,17 @@
                     <TextBlock Classes="SettingsSectionSub"
                                Text="Only for the character you have loaded — each character on this BBS keeps its own copy."/>
                     <Border Classes="SettingsSectionRule"/>
+
+                    <!-- The loaded character's realm on its own BBS (shown only while
+                         that BBS is the one selected above). Committed on OK. -->
+                    <Grid ColumnDefinitions="180,Auto,*" Margin="0,10,0,0" ColumnSpacing="8"
+                          IsVisible="{Binding CanPickCharacterRealm}">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Plays on realm"/>
+                        <ComboBox  Grid.Column="1" Width="220"
+                                   ItemsSource="{Binding RealmNames}"
+                                   SelectedItem="{Binding CharacterRealm, Mode=TwoWay}"
+                                   ToolTip.Tip="Which of this BBS's realms the loaded character plays. It picks the realm's game data and settings, and where what you collect while playing is kept (shared with the realm's other characters)."/>
+                    </Grid>
 
                     <TextBlock Classes="GroupHeader" Text="Credentials"/>
 

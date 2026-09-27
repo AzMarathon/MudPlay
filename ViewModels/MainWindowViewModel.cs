@@ -4443,8 +4443,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Items bound to File → Game Data → Active set. Each entry has a
     // checkbox-style header (checked = currently active set) and a command
-    // that flips GameDataCache.ActiveSet + writes the resolved BBS's
-    // BbsProfile.ActiveGameDataSet field (falling back to
+    // that flips GameDataCache.ActiveSet + writes the active realm's
+    // RealmProfile.ActiveGameDataSet (falling back to
     // GlobalSettings.DefaultGameDataSet when no BBS is pinned).
     public ObservableCollection<GameDataSetMenuItem> GameDataSets { get; } = new();
 
@@ -4692,11 +4692,10 @@ public partial class MainWindowViewModel : ObservableObject
         else
             cache.SwitchSet(setName);
 
-        BbsProfile? bbs = ResolveActiveBbs();
-        if (bbs is not null)
+        if (AppServices.Current.ResolveActiveRealm() is { } active)
         {
-            bbs.ActiveGameDataSet = setName;
-            AppServices.Current.Bbs.Save(bbs);
+            active.Realm.ActiveGameDataSet = setName;
+            AppServices.Current.Bbs.Save(active.Bbs);
         }
         else
         {

@@ -5,7 +5,7 @@ using MudPlay.Services;
 namespace MudPlay.Game.Health;
 
 // Traces a realm's true negative-HP death floor and refines
-// BbsProfile.PlayerDiesAtHp toward it from two independent kinds of evidence.
+// RealmProfile.PlayerDiesAtHp toward it from two independent kinds of evidence.
 // The seed (-25) is only a guess; both paths correct it downward:
 //   1. A clean *slow* death lands right at the floor, so its HP reading measures
 //      it exactly (RecordDeath).
@@ -49,7 +49,8 @@ public sealed class DeathFloorTracer : IDisposable
     private const double MaxBleedStepFractionOfMaxHp = 0.10;
 
     private readonly PlayerState _state;
-    private readonly Func<BbsProfile?> _resolveBbs;
+    // The active realm and the BBS that holds it (saving the BBS saves the realm).
+    private readonly Func<(BbsProfile Bbs, RealmProfile Realm)?> _resolveRealm;
     private readonly Action<BbsProfile> _saveBbs;
     private readonly LogService? _log;
     private bool _disposed;
@@ -62,15 +63,15 @@ public sealed class DeathFloorTracer : IDisposable
 
     public DeathFloorTracer(
         PlayerState state,
-        Func<BbsProfile?> resolveBbs,
+        Func<(BbsProfile Bbs, RealmProfile Realm)?> resolveRealm,
         Action<BbsProfile> saveBbs,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(state);
-        ArgumentNullException.ThrowIfNull(resolveBbs);
+        ArgumentNullException.ThrowIfNull(resolveRealm);
         ArgumentNullException.ThrowIfNull(saveBbs);
         _state = state;
-        _resolveBbs = resolveBbs;
+        _resolveRealm = resolveRealm;
         _saveBbs = saveBbs;
         _log = log;
         _state.PropertyChanged += OnStateChanged;
@@ -128,16 +129,16 @@ public sealed class DeathFloorTracer : IDisposable
     private void RefineFloorFromLiveSurvival(int survivedHp)
     {
         int bound = survivedHp - 1;
-        BbsProfile? bbs = _resolveBbs();
-        if (bbs is null || !bbs.AutoRefineDeathFloor) return;
-        if (bound >= bbs.PlayerDiesAtHp) return;   // estimate already at least this deep
+        if (_resolveRealm() is not { } active || !active.Realm.AutoRefineDeathFloor) return;
+        RealmProfile realm = active.Realm;
+        if (bound >= realm.PlayerDiesAtHp) return;   // estimate already at least this deep
 
-        int old = bbs.PlayerDiesAtHp;
-        bbs.PlayerDiesAtHp = bound;
-        _saveBbs(bbs);
+        int old = realm.PlayerDiesAtHp;
+        realm.PlayerDiesAtHp = bound;
+        _saveBbs(active.Bbs);
         _log?.Info(LogCategory,
             $"alive at HP {survivedHp} (floor was {old}) — a survived reading can't sit at or below the floor; " +
-            $"refined {old} → {bound} (BBS '{bbs.Name}').");
+            $"refined {old} → {bound} (realm '{realm.Name}' on BBS '{active.Bbs.Name}').");
     }
 
     // The local player just died (wired to DeathLineWatcher.PlayerDied). Classify
@@ -155,28 +156,28 @@ public sealed class DeathFloorTracer : IDisposable
         _sawBleedTick = false;
         _maxInBandStep = 0;
 
-        BbsProfile? bbs = _resolveBbs();
-        if (bbs is null || !bbs.AutoRefineDeathFloor) return;
+        if (_resolveRealm() is not { } active || !active.Realm.AutoRefineDeathFloor) return;
+        RealmProfile realm = active.Realm;
 
         if (!IsSlowDeath(deathHp, sawBleed, maxStep, _state.MaxHp, out int measured, out string reason))
         {
             _log?.Debug(LogCategory,
-                $"death not used to refine floor ({reason}); floor {bbs.PlayerDiesAtHp} unchanged.");
+                $"death not used to refine floor ({reason}); floor {realm.PlayerDiesAtHp} unchanged.");
             return;
         }
 
-        int old = bbs.PlayerDiesAtHp;
+        int old = realm.PlayerDiesAtHp;
         if (measured == old)
         {
             _log?.Debug(LogCategory,
-                $"slow death at HP {measured} confirms realm floor {old} (BBS '{bbs.Name}').");
+                $"slow death at HP {measured} confirms realm floor {old} (realm '{realm.Name}' on BBS '{active.Bbs.Name}').");
             return;
         }
 
-        bbs.PlayerDiesAtHp = measured;
-        _saveBbs(bbs);
+        realm.PlayerDiesAtHp = measured;
+        _saveBbs(active.Bbs);
         _log?.Info(LogCategory,
-            $"slow death at HP {measured} — refined realm floor {old} → {measured} (BBS '{bbs.Name}').");
+            $"slow death at HP {measured} — refined realm floor {old} → {measured} (realm '{realm.Name}' on BBS '{active.Bbs.Name}').");
     }
 
     // A death is a slow (measurable) death when we watched the character bleed

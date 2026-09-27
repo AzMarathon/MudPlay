@@ -69,11 +69,11 @@ public sealed class RoombaMasterListViewModelTests : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
-        labels.OnBbsPinApplied(_scratchBbs);
+        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         labels.SetLabel(new RoomKey(1, 1), new System.Collections.Generic.List<GhCategoryRule>(), isCatchAll: false);
 
         GhItemLocationStore locations = new(itemNames);
-        locations.OnBbsPinApplied(_scratchBbs);
+        locations.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         return (locations, labels, itemNames, cache, roomGraph);
     }

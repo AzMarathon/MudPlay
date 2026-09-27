@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.115.12**
-> - Good-only / Evil-only gear is no longer flagged "unable to wear" from a stale alignment: your alignment only counts once a `who` shows you this session (a same-named character on another realm of the same BBS was overwriting it)
+> **Version 3.116.0**
+> - A BBS can host several named realms (Settings → BBS + Display): each has its own game data, game-menu commands, death floor, boss cleanup time and runic currency name
+> - What you collect while playing (players seen, room blacklist, leaderboard, Roomba labels and sightings, quest edits, boss timers, realm game-data edits) is kept per realm, shared by the characters playing it
+> - Characters are put on a realm under Settings → BBS + Display or Profile Management; an existing BBS becomes one realm holding its current settings and data
+> - The "Only for this BBS" game-data tier is now "Only for this realm"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

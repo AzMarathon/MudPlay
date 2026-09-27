@@ -348,12 +348,12 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(SysGotoAvailable));
     }
 
-    // Active-BBS death floor (BbsProfile.PlayerDiesAtHp), read through the same
+    // Active realm's death floor (RealmProfile.PlayerDiesAtHp), read through the same
     // ResolveActiveBbs path the engine's readDeathFloor uses so the Hang-up
     // ticker's lower bound matches where the game actually kills the character.
     private static int TryGetDeathFloor()
     {
-        try { return AppServices.Current.ResolveActiveBbs()?.PlayerDiesAtHp ?? -25; }
+        try { return AppServices.Current.ResolveActiveRealm()?.Realm.PlayerDiesAtHp ?? -25; }
         catch { return -25; }    // design-time
     }
 

@@ -150,13 +150,13 @@ public sealed class LeaderboardSnapshotStoreTests : IDisposable
     public void Persist_ReloadRoundTrip_PreservesEntriesAndRequestedCount()
     {
         var store = new LeaderboardSnapshotStore();
-        store.OnBbsPinApplied(_scratchBbs);
+        store.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         store.Add(Snap(T, 250, 1234567));
 
-        Assert.True(File.Exists(AppPaths.BbsLeaderboardFile(_scratchBbs)));
+        Assert.True(File.Exists(AppPaths.RealmLeaderboardFile(AppPaths.BbsFolder(_scratchBbs))));
 
         var reloaded = new LeaderboardSnapshotStore();
-        reloaded.OnBbsPinApplied(_scratchBbs);
+        reloaded.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         Assert.Single(reloaded.Snapshots);
         LeaderboardSnapshot snap = reloaded.Snapshots[0];
@@ -168,14 +168,14 @@ public sealed class LeaderboardSnapshotStoreTests : IDisposable
     }
 
     [Fact]
-    public void OnBbsPinApplied_Blank_ClearsInMemory()
+    public void OnRealmChanged_Blank_ClearsInMemory()
     {
         var store = new LeaderboardSnapshotStore();
-        store.OnBbsPinApplied(_scratchBbs);
+        store.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         store.Add(Snap(T, 100, 1000));
         Assert.Single(store.Snapshots);
 
-        store.OnBbsPinApplied(null);
+        store.OnRealmChanged(null);
         Assert.Empty(store.Snapshots);
     }
 }

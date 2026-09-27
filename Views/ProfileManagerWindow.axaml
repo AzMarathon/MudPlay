@@ -112,6 +112,17 @@
                         <Button Grid.Column="2" Content="Assign to BBS" Margin="6,0,0,0"
                                 Command="{Binding AssignToBbsCommand}" IsEnabled="{Binding HasProfileSelection}"/>
                     </Grid>
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <TextBlock Grid.Column="0" Text="Realm:" VerticalAlignment="Center"
+                                   Foreground="{StaticResource ChromeFgSecBrush}" Margin="0,0,6,0"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding Realms}"
+                                  SelectedItem="{Binding AssignTargetRealm, Mode=TwoWay}"
+                                  ToolTip.Tip="Which of this BBS's realms the selected character plays (add and name realms in Settings → BBS)."/>
+                        <Button Grid.Column="2" Content="Assign to realm" Margin="6,0,0,0"
+                                Command="{Binding AssignToRealmCommand}" IsEnabled="{Binding HasProfileSelection}"
+                                ToolTip.Tip="Put the selected character on the chosen realm: its game data, settings and collected data (players, blacklist, leaderboard, roomba, quests, boss timers) are that realm's."/>
+                    </Grid>
                 </StackPanel>
 
                 <Grid>
@@ -129,6 +140,9 @@
                                                VerticalAlignment="Center"/>
                                     <TextBlock Text="loaded" IsVisible="{Binding IsCurrent}"
                                                Foreground="{StaticResource AccentGreenBrush}"
+                                               FontSize="10" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Realm}"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"
                                                FontSize="10" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </DataTemplate>

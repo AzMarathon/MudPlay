@@ -122,14 +122,54 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int _scrollbackLines = 4_000;
     [ObservableProperty] private int _backscrollWheelLines = 5;
 
-    // ----- Game-menu commands (per-BBS) -----
-    // The two main-menu picks for entering / leaving the realm. Stored
-    // per-BBS because the menu key bindings are a property of the realm /
-    // front-end, not the character.
+    // ----- Realms of the selected BBS -----
+    // A board can host several versions of the game; each realm carries its own
+    // game data, menu commands, death floor, cleanup time and currency name, and
+    // its own folder of collected data. The fields below the list edit the selected
+    // realm (RealmProfile) inside the cached BbsProfile, so they save with the BBS.
+    public ObservableCollection<string> RealmNames { get; } = new();
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RemoveRealmCommand))]
+    private string? _selectedRealmName;
+
+    // Rename box for the selected realm; commits when it loses focus.
+    [ObservableProperty] private string _realmName = string.Empty;
+
+    // The selected realm's game-data set; GlobalDefaultSet means "use the Global
+    // default" (RealmProfile.ActiveGameDataSet = null).
+    public const string GlobalDefaultSet = "(global default)";
+    public IReadOnlyList<string> GameDataSetOptions { get; } = BuildGameDataSetOptions();
+    [ObservableProperty] private string _realmGameDataSet = GlobalDefaultSet;
+
+    // Realm renames / removals made in the window, applied on OK: a rename moves
+    // the realm's data folder and re-points its characters, a removal sends them
+    // to the first realm (its folder is left on disk).
+    private readonly List<(string Bbs, string Old, string New)> _realmRenames = new();
+    private readonly List<(string Bbs, string Name)> _realmRemovals = new();
+
+    // The loaded character's realm on its own BBS — editable only while that BBS
+    // is the one selected. Committed on OK.
+    [ObservableProperty] private string? _characterRealm;
+    private bool _characterRealmTouched;
+    public bool CanPickCharacterRealm =>
+        HasProfile && SelectedBbsName is { } sel
+        && string.Equals(sel, _profile.CurrentBbsName, StringComparison.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<string> BuildGameDataSetOptions()
+    {
+        var sets = new List<string> { GlobalDefaultSet };
+        if (AppServices.CurrentOrNull is { } svcs)
+            sets.AddRange(svcs.GameData.AvailableSets.OrderBy(s => s, StringComparer.OrdinalIgnoreCase));
+        return sets;
+    }
+
+    // ----- Game-menu commands (selected realm) -----
+    // The two main-menu picks for entering / leaving the game.
     [ObservableProperty] private string _gameEntryCommand = "E";
     [ObservableProperty] private string _gameExitCommand = "=x";
 
-    // ----- Realm mechanics (per-BBS) -----
+    // ----- Realm mechanics (selected realm) -----
     // The negative-HP floor at which a character actually dies (0 HP only drops
     // you into a revivable bleed-out). The emergency auto-hangup reads it to
     // keep firing through the whole bleeding-out window. Seeded at the standard
@@ -167,9 +207,9 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // "just hung up" forms are watched.
     [ObservableProperty] private string? _disconnectPattern;
 
-    // Per-BBS label for the top (runic) denomination — some realms rename it,
-    // which changes both the coin wording the server sends and the keyword the
-    // client keys currency commands on. Blank falls back to "runic" on save.
+    // The selected realm's label for the top (runic) denomination — some realms
+    // rename it, which changes both the coin wording the server sends and the
+    // keyword the client keys currency commands on. Blank falls back to "runic".
     [ObservableProperty] private string _runicCurrencyName = "runic";
 
     // ----- Per-character credentials -----
@@ -322,6 +362,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 
     public override void Apply()
     {
+        ApplyRealmChanges();
+
         // Rename pass: if the Name field differs from the selected key, the
         // user retitled this BBS. Move the on-disk file + cache entry and
         // refresh the selection so the list shows the new name.
@@ -344,9 +386,17 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         }
 
         ApplyToCurrentProfile();
+        bool realmMoved = ApplyCharacterRealm();
         SaveConfirmToGlobalSettings();
 
+        // The active realm's settings, name or assignment may have changed: re-pin so
+        // the game data, menu commands and realm stores follow.
+        if (realmMoved || _realmRenames.Count > 0 || _realmRemovals.Count > 0
+            || (_profile.CurrentBbsName is { } active && _loaded.ContainsKey(active)))
+            _profile.NotifyBbsPinApplied();
+
         ResetCredentialStaging();
+        ResetRealmStaging();
         ClearDirty();
 
         // First-run tour: OK/Apply on a BBS with a host completes the "Click OK"
@@ -360,6 +410,13 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // Called once the edits have been committed (Apply) or abandoned (Discard,
     // character swap) — holding them past that point would re-commit stale
     // values onto whatever profile is loaded next.
+    private void ResetRealmStaging()
+    {
+        _realmRenames.Clear();
+        _realmRemovals.Clear();
+        _characterRealmTouched = false;
+    }
+
     private void ResetCredentialStaging()
     {
         _stagedCredentials.Clear();
@@ -525,6 +582,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // next selection. Keeps the Apply contract: Cancel really cancels.
         _loaded.Clear();
         ResetCredentialStaging();
+        ResetRealmStaging();
         if (SelectedBbsName is not null)
         {
             _suppressDirty = true;
@@ -657,14 +715,191 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         TerminalRows = profile.TerminalRows;
         ScrollbackLines = profile.ScrollbackLines;
         BackscrollWheelLines = profile.BackscrollWheelLines;
-        GameEntryCommand = profile.GameEntryCommand;
-        GameExitCommand = profile.GameExitCommand;
-        PlayerDiesAtHp = profile.PlayerDiesAtHp;
-        AutoRefineDeathFloor = profile.AutoRefineDeathFloor;
-        CleanupTimeOfDay = profile.CleanupTimeOfDay;
-        CleanupTimeZoneId = profile.CleanupTimeZoneId;
         DisconnectPattern = profile.DisconnectPattern;
-        RunicCurrencyName = profile.RunicCurrencyName;
+
+        // Land on the loaded character's realm when this is its BBS.
+        string? characterRealm = CanPickCharacterRealm
+            ? (_characterRealmTouched ? CharacterRealm : profile.RealmFor(_profile.Current?.Realm)?.Name)
+            : null;
+        LoadRealmList(profile, characterRealm);
+        CharacterRealm = characterRealm;
+        OnPropertyChanged(nameof(CanPickCharacterRealm));
+    }
+
+    private void LoadRealmList(BbsProfile profile, string? select)
+    {
+        RealmNames.Clear();
+        foreach (RealmProfile r in profile.Realms) RealmNames.Add(r.Name);
+        SelectedRealmName = profile.RealmFor(select)?.Name;
+        LoadRealmFields();
+    }
+
+    // The realm selected in the list, inside the cached BbsProfile being edited.
+    private RealmProfile? SelectedRealm() =>
+        SelectedBbsName is { } bbs && _loaded.TryGetValue(bbs, out BbsProfile? profile)
+            ? profile.Realms.FirstOrDefault(r =>
+                string.Equals(r.Name, SelectedRealmName, StringComparison.OrdinalIgnoreCase))
+            : null;
+
+    private void LoadRealmFields()
+    {
+        RealmProfile realm = SelectedRealm() ?? new RealmProfile();
+        RealmName = realm.Name;
+        RealmGameDataSet = realm.ActiveGameDataSet is { } set && GameDataSetOptions.Contains(set)
+            ? set : GlobalDefaultSet;
+        GameEntryCommand = realm.GameEntryCommand;
+        GameExitCommand = realm.GameExitCommand;
+        PlayerDiesAtHp = realm.PlayerDiesAtHp;
+        AutoRefineDeathFloor = realm.AutoRefineDeathFloor;
+        CleanupTimeOfDay = realm.CleanupTimeOfDay;
+        CleanupTimeZoneId = realm.CleanupTimeZoneId;
+        RunicCurrencyName = realm.RunicCurrencyName;
+    }
+
+    partial void OnSelectedRealmNameChanged(string? value)
+    {
+        bool prev = _suppressDirty;
+        _suppressDirty = true;
+        LoadRealmFields();
+        _suppressDirty = prev;
+    }
+
+    // Rename the selected realm (the name box lost focus). Refused when blank,
+    // not a valid folder name, or taken on this BBS.
+    partial void OnRealmNameChanged(string value)
+    {
+        if (_suppressDirty) return;
+        if (SelectedBbsName is not { } bbs || SelectedRealm() is not { } realm) return;
+        string name = value?.Trim() ?? string.Empty;
+        if (string.Equals(name, realm.Name, StringComparison.Ordinal)) return;
+
+        string? problem =
+            name.Length == 0 ? "A realm needs a name."
+            : name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ? $"“{name}” can't be used as a realm name."
+            : RealmNames.Any(n => !string.Equals(n, realm.Name, StringComparison.OrdinalIgnoreCase)
+                                  && string.Equals(n, name, StringComparison.OrdinalIgnoreCase))
+                ? $"This BBS already has a realm named “{name}”."
+            : null;
+        if (problem is not null)
+        {
+            AppServices.CurrentOrNull?.Dialogs.ShowInfo("Realm not renamed", problem);
+            _suppressDirty = true;
+            RealmName = realm.Name;
+            _suppressDirty = false;
+            return;
+        }
+
+        // Fold a chain of renames made before OK into one (old → newest).
+        int earlier = _realmRenames.FindIndex(r =>
+            string.Equals(r.Bbs, bbs, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(r.New, realm.Name, StringComparison.OrdinalIgnoreCase));
+        if (earlier >= 0) _realmRenames[earlier] = _realmRenames[earlier] with { New = name };
+        else _realmRenames.Add((bbs, realm.Name, name));
+
+        // Replacing the list entry makes the list box and the character's realm
+        // picker drop their selection, so re-select both with changes suppressed.
+        // The character follows the rename through ProfileService.RenameRealm on OK.
+        string oldName = realm.Name;
+        bool characterOnIt = string.Equals(CharacterRealm, oldName, StringComparison.OrdinalIgnoreCase);
+        string? characterRealm = characterOnIt ? name : CharacterRealm;
+        realm.Name = name;
+        _suppressDirty = true;
+        int index = RealmNames.IndexOf(oldName);
+        if (index >= 0) RealmNames[index] = name;
+        SelectedRealmName = name;
+        CharacterRealm = characterRealm;
+        _suppressDirty = false;
+        Dirty();
+    }
+
+    // Add an empty realm to the selected BBS and select it. It starts with the
+    // default settings and no collected data.
+    [RelayCommand]
+    private void AddRealm()
+    {
+        if (SelectedBbsName is not { } bbs || !_loaded.TryGetValue(bbs, out BbsProfile? profile)) return;
+        int n = profile.Realms.Count + 1;
+        while (profile.Realms.Any(r => string.Equals(r.Name, $"Realm {n}", StringComparison.OrdinalIgnoreCase))) n++;
+        RealmProfile realm = new() { Name = $"Realm {n}" };
+        profile.Realms.Add(realm);
+        RealmNames.Add(realm.Name);
+        SelectedRealmName = realm.Name;
+        Dirty();
+    }
+
+    // Remove the selected realm (a BBS keeps at least one). Its characters move to
+    // the first realm on OK; its data folder stays on disk.
+    [RelayCommand(CanExecute = nameof(CanRemoveRealm))]
+    private void RemoveRealm()
+    {
+        if (SelectedBbsName is not { } bbs || !_loaded.TryGetValue(bbs, out BbsProfile? profile)) return;
+        if (SelectedRealm() is not { } realm || profile.Realms.Count <= 1) return;
+        profile.Realms.Remove(realm);
+        // A realm added in this window and removed again leaves nothing to undo.
+        int renamed = _realmRenames.FindIndex(r =>
+            string.Equals(r.Bbs, bbs, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(r.New, realm.Name, StringComparison.OrdinalIgnoreCase));
+        string original = realm.Name;
+        if (renamed >= 0)
+        {
+            original = _realmRenames[renamed].Old;
+            _realmRenames.RemoveAt(renamed);
+        }
+        _realmRemovals.Add((bbs, original));
+
+        // Removing the list entry clears the pickers' selections; restore them with
+        // changes suppressed. A character on the removed realm shows the first one,
+        // which is where ProfileService.RenameRealm sends it on OK.
+        string? characterRealm =
+            string.Equals(CharacterRealm, realm.Name, StringComparison.OrdinalIgnoreCase)
+                ? profile.Realms[0].Name : CharacterRealm;
+        _suppressDirty = true;
+        RealmNames.Remove(realm.Name);
+        SelectedRealmName = profile.Realms[0].Name;
+        CharacterRealm = characterRealm;
+        _suppressDirty = false;
+        Dirty();
+    }
+
+    private bool CanRemoveRealm() => SelectedRealmName is not null && RealmNames.Count > 1;
+
+    partial void OnCharacterRealmChanged(string? value)
+    {
+        if (_suppressDirty) return;
+        _characterRealmTouched = true;
+        Dirty();
+    }
+
+    // OK: carry out the realm renames / removals — before a BBS rename, while the
+    // folders still sit under the names they were made with.
+    private void ApplyRealmChanges()
+    {
+        foreach ((string bbs, string oldName, string newName) in _realmRenames)
+        {
+            string from = AppPaths.RealmFolder(bbs, oldName);
+            string to = AppPaths.RealmFolder(bbs, newName);
+            if (Directory.Exists(from) && !Directory.Exists(to)) Directory.Move(from, to);
+            _profile.RenameRealm(bbs, oldName, newName);
+            AppServices.CurrentOrNull?.Log.Info("BBS", $"Renamed realm '{oldName}' → '{newName}' on '{bbs}'.");
+        }
+        foreach ((string bbs, string name) in _realmRemovals)
+        {
+            _profile.RenameRealm(bbs, name, null);
+            AppServices.CurrentOrNull?.Log.Info("BBS",
+                $"Removed realm '{name}' from '{bbs}'; its characters now play the first realm.");
+        }
+    }
+
+    // OK: put the loaded character on the realm picked for it.
+    private bool ApplyCharacterRealm()
+    {
+        if (!_characterRealmTouched || _profile.Current is not { } character) return false;
+        if (string.Equals(character.Realm, CharacterRealm, StringComparison.OrdinalIgnoreCase)) return false;
+        character.Realm = CharacterRealm;
+        _profile.Save();
+        AppServices.CurrentOrNull?.Log.Info("BBS",
+            $"Character '{_profile.CurrentProfileName ?? "(draft)"}' now plays realm '{CharacterRealm}'.");
+        return true;
     }
 
     private void LoadCredentialsFor(string bbsName)
@@ -784,13 +1019,15 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // while the window is open invalidates everything staged — committing it
         // would write the outgoing character's logins onto the incoming one.
         ResetCredentialStaging();
+        _characterRealmTouched = false;
         HasProfile = _profile.Current is not null;
         OnPropertyChanged(nameof(CredentialsHint));
         OnPropertyChanged(nameof(IsCredentialsHintWarning));
         if (SelectedBbsName is not null)
         {
+            // ReloadSelected reloads the credentials and the character's realm.
             _suppressDirty = true;
-            LoadCredentialsFor(SelectedBbsName);
+            ReloadSelected();
             _suppressDirty = false;
         }
         RefreshSuicidePassword();
@@ -832,14 +1069,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         TerminalRows = defaults.TerminalRows;
         ScrollbackLines = defaults.ScrollbackLines;
         BackscrollWheelLines = defaults.BackscrollWheelLines;
-        GameEntryCommand = defaults.GameEntryCommand;
-        GameExitCommand = defaults.GameExitCommand;
-        PlayerDiesAtHp = defaults.PlayerDiesAtHp;
-        AutoRefineDeathFloor = defaults.AutoRefineDeathFloor;
-        CleanupTimeOfDay = defaults.CleanupTimeOfDay;
-        CleanupTimeZoneId = defaults.CleanupTimeZoneId;
         DisconnectPattern = defaults.DisconnectPattern;
-        RunicCurrencyName = defaults.RunicCurrencyName;
+        RealmNames.Clear();
+        SelectedRealmName = null;
+        LoadRealmFields();
+        CharacterRealm = null;
     }
 
     private void Dirty()
@@ -889,21 +1123,25 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         profile.TerminalRows = TerminalRows;
         profile.ScrollbackLines = ScrollbackLines;
         profile.BackscrollWheelLines = BackscrollWheelLines;
-        profile.GameEntryCommand = string.IsNullOrWhiteSpace(GameEntryCommand)
-            ? new BbsProfile().GameEntryCommand : GameEntryCommand.Trim();
-        profile.GameExitCommand = string.IsNullOrWhiteSpace(GameExitCommand)
-            ? new BbsProfile().GameExitCommand : GameExitCommand.Trim();
-        // Death floor is a negative-HP value; a positive entry is meaningless
-        // (0 HP already means dropped), so clamp to <= 0 at the point of storage.
-        profile.PlayerDiesAtHp = Math.Min(0, PlayerDiesAtHp);
-        profile.AutoRefineDeathFloor = AutoRefineDeathFloor;
-        profile.CleanupTimeOfDay = CleanupTimeOfDay?.Trim() ?? string.Empty;
-        profile.CleanupTimeZoneId = string.IsNullOrWhiteSpace(CleanupTimeZoneId)
-            ? new BbsProfile().CleanupTimeZoneId : CleanupTimeZoneId.Trim();
         profile.DisconnectPattern = string.IsNullOrWhiteSpace(DisconnectPattern)
             ? null : DisconnectPattern.Trim();
-        profile.RunicCurrencyName = string.IsNullOrWhiteSpace(RunicCurrencyName)
-            ? new BbsProfile().RunicCurrencyName : RunicCurrencyName.Trim();
+
+        if (SelectedRealm() is not { } realm) return;
+        RealmProfile defaults = new();
+        realm.ActiveGameDataSet = RealmGameDataSet == GlobalDefaultSet ? null : RealmGameDataSet;
+        realm.GameEntryCommand = string.IsNullOrWhiteSpace(GameEntryCommand)
+            ? defaults.GameEntryCommand : GameEntryCommand.Trim();
+        realm.GameExitCommand = string.IsNullOrWhiteSpace(GameExitCommand)
+            ? defaults.GameExitCommand : GameExitCommand.Trim();
+        // Death floor is a negative-HP value; a positive entry is meaningless
+        // (0 HP already means dropped), so clamp to <= 0 at the point of storage.
+        realm.PlayerDiesAtHp = Math.Min(0, PlayerDiesAtHp);
+        realm.AutoRefineDeathFloor = AutoRefineDeathFloor;
+        realm.CleanupTimeOfDay = CleanupTimeOfDay?.Trim() ?? string.Empty;
+        realm.CleanupTimeZoneId = string.IsNullOrWhiteSpace(CleanupTimeZoneId)
+            ? defaults.CleanupTimeZoneId : CleanupTimeZoneId.Trim();
+        realm.RunicCurrencyName = string.IsNullOrWhiteSpace(RunicCurrencyName)
+            ? defaults.RunicCurrencyName : RunicCurrencyName.Trim();
     }
 
     partial void OnNameChanged(string value)                    { Dirty(); }
@@ -998,6 +1236,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnCleanupTimeZoneIdChanged(string value)       { PushToCache(); Dirty(); }
     partial void OnDisconnectPatternChanged(string? value)      { PushToCache(); Dirty(); }
     partial void OnRunicCurrencyNameChanged(string value)       { PushToCache(); Dirty(); }
+    partial void OnRealmGameDataSetChanged(string value)        { PushToCache(); Dirty(); }
 
     // Confirm flags are Global-tier, not per-BBS — they don't push into
     // the per-BBS cache, just mark the section dirty so Apply commits

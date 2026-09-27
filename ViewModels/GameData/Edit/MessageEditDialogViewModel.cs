@@ -101,7 +101,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     {
         new TierOption(SettingsTier.Defaults,  "Defaults"),
         new TierOption(SettingsTier.Global,    "Global"),
-        new TierOption(SettingsTier.Bbs,       "BBS"),
+        new TierOption(SettingsTier.Bbs,       "Realm"),
         new TierOption(SettingsTier.Character, "Character"),
     };
 
