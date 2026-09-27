@@ -251,6 +251,20 @@ public sealed class TrapDisarmManagerTests : IDisposable
         Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
     }
 
+    // Every trap has its own failure wording; any of them retries the pending disarm.
+    [Fact]
+    public void DisarmTriggered_ByAnotherTrapsWording_TriesAgain()
+    {
+        var (mgr, router, _, wire) = Setup();
+        mgr.Enqueue("n", "walker", _ => { });
+        wire.Clear();
+
+        Dispatch(router, "You fail to disarm the trap, and blades sweep out and slice you!");
+
+        Assert.Equal("disarm trap n\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
+    }
+
     [Fact]
     public void DisarmTriggered_AtTheCap_GivesUpAndReports()
     {

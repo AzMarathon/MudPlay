@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.115.0**
-> - Every combat-profile group in Settings gets an "Include in combat profile" checkbox: uncheck it to share one set of values across every combat profile
-> - When running away, self bless timing, party healing and party bless now swap with the combat profile
-> - The Party tab refreshes after a combat-profile switch is saved, and its unsaved edits stay with the profile they were made on
+> **Version 3.115.3**
+> - A disarm that sets the trap off is recognised by every trap's own failure line, on both realms (Stock's walker no longer stalls on one)
+> - The Stock engine's exit refusals (spell, item, level, alignment, timed, add-on, dragging, closed door, too stunned) count as a refused move instead of stalling the walker
+> - "You took N damage." is no longer read as picking up an item
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

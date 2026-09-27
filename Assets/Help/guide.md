@@ -3331,9 +3331,8 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **Default:** 5
 **What it does:** Caps how many times MudPlay tries to disarm a trap before giving up, whether for your own walk or a remote `@trap` command.
 - **A failed disarm can set the trap off,** so each retry risks its damage again.
-- **Paradigm:**
-  - A failure prints `You try to disarm the trap, but instead trigger it!`. After the cap, a walk stops at that exit rather than walking into the trap.
-  - `Your command had no effect.` means there's no trap that way, and the walk carries on.
+- **When the trap goes off (both realms),** each trap prints its own line, e.g. `You try to disarm the trap, but instead trigger it!` or `You trigger the trap, and a large spear shoots out!`. MudPlay knows them all and retries; after the cap, a walk stops at that exit rather than walking into the trap.
+- **Paradigm:** `Your command had no effect.` means there's no trap that way, and the walk carries on.
 - **Stock:** `You failed to disarm any trap to the <dir>.` means either a failed disarm or no trap there; the game doesn't say which. MudPlay retries up to the cap, and if it's still getting that answer it takes the exit as clear and walks on.
 - **No searching:** MudPlay never searches for a trap first. `disarm trap <dir>` works on the trap directly, and your game data already says which exits are trapped.
 

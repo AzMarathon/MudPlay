@@ -67,12 +67,25 @@ public static class DefaultPatterns
         // simply stopped, stranding a return-to-loop at the gated exit (report
         // stock-20260913-233911). Deliberately distinct from the trainer's
         // "...too far to USE THE TRAINING provided here", which is not a move.
+        //
+        // The Stock engine's other exit refusals: a spell / item / level /
+        // alignment / sysop-add-on gate, a timed exit, and dragging a downed ally
+        // through an exit that won't take them.
         yield return new RegexPattern(KnownPatterns.DirectionFailed,
             @"^(?:There is no exit in that direction!"
             + @"|The (?:door|gate) is closed(?: in that direction)?!"
+            + @"|There is a closed door in that direction!"
             + @"|You have progressed too far for this room\."
             + @"|You have progressed too far to go through this exit!"
-            + @"|You are not permitted in that room!)");
+            + @"|You have not progressed far enough to go through this exit!"
+            + @"|You are not permitted in that room!"
+            + @"|You need to cast a spell to go that way!"
+            + @"|You do not have the appropriate item to go that direction!"
+            + @"|You may not go through this exit!"
+            + @"|You are too (?:good|evil) to go through this exit!"
+            + @"|You may not pass through that exit at this point in time\."
+            + @"|You may not drag anyone through this exit\."
+            + @"|Your sysop must purchase the .+ before you may move through this exit\.)");
         yield return new RegexPattern(KnownPatterns.BashFailed,
             @"^Your attempts to bash through fail!$");
         yield return new RegexPattern(KnownPatterns.HeardMovement,
@@ -499,9 +512,10 @@ public static class DefaultPatterns
         // ----- Action / Items -------------------------------------------
         yield return new RegexPattern(KnownPatterns.UserHides,
             @"^You hid (?<item>.*)\.");
-        // PlayerGets: combined own + others via alternation.
+        // PlayerGets: combined own + others via alternation. "You took N damage."
+        // is the engine's damage report, not a pickup.
         yield return new RegexPattern(KnownPatterns.PlayerGets,
-            @"^(?:(?<player>\w+) picks up|You took) (?<item>.*)\.");
+            @"^(?:(?<player>\w+) picks up|You took(?! \d+ damage[.!])) (?<item>.*)\.");
         yield return new RegexPattern(KnownPatterns.PlayerDrops,
             @"^(?:(?<player>\w+) drops|You dropped) (?<item>.*)\.");
         // Room-capacity refusal on a drop. Carries the item's FULL canonical name
@@ -815,10 +829,29 @@ public static class DefaultPatterns
             @"^You notice nothing different to the (?<dir>\w+)\.?\s*$");
         yield return new RegexPattern(KnownPatterns.TrapDisarmedSuccess,
             @"^You successfully disarmed the trap to the (?<dir>\w+)\.?\s*$");
-        // A failed disarm sets the trap off (and hurts). It names no direction;
-        // TrapDisarmManager only reads it while its own disarm is pending.
+        // A failed disarm sets the trap off (and hurts). Each trapped exit names
+        // its own failure message in the map data, and the imported rooms don't
+        // carry that link, so every wording the Stock 1.11p map uses is listed
+        // here; they apply on both realms. None names a direction:
+        // TrapDisarmManager only reads them while its own disarm is pending.
         yield return new RegexPattern(KnownPatterns.TrapDisarmTriggered,
-            @"^You try to disarm the trap, but instead trigger it!?\s*$");
+            @"^(?:You try to disarm the trap, but instead trigger it"
+            + @"|You try and disarm the trap, but trigger it"
+            + @"|You attempt to disarm the trap, but trigger it instead"
+            + @"|Your attempts to disarm the trap trigger it instead"
+            + @"|Your hands fail you at disarming the trap and you trigger it instead"
+            + @"|Your sloppy attempts at disarming the trap fail, an axe slices into you"
+            + @"|You fail to disarm the trap, and blades sweep out and slice you"
+            + @"|You fail to disarm the hidden release, and spikes stab into you"
+            + @"|You attempt to disarm the trap, and a huge stone block crushes you"
+            + @"|As you fiddle with the wire, large stones pound down on you from above"
+            + @"|You cut the wrong wire and a log slams into you"
+            + @"|You trigger the trap, and a large spear shoots out"
+            + @"|You trigger the trap, and two stone slabs spring out and crush you"
+            + @"|You trip a hidden wire, and a huge spear shoots out and stabs you"
+            + @"|Spikes jut out and stab you as you trigger the trap"
+            + @"|Spikes shoot out of the wall and stab you viciously"
+            + @"|An arrow shoots out of the wall and strikes you)!?\s*$");
         // Stock's one disarm-failure line, which also answers a direction with no
         // trap — see TrapDisarmManager.OnDisarmFailedAny.
         yield return new RegexPattern(KnownPatterns.TrapDisarmFailedAny,

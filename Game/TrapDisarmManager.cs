@@ -14,7 +14,7 @@ namespace MudPlay.Game;
 // to State.Idle.
 //
 // Every request disarms directly with `disarm trap <dir>`: the game accepts it
-// without searching for the trap first (GAME_MECHANICS "Trapped exits"), so a
+// without searching for the trap first (GAME_MECHANICS "Exit traps — search and disarm"), so a
 // confirming `search` would only waste rounds.
 //
 // The capability gate (CanDisarm) lives in this manager so the handler can
@@ -201,9 +201,11 @@ public sealed class TrapDisarmManager : IDisposable
         CompleteCurrent();
     }
 
-    // Paradigm: the disarm failed and set the trap off (capture 2026-09-27:
-    // `You try to disarm the trap, but instead trigger it!`). The line names no
-    // direction, so it's taken for the disarm we have pending. Try again up to
+    // The disarm failed and set the trap off, both realms. Each trap prints its own
+    // wording (`You try to disarm the trap, but instead trigger it!`, `You trigger
+    // the trap, and a large spear shoots out!`, …); none names a direction, so it's
+    // taken for the disarm we have pending. A trap that fired is a trap that's
+    // there, so unlike Stock's ambiguous failure line this never walks on. Try again up to
     // MaxDisarmAttempts, then give up and report it — the walker stops rather
     // than walk into a trap it couldn't clear.
     private void OnDisarmTriggered(MatchResult _)

@@ -497,7 +497,7 @@ public static class KnownPatterns
     public const string TrapFoundInSearch     = "trap.found-in-search";   // "You found a trap to the <dir>!"
     public const string TrapNoneInSearch      = "trap.none-in-search";    // "You notice nothing different to the <dir>."
     public const string TrapDisarmedSuccess   = "trap.disarmed-success";  // "You successfully disarmed the trap to the <dir>."
-    public const string TrapDisarmTriggered   = "trap.disarm-triggered";  // "You try to disarm the trap, but instead trigger it!" (no direction)
+    public const string TrapDisarmTriggered   = "trap.disarm-triggered";  // a trap's own "disarm failed and set it off" line, e.g. "You try to disarm the trap, but instead trigger it!" (no direction)
     public const string TrapDisarmFailedAny   = "trap.disarm-failed-any"; // "You failed to disarm any trap to the <dir>." (Stock: failed OR no trap)
 
     // Empty result of a room-wide `sea` — nothing concealed here. Lets AutoSearch

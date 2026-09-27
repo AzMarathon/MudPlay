@@ -66,6 +66,17 @@ public sealed class DefaultPatternsTests
     [InlineData("You have progressed too far for this room.")]
     [InlineData("You have progressed too far to go through this exit!")]
     [InlineData("You are not permitted in that room!")]
+    // The Stock engine's other exit refusals.
+    [InlineData("There is a closed door in that direction!")]
+    [InlineData("You have not progressed far enough to go through this exit!")]
+    [InlineData("You need to cast a spell to go that way!")]
+    [InlineData("You do not have the appropriate item to go that direction!")]
+    [InlineData("You may not go through this exit!")]
+    [InlineData("You are too good to go through this exit!")]
+    [InlineData("You are too evil to go through this exit!")]
+    [InlineData("You may not pass through that exit at this point in time.")]
+    [InlineData("You may not drag anyone through this exit.")]
+    [InlineData("Your sysop must purchase the Dragon's Teeth add-on before you may move through this exit.")]
     public void DirectionFailedRegex_MatchesEveryRefusal(string line)
         => Assert.True(PatternById(KnownPatterns.DirectionFailed).TryMatch(Line(line), out _));
 
@@ -416,4 +427,25 @@ public sealed class DefaultPatternsTests
         Assert.False(cash.TryMatch(Line("Bob picks up a rusty sword."), out _));
         Assert.True(item.TryMatch(Line("Bob picks up a rusty sword."), out _));
     }
+
+    // The engine reports damage as "You took N damage." — not an item pickup.
+    [Theory]
+    [InlineData("You took 12 damage.")]
+    [InlineData("You took 12 damage!")]
+    public void PlayerGetsRegex_IgnoresTheDamageReport(string line)
+        => Assert.False(PatternById(KnownPatterns.PlayerGets).TryMatch(Line(line), out _));
+
+    [Fact]
+    public void PlayerGetsRegex_StillMatchesAnItemNamedWithANumber()
+        => Assert.True(PatternById(KnownPatterns.PlayerGets).TryMatch(Line("You took 3 orc-head."), out _));
+
+    // Each trapped exit prints its own "disarm failed and set it off" wording.
+    [Theory]
+    [InlineData("You try to disarm the trap, but instead trigger it!")]
+    [InlineData("You trigger the trap, and a large spear shoots out!")]
+    [InlineData("You fail to disarm the trap, and blades sweep out and slice you!")]
+    [InlineData("You attempt to disarm the trap, but trigger it instead!")]
+    [InlineData("An arrow shoots out of the wall and strikes you!")]
+    public void TrapDisarmTriggeredRegex_MatchesEachTrapsWording(string line)
+        => Assert.True(PatternById(KnownPatterns.TrapDisarmTriggered).TryMatch(Line(line), out _));
 }

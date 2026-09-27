@@ -2219,12 +2219,25 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - `You can't go that way.` / `You can't move (in) that direction.` (the forms the client's refusal detector matches; an earlier note wrote `You can't move that way.`, never seen in a capture)
   - `The door is closed.` / `The door is Closed!` / `The gate is closed!` (the client matches these case-insensitively, ending in `.` or `!`)
   - impairment forms (paralyzed / confused / stunned / dazed / too encumbered / can't see well enough to move).
+- **The Stock 1.11p engine's full set of refusals** *([OBSERVED] `wccmmud.dll` 1.11p string table, the movement code's strings; treated as refusals by the user's call 2026-09-27 · Realm: Stock — Paradigm wordings not recorded)*:
+  - `There is a closed door in that direction!`
+  - `You are too stunned to move anywhere!`
+  - `You need to cast a spell to go that way!`
+  - `You do not have the appropriate item to go that direction!`
+  - `You may not go through this exit!`
+  - `You have not progressed far enough to go through this exit!` / `You have progressed too far to go through this exit!`
+  - `You are too good to go through this exit!` / `You are too evil to go through this exit!`
+  - `You may not pass through that exit at this point in time.`
+  - `Your sysop must purchase the <add-on> before you may move through this exit.` (the add-on name is wrapped in colour codes)
+  - `You may not drag anyone through this exit.`: only while you're dragging a downed ally (`drag <name>`) through an exit that won't take them. *([CONFIRMED] 2026-09-27, user.)*
+  - `You may not go through this exit during tournament play!` is also in the table, but it never comes up in play. *([CONFIRMED] 2026-09-27, user.)* The client doesn't match it.
 - **The player's on-screen room does not re-print on a refusal** — this is the authoritative signal the client keys on.
 - **Corollary: a room redisplay that still matches the room you moved from is never the result of a refused move.** While a move is pending, seeing the source room again can only be a **passive re-look** — a combat-clear, a monster/player arrival or departure notice, a bare re-glance — carrying no position signal.
 - **A genuine self-loop exit is a real move, not a passive redisplay:** a genuine self-loop exit that lands back in the same room is a real move with a real room display; it resolves as a normal predicted-neighbour match because the exit's target *is* the source, so it is not confused with a passive redisplay.
 
 **Client use:**
 - `MovementRefusalDetector` matches the refusal lines and calls `RoomTracker.NoteMoveBlocked` (which drops the pending move and re-confirms at the source).
+- The exit-gate refusals (level, spell, item, alignment, add-on, timed, drag) and the closed-door forms are in the `DirectionFailed` pattern instead, which drops the pending move through `RoomTracker.NoteDirectionFailed` (report `stock-20260913-233911` for the level cap).
 - The tracker ignores a source-room redisplay while a move is pending and keeps waiting for the move's real outcome (a different room), rather than inferring a refusal from the redisplay alone.
 
 ### Too heavy to move (over max encumbrance)
@@ -2481,7 +2494,13 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Disarm replies differ by realm.** *(Paradigm: [OBSERVED] user screenshot 2026-09-27, meanings [CONFIRMED] user. Stock: [OBSERVED] `wccmmud.dll` 1.11p string table from github.com/lucid2310/Majormud, plus a user screenshot; meaning [CONFIRMED] user.)*
   - **Success, both realms:** `You successfully disarmed the trap to the <dir>.`
   - **Paradigm, no trap that way:** `Your command had no effect.`
-  - **Paradigm, failed disarm:** `You try to disarm the trap, but instead trigger it!`. It names no direction. The capture came from a character with Traps skill 0, a guaranteed failure; the trap fired, HP 302 → 222.
+  - **Failed disarm that sets the trap off, both realms: each trap prints its own line.** *(Lines [CONFIRMED] as trap-failure lines on both realms, user 2026-09-27; the per-exit link [OBSERVED] in the Stock 1.11p map file `wccmp002.dat`.)* None names a direction.
+    - Paradigm capture: `You try to disarm the trap, but instead trigger it!` (message #1010), from a character with Traps skill 0, a guaranteed failure; the trap fired, HP 302 → 222.
+    - **Where the line lives:** every trapped exit (exit type 9) carries three per-exit values in the room record: the trap's damage, the message printed when you walk into it, and the message printed when a disarm sets it off. All three are message-table numbers except the damage. In the 1.11p `wccmp002.dat` room record (1,546 bytes) for exit `i` (0 = N … 9 = D): destination room at byte `826+4i`, exit type (int16) at `866+2i`, damage at `886+4i`, walk-in message at `946+4i`, disarm-failure message at `986+4i`.
+    - **The imported game data doesn't carry the link.** The MDB's room table renders the exit as `(Trap, N damage)` and drops both messages, so the client can't look a trap's line up per exit.
+    - **The disarm-failure lines the 1.11p map uses** (272 of its 275 trapped exits name one; message number, then how many exits use it): #3308 (42) `You attempt to disarm the trap, but trigger it instead!` · #1090 (40) `You trigger the trap, and a large spear shoots out!` · #662 (38) `You fail to disarm the trap, and blades sweep out and slice you!` · #546 (36) `You try and disarm the trap, but trigger it!` · #2901 (28) `Your hands fail you at disarming the trap and you trigger it instead!` · #3017 (23) `Your attempts to disarm the trap trigger it instead!` · #2899 (17) `Your sloppy attempts at disarming the trap fail, an axe slices into you!` · #1733 (10) `Spikes shoot out of the wall and stab you viciously!` · #1740 (8) `An arrow shoots out of the wall and strikes you!` · #1640 (6) `You trigger the trap, and two stone slabs spring out and crush you!` · #1089 (6) `You trip a hidden wire, and a huge spear shoots out and stabs you!` · #1124 (4) `You attempt to disarm the trap, and a huge stone block crushes you!` · #763 (4) `As you fiddle with the wire, large stones pound down on you from above!` · #2903 (3) `You cut the wrong wire and a log slams into you!` · #1010 (2) `You try to disarm the trap, but instead trigger it!` · #1088 (2) `Spikes jut out and stab you as you trigger the trap!` · #1116 (2) `You fail to disarm the hidden release, and spikes stab into you!`
+    - `[NEEDS CONFIRMATION]` A Paradigm trap added after 1.11p may use a wording not on this list.
+    - `[NEEDS CONFIRMATION]` On Stock, does a disarm that sets the trap off print only its own line, or `You failed to disarm any trap to the <dir>.` as well?
   - **Stock, failed disarm OR no trap that way:** `You failed to disarm any trap to the <dir>.`, e.g. `disarm trap e` with no trap east. It's the only failure string near `_cmd_disarm`, along with `There is no exit in that direction!` for a wall, so it can't tell a fumble from an empty exit.
   - `[NEEDS CONFIRMATION]` Does a Paradigm failed disarm that *doesn't* fire the trap print a different line? And is a fired trap still there to disarm again?
   - The Stock DLL also spells search hits for up/down as `You found a trap above you!` / `You found a trap below you!`.
@@ -2494,7 +2513,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 **Client use:**
 - `TrapDisarmManager` disarms every request directly (`disarm trap <dir>`), with no search phase, for both the walker's trapped exits and remote `@trap`. The trap-found line is no longer acted on.
-  - **Paradigm trigger line:** it retries up to `MaxTrapDisarmAttempts`, then reports failure, and the walker stops.
+  - **A trap's own trigger line (any on the list above):** it retries up to `MaxTrapDisarmAttempts`, then reports failure, and the walker stops. A trap that fired is a trap that's there, so this never walks on. `DefaultPatterns` lists every wording under `TrapDisarmTriggered`.
   - **Paradigm `Your command had no effect.` while a disarm is pending:** read as "no trap", and the walker moves on.
   - **Stock `You failed to disarm any trap to the <dir>.`:** it retries up to the cap, then takes the exit as clear and walks on. That's the user's call: the worst case is walking into a live trap, which a failed disarm risks anyway. (An earlier note said the manager ran a search→disarm loop for `@trap`; superseded 2026-09-27.)
 - **Direction matching must normalise both sides.** The @trap remote handler enqueues the short form it parsed, but the walker enqueues the long-form direction word — and the game's reply is long-form. Comparing a short-normalised observed direction against an un-normalised stored one (long-form from the walker) never matched, so the flow stalled (the reported bug, report 132150, when it still searched first). Both the observed and the stored/enqueued direction are now normalised to the short form before compare.
@@ -3442,6 +3461,7 @@ How items are acquired, counted, picked up, dropped and stored in rooms. Also co
   - An **item** get is `You took <item>.` and an item drop is `You dropped <item>.`
   - The drop/hide verbs are **shared** with coins. A colour-adjective item (`You dropped a silver key.`) is told apart from coin only by the trailing **coin noun** (`nobles`/`farthings`/…) and a numeric count.
   - `You picked up …` is coin-exclusive; items never use it.
+  - **`You took N damage.` / `You took N damage!` is a damage report, not a pickup.** *([OBSERVED] `wccmmud.dll` 1.11p string table; Stock.)* It shares the `You took` opening, so the item-get parsers exclude that exact shape (`PlayerGets`, `InventoryManager`, `DeathRecoveryManager`); the user asked for the fix 2026-09-27.
 - **The pickup lines are the authoritative "the get landed" signal**: `You took <item>.` per item (one line per collected item), and `You picked up <N> <coin>` per coin get (see *Money, banks & shops → Coin wire wording*).
 - **A `You picked up 0 <coin>` is a FAILURE, not a success.** (This entry originally wrote it with a trailing period, `You picked up 0 <coin>.`, which disagrees with *Money, banks & shops → Coin wire wording*.) The character is at its carry limit and took nothing; the coins stay on the ground. For gate purposes the get has still *resolved*, so it stops the walker waiting on it, but nothing was collected.
 - **Item-get failures have their own wordings**, recorded in *`get` failure responses* (CONFIRMED 2026-08-21 from screenshots; superseded: earlier recorded as not yet captured). A get that yields neither a `You took` line nor a recognised failure is released by the settle timeout rather than by a confirmation.

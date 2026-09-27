@@ -124,9 +124,10 @@ public sealed partial class MovementRefusalDetector : IDisposable
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NoExitThatDirection();
 
-    // Paralyzed / confused / stunned variants — "You are too <state> to move."
+    // Paralyzed / confused / stunned variants — "You are too <state> to move.";
+    // the Stock engine says "You are too stunned to move anywhere!".
     [GeneratedRegex(
-        @"^\s*You are too (paralyzed|confused|stunned|dazed) to move[.!]?\s*$",
+        @"^\s*You are too (paralyzed|confused|stunned|dazed) to move(?: anywhere)?[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TooImpairedToMove();
 
@@ -153,13 +154,14 @@ public sealed partial class MovementRefusalDetector : IDisposable
 
     // Door / gate blocking — server returns this when the user issues a direction
     // whose exit is shut. Both the plain and the "in that direction" long form are
-    // covered, and "gate" as well as "door" (a fortress gate opened by a `pull
+    // covered, Stock's "There is a closed door in that direction!", and "gate" as
+    // well as "door" (a fortress gate opened by a `pull
     // winch` prerequisite bonks with "The gate is closed!" — without matching it,
     // the pending move never reverts and the tracker latches in Pending, swallowing
     // even the post-open redisplay: the walker stalls forever, report
     // paradigm-20260827-113513).
     [GeneratedRegex(
-        @"^\s*The (?:door|gate) is closed(?: in that direction)?[.!]?\s*$",
+        @"^\s*(?:The (?:door|gate) is closed(?: in that direction)?|There is a closed door in that direction)[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DoorIsClosed();
 
