@@ -194,6 +194,11 @@ public sealed partial class CombatManager : IDisposable
     // → fail-open (never blocks, the pre-flag behavior).
     private Func<bool>? _attacksPrevented;
 
+    // Fear (ConditionTracker.IsFeared): the server refuses weapon attacks and attack
+    // spells ("You are too afraid!"), but debuffs and the between-round heals / buffs
+    // / cures still go out. null until wired → never blocks.
+    private Func<bool>? _isFeared;
+
     // Edge-tracker so AttacksBlocked logs the hold and the release once each, not
     // once per suppressed send.
     private bool _attackBlockLogged;
@@ -904,22 +909,32 @@ public sealed partial class CombatManager : IDisposable
         _attacksPrevented = isAttackPrevented;
     }
 
+    public void SetFearGate(Func<bool> isFeared)
+    {
+        ArgumentNullException.ThrowIfNull(isFeared);
+        _isFeared = isFeared;
+    }
+
     // True while an AttackPrevented condition is active: a message flagged
     // AttackPrevented latched (stun / petrify / bind / …) and its wear-off hasn't
     // fired. The server refuses every attack command in that state — weapon AND
     // spell — so every attack chokepoint below (SendAttack, the combat-spell and
     // pre-attack-debuff casts, the fumble re-send) consults this and holds,
     // retrying each round until it clears. Edge-logged at Combat level so a report
-    // shows exactly when the hold began and lifted.
-    private bool AttacksBlocked()
+    // shows exactly when the hold began and lifted. Fear holds the same attacks
+    // except the debuff (`debuff`), which is left out of the edge log so a feared
+    // debuff check can't flip it every round.
+    private bool AttacksBlocked(bool debuff = false)
     {
-        bool blocked = _attacksPrevented?.Invoke() == true;
+        bool prevented = _attacksPrevented?.Invoke() == true;
+        if (debuff) return prevented;
+        bool blocked = prevented || _isFeared?.Invoke() == true;
         if (blocked != _attackBlockLogged)
         {
             _attackBlockLogged = blocked;
             _log?.Combat(LogCategory, blocked
-                ? "attacks held — AttackPrevented condition active"
-                : "attacks resumed — AttackPrevented condition cleared");
+                ? "attacks held — AttackPrevented condition or fear active"
+                : "attacks resumed — AttackPrevented condition / fear cleared");
         }
         return blocked;
     }

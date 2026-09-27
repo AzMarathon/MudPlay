@@ -75,7 +75,9 @@ public sealed partial class MovementRefusalDetector : IDisposable
         // doesn't run a room ahead through a same-named grid (issue #478).
         // NoteCommandDropped self-guards: it reverts only a recently-sent,
         // still-Pending move, since this line doesn't name what it dropped.
-        if (TypingTooQuickly().IsMatch(text))
+        // "You are too afraid!" refuses whatever we sent while feared, move or not,
+        // so it reverts a move only through the same self-guarding path.
+        if (TypingTooQuickly().IsMatch(text) || TooAfraid().IsMatch(text))
         {
             _tracker.NoteCommandDropped(when);
             _log?.Info("MoveRefusal", $"command dropped (typing too quickly): {text.Trim()}");
@@ -193,6 +195,12 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*You are typing too quickly - command ignored[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TypingTooQuickly();
+
+    // Feared: the game refuses any action (attack, item use, a move) with this.
+    [GeneratedRegex(
+        @"^\s*You are too afraid!\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex TooAfraid();
 
     // Confusion-fumble wordings ("You fumble in confusion!", convulsions' "You convulse
     // violently" / "You look around stupidly and do nothing") are no longer hardcoded

@@ -741,6 +741,62 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
+    public void RestRefusedSick_HoldsTheReSend_ThenRetries()
+    {
+        // "You are too sick to rest!" with no poison on record (the par screen hasn't
+        // shown it yet): the latch drops, the re-send waits, then retries.
+        using Harness h = new();
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 50;
+        Assert.Equal(1, h.SentLines.Count(x => x == "rest"));
+
+        h.Health.NoteRestRefusedSick();
+        Assert.False(h.Health.RestInFlight);
+        h.State.Hp = 51;
+        Assert.Equal(1, h.SentLines.Count(x => x == "rest"));   // held
+
+        h.Clock += TimeSpan.FromSeconds(16);
+        h.State.Hp = 52;
+        Assert.Equal(2, h.SentLines.Count(x => x == "rest"));   // retried
+    }
+
+    [Fact]
+    public void RestRefusedSick_WhilePoisoned_WaitsForThePoisonToClear()
+    {
+        using Harness h = new();
+        h.Poisoned = true;
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 50;
+        h.Health.NoteRestRefusedSick();
+
+        h.Clock += TimeSpan.FromSeconds(60);
+        h.State.Hp = 51;
+        Assert.Equal(1, h.SentLines.Count(x => x == "rest"));   // still poisoned: no retry
+
+        h.Poisoned = false;
+        h.State.Hp = 52;
+        Assert.Equal(2, h.SentLines.Count(x => x == "rest"));
+    }
+
+    [Fact]
+    public void MeditateNotNeeded_RestsInstead()
+    {
+        // "Meditation will not help at this time.": mana's already full whatever
+        // the prompt said — rest instead of re-sending the meditate.
+        using Harness h = new();
+        h.Settings.UseMeditateAbility = true;
+        h.SetPrompt(hp: 200, maxHp: 200, ma: 5, maxMa: 100);
+        Assert.Equal("meditate", h.LastSent);
+
+        h.Health.NoteMeditateNotNeeded();
+        h.State.Ma = 6;
+
+        Assert.Equal("rest", h.LastSent);
+    }
+
+    [Fact]
     public void GateAsserted_HostilesInRoom_DoesNotRest()
     {
         // User direction: "if a room has hostiles it will break resting

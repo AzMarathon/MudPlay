@@ -1383,6 +1383,8 @@ public static class BugReportBuilder
             + (trap.QueueDepth > 0 ? $", queued={trap.QueueDepth}" : string.Empty)
             + $", canDisarm={trap.CanDisarm}, trapsStat={svc.PlayerStats.Traps}"
             + $", skillFromClassRace={trap.SkillInferredFromClassOrRace}");
+        if (trap.LastUnansweredReply is { } unanswered)
+            Kv(sb, "Trap disarm, last unanswered reply", unanswered);
 
         sb.Append("\n**Path-item detours**\n\n");
         Kv(sb, "Path-item search demand", svc.PathItemDemand.SearchDemandActive.ToString());

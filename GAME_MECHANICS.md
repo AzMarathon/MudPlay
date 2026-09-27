@@ -791,8 +791,16 @@ How HP works from full health down through dropping and death, how monster healt
 *Status: CONFIRMED 2026-08-17 (user; report `paradigm-20260817-092945`)*
 
 - **While poisoned you cannot rest.** A `rest` (or meditate) issued while poisoned does **not** put you into the `(Resting)` state — poison refuses / breaks it — so the position never becomes Resting and the resting recovery doesn't happen; you only get the slow standing regen.
+- **The refusal lines are `You are too sick to rest!` and `You are too sick to meditate!`.** *(Wording [OBSERVED] `wccmmud.dll` 1.11p string table; meaning [CONFIRMED] 2026-09-27, user: "you can't rest or meditate while poisoned".)*
 - **Client use:**
   - An optimistic "resting" latch armed on the send (`HealthManager._restInFlight`) never confirms while poisoned, and the interruption latch can't clear it (it needs a confirmed Resting first). So the auto-rest engine must **re-attempt the rest once poison clears** (the poison falling edge drops the stale latch) — otherwise it sits standing below the rest floor forever, which is what report 092945 hit.
+  - `HealthManager.NoteRestRefusedSick` reads the refusal lines: it drops the latch, holds the re-send while the poison is on record, and otherwise retries after 15 s, since the refusal can arrive before the poison shows up anywhere else.
+
+### Meditating with mana already full
+*Status: CONFIRMED 2026-09-27 (user) · wording [OBSERVED] `wccmmud.dll` 1.11p string table*
+
+- **`meditate` with mana already full is refused with `Meditation will not help at this time.`** You don't start meditating.
+- **Client use:** `HealthManager.NoteMeditateNotNeeded` drops the unanswered meditate and rests instead for 30 s, in case the prompt's mana reading was stale.
 
 ### Casting a spell interrupts resting / meditating
 *Status: CONFIRMED 2026-08-20 (user)*
@@ -1752,6 +1760,11 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   - This realm split applies to the *whole* stat effect list, not just fear (the same capture shows
     `safe from evil! (75s)`, `halo … (156s)`, etc.).
 - **End:** **`The effects of fear wear off!`**.
+- **Fear stops you acting.** *([CONFIRMED] 2026-09-27, user; wording [OBSERVED] `wccmmud.dll` 1.11p, in the attack and item-use code.)*
+  - A refused action prints **`You are too afraid!`**.
+  - **Weapon attacks and attack spells are refused.**
+  - **Between-round spells still go out:** buffs, cures, debuffs and heals.
+  - The user's wording on the forced moves: fear "will forcibly move us between rooms at random" unless you're in a "trapped area". `[NEEDS CONFIRMATION]` what counts as a trapped area: a room with no cardinal exit to be shoved through?
 - **While feared, the game shoves you between cardinal-CONNECTED adjacent rooms** (never across a
   `go`/text-exit) and re-renders each new room — but those forced moves carry **no command echo and no
   per-move line** (bare `[HP=..]:` prompts, just changing exits).
@@ -1762,6 +1775,10 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   - A nav client can therefore recognise it's being fear-moved and stop treating the echo-less
     redisplays as re-looks — dropping to localisation instead of holding/guessing — rather than being
     "wire-indistinguishable."
+  - `CombatManager.SetFearGate` (`ConditionTracker.IsFeared`) holds weapon attacks and attack spells
+    while feared, but not the pre-attack debuff. `CastingDirector`'s between-round casts aren't held.
+  - `MovementRefusalDetector` reads `You are too afraid!` through the same self-guarding path as the
+    rate-limiter drop, so it reverts a pending move only when one was just sent.
 
 ### Ailment identification — which spells cause disease / poison / blind / hold
 *Status: CONFIRMED 2026-09-03 (user + AbilityNames.cs) · Realm: both (each realm seed flagged from its own MDB)*

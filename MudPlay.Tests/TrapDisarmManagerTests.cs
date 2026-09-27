@@ -265,6 +265,35 @@ public sealed class TrapDisarmManagerTests : IDisposable
         Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
     }
 
+    // A trap whose failure wording we don't know gets no recognised reply: the
+    // watchdog handles it like one that went off, and keeps the lines for the log.
+    [Fact]
+    public void UnansweredDisarm_RetriesAndKeepsTheLines()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        List<Action> timers = new();
+        TrapDisarmManager mgr = new(router, new PlayerStats { Traps = 50 }, Cache(),
+            scheduleDelay: (_, cb) => { timers.Add(cb); return new NoopHandle(); });
+        List<byte[]> wire = new();
+        mgr.SetWireSender(wire.Add);
+        mgr.Enqueue("n", "walker", _ => { });
+        wire.Clear();
+
+        Dispatch(router, "disarm trap n");
+        Dispatch(router, "A gout of green flame bursts from the wall!");
+        timers[^1]();
+
+        Assert.Equal("disarm trap n\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.Equal("A gout of green flame bursts from the wall!", mgr.LastUnansweredReply);
+        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
+    }
+
+    private sealed class NoopHandle : IDisposable
+    {
+        public void Dispose() { }
+    }
+
     [Fact]
     public void DisarmTriggered_AtTheCap_GivesUpAndReports()
     {

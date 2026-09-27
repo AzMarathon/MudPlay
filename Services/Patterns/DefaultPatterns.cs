@@ -98,6 +98,12 @@ public static class DefaultPatterns
         // match — only the unquoted system line does.
         yield return new RegexPattern(KnownPatterns.MovementFailedStuck,
             @"^You can't seem to move anywhere!");
+        // Rest / meditate refusals: poisoned (you can't rest or meditate while
+        // poisoned), and meditating with mana already full.
+        yield return new RegexPattern(KnownPatterns.RestRefusedSick,
+            @"^You are too sick to (?:rest|meditate)!");
+        yield return new RegexPattern(KnownPatterns.MeditateNotNeeded,
+            @"^Meditation will not help at this time\.");
         yield return new RegexPattern(KnownPatterns.MovementFailedHeavy,
             @"^[^""]*too heavy to move");
         // Fully anchored to the standalone period form — a move made while

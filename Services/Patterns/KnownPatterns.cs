@@ -31,6 +31,8 @@ public static class KnownPatterns
     // before "You are no longer following X." — distinguishing a genuine
     // left-behind (auto-`@comeback`) from a deliberate uninvite/unfollow.
     public const string MovementFailedStuck = "movement.failed-stuck";   // "You can't seem to move anywhere!" — a prevents-movement gamedata flag blocked us
+    public const string RestRefusedSick     = "rest.refused-sick";       // "You are too sick to rest!" / "…to meditate!" — poisoned
+    public const string MeditateNotNeeded   = "rest.meditate-not-needed"; // "Meditation will not help at this time." — mana already full
     public const string MovementFailedHeavy = "movement.failed-heavy";   // "...too heavy to move" — over-encumbered (system line; never inside a chat channel)
     // "You are blind." (period) — a move issued while blinded SUCCEEDS but
     // starves the room display, exactly like a dark room. Distinct from the
