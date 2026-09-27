@@ -3816,7 +3816,6 @@ public sealed class AppServices
         Health.IsMovePending = () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending;
         Health.IsServerEngaged = () => CombatTracker.IsServerEngaged;
         RoomTracker.MoveBlocked += Health.NoteMoveBlocked;
-        RoomTracker.MoveBlocked += Stealth.NoteMoveBlocked;
         Health.PreviousRoom = () =>
         {
             IReadOnlyList<Game.Map.RoomKey> history = RoomTracker.GetHistory();
@@ -4401,6 +4400,8 @@ public sealed class AppServices
         // suppress the doomed `sn` instead of firing it into a rejection.
         Stealth.SetSneakBlockCheck(() => CombatTracker.HasRoomNpc);
         Stealth.SetMovementCoordinator(MovementCoordinator);
+        // A refused move never left the room — Stealth drops its arrival-confirm wait.
+        RoomTracker.MoveBlocked += Stealth.NoteMoveBlocked;
         // Auto-hide is suppressed in a party — a hidden member falls off the
         // Also-here line and can't be single-target-healed/buffed until revealed.
         Stealth.SetPartyCheck(() => PartyState.IsInParty);

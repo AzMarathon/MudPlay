@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.111.18**
+> **Version 3.111.19**
 > - A step waits for the sneak to take (retrying up to 15s), including a loop's first step, instead of walking in unsneaked
 > - Entering a room without the game's "Sneaking..." line counts as a broken sneak: no backstab, and Run if BS fails / Hit and Run react
 > - A failed backstab only runs if something's still standing after that round, so no `break` + run when the swing killed it anyway
+> - Fixed a crash on startup from the new sneak wiring
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
