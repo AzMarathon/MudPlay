@@ -2551,6 +2551,57 @@ public sealed class CombatManagerTests
         return (h, landed, runs);
     }
 
+    // Hit and Run backstabs everything and covers what Run if BS fails does (user,
+    // 2026-09-27): a room it can't backstab (the sneak broke coming in) or a backstab
+    // that swung without surprise is run from, with Run if BS fails off.
+    [Fact]
+    public void HitAndRun_SneakBrokeOnEntry_Runs_WithRunIfBsFailsOff()
+    {
+        (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false);
+        using Harness _h = h;
+        h.Settings.RunIfBackstabFails = false;
+        h.AddMonster(1, "carrion beast", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
+        h.Combat.SetSneakBrokeOnEntryProbe(() => true);
+
+        h.Feed("Also here: carrion beast.");
+
+        Assert.Contains(runs, r => r.Contains("sneak broke"));
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.DoesNotContain(h.Sent, b => System.Text.Encoding.Latin1.GetString(b).StartsWith("a carrion beast"));
+    }
+
+    [Fact]
+    public void HitAndRun_SneakBrokeOnEntry_RunBudgetSpent_Fights()
+    {
+        (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false, allowRun: false);
+        using Harness _h = h;
+        h.AddMonster(1, "carrion beast", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
+        h.Combat.SetSneakBrokeOnEntryProbe(() => true);
+
+        h.Feed("Also here: carrion beast.");
+
+        Assert.NotEmpty(runs);
+        Assert.Equal("a carrion beast", h.LastSent);
+    }
+
+    [Fact]
+    public void HitAndRun_BackstabWithoutSurprise_Runs_WithRunIfBsFailsOff()
+    {
+        (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false);
+        using Harness _h = h;
+        h.Settings.RunIfBackstabFails = false;
+        h.AddMonster(1, "dark cultist", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: dark cultist.");
+        Assert.Equal("bs dark cultist", h.LastSent);
+        h.Feed("You punch dark cultist for 2 damage!");     // no "surprise": the backstab missed
+
+        Assert.Contains(runs, r => r.Contains("no surprise"));
+    }
+
     [Fact]
     public void HitAndRun_BackstabKillsTheOnlyMonster_NoRun()
     {

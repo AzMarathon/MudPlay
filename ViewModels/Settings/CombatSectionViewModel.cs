@@ -131,7 +131,12 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _doBackstab;
     [ObservableProperty] private bool _skipBackstabIfMultiAttack = true;
     [ObservableProperty] private bool _runIfBackstabFails;
-    [ObservableProperty] private bool _hitAndRunTactics;
+    // Hit and Run covers everything Run if BS fails does, so that box greys out
+    // while it's on.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRunIfBackstabFailsEditable))]
+    private bool _hitAndRunTactics;
+    public bool IsRunIfBackstabFailsEditable => !HitAndRunTactics;
     [ObservableProperty] private int _hitAndRunMaxRuns = 3;
     [ObservableProperty] private bool _clearHostilesWhenSeenHidden;
 

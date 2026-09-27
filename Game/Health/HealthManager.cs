@@ -1646,12 +1646,14 @@ public sealed class HealthManager : IDisposable
     // RunDirection / RunDistance — so a hand-walked failure just logs and no-ops.
     public void RunFromBackstabFailure() => TryFlee("backstab failed");
 
-    // Hit and Run tactics (CombatSettings.HitAndRunTactics): never fight without a
-    // backstab. CombatManager reports every landed backstab here (runNow when anything
-    // is still standing in the room), and asks RunInsteadOfFight before opening any
-    // fight with a plain attack — a monster walking in after the backstab, one that
-    // chased us, a room we entered seen. Each run retreats like any flee; the engine
-    // resumes once it lands, re-sneaks and comes back for another backstab.
+    // Hit and Run tactics (CombatSettings.HitAndRunTactics): backstab everything, as
+    // many times as it takes; stay only when a backstab kills the lone target.
+    // CombatManager reports every landed backstab here (runNow when anything is still
+    // standing), and asks RunInsteadOfFight for everything else it runs from: a
+    // backstab that swung without surprise, a sneak that broke on the way in, and
+    // any fight that would open with a plain attack (a walk-in, a chaser). It covers
+    // Run if BS fails entirely. Each run retreats like any flee; the engine resumes
+    // once it lands, re-sneaks and comes back for another backstab.
     //
     // HitAndRunMaxRuns caps the runs between backstabs (the first included): past it,
     // re-stealthing isn't going to happen, so we stand and fight. A landed backstab

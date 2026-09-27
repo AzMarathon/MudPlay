@@ -1,5 +1,11 @@
 # Version history
 
+## 3.114.2
+
+- Hit and Run tactics now also runs when the sneak breaks on the way in or the backstab misses (no surprise), not just after a backstab lands; it only stays when a backstab kills the lone target
+- Run if BS fails greys out while Hit and Run tactics is on, since Hit and Run covers it
+- bug reports addressed: paradigm-20260927-125039, paradigm-20260927-125252
+
 ## 3.114.0
 
 - Events: new When trigger that fires once your character reaches a state (money in a coin type, encumbrance %, experience, level), compared with ≥ ≤ > < = ≠; list several conditions and it fires when all hold, once per crossing

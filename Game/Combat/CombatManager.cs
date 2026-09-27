@@ -321,10 +321,6 @@ public sealed partial class CombatManager : IDisposable
     // read as "fought without a backstab" (report paradigm-20260927-000454).
     private bool _hitAndRunSettlePending;
 
-    // Our backstab couldn't work here (the sneak broke on the way in) or didn't (it
-    // swung without surprise) — this room's fight is Run if BS fails' call, not Hit
-    // and Run's. Reset on the room change.
-    private bool _backstabFailedHere;
 
     // HealthManager.IsFleeInFlight — while a flee's move is on its way, don't open a
     // fight in the room we're leaving (a swipe on the way out would draw a `bs` that
@@ -1395,7 +1391,6 @@ public sealed partial class CombatManager : IDisposable
         if (obs.Source == RoomObservationSource.RoomChange)
         {
             _backstabOpenerConsumed = false;
-            _backstabFailedHere = false;
             // The old room's surprise round is moot once we've moved on — drop any
             // unresolved watch so a missed resolution line can't strand the re-fire
             // suppression across rooms.
@@ -1786,24 +1781,31 @@ public sealed partial class CombatManager : IDisposable
         }
 
         // We snuck in for a backstab but made a sound entering: the surprise is gone
-        // and the backstab would fail, so with "run if backstab fails" on, run now
-        // rather than open with a plain swing (report paradigm-20260926-222210).
-        //
-        // That call is Run if BS fails' alone: with it off we fight here normally, and
-        // Hit and Run doesn't step in (report paradigm-20260927-023118 — the user keeps
-        // "my backstab can't work" and "after my backstab" as two separate choices).
+        // and the backstab would fail, so run now rather than open with a plain swing
+        // (report paradigm-20260926-222210). Hit and Run covers this itself — it
+        // backstabs everything, so a room it can't backstab is a room it leaves —
+        // through its own retreat so the give-up-after-N-runs budget applies; without
+        // it, Run if BS fails decides.
         if (settings.DoBackstab && !_backstabOpenerConsumed && _currentTarget is null
             && _takeSneakBrokeOnEntry?.Invoke() == true)
         {
             _backstabOpenerConsumed = true;
-            _backstabFailedHere = true;
-            if (settings.RunIfBackstabFails)
+            if (settings.HitAndRunTactics)
+            {
+                if (_hitAndRunInsteadOfFight?.Invoke("sneak broke entering the room — the backstab would fail") == true)
+                {
+                    _currentTarget = null;
+                    return;
+                }
+            }
+            else if (settings.RunIfBackstabFails)
             {
                 _log?.Info(LogCategory, "sneak broke entering the room — backstab would fail; running");
                 _backstabFailureFlee?.Invoke();
                 return;
             }
-            _log?.Info(LogCategory, "sneak broke entering the room — Run if BS fails is off; fighting");
+            else
+                _log?.Info(LogCategory, "sneak broke entering the room — Run if BS fails and Hit and Run are off; fighting");
         }
 
         bool backstabPending = BackstabPending(settings, obs);
@@ -1871,9 +1873,9 @@ public sealed partial class CombatManager : IDisposable
         // Hit and Run tactics: never open a fight without a backstab. A monster that
         // walks in after our backstab, one that chased us, a room we entered seen —
         // run, re-sneak and come back instead (report paradigm-20260926-233241). Not
-        // when a backstab couldn't work here anyway (a see-hidden monster, a
-        // don't-backstab target), and HealthManager lets it fight once the run budget
-        // is spent or no retreat can start.
+        // when a backstab can't work against it however we come back (a see-hidden
+        // monster, a don't-backstab target), and HealthManager lets it fight once the
+        // run budget is spent or no retreat can start.
         if (settings.HitAndRunTactics && _hitAndRunSettlePending)
         {
             _log?.Combat(LogCategory, $"hit and run — holding {picked.RawName} until the backstab's round settles");
@@ -1881,7 +1883,7 @@ public sealed partial class CombatManager : IDisposable
             return;
         }
         if (settings.DoBackstab && settings.HitAndRunTactics && _currentTarget is null
-            && !_backstabFailedHere && !backstabPending && !picked.DontBackstab && !RoomHasSeeHidden(obs)
+            && !backstabPending && !picked.DontBackstab && !RoomHasSeeHidden(obs)
             && _hitAndRunInsteadOfFight?.Invoke($"{picked.RawName} would be fought without a backstab") == true)
         {
             return;
@@ -3145,16 +3147,21 @@ public sealed partial class CombatManager : IDisposable
                 _hitAndRunBackstabLanded(standing);
             }
         }
-        else
+        else if (!standing)
         {
-            // A failed backstab makes this room Run if BS fails' call alone — Hit and
-            // Run doesn't then run from the fight that follows.
-            _backstabFailedHere = true;
-            if (settings.RunIfBackstabFails)
-            {
-                if (standing) _backstabFailureFlee?.Invoke();
-                else _log?.Info(LogCategory, "backstab failed, but the round killed the target and the room is clear — not running");
-            }
+            if (settings.HitAndRunTactics || settings.RunIfBackstabFails)
+                _log?.Info(LogCategory, "backstab failed, but the round killed the target and the room is clear — not running");
+        }
+        else if (settings.HitAndRunTactics)
+        {
+            // A backstab that swung without surprise is a miss — Hit and Run runs from
+            // it the same as from one that landed and left something standing.
+            _log?.Info(LogCategory, "hit and run — backstab failed (no surprise) — running to re-sneak");
+            _hitAndRunInsteadOfFight?.Invoke("backstab failed (no surprise)");
+        }
+        else if (settings.RunIfBackstabFails)
+        {
+            _backstabFailureFlee?.Invoke();
         }
 
         if (_isFleeInFlight?.Invoke() == true) return;   // we're leaving
