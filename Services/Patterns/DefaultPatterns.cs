@@ -819,6 +819,10 @@ public static class DefaultPatterns
         // TrapDisarmManager only reads it while its own disarm is pending.
         yield return new RegexPattern(KnownPatterns.TrapDisarmTriggered,
             @"^You try to disarm the trap, but instead trigger it!?\s*$");
+        // Stock's one disarm-failure line, which also answers a direction with no
+        // trap — see TrapDisarmManager.OnDisarmFailedAny.
+        yield return new RegexPattern(KnownPatterns.TrapDisarmFailedAny,
+            @"^You failed to disarm any trap to the (?<dir>\w+)\.?\s*$");
 
         // ----- Door handling --------------------------------------------
         // Single-shot match — DoorOpenManager runs one request at a time,

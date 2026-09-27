@@ -280,6 +280,35 @@ public sealed class TrapDisarmManagerTests : IDisposable
         Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
     }
 
+    // Stock: "You failed to disarm any trap to the <dir>." is both a fumble and the
+    // reply for a direction with no trap. Retry, then take the exit as clear.
+    [Fact]
+    public void StockFailedAny_RetriesThenTakesTheExitAsClear()
+    {
+        var (mgr, router, _, wire) = Setup();
+        mgr.MaxDisarmAttempts = 2;
+        string? reply = null;
+        mgr.Enqueue("e", "walker", t => reply = t);
+
+        Dispatch(router, "You failed to disarm any trap to the east.");
+        Assert.Equal(2, wire.Count);                  // retried once
+        Assert.Null(reply);
+
+        Dispatch(router, "You failed to disarm any trap to the east.");
+        Assert.StartsWith("No trap to the e", reply);  // the walker's "clear" reply
+        Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
+    }
+
+    [Fact]
+    public void StockFailedAny_OtherDirection_Ignored()
+    {
+        var (mgr, router, _, wire) = Setup();
+        mgr.Enqueue("e", "walker", _ => { });
+        Dispatch(router, "You failed to disarm any trap to the west.");
+        Assert.Single(wire);
+        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
+    }
+
     [Fact]
     public void NoEffect_WhileIdle_IsSomeoneElsesRefusal()
     {

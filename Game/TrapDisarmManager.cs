@@ -25,8 +25,8 @@ namespace MudPlay.Game;
 // silent; Telepath → reply) since the channel context lives at handler dispatch
 // time.
 //
-// A request ends on a successful disarm, on "no effect" (no trap that way), or
-// once MaxDisarmAttempts disarms have all set the trap off.
+// A request ends on a successful disarm, on a reply meaning there's no trap that
+// way, or once MaxDisarmAttempts disarms have all failed.
 public sealed class TrapDisarmManager : IDisposable
 {
     private readonly MessageRouter _router;
@@ -35,6 +35,7 @@ public sealed class TrapDisarmManager : IDisposable
     private readonly LogService? _log;
     private readonly IDisposable _disarmedSub;
     private readonly IDisposable _triggeredSub;
+    private readonly IDisposable _failedAnySub;
     private readonly IDisposable _noEffectSub;
     private readonly WireSender _wire = new();
     private bool _disposed;
@@ -90,6 +91,7 @@ public sealed class TrapDisarmManager : IDisposable
 
         _disarmedSub = _router.Subscribe(KnownPatterns.TrapDisarmedSuccess, OnDisarmedSuccess);
         _triggeredSub = _router.Subscribe(KnownPatterns.TrapDisarmTriggered, OnDisarmTriggered);
+        _failedAnySub = _router.Subscribe(KnownPatterns.TrapDisarmFailedAny, OnDisarmFailedAny);
         _noEffectSub = _router.Subscribe(KnownPatterns.CommandNoEffect, OnNoEffect);
     }
 
@@ -106,6 +108,7 @@ public sealed class TrapDisarmManager : IDisposable
         _disposed = true;
         _disarmedSub.Dispose();
         _triggeredSub.Dispose();
+        _failedAnySub.Dispose();
         _noEffectSub.Dispose();
     }
 
@@ -198,7 +201,7 @@ public sealed class TrapDisarmManager : IDisposable
         CompleteCurrent();
     }
 
-    // The disarm failed and set the trap off (Paradigm capture 2026-09-27:
+    // Paradigm: the disarm failed and set the trap off (capture 2026-09-27:
     // `You try to disarm the trap, but instead trigger it!`). The line names no
     // direction, so it's taken for the disarm we have pending. Try again up to
     // MaxDisarmAttempts, then give up and report it — the walker stops rather
@@ -219,8 +222,31 @@ public sealed class TrapDisarmManager : IDisposable
         SendDisarm();
     }
 
-    // `disarm trap <dir>` answered "Your command had no effect.": there's no trap
-    // that way (already disarmed, or not set right now), so there's nothing to do
+    // Stock's `You failed to disarm any trap to the <dir>.` is its only failure line,
+    // and it also answers a direction with no trap (user, 2026-09-27) — so it can't
+    // tell a fumble from an empty exit. Retry up to MaxDisarmAttempts; if every try
+    // says the same, take it as no trap there (already disarmed, or not set) and
+    // report the exit clear so the walk carries on (the user's call: the worst case
+    // is walking into a live trap, which a failed disarm risks anyway).
+    private void OnDisarmFailedAny(MatchResult result)
+    {
+        if (_state != State.DisarmPending) return;
+        if (_current is not { } cur) return;
+        if (!MatchesCurrentDirection(result)) return;
+        if (_disarmAttempts < MaxDisarmAttempts)
+        {
+            _log?.Log(LogSeverity.Info, "Trap", $"Disarm {cur.Direction} failed — trying again.");
+            SendDisarm();
+            return;
+        }
+        _log?.Log(LogSeverity.Info, "Trap",
+            $"Disarm {cur.Direction} failed {_disarmAttempts} time(s) — taking it as no trap there.");
+        cur.Reply($"No trap to the {cur.Direction} to disarm (failed {_disarmAttempts} times; taking it as clear).");
+        CompleteCurrent();
+    }
+
+    // Paradigm: `disarm trap <dir>` answered "Your command had no effect.": there's no
+    // trap that way (already disarmed, or not set right now), so there's nothing to do
     // and the exit is clear. Only read while our disarm is pending — the same line
     // answers any other command the server refuses.
     private void OnNoEffect(MatchResult _)
