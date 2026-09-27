@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.110.13**
+> **Version 3.110.14**
 > - Profile Management: New… starts the draft on the BBS you have selected, and Save As… names it there
 > - Profile Management: new Copy button duplicates a character under a new name on the same BBS
+> - Paradigm: one-use items that don't recharge (learn-spell scrolls) are no longer looked at for charges
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

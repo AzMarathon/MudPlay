@@ -106,9 +106,11 @@ public sealed class ItemChargeTracker : IDisposable
     public int? RemainingFor(int number)
     {
         if (number <= 0) return null;
+        ItemChargeMeta? meta0 = ItemChargeMeta.Read(_gameData, number);
+        if (meta0 is { IsSingleUseConsumable: true }) return 1;   // held ⇒ its one charge, unspent
         if (_profile.Current?.ItemCharges is not { } map || !map.TryGetValue(number, out ItemChargeRecord? rec))
             return null;
-        if (ItemChargeMeta.Read(_gameData, number) is { Recharges: true, IsLimitedUse: true } meta
+        if (meta0 is { Recharges: true, IsLimitedUse: true } meta
             && _cleanupConfig() is { } cfg
             && _now() >= BossTimerMath.NextCleanup(rec.UpdatedUtc, cfg.TimeOfDay, cfg.Tz))
             return meta.MaxUses;
@@ -128,7 +130,8 @@ public sealed class ItemChargeTracker : IDisposable
     // Look up (and dispatch) the charges of any held charged item we don't yet know.
     // Called on inventory-settle. No-op off Paradigm. Each unknown item gets one paced
     // `look`; a persisted count (or a rechargeable that cleanup-resolves to max) needs
-    // no look, so this stays quiet after the first encounter with each item.
+    // no look, so this stays quiet after the first encounter with each item. A one-use
+    // consumable (a learn-spell scroll) is never looked: held, it has its one charge.
     public void EnsureChargesKnown()
     {
         if (_disposed || !_onParadigm()) return;
@@ -144,7 +147,7 @@ public sealed class ItemChargeTracker : IDisposable
             int number = _itemNumberOf(name);
             if (number <= 0 || _autoAttempted.Contains(number)) continue;   // one look per item per session
             if (RemainingFor(number) is not null) continue;                 // already known
-            if (ItemChargeMeta.Read(_gameData, number) is not { IsLimitedUse: true }) continue;
+            if (ItemChargeMeta.Read(_gameData, number) is not { IsLimitedUse: true, IsSingleUseConsumable: false }) continue;
             _autoLookQueue.Enqueue(name);
             _autoAttempted.Add(number);   // mark now so a look that prints no charge line isn't retried forever
         }
@@ -207,8 +210,10 @@ public sealed class ItemChargeTracker : IDisposable
         if (TokenCatalog.PlaceOf(name) is not null) return;
         int number = _itemNumberOf(name);
         if (number <= 0) return;
+        // Not a charged item — or a one-use consumable, gone once used.
+        if (ItemChargeMeta.Read(_gameData, number) is { IsSingleUseConsumable: true }) return;
         if (RemainingFor(number) is null
-            && ItemChargeMeta.Read(_gameData, number) is not { IsLimitedUse: true }) return;   // not a charged item
+            && ItemChargeMeta.Read(_gameData, number) is not { IsLimitedUse: true }) return;
         int gen = _relookGen.TryGetValue(number, out int g) ? g + 1 : 1;
         _relookGen[number] = gen;
         _schedule(RelookDelayMs, () =>
