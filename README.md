@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.115.11**
-> - Health, Spells and Party tabs get the combat-profile chips at the top, with add / remove, so profiles can be switched, compared, added and removed from any of them
-> - The Party tab's party healing and party bless follow the chips like the other tabs, instead of waiting for Apply
+> **Version 3.115.12**
+> - Good-only / Evil-only gear is no longer flagged "unable to wear" from a stale alignment: your alignment only counts once a `who` shows you this session (a same-named character on another realm of the same BBS was overwriting it)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

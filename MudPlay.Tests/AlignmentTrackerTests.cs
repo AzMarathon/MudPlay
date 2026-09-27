@@ -66,4 +66,25 @@ public sealed class AlignmentTrackerTests
 
         Assert.True(tracker.IsStale);
     }
+
+    // Our own alignment counts only once a `who` shows us this session: a saved row
+    // (stale, or a same-named character's on another realm) is ignored (report
+    // paradigm-20260927-134201).
+    [Fact]
+    public void SelfAlignment_IgnoresTheSavedRow_UntilAWhoShowsUs()
+    {
+        var router = new MessageRouter();
+        DefaultPatterns.Seed(router);
+        var db = new PlayerDatabase();
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Villain", "Chosen", null, null, DateTime.UtcNow.AddHours(-9));
+        var tracker = new AlignmentTracker(router, new PlayerStats { Name = "Fujin" }, db);
+
+        Assert.Null(tracker.SelfAlignment);
+
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Saint", "Chosen", null, null, DateTime.UtcNow);
+        Assert.Equal("Saint", tracker.SelfAlignment);
+
+        tracker.ResetForProfile();
+        Assert.Null(tracker.SelfAlignment);
+    }
 }
