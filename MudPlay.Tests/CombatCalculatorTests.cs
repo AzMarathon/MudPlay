@@ -163,6 +163,33 @@ public sealed class CombatCalculatorTests
         Assert.True(lowEncum > noEncum);
     }
 
+    // Paradigm capture: a level-2 Gypsy (combat 4; STR 60 AGI 70 INT 70 CHM 30, +5
+    // accuracy from gear) at 964/2880 = 33% read Attack 43 / Bash 27 / Dodge 9 in
+    // `stat all`. All three need the light-load bonus, so 33% still earns it there.
+    [Fact]
+    public void Paradigm_LightLoadBonusStillAppliesAtExactly33Percent()
+    {
+        int attack = CombatCalculator.CalcAccuracy(MudAttackType.Normal, RealmType.ParaMud,
+            level: 2, nCombatLevel: 4, strength: 60, agility: 70, intellect: 70, charm: 30,
+            totalWornAccy: 0, maxSingleAbil22: 5, currentEncum: 964, maxEncum: 2880);
+        int bash = CombatCalculator.CalcAccuracy(MudAttackType.Bash, RealmType.ParaMud,
+            level: 2, nCombatLevel: 4, strength: 60, agility: 70, intellect: 70, charm: 30,
+            totalWornAccy: 0, maxSingleAbil22: 5, currentEncum: 964, maxEncum: 2880);
+        int dodge = CombatCalculator.CalcDodge(2, 70, 30, 0, 964, 2880, RealmType.ParaMud);
+
+        Assert.Equal(43, attack);
+        Assert.Equal(27, bash);
+        Assert.Equal(9, dodge);
+    }
+
+    [Fact]
+    public void Stock_LightLoadBonusStopsBelow33Percent()
+    {
+        int at32 = CombatCalculator.CalcDodge(2, 70, 30, 0, 32, 100, RealmType.Stock);
+        int at33 = CombatCalculator.CalcDodge(2, 70, 30, 0, 33, 100, RealmType.Stock);
+        Assert.Equal(at32 - 7, at33);
+    }
+
     // ----- Diminishing returns ---------------------------------------------
 
     [Fact]

@@ -78,7 +78,7 @@ public static class IncomingHitEstimator
         int ac = (int)acExact;
         int dodge = CombatCalculator.CalcDodge(
             stats.Level, stats.Agility, stats.Charm, totals.PlusDodge,
-            encum.CurrentWeight, encum.MaxWeight);
+            encum.CurrentWeight, encum.MaxWeight, gameData.ActiveRealm);
         int protEvil = totals.PlusProtEvil + buff.ProtEvil;
         bool shadow = totals.PlusShadowResist > 0 || buff.HasShadow;
         return new PlayerDefenseProfile(

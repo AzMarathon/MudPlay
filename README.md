@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.112.0**
-> - Item Finder: new Backstab attack type — one strike with a backstab-capable weapon
-> - Item Finder: Dmg/Rnd column (average damage per round for the selected attack, crits included) and Est. BS Dmg column (your backstab min-max and average per weapon)
-> - Gear Finder: Find Best by computed Backstab Dmg (min / max / avg) and by Damage / Round for the selected attack
+> **Version 3.112.1**
+> - Character Info, Calculators and Monster Intel: Paradigm accuracy and dodge keep the light-load bonus at exactly 33% encumbrance, matching the game's `stat all` (it was 11 accuracy / 7 dodge low there)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

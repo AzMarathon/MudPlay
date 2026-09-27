@@ -186,7 +186,8 @@ public static class CombatCalculator
     // CalcDodgeVSAccuracy). Includes a low-encumbrance bonus when under 33%
     // encumbered.
     public static int CalcDodge(int level, int agility, int charm, int plusDodge,
-                                double currentEncum = 0, double maxEncum = -1)
+                                double currentEncum = 0, double maxEncum = -1,
+                                RealmType realmType = RealmType.Stock)
     {
         int dodge = level / 5;
         dodge += (charm - 50) / 5;
@@ -196,7 +197,7 @@ public static class CombatCalculator
         if (maxEncum > 0)
         {
             int encumPct = (int)(currentEncum / maxEncum * 100);
-            if (encumPct < 33)
+            if (HasLightLoadBonus(encumPct, realmType))
             {
                 dodge += 10 - (encumPct / 10);
             }
@@ -523,6 +524,13 @@ public static class CombatCalculator
         return accy;
     }
 
+    // Whether a load (whole percent of max, truncated) still earns the light-load
+    // accuracy / dodge bonus. Paradigm keeps it at exactly 33%: a character at
+    // 964/2880 (33%) read Attack 43 / Dodge 9 in `stat all`, both only reachable with
+    // the bonus. Stock stops below 33%.
+    private static bool HasLightLoadBonus(int encumPct, RealmType realm) =>
+        realm == RealmType.ParaMud ? encumPct <= 33 : encumPct < 33;
+
     // ----- Attack accuracy -------------------------------------------------
 
     // Level + combat-level base accuracy term shared by Stock and ParaMUD.
@@ -577,8 +585,8 @@ public static class CombatCalculator
 
         if (isParaMud)
         {
-            // < 33%: 15 - (encumPct-1)/10 (15→14→13→12 at 11/21/31); ≥ 33%: +1.
-            if (encumPct < 33)
+            // Up to 33%: 15 - (encumPct-1)/10 (15→14→13→12 at 11/21/31); past it: +1.
+            if (HasLightLoadBonus(encumPct, realm))
                 accyCalc += 15 - ((encumPct - 1) / 10);
             else
                 accyCalc += 1;

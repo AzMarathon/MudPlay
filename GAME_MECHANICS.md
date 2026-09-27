@@ -557,13 +557,19 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Paradigm normal attack:** `(AGL-50)/3 + (INT-50)/6 + (CHM-50)/10` — AGL ~3/pt, INT ~6/pt, CHM ~10/pt. STR does **not** feed a normal Paradigm attack.
 - **Paradigm bash / smash:** `(STR-50)/3 + (AGL-50)/6` — STR ~3/pt, AGL ~6/pt (INT/CHM drop out). So STR reaches accuracy on Paradigm ONLY through bash/smash.
 
+- **Light-load bonus boundary: Paradigm still grants it at exactly 33%.** The percentage is `current*100/max`, truncated. *([OBSERVED] Paradigm, 2026-09-27, the user's `stat all` screenshot.)*
+  - **The capture:** a level-2 Gypsy at 964/2880, which the game shows as `Light [33%]`, read Attack `43`, Bash `27` and Dodge `9`. All three are only reachable with the bonus: accuracy +12 and dodge +7.
+  - **Stock:** MMUD-Explorer's `CalculateAccuracy` gates on `< 33`, which excludes 33%. Stock is kept on that. `[NEEDS CONFIRMATION]` Does Stock also grant it at exactly 33%?
+
 **Client use:**
 - `StatEffects.BashAccuracyFromStats` computes the bash/smash form; the CP tooltip labels each accuracy line with the attacks it applies to.
+- `CombatCalculator.HasLightLoadBonus` gates the encumbrance term in both `CalcAccuracy` and `CalcDodge`.
 
 ### Dodge (raw value, pre vs-accuracy conversion)
 *Status: CONFIRMED (`CombatCalculator.CalcDodge`)*
 
-- **Formula:** `level/5 + (CHM-50)/5 + (AGL-50)/3` (+ gear, + an encumbrance bonus under 33% load). So AGL ~3/pt, CHM ~5/pt.
+- **Formula:** `level/5 + (CHM-50)/5 + (AGL-50)/3` (+ gear, + an encumbrance bonus of `10 - pct/10` for a light load). So AGL ~3/pt, CHM ~5/pt.
+- The light-load cutoff is the one in *Normal-attack accuracy — stat contribution*. On Paradigm it includes exactly 33%.
 
 ### Stealth base
 *Status: CONFIRMED (MMUD-Explorer `CalculateStealth` (modMMudFunc.bas ~4620); stock also in `dll-stats-map.md` `0x5fa`) · Realm: both*
