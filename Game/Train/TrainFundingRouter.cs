@@ -155,10 +155,13 @@ public sealed class TrainFundingRouter
         _visited.Clear();
         _session++;
 
-        if (_requestInventory is null) return Advance(firstCall: true);
+        // A run the running purse already says can't go is answered from it, with no
+        // `i`: the armed trigger re-checks every time its back-off lapses, and
+        // re-reading the inventory each time while clearly short is just noise.
+        if (_requestInventory is null || !RunningPurseWouldProceed()) return Advance(firstCall: true);
 
-        // PRICE AGAINST A FRESH PURSE. The carried-coin snapshot is authoritative
-        // only on a full `i` and drifts between them, so a stale figure can read as
+        // VERIFY BEFORE TRAVELLING. The carried-coin snapshot is authoritative only
+        // on a full `i` and drifts between them, so a stale figure can read as
         // covering a bill it does not: the run then walks to the trainer, is refused
         // there, and the withdrawal that would have fixed it was never considered.
         // The answer arrives through NoteInventoryRefreshed, or the window closes
@@ -174,6 +177,19 @@ public sealed class TrainFundingRouter
             PriceNow();
         });
         return TrainFundingStart.Collecting;
+    }
+
+    // Whether the running purse says this run would go anywhere: funded outright,
+    // or a reachable collection plan covers it. Pure — no leg starts and nothing is
+    // reported; it only decides whether an `i` is worth sending first.
+    private bool RunningPurseWouldProceed()
+    {
+        long spendable = Spendable(_onHandCopper());
+        if (spendable >= _cost) return true;
+        if (_currentRoom() is not { } here) return false;
+        TrainFundingPlan plan = TrainFundingPlanner.Plan(
+            _cost, spendable, _sources(), here, _trainerRoom, _distance);
+        return plan.Affordable && plan.Legs.Count > 0;
     }
 
     // A full `i` landed. Only interesting while Begin is holding for one.
@@ -211,9 +227,7 @@ public sealed class TrainFundingRouter
     private TrainFundingStart Advance(bool firstCall)
     {
         long onHand = _onHandCopper();
-        // What the user asked to keep is not available for the bill.
-        long reserve = Math.Max(0, _reserveCopper?.Invoke() ?? 0);
-        long spendable = Math.Max(0, onHand - reserve);
+        long spendable = Spendable(onHand);
         if (spendable >= _cost)
         {
             // Includes the happy accident the user asked for: coin picked up during
@@ -225,7 +239,7 @@ public sealed class TrainFundingRouter
             {
                 _log?.Info(LogCategory,
                     $"Funded en route ({onHand:N0} copper on hand, {spendable:N0} "
-                    + "spendable) — heading to the trainer.");
+                    + "above keep-on-hand) — heading to the trainer.");
                 Finished?.Invoke(new(true, 0, "funded"));
             }
             return TrainFundingStart.Funded;
@@ -370,9 +384,15 @@ public sealed class TrainFundingRouter
     {
         _phase = Phase.Idle;
         RestoreAutoGetCash();
-        long shortfall = Math.Max(0, _cost - _onHandCopper());
+        long shortfall = Math.Max(0, _cost - Spendable(_onHandCopper()));
         Finished?.Invoke(new(false, shortfall, detail));
     }
+
+    // What the purse holds above the keep-on-hand floor. Negative when the purse is
+    // already under the floor: that deficit is part of what a withdrawal must cover,
+    // so a top-up pays the bill AND restores the floor rather than dipping into it.
+    private long Spendable(long onHand) =>
+        onHand - Math.Max(0, _reserveCopper?.Invoke() ?? 0);
 
     private void ForceAutoGetCash()
     {

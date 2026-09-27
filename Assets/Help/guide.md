@@ -3186,7 +3186,7 @@ Settings → Auto-Trainer. Controls *how* auto-training behaves once it runs —
 **Solo only:** training briefly drops you out of and back into the realm, which disbands a party server-side — so an armed Auto-train never fires while you're grouped. To train while grouped, turn on **Auto-train party** (below). One exception: **leading** with Auto-train party on when nobody else in the party uses it, Auto-train runs as your normal solo trip — the members follow, and they're re-invited once you've trained.
 **It checks it can pay first.** Before walking anywhere, MudPlay prices the whole run and compares it to the coin you're carrying:
 - **The whole run is priced**, including the second trainer when your banked levels span two level bands, since each charges its own markup.
-- **The purse is re-read first.** It sends `i`, so the price is checked against what you really hold, not a running estimate.
+- **The purse is confirmed before it travels.** MudPlay tracks your coin from each inventory read plus what you pick up. It only sends `i` when that figure says the run can go, so it checks against what you really hold before walking. While you're clearly short, it doesn't keep re-reading.
 - **Keep-on-hand is left alone.** Coin up to your **Minimum cash to keep on hand** (Settings → Cash) doesn't count toward the bill.
 - **If the trainer still refuses for money**, MudPlay re-reads the purse and fetches the difference from your bank. It does that once per run. If it's refused again, the run stops and stays armed.
 

@@ -1,10 +1,11 @@
 # Version history
 
-## 3.112.4
+## 3.112.6
 
-- Auto-train re-reads your purse with `i` before pricing a run, so a stale coin count no longer sends it to a trainer it can't pay
+- Auto-train confirms your purse with `i` before it travels, so a stale coin count no longer sends it to a trainer it can't pay; while you're clearly short it doesn't keep re-reading
 - A trainer's "not enough money" refusal re-reads the purse and fetches the difference from the bank once; if nothing covers it the run backs off instead of walking back and forth
-- Auto-train keeps your Settings → Cash keep-on-hand amount: it tops up from the bank rather than spend below it
+- Auto-train keeps your Settings → Cash keep-on-hand amount: it tops up from the bank rather than spend below it, and under the floor it withdraws enough to restore it and pay the bill
+- bug reports addressed: paradigm-20260927-105726, paradigm-20260927-105932
 
 ## 3.112.3
 

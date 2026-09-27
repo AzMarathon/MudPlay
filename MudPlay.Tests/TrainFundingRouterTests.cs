@@ -367,6 +367,35 @@ public sealed class TrainFundingRouterTests
     }
 
     [Fact]
+    public void UnderTheFloor_TheShortfallIncludesTheDeficit()
+    {
+        // Report paradigm-20260927-105726: 16,040 carried, keep 20,000, a 100 bill.
+        // Paying it without dipping into the floor needs 20,100 on hand, so it's
+        // 4,060 short, not "no shortfall" and not 100.
+        Harness h = new() { Purse = 16_040, Reserve = 20_000 };
+
+        Assert.Equal(TrainFundingStart.Short, h.Router.Begin(100, Trainer));
+        Assert.Equal(4_060, h.Result!.Value.ShortfallCopper);
+    }
+
+    [Fact]
+    public void UnderTheFloor_TheWithdrawalRestoresItAndPaysTheBill()
+    {
+        // Withdrawing only the bill would leave the purse still under the floor,
+        // still "short", and the bank already visited.
+        Harness h = new() { Purse = 16_040, Reserve = 20_000 };
+        h.Sources.Add(Bank(50_000));
+        h.Router.Begin(100, Trainer);
+
+        h.ArriveAtLastWalk();
+        Assert.Contains("with 4060", h.Sent);
+
+        h.Purse = 20_100;
+        h.FireTimers();
+        Assert.True(h.Result!.Value.Funded);
+    }
+
+    [Fact]
     public void AFloorBiggerThanThePurse_LeavesNothingSpendable()
     {
         // Nothing to draw on either, so this is the honest "can\'t afford it" answer
@@ -396,6 +425,30 @@ public sealed class TrainFundingRouterTests
 
         h.Router.NoteInventoryRefreshed();
         Assert.False(h.Router.IsAwaitingInventory);
+    }
+
+    [Fact]
+    public void ARunningPurseThatIsClearlyShort_AnswersWithoutAnInventory()
+    {
+        // Report paradigm-20260927-105932: every lapse of the back-off re-sent `i`
+        // while the purse was plainly under keep-on-hand plus the bill. Only a
+        // run that would actually travel is worth verifying first.
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000 };
+
+        Assert.Equal(TrainFundingStart.Short, h.Router.Begin(100, Trainer));
+        Assert.Equal(0, h.InventoryRequests);
+        Assert.False(h.Router.IsAwaitingInventory);
+    }
+
+    [Fact]
+    public void AShortPurseWithABankThatCoversIt_VerifiesBeforeWalking()
+    {
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000 };
+        h.Sources.Add(Bank(50_000));
+
+        Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(100, Trainer));
+        Assert.Equal(1, h.InventoryRequests);
+        Assert.Empty(h.Walked);
     }
 
     [Fact]
