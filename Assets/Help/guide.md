@@ -340,9 +340,12 @@ the usual way of learning what shares the room with you is gone. Auto-combat
 falls back on what still reaches you — the attack itself:
 
 - **something damages you** — `... you for N damage!`
-- **something swings at you twice in the same round** — one swing is not
-  enough, because an emote (`The barmaid smiles at you.`) reads the same way;
-  a monster names itself on every swing, so a repeat is the tell
+- **something misses you** — `The <monster> swings at you!`, acted on the
+  first time it's seen
+- **a monster with a proper name swings at you twice in the same round**:
+  - with no leading `The`, one swing isn't enough, because an emote such as
+    `The barmaid smiles at you.` has the same shape
+  - a monster names itself on every swing, so a repeat is the tell
 - **a party member announces an attack** — `<player> moves to attack <mob>.`
 
 The attacker's name is read off the line and matched against your game data,
@@ -358,6 +361,15 @@ Two consequences worth knowing:
   to name, and guessing would mean swinging at whatever the room holds.
 - something set to **Neutral** or **Friendly** is still left alone, even if it
   is the thing hitting you.
+
+A monster found this way is taken off the list again when the server refuses
+the attack:
+- `Your command had no effect.`
+- `You don't see <monster> here!` or `You do not see <monster> here!`
+
+That covers a monster that died unseen or left, so whatever is actually
+attacking you can be found next. A refusal naming a party member (a cast at
+someone hiding) or an item doesn't count.
 
 This only runs while the room is dark. In a lit room **Also here:** is
 authoritative and is used instead.

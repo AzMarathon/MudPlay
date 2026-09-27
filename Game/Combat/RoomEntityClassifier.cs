@@ -666,6 +666,19 @@ public sealed class RoomEntityClassifier : IDisposable
     public bool RemoveDeadEntity(string monsterName)
         => RemoveMonsterEntity(monsterName, RoomObservationSource.Death);
 
+    // Whether a "You don't see <X> here" / "You do not see <X> here!" refusal is about
+    // a monster: <X> is the target we attacked, or resolves to a monster. The same
+    // refusal answers a targeted cast at a hiding party member and a `get` that found
+    // nothing, and neither means the monster we're fighting is gone.
+    public bool RefusalNamesMonster(string refused, string? currentTarget)
+    {
+        string name = refused.Trim();
+        if (name.Length == 0) return false;
+        if (currentTarget is { Length: > 0 } t && name.Equals(t, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return Classify(name).Kind == EntityKind.Monster;
+    }
+
     // Remove ONE monster matching monsterName because it WALKED OUT of the room —
     // a "<mob> walks out of the room to <dir>." departure line, most often when a
     // fleeing player drags the mob we were engaged with out with them (see the

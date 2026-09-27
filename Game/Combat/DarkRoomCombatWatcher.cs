@@ -106,7 +106,7 @@ public sealed class DarkRoomCombatWatcher : IDisposable
         _subs.Add(router.Subscribe(KnownPatterns.IncomingAttack, OnSwing));
         _subs.Add(router.Subscribe(KnownPatterns.PartyAttackAnnounce, OnPartyAttack));
         _subs.Add(router.Subscribe(KnownPatterns.CommandNoEffect, OnTargetGone));
-        _subs.Add(router.Subscribe(KnownPatterns.TargetNotHere, OnTargetGone));
+        _subs.Add(router.Subscribe(KnownPatterns.TargetNotHere, OnTargetNotHere));
     }
 
     // An attack line whose shape is combat and nothing else: MobMisses requires
@@ -211,6 +211,12 @@ public sealed class DarkRoomCombatWatcher : IDisposable
                 best = candidate;
         }
         return best;
+    }
+
+    private void OnTargetNotHere(MatchResult match)
+    {
+        if (match.Groups.Count > 0 && !_classifier.RefusalNamesMonster(match.Groups[0], _currentTarget())) return;
+        OnTargetGone(match);
     }
 
     private void OnTargetGone(MatchResult _)

@@ -223,6 +223,23 @@ public sealed class DarkRoomCombatWatcherTests
     }
 
     [Fact]
+    public void ARefusalNamingSomethingElse_LeavesTheTarget()
+    {
+        // The same refusal answers a cast at a hiding party member and a `get` that
+        // found nothing. Neither means the monster we're fighting has gone.
+        using Harness h = new();
+        h.AddMonster(963, "bugbear captain");
+        h.EnterDarkRoom();
+        h.Feed("The bugbear captain swings at you with their greataxe!");
+        h.CurrentTarget = "bugbear captain";
+
+        h.Feed("You do not see Bob here!");
+        h.Feed("You don't see rod here.");
+
+        Assert.Single(h.Classifier.Current!.Value.Entities);
+    }
+
+    [Fact]
     public void KnownMonsterMissLine_InDark_InjectsForCombat()
     {
         using Harness h = new();

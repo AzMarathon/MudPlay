@@ -238,11 +238,12 @@ public static class DefaultPatterns
 
         // "You don't see <X> here!" — target-gone signal. Trailing punctuation
         // tolerant — "!" canonical but some realms emit ".".
-        // BOTH SPELLINGS. The realm prints the uncontracted form, "You do not
-        // see <X> here!", so a pattern that demands "don't" never matches and
-        // CombatManager never learns its target is gone: it holds a target the
-        // server denies, and DarkRoomCombatWatcher's AlreadyPresent check then
-        // suppresses every reveal for that room.
+        // BOTH SPELLINGS. The realm prints "You do not see <X> here!" as well as
+        // "You don't see <X> here!"; missing the first leaves CombatManager holding
+        // a target the server denies, and DarkRoomCombatWatcher's AlreadyPresent
+        // check then suppresses every reveal for that room. The same line answers a
+        // cast at a hiding party member, so consumers check <X> with
+        // RoomEntityClassifier.RefusalNamesMonster before acting.
         yield return new RegexPattern(KnownPatterns.TargetNotHere,
             @"^You do(?:n't| not) see (?<target>.+?) here[.!]\s*$");
 
