@@ -22,7 +22,9 @@ public sealed class ItemChargeTrackerTests : IDisposable
           { "Number": 20, "Name": "peasant cloak",       "UseCount": 5,  "Retain After Uses": 1 },
           { "Number": 30, "Name": "nexus spear",         "UseCount": -1, "Retain After Uses": 0 },
           { "Number": 40, "Name": "token of Silvermere", "UseCount": 0,  "Retain After Uses": 1 },
-          { "Number": 41, "Name": "token of Arlysia",    "UseCount": 5,  "Retain After Uses": 1 }
+          { "Number": 41, "Name": "token of Arlysia",    "UseCount": 5,  "Retain After Uses": 1 },
+          { "Number": 50, "Name": "scroll of blur",      "UseCount": 1,  "Retain After Uses": 0 },
+          { "Number": 51, "Name": "blessed charm",       "UseCount": 1,  "Retain After Uses": 1 }
         ]
         """;
 
@@ -73,6 +75,8 @@ public sealed class ItemChargeTrackerTests : IDisposable
         "nexus spear" => 30,
         "token of Silvermere" => 40,
         "token of Arlysia" => 41,
+        "scroll of blur" => 50,
+        "blessed charm" => 51,
         _ => 0,
     };
 
@@ -136,6 +140,27 @@ public sealed class ItemChargeTrackerTests : IDisposable
         FireTimers();                             // advance the queue
         _tracker.EnsureChargesKnown();            // now known — no second look
         Assert.DoesNotContain("look gnarled wand", _sent);
+    }
+
+    // Report paradigm-20260926-220239: buying learn-spell scrolls looked each one.
+    [Fact]
+    public void SingleUseConsumable_IsNotLooked_AndReadsOneCharge()
+    {
+        _carried.Add("scroll of blur");
+        _tracker.EnsureChargesKnown();
+        Use("use scroll of blur");
+        FireTimers();
+
+        Assert.Empty(_sent);
+        Assert.Equal(1, _tracker.RemainingFor(50));
+    }
+
+    [Fact]
+    public void SingleUseRechargeable_IsStillLooked()
+    {
+        _carried.Add("blessed charm");
+        _tracker.EnsureChargesKnown();
+        Assert.Contains("look blessed charm", _sent);
     }
 
     [Fact]

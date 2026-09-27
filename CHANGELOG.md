@@ -1,5 +1,12 @@
 # Version history
 
+## 3.110.14
+
+- Profile Management: New… starts the draft on the BBS you have selected, and Save As… names it there
+- Profile Management: new Copy button duplicates a character under a new name on the same BBS
+- Paradigm: one-use items that don't recharge (learn-spell scrolls) are no longer looked at for charges
+- bug reports addressed: paradigm-20260926-220239
+
 ## 3.110.11
 
 - Drop All / Hide All / Equip toolbar ▾ only changes what the button does; nothing is sent until you click the button

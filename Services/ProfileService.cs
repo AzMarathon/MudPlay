@@ -43,10 +43,12 @@ public sealed class ProfileService
     // BBS folder the loaded profile lives under — the authoritative link
     // between a character and its server (there is no longer a BbsName field on
     // the DTO; folder location is the source of truth). For a named profile
-    // this is set from disk on Load; for a blank draft it stays null until the
-    // draft is named + homed (File → Save As, or the Profile Management window's
-    // Add / Assign). Consumed by SettingsResolver and AppServices.ResolveActiveBbs
-    // to decide the active BBS.
+    // this is set from disk on Load. A default-profile draft started from Profile
+    // Management's New… carries the BBS that was selected there (so connecting,
+    // BBS-tier settings and Save As… all follow it); otherwise a draft has none
+    // until it's named + homed. Only a name AND a BBS make a real character.
+    // Consumed by SettingsResolver and AppServices.ResolveActiveBbs to decide the
+    // active BBS.
     public string? CurrentBbsName { get; private set; }
 
     // Whether the current no-name profile persists to the Global default-profile
@@ -224,7 +226,7 @@ public sealed class ProfileService
     // so File → Save persists it back to the Global file (see Save) and File →
     // Save As copies it into a named character. Any outgoing profile is auto-saved
     // first so per-session edits aren't dropped.
-    public CharacterProfile LoadDefaultProfile()
+    public CharacterProfile LoadDefaultProfile(string? onBbs = null)
     {
         string? outgoing = CurrentProfileName;
         if (Current is not null)
@@ -242,7 +244,7 @@ public sealed class ProfileService
 
         Current = profile;
         CurrentProfileName = null;
-        CurrentBbsName = null;
+        CurrentBbsName = string.IsNullOrWhiteSpace(onBbs) ? null : onBbs;
         _defaultProfilePersists = true;
         Log?.Info(LogCategory, outgoing is null
             ? "Loaded the default profile (no character loaded)."
@@ -532,6 +534,40 @@ public sealed class ProfileService
         Directory.CreateDirectory(AppPaths.ProfileFolder(bbsName, profileName));
         JsonStore.Save(AppPaths.CharacterProfileFile(bbsName, profileName), fresh);
         Log?.Info(LogCategory, $"Created profile '{profileName}' on '{bbsName}'.");
+    }
+
+    // Copy a saved character to a new name on the same BBS — its whole folder
+    // (profile + character-tier overrides), minus .bak backups, with the copy's
+    // Name rewritten. The loaded character is saved first so the copy carries its
+    // unsaved session edits. Throws when the new name is taken.
+    public void CopyProfile(string bbsName, string fromName, string toName)
+    {
+        if (string.IsNullOrWhiteSpace(bbsName) || string.IsNullOrWhiteSpace(fromName) || string.IsNullOrWhiteSpace(toName))
+            throw new ArgumentException("BBS, source and new name are required.");
+        if (Exists(bbsName, toName) || Directory.Exists(AppPaths.ProfileFolder(bbsName, toName)))
+            throw new IOException($"A profile named '{toName}' already exists on '{bbsName}'.");
+
+        bool isCurrent = Current is not null
+            && string.Equals(CurrentBbsName, bbsName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(CurrentProfileName, fromName, StringComparison.Ordinal);
+        if (isCurrent) Save();
+
+        string source = AppPaths.ProfileFolder(bbsName, fromName);
+        string dest = AppPaths.ProfileFolder(bbsName, toName);
+        foreach (string file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            if (file.EndsWith(".bak", StringComparison.OrdinalIgnoreCase)) continue;
+            string target = Path.Combine(dest, Path.GetRelativePath(source, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+        string path = AppPaths.CharacterProfileFile(bbsName, toName);
+        if (JsonStore.Load<CharacterProfile>(path) is { } copy)
+        {
+            copy.Name = toName;
+            JsonStore.Save(path, copy);
+        }
+        Log?.Info(LogCategory, $"Copied profile '{fromName}' → '{toName}' on '{bbsName}'.");
     }
 
     // Delete a saved profile's folder. When it's the CURRENTLY loaded profile,

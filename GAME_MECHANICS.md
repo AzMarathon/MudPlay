@@ -3609,9 +3609,12 @@ There is no room to drop amethyst pendant here.
   - MajorMUD stores **`-1`** for a truly unlimited item (the common case, e.g. *shimmering greatsword*, *jeweled longsword*), and occasionally **`0`**. **Both are unlimited.**
   - This matches MMUD Explorer's own normalisation `If uses <= 0 Then uses = -1`.
 
+- **A one-charge item that doesn't recharge (`UseCount` 1, `Retain After Uses` 0) has exactly its one charge while held.** Examples are learn-spell scrolls and a bola. It's gone once used, so a `look` for its charges tells nothing. *(**Client policy**, user, 2026-09-26; report `paradigm-20260926-220239`.)*
+
 **Client use:**
 - Only unlimited items are safe to feed a buff-recast loop.
 - The Spell Book renders `<= 0` as the word "Unlimited" (never a raw "-1 uses").
+- `ItemChargeTracker` (Paradigm) never looks at a one-charge non-recharging item, and reports it as 1 (`ItemChargeMeta.IsSingleUseConsumable`).
 
 ### Equip → use → restore swap for a readied buff item
 *Status: CONFIRMED 2026-08-06 (user); 2H-weapon + off-hand-buff exception CONFIRMED 2026-08-26 (user)*

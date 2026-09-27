@@ -18,6 +18,10 @@ public readonly record struct ItemChargeMeta(int MaxUses, bool Recharges)
     // (MaxUses <= 0) items carry no charge readout.
     public bool IsLimitedUse => MaxUses > 0;
 
+    // One use and consumed when spent (a learn-spell scroll, a bola): while it's held
+    // it has exactly its one charge, so there's nothing a `look` could tell us.
+    public bool IsSingleUseConsumable => MaxUses == 1 && !Recharges;
+
     // Charge metadata for an item number in the active set, or null when the row isn't
     // found. Realm-correct automatically — it reads whichever set is loaded.
     public static ItemChargeMeta? Read(GameDataCache cache, int itemNumber)

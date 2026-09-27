@@ -88,6 +88,35 @@ public sealed class ProfileManagementTests : IDisposable
     }
 
     [Fact]
+    public void CopyProfile_DuplicatesFolder_RewritesName_KeepsSource()
+    {
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "Main");
+        File.WriteAllText(Path.Combine(AppPaths.ProfileFolder(_bbsA, "Main"), "items_overrides.set.json"), "{}");
+        File.WriteAllText(AppPaths.CharacterProfileFile(_bbsA, "Main") + ".bak", "{}");
+
+        svc.CopyProfile(_bbsA, "Main", "Alt");
+
+        Assert.True(File.Exists(AppPaths.CharacterProfileFile(_bbsA, "Main")));
+        CharacterProfile copy = JsonStore.Load<CharacterProfile>(AppPaths.CharacterProfileFile(_bbsA, "Alt"))!;
+        Assert.Equal("Alt", copy.Name);
+        Assert.True(File.Exists(Path.Combine(AppPaths.ProfileFolder(_bbsA, "Alt"), "items_overrides.set.json")));
+        Assert.False(File.Exists(AppPaths.CharacterProfileFile(_bbsA, "Alt") + ".bak"));
+        Assert.Throws<IOException>(() => svc.CopyProfile(_bbsA, "Main", "Alt"));   // clash
+    }
+
+    [Fact]
+    public void LoadDefaultProfile_OnBbs_PinsTheDraft_WithoutNamingIt()
+    {
+        var svc = new ProfileService();
+
+        svc.LoadDefaultProfile(_bbsB);
+
+        Assert.Equal(_bbsB, svc.CurrentBbsName);
+        Assert.Null(svc.CurrentProfileName);
+    }
+
+    [Fact]
     public void MoveProfile_SameBbsRename_NonCurrent_MovesFolder_RewritesName()
     {
         var svc = new ProfileService();

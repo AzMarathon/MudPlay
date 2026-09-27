@@ -3932,15 +3932,18 @@ public partial class MainWindowViewModel : ObservableObject
     // first (inside LoadDefaultProfile), then Current becomes the Global default.
     // Not a menu/keybind command any more; Profile Management gates it on its own
     // disconnected check.
-    private void NewProfile()
+    private void NewProfile(string? onBbs)
     {
-        AppServices.Current.Profile.LoadDefaultProfile();
+        AppServices.Current.Profile.LoadDefaultProfile(onBbs);
+        // The active BBS just changed with it — connection info, title, BBS-tier
+        // settings and game-data set follow the pin.
+        AppServices.Current.Profile.NotifyBbsPinApplied();
         SyncProfileMenuState();
     }
 
     // "Save as" from the Profile Management window: name the loaded profile (e.g. a
     // fresh {default} draft) and write it under a BBS. Prompts for the name.
-    private async Task SaveProfileAsAsync()
+    private async Task SaveProfileAsAsync(string? selectedBbs)
     {
         ProfileService profile = AppServices.Current.Profile;
         if (profile.Current is null)
@@ -3953,7 +3956,11 @@ public partial class MainWindowViewModel : ObservableObject
         // back to the active BBS shown in the title bar (ResolveActiveBbs) so a
         // fresh {default} draft can be named against the BBS the user is looking
         // at. Only a truly BBS-less install has nowhere to save.
-        string? bbs = profile.CurrentBbsName ?? ResolveActiveBbs()?.Name;
+        // A default draft saves under the BBS picked in Profile Management; a named
+        // character stays on its own BBS.
+        string? bbs = profile.CurrentProfileName is null
+            ? selectedBbs ?? profile.CurrentBbsName ?? ResolveActiveBbs()?.Name
+            : profile.CurrentBbsName ?? ResolveActiveBbs()?.Name;
         if (string.IsNullOrWhiteSpace(bbs))
         {
             ShowInfoDialog("Save profile",
