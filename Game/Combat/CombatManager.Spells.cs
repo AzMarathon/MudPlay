@@ -1143,9 +1143,10 @@ public sealed partial class CombatManager
         string? castTarget =
             decision.Action == CombatSpellAction.AreaDebuff ? null : picked.RawName;
         // A pre-attack debuff is offensive output too — hold it while AttackPrevented is
-        // active. Returning false lets the caller try the attack directly, which its own
-        // AttacksBlocked gate then also holds, so nothing goes out until the block clears.
-        if (AttacksBlocked() || !_cast.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
+        // active (fear doesn't stop debuffs). Returning false lets the caller try the
+        // attack directly, which its own AttacksBlocked gate then also holds, so nothing
+        // goes out until the block clears.
+        if (AttacksBlocked(debuff: true) || !_cast.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
             return false;
 
         _spellChooser.MarkCast(decision, picked.RawName, ctx.RoomMobKeys);

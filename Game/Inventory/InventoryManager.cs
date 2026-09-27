@@ -1324,8 +1324,9 @@ public sealed partial class InventoryManager : IDisposable
     // the present-tense "You drop X."). The currency forms use different verbs
     // ("You picked up N ..." with no trailing period / "You dropped N ...") and
     // carry a numeric count; they're matched and returned earlier, so a coin
-    // line never reaches these.
-    [GeneratedRegex(@"^You took (.+?)\.$")]
+    // line never reaches these. The engine also reports damage as "You took N
+    // damage." — not a pickup.
+    [GeneratedRegex(@"^You took (?!\d+ damage\.$)(.+?)\.$")]
     private static partial Regex TookItemRegex();
 
     [GeneratedRegex(@"^You drop(?:ped)? (.+?)\.$")]

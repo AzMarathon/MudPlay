@@ -39,6 +39,7 @@ public sealed class CombatManagerTests
         // Drives the AttackPrevented gate — true = a stun/petrify/bind message is
         // active, so the engine must issue no attack (weapon or spell).
         public bool AttackPrevented { get; set; }
+        public bool Feared { get; set; }
         // Drives the dark-room probe CombatManager reads to suppress its CR
         // "where am I" refreshes. Default false (lit) → refreshes fire as before.
         public bool Dark { get; set; }
@@ -82,6 +83,7 @@ public sealed class CombatManagerTests
                 readWornWeapon: () => WornWeapon);
             Combat.SetDarkRoomProbe(() => Dark);
             Combat.SetAttackPreventedGate(() => AttackPrevented);
+            Combat.SetFearGate(() => Feared);
         }
 
         public void SetOverlay(int monsterNumber, MonsterAttackPriority? priority = null,
@@ -186,6 +188,19 @@ public sealed class CombatManagerTests
         // block; here nothing goes out until the wear-off clears the gate.
         using Harness h = new();
         h.AttackPrevented = true;
+        h.AddMonster(1, "giant rat", killable: true);
+
+        h.Feed("Also here: giant rat.");
+
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void Feared_HoldsTheAttack()
+    {
+        // Fear refuses attacks ("You are too afraid!") until it wears off.
+        using Harness h = new();
+        h.Feared = true;
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");

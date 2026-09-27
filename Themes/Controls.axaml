@@ -215,6 +215,30 @@
         <Setter Property="Margin" Value="0,6,0,0"/>
     </Style>
 
+    <!-- A settings group a combat profile can carry (Combat / Health / Spells / Party
+         tabs): its header holds the "Include in combat profile" toggle, and while the
+         group is included a border tinted the active profile's colour (bound per
+         instance to ActiveProfileAccentSoftBrush / ActiveProfileAccentBrush) plus the
+         profile's name show what swaps with the chip. Unchecked, both hide; the body
+         keeps its padding so the layout doesn't jump. -->
+    <Style Selector="Panel.ProfileFrame">
+        <Setter Property="Margin" Value="0,10,0,2"/>
+    </Style>
+    <Style Selector="Border.ProfileGroup">
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="6"/>
+    </Style>
+    <Style Selector="StackPanel.ProfileBody">
+        <Setter Property="Margin" Value="11,4,11,9"/>
+        <Setter Property="Spacing" Value="2"/>
+    </Style>
+    <Style Selector="TextBlock.ProfileGroupHeader">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="VerticalAlignment" Value="Bottom"/>
+        <Setter Property="Margin" Value="12,0,0,4"/>
+    </Style>
+
     <!-- "Include in combat profile" toggle, docked right of a group header on the
          Combat / Health / Spells / Party tabs. Bottom-aligned so it sits on the
          header's baseline rather than centring in the header's leading gap. -->

@@ -1463,7 +1463,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // "You took <item>." — the own-pickup confirmation for a Stock ground `get`
     // (matches KnownPatterns.PlayerGets' own branch; the "<player> picks up" form
     // is another player and never reaches here). Drives the per-item Stock
-    // deathpile decrement.
-    [GeneratedRegex(@"^You took (?<item>.+?)\.$", RegexOptions.CultureInvariant)]
+    // deathpile decrement. "You took N damage." is the engine's damage report,
+    // not a pickup.
+    [GeneratedRegex(@"^You took (?!\d+ damage\.$)(?<item>.+?)\.$", RegexOptions.CultureInvariant)]
     private static partial Regex YouTookRegex();
 }

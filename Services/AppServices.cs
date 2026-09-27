@@ -2807,7 +2807,15 @@ public sealed class AppServices
         // handler owns the @-command auth boundary. Wire-sender +
         // OtherSettings cadence knobs bind in MainWindowVM /
         // ApplyOtherFromActiveProfile.
-        TrapDisarm = new Game.TrapDisarmManager(Router, PlayerStats, GameData, Log);
+        TrapDisarm = new Game.TrapDisarmManager(Router, PlayerStats, GameData, Log,
+            // UI-thread one-shot, same as the door FSM's response watchdog below.
+            scheduleDelay: (delay, callback) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+                return new DispatcherTimerHandle(timer);
+            });
         TrapDelegation = new Game.TrapDelegationManager(Party, Players, GameData, Router, Log);
         // Suppress the race-probe look while a party-splitting-teleport reform is
         // settling — no member looks during that evolution (AutoParty owns the
@@ -3758,6 +3766,7 @@ public sealed class AppServices
         // server rejects every attack the player issues — weapon and spell — so the
         // combat engine holds all offensive output until the wear-off clears it.
         Combat.SetAttackPreventedGate(() => Conditions.IsAttackPrevented);
+        Combat.SetFearGate(() => Conditions.IsFeared);
 
         // A combat-spell engage can lose its initial send to a self-buff that just
         // spent the cast slot. On a fresh process there may be no combat-tick anchor
@@ -3921,6 +3930,8 @@ public sealed class AppServices
             requestPartyHeal: () => PartyRest.RequestHeal(),
             isLeaderWaited: () => PartyState.SelfIsLeader && PartyEssentials.IsPaused,
             isSelfPoisoned: () => Conditions.IsPoisoned);
+        Router.Subscribe(Services.Patterns.KnownPatterns.RestRefusedSick, _ => Health.NoteRestRefusedSick());
+        Router.Subscribe(Services.Patterns.KnownPatterns.MeditateNotNeeded, _ => Health.NoteMeditateNotNeeded());
 
         // Wait-edge nudge: a standing-idle leader's PlayerState may not change
         // between prompt ticks, so without this poke the leader-waited downtime rest

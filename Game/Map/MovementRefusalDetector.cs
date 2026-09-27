@@ -75,7 +75,9 @@ public sealed partial class MovementRefusalDetector : IDisposable
         // doesn't run a room ahead through a same-named grid (issue #478).
         // NoteCommandDropped self-guards: it reverts only a recently-sent,
         // still-Pending move, since this line doesn't name what it dropped.
-        if (TypingTooQuickly().IsMatch(text))
+        // "You are too afraid!" refuses whatever we sent while feared, move or not,
+        // so it reverts a move only through the same self-guarding path.
+        if (TypingTooQuickly().IsMatch(text) || TooAfraid().IsMatch(text))
         {
             _tracker.NoteCommandDropped(when);
             _log?.Info("MoveRefusal", $"command dropped (typing too quickly): {text.Trim()}");
@@ -124,9 +126,10 @@ public sealed partial class MovementRefusalDetector : IDisposable
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NoExitThatDirection();
 
-    // Paralyzed / confused / stunned variants — "You are too <state> to move."
+    // Paralyzed / confused / stunned variants — "You are too <state> to move.";
+    // the Stock engine says "You are too stunned to move anywhere!".
     [GeneratedRegex(
-        @"^\s*You are too (paralyzed|confused|stunned|dazed) to move[.!]?\s*$",
+        @"^\s*You are too (paralyzed|confused|stunned|dazed) to move(?: anywhere)?[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TooImpairedToMove();
 
@@ -153,13 +156,14 @@ public sealed partial class MovementRefusalDetector : IDisposable
 
     // Door / gate blocking — server returns this when the user issues a direction
     // whose exit is shut. Both the plain and the "in that direction" long form are
-    // covered, and "gate" as well as "door" (a fortress gate opened by a `pull
+    // covered, Stock's "There is a closed door in that direction!", and "gate" as
+    // well as "door" (a fortress gate opened by a `pull
     // winch` prerequisite bonks with "The gate is closed!" — without matching it,
     // the pending move never reverts and the tracker latches in Pending, swallowing
     // even the post-open redisplay: the walker stalls forever, report
     // paradigm-20260827-113513).
     [GeneratedRegex(
-        @"^\s*The (?:door|gate) is closed(?: in that direction)?[.!]?\s*$",
+        @"^\s*(?:The (?:door|gate) is closed(?: in that direction)?|There is a closed door in that direction)[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DoorIsClosed();
 
@@ -191,6 +195,12 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*You are typing too quickly - command ignored[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TypingTooQuickly();
+
+    // Feared: the game refuses any action (attack, item use, a move) with this.
+    [GeneratedRegex(
+        @"^\s*You are too afraid!\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex TooAfraid();
 
     // Confusion-fumble wordings ("You fumble in confusion!", convulsions' "You convulse
     // violently" / "You look around stupidly and do nothing") are no longer hardcoded

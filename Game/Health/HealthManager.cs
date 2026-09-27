@@ -158,6 +158,20 @@ public sealed class HealthManager : IDisposable
     private bool _restInFlight;          // sent rest, awaiting recovery
     private bool _restConfirmedByPrompt; // observed (Resting) since the last rest emit
     private bool _wasPoisoned;           // poison state last Evaluate — for the poison-cleared re-rest edge
+
+    // "You are too sick to rest!" / "…to meditate!": poisoned, so the rest never
+    // started. Hold the re-send while we know we're poisoned, and otherwise retry
+    // after a while — the refusal is often the only sign of a poison the par screen
+    // hasn't reported yet, and waiting on a poison-cleared edge that never comes
+    // left the character standing below its rest floor.
+    private DateTimeOffset? _restRefusedSickAt;
+    private static readonly TimeSpan RestRefusedSickRetry = TimeSpan.FromSeconds(15);
+
+    // "Meditation will not help at this time.": mana is already full, whatever our
+    // stats say. Rest instead for a while rather than re-send a meditate the game
+    // keeps turning down.
+    private DateTimeOffset? _meditateNotNeededAt;
+    private static readonly TimeSpan MeditateNotNeededWindow = TimeSpan.FromSeconds(30);
     // The idle-stall watchdog force-clears combat OPTIMISTICALLY and sends a resync
     // CR; the re-display that re-confirms a still-present monster lands a beat later.
     // Resting the instant InCombat flips false fires in that gap — a blinded / slow
@@ -784,6 +798,7 @@ public sealed class HealthManager : IDisposable
         if (_restInFlight && restingFamily)
         {
             _restConfirmedByPrompt = true;
+            _restRefusedSickAt = null;
         }
         else if (_restInFlight && _restConfirmedByPrompt && !restingFamily)
         {
@@ -1108,11 +1123,12 @@ public sealed class HealthManager : IDisposable
         // it's only the actual rest/meditate SEND further down that waits on this.
         bool anyGateConfirmed = _hpGateConfirmed || _maGateConfirmed;
 
-        // A poisoned character skips the downtime-rest paths below: poison ticks
-        // keep breaking rest, so sitting during the leader's / our own wait just
-        // burns wire round-trips without recovering. This gate applies ONLY to the
-        // opportunistic paths — a poisoned character below its own rest floor still
-        // rests through the anyGate branch, since it needs the recovery to survive.
+        // A poisoned character skips the downtime-rest paths below: the game won't
+        // let you rest or meditate while poisoned ("You are too sick to rest!"), so
+        // sitting during the leader's / our own wait just burns wire round-trips.
+        // This gate applies ONLY to the opportunistic paths — below its own rest
+        // floor the character still tries through the anyGate branch (the poison
+        // flag can lag), and NoteRestRefusedSick holds the re-send once refused.
         bool selfPoisoned = _isSelfPoisoned?.Invoke() ?? false;
 
         // Poison-cleared re-rest. A rest sent while poisoned never reaches the (Resting)
@@ -1287,6 +1303,7 @@ public sealed class HealthManager : IDisposable
                 $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
         }
         else if (shouldSendRestCommand && !_state.InCombat && !_restInFlight && !equipmentApplying
+            && !RestRefusedSickHolding(selfPoisoned)
             && (!hostilesPresent || shadowRest || _restHostilesBypassArmed))
         {
             // Pick rest vs meditate based on user settings + which
@@ -1861,7 +1878,7 @@ public sealed class HealthManager : IDisposable
     private string ChooseRestCommand(HealthSettings s)
     {
         // No meditate ability → always rest.
-        if (!s.UseMeditateAbility) return "rest";
+        if (!s.UseMeditateAbility || MeditateRecentlyRefused()) return "rest";
 
         bool needsHp = _hpGateAsserted;
         bool needsMa = _maGateAsserted;
@@ -1872,6 +1889,35 @@ public sealed class HealthManager : IDisposable
         // flip MeditateBeforeResting for casters where mana recovery
         // matters more than HP catchup.
         return "rest";
+    }
+
+    private bool RestRefusedSickHolding(bool selfPoisoned) =>
+        _restRefusedSickAt is { } at && (selfPoisoned || _now() - at < RestRefusedSickRetry);
+
+    private bool MeditateRecentlyRefused() =>
+        _meditateNotNeededAt is { } at && _now() - at < MeditateNotNeededWindow;
+
+    // The game refused our rest / meditate because we're poisoned. Only reacts to a
+    // rest we sent that hasn't taken yet.
+    public void NoteRestRefusedSick()
+    {
+        if (!_restInFlight || _restConfirmedByPrompt) return;
+        _restInFlight = false;
+        _restRefusedSickAt = _now();
+        _log?.Combat(LogCategory,
+            $"rest refused — too sick (poisoned); holding the re-send while poisoned, else retrying in "
+            + $"{RestRefusedSickRetry.TotalSeconds:0}s (hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
+    }
+
+    // The game says meditating won't help: mana is already full. Drop the unanswered
+    // meditate so the next tick can rest (or finish) instead of waiting on it.
+    public void NoteMeditateNotNeeded()
+    {
+        _meditateNotNeededAt = _now();
+        if (_restInFlight && !_restConfirmedByPrompt) _restInFlight = false;
+        _log?.Combat(LogCategory,
+            $"meditate refused — mana already full; resting instead for {MeditateNotNeededWindow.TotalSeconds:0}s "
+            + $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
     }
 
     // True when a follower riding the leader's rest downtime still has something
@@ -1917,7 +1963,7 @@ public sealed class HealthManager : IDisposable
     // held, so the choice is driven by live pool fill.
     private string ChooseOpportunisticRestCommand(HealthSettings s)
     {
-        if (!s.UseMeditateAbility) return "rest";
+        if (!s.UseMeditateAbility || MeditateRecentlyRefused()) return "rest";
 
         bool missingMana = _state.MaxMa > 0 && _state.Ma < _state.MaxMa;
         if (s.MeditateBeforeResting && missingMana) return "meditate";

@@ -1,6 +1,7 @@
 using MudPlay.Game.GameData;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 
 namespace MudPlay.Game;
 
@@ -14,7 +15,7 @@ namespace MudPlay.Game;
 // to State.Idle.
 //
 // Every request disarms directly with `disarm trap <dir>`: the game accepts it
-// without searching for the trap first (GAME_MECHANICS "Trapped exits"), so a
+// without searching for the trap first (GAME_MECHANICS "Exit traps — search and disarm"), so a
 // confirming `search` would only waste rounds.
 //
 // The capability gate (CanDisarm) lives in this manager so the handler can
@@ -27,6 +28,12 @@ namespace MudPlay.Game;
 //
 // A request ends on a successful disarm, on a reply meaning there's no trap that
 // way, or once MaxDisarmAttempts disarms have all failed.
+//
+// A trap's failure wording is per exit and the imported rooms don't carry it, so a
+// trap we've never seen (Paradigm has more trapped exits than the Stock list covers)
+// answers with a line nothing recognises. The reply watchdog treats silence as a
+// trap that went off — retry, then stop the walk — and logs the lines that arrived,
+// so the unknown wording shows up in the program log and the bug report.
 public sealed class TrapDisarmManager : IDisposable
 {
     private readonly MessageRouter _router;
@@ -38,7 +45,15 @@ public sealed class TrapDisarmManager : IDisposable
     private readonly IDisposable _failedAnySub;
     private readonly IDisposable _noEffectSub;
     private readonly WireSender _wire = new();
+    private readonly Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private bool _disposed;
+
+    // A disarm reply comes back with the next prompt; this is long enough to cover lag.
+    private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(8);
+    private const int MaxLinesKept = 6;
+    private IDisposable? _replyWatchdog;
+    // Non-prompt lines seen since the last disarm went out, for the timeout log.
+    private readonly List<string> _linesSinceDisarm = new();
 
     // FIFO queue of pending trap requests (oldest at the front).
     private readonly Queue<TrapRequest> _queue = new();
@@ -78,8 +93,15 @@ public sealed class TrapDisarmManager : IDisposable
     // Outstanding queue depth (excludes the in-flight request).
     public int QueueDepth => _queue.Count;
 
+    // The lines that arrived the last time a disarm went unanswered — the likely
+    // wording of a trap we don't know yet. Surfaced in the bug report.
+    public string? LastUnansweredReply { get; private set; }
+
+    // scheduleDelay runs the reply watchdog on the router's thread; tests leave it
+    // null and drive replies synchronously.
     public TrapDisarmManager(
-        MessageRouter router, PlayerStats stats, GameDataCache gameData, LogService? log = null)
+        MessageRouter router, PlayerStats stats, GameDataCache gameData, LogService? log = null,
+        Func<TimeSpan, Action, IDisposable>? scheduleDelay = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(stats);
@@ -88,11 +110,13 @@ public sealed class TrapDisarmManager : IDisposable
         _stats    = stats;
         _gameData = gameData;
         _log      = log;
+        _scheduleDelay = scheduleDelay;
 
         _disarmedSub = _router.Subscribe(KnownPatterns.TrapDisarmedSuccess, OnDisarmedSuccess);
         _triggeredSub = _router.Subscribe(KnownPatterns.TrapDisarmTriggered, OnDisarmTriggered);
         _failedAnySub = _router.Subscribe(KnownPatterns.TrapDisarmFailedAny, OnDisarmFailedAny);
         _noEffectSub = _router.Subscribe(KnownPatterns.CommandNoEffect, OnNoEffect);
+        _router.LineDispatched += OnLineDispatched;
     }
 
     // Bind the wire-sender. Same shape as the rest of the engine-side handlers —
@@ -110,6 +134,8 @@ public sealed class TrapDisarmManager : IDisposable
         _triggeredSub.Dispose();
         _failedAnySub.Dispose();
         _noEffectSub.Dispose();
+        _router.LineDispatched -= OnLineDispatched;
+        CancelWatchdog();
     }
 
     // Queue a new @trap <direction> request. direction must already be normalised
@@ -167,6 +193,7 @@ public sealed class TrapDisarmManager : IDisposable
         }
         _state = State.Idle;
         _disarmAttempts = 0;
+        CancelWatchdog();
         _log?.Log(LogSeverity.Info, "Trap", "Trap flow stopped — queue drained.");
     }
 
@@ -186,6 +213,9 @@ public sealed class TrapDisarmManager : IDisposable
     {
         if (_current is not { } cur) return;
         _disarmAttempts++;
+        _linesSinceDisarm.Clear();
+        CancelWatchdog();
+        _replyWatchdog = _scheduleDelay?.Invoke(ReplyTimeout, OnReplyTimeout);
         _wire.Send($"disarm trap {cur.Direction}");
         _log?.Log(LogSeverity.Info, "Trap",
             $"Disarming {cur.Direction} (attempt {_disarmAttempts}/{MaxDisarmAttempts}).");
@@ -201,12 +231,16 @@ public sealed class TrapDisarmManager : IDisposable
         CompleteCurrent();
     }
 
-    // Paradigm: the disarm failed and set the trap off (capture 2026-09-27:
-    // `You try to disarm the trap, but instead trigger it!`). The line names no
-    // direction, so it's taken for the disarm we have pending. Try again up to
+    // The disarm failed and set the trap off, both realms. Each trap prints its own
+    // wording (`You try to disarm the trap, but instead trigger it!`, `You trigger
+    // the trap, and a large spear shoots out!`, …); none names a direction, so it's
+    // taken for the disarm we have pending. A trap that fired is a trap that's
+    // there, so unlike Stock's ambiguous failure line this never walks on. Try again up to
     // MaxDisarmAttempts, then give up and report it — the walker stops rather
     // than walk into a trap it couldn't clear.
-    private void OnDisarmTriggered(MatchResult _)
+    private void OnDisarmTriggered(MatchResult _) => HandleTriggered();
+
+    private void HandleTriggered()
     {
         if (_state != State.DisarmPending) return;
         if (_current is not { } cur) return;
@@ -277,8 +311,40 @@ public sealed class TrapDisarmManager : IDisposable
                && observed.Equals(expected, StringComparison.OrdinalIgnoreCase);
     }
 
+    // No recognised reply in time. Most likely a trap whose failure wording isn't in
+    // our list: handle it as one that went off (a lost reply just costs a retry) and
+    // log what arrived so the wording can be added.
+    private void OnReplyTimeout()
+    {
+        _replyWatchdog = null;
+        if (_disposed || _state != State.DisarmPending || _current is not { } cur) return;
+        LastUnansweredReply = _linesSinceDisarm.Count > 0
+            ? string.Join(" | ", _linesSinceDisarm)
+            : "(no lines)";
+        _log?.Log(LogSeverity.Info, "Trap",
+            $"disarm trap {cur.Direction}: no recognised reply in {ReplyTimeout.TotalSeconds:0}s — "
+            + $"treating it as a trap that went off. Lines since the disarm: {LastUnansweredReply}");
+        HandleTriggered();
+    }
+
+    private void OnLineDispatched(LineExtractor.EmittedLine line)
+    {
+        if (_state != State.DisarmPending || line.IsPromptLine) return;
+        string text = line.Text.Trim();
+        if (text.Length == 0 || _linesSinceDisarm.Count >= MaxLinesKept) return;
+        if (text.StartsWith("disarm trap", StringComparison.OrdinalIgnoreCase)) return;   // our echo
+        _linesSinceDisarm.Add(text);
+    }
+
+    private void CancelWatchdog()
+    {
+        _replyWatchdog?.Dispose();
+        _replyWatchdog = null;
+    }
+
     private void CompleteCurrent()
     {
+        CancelWatchdog();
         _current = null;
         _state = State.Idle;
         _disarmAttempts = 0;

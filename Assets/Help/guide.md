@@ -2546,9 +2546,9 @@ The rest stays per-character and never swaps: targeting and display on the Comba
 
 **Include in combat profile.** Each of those groups has an **Include in combat profile** checkbox at the right of its header, checked by default. Uncheck it and that group stops swapping: **one set of values is shared by every combat profile**, and switching profiles leaves it as it is. The values you're looking at when you uncheck it become the shared ones. Check it again and every profile starts from that shared value, which you can then change per profile. The checkboxes belong to the character, not to a profile, and like everything else on these tabs they're saved with **Apply** / **OK**.
 
-Every group that swaps with the profile is wrapped in a **coloured "Combat profile: `<name>`" border** or sits under a header with the checkbox, so you can see at a glance which settings are per-profile. On the Combat tab the per-profile settings sit at the **top**; the **shared** settings (targeting, display) sit at the **bottom** under a **"Shared combat settings"** divider. Shared settings apply to every combat profile and don't swap with the chip.
+Every group a profile can carry has the checkbox on its header. While it's included, the group is wrapped in a **coloured border** with **"Combat profile: `<name>`"** beside the checkbox, so you can see at a glance what swaps with the profile; uncheck it and the border goes away. On the Party tab the border follows the profile that's live, since that tab shows the live values until you press **Apply**. On the Combat tab the per-profile settings sit at the **top**; the **shared** settings (targeting, display) sit at the **bottom** under a **"Shared combat settings"** divider. Shared settings apply to every combat profile and don't swap with the chip.
 
-**Each profile has its own colour.** Add a second profile and its chip picks up a distinct colour; the third another, and so on. That colour tints the profile's chip, all of its bordered groups (across the Combat, Health and Spells tabs), and the Workshop's Default-set weapon rows — so it's always obvious which profile you're looking at.
+**Each profile has its own colour.** Add a second profile and its chip picks up a distinct colour; the third another, and so on. That colour tints the profile's chip, all of its bordered groups (across the Combat, Health, Spells and Party tabs), and the Workshop's Default-set weapon rows — so it's always obvious which profile you're looking at.
 
 **Weapons — how they stay in sync:** a profile's weapons *are* the Workshop → Equipment Manager **Default** gear set's weapon slots (the surface the combat engine actually reads). So editing a profile's weapon pickers here and editing the Default set's Weapon / Off-Hand / Alt rows in the Workshop are the **same loadout, kept in sync** — and the Workshop shows a matching amber "Combat profile: `<name>`" marker over those rows. Switching a profile writes its stored weapons into the Default set, so your equipped weapon changes with the profile. (Backstab gear stays global on the Backstab set.)
 
@@ -3331,9 +3331,8 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **Default:** 5
 **What it does:** Caps how many times MudPlay tries to disarm a trap before giving up, whether for your own walk or a remote `@trap` command.
 - **A failed disarm can set the trap off,** so each retry risks its damage again.
-- **Paradigm:**
-  - A failure prints `You try to disarm the trap, but instead trigger it!`. After the cap, a walk stops at that exit rather than walking into the trap.
-  - `Your command had no effect.` means there's no trap that way, and the walk carries on.
+- **When the trap goes off (both realms),** each trap prints its own line, e.g. `You try to disarm the trap, but instead trigger it!` or `You trigger the trap, and a large spear shoots out!`. MudPlay knows them all and retries; after the cap, a walk stops at that exit rather than walking into the trap.
+- **Paradigm:** `Your command had no effect.` means there's no trap that way, and the walk carries on.
 - **Stock:** `You failed to disarm any trap to the <dir>.` means either a failed disarm or no trap there; the game doesn't say which. MudPlay retries up to the cap, and if it's still getting that answer it takes the exit as clear and walks on.
 - **No searching:** MudPlay never searches for a trap first. `disarm trap <dir>` works on the trap directly, and your game data already says which exits are trapped.
 

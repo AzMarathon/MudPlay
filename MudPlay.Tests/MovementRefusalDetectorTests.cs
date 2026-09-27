@@ -85,6 +85,9 @@ public sealed class MovementRefusalDetectorTests : IDisposable
     [InlineData("The gate is closed!")]
     [InlineData("The gate is closed.")]
     [InlineData("The door is closed in that direction!")]
+    // Stock engine wordings.
+    [InlineData("You are too stunned to move anywhere!")]
+    [InlineData("There is a closed door in that direction!")]
     // Paradigm terminates refusal lines with '!' — the confirmed capture that
     // stranded a Pending move, plus representative variants of the broadened set.
     [InlineData("There is no exit in that direction!")]

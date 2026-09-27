@@ -31,6 +31,8 @@ public static class KnownPatterns
     // before "You are no longer following X." — distinguishing a genuine
     // left-behind (auto-`@comeback`) from a deliberate uninvite/unfollow.
     public const string MovementFailedStuck = "movement.failed-stuck";   // "You can't seem to move anywhere!" — a prevents-movement gamedata flag blocked us
+    public const string RestRefusedSick     = "rest.refused-sick";       // "You are too sick to rest!" / "…to meditate!" — poisoned
+    public const string MeditateNotNeeded   = "rest.meditate-not-needed"; // "Meditation will not help at this time." — mana already full
     public const string MovementFailedHeavy = "movement.failed-heavy";   // "...too heavy to move" — over-encumbered (system line; never inside a chat channel)
     // "You are blind." (period) — a move issued while blinded SUCCEEDS but
     // starves the room display, exactly like a dark room. Distinct from the
@@ -497,7 +499,7 @@ public static class KnownPatterns
     public const string TrapFoundInSearch     = "trap.found-in-search";   // "You found a trap to the <dir>!"
     public const string TrapNoneInSearch      = "trap.none-in-search";    // "You notice nothing different to the <dir>."
     public const string TrapDisarmedSuccess   = "trap.disarmed-success";  // "You successfully disarmed the trap to the <dir>."
-    public const string TrapDisarmTriggered   = "trap.disarm-triggered";  // "You try to disarm the trap, but instead trigger it!" (no direction)
+    public const string TrapDisarmTriggered   = "trap.disarm-triggered";  // a trap's own "disarm failed and set it off" line, e.g. "You try to disarm the trap, but instead trigger it!" (no direction)
     public const string TrapDisarmFailedAny   = "trap.disarm-failed-any"; // "You failed to disarm any trap to the <dir>." (Stock: failed OR no trap)
 
     // Empty result of a room-wide `sea` — nothing concealed here. Lets AutoSearch
