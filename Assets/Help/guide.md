@@ -2554,7 +2554,7 @@ Every group a profile can carry has the checkbox on its header. While it's inclu
 
 **Setting them up (in Settings → Combat):** your current setup is already **Profile 1** — you always have at least one. The **Combat profile** selector sits near the top of the tab:
 - Numbered **chips** (`1 2 3 …`) are your profiles; the **active one has a ring**. Click a chip to load that profile into every per-profile group on the Combat, Health, Spells and Party tabs.
-- **The same chips sit at the top of the Health, Spells and Party tabs,** so you can flip between profiles to compare or set them from whichever tab you're on, without going back to Combat.
+- **The same chips, with ＋ and ✕, sit at the top of the Health, Spells and Party tabs,** so you can flip between, add or remove profiles from whichever tab you're on, without going back to Combat. The name box stays on the Combat tab.
 - **＋** adds a new, empty profile and switches to it, ready to fill in; **✕** removes the one you're on (the last one can't be removed).
 - The **name box** just below the chips names the profile you're viewing.
 

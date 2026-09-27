@@ -520,10 +520,6 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     private void OnSessionCommitted() => OnPropertyChanged(nameof(IsDirty));
 
-    [RelayCommand] private void AddProfile() => _session.AddNew();
-
-    [RelayCommand] private void RemoveActiveProfile() => _session.RemoveActive();
-
     public CombatSectionViewModel()
         : this(AppServices.Current.Profile, CreateStandaloneSession()) { }
 

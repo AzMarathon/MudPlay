@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.115.10**
-> - Health, Spells and Party tabs get the combat-profile chips at the top, so profiles can be switched and compared from any of them
+> **Version 3.115.11**
+> - Health, Spells and Party tabs get the combat-profile chips at the top, with add / remove, so profiles can be switched, compared, added and removed from any of them
 > - The Party tab's party healing and party bless follow the chips like the other tabs, instead of waiting for Apply
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

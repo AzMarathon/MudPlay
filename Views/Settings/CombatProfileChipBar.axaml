@@ -16,21 +16,27 @@
         </Style>
     </UserControl.Styles>
 
-    <ItemsControl ItemsSource="{Binding Chips}" VerticalAlignment="Center">
-        <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-                <StackPanel Orientation="Horizontal" Spacing="3"/>
-            </ItemsPanelTemplate>
-        </ItemsControl.ItemsPanel>
-        <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vmroot:CombatProfileMenuItem">
-                <Button Classes="ProfileChip" Classes.Active="{Binding IsActive}"
-                        Background="{Binding ChipBackground}"
-                        Foreground="{Binding ChipForeground}"
-                        BorderBrush="{Binding ChipBorder}"
-                        Content="{Binding Number}" Command="{Binding SwitchCommand}"
-                        ToolTip.Tip="{Binding Display}"/>
-            </DataTemplate>
-        </ItemsControl.ItemTemplate>
-    </ItemsControl>
+    <StackPanel Orientation="Horizontal" Spacing="6">
+        <ItemsControl ItemsSource="{Binding Chips}" VerticalAlignment="Center">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="3"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vmroot:CombatProfileMenuItem">
+                    <Button Classes="ProfileChip" Classes.Active="{Binding IsActive}"
+                            Background="{Binding ChipBackground}"
+                            Foreground="{Binding ChipForeground}"
+                            BorderBrush="{Binding ChipBorder}"
+                            Content="{Binding Number}" Command="{Binding SwitchCommand}"
+                            ToolTip.Tip="{Binding Display}"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Button Content="+" Command="{Binding AddProfileCommand}"
+                ToolTip.Tip="Add a new (empty) profile and switch to it"/>
+        <Button Content="✕" Command="{Binding RemoveActiveProfileCommand}"
+                ToolTip.Tip="Remove the active profile (keeps at least one)"/>
+    </StackPanel>
 </UserControl>

@@ -22,7 +22,6 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-
         <!-- Unlearned dropdown row: struck through + dimmed. -->
         <Style Selector="TextBlock.unlearnedPick">
             <Setter Property="TextDecorations" Value="Strikethrough"/>
@@ -85,20 +84,16 @@
                            Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
                 <Border Classes="SettingsSectionRule"/>
 
-                <!-- Combat-profile selector. The chips (also at the top of the Health,
-                     Spells and Party tabs) switch the staged active profile; +/✕ add an
-                     empty profile or remove the active one, and the name box renames it
-                     — those stay here. Every bordered group on those tabs belongs to
-                     the active profile; the edits save with the window. -->
+                <!-- Combat-profile selector. The chips and +/✕ (also at the top of the
+                     Health, Spells and Party tabs) switch, add and remove profiles; the
+                     name box renaming the active one stays here. Every bordered group
+                     on those tabs belongs to the active profile; the edits save with
+                     the window. -->
                 <TextBlock Classes="SectionHeader" Text="Combat profile" Margin="0,10,0,4"/>
                 <StackPanel Spacing="4" Margin="0,0,0,6">
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <TextBlock Classes="FieldLabel" Text="Profile:" VerticalAlignment="Center"/>
                         <settings:CombatProfileChipBar DataContext="{Binding ChipBar}"/>
-                        <Button Content="+" Command="{Binding AddProfileCommand}"
-                                ToolTip.Tip="Add a new (empty) profile"/>
-                        <Button Content="✕" Command="{Binding RemoveActiveProfileCommand}"
-                                ToolTip.Tip="Remove the active profile (keeps at least one)"/>
                     </StackPanel>
                     <TextBox Text="{Binding ActiveProfileName, Mode=TwoWay}" Width="220"
                              HorizontalAlignment="Left" PlaceholderText="Profile name"
