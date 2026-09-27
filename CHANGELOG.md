@@ -1,5 +1,10 @@
 # Version history
 
+## 3.110.13
+
+- Profile Management: New… starts the draft on the BBS you have selected, and Save As… names it there
+- Profile Management: new Copy button duplicates a character under a new name on the same BBS
+
 ## 3.110.11
 
 - Drop All / Hide All / Equip toolbar ▾ only changes what the button does; nothing is sent until you click the button

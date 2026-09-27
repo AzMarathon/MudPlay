@@ -87,15 +87,18 @@
 
                 <!-- Character actions -->
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0" Spacing="6">
-                    <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="4">
+                    <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="4">
                         <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
                                 Classes.tutTarget="{Binding HighlightAddCharacter}"
                                 Command="{Binding AddProfileCommand}" IsEnabled="{Binding HasBbsSelection}"/>
                         <Button Grid.Column="1" Content="Rename" HorizontalAlignment="Stretch"
                                 Command="{Binding RenameProfileCommand}" IsEnabled="{Binding HasProfileSelection}"/>
-                        <Button Grid.Column="2" Content="Delete" HorizontalAlignment="Stretch"
+                        <Button Grid.Column="2" Content="Copy" HorizontalAlignment="Stretch"
+                                Command="{Binding CopyProfileCommand}" IsEnabled="{Binding HasProfileSelection}"
+                                ToolTip.Tip="Duplicate the selected character under a new name on this BBS — settings, macros, gear sets and all."/>
+                        <Button Grid.Column="3" Content="Delete" HorizontalAlignment="Stretch"
                                 Command="{Binding DeleteProfileCommand}" IsEnabled="{Binding HasProfileSelection}"/>
-                        <Button Grid.Column="3" Content="Load" HorizontalAlignment="Stretch"
+                        <Button Grid.Column="4" Content="Load" HorizontalAlignment="Stretch"
                                 Command="{Binding LoadCommand}" IsEnabled="{Binding HasProfileSelection}"
                                 ToolTip.Tip="Load the selected character(s): the first fills this client (when it's idle), the rest each open in a new client."/>
                     </Grid>

@@ -24,9 +24,9 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
 {
     private readonly Func<bool> _isDisconnected;
     private readonly Action<ProfileRef> _swapToProfile;
-    private readonly Action _newProfile;
+    private readonly Action<string?> _newProfile;
     private readonly Action _saveCurrent;
-    private readonly Func<Task> _saveCurrentAs;
+    private readonly Func<string?, Task> _saveCurrentAs;
     private readonly Action<string> _editBbsSettings;
     private readonly ProfileService _profile;
     private readonly BbsProfileStore _bbs;
@@ -71,9 +71,9 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     public ProfileManagerViewModel(
         Func<bool> isDisconnected,
         Action<ProfileRef> swapToProfile,
-        Action newProfile,
+        Action<string?> newProfile,
         Action saveCurrent,
-        Func<Task> saveCurrentAs,
+        Func<string?, Task> saveCurrentAs,
         Action<string> editBbsSettings)
     {
         _isDisconnected = isDisconnected;
@@ -131,7 +131,9 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         CurrentProfileLabel = _profile.Current is null
             ? "No character loaded"
             : _profile.CurrentProfileName is null
-                ? "{default} — Use Save to update the default profile template"
+                ? (_profile.CurrentBbsName is { } draftBbs
+                    ? $"{{default}} on {draftBbs} — Save updates the default template, Save As names it"
+                    : "{default} — Use Save to update the default profile template")
                 : $"{_profile.CurrentBbsName} / {_profile.CurrentProfileName}";
 
     private void ReloadBbses()
@@ -231,6 +233,10 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         _bbs.Delete(name);
         _log?.Info("BBS", $"Removed BBS '{name}'.");
         if (deletingCurrent) _profile.LoadDefaultProfile();
+        // A default draft sitting on the removed BBS moves off it too.
+        else if (_profile.CurrentProfileName is null
+                 && string.Equals(_profile.CurrentBbsName, name, StringComparison.OrdinalIgnoreCase))
+            _profile.LoadDefaultProfile();
         ReloadBbses();
         SelectedBbs = Bbses.FirstOrDefault();
     }
@@ -302,6 +308,26 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         if (wasCurrent) _profile.NotifyMutated();   // title / bindings refresh (same-BBS rename)
         ReloadProfiles();
         SelectedProfile = Profiles.FirstOrDefault(r => string.Equals(r.Name, newName, StringComparison.Ordinal));
+    }
+
+    [RelayCommand]
+    private async Task CopyProfileAsync()
+    {
+        if (SelectedBbs is not { } bbs || SelectedProfile is not { } row) return;
+        string from = row.Ref.Name;
+        string suggested = $"{from} copy";
+        ProfileNameInputDialogViewModel vm = new(suggested, n => _profile.Exists(bbs, n));
+        string? name = await _dialogs.OpenWindowAsync<ProfileNameInputDialogViewModel, string>(vm);
+        if (string.IsNullOrWhiteSpace(name)) return;
+        if (_profile.Exists(bbs, name))
+        {
+            _dialogs.ShowInfo("Character not copied",
+                $"A character named “{name}” already exists on “{bbs}”.");
+            return;
+        }
+        _profile.CopyProfile(bbs, from, name);
+        ReloadProfiles();
+        SelectedProfile = Profiles.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal));
     }
 
     [RelayCommand]
@@ -417,7 +443,8 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private void NewCurrent()
     {
         if (!EnsureDisconnected("start a new character")) return;
-        _newProfile();
+        // The draft lands on the BBS picked here, not the first one on disk.
+        _newProfile(SelectedBbs);
         RefreshAfterCurrentChange();
     }
 
@@ -431,7 +458,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     [RelayCommand]
     private async Task SaveCurrentAsAsync()
     {
-        await _saveCurrentAs();
+        await _saveCurrentAs(SelectedBbs);
         RefreshAfterCurrentChange();
     }
 
