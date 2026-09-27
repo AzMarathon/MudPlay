@@ -535,8 +535,8 @@ public sealed class TrainerWalkManager : IDisposable
                 _phase = Phase.Funding;
                 _log?.Info("AutoTrain",
                     $"Training {levels} level(s) across {itinerary.Count} trainer(s) costs {cost:N0} copper — "
-                    + (_funding.IsAwaitingInventory
-                        ? "re-reading the purse before deciding."
+                    + (_funding.IsCheckingFunds
+                        ? "checking the purse and bank before deciding."
                         : "collecting the difference first."));
                 StateChanged?.Invoke();
                 return true;

@@ -56,12 +56,18 @@ public sealed class TrainFundingRouter
     // price against what we have rather than stalling the run.
     public TimeSpan InventoryWindow { get; set; } = TimeSpan.FromSeconds(3);
 
-    private enum Phase { Idle, AwaitingInventory, WalkingToLeg, Collecting, Withdrawing }
+    // How long to wait for the `bank` listing when no balance is known yet. It
+    // comes back in one burst; on timeout we price with whatever arrived.
+    public TimeSpan BankWindow { get; set; } = TimeSpan.FromSeconds(5);
+
+    private enum Phase { Idle, AwaitingBank, AwaitingInventory, WalkingToLeg, Collecting, Withdrawing }
 
     private readonly Func<RoomKey?> _currentRoom;
     private readonly Func<long> _onHandCopper;
     private readonly Func<long>? _reserveCopper;
     private readonly Action? _requestInventory;
+    private readonly Func<bool>? _bankBalancesKnown;
+    private readonly Action? _requestBankBalances;
     private readonly Func<IReadOnlyList<TrainFundingSource>> _sources;
     private readonly Func<RoomKey, RoomKey, int?> _distance;
     private readonly Func<RoomKey, bool> _walkTo;
@@ -104,8 +110,9 @@ public sealed class TrainFundingRouter
 
     public bool IsBusy => _phase != Phase.Idle;
 
-    // Begin is holding for the `i` that re-anchors the purse; nothing is priced yet.
-    public bool IsAwaitingInventory => _phase == Phase.AwaitingInventory;
+    // Begin is holding for the `bank` listing or the `i` that re-anchors the purse;
+    // nothing is priced yet.
+    public bool IsCheckingFunds => _phase is Phase.AwaitingBank or Phase.AwaitingInventory;
 
     public TrainFundingRouter(
         Func<RoomKey?> currentRoom,
@@ -127,7 +134,13 @@ public sealed class TrainFundingRouter
         // Asks for a fresh `i`. Wired, Begin re-anchors the purse before pricing
         // and the owner reports the parse through NoteInventoryRefreshed. Unwired,
         // pricing uses the last snapshot as it always did.
-        Action? requestInventory = null)
+        Action? requestInventory = null,
+        // Whether this session has a `bank` listing to plan withdrawals from, and a
+        // way to ask for one (the owner reports the reply through NoteBankRefreshed).
+        // Without a listing no bank is a funding source at all, so a purse that
+        // can't pay would read as short even with money on deposit.
+        Func<bool>? bankBalancesKnown = null,
+        Action? requestBankBalances = null)
     {
         _autoGetCash = autoGetCash ?? throw new ArgumentNullException(nameof(autoGetCash));
         _setAutoGetCash = setAutoGetCash ?? throw new ArgumentNullException(nameof(setAutoGetCash));
@@ -142,6 +155,8 @@ public sealed class TrainFundingRouter
         _log = log;
         _reserveCopper = reserveCopper;
         _requestInventory = requestInventory;
+        _bankBalancesKnown = bankBalancesKnown;
+        _requestBankBalances = requestBankBalances;
     }
 
     // Price the bill against everything reachable and act on the answer.
@@ -158,8 +173,50 @@ public sealed class TrainFundingRouter
         // A run the running purse already says can't go is answered from it, with no
         // `i`: the armed trigger re-checks every time its back-off lapses, and
         // re-reading the inventory each time while clearly short is just noise.
-        if (_requestInventory is null || !RunningPurseWouldProceed()) return Advance(firstCall: true);
+        if (_requestInventory is null) return Advance(firstCall: true);
+        if (!RunningPurseWouldProceed())
+        {
+            // Short on what we can see — but with no `bank` listing this session,
+            // money on deposit is invisible to the planner. Ask once, then decide.
+            if (_requestBankBalances is not null && _bankBalancesKnown?.Invoke() == false)
+            {
+                _phase = Phase.AwaitingBank;
+                int bankSession = _session;
+                _log?.Info(LogCategory, "No bank balance known this session — checking with `bank` "
+                    + "before deciding.");
+                _requestBankBalances();
+                _armTimer(BankWindow, () =>
+                {
+                    if (_session != bankSession || _phase != Phase.AwaitingBank) return;
+                    ContinueAfterBank();
+                });
+                return TrainFundingStart.Collecting;
+            }
+            return Advance(firstCall: true);
+        }
 
+        StartInventoryCheck();
+        return TrainFundingStart.Collecting;
+    }
+
+    // The `bank` listing landed. Only interesting while Begin is holding for one.
+    public void NoteBankRefreshed()
+    {
+        if (_phase != Phase.AwaitingBank) return;
+        ContinueAfterBank();
+    }
+
+    // With the deposits now visible: verify the purse and go if a plan covers the
+    // run, otherwise report the shortfall.
+    private void ContinueAfterBank()
+    {
+        _phase = Phase.Idle;
+        if (RunningPurseWouldProceed()) StartInventoryCheck();
+        else PriceNow();
+    }
+
+    private void StartInventoryCheck()
+    {
         // VERIFY BEFORE TRAVELLING. The carried-coin snapshot is authoritative only
         // on a full `i` and drifts between them, so a stale figure can read as
         // covering a bill it does not: the run then walks to the trainer, is refused
@@ -168,7 +225,7 @@ public sealed class TrainFundingRouter
         // and we price with what we have.
         _phase = Phase.AwaitingInventory;
         int session = _session;
-        _requestInventory();
+        _requestInventory?.Invoke();
         _armTimer(InventoryWindow, () =>
         {
             if (_session != session || _phase != Phase.AwaitingInventory) return;
@@ -176,7 +233,6 @@ public sealed class TrainFundingRouter
                 + "train against the last known purse.");
             PriceNow();
         });
-        return TrainFundingStart.Collecting;
     }
 
     // Whether the running purse says this run would go anywhere: funded outright,

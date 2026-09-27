@@ -1540,7 +1540,7 @@ public static class BugReportBuilder
               .Append(copper.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)).Append(" copper\n");
 
         sb.Append('\n');
-        Kv(sb, "Train funding errand", svc.TrainFunding.IsAwaitingInventory ? "re-reading the purse (i)"
+        Kv(sb, "Train funding errand", svc.TrainFunding.IsCheckingFunds ? "checking purse / bank (i, bank)"
             : svc.TrainFunding.IsBusy ? "collecting" : "idle");
         Kv(sb, "Trainer choice (if a run started now)", svc.TrainerWalk.DescribeTrainerChoiceFromHere());
         Kv(sb, "Last train shortfall", svc.TrainerWalk.LastFundingShortfall > 0

@@ -6706,7 +6706,13 @@ public sealed class AppServices
                        * Game.Inventory.CurrencyHoldings.CopperUnit(
                              cash.KeepOnHandDenomination);
             },
-            requestInventory: () => SendGameCommand("i"));
+            requestInventory: () => SendGameCommand("i"),
+            bankBalancesKnown: () => BankBalance.HasListing,
+            // `bank` is a global query, so this needs no walk. The probe completes on
+            // its reply window; the router hears it back on the UI thread.
+            requestBankBalances: () => _ = BankBalance.QueryAsync().ContinueWith(
+                _ => Avalonia.Threading.Dispatcher.UIThread.Post(() => TrainFunding.NoteBankRefreshed()),
+                TaskScheduler.Default));
         // The full parse that answers that `i`: an incremental pickup / drop patch is
         // exactly the drifting figure the refresh exists to replace. Harmless at any
         // other time, since the router only listens while it is holding for one.

@@ -63,6 +63,11 @@ public sealed partial class BankBalanceProbe : IDisposable
         _log = log;
     }
 
+    // True once this session has seen a `bank` listing: a parsed balance, or a
+    // query whose reply window closed (an empty reply means no bank was ever used).
+    // Before that every balance is unknown, not zero.
+    public bool HasListing { get; private set; }
+
     // Last-known deposit per bank name (case-insensitive) — a copy so callers
     // can't mutate the live map.
     public IReadOnlyDictionary<string, long> LastKnown =>
@@ -145,6 +150,7 @@ public sealed partial class BankBalanceProbe : IDisposable
                 NumberStyles.Integer, CultureInfo.InvariantCulture, out long copper))
         {
             _balances[name] = copper;
+            HasListing = true;
             _log?.Info("BankBalance", $"{name}: {copper:N0} copper on deposit");
             _pendingName = null;
         }
@@ -153,6 +159,7 @@ public sealed partial class BankBalanceProbe : IDisposable
     private void Complete(TaskCompletionSource<IReadOnlyDictionary<string, long>> tcs)
     {
         if (!_pending.Remove(tcs)) return;
+        HasListing = true;
         tcs.TrySetResult(LastKnown);
     }
 

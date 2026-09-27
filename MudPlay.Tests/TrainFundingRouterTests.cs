@@ -37,6 +37,11 @@ public sealed class TrainFundingRouterTests
         public bool RefreshInventory;
         public int InventoryRequests;
 
+        // Whether a `bank` listing has been seen this session, and how often one was
+        // asked for. Wired only alongside the `i` refresh.
+        public bool BankKnown = true;
+        public int BankRequests;
+
         // Timers fire only when the test says so, so each leg's settle window is an
         // explicit step rather than a race.
         private readonly List<Action> _timers = new();
@@ -72,6 +77,10 @@ public sealed class TrainFundingRouterTests
                 reserveCopper: () => Reserve,
                 requestInventory: refresh
                     ? () => { InventoryRequests++; Sent.Add("i"); }
+                    : null,
+                bankBalancesKnown: () => BankKnown,
+                requestBankBalances: refresh
+                    ? () => { BankRequests++; Sent.Add("bank"); }
                     : null);
             Router.Finished += r => Result = r;
         }
@@ -421,10 +430,10 @@ public sealed class TrainFundingRouterTests
         Assert.Contains("i", h.Sent);
         Assert.Empty(h.Walked);                              // nothing committed yet
         Assert.Null(h.Result);
-        Assert.True(h.Router.IsAwaitingInventory);           // the owner logs "re-reading", not "collecting"
+        Assert.True(h.Router.IsCheckingFunds);           // the owner logs "re-reading", not "collecting"
 
         h.Router.NoteInventoryRefreshed();
-        Assert.False(h.Router.IsAwaitingInventory);
+        Assert.False(h.Router.IsCheckingFunds);
     }
 
     [Fact]
@@ -437,7 +446,7 @@ public sealed class TrainFundingRouterTests
 
         Assert.Equal(TrainFundingStart.Short, h.Router.Begin(100, Trainer));
         Assert.Equal(0, h.InventoryRequests);
-        Assert.False(h.Router.IsAwaitingInventory);
+        Assert.False(h.Router.IsCheckingFunds);
     }
 
     [Fact]
@@ -449,6 +458,61 @@ public sealed class TrainFundingRouterTests
         Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(100, Trainer));
         Assert.Equal(1, h.InventoryRequests);
         Assert.Empty(h.Walked);
+    }
+
+    [Fact]
+    public void ShortWithNoBankListing_ChecksTheBankBeforeDeciding()
+    {
+        // Without a `bank` listing this session no deposit is a funding source, so
+        // a short purse would read as short even with money in the bank.
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000, BankKnown = false };
+
+        Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(100, Trainer));
+        Assert.Equal(1, h.BankRequests);
+        Assert.True(h.Router.IsCheckingFunds);
+        Assert.Null(h.Result);
+    }
+
+    [Fact]
+    public void TheBankListingShowsMoney_VerifiesThePurseThenGoesToWithdraw()
+    {
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000, BankKnown = false };
+        h.Router.Begin(100, Trainer);
+
+        h.BankKnown = true;
+        h.Sources.Add(Bank(50_000));                         // what the listing revealed
+        h.Router.NoteBankRefreshed();
+        Assert.Equal(1, h.InventoryRequests);                 // verify before travelling
+
+        h.Router.NoteInventoryRefreshed();
+        Assert.Equal(new[] { BankRoom }, h.Walked);
+    }
+
+    [Fact]
+    public void ABankNeverUsed_ListsNothing_AndTheRunIsShort()
+    {
+        // A character that has never used a bank gets no reply to `bank` at all, so
+        // the window closes on an empty listing. That's an answer, not a failure.
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000, BankKnown = false };
+        h.Router.Begin(100, Trainer);
+
+        h.BankKnown = true;
+        h.FireTimers();
+
+        Assert.False(h.Result!.Value.Funded);
+        Assert.Equal(4_060, h.Result!.Value.ShortfallCopper);
+        Assert.Equal(0, h.InventoryRequests);
+    }
+
+    [Fact]
+    public void ABankListingAlreadySeen_IsNotAskedForAgain()
+    {
+        // The armed trigger re-checks every time its back-off lapses; once the
+        // session has a listing, deposits and withdrawals keep it current.
+        Harness h = new(refresh: true) { Purse = 16_040, Reserve = 20_000, BankKnown = true };
+
+        Assert.Equal(TrainFundingStart.Short, h.Router.Begin(100, Trainer));
+        Assert.Equal(0, h.BankRequests);
     }
 
     [Fact]
