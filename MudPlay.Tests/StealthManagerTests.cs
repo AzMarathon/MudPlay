@@ -94,6 +94,24 @@ public sealed class StealthManagerTests
     }
 
     [Fact]
+    public void SneakBrokeOnEntry_ReportsOnce_WithinTheWindow()
+    {
+        using Harness h = new();
+        DateTimeOffset now = new(2026, 9, 26, 22, 22, 6, TimeSpan.Zero);
+        h.Stealth.NowProvider = () => now;
+        h.Feed("Sneaking...");
+        h.Feed("You make a sound as you enter the room!");
+
+        Assert.True(h.Stealth.TakeSneakBrokeOnEntry());
+        Assert.False(h.Stealth.TakeSneakBrokeOnEntry());   // taken
+
+        h.Feed("Sneaking...");
+        h.Feed("You make a sound as you enter the room!");
+        now = now.AddSeconds(10);                           // stale by the next room
+        Assert.False(h.Stealth.TakeSneakBrokeOnEntry());
+    }
+
+    [Fact]
     public void SneakFailed_TransitionsToFailed()
     {
         using Harness h = new();

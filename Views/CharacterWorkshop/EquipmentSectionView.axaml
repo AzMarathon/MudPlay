@@ -155,6 +155,8 @@
                         Margin="0,0,0,8" IsVisible="{Binding HasSet}">
                 <Button Content="Update from live" Command="{Binding SnapshotCurrentCommand}"
                         ToolTip.Tip="Fill the slots from the items you're wearing right now."/>
+                <Button Content="Clear all" Command="{Binding ClearAllCommand}"
+                        ToolTip.Tip="Empty every slot in this set (weapons and alternates too), back to {no change}."/>
                 <Button Content="Equip Now" Command="{Binding ApplyNowCommand}"
                         ToolTip.Tip="Wear this set now; blank ({no change}) slots are left untouched."/>
                 <Button Content="Item Finder" Command="{Binding OpenItemFinderCommand}"

@@ -2365,13 +2365,14 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - `Attempting to sneak...` (alone, no suffix) — the server ACK: the sneak took and you're armed to move. A move made now carries the sneak into the next room.
   - `Attempting to sneak...You don't think you're sneaking.` — soft rejection; the attempt didn't take. Resend `sn`.
   - `Sneaking...` — emitted on each room entry while sneak holds; post-move confirmation you arrived unseen.
-  - `You make a sound as you enter the room!` — loud loss of sneak.
+  - `You make a sound as you enter the room!` — loud loss of sneak. You enter seen, so a backstab opened in that room would fail. *([CONFIRMED] user, 2026-09-26; report `paradigm-20260926-222210`.)*
   - `You may not sneak right now!` — hard block; no auto-retry.
 - **Sneak breaks *silently* when you move into a room that doesn't re-emit `Sneaking...`** *([OBSERVED])* — no failure line, the stealth is just gone.
 - **Any NPC in the room prevents a sneak from taking** *([OBSERVED])* — an `sn` is wasted while a monster shares the room.
 
 **Client use:**
 - The backstab loadout is applied in the walker's pre-move step, ahead of the `sn`, rather than raced at room-clear (because of the equip-before-sneak rule).
+- `StealthManager.TakeSneakBrokeOnEntry` → `CombatManager`: with *Run if backstab fails* on, a loud entry runs instead of opening with a plain swing.
 
 ### Observing another player's failed sneak into your room
 *Status: CONFIRMED 2026-07-12 (user)*

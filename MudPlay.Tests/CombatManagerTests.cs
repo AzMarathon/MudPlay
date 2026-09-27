@@ -2413,6 +2413,44 @@ public sealed class CombatManagerTests
         Assert.True(fled);
     }
 
+    // Report paradigm-20260926-222210: the sneak broke on the way in ("You make a
+    // sound as you enter the room!") — the backstab would fail, so run, don't swing.
+    [Fact]
+    public void SneakBrokeOnEntry_RunIfBackstabFails_RunsInsteadOfAttacking()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.Settings.RunIfBackstabFails = true;
+        h.AddMonster(1, "carrion beast", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
+        h.Combat.SetSneakBrokeOnEntryProbe(() => true);
+        bool fled = false;
+        h.Combat.SetBackstabFailureFlee(() => fled = true);
+
+        h.Feed("Also here: carrion beast.");
+
+        Assert.True(fled);
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    [Fact]
+    public void SneakBrokeOnEntry_SettingOff_AttacksNormally()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.Settings.RunIfBackstabFails = false;
+        h.AddMonster(1, "carrion beast", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
+        h.Combat.SetSneakBrokeOnEntryProbe(() => true);
+        bool fled = false;
+        h.Combat.SetBackstabFailureFlee(() => fled = true);
+
+        h.Feed("Also here: carrion beast.");
+
+        Assert.False(fled);
+        Assert.NotNull(h.Combat.CurrentTarget);
+    }
+
     [Fact]
     public void Backstab_Failure_Whiff_TriggersFlee()
     {

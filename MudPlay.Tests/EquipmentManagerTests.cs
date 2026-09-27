@@ -1443,6 +1443,40 @@ public sealed class EquipmentManagerTests
         Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
     }
 
+    // Report paradigm-20260926-221353: a copied profile's blocks stayed on slots that
+    // Update from live had since emptied — the set no longer lists those slots at all.
+    [Fact]
+    public void RefreshBlocksForSet_ClearedSlot_DropsItsBlock()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Arms, "silver bracers"), Entry(EquipmentSlot.Head, "padded helm"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: n => n == "silver bracers");
+        mgr.RefreshBlocksForSet(set, announce: false);
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Arms));
+
+        set.Slots = new() { Entry(EquipmentSlot.Head, "padded helm") };   // Arms emptied
+        mgr.RefreshBlocksForSet(set, announce: false);
+
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Arms));
+    }
+
+    [Fact]
+    public void RefreshBlocksForSet_RePickedSlot_DropsTheOldItemsBlock()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Arms, "silver bracers"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: n => n == "silver bracers");
+        mgr.RefreshBlocksForSet(set, announce: false);
+
+        set.Slots = new() { Entry(EquipmentSlot.Arms, "leather bracers") };
+        mgr.RefreshBlocksForSet(set, announce: false);
+
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Arms));
+    }
+
     [Fact]
     public void Apply_RestrictedSetItem_IsBlockedAndNotSent()
     {
