@@ -267,7 +267,7 @@ public static class RemoteCommandCatalog
             ["@train"]        = new("@train", "trains (and applies your CP plan if Auto-train-stats is on); assumes you're at a trainer"),
             ["@equip"]        = new("@equip <set> [update] | @equip-all", "wears a saved gear set (default / backstab / resthp / restma / moving / bossing, or its keyword); 'update' saves what you're wearing into that set; @equip-all wears the Default set"),
             ["@goto"]         = new("@goto <destination>", "walks you to a GOTO favorite, a searched room (coords/name/acronym), or a boss"),
-            ["@loop"]         = new("@loop <name|coords|last> | @loop send <name|yes|no>", "starts a saved loop, an ad-hoc coordinate loop (≥2 coords), or re-runs the last loop ('last'); 'send' asks for a copy of one of my loops"),
+            ["@loop"]         = new("@loop <name|coords|last> | @loop send [name|yes|no]", "starts a saved loop, an ad-hoc coordinate loop (≥2 coords), or re-runs the last loop ('last'); 'send' asks for a copy of one of my loops (bare 'send' = the one I'm running)"),
             ["@lair"]         = new("@lair <name|coords>", "starts an Auto-Lair setup"),
             ["@stop"]         = new("@stop", "pauses your movement"),
             ["@rego"]         = new("@rego", "resumes your movement"),

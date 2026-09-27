@@ -6602,7 +6602,8 @@ public sealed class AppServices
         // @loop send — sender side paces its @loopdata lines the same way as @roomba sync; the
         // receiver saves a loop we asked for (window opened by our own outbound
         // `@loop send yes`, wired from the outbound-chat watcher in MainWindowViewModel).
-        LoopShare = new Game.Remote.LoopShareHandler(Loops, Log, paceScheduler: pacedReplyScheduler);
+        LoopShare = new Game.Remote.LoopShareHandler(Loops, Log, paceScheduler: pacedReplyScheduler,
+            runningLoop: () => LoopRunner.State is not Game.Map.LoopState.Idle ? LoopRunner.CurrentLoop : null);
         LoopShareInbox = new Game.Remote.LoopShareReceiver(Chat, Loops,
             notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)), Log);
 

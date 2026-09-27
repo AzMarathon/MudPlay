@@ -606,6 +606,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 - `@loop 5/10 5/11 5/12` — an ad-hoc loop from two or more `map/room` coordinates
 - `@loop last` — re-run the last loop run this session
 - `@loop send kings road` — ask the player for a copy of their saved loop (they offer it; answer `@loop send yes` or `@loop send no`)
+- `@loop send` — the same, for the loop they're running right now
 - `@lair mud men` — start an Auto-Lair (a setup name or coordinates)
 - `@timer dragon` — boss timers whose name matches "dragon" (bare `@timer` lists them all). Each line gives the full respawn plus every un-passed early-spawn window — on Paradigm all three (`-20%` / `-10%` / `-5%`), on Stock the single `87.5%`
 - `@death all` — every unrecovered death (bare `@death` gives just the latest)
@@ -661,7 +662,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 | Command | Args | Does |
 |---|---|---|
 | `@goto` | `<destination>` | walks you to a saved GOTO favorite, a searched room (coords / name / acronym), or a boss |
-| `@loop` | `<name>`, ≥2 coords, `last`, or `send <name>` / `send yes` / `send no` | starts a saved loop, an ad-hoc coordinate loop, or (`@loop last`) re-runs the last loop run this session — including an ad-hoc one that was never saved. `@loop send` asks for a copy of one of their loops instead (see *Getting a loop from another player* below) |
+| `@loop` | `<name>`, ≥2 coords, `last`, or `send [name]` / `send yes` / `send no` | starts a saved loop, an ad-hoc coordinate loop, or (`@loop last`) re-runs the last loop run this session — including an ad-hoc one that was never saved. `@loop send` asks for a copy of one of their loops instead (see *Getting a loop from another player* below) |
 | `@lair` | `<name>` or coords | starts an Auto-Lair setup |
 | `@stop` | — | pauses your movement |
 | `@rego` | — | resumes it |
@@ -672,7 +673,7 @@ A new movement command overrides an `@stop`: after `@stop`, an `@goto` / `@loop`
 
 Another MudPlay player who grants you **Move player** (the same grant `@loop` needs) can send you a copy of one of their saved loops over chat:
 
-1. Send them **`@loop send <name>`** — the name matches the same way `@loop` does (exact name first, otherwise every word you type, in any order; apostrophes are optional, so `kings road` finds *King's Road*). They reply **`{preparing to send: King's Road, yes to confirm, no to deny}`**, or tell you the name matched nothing or several loops.
+1. Send them **`@loop send <name>`** — the name matches the same way `@loop` does (exact name first, otherwise every word you type, in any order; apostrophes are optional, so `kings road` finds *King's Road*). They reply **`{preparing to send: King's Road, yes to confirm, no to deny}`**, or tell you the name matched nothing or several loops. A bare **`@loop send`** offers the loop they're running right now (or says they aren't running one).
 2. Answer **`@loop send yes`** to receive it, or **`@loop send no`** to call it off (they reply that it was cancelled). The offer lapses after two minutes.
 3. On yes they reply how many rooms and lines are coming, then send the loop as a few encoded `@loopdata` lines, paced so they don't crowd out anything else. Your client puts it back together and saves it to your Loops list, with a note in the terminal.
 
