@@ -82,6 +82,163 @@ public sealed class DarkRoomCombatWatcherTests
 
     // ----- inject on attack line ---------------------------------------
 
+    // The reported session, verbatim from the move that put the player in the
+    // dark tunnel.
+    private static readonly string[] Capture =
+    {
+        "Dark Cave, Tunnel",
+        "Obvious exits: north, southwest",
+        "[HP=236]:",
+        "bugbear captain moves into the room from nowhere.",
+        "[HP=236]:",
+        "The room is very dark - you can\'t see anything",
+        "[HP=236]:",
+        "You do not see bugbear captain here!",
+        "[HP=236]:",
+        "bugbear captain moves into the from the northeast.",
+        "[HP=236]:",
+        "The bugbear captain swings at you with their greataxe!",
+        "The bugbear captain all-out cleaves you for 20 damage!",
+        "The shield spike stabs bugbear captain for 2 damage!",
+        "[HP=216]:",
+        "The bugbear captain swings at you with their greataxe!",
+        "The bugbear captain swings at you with their greataxe!",
+        "[HP=216]:",
+    };
+
+    [Fact]
+    public void ReportedSession_RevealsOnTheFirstSwing()
+    {
+        // The monster swings before it lands anything, and MobMisses is specific
+        // enough to act on at once, so the reveal comes on that line — index 11,
+        // the first of the attack.
+        using Harness h = new();
+        h.AddMonster(963, "bugbear captain");
+        h.EnterDarkRoom();
+        int revealedAt = -1;
+
+        for (int i = 0; i < Capture.Length; i++)
+        {
+            h.Feed(Capture[i]);
+            if (revealedAt < 0 && h.Observations.Count > 0) revealedAt = i;
+        }
+
+        Assert.Equal(11, revealedAt);
+        Assert.Equal("bugbear captain", h.Watcher.LastRevealName);
+        RoomEntity injected = Assert.Single(h.Classifier.Current!.Value.Entities);
+        Assert.Equal("bugbear captain", injected.ResolvedName);
+        Assert.Equal(963, injected.MonsterNumber);
+    }
+
+    [Fact]
+    public void ReportedSession_InALitRoom_RevealsNothing()
+    {
+        // Same wire, no darkness flag. In a lit room "Also here:" is
+        // authoritative and this watcher must not fabricate a target, because
+        // nothing here would withdraw it.
+        using Harness h = new();
+        h.AddMonster(963, "bugbear captain");
+
+        foreach (string line in Capture) h.Feed(line);
+
+        Assert.Empty(h.Observations);
+        Assert.Null(h.Watcher.LastRevealName);
+    }
+
+    [Fact]
+    public void TheHitLinesName_IsReadOffTheLine_NotTheCaptureGroup()
+    {
+        // MobHits captures "bugbear captain all-out" out of this sentence, which
+        // resolves to nothing. The longest prefix that names a monster does.
+        using Harness h = new();
+        h.AddMonster(963, "bugbear captain");
+        h.EnterDarkRoom();
+
+        h.Feed("The bugbear captain all-out cleaves you for 20 damage!");
+
+        Assert.Equal("bugbear captain", h.Watcher.LastRevealName);
+    }
+
+    [Fact]
+    public void TheLongestNameWins_NotTheShorterOneThatAlsoExists()
+    {
+        using Harness h = new();
+        h.AddMonster(900, "bugbear");
+        h.AddMonster(963, "bugbear captain");
+        h.EnterDarkRoom();
+
+        h.Feed("The bugbear captain all-out cleaves you for 20 damage!");
+
+        Assert.Equal("bugbear captain", h.Watcher.LastRevealName);
+    }
+
+    [Fact]
+    public void AProperName_WithNoArticle_IsRevealedOnARepeatedSwing()
+    {
+        // "Goru-Nezar swings at you!" carries no article, so MobMisses cannot see
+        // it. The article-optional swing pattern can, and being loose it needs the
+        // same attacker twice inside a round.
+        using Harness h = new();
+        h.AddMonster(311, "Goru-Nezar");
+        h.EnterDarkRoom();
+
+        h.Feed("Goru-Nezar swings at you!");
+        Assert.Empty(h.Observations);
+
+        h.Feed("Goru-Nezar swings at you!");
+        Assert.Equal("Goru-Nezar", h.Watcher.LastRevealName);
+    }
+
+    [Fact]
+    public void AnEmoteFromANonMonster_RevealsNothing_EvenRepeated()
+    {
+        // The swing shape is also the shape of an emote. Repetition alone is not
+        // enough: it still has to resolve to a monster in the game data.
+        using Harness h = new();
+        h.EnterDarkRoom();
+
+        h.Feed("The barmaid smiles at you.");
+        h.Feed("The barmaid smiles at you.");
+
+        Assert.Empty(h.Observations);
+        Assert.NotNull(h.Watcher.LastHeldOffReason);
+    }
+
+    [Fact]
+    public void TheUncontractedRefusal_RetractsTheTarget()
+    {
+        // The realm prints "You do not see <X> here!". A retraction that only
+        // listened for the contraction left the phantom in place, and
+        // AlreadyPresent then suppressed every later reveal for that room.
+        using Harness h = new();
+        h.AddMonster(963, "bugbear captain");
+        h.EnterDarkRoom();
+        h.Feed("The bugbear captain swings at you with their greataxe!");
+        Assert.Single(h.Classifier.Current!.Value.Entities);
+
+        h.CurrentTarget = "bugbear captain";
+        h.Feed("You do not see bugbear captain here!");
+
+        Assert.Empty(h.Classifier.Current!.Value.Entities);
+    }
+
+    [Fact]
+    public void ARefusalNamingSomethingElse_LeavesTheTarget()
+    {
+        // The same refusal answers a cast at a hiding party member and a `get` that
+        // found nothing. Neither means the monster we're fighting has gone.
+        using Harness h = new();
+        h.AddMonster(963, "bugbear captain");
+        h.EnterDarkRoom();
+        h.Feed("The bugbear captain swings at you with their greataxe!");
+        h.CurrentTarget = "bugbear captain";
+
+        h.Feed("You do not see Bob here!");
+        h.Feed("You don't see rod here.");
+
+        Assert.Single(h.Classifier.Current!.Value.Entities);
+    }
+
     [Fact]
     public void KnownMonsterMissLine_InDark_InjectsForCombat()
     {

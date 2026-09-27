@@ -1905,6 +1905,37 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
+    public void TargetNotHere_NamingANonMonster_KeepsTheTarget()
+    {
+        // "You do not see Bob here!" answers a targeted cast at a hiding party
+        // member, and "You don't see rod here." a `get` that found nothing. The
+        // monster we're fighting is still here, so the target stays and no refresh
+        // goes out.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        int sentBefore = h.Sent.Count;
+
+        h.Feed("You do not see Bob here!");
+        h.Feed("You don't see rod here.");
+
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+        Assert.Equal(sentBefore, h.Sent.Count);
+    }
+
+    [Fact]
+    public void TargetNotHere_UncontractedForm_DropsTheTarget()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+
+        h.Feed("You do not see giant rat here!");
+
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    [Fact]
     public void TargetNotHere_WithoutCurrentTarget_NoOp()
     {
         // No target → nothing to drop. Don't send CR either; some

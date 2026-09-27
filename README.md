@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.112.2**
-> - Character Info, Calculators and Monster Intel: Paradigm accuracy and dodge keep the light-load bonus at exactly 33% encumbrance, matching the game's `stat all` (it was 11 accuracy / 7 dodge low there)
-> - Gear Finder: the Find Best dropdown keeps a steady width instead of resizing to each criterion as you scroll through them
+> **Version 3.112.3**
+> - Dark rooms: auto-combat reacts to a monster that only misses, and to one with a proper name (no leading article)
+> - Dark rooms: the attacker's name is matched against game data longest-first, so an attack line's verb isn't read as part of the name
+> - A target the server refuses with `You do not see <X> here!` is dropped, as `You don't see` already was, so a dead or departed dark-room target no longer blocks every later reveal
+> - Bug report shows the dark-room watcher's last reveal and last hold-off reason
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

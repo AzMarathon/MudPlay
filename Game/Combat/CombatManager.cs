@@ -3151,7 +3151,11 @@ public sealed partial class CombatManager : IDisposable
     // line was missed, the mob fled, or a partymate killed it between our send
     // and the server's resolve. Drop the current target and refresh the room so
     // the next observation picks a fresh target.
-    private void OnTargetNotHere(MatchResult _) => DropMissingTarget("target-not-here");
+    private void OnTargetNotHere(MatchResult m)
+    {
+        if (m.Groups.Count > 0 && !_classifier.RefusalNamesMonster(m.Groups[0], _currentTarget)) return;
+        DropMissingTarget("target-not-here");
+    }
 
     // Our attack came back as speech: `a kobold thief` answered with `You say "a kobold
     // thief"`. With no monster of that name in the room and talk-slow off, the server

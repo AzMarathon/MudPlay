@@ -1155,6 +1155,18 @@ public static class BugReportBuilder
         // position from moves and combat from attack lines. A "stuck in the dark"
         // report needs this flag to explain why the room display looks empty.
         Kv(sb, "In dark room", svc.RoomTracker.IsInDarkRoom.ToString());
+        // ...and what the dark-room reveal actually did, which is the whole
+        // question behind "it never fought back": whether it revealed something
+        // (and what), or held off (and why). Neither line present means the
+        // watcher saw nothing to act on.
+        if (svc.DarkRoomCombat is { } dark)
+        {
+            Kv(sb, "Dark reveal",
+                dark.LastRevealName is { Length: > 0 } rn
+                    ? $"{rn} at {dark.LastRevealAt:HH:mm:ss} from '{dark.LastRevealLine}'"
+                    : "(none this session)");
+            Kv(sb, "Dark held off", dark.LastHeldOffReason ?? "(none)");
+        }
         // Suspect-strike count + the last observation's exit sets drive the
         // walker's hidden-search / lost-recovery decisions — the exact inputs a
         // "walker got lost / re-searched" report needs.
