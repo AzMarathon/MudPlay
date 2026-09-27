@@ -3203,6 +3203,7 @@ These shape how the **leader** runs an Auto-train party trip (the level-11 rule 
 
 **Default:** every discovered trainer allowed
 **What it does:** A list of the trainers in your loaded game data that apply to you — the universal Training Room plus your own class's trainer — each with a checkbox controlling whether MudPlay is allowed to route to it. Uncheck a specific trainer to exclude it — useful if a trainer sits somewhere dangerous or inconvenient. A **Usable at my level** filter above the table narrows it to trainers whose level range covers your current level.
+**Which one gets walked to:** the nearest allowed trainer that serves your level, by steps from where you stand. When two are the same distance, the cheaper one (lower markup) wins. Each run logs its choice with every candidate's step count, or why it was skipped (`disabled`, `no path`), so the Program Log shows why a trainer was passed over. An unchecked row here shows up as `disabled`. Copying a profile copies this list too.
 
 ---
 

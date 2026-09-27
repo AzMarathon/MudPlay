@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.111.27**
+> **Version 3.111.28**
 > - Clearer Run if BS fails tooltip and Help: what it covers, when it holds back, and how it pairs with Hit and Run tactics
 > - Settings → Combat: backstab options grouped under Do BS attacks (greyed out while it's off); the combat-off stealth-running option sits on its own
 > - Settings → Combat: Kill all engaged moved inside the combat-profile box, since it's saved per combat profile
@@ -11,6 +11,7 @@
 > - The post-backstab check waits a beat for the round's kill lines, so it doesn't run (or `break`) from a monster the backstab already killed
 > - A flee holds the loop / walk until it lands even when combat already had it paused, so the route can't step on top of the flee
 > - Settings → Combat's weapon boxes follow the Default gear set when it's changed in the Workshop (Update from live etc.), and Save no longer writes the old weapon back
+> - Auto-train logs its trainer choice with every candidate's step count or skip reason, and the bug report shows it; equal-distance trainers go to the cheaper one
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -159,4 +159,52 @@ public sealed class TrainerCatalogSelectTests
             distance: t => t.Number == Silver.Number ? 0 : 9);
         Assert.Equal(Silver.Number, pick!.Value.Number);
     }
+
+    // ----- RankCandidates — the ranking the selectors pick from and the log shows -----
+
+    // Shaped on report paradigm-20260927-030929: a Gypsy at level 1 with the universal
+    // Training Room in two towns (one disabled) and the pricier Gypsy class trainer.
+    private static readonly TrainerShop GypsyRoom   = new(21, "Gypsy Training Room", 1, 384, "", 1, 10, 10, 300);
+    private static readonly TrainerShop UniSilver   = new(38, "Training Room", 1, 1376, "", 1, 10, 0, 0);
+    private static readonly TrainerShop UniNewhaven = new(38, "Training Room", 1, 2147, "", 1, 10, 0, 0);
+
+    [Fact]
+    public void RankCandidates_OrdersUsableByDistanceThenListsRuledOut()
+    {
+        var ranked = TrainerCatalog.RankCandidates(
+            new[] { GypsyRoom, UniSilver, UniNewhaven }, level: 1, classNumber: 10,
+            disabled: new HashSet<string> { UniNewhaven.RowKey },
+            distance: t => t.Room switch { 384 => 30, 1376 => 25, _ => 2 });
+
+        Assert.Equal(new[] { 1376, 384, 2147 }, ranked.Select(c => c.Trainer.Room));
+        Assert.Equal(TrainerSkip.Disabled, ranked[2].Skip);
+        Assert.Equal(UniSilver, TrainerCatalog.FirstUsable(ranked));
+        Assert.Equal(
+            "Training Room 1/1376 (25 steps), Gypsy Training Room 1/384 (30 steps), Training Room 1/2147 (disabled)",
+            TrainerCatalog.DescribeCandidates(ranked));
+    }
+
+    [Fact]
+    public void SelectNearest_EqualDistance_PrefersTheCheaperTrainer()
+    {
+        // Same walk either way — the lower markup is the cheaper lesson, whatever
+        // order the Shops table lists them in.
+        TrainerShop? pick = TrainerCatalog.SelectNearest(
+            new[] { GypsyRoom, UniSilver }, level: 1, classNumber: 10,
+            disabled: new HashSet<string>(), distance: _ => 12);
+
+        Assert.Equal(UniSilver, pick);
+    }
+
+    [Fact]
+    public void RankCandidates_AllRuledOut_SelectsNothingButStillExplains()
+    {
+        var ranked = TrainerCatalog.RankCandidates(
+            new[] { GypsyRoom, UniNewhaven }, level: 1, classNumber: 10,
+            disabled: new HashSet<string> { UniNewhaven.RowKey }, distance: _ => null);
+
+        Assert.Null(TrainerCatalog.FirstUsable(ranked));
+        Assert.Equal("Gypsy Training Room 1/384 (no path), Training Room 1/2147 (disabled)",
+            TrainerCatalog.DescribeCandidates(ranked));
+    }
 }

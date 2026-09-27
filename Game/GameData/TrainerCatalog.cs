@@ -35,6 +35,14 @@ public readonly record struct TrainerShop(
     public bool ServesClass(int classNumber) => ClassRest == 0 || ClassRest == classNumber;
 }
 
+// Why a trainer that serves the level/class can't be used from here. Ordered so a
+// ranking sorts usable trainers ahead of ruled-out ones.
+public enum TrainerSkip { None, Unreachable, Disabled }
+
+// One trainer as ranked by TrainerCatalog.RankCandidates: Distance is the hop count
+// when usable, null when Skip says why it was ruled out.
+public readonly record struct TrainerCandidate(TrainerShop Trainer, int? Distance, TrainerSkip Skip);
+
 // Enumerates the training shops (ShopType == 8) in the active game-data set,
 // resolving each one's host room(s) from Assigned To. A shop assigned to several
 // rooms yields one TrainerShop per room (so the universal Training Room appears
@@ -94,28 +102,8 @@ public static class TrainerCatalog
     // with no matching trainer. Pure: the caller supplies the distance metric (BFS).
     public static TrainerShop? SelectNearest(
         IReadOnlyList<TrainerShop> trainers, int level, int classNumber,
-        IReadOnlyCollection<string> disabled, Func<TrainerShop, int?> distance)
-    {
-        ArgumentNullException.ThrowIfNull(trainers);
-        ArgumentNullException.ThrowIfNull(disabled);
-        ArgumentNullException.ThrowIfNull(distance);
-
-        TrainerShop? best = null;
-        int bestDist = int.MaxValue;
-        foreach (TrainerShop t in trainers)
-        {
-            if (!t.HasRoom) continue;
-            if (!t.ServesLevel(level)) continue;
-            if (!t.ServesClass(classNumber)) continue;
-            if (disabled.Contains(t.RowKey)) continue;
-            if (distance(t) is { } dist && dist < bestDist)
-            {
-                best = t;
-                bestDist = dist;
-            }
-        }
-        return best;
-    }
+        IReadOnlyCollection<string> disabled, Func<TrainerShop, int?> distance) =>
+        FirstUsable(RankCandidates(trainers, level, classNumber, disabled, distance));
 
     // Pick the nearest trainer for a `train stats` (CP allocation) action. Unlike a
     // level-up `train`, applying stat points is NOT level-band gated — any trainer that
@@ -125,27 +113,73 @@ public static class TrainerCatalog
     // trainer yields distance 0, so it's selected and CP applies in place — no walk.
     public static TrainerShop? SelectNearestForStats(
         IReadOnlyList<TrainerShop> trainers, int classNumber,
+        IReadOnlyCollection<string> disabled, Func<TrainerShop, int?> distance) =>
+        FirstUsable(RankCandidates(trainers, level: null, classNumber, disabled, distance));
+
+    // Every trainer that could serve this level (null = any level, the `train stats`
+    // case) and class, ranked the way the selectors choose: usable ones nearest
+    // first — equal distance goes to the lower markup, the cheaper lesson — then
+    // the ruled-out ones with the reason. The selectors take the first usable entry,
+    // and the auto-trainer logs the same list, so a report shows exactly why one
+    // trainer beat another instead of just which one won.
+    public static IReadOnlyList<TrainerCandidate> RankCandidates(
+        IReadOnlyList<TrainerShop> trainers, int? level, int classNumber,
         IReadOnlyCollection<string> disabled, Func<TrainerShop, int?> distance)
     {
         ArgumentNullException.ThrowIfNull(trainers);
         ArgumentNullException.ThrowIfNull(disabled);
         ArgumentNullException.ThrowIfNull(distance);
 
-        TrainerShop? best = null;
-        int bestDist = int.MaxValue;
+        var candidates = new List<TrainerCandidate>();
         foreach (TrainerShop t in trainers)
         {
             if (!t.HasRoom) continue;
-            if (!t.ServesClass(classNumber)) continue;     // NO ServesLevel gate — stats aren't band-gated
-            if (disabled.Contains(t.RowKey)) continue;
-            if (distance(t) is { } dist && dist < bestDist)
-            {
-                best = t;
-                bestDist = dist;
-            }
+            if (level is { } lvl && !t.ServesLevel(lvl)) continue;
+            if (!t.ServesClass(classNumber)) continue;
+            if (disabled.Contains(t.RowKey))
+                candidates.Add(new(t, null, TrainerSkip.Disabled));
+            else if (distance(t) is { } dist)
+                candidates.Add(new(t, dist, TrainerSkip.None));
+            else
+                candidates.Add(new(t, null, TrainerSkip.Unreachable));
         }
-        return best;
+
+        candidates.Sort((a, b) =>
+        {
+            int c = a.Skip.CompareTo(b.Skip);
+            if (c != 0) return c;
+            c = (a.Distance ?? int.MaxValue).CompareTo(b.Distance ?? int.MaxValue);
+            if (c != 0) return c;
+            c = a.Trainer.Markup.CompareTo(b.Trainer.Markup);
+            return c != 0 ? c : string.CompareOrdinal(a.Trainer.RowKey, b.Trainer.RowKey);
+        });
+        return candidates;
     }
+
+    // One-line rendering of a ranking for the program log and the bug report, e.g.
+    // "Training Room 1/1376 (25 steps), Gypsy Training Room 1/384 (30 steps),
+    // Training Room 1/2147 (disabled)".
+    public static string DescribeCandidates(IReadOnlyList<TrainerCandidate> ranked)
+    {
+        ArgumentNullException.ThrowIfNull(ranked);
+        if (ranked.Count == 0) return "(no trainer serves this level/class)";
+        var parts = new List<string>(ranked.Count);
+        foreach (TrainerCandidate c in ranked)
+        {
+            string why = c.Skip switch
+            {
+                TrainerSkip.Disabled => "disabled",
+                TrainerSkip.Unreachable => "no path",
+                _ => c.Distance == 1 ? "1 step" : $"{c.Distance} steps",
+            };
+            parts.Add(string.Create(CultureInfo.InvariantCulture,
+                $"{c.Trainer.Name} {c.Trainer.Map}/{c.Trainer.Room} ({why})"));
+        }
+        return string.Join(", ", parts);
+    }
+
+    public static TrainerShop? FirstUsable(IReadOnlyList<TrainerCandidate> ranked) =>
+        ranked.Count > 0 && ranked[0].Skip == TrainerSkip.None ? ranked[0].Trainer : null;
 
     // Cheapest markup among trainers that can teach a character of classNumber up
     // to targetLevel (MinLVL <= targetLevel <= MaxLVL, class-ok). Training cost
