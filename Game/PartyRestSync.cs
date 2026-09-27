@@ -77,6 +77,9 @@ public sealed class PartyRestSync : IDisposable
         Telepath(_party.LeaderName!, "@ok");
     }
 
+    // True while any wait reason (a rest, a hold, a blinding…) still stands.
+    public bool IsHoldingWait => _waitReasons.Count > 0;
+
     // Broadcast @heal to the whole party (gangpath) — the flee-side signal a
     // low-HP follower emits instead of running. A follower that ran off alone
     // would break party formation and strand itself, so it asks the party

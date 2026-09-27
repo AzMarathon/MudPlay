@@ -717,6 +717,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 ### Party coordination — any active party member, no grant needed
 
 - `@wait` — hold: automation pauses until you `@ok` (which releases it).
+- `@waiting` — sent by your leader after going back for you: it's holding for your `@ok`, which your client sends once nothing holds you.
 - `@comeback` (optionally `<map/room>`) — a stranded member asks the party to come recover them; `@forget` calls that recovery off.
 - `@share` — splits your held coin evenly across the party.
 - `@ptrain` — the **Auto-train party** handshake between MudPlay clients (readiness reports, and the leader's give / withdraw / train orders during a party training trip). You never type it; a client only acts on it while its own *Auto-train party* box is on, and only on orders from its current leader. See **Auto-train party** under Settings → Auto-Trainer.
@@ -2794,7 +2795,7 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 ### Re-invite lost party members
 
 **Default:** On
-**What it does:** Leader-only. If a party member disconnects and reconnects within the grace window (see "If leading, wait only" below), you automatically re-invite them instead of having to notice and do it manually.
+**What it does:** Leader-only. If a party member disconnects and reconnects within the grace window (see "If leading, wait only" below), you automatically re-invite them instead of having to notice and do it manually. It also covers a follower your move left behind because they couldn't move (held, knocked down): you go back for them and re-invite them (see "If leading, wait only").
 
 ### Send @join nags to invited members
 
@@ -2832,7 +2833,13 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 ### If leading, wait only (s)
 
 **Default:** `90` seconds
-**What it does:** As leader, how long you keep watching for a disconnected member to come back before giving up on them — and how long a member's `@wait` holds your automation before you give up and move on without their `@ok` (0 = wait until they send it).
+**What it does:** As leader, the one window every party wait uses (0 = wait until they send it / come back):
+- how long you keep watching for a disconnected member to come back before giving up on them;
+- how long a member's `@wait` (or `@held`) holds your automation before you move on without their `@ok`;
+- how long you wait for a member you went back for to follow you again;
+- how long you hold for a member you left behind (below) after they rejoin.
+
+**Left behind by a hold.** If a follower can't move when your walk, loop or Auto-Lair steps on — held or knocked down — the game drops them from the party (`<name> is no longer following you.`; with one follower the whole party disbands). With **Re-invite lost party members** on, you stop, backtrack to find them, and re-invite them. Once they follow, their party row shows **Held** and you hold the full window again, or until their `@ok`. Their client is sent `@waiting` so it knows you're holding: a MudPlay follower answers `@ok` at once if nothing still holds it, or as soon as the hold clears.
 
 **As a follower:** your client sends the leader `@wait` when you drop below a rest floor, and asks again whenever you drop below one afresh (HP or mana) or get walked on while still recovering — so if the leader's wait window runs out while you're resting, the next drop or the next room you're pulled into re-asks instead of leaving you dragged along. `@ok` goes once you're back to full rest-max.
 

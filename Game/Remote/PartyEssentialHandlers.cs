@@ -18,7 +18,8 @@ namespace MudPlay.Game.Remote;
 //     moves in lock-step; `meditate`→`medi` and `go <dir>`→bare-direction are the
 //     only token rewrites.
 //   - Receive-only signalling — @wait / @ok. Recorded in WaitingMembers, which
-//     the pause-gate reads to decide whether to hold automation.
+//     the pause-gate reads to decide whether to hold automation. @waiting is the
+//     leader's nudge back: it's holding for our @ok.
 //
 // Lifetime: registered once at AppServices construction after the engine ships.
 // Disposal unregisters every command so repeated AppServices builds in tests
@@ -29,7 +30,7 @@ public sealed class PartyEssentialHandlers : IDisposable
     private static readonly string[] RegisteredCommands =
     {
         "@version", "@health", "@status", "@where", "@who", "@path",
-        "@party", "@wait", "@ok",
+        "@party", "@wait", "@ok", "@waiting",
         "@lives", "@invite", "@join",
     };
 
@@ -43,6 +44,7 @@ public sealed class PartyEssentialHandlers : IDisposable
     private readonly Func<string?>? _readDraggedBy;
     private readonly Func<MessageFlags>? _readAilments;
     private readonly Func<bool>? _readFleeing;
+    private readonly Func<bool>? _readHoldingWait;
     private Action<byte[]>? _wireSender;
 
     // Paradigm-only authoritative position re-fix seam. Bound by AppServices to
@@ -95,7 +97,8 @@ public sealed class PartyEssentialHandlers : IDisposable
         Func<MovementStatus>? readMovement = null,
         Func<string?>? readDraggedBy = null,
         Func<MessageFlags>? readAilments = null,
-        Func<bool>? readFleeing = null)
+        Func<bool>? readFleeing = null,
+        Func<bool>? readHoldingWait = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(player);
@@ -110,6 +113,7 @@ public sealed class PartyEssentialHandlers : IDisposable
         _readDraggedBy = readDraggedBy;
         _readAilments = readAilments;
         _readFleeing = readFleeing;
+        _readHoldingWait = readHoldingWait;
 
         // Categories sourced from RemoteCommandCatalog — single source of truth
         // for every documented @-command's required permission category.
@@ -125,6 +129,7 @@ public sealed class PartyEssentialHandlers : IDisposable
         Register("@party",   OnParty);
         Register("@wait",    OnWait);
         Register("@ok",      OnOk);
+        Register("@waiting", OnWaiting);
         Register("@lives",   OnLives);
         Register("@invite",  OnInvite);
         Register("@join",    OnJoin);
@@ -700,6 +705,19 @@ public sealed class PartyEssentialHandlers : IDisposable
         WaitingMembers.Remove(ctx.Sender);
         SetMemberWaitFlag(ctx.Sender, false);
         if (wasPaused && !IsPaused) PauseGateChanged?.Invoke(false);
+    }
+
+    // @waiting — our leader is holding for our @ok. It sends this after re-collecting
+    // us from a room we were left in (held / knocked down): we fell out of the party
+    // there, so a hold that cleared while we were out never sent its @ok. Answer
+    // @ok now when nothing still holds us; otherwise the @ok goes out when the last
+    // hold clears (PartyRestSync.RequestOk), since we're back in the party.
+    private void OnWaiting(RemoteCommandContext ctx)
+    {
+        string senderGiven = GivenName(ctx.Sender);
+        if (!IsBelievedLeader(senderGiven) || _wireSender is null) return;
+        if (_readHoldingWait?.Invoke() == true) return;
+        _wireSender(Encoding.Latin1.GetBytes($"/{senderGiven} @ok\r"));
     }
 
     // Force-release every outstanding @wait at once — the second release path

@@ -227,6 +227,20 @@ public sealed class PartyAilmentTracker : IDisposable
         }
     }
 
+    // A follower our move left behind (they couldn't move with us) has rejoined.
+    // Nothing announced a hold — they fell out of the party with it — so infer one:
+    // light their Held chip and pause for their @ok exactly as an inbound @held
+    // would, over a fresh wait window.
+    public void NoteInferredHold(string member)
+    {
+        if (string.IsNullOrWhiteSpace(member)) return;
+        _party.SetMemberAilment(member, MessageFlags.MovementPrevented, true);
+        _essentials.NotePause(member);
+        _expiryAtMs.TryAdd((GivenName(member), MessageFlags.MovementPrevented),
+            _now() + (long)(FallbackDurationSeconds * 1000));
+        _log?.Info(LogCategory, $"{member} was left behind by our move — treating them as held until their @ok");
+    }
+
     // Reconcile a member's curable-ailment chips against a @status reply — the
     // pull-based counterpart to the push-based .@X on/off say. The reply body
     // (wrapped in { } by RemoteCommandManager.SendReply) ends with an ailment

@@ -6,7 +6,7 @@ using MudPlay.Services.Patterns;
 
 namespace MudPlay.Game.Remote;
 
-// Leader-side reconnect recovery. Two entry paths converge on the same walk-to-
+// Leader-side follower recovery. Three entry paths converge on the same walk-to-
 // re-collect flow:
 //   - Path A (@comeback): a stranded follower telepaths @comeback <map>/<room>
 //     (e.g. @comeback 9/1012) or a bare @comeback. Used when the follower still
@@ -16,8 +16,11 @@ namespace MudPlay.Game.Remote;
 //     (PartyManager raises MemberReturned), the leader telepaths @where, parses
 //     the location reply, and recovers them — the fallback for a follower who
 //     cleanly closed and lost their @comeback memory.
+//   - Path C (left behind): a follower who couldn't move with us (held, knocked
+//     down) falls off the party (PartyManager raises MemberLeftBehind); we
+//     backtrack to where we left them.
 //
-// Both paths run the same gates before committing: skip if our party is already
+// All paths run the same gates before committing: skip if our party is already
 // full (we backfilled the slot while they were gone) and skip if they're farther
 // than the return-distance setting, declining via @forget + a spoken reason so
 // the member isn't left waiting. Otherwise we pause the running movement engine,
@@ -55,8 +58,10 @@ public sealed class PartyComebackManager : IDisposable
 
     // How long to wait for the recovered follower's "X started to follow you."
     // confirmation before resuming the paused engine anyway, so a follower who
-    // never re-follows can't hang the leader indefinitely.
-    private static readonly TimeSpan FollowTimeout = TimeSpan.FromSeconds(20);
+    // never re-follows can't hang the leader indefinitely. Mirrors Settings → Party
+    // "If leading, wait only" like every other leader-side wait; zero waits until
+    // they follow.
+    public TimeSpan FollowWaitWindow { get; set; } = TimeSpan.FromSeconds(90);
 
     // How long a path-B @where probe stays pending before we stop watching for its
     // reply — a member who never answers shouldn't leave a stale probe that
@@ -102,6 +107,12 @@ public sealed class PartyComebackManager : IDisposable
     private Action<string> _reply = static _ => { };
     private readonly List<RoomKey> _backtrack = new();
     private int _backtrackIndex;
+    // The recovery in flight is for a follower our move left behind (path C).
+    private bool _leftBehind;
+
+    // Raised with the given name when a left-behind follower re-follows, before the
+    // engine resumes — AppServices treats them as held (chip + wait for @ok).
+    public Action<string>? LeftBehindRejoined { get; set; }
 
     // Consecutive recovery walks that couldn't REACH a member, keyed by given name.
     // A follower stranded past a gate the leader can't cross (an item / key / toll
@@ -134,6 +145,9 @@ public sealed class PartyComebackManager : IDisposable
     // idle. Surfaced in the bug report's Party section so a "leader never came
     // back for me" report shows whether a recovery was in flight.
     public string? RecoveringMember => _busy ? _senderGiven : null;
+
+    // Whether that recovery is for a follower our own move left behind (path C).
+    public bool RecoveringLeftBehind => _busy && _leftBehind;
 
     // Members we've hit the failed-recovery cap on and are now declining outright
     // (name → failure count). Surfaced in the bug report so a "leader keeps
@@ -184,7 +198,7 @@ public sealed class PartyComebackManager : IDisposable
         _bfs = bfs;
         _log = log;
 
-        _followTimer = new DispatcherTimer { Interval = FollowTimeout };
+        _followTimer = new DispatcherTimer();
         _followTimer.Tick += OnFollowTimeout;
         _crFallbackTimer = new DispatcherTimer { Interval = CrRecoverFallback };
         _crFallbackTimer.Tick += (_, _) => FireCrFallback();
@@ -195,6 +209,8 @@ public sealed class PartyComebackManager : IDisposable
         // for a dropped member re-entering inside the grace window while we lead —
         // fired before it clears its own grace entry, so there's no race.
         _party.MemberReturned += OnMemberReturned;
+        // Path C trigger: a follower who couldn't move with us fell off the party.
+        _party.MemberLeftBehind += OnMemberLeftBehind;
         // Path B reply: the probed member's @where answer arrives as a telepath.
         _subs.Add(router.Subscribe(KnownPatterns.ConversationTelepathIn, OnTelepathIn));
 
@@ -233,6 +249,7 @@ public sealed class PartyComebackManager : IDisposable
         _walker.Event -= OnWalkEvent;
         _party.MemberFollowConfirmed -= OnMemberFollowConfirmed;
         _party.MemberReturned -= OnMemberReturned;
+        _party.MemberLeftBehind -= OnMemberLeftBehind;
         foreach (IDisposable sub in _subs) sub.Dispose();
         _subs.Clear();
         _followTimer.Stop();
@@ -334,6 +351,26 @@ public sealed class PartyComebackManager : IDisposable
             if (now - kv.Value > ProbeTimeout) (stale ??= new()).Add(kv.Key);
         if (stale is null) return;
         foreach (string key in stale) _pendingProbes.Remove(key);
+    }
+
+    // ----- left behind (path C) -------------------------------------
+
+    // The follower couldn't move when we did (held / knocked down) and is standing
+    // in a room we just walked out of. Only a running engine walked away from them —
+    // a manual move leaves the pickup to the player — so an idle leader stays silent
+    // rather than telling the member "I'm idle". Recovery backtracks along the path
+    // just taken, since that's where they were left.
+    private void OnMemberLeftBehind(string given)
+    {
+        if (string.IsNullOrEmpty(given) || _busy) return;
+        if (SnapshotRunningEngine().Kind == ResumeKind.None)
+        {
+            _log?.Info(LogCategory, $"{given} was left behind, but no engine is running — leaving the pickup to you.");
+            return;
+        }
+        _log?.Info(LogCategory, $"{given} was left behind by our move — going back for them.");
+        BeginRecovery(given, null, TelepathReply(given));
+        _leftBehind = _busy && string.Equals(_senderGiven, given, StringComparison.OrdinalIgnoreCase);
     }
 
     // ----- shared recovery decision + drive --------------------------
@@ -521,6 +558,7 @@ public sealed class PartyComebackManager : IDisposable
     private void GoIdle()
     {
         _busy = false;
+        _leftBehind = false;
         _phase = ComebackPhase.Idle;
         _followTimer.Stop();
         _backtrack.Clear();
@@ -546,7 +584,7 @@ public sealed class PartyComebackManager : IDisposable
     // Count a recovery walk that couldn't reach the member (plan-time no-path or a
     // mid-route gate refusal). Drives the MaxFailedRecoveries backoff in
     // BeginRecovery. A follow-confirm clears the count; only failures to REACH them
-    // count — a reach-but-no-follow (FollowTimeout) is a different problem and stays
+    // count — a reach-but-no-follow (FollowWaitWindow) is a different problem and stays
     // neutral.
     private void NoteRecoveryFailedToReach()
     {
@@ -630,7 +668,11 @@ public sealed class PartyComebackManager : IDisposable
         _reply($"found you — re-inviting {_senderGiven}");
         _party.Invite(_senderGiven);
         _followTimer.Stop();
-        _followTimer.Start();
+        if (FollowWaitWindow > TimeSpan.Zero)
+        {
+            _followTimer.Interval = FollowWaitWindow;
+            _followTimer.Start();
+        }
     }
 
     private void OnMemberFollowConfirmed(string name)
@@ -643,7 +685,19 @@ public sealed class PartyComebackManager : IDisposable
 
         if (!_busy || _phase != ComebackPhase.AwaitingFollow) return;
         if (!string.Equals(GivenName(name), _senderGiven, StringComparison.OrdinalIgnoreCase)) return;
-        _reply("got you — resuming");
+        if (_leftBehind)
+        {
+            // Whatever held them may still hold them: wait the full window for their
+            // @ok, and tell them so — a hold that cleared while they were out of the
+            // party never sent one.
+            LeftBehindRejoined?.Invoke(_senderGiven);
+            _wire.Send($"/{_senderGiven} @waiting");
+            _reply("got you — waiting for your @ok");
+        }
+        else
+        {
+            _reply("got you — resuming");
+        }
         Resume();
     }
 

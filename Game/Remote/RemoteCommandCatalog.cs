@@ -184,6 +184,7 @@ public static class RemoteCommandCatalog
             // None = "any active party member", per engine convention.
             ["@wait"]         = PlayerRemoteControls.None,
             ["@ok"]           = PlayerRemoteControls.None,
+            ["@waiting"]      = PlayerRemoteControls.None,
             ["@comeback"]     = PlayerRemoteControls.None,
             // @forget is the reconnect-recovery teardown paired with @comeback:
             // a follower calls off their own pickup, or a leader declines to
@@ -293,6 +294,7 @@ public static class RemoteCommandCatalog
             ["@dupe"]         = new("@dupe <player>", "copies your query and roomba permissions onto that player (Elevated; one use until reset in the client; telepath / gangpath only)"),
             ["@wait"]         = new("@wait", "hold: automation pauses until @ok releases it"),
             ["@ok"]           = new("@ok", "releases a @wait hold"),
+            ["@waiting"]      = new("@waiting", "leader is holding for your @ok; answered with @ok once nothing holds you"),
             ["@comeback"]     = new("@comeback [map/room]", "stranded member asks the party to come recover them"),
             ["@forget"]       = new("@forget", "calls off a @comeback recovery"),
             ["@heal"]         = new("@heal", "asks a configured party healer to heal whoever's low"),

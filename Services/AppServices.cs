@@ -2436,7 +2436,8 @@ public sealed class AppServices
             readAilments: () => Conditions?.ActiveFlags ?? Models.GameData.MessageFlags.None,
             // HealthManager is built later in OnGameDataLoaded; the lambda reads it
             // lazily so a @status arriving after startup sees the live flee state.
-            readFleeing: () => Health?.IsFleeing ?? false);
+            readFleeing: () => Health?.IsFleeing ?? false,
+            readHoldingWait: () => PartyRest?.IsHoldingWait ?? false);
         // Drives the on-join @health exchange + the
         // periodic par poll. Wire-sender + cadence-from-settings hookup
         // happens in MainWindowViewModel.
@@ -6620,6 +6621,9 @@ public sealed class AppServices
         // from Settings → Other by ApplyOtherFromActiveProfile on load.
         PartyComeback = new Game.Remote.PartyComebackManager(
             RemoteCommands, Party, RoomTracker, RoomClassifier, Walker, LoopRunner, AutoLair, Router, Bfs, Log);
+        // A follower we backtracked for couldn't move — hold for their @ok as if
+        // they'd sent @held (chip + full wait window).
+        PartyComeback.LeftBehindRejoined = given => PartyAilment?.NoteInferredHold(given);
 
         // @where reply → nav-map flash. Recognises the wrapped location reply an
         // @where'd MudPlay client telepaths back and routes it to the (open) map;
@@ -10075,6 +10079,8 @@ public sealed class AppServices
         // Same window holds movement for a dropped follower to reconnect and
         // re-party before we resume.
         PartyDisconnectMovement.GraceWindow = TimeSpan.FromSeconds(Math.Clamp(dto.IfLeadingWaitTotalSec, 0, 3600));
+        // And how long a recovery waits for a re-invited follower to follow again.
+        PartyComeback.FollowWaitWindow = TimeSpan.FromSeconds(Math.Clamp(dto.IfLeadingWaitTotalSec, 0, 3600));
         // Leader-side recovery reach — the farthest we'll BFS-walk to re-collect a
         // returning member before declining via @forget.
         PartyComeback.ReturnDistanceRooms = Math.Clamp(dto.ReturnDistanceRooms, 1, 500);
@@ -10107,6 +10113,7 @@ public sealed class AppServices
         AutoParty.InviteWaitWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
         PartyWaitMovement.WaitWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
         PartyDisconnectMovement.GraceWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
+        PartyComeback.FollowWaitWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
         PartyComeback.ReturnDistanceRooms = defaults.ReturnDistanceRooms;
         Party.LocalRankPreference = defaults.Rank;
         PartyBroadcaster.AutoExpResetEnabled = defaults.ResetStatisticsOnLoopStart;

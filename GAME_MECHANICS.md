@@ -4008,6 +4008,18 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - The client keys on the follow line to stay located; without it the tracker keeps its old anchor, reads every new room as a mismatch and falls to Lost within a few rooms.
   - The follow line is handled via `FollowMoveObserver` → `RoomTracker.NoteFollowMove`. `NoteFollowMove` wraps `RoomTracker.NoteMoveSent`'s prediction core but flags the move as a follow-drag, so its near-instant arrival isn't taken for a passive re-look.
 
+### A follower who can't move is left behind
+*Status: CONFIRMED 2026-09-26 (user; report `paradigm-20260926-195517`) · Realm: Paradigm (wire text observed there; Stock not recorded)*
+
+- **When the leader moves, only the followers who can move go with them.** A follower who is held or knocked down stays in the room and drops out of the party. *([CONFIRMED] user, 2026-09-26.)* A cure such as *freedom* or *cure paralysis* may free them, depending on the hold.
+- **The leader sees `<name> is no longer following you.`** *([OBSERVED] report `paradigm-20260926-195517`.)*
+- **With only one follower, the party then disbands: `Your party has been disbanded.`** *([OBSERVED] same report; see Party size bounds — a party needs 2.)*
+- **Nothing tells the leader why.** A held follower's `@wait` may never arrive before the leader's next step. In the report above it didn't, although the same follower had sent `@wait (can't move)` / `@ok` a minute earlier.
+
+**Client use:**
+- `PartyManager.OnLeftBehind` → `MemberLeftBehind` → `PartyComebackManager` path C: backtrack, re-invite, then `PartyAilmentTracker.NoteInferredHold` (Held chip + `@wait` pause over the full "If leading, wait only" window) and a `@waiting` telepath the follower answers with `@ok` once nothing holds it (`PartyEssentialHandlers.OnWaiting`).
+- **Client policy** (user, 2026-09-26): gated on *Re-invite lost party members*; only a running walk / loop / Auto-Lair goes back.
+
 ### Losing the leader disbands the party
 *Status: CONFIRMED*
 
@@ -4137,6 +4149,7 @@ This covers how a client learns which ailments afflict itself and its party memb
   - The timer is the "If leading, wait only (s)" cap (`PartySettings.IfLeadingWaitTotalSec`).
   - On expiry the leader gives up and resumes, so a dropped / AFK member can't strand the party forever.
 - **The leader-side "ignore @wait when leading" opt-out drops inbound `@wait` before it ever pauses.**
+- **`@waiting` (leader → follower, TELEPATH) is MudPlay's nudge that the leader is holding for an `@ok`.** It is sent after re-collecting a follower who was left behind (see *A follower who can't move is left behind*). *(**Client policy**, user, 2026-09-26.)*
 - **Held follows the same `@wait` / `@ok` flow and cannot be suppressed.** A held member can't move, so the party waits for them. Held has no `Ignore` gate, so it is never suppressible.
   - **Both signals pause the leader.** A held member telepaths `@wait`/`@ok` *in addition to* announcing its `.@held` on say: the say lights the member's chip, and the `@wait` pauses the leader. The inbound `@held` say also routes through the same pause (`PartyEssentialHandlers.NotePause`), and that member's `@ok` on cure releases it.
 - **All of this is party-only.** Solo (no party / no leader / you ARE the leader), nothing is telepathed. Self recognition and clearing run entirely off the apply/wear-off spell messages.

@@ -268,7 +268,9 @@ public static class BugReportBuilder
         // Leader-side recovery state — who (if anyone) we're currently walking to
         // re-collect, and the reach cap that gates it. A "leader never came back
         // for me" report needs both.
-        Kv(sb, "Recovering member", svc.PartyComeback.RecoveringMember ?? "(none in flight)");
+        Kv(sb, "Recovering member", svc.PartyComeback.RecoveringMember is { } rec
+            ? (svc.PartyComeback.RecoveringLeftBehind ? $"{rec} (left behind by our move)" : rec)
+            : "(none in flight)");
         Kv(sb, "Recovery reach (rooms)", svc.PartyComeback.ReturnDistanceRooms.ToString());
         // Members we gave up chasing (return route un-crossable) — a "leader keeps
         // abandoning me" report should show the give-up was deliberate.

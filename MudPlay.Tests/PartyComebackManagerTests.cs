@@ -431,6 +431,98 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal(WalkState.Idle, h.Walker.State);
     }
 
+    // ----- path C: a follower left behind by our move ----------------
+
+    // Report paradigm-20260926-195517: a held follower couldn't move when the
+    // leader's walker stepped on — "X is no longer following you." — and the
+    // leader walked off without them.
+    [Fact]
+    public void LeftBehind_WhileEngineRuns_BacktracksForThem()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));   // where Tank is left
+        StartLair(h);                               // we've moved on to 1/1
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.False(h.Lair.IsActive);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+        Assert.True(Sent(h, "/Tank {backtracking"));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+    }
+
+    [Fact]
+    public void LeftBehind_Rejoins_HoldsForTheirOk_AndTellsThem()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        List<string> held = new();
+        h.Comeback.LeftBehindRejoined = held.Add;
+        h.Tracker.SetLocated(new RoomKey(1, 2));   // where Tank is left
+        StartLair(h);                               // we've moved on to 1/1
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Players.Players.Add(new MudPlay.Models.GameData.PlayerRecord(
+            GivenName: "Tank", FamilyName: "", Class: "Warrior", Race: "Human", Alignment: "Neutral",
+            Title: null, Gang: null, Role: null, FirstSeenUtc: DateTime.UtcNow, LastSeenUtc: DateTime.UtcNow));
+        h.Router.Dispatch(Line("Also here: Tank."));  // Tank stands where we left him
+        h.Tracker.SetLocated(new RoomKey(1, 2));   // backtracked into Tank's room
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        Assert.Equal(new[] { "Tank" }, held);
+        Assert.True(Sent(h, "/Tank @waiting"));
+        Assert.True(Sent(h, "waiting for your @ok"));
+        Assert.True(h.Lair.IsActive);   // resumed — the party @wait gate holds it
+    }
+
+    [Fact]
+    public void Comeback_Rejoins_DoesNotInferAHold()
+    {
+        using Harness h = NewHarness();
+        List<string> held = new();
+        h.Comeback.LeftBehindRejoined = held.Add;
+        SeatFollower(h, "Tank");
+        StartLair(h);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/1"));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        Assert.Empty(held);
+    }
+
+    [Fact]
+    public void LeftBehind_NoEngineRunning_StaysSilent()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.False(Sent(h, "/Tank"));
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    [Fact]
+    public void LeftBehind_ReInviteOff_KeepsGoing()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Party.AutoInviteEnabled = false;
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.True(h.Lair.IsActive);
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
     // ----- path B: leader probes @where on a member's return ---------
 
     [Fact]
