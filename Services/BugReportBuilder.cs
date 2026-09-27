@@ -405,6 +405,26 @@ public static class BugReportBuilder
     {
         StringBuilder sb = new();
 
+        // "When" events: what they wait on and whether it holds right now, against
+        // the readings the watcher uses (an unread inventory / stat screen is unknown).
+        Game.Events.EventConditionEvaluator.Readings now = svc.ReadEventReadings();
+        List<Models.GameData.ScheduledEvent> stateEvents = svc.Events.Events
+            .Where(e => e.TriggerType == Models.GameData.EventTriggerType.State).ToList();
+        sb.Append("**When-triggered events** (").Append(stateEvents.Count).Append(") · readings: money=")
+          .Append(now.Copper?.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) ?? "unknown")
+          .Append(" copper, encumbrance=").Append(now.EncumbrancePercent is { } ep ? $"{ep}%" : "unknown")
+          .Append(", exp=").Append(now.Experience?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown")
+          .Append(", level=").Append(now.Level?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown")
+          .Append(", in game=").Append(svc.EventScheduler.IsInGame).Append("\n\n");
+        if (stateEvents.Count == 0) sb.Append("_(none)_\n");
+        else foreach (Models.GameData.ScheduledEvent e in stateEvents)
+            sb.Append("- ").Append(string.IsNullOrWhiteSpace(e.Name) ? "(unnamed)" : e.Name)
+              .Append(e.Disabled ? " [disabled]" : string.Empty).Append(": ")
+              .Append(Game.Events.EventConditionEvaluator.Describe(e.Conditions))
+              .Append(" — holds now: ").Append(Game.Events.EventConditionEvaluator.AllHold(e.Conditions, now))
+              .Append('\n');
+        sb.Append('\n');
+
         IReadOnlyList<AutoPartyManager.NagSnapshot> nags = svc.AutoParty.ActiveNagSnapshot();
         sb.Append("**@join nags** (").Append(nags.Count).Append(")\n\n");
         if (nags.Count == 0) sb.Append("_(none active)_\n");

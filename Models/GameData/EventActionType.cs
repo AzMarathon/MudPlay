@@ -13,10 +13,14 @@ namespace MudPlay.Models.GameData;
 //     multi-fire via ^M and ; separators; each chunk is sent as its own
 //     CR-terminated line. Matches the splitter the Macro / Trigger /
 //     Alias command surfaces already use.
+//   Roomba — start a Roomba sweep in ScheduledEvent.RoombaMode (Sort or
+//     Inventory only). Stops any walk / loop / auto-lair first; the sweep
+//     drives the loop runner itself.
 public enum EventActionType
 {
     WalkTo = 0,
     Loop = 1,
     AutoLair = 2,
     Command = 3,
+    Roomba = 4,
 }

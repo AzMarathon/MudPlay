@@ -128,6 +128,16 @@ public sealed class EventManager : IDisposable
     }
     private bool _disposed;
 
+    // Starts a Roomba sweep for EventActionType.Roomba; returns null on success or
+    // the sweep's refusal reason. Bound by AppServices to GhSweepManager, which is
+    // built after this manager.
+    private Func<EventRoombaMode, string?>? _startRoomba;
+    public void SetRoombaStarter(Func<EventRoombaMode, string?> start)
+    {
+        ArgumentNullException.ThrowIfNull(start);
+        _startRoomba = start;
+    }
+
     // Bind the wire sender for EventActionType.Command dispatch. Same shape as the
     // other automation engines — the main window VM supplies the gate-wrapped
     // SendUserInput.
@@ -195,6 +205,7 @@ public sealed class EventManager : IDisposable
             case EventActionType.Loop: ExecuteLoop(e); break;
             case EventActionType.AutoLair: ExecuteAutoLair(e); break;
             case EventActionType.Command: ExecuteCommand(e); break;
+            case EventActionType.Roomba: ExecuteRoomba(e); break;
         }
     }
 
@@ -306,6 +317,20 @@ public sealed class EventManager : IDisposable
             _autoLair.Mark(new RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
         if (!_autoLair.Start())
             _log?.Warn("Events", $"Event '{Label(e)}' auto-lair '{setup.Name}' failed to start.");
+    }
+
+    private void ExecuteRoomba(ScheduledEvent e)
+    {
+        if (_startRoomba is null) return;
+        EventRoombaMode mode = e.RoombaMode ?? EventRoombaMode.Sort;
+        // The sweep refuses to start over a running walk / loop / auto-lair.
+        EngineSupersede.StopOthers(
+            _walker, _loopRunner, _autoLair,
+            SupersedeKeep.None, "event Roomba");
+        if (_startRoomba(mode) is { } refused)
+            _log?.Warn("Events", $"Event '{Label(e)}' Roomba ({mode}) didn't start: {refused}");
+        else
+            _log?.Info("Events", $"Event '{Label(e)}' started a Roomba sweep ({mode}).");
     }
 
     private void ExecuteCommand(ScheduledEvent e)

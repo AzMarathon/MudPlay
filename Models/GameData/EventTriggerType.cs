@@ -14,6 +14,10 @@ namespace MudPlay.Models.GameData;
 //   Every — recurring cadence based on ScheduledEvent.EveryAmount and
 //     ScheduledEvent.EveryUnit. Timer pauses on disconnect and restarts
 //     from zero on reconnect (no anchor preservation).
+//   State — fires when every one of ScheduledEvent.Conditions becomes true
+//     (money / encumbrance / experience / level against a value). Once per
+//     crossing: it re-arms only after the conditions stop holding. Only fires
+//     while in-game.
 public enum EventTriggerType
 {
     Logon = 0,
@@ -21,4 +25,5 @@ public enum EventTriggerType
     Relog = 2,
     AtTime = 3,
     Every = 4,
+    State = 5,
 }

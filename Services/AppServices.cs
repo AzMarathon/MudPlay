@@ -1033,6 +1033,34 @@ public sealed class AppServices
     // directly from the user-initiated disconnect path.
     public Game.Events.EventScheduler EventScheduler { get; private set; } = null!;
 
+    // Fires State-triggered events (money / encumbrance / exp / level conditions).
+    public Game.Events.EventStateWatcher EventStateWatcher { get; private set; } = null!;
+
+    // The watcher is UI-thread-confined like the rest of the events stack; stat and
+    // inventory changes can be raised off it.
+    private void EvaluateEventStates()
+    {
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) EventStateWatcher.Evaluate();
+        else Avalonia.Threading.Dispatcher.UIThread.Post(EventStateWatcher.Evaluate);
+    }
+
+    // What State-triggered events compare against. Money and encumbrance stay
+    // unknown until the inventory has been read; exp and level until the stat
+    // screen has.
+    internal Game.Events.EventConditionEvaluator.Readings ReadEventReadings()
+    {
+        bool invKnown = Inventory.IsLoaded;
+        Game.Inventory.EncumbranceReading enc = Inventory.Snapshot.Encumbrance;
+        bool statsKnown = PlayerStats.Level > 0;
+        return new(
+            Copper: invKnown ? Inventory.Snapshot.Currency.TotalCopperValue : null,
+            EncumbrancePercent: invKnown && enc.MaxWeight > 0
+                ? (int)((long)enc.CurrentWeight * 100 / enc.MaxWeight)
+                : null,
+            Experience: statsKnown ? PlayerStats.Exp : null,
+            Level: statsKnown ? PlayerStats.Level : null);
+    }
+
     // Runs the character's Settings → General "Default task" (Begin looping /
     // Begin Auto-Lair) once per game entry. Like EventScheduler it's app-scoped
     // and driven by MainWindowVM's NotifyConnected / NotifyDisconnected plus the
@@ -7217,6 +7245,25 @@ public sealed class AppServices
         // the TelnetClient itself is per-connection.
         EventScheduler = new Game.Events.EventScheduler(
             Events, PromptScanner, Cleanup, Profile, Log);
+
+        // State-triggered events: re-checked whenever money, encumbrance, exp or
+        // level changes, and on game entry. No polling.
+        EventStateWatcher = new Game.Events.EventStateWatcher(
+            Events, () => EventScheduler.IsInGame, ReadEventReadings, Log);
+        EventScheduler.EnteredGame += () => EvaluateEventStates();
+        Profile.ProfileLoaded += _ => EventStateWatcher.Reset();
+        Inventory.Changed += () => EvaluateEventStates();
+        PlayerStats.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(Game.PlayerStats.Exp) or nameof(Game.PlayerStats.Level))
+                EvaluateEventStates();
+        };
+        Events.SetRoombaStarter(mode =>
+            GhSweep.Start(mode == Models.GameData.EventRoombaMode.InventoryOnly
+                ? Game.Map.GhSweepManager.SweepMode.InventoryOnly
+                : Game.Map.GhSweepManager.SweepMode.Sort)
+                ? null
+                : GhSweep.LastStartError ?? "the sweep refused to start");
 
         // DefaultTaskRunner. Starts the character's configured "Default task"
         // (loop / Auto-Lair) on the first in-game prompt with a known room,
