@@ -155,6 +155,15 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     public CombatProfileGroupToggle? PartyHealingInProfile { get; }
     public CombatProfileGroupToggle? PartyBlessInProfile { get; }
 
+    // The border / label for the groups above follow the saved active profile, whose
+    // party values this tab shows (it isn't staged per chip).
+    public string ActiveProfileLabel => _session is null ? string.Empty
+        : $"Combat profile: {(string.IsNullOrWhiteSpace(_session.LiveActiveName) ? $"Profile {_session.LiveActiveIndex + 1}" : _session.LiveActiveName.Trim())}";
+    public Avalonia.Media.IBrush ActiveProfileAccentBrush =>
+        CombatProfilePalette.SolidBrush((_session?.LiveActiveIndex ?? 0) + 1);
+    public Avalonia.Media.IBrush ActiveProfileAccentSoftBrush =>
+        CombatProfilePalette.SoftBrush((_session?.LiveActiveIndex ?? 0) + 1);
+
     public PartySectionViewModel(CombatProfileStagingSession? session = null)
         : this(AppServices.Current.Profile, session) { }
 
@@ -223,6 +232,9 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         LoadFromProfile();
         _suppressDirty = false;
         ClearDirty();
+        OnPropertyChanged(nameof(ActiveProfileLabel));
+        OnPropertyChanged(nameof(ActiveProfileAccentBrush));
+        OnPropertyChanged(nameof(ActiveProfileAccentSoftBrush));
     }
 
     private void Write()

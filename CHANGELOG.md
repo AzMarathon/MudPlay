@@ -1,6 +1,6 @@
 # Version history
 
-## 3.115.7
+## 3.115.8
 
 - A disarm that sets the trap off is recognised by every trap's own failure line, on both realms (Stock's walker no longer stalls on one)
 - The Stock engine's exit refusals (spell, item, level, alignment, timed, add-on, dragging, closed door, too stunned) count as a refused move instead of stalling the walker
@@ -9,6 +9,7 @@
 - A rest refused while poisoned waits for the poison to clear (or retries shortly) instead of leaving you standing
 - "Meditation will not help" (mana already full) switches to resting instead of waiting on the meditate
 - A disarm with no recognised reply is handled like a trap that went off, and the lines it got are logged for the bug report
+- Each "Include in combat profile" group sits in its own profile-coloured border with the checkbox inside; unchecked, the border goes away (Party tab included)
 
 ## 3.115.0
 

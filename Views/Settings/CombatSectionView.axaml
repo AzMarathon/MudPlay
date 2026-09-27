@@ -51,22 +51,6 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,16,0,6"/>
         </Style>
-        <!-- Per-combat-profile settings group: a soft panel tinted the ACTIVE
-             profile's accent (bound per-instance to ActiveProfileAccentSoftBrush /
-             ActiveProfileAccentBrush, so it recolours on a chip switch) with the
-             profile name in the header — it reads as "this group swaps with the
-             combat profile chip above". -->
-        <Style Selector="Border.ProfileGroup">
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="10,8"/>
-            <Setter Property="Margin" Value="0,6,0,4"/>
-        </Style>
-        <Style Selector="TextBlock.ProfileGroupHeader">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,0,0,6"/>
-        </Style>
         <Style Selector="TextBlock.FieldLabel">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
@@ -154,483 +138,509 @@
                      to attack, not WHETHER to. -->
 
                 <!-- ============ Combat action order ============ -->
-                <DockPanel>
-                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                              IsChecked="{Binding ActionOrderInProfile.IsIncluded, Mode=TwoWay}"
-                              ToolTip.Tip="{Binding ActionOrderInProfile.Tooltip}"/>
-                    <TextBlock Classes="SectionHeader" Text="Combat action order"/>
-                </DockPanel>
-                <TextBlock Text="Which action to prefer as the round's one combat action. Spells first casts the attack-spell cascade (multi → normal → alternate) when one applies and swings only when none can fire; Physical first swings the weapon and reverts to spells only when the weapon can't damage the target (normal weapon has no effect and there's no working alternate). The backstab opener (when enabled) and debuff casts sit outside this choice."
-                           Foreground="{StaticResource ChromeFgMutedBrush}"
-                           FontSize="{StaticResource FontSizeSm}"
-                           FontStyle="Italic"
-                           TextWrapping="Wrap"
-                           Margin="0,0,0,4"/>
-                <Grid ColumnDefinitions="180,*">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Action order"/>
-                    <ComboBox Grid.Column="1"
-                              ItemsSource="{Binding ActionOrderOptions}"
-                              SelectedValue="{Binding ActionOrder, Mode=TwoWay}"
-                              SelectedValueBinding="{Binding Value}"
-                              DisplayMemberBinding="{Binding Label}"
-                              Width="260" HorizontalAlignment="Left"
-                              ToolTip.Tip="Spells first = cast the attack-spell cascade when applicable, else swing. Physical first = swing the weapon, reverting to spells only when neither the normal nor alternate weapon can damage the target. Alternate = flip the round's action every round (spell one round, swing the next); a phase that can't act falls back to the other type so the round never stalls. Custom round cycle = configurable-length phases (see below) instead of a fixed 1-round flip."/>
-                </Grid>
-
-                <!-- Custom round cycle — only meaningful when Action order above is
-                     'Custom round cycle', but stays visible (just disabled) the rest
-                     of the time so a tuned value isn't hidden when switching away. -->
-                <Grid ColumnDefinitions="180,110,16,110,16,180" Margin="0,4,0,0"
-                      IsEnabled="{Binding CycleFieldsEnabled}">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Round cycle"/>
-                    <NumericUpDown Grid.Column="1"
-                                   Value="{Binding CycleRoundsPhysical, Mode=TwoWay}"
-                                   Minimum="0" Maximum="999" FormatString="0" Increment="1"
-                                   HorizontalAlignment="Stretch"
-                                   ToolTip.Tip="Rounds to spend attacking physically before switching to spells. 0 = physical forever (the cycle never reaches the spell phase)."/>
-                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="/"/>
-                    <NumericUpDown Grid.Column="3"
-                                   Value="{Binding CycleRoundsSpell, Mode=TwoWay}"
-                                   Minimum="0" Maximum="999" FormatString="0" Increment="1"
-                                   HorizontalAlignment="Stretch"
-                                   ToolTip.Tip="Rounds to spend casting spells before switching back to physical. 0 = spells for the rest of the fight once reached ('spells till death') — the cycle never returns to physical."/>
-                    <CheckBox Grid.Column="5" Content="Start on spell"
-                              IsChecked="{Binding CycleStartOnSpell, Mode=TwoWay}"
-                              ToolTip.Tip="Unchecked (default): the cycle opens physical, e.g. '2 physical rounds, then spells'. Checked: the cycle opens on the spell instead, e.g. '1 spell round, then physical till death'."/>
-                </Grid>
-                <TextBlock Text="Physical rounds / Spell rounds. Only used when Action order is 'Custom round cycle'."
-                           IsEnabled="{Binding CycleFieldsEnabled}"
-                           Foreground="{StaticResource ChromeFgMutedBrush}"
-                           FontSize="{StaticResource FontSizeSm}"
-                           FontStyle="Italic"
-                           Margin="180,2,0,0"/>
-
-                <!-- ============ Weapons & attack commands (per profile) ============ -->
-                <DockPanel>
-                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                              IsChecked="{Binding WeaponsInProfile.IsIncluded, Mode=TwoWay}"
-                              ToolTip.Tip="{Binding WeaponsInProfile.Tooltip}"/>
-                    <TextBlock Classes="SectionHeader" Text="Weapons &amp; attack commands"/>
-                </DockPanel>
-                <Border Classes="ProfileGroup"
-                        Background="{Binding ActiveProfileAccentSoftBrush}"
-                        BorderBrush="{Binding ActiveProfileAccentBrush}">
-                    <StackPanel Spacing="2">
-                        <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
-                                   Foreground="{Binding ActiveProfileAccentBrush}"/>
-                        <TextBlock Text="Primary / alternate weapons and their attack commands, per profile. The active profile's weapons live in the Workshop → Equipment Manager Default gear set (the combat engine reads them there), so editing here and editing the Default set's weapon rows are the same loadout, kept in sync. Backstab gear stays global on the Backstab set."
+                <Panel Classes="ProfileFrame">
+                    <Border Classes="ProfileGroup" IsVisible="{Binding ActionOrderInProfile.IsIncluded}"
+                            Background="{Binding ActiveProfileAccentSoftBrush}"
+                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
+                    <StackPanel Classes="ProfileBody">
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                                      IsChecked="{Binding ActionOrderInProfile.IsIncluded, Mode=TwoWay}"
+                                      ToolTip.Tip="{Binding ActionOrderInProfile.Tooltip}"/>
+                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
+                                       IsVisible="{Binding ActionOrderInProfile.IsIncluded}"/>
+                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Combat action order"/>
+                        </DockPanel>
+                        <TextBlock Text="Which action to prefer as the round's one combat action. Spells first casts the attack-spell cascade (multi → normal → alternate) when one applies and swings only when none can fire; Physical first swings the weapon and reverts to spells only when the weapon can't damage the target (normal weapon has no effect and there's no working alternate). The backstab opener (when enabled) and debuff casts sit outside this choice."
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
                                    FontSize="{StaticResource FontSizeSm}"
                                    FontStyle="Italic"
                                    TextWrapping="Wrap"
-                                   Margin="0,0,0,6"/>
-
-                        <Grid ColumnDefinitions="150,260,150,*" RowDefinitions="Auto,Auto" Margin="0,0,0,2">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Normal weapon"/>
-                            <AutoCompleteBox Grid.Row="0" Grid.Column="1"
-                                             Text="{Binding NormalWeapon, Mode=TwoWay}"
-                                             ItemsSource="{Binding WeaponSuggestions}"
-                                             FilterMode="ContainsOrdinal"
-                                             PlaceholderText="(bare hands)"
-                                             Width="240" HorizontalAlignment="Left"
-                                             ToolTip.Tip="Primary weapon for this profile. Suggestions are the realm's weapons. Written into the Workshop Default set on switch — kept in sync with that set's Weapon slot."/>
-                            <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel" Text="Attack command" Margin="12,0,0,0"/>
-                            <TextBox Grid.Row="0" Grid.Column="3"
-                                     Text="{Binding NormalAttackCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                     Width="120" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Command sent each round to swing the normal weapon — default `a` (the canonical MajorMUD attack alias)."/>
-
-                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Off-hand" Margin="0,4,0,0"/>
-                            <AutoCompleteBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0"
-                                             Text="{Binding NormalOffHand, Mode=TwoWay}"
-                                             ItemsSource="{Binding OffHandSuggestions}"
-                                             FilterMode="ContainsOrdinal"
-                                             PlaceholderText="(none)"
-                                             Width="240" HorizontalAlignment="Left"
-                                             ToolTip.Tip="Off-hand paired with the normal weapon (shield / second weapon). Written into the Default set's Off-Hand slot on switch."/>
+                                   Margin="0,0,0,4"/>
+                        <Grid ColumnDefinitions="180,*">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Action order"/>
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding ActionOrderOptions}"
+                                      SelectedValue="{Binding ActionOrder, Mode=TwoWay}"
+                                      SelectedValueBinding="{Binding Value}"
+                                      DisplayMemberBinding="{Binding Label}"
+                                      Width="260" HorizontalAlignment="Left"
+                                      ToolTip.Tip="Spells first = cast the attack-spell cascade when applicable, else swing. Physical first = swing the weapon, reverting to spells only when neither the normal nor alternate weapon can damage the target. Alternate = flip the round's action every round (spell one round, swing the next); a phase that can't act falls back to the other type so the round never stalls. Custom round cycle = configurable-length phases (see below) instead of a fixed 1-round flip."/>
                         </Grid>
 
-                        <Grid ColumnDefinitions="150,260,150,*" RowDefinitions="Auto,Auto" Margin="0,6,0,0">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Alternate weapon"/>
-                            <AutoCompleteBox Grid.Row="0" Grid.Column="1"
-                                             Text="{Binding AlternateWeapon, Mode=TwoWay}"
-                                             ItemsSource="{Binding WeaponSuggestions}"
-                                             FilterMode="ContainsOrdinal"
-                                             PlaceholderText="(none)"
-                                             Width="240" HorizontalAlignment="Left"
-                                             ToolTip.Tip="Swap-target weapon for this profile. Written into the Default set's Alt-Weapon slot on switch."/>
-                            <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel" Text="Attack command" Margin="12,0,0,0"/>
-                            <TextBox Grid.Row="0" Grid.Column="3"
-                                     Text="{Binding AlternateAttackCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                     Width="120" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Command sent when swinging the alternate weapon — default `a`. Some 2H alt weapons use `swing` while a 1H normal uses `a`."/>
-
-                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Alt off-hand" Margin="0,4,0,0"/>
-                            <AutoCompleteBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0"
-                                             Text="{Binding AlternateOffHand, Mode=TwoWay}"
-                                             ItemsSource="{Binding OffHandSuggestions}"
-                                             FilterMode="ContainsOrdinal"
-                                             PlaceholderText="(none)"
-                                             Width="240" HorizontalAlignment="Left"
-                                             ToolTip.Tip="Off-hand paired with the alternate weapon. Written into the Default set's Alt-Off-Hand slot on switch."/>
+                        <!-- Custom round cycle — only meaningful when Action order above is
+                             'Custom round cycle', but stays visible (just disabled) the rest
+                             of the time so a tuned value isn't hidden when switching away. -->
+                        <Grid ColumnDefinitions="180,110,16,110,16,180" Margin="0,4,0,0"
+                              IsEnabled="{Binding CycleFieldsEnabled}">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Round cycle"/>
+                            <NumericUpDown Grid.Column="1"
+                                           Value="{Binding CycleRoundsPhysical, Mode=TwoWay}"
+                                           Minimum="0" Maximum="999" FormatString="0" Increment="1"
+                                           HorizontalAlignment="Stretch"
+                                           ToolTip.Tip="Rounds to spend attacking physically before switching to spells. 0 = physical forever (the cycle never reaches the spell phase)."/>
+                            <TextBlock Grid.Column="2" Classes="FieldLabel" Text="/"/>
+                            <NumericUpDown Grid.Column="3"
+                                           Value="{Binding CycleRoundsSpell, Mode=TwoWay}"
+                                           Minimum="0" Maximum="999" FormatString="0" Increment="1"
+                                           HorizontalAlignment="Stretch"
+                                           ToolTip.Tip="Rounds to spend casting spells before switching back to physical. 0 = spells for the rest of the fight once reached ('spells till death') — the cycle never returns to physical."/>
+                            <CheckBox Grid.Column="5" Content="Start on spell"
+                                      IsChecked="{Binding CycleStartOnSpell, Mode=TwoWay}"
+                                      ToolTip.Tip="Unchecked (default): the cycle opens physical, e.g. '2 physical rounds, then spells'. Checked: the cycle opens on the spell instead, e.g. '1 spell round, then physical till death'."/>
                         </Grid>
+                        <TextBlock Text="Physical rounds / Spell rounds. Only used when Action order is 'Custom round cycle'."
+                                   IsEnabled="{Binding CycleFieldsEnabled}"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                   FontSize="{StaticResource FontSizeSm}"
+                                   FontStyle="Italic"
+                                   Margin="180,2,0,0"/>
                     </StackPanel>
-                </Border>
+                </Panel>
+
+                <!-- ============ Weapons & attack commands (per profile) ============ -->
+                <Panel Classes="ProfileFrame">
+                    <Border Classes="ProfileGroup" IsVisible="{Binding WeaponsInProfile.IsIncluded}"
+                            Background="{Binding ActiveProfileAccentSoftBrush}"
+                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
+                    <StackPanel Classes="ProfileBody">
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                                      IsChecked="{Binding WeaponsInProfile.IsIncluded, Mode=TwoWay}"
+                                      ToolTip.Tip="{Binding WeaponsInProfile.Tooltip}"/>
+                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
+                                       IsVisible="{Binding WeaponsInProfile.IsIncluded}"/>
+                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Weapons &amp; attack commands"/>
+                        </DockPanel>
+                                <TextBlock Text="Primary / alternate weapons and their attack commands, per profile. The active profile's weapons live in the Workshop → Equipment Manager Default gear set (the combat engine reads them there), so editing here and editing the Default set's weapon rows are the same loadout, kept in sync. Backstab gear stays global on the Backstab set."
+                                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                                           FontSize="{StaticResource FontSizeSm}"
+                                           FontStyle="Italic"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,6"/>
+
+                                <Grid ColumnDefinitions="150,260,150,*" RowDefinitions="Auto,Auto" Margin="0,0,0,2">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Normal weapon"/>
+                                    <AutoCompleteBox Grid.Row="0" Grid.Column="1"
+                                                     Text="{Binding NormalWeapon, Mode=TwoWay}"
+                                                     ItemsSource="{Binding WeaponSuggestions}"
+                                                     FilterMode="ContainsOrdinal"
+                                                     PlaceholderText="(bare hands)"
+                                                     Width="240" HorizontalAlignment="Left"
+                                                     ToolTip.Tip="Primary weapon for this profile. Suggestions are the realm's weapons. Written into the Workshop Default set on switch — kept in sync with that set's Weapon slot."/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel" Text="Attack command" Margin="12,0,0,0"/>
+                                    <TextBox Grid.Row="0" Grid.Column="3"
+                                             Text="{Binding NormalAttackCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                             Width="120" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Command sent each round to swing the normal weapon — default `a` (the canonical MajorMUD attack alias)."/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Off-hand" Margin="0,4,0,0"/>
+                                    <AutoCompleteBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0"
+                                                     Text="{Binding NormalOffHand, Mode=TwoWay}"
+                                                     ItemsSource="{Binding OffHandSuggestions}"
+                                                     FilterMode="ContainsOrdinal"
+                                                     PlaceholderText="(none)"
+                                                     Width="240" HorizontalAlignment="Left"
+                                                     ToolTip.Tip="Off-hand paired with the normal weapon (shield / second weapon). Written into the Default set's Off-Hand slot on switch."/>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="150,260,150,*" RowDefinitions="Auto,Auto" Margin="0,6,0,0">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Alternate weapon"/>
+                                    <AutoCompleteBox Grid.Row="0" Grid.Column="1"
+                                                     Text="{Binding AlternateWeapon, Mode=TwoWay}"
+                                                     ItemsSource="{Binding WeaponSuggestions}"
+                                                     FilterMode="ContainsOrdinal"
+                                                     PlaceholderText="(none)"
+                                                     Width="240" HorizontalAlignment="Left"
+                                                     ToolTip.Tip="Swap-target weapon for this profile. Written into the Default set's Alt-Weapon slot on switch."/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel" Text="Attack command" Margin="12,0,0,0"/>
+                                    <TextBox Grid.Row="0" Grid.Column="3"
+                                             Text="{Binding AlternateAttackCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                             Width="120" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Command sent when swinging the alternate weapon — default `a`. Some 2H alt weapons use `swing` while a 1H normal uses `a`."/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Alt off-hand" Margin="0,4,0,0"/>
+                                    <AutoCompleteBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0"
+                                                     Text="{Binding AlternateOffHand, Mode=TwoWay}"
+                                                     ItemsSource="{Binding OffHandSuggestions}"
+                                                     FilterMode="ContainsOrdinal"
+                                                     PlaceholderText="(none)"
+                                                     Width="240" HorizontalAlignment="Left"
+                                                     ToolTip.Tip="Off-hand paired with the alternate weapon. Written into the Default set's Alt-Off-Hand slot on switch."/>
+                                </Grid>
+                    </StackPanel>
+                </Panel>
 
                 <!-- ============ Backstab options (per profile) ============ -->
-                <DockPanel>
-                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                              IsChecked="{Binding BackstabInProfile.IsIncluded, Mode=TwoWay}"
-                              ToolTip.Tip="{Binding BackstabInProfile.Tooltip}"/>
-                    <TextBlock Classes="SectionHeader" Text="Backstab"/>
-                </DockPanel>
-                <StackPanel Spacing="2">
-                    <CheckBox Content="Do BS attacks"
-                              IsChecked="{Binding DoBackstab, Mode=TwoWay}"
-                              ToolTip.Tip="Attempt a backstab when entering a room with an eligible target. Off by default — an explicit opt-in even on stealth-capable classes."/>
-                    <!-- Only meaningful with backstab on: indented under it and greyed out
-                         while it's off. -->
-                    <StackPanel Spacing="2" Margin="24,0,0,0" IsEnabled="{Binding DoBackstab}">
-                        <CheckBox Content="Don't BS if multi-attack room spell is firing"
-                                  IsChecked="{Binding SkipBackstabIfMultiAttack, Mode=TwoWay}"
-                                  ToolTip.Tip="Skip the BS attempt when the multi-attack room spell is going off this round."/>
-                        <CheckBox Content="Run if BS fails"
-                                  IsChecked="{Binding RunIfBackstabFails, Mode=TwoWay}"
-                                  IsEnabled="{Binding IsRunIfBackstabFailsEditable}"
-                                  ToolTip.Tip="Run instead of fighting when your backstab opener can't work: the backstab swings without &quot;surprise&quot;, or your sneak broke on the way in (&quot;You make a sound…&quot;, or no &quot;Sneaking...&quot; on arrival). Holds back if that same round killed the target and the room is clear. Greyed out while Hit and Run tactics is on: Hit and Run already does all of this."/>
-                        <CheckBox Content="Hit and Run tactics"
-                                  IsChecked="{Binding HitAndRunTactics, Mode=TwoWay}"
-                                  ToolTip.Tip="Backstab everything, as many times as it takes. Carries on only when a backstab kills the target and nothing else is in the room. Otherwise it runs, re-sneaks and comes back: the backstab missed (no surprise), the target survived it, others are in the room, the sneak broke on the way in, or a monster walked in or chased you. Includes everything Run if BS fails does. Needs Do BS attacks and a running loop / walk."/>
-                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="24,0,0,0"
-                                    IsEnabled="{Binding HitAndRunTactics}">
-                            <TextBlock Classes="FieldLabel" Text="Give up and fight after" VerticalAlignment="Center"/>
-                            <NumericUpDown Value="{Binding HitAndRunMaxRuns, Mode=TwoWay}"
-                                           Minimum="1" Maximum="20" FormatString="0" Increment="1" Width="110"
-                                           ToolTip.Tip="Runs allowed between backstabs, the first included. Each fight that would start without a backstab is run from until this is spent; then you stand and fight. A landed backstab starts the count over."/>
-                            <TextBlock Classes="FieldLabel" Text="runs" VerticalAlignment="Center"/>
+                <Panel Classes="ProfileFrame">
+                    <Border Classes="ProfileGroup" IsVisible="{Binding BackstabInProfile.IsIncluded}"
+                            Background="{Binding ActiveProfileAccentSoftBrush}"
+                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
+                    <StackPanel Classes="ProfileBody">
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                                      IsChecked="{Binding BackstabInProfile.IsIncluded, Mode=TwoWay}"
+                                      ToolTip.Tip="{Binding BackstabInProfile.Tooltip}"/>
+                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
+                                       IsVisible="{Binding BackstabInProfile.IsIncluded}"/>
+                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Backstab"/>
+                        </DockPanel>
+                        <StackPanel Spacing="2">
+                            <CheckBox Content="Do BS attacks"
+                                      IsChecked="{Binding DoBackstab, Mode=TwoWay}"
+                                      ToolTip.Tip="Attempt a backstab when entering a room with an eligible target. Off by default — an explicit opt-in even on stealth-capable classes."/>
+                            <!-- Only meaningful with backstab on: indented under it and greyed out
+                                 while it's off. -->
+                            <StackPanel Spacing="2" Margin="24,0,0,0" IsEnabled="{Binding DoBackstab}">
+                                <CheckBox Content="Don't BS if multi-attack room spell is firing"
+                                          IsChecked="{Binding SkipBackstabIfMultiAttack, Mode=TwoWay}"
+                                          ToolTip.Tip="Skip the BS attempt when the multi-attack room spell is going off this round."/>
+                                <CheckBox Content="Run if BS fails"
+                                          IsChecked="{Binding RunIfBackstabFails, Mode=TwoWay}"
+                                          IsEnabled="{Binding IsRunIfBackstabFailsEditable}"
+                                          ToolTip.Tip="Run instead of fighting when your backstab opener can't work: the backstab swings without &quot;surprise&quot;, or your sneak broke on the way in (&quot;You make a sound…&quot;, or no &quot;Sneaking...&quot; on arrival). Holds back if that same round killed the target and the room is clear. Greyed out while Hit and Run tactics is on: Hit and Run already does all of this."/>
+                                <CheckBox Content="Hit and Run tactics"
+                                          IsChecked="{Binding HitAndRunTactics, Mode=TwoWay}"
+                                          ToolTip.Tip="Backstab everything, as many times as it takes. Carries on only when a backstab kills the target and nothing else is in the room. Otherwise it runs, re-sneaks and comes back: the backstab missed (no surprise), the target survived it, others are in the room, the sneak broke on the way in, or a monster walked in or chased you. Includes everything Run if BS fails does. Needs Do BS attacks and a running loop / walk."/>
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="24,0,0,0"
+                                            IsEnabled="{Binding HitAndRunTactics}">
+                                    <TextBlock Classes="FieldLabel" Text="Give up and fight after" VerticalAlignment="Center"/>
+                                    <NumericUpDown Value="{Binding HitAndRunMaxRuns, Mode=TwoWay}"
+                                                   Minimum="1" Maximum="20" FormatString="0" Increment="1" Width="110"
+                                                   ToolTip.Tip="Runs allowed between backstabs, the first included. Each fight that would start without a backstab is run from until this is spent; then you stand and fight. A landed backstab starts the count over."/>
+                                    <TextBlock Classes="FieldLabel" Text="runs" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- A separate mode: sneaking a walk-to with combat off. -->
+                            <TextBlock Classes="FieldLabel" Text="Stealth running (combat off)" Margin="0,8,0,0"/>
+                            <CheckBox Content="Clear hostiles when sneak broken by see-hidden monster"
+                                      IsChecked="{Binding ClearHostilesWhenSeenHidden, Mode=TwoWay}"
+                                      ToolTip.Tip="Combat-off override for stealth runners. When sprinting a walk-to route with combat OFF and auto-sneak ON, a room holding a see-hidden monster breaks sneak. With this on, the engine force-clears every hostile in that room (bypassing the Min/Max gate) so the route can resume sneaking — preventing monsters from dragging and stacking across rooms. Off by default."/>
                         </StackPanel>
                     </StackPanel>
-
-                    <!-- A separate mode: sneaking a walk-to with combat off. -->
-                    <TextBlock Classes="FieldLabel" Text="Stealth running (combat off)" Margin="0,8,0,0"/>
-                    <CheckBox Content="Clear hostiles when sneak broken by see-hidden monster"
-                              IsChecked="{Binding ClearHostilesWhenSeenHidden, Mode=TwoWay}"
-                              ToolTip.Tip="Combat-off override for stealth runners. When sprinting a walk-to route with combat OFF and auto-sneak ON, a room holding a see-hidden monster breaks sneak. With this on, the engine force-clears every hostile in that room (bypassing the Min/Max gate) so the route can resume sneaking — preventing monsters from dragging and stacking across rooms. Off by default."/>
-                </StackPanel>
+                </Panel>
 
                 <!-- ============ Room thresholds (per profile) ============ -->
-                <DockPanel>
-                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                              IsChecked="{Binding RoomThresholdsInProfile.IsIncluded, Mode=TwoWay}"
-                              ToolTip.Tip="{Binding RoomThresholdsInProfile.Tooltip}"/>
-                    <TextBlock Classes="SectionHeader" Text="Room thresholds"/>
-                </DockPanel>
-                <Border Classes="ProfileGroup"
-                        Background="{Binding ActiveProfileAccentSoftBrush}"
-                        BorderBrush="{Binding ActiveProfileAccentBrush}">
-                    <StackPanel Spacing="2">
-                        <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
-                                   Foreground="{Binding ActiveProfileAccentBrush}"/>
-                        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Min. monsters"/>
-                            <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                           Value="{Binding MinMonstersInRoom, Mode=TwoWay}"
-                                           Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Skip the room if fewer than this many hostiles are present. Range 0–20."/>
+                <Panel Classes="ProfileFrame">
+                    <Border Classes="ProfileGroup" IsVisible="{Binding RoomThresholdsInProfile.IsIncluded}"
+                            Background="{Binding ActiveProfileAccentSoftBrush}"
+                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
+                    <StackPanel Classes="ProfileBody">
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                                      IsChecked="{Binding RoomThresholdsInProfile.IsIncluded, Mode=TwoWay}"
+                                      ToolTip.Tip="{Binding RoomThresholdsInProfile.Tooltip}"/>
+                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
+                                       IsVisible="{Binding RoomThresholdsInProfile.IsIncluded}"/>
+                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Room thresholds"/>
+                        </DockPanel>
+                                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Min. monsters"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                                   Value="{Binding MinMonstersInRoom, Mode=TwoWay}"
+                                                   Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                                   ToolTip.Tip="Skip the room if fewer than this many hostiles are present. Range 0–20."/>
 
-                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Max. monsters"/>
-                            <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                           Value="{Binding MaxMonstersInRoom, Mode=TwoWay}"
-                                           Minimum="1" Maximum="20" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Skip the room if more than this many hostiles are present. Range 1–20."/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Max. monsters"/>
+                                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                                   Value="{Binding MaxMonstersInRoom, Mode=TwoWay}"
+                                                   Minimum="1" Maximum="20" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                                   ToolTip.Tip="Skip the room if more than this many hostiles are present. Range 1–20."/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Run distance"/>
-                            <NumericUpDown Grid.Row="2" Grid.Column="1"
-                                           Value="{Binding RunDistance, Mode=TwoWay}"
-                                           Minimum="1" Maximum="100" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Rooms to flee before re-evaluating. Range 1–100."/>
-                        </Grid>
-                        <CheckBox Content="Kill all engaged"
-                                  Margin="0,6,0,0"
-                                  IsChecked="{Binding KillAllEngaged, Mode=TwoWay}"
-                                  ToolTip.Tip="Once a room has been engaged because its hostile count met Min. monsters, keep fighting it per your combat settings until it's cleared — instead of moving on when kills drop the count below Min. monsters. Useful where mixed HP pools leave the tanky ones alive after the first wave. Only bypasses the minimum for rooms you actually engaged; the maximum and every other gate still apply, and an HP/MA flee still overrides it. When unchecked (default), the engine moves on once fewer than Min. monsters remain, leaving the leftovers behind."/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Run distance"/>
+                                    <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                                   Value="{Binding RunDistance, Mode=TwoWay}"
+                                                   Minimum="1" Maximum="100" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                                   ToolTip.Tip="Rooms to flee before re-evaluating. Range 1–100."/>
+                                </Grid>
+                                <CheckBox Content="Kill all engaged"
+                                          Margin="0,6,0,0"
+                                          IsChecked="{Binding KillAllEngaged, Mode=TwoWay}"
+                                          ToolTip.Tip="Once a room has been engaged because its hostile count met Min. monsters, keep fighting it per your combat settings until it's cleared — instead of moving on when kills drop the count below Min. monsters. Useful where mixed HP pools leave the tanky ones alive after the first wave. Only bypasses the minimum for rooms you actually engaged; the maximum and every other gate still apply, and an HP/MA flee still overrides it. When unchecked (default), the engine moves on once fewer than Min. monsters remain, leaving the leftovers behind."/>
 
-                        <!-- Run-away (flee) behaviour — coordinates with Run distance
-                             above. HealthManager.TryFlee reads RunDirection /
-                             BreakBeforeFleeing from CombatSettings. -->
-                        <TextBlock Classes="FieldLabel" Text="When running away:" Margin="0,12,0,0"/>
-                        <CheckBox Content="Go backwards if running"
-                                  IsChecked="{Binding GoBackwardsIfRunning, Mode=TwoWay}"
-                                  ToolTip.Tip="When checked (default): an auto-flee retraces the rooms you just walked in through — safer because you know what's behind you. When unchecked, the flee pushes forward along the active walker path into unscouted rooms."/>
-                        <CheckBox Content="Break combat before running"
-                                  IsChecked="{Binding BreakBeforeFleeing, Mode=TwoWay}"
-                                  ToolTip.Tip="When checked (default): `break` is sent before the first flee move so auto-attack disengages and the move lands cleanly. When unchecked, the flee starts mid-fight and the server may reject the first move because you're still engaged — faster, but you may waste a round."/>
+                                <!-- Run-away (flee) behaviour — coordinates with Run distance
+                                     above. HealthManager.TryFlee reads RunDirection /
+                                     BreakBeforeFleeing from CombatSettings. -->
+                                <TextBlock Classes="FieldLabel" Text="When running away:" Margin="0,12,0,0"/>
+                                <CheckBox Content="Go backwards if running"
+                                          IsChecked="{Binding GoBackwardsIfRunning, Mode=TwoWay}"
+                                          ToolTip.Tip="When checked (default): an auto-flee retraces the rooms you just walked in through — safer because you know what's behind you. When unchecked, the flee pushes forward along the active walker path into unscouted rooms."/>
+                                <CheckBox Content="Break combat before running"
+                                          IsChecked="{Binding BreakBeforeFleeing, Mode=TwoWay}"
+                                          ToolTip.Tip="When checked (default): `break` is sent before the first flee move so auto-attack disengages and the move lands cleanly. When unchecked, the flee starts mid-fight and the server may reject the first move because you're still engaged — faster, but you may waste a round."/>
                     </StackPanel>
-                </Border>
+                </Panel>
 
                 <!-- ============ Spell combat (per profile) ============ -->
-                <DockPanel>
-                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                              IsChecked="{Binding SpellCombatInProfile.IsIncluded, Mode=TwoWay}"
-                              ToolTip.Tip="{Binding SpellCombatInProfile.Tooltip}"/>
-                    <TextBlock Classes="SectionHeader" Text="Spell combat"/>
-                </DockPanel>
-                <Border Classes="ProfileGroup"
-                        Background="{Binding ActiveProfileAccentSoftBrush}"
-                        BorderBrush="{Binding ActiveProfileAccentBrush}">
-                  <StackPanel Spacing="4">
-                    <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
-                               Foreground="{Binding ActiveProfileAccentBrush}"/>
+                <Panel Classes="ProfileFrame">
+                    <Border Classes="ProfileGroup" IsVisible="{Binding SpellCombatInProfile.IsIncluded}"
+                            Background="{Binding ActiveProfileAccentSoftBrush}"
+                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
+                    <StackPanel Classes="ProfileBody">
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                                      IsChecked="{Binding SpellCombatInProfile.IsIncluded, Mode=TwoWay}"
+                                      ToolTip.Tip="{Binding SpellCombatInProfile.Tooltip}"/>
+                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
+                                       IsVisible="{Binding SpellCombatInProfile.IsIncluded}"/>
+                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Spell combat"/>
+                        </DockPanel>
 
-                <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
-                    <TextBlock Classes="FieldLabel" Text="Minimum mana per cast:"/>
-                    <RadioButton GroupName="SpellManaUnit" Content="Percentage"
-                                 IsChecked="{Binding SpellManaModePercentage, Mode=TwoWay}"
-                                 ToolTip.Tip="Min mana columns below are read as % of MaxMa / MaxKai."/>
-                    <RadioButton GroupName="SpellManaUnit" Content="Value"
-                                 IsChecked="{Binding SpellManaModeAbsolute, Mode=TwoWay}"
-                                 ToolTip.Tip="Min mana columns below are read as absolute MA / KAI."/>
-                </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
+                            <TextBlock Classes="FieldLabel" Text="Minimum mana per cast:"/>
+                            <RadioButton GroupName="SpellManaUnit" Content="Percentage"
+                                         IsChecked="{Binding SpellManaModePercentage, Mode=TwoWay}"
+                                         ToolTip.Tip="Min mana columns below are read as % of MaxMa / MaxKai."/>
+                            <RadioButton GroupName="SpellManaUnit" Content="Value"
+                                         IsChecked="{Binding SpellManaModeAbsolute, Mode=TwoWay}"
+                                         ToolTip.Tip="Min mana columns below are read as absolute MA / KAI."/>
+                        </StackPanel>
 
-                <!-- Spell-row column headers. -->
-                <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,4,0,0">
-                    <TextBlock Grid.Column="0"/>
-                    <TextBlock Grid.Column="1" Classes="ColumnHeader" Text="Spell"/>
-                    <TextBlock Grid.Column="2" Classes="ColumnHeader" Text="Min enemies"/>
-                    <TextBlock Grid.Column="3" Classes="ColumnHeader" Text="Max casts"/>
-                    <TextBlock Grid.Column="4" Classes="ColumnHeader" Text="Min mana per cast"/>
-                    <TextBlock Grid.Column="5" Classes="ColumnHeader" Text="= mana / %"/>
-                </Grid>
+                        <!-- Spell-row column headers. -->
+                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,4,0,0">
+                            <TextBlock Grid.Column="0"/>
+                            <TextBlock Grid.Column="1" Classes="ColumnHeader" Text="Spell"/>
+                            <TextBlock Grid.Column="2" Classes="ColumnHeader" Text="Min enemies"/>
+                            <TextBlock Grid.Column="3" Classes="ColumnHeader" Text="Max casts"/>
+                            <TextBlock Grid.Column="4" Classes="ColumnHeader" Text="Min mana per cast"/>
+                            <TextBlock Grid.Column="5" Classes="ColumnHeader" Text="= mana / %"/>
+                        </Grid>
 
-                <!-- Multi-attack 1 (room spell). -->
-                <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Multi-attack 1"/>
-                    <AutoCompleteBox Grid.Column="1"
-                                     Text="{Binding MultiAttackSpellName, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding MultiAttackSpellUnlearned}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="210" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Multi-target room spell to fire. Suggestions come from this class's known spells."/>
-                    <NumericUpDown Grid.Column="2"
-                                   Value="{Binding MultiAttackMinEnemies, Mode=TwoWay}"
-                                   Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Only cast when at least this many hostiles are present."/>
-                    <NumericUpDown Grid.Column="3"
-                                   Value="{Binding MultiAttackMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
-                    <NumericUpDown Grid.Column="4"
-                                   Value="{Binding MultiAttackMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
-                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding MultiAttackMinManaPerCastConverted}"/>
-                </Grid>
+                        <!-- Multi-attack 1 (room spell). -->
+                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Multi-attack 1"/>
+                            <AutoCompleteBox Grid.Column="1"
+                                             Text="{Binding MultiAttackSpellName, Mode=TwoWay}"
+                                             Classes.unlearnedSpell="{Binding MultiAttackSpellUnlearned}"
+                                             ItemsSource="{Binding SpellSuggestions}"
+                                             ValueMemberBinding="{ReflectionBinding Short}"
+                                             ItemFilter="{Binding SpellSuggestionFilter}"
+                                             ItemTemplate="{StaticResource SpellPickItem}"
+                                             PlaceholderText="Type code or name…"
+                                             Width="210" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Multi-target room spell to fire. Suggestions come from this class's known spells."/>
+                            <NumericUpDown Grid.Column="2"
+                                           Value="{Binding MultiAttackMinEnemies, Mode=TwoWay}"
+                                           Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Only cast when at least this many hostiles are present."/>
+                            <NumericUpDown Grid.Column="3"
+                                           Value="{Binding MultiAttackMaxCastsPerRoom, Mode=TwoWay}"
+                                           Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
+                            <NumericUpDown Grid.Column="4"
+                                           Value="{Binding MultiAttackMinManaPerCast, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding MultiAttackMinManaPerCastConverted}"/>
+                        </Grid>
 
-                <!-- Multi-attack 2 — slot 1's successor, not a second room spell racing it.
-                     Shares slot 1's Min enemies, so that column is inert here. -->
-                <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
-                    <CheckBox Grid.Column="0" Content="Multi-attack 2"
-                              IsChecked="{Binding MultiAttack2Enabled, Mode=TwoWay}"
-                              ToolTip.Tip="Off by default. When on, this spell takes over the room once Multi-attack 1 hits its Max casts or mana drops under its Min mana — so a costly opener can fire once or twice and a cheaper spell finishes the pack."/>
-                    <AutoCompleteBox Grid.Column="1"
-                                     Text="{Binding MultiAttack2SpellName, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding MultiAttack2SpellUnlearned}"
-                                     IsEnabled="{Binding MultiAttack2Enabled}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="210" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Follow-up multi-target room spell. Suggestions come from this class's known spells."/>
-                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
-                               Foreground="{StaticResource ChromeFgMutedBrush}"
-                               ToolTip.Tip="Shares Multi-attack 1's Min enemies — the room has to qualify for slot 1 before slot 2 is ever reached."/>
-                    <NumericUpDown Grid.Column="3"
-                                   Value="{Binding MultiAttack2MaxCastsPerRoom, Mode=TwoWay}"
-                                   IsEnabled="{Binding MultiAttack2Enabled}"
-                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
-                    <NumericUpDown Grid.Column="4"
-                                   Value="{Binding MultiAttack2MinManaPerCast, Mode=TwoWay}"
-                                   IsEnabled="{Binding MultiAttack2Enabled}"
-                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
-                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding MultiAttack2MinManaPerCastConverted}"/>
-                </Grid>
+                        <!-- Multi-attack 2 — slot 1's successor, not a second room spell racing it.
+                             Shares slot 1's Min enemies, so that column is inert here. -->
+                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                            <CheckBox Grid.Column="0" Content="Multi-attack 2"
+                                      IsChecked="{Binding MultiAttack2Enabled, Mode=TwoWay}"
+                                      ToolTip.Tip="Off by default. When on, this spell takes over the room once Multi-attack 1 hits its Max casts or mana drops under its Min mana — so a costly opener can fire once or twice and a cheaper spell finishes the pack."/>
+                            <AutoCompleteBox Grid.Column="1"
+                                             Text="{Binding MultiAttack2SpellName, Mode=TwoWay}"
+                                             Classes.unlearnedSpell="{Binding MultiAttack2SpellUnlearned}"
+                                             IsEnabled="{Binding MultiAttack2Enabled}"
+                                             ItemsSource="{Binding SpellSuggestions}"
+                                             ValueMemberBinding="{ReflectionBinding Short}"
+                                             ItemFilter="{Binding SpellSuggestionFilter}"
+                                             ItemTemplate="{StaticResource SpellPickItem}"
+                                             PlaceholderText="Type code or name…"
+                                             Width="210" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Follow-up multi-target room spell. Suggestions come from this class's known spells."/>
+                            <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       ToolTip.Tip="Shares Multi-attack 1's Min enemies — the room has to qualify for slot 1 before slot 2 is ever reached."/>
+                            <NumericUpDown Grid.Column="3"
+                                           Value="{Binding MultiAttack2MaxCastsPerRoom, Mode=TwoWay}"
+                                           IsEnabled="{Binding MultiAttack2Enabled}"
+                                           Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
+                            <NumericUpDown Grid.Column="4"
+                                           Value="{Binding MultiAttack2MinManaPerCast, Mode=TwoWay}"
+                                           IsEnabled="{Binding MultiAttack2Enabled}"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding MultiAttack2MinManaPerCastConverted}"/>
+                        </Grid>
 
-                <!-- Debuff (AOE). -->
-                <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Debuff (AOE)"/>
-                    <AutoCompleteBox Grid.Column="1"
-                                     Text="{Binding AreaDebuffSpellName, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding AreaDebuffSpellUnlearned}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="210" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Area-effect debuff (e.g. blind-room, curse-room). Suggestions come from this class's known spells."/>
-                    <NumericUpDown Grid.Column="2"
-                                   Value="{Binding AreaDebuffMinEnemies, Mode=TwoWay}"
-                                   Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Only cast when at least this many hostiles are present."/>
-                    <NumericUpDown Grid.Column="3"
-                                   Value="{Binding AreaDebuffMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
-                    <NumericUpDown Grid.Column="4"
-                                   Value="{Binding AreaDebuffMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Minimum mana required to cast."/>
-                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding AreaDebuffMinManaPerCastConverted}"/>
-                </Grid>
-                <TextBlock Text="{Binding AreaDebuffSpellMisSlotWarning}"
-                           IsVisible="{Binding AreaDebuffSpellMisSlotWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                           Foreground="{StaticResource SeverityWarnBrush}"
-                           FontSize="11" Margin="150,0,0,2" TextWrapping="Wrap"/>
-                <CheckBox Content="Only cast on the first round in a room" Margin="150,0,0,0"
-                          IsChecked="{Binding AreaDebuffFirstRoundOnly, Mode=TwoWay}"
-                          ToolTip.Tip="Attempt the AoE debuff only on room entry (before the first combat round). If a higher-priority buff/heal takes the round's between-round cast slot on entry, the debuff is abandoned for the room rather than landing on round 2+, where it's mostly wasted mana. Off = keep retrying until it lands once per room."/>
+                        <!-- Debuff (AOE). -->
+                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Debuff (AOE)"/>
+                            <AutoCompleteBox Grid.Column="1"
+                                             Text="{Binding AreaDebuffSpellName, Mode=TwoWay}"
+                                             Classes.unlearnedSpell="{Binding AreaDebuffSpellUnlearned}"
+                                             ItemsSource="{Binding SpellSuggestions}"
+                                             ValueMemberBinding="{ReflectionBinding Short}"
+                                             ItemFilter="{Binding SpellSuggestionFilter}"
+                                             ItemTemplate="{StaticResource SpellPickItem}"
+                                             PlaceholderText="Type code or name…"
+                                             Width="210" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Area-effect debuff (e.g. blind-room, curse-room). Suggestions come from this class's known spells."/>
+                            <NumericUpDown Grid.Column="2"
+                                           Value="{Binding AreaDebuffMinEnemies, Mode=TwoWay}"
+                                           Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Only cast when at least this many hostiles are present."/>
+                            <NumericUpDown Grid.Column="3"
+                                           Value="{Binding AreaDebuffMaxCastsPerRoom, Mode=TwoWay}"
+                                           Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
+                            <NumericUpDown Grid.Column="4"
+                                           Value="{Binding AreaDebuffMinManaPerCast, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Minimum mana required to cast."/>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding AreaDebuffMinManaPerCastConverted}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding AreaDebuffSpellMisSlotWarning}"
+                                   IsVisible="{Binding AreaDebuffSpellMisSlotWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{StaticResource SeverityWarnBrush}"
+                                   FontSize="11" Margin="150,0,0,2" TextWrapping="Wrap"/>
+                        <CheckBox Content="Only cast on the first round in a room" Margin="150,0,0,0"
+                                  IsChecked="{Binding AreaDebuffFirstRoundOnly, Mode=TwoWay}"
+                                  ToolTip.Tip="Attempt the AoE debuff only on room entry (before the first combat round). If a higher-priority buff/heal takes the round's between-round cast slot on entry, the debuff is abandoned for the room rather than landing on round 2+, where it's mostly wasted mana. Off = keep retrying until it lands once per room."/>
 
-                <!-- Debuff (single target — no Min enemies). -->
-                <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Debuff (single target)"/>
-                    <AutoCompleteBox Grid.Column="1"
-                                     Text="{Binding SingleTargetDebuffSpellName, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding SingleTargetDebuffSpellUnlearned}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="210" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Single-target debuff (e.g. weakness, slow). Suggestions come from this class's known spells."/>
-                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
-                               Foreground="{StaticResource ChromeFgMutedBrush}"
-                               ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
-                    <NumericUpDown Grid.Column="3"
-                                   Value="{Binding SingleTargetDebuffMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
-                    <NumericUpDown Grid.Column="4"
-                                   Value="{Binding SingleTargetDebuffMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Minimum mana required to cast."/>
-                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding SingleTargetDebuffMinManaPerCastConverted}"/>
-                </Grid>
-                <TextBlock Text="{Binding SingleTargetDebuffSpellMisSlotWarning}"
-                           IsVisible="{Binding SingleTargetDebuffSpellMisSlotWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                           Foreground="{StaticResource SeverityWarnBrush}"
-                           FontSize="11" Margin="150,0,0,2" TextWrapping="Wrap"/>
+                        <!-- Debuff (single target — no Min enemies). -->
+                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Debuff (single target)"/>
+                            <AutoCompleteBox Grid.Column="1"
+                                             Text="{Binding SingleTargetDebuffSpellName, Mode=TwoWay}"
+                                             Classes.unlearnedSpell="{Binding SingleTargetDebuffSpellUnlearned}"
+                                             ItemsSource="{Binding SpellSuggestions}"
+                                             ValueMemberBinding="{ReflectionBinding Short}"
+                                             ItemFilter="{Binding SpellSuggestionFilter}"
+                                             ItemTemplate="{StaticResource SpellPickItem}"
+                                             PlaceholderText="Type code or name…"
+                                             Width="210" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Single-target debuff (e.g. weakness, slow). Suggestions come from this class's known spells."/>
+                            <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
+                            <NumericUpDown Grid.Column="3"
+                                           Value="{Binding SingleTargetDebuffMaxCastsPerRoom, Mode=TwoWay}"
+                                           Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
+                            <NumericUpDown Grid.Column="4"
+                                           Value="{Binding SingleTargetDebuffMinManaPerCast, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Minimum mana required to cast."/>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding SingleTargetDebuffMinManaPerCastConverted}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding SingleTargetDebuffSpellMisSlotWarning}"
+                                   IsVisible="{Binding SingleTargetDebuffSpellMisSlotWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{StaticResource SeverityWarnBrush}"
+                                   FontSize="11" Margin="150,0,0,2" TextWrapping="Wrap"/>
 
-                <!-- Normal attack spell (single-target — no Min enemies). -->
-                <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Normal attack spell"/>
-                    <AutoCompleteBox Grid.Column="1"
-                                     Text="{Binding NormalAttackSpellName, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding NormalAttackSpellUnlearned}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="210" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Primary single-target damage spell. Suggestions come from this class's known spells."/>
-                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
-                               Foreground="{StaticResource ChromeFgMutedBrush}"
-                               ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
-                    <NumericUpDown Grid.Column="3"
-                                   Value="{Binding NormalAttackSpellMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
-                    <NumericUpDown Grid.Column="4"
-                                   Value="{Binding NormalAttackSpellMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Minimum mana required to cast."/>
-                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding NormalAttackSpellMinManaPerCastConverted}"/>
-                </Grid>
+                        <!-- Normal attack spell (single-target — no Min enemies). -->
+                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Normal attack spell"/>
+                            <AutoCompleteBox Grid.Column="1"
+                                             Text="{Binding NormalAttackSpellName, Mode=TwoWay}"
+                                             Classes.unlearnedSpell="{Binding NormalAttackSpellUnlearned}"
+                                             ItemsSource="{Binding SpellSuggestions}"
+                                             ValueMemberBinding="{ReflectionBinding Short}"
+                                             ItemFilter="{Binding SpellSuggestionFilter}"
+                                             ItemTemplate="{StaticResource SpellPickItem}"
+                                             PlaceholderText="Type code or name…"
+                                             Width="210" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Primary single-target damage spell. Suggestions come from this class's known spells."/>
+                            <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
+                            <NumericUpDown Grid.Column="3"
+                                           Value="{Binding NormalAttackSpellMaxCastsPerRoom, Mode=TwoWay}"
+                                           Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
+                            <NumericUpDown Grid.Column="4"
+                                           Value="{Binding NormalAttackSpellMinManaPerCast, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Minimum mana required to cast."/>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding NormalAttackSpellMinManaPerCastConverted}"/>
+                        </Grid>
 
-                <!-- Alternate attack spell (single-target — no Min enemies). -->
-                <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Alternate attack spell"/>
-                    <AutoCompleteBox Grid.Column="1"
-                                     Text="{Binding AlternateAttackSpellName, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding AlternateAttackSpellUnlearned}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="210" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Fallback / second-choice damage spell — used when the normal pick can't fire. Suggestions come from this class's known spells."/>
-                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
-                               Foreground="{StaticResource ChromeFgMutedBrush}"
-                               ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
-                    <NumericUpDown Grid.Column="3"
-                                   Value="{Binding AlternateAttackSpellMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
-                    <NumericUpDown Grid.Column="4"
-                                   Value="{Binding AlternateAttackSpellMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Minimum mana required to cast."/>
-                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding AlternateAttackSpellMinManaPerCastConverted}"/>
-                </Grid>
+                        <!-- Alternate attack spell (single-target — no Min enemies). -->
+                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Alternate attack spell"/>
+                            <AutoCompleteBox Grid.Column="1"
+                                             Text="{Binding AlternateAttackSpellName, Mode=TwoWay}"
+                                             Classes.unlearnedSpell="{Binding AlternateAttackSpellUnlearned}"
+                                             ItemsSource="{Binding SpellSuggestions}"
+                                             ValueMemberBinding="{ReflectionBinding Short}"
+                                             ItemFilter="{Binding SpellSuggestionFilter}"
+                                             ItemTemplate="{StaticResource SpellPickItem}"
+                                             PlaceholderText="Type code or name…"
+                                             Width="210" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Fallback / second-choice damage spell — used when the normal pick can't fire. Suggestions come from this class's known spells."/>
+                            <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
+                            <NumericUpDown Grid.Column="3"
+                                           Value="{Binding AlternateAttackSpellMaxCastsPerRoom, Mode=TwoWay}"
+                                           Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
+                            <NumericUpDown Grid.Column="4"
+                                           Value="{Binding AlternateAttackSpellMinManaPerCast, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Minimum mana required to cast."/>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding AlternateAttackSpellMinManaPerCastConverted}"/>
+                        </Grid>
 
-                <Separator Margin="0,6"/>
+                        <Separator Margin="0,6"/>
 
-                <!-- Drain (life-steal) spell — an emergency heal that also attacks. -->
-                <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Drain spell"/>
-                    <AutoCompleteBox Grid.Column="1"
-                                     Text="{Binding DrainSpellName, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding DrainSpellUnlearned}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="210" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Life-drain spell (e.g. vamp / dtch / nebo) — the damage it deals also heals you, so it's used as an emergency heal that also attacks. Cast in place of the round's attack when HP drops to the trigger below, on living non-undead targets only (a drain can't affect NonLiving / Undead). Suggestions come from this class's known spells."/>
-                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
-                               Foreground="{StaticResource ChromeFgMutedBrush}"
-                               ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
-                    <NumericUpDown Grid.Column="3"
-                                   Value="{Binding DrainSpellMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
-                    <NumericUpDown Grid.Column="4"
-                                   Value="{Binding DrainSpellMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Minimum mana required to cast — drops back to the normal action below this."/>
-                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding DrainSpellMinManaPerCastConverted}"/>
-                </Grid>
-                <!-- Drain trigger + AoE-override, indented to align under the Spell column. -->
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="150,2,0,0" VerticalAlignment="Center">
-                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="Heal when ≤ HP"/>
-                    <NumericUpDown Value="{Binding DrainHpTrigger, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" FormatString="0" Increment="5" Width="100"
-                                   ToolTip.Tip="Health % at/under which the drain overrides the round's attack. 0 = off. Above this %, the engine reverts to the normal attack pick."/>
-                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="%"/>
-                    <CheckBox Content="Drains override AOE" Margin="20,0,0,0"
-                              IsChecked="{Binding DrainsOverrideAoe, Mode=TwoWay}"
-                              ToolTip.Tip="When checked, the drain overrides the room AoE (multi-attack) too. Off (default): with enough enemies to trigger the AoE, the AoE keeps rooming and the drain only overrides single-target / physical actions."/>
-                </StackPanel>
-                  </StackPanel>
-                </Border>
+                        <!-- Drain (life-steal) spell — an emergency heal that also attacks. -->
+                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Drain spell"/>
+                            <AutoCompleteBox Grid.Column="1"
+                                             Text="{Binding DrainSpellName, Mode=TwoWay}"
+                                             Classes.unlearnedSpell="{Binding DrainSpellUnlearned}"
+                                             ItemsSource="{Binding SpellSuggestions}"
+                                             ValueMemberBinding="{ReflectionBinding Short}"
+                                             ItemFilter="{Binding SpellSuggestionFilter}"
+                                             ItemTemplate="{StaticResource SpellPickItem}"
+                                             PlaceholderText="Type code or name…"
+                                             Width="210" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Life-drain spell (e.g. vamp / dtch / nebo) — the damage it deals also heals you, so it's used as an emergency heal that also attacks. Cast in place of the round's attack when HP drops to the trigger below, on living non-undead targets only (a drain can't affect NonLiving / Undead). Suggestions come from this class's known spells."/>
+                            <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
+                            <NumericUpDown Grid.Column="3"
+                                           Value="{Binding DrainSpellMaxCastsPerRoom, Mode=TwoWay}"
+                                           Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
+                            <NumericUpDown Grid.Column="4"
+                                           Value="{Binding DrainSpellMinManaPerCast, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Minimum mana required to cast — drops back to the normal action below this."/>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding DrainSpellMinManaPerCastConverted}"/>
+                        </Grid>
+                        <!-- Drain trigger + AoE-override, indented to align under the Spell column. -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="150,2,0,0" VerticalAlignment="Center">
+                            <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="Heal when ≤ HP"/>
+                            <NumericUpDown Value="{Binding DrainHpTrigger, Mode=TwoWay}"
+                                           Minimum="0" Maximum="100" FormatString="0" Increment="5" Width="100"
+                                           ToolTip.Tip="Health % at/under which the drain overrides the round's attack. 0 = off. Above this %, the engine reverts to the normal attack pick."/>
+                            <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="%"/>
+                            <CheckBox Content="Drains override AOE" Margin="20,0,0,0"
+                                      IsChecked="{Binding DrainsOverrideAoe, Mode=TwoWay}"
+                                      ToolTip.Tip="When checked, the drain overrides the room AoE (multi-attack) too. Off (default): with enough enemies to trigger the AoE, the AoE keeps rooming and the drain only overrides single-target / physical actions."/>
+                        </StackPanel>
+                    </StackPanel>
+                </Panel>
 
                 <Separator Margin="0,10"/>
 

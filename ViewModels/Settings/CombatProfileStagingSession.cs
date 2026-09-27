@@ -91,6 +91,11 @@ public sealed class CombatProfileStagingSession : IDisposable
     public IReadOnlyList<CombatSpellProfile> Profiles => _profiles;
     public int ActiveIndex => _active;
 
+    // The saved active profile — whose values are live. The Party tab isn't staged,
+    // so it shows this one's values until a commit makes a chip switch live.
+    public int LiveActiveIndex => _mgr.ActiveIndex;
+    public string? LiveActiveName => _mgr.Active?.Name;
+
     // Always ≥1 profile (the manager guarantees it; Reseed adds a blank fallback).
     public CombatSpellProfile Active => _profiles[_active];
     public bool IsDirty => _dirty;

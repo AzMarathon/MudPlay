@@ -19,20 +19,6 @@
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
-        <!-- The whole Health tab is per combat profile: a soft panel tinted the
-             active-profile accent (bound per-instance, matching the Combat tab's
-             chips + borders) with the profile name in the header. -->
-        <Style Selector="Border.ProfileGroup">
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="10,8"/>
-            <Setter Property="Margin" Value="0,6,0,4"/>
-        </Style>
-        <Style Selector="TextBlock.ProfileGroupHeader">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,0,0,6"/>
-        </Style>
     </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
@@ -71,251 +57,293 @@
                 <!-- The entire Health tab is per combat profile — switch the active
                      profile with the chip bar on the Combat tab and these thresholds
                      swap with it. -->
-                <Border Classes="ProfileGroup"
-                        Background="{Binding ActiveProfileAccentSoftBrush}"
-                        BorderBrush="{Binding ActiveProfileAccentBrush}">
-                  <StackPanel Spacing="4">
-                    <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
-                               Foreground="{Binding ActiveProfileAccentBrush}"/>
 
                 <!-- ============ Health (HP) ============ -->
-                <DockPanel>
-                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                              IsChecked="{Binding HealthHpInProfile.IsIncluded, Mode=TwoWay}"
-                              ToolTip.Tip="{Binding HealthHpInProfile.Tooltip}"/>
-                    <TextBlock Classes="SectionHeader" Text="Health (HP)"/>
-                </DockPanel>
+                <Panel Classes="ProfileFrame">
+                    <Border Classes="ProfileGroup" IsVisible="{Binding HealthHpInProfile.IsIncluded}"
+                            Background="{Binding ActiveProfileAccentSoftBrush}"
+                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
+                    <StackPanel Classes="ProfileBody">
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                                      IsChecked="{Binding HealthHpInProfile.IsIncluded, Mode=TwoWay}"
+                                      ToolTip.Tip="{Binding HealthHpInProfile.Tooltip}"/>
+                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
+                                       IsVisible="{Binding HealthHpInProfile.IsIncluded}"/>
+                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Health (HP)"/>
+                        </DockPanel>
 
-                <!-- Mode picker -->
-                <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
-                    <RadioButton GroupName="HpUnit" Content="Percentage"
-                                 IsChecked="{Binding HpModePercentage, Mode=TwoWay}"
-                                 ToolTip.Tip="Thresholds below are read as % of MaxHp."/>
-                    <RadioButton GroupName="HpUnit" Content="Value"
-                                 IsChecked="{Binding HpModeAbsolute, Mode=TwoWay}"
-                                 ToolTip.Tip="Thresholds below are read as absolute HP."/>
-                </StackPanel>
+                        <!-- Mode picker -->
+                        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
+                            <RadioButton GroupName="HpUnit" Content="Percentage"
+                                         IsChecked="{Binding HpModePercentage, Mode=TwoWay}"
+                                         ToolTip.Tip="Thresholds below are read as % of MaxHp."/>
+                            <RadioButton GroupName="HpUnit" Content="Value"
+                                         IsChecked="{Binding HpModeAbsolute, Mode=TwoWay}"
+                                         ToolTip.Tip="Thresholds below are read as absolute HP."/>
+                        </StackPanel>
 
-                <Grid ColumnDefinitions="180,130,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rest max"/>
-                    <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                   Value="{Binding RestMaxHp, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Stop resting once HP reaches this threshold — the auto-rest ends here and you stand back up."/>
-                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding RestMaxHpConverted}"/>
+                        <Grid ColumnDefinitions="180,130,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rest max"/>
+                            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                           Value="{Binding RestMaxHp, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Stop resting once HP reaches this threshold — the auto-rest ends here and you stand back up."/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding RestMaxHpConverted}"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Rest if below"/>
-                    <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                   Value="{Binding RestIfBelowHp, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Auto-rest trigger — HealthManager asserts the HealthRecovery gate when HP falls below this."/>
-                    <TextBlock Grid.Row="1" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding RestIfBelowHpConverted}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Rest if below"/>
+                            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                           Value="{Binding RestIfBelowHp, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Auto-rest trigger — HealthManager asserts the HealthRecovery gate when HP falls below this."/>
+                            <TextBlock Grid.Row="1" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding RestIfBelowHpConverted}"/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Heal (rest)"/>
-                    <NumericUpDown Grid.Row="2" Grid.Column="1"
-                                   Value="{Binding HealRestTrigger, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Cast Spells → Minor heal during a rest cycle when HP drops below this."/>
-                    <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding HealRestTriggerConverted}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Heal (rest)"/>
+                            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                           Value="{Binding HealRestTrigger, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Cast Spells → Minor heal during a rest cycle when HP drops below this."/>
+                            <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding HealRestTriggerConverted}"/>
 
-                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Minor heal (combat)"/>
-                    <NumericUpDown Grid.Row="3" Grid.Column="1"
-                                   Value="{Binding MinorHealCombatTrigger, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Cast Spells → Minor heal during combat when HP drops below this."/>
-                    <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding MinorHealCombatTriggerConverted}"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Minor heal (combat)"/>
+                            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                           Value="{Binding MinorHealCombatTrigger, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Cast Spells → Minor heal during combat when HP drops below this."/>
+                            <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding MinorHealCombatTriggerConverted}"/>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Major heal (combat)"/>
-                    <NumericUpDown Grid.Row="4" Grid.Column="1"
-                                   Value="{Binding MajorHealCombatTrigger, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Cast Spells → Major heal during combat when HP drops below this."/>
-                    <TextBlock Grid.Row="4" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding MajorHealCombatTriggerConverted}"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Major heal (combat)"/>
+                            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                                           Value="{Binding MajorHealCombatTrigger, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Cast Spells → Major heal during combat when HP drops below this."/>
+                            <TextBlock Grid.Row="4" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding MajorHealCombatTriggerConverted}"/>
 
-                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Emergency heal"/>
-                    <NumericUpDown Grid.Row="5" Grid.Column="1"
-                                   Value="{Binding EmergencyHealTrigger, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Cast Spells → Emergency heal the instant HP drops to or below this, in ANY state — combat, resting, mid-walk. Overrides everything else that round (major/minor heal, cures, blesses/buffs, debuffs) and ignores the mana-floor gate below: this is a last-resort save, not a routine heal."/>
-                    <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding EmergencyHealTriggerConverted}"/>
+                            <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Emergency heal"/>
+                            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                                           Value="{Binding EmergencyHealTrigger, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Cast Spells → Emergency heal the instant HP drops to or below this, in ANY state — combat, resting, mid-walk. Overrides everything else that round (major/minor heal, cures, blesses/buffs, debuffs) and ignores the mana-floor gate below: this is a last-resort save, not a routine heal."/>
+                            <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding EmergencyHealTriggerConverted}"/>
 
-                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="FieldLabel" Text="Run if below"/>
-                    <NumericUpDown Grid.Row="6" Grid.Column="1"
-                                   Value="{Binding RunIfBelowHp, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Trigger flee behavior when HP falls this low. 0 = off (never flee on HP)."/>
-                    <TextBlock Grid.Row="6" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding RunIfBelowHpConverted}"/>
+                            <TextBlock Grid.Row="6" Grid.Column="0" Classes="FieldLabel" Text="Run if below"/>
+                            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                                           Value="{Binding RunIfBelowHp, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Trigger flee behavior when HP falls this low. 0 = off (never flee on HP)."/>
+                            <TextBlock Grid.Row="6" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding RunIfBelowHpConverted}"/>
 
-                    <TextBlock Grid.Row="7" Grid.Column="0" Classes="FieldLabel" Text="Hang up if below"/>
-                    <NumericUpDown Grid.Row="7" Grid.Column="1"
-                                   Value="{Binding HangIfBelowHp, Mode=TwoWay}"
-                                   Minimum="{Binding HangMinimum}" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Drop the connection when HP falls this low — emergency last resort. This can go negative in either mode, down to the realm death floor (HP % goes negative while bleeding out, as par shows), so you can set the hangup deep in the bleeding-out band, closer to death. 0 = hang the moment you drop. To turn it off, use 'Disable hang-ups' in Other settings."/>
-                    <TextBlock Grid.Row="7" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding HangIfBelowHpConverted}"/>
-                </Grid>
+                            <TextBlock Grid.Row="7" Grid.Column="0" Classes="FieldLabel" Text="Hang up if below"/>
+                            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                                           Value="{Binding HangIfBelowHp, Mode=TwoWay}"
+                                           Minimum="{Binding HangMinimum}" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Drop the connection when HP falls this low — emergency last resort. This can go negative in either mode, down to the realm death floor (HP % goes negative while bleeding out, as par shows), so you can set the hangup deep in the bleeding-out band, closer to death. 0 = hang the moment you drop. To turn it off, use 'Disable hang-ups' in Other settings."/>
+                            <TextBlock Grid.Row="7" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding HangIfBelowHpConverted}"/>
+                        </Grid>
+                    </StackPanel>
+                </Panel>
 
                 <!-- ============ Mana / Kai ============ -->
-                <DockPanel>
-                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                              IsChecked="{Binding HealthManaInProfile.IsIncluded, Mode=TwoWay}"
-                              ToolTip.Tip="{Binding HealthManaInProfile.Tooltip}"/>
-                    <TextBlock Classes="SectionHeader" Text="Mana / Kai"/>
-                </DockPanel>
+                <Panel Classes="ProfileFrame">
+                    <Border Classes="ProfileGroup" IsVisible="{Binding HealthManaInProfile.IsIncluded}"
+                            Background="{Binding ActiveProfileAccentSoftBrush}"
+                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
+                    <StackPanel Classes="ProfileBody">
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                                      IsChecked="{Binding HealthManaInProfile.IsIncluded, Mode=TwoWay}"
+                                      ToolTip.Tip="{Binding HealthManaInProfile.Tooltip}"/>
+                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
+                                       IsVisible="{Binding HealthManaInProfile.IsIncluded}"/>
+                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Mana / Kai"/>
+                        </DockPanel>
 
-                <!-- Mode picker -->
-                <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
-                    <RadioButton GroupName="MaUnit" Content="Percentage"
-                                 IsChecked="{Binding MaModePercentage, Mode=TwoWay}"
-                                 ToolTip.Tip="Thresholds below are read as % of MaxMa / MaxKai."/>
-                    <RadioButton GroupName="MaUnit" Content="Value"
-                                 IsChecked="{Binding MaModeAbsolute, Mode=TwoWay}"
-                                 ToolTip.Tip="Thresholds below are read as absolute MA / KAI."/>
-                </StackPanel>
+                        <!-- Mode picker -->
+                        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
+                            <RadioButton GroupName="MaUnit" Content="Percentage"
+                                         IsChecked="{Binding MaModePercentage, Mode=TwoWay}"
+                                         ToolTip.Tip="Thresholds below are read as % of MaxMa / MaxKai."/>
+                            <RadioButton GroupName="MaUnit" Content="Value"
+                                         IsChecked="{Binding MaModeAbsolute, Mode=TwoWay}"
+                                         ToolTip.Tip="Thresholds below are read as absolute MA / KAI."/>
+                        </StackPanel>
 
-                <Grid ColumnDefinitions="180,130,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rest max"/>
-                    <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                   Value="{Binding RestMaxMa, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Stop resting the caster pool once MA / KAI reaches this threshold."/>
-                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding RestMaxMaConverted}"/>
+                        <Grid ColumnDefinitions="180,130,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rest max"/>
+                            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                           Value="{Binding RestMaxMa, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Stop resting the caster pool once MA / KAI reaches this threshold."/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding RestMaxMaConverted}"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Rest if below"/>
-                    <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                   Value="{Binding RestIfBelowMa, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Auto-rest trigger for the caster pool — HealthManager asserts the ManaRecovery gate when MA falls below this."/>
-                    <TextBlock Grid.Row="1" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding RestIfBelowMaConverted}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Rest if below"/>
+                            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                           Value="{Binding RestIfBelowMa, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Auto-rest trigger for the caster pool — HealthManager asserts the ManaRecovery gate when MA falls below this."/>
+                            <TextBlock Grid.Row="1" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding RestIfBelowMaConverted}"/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Heal if above (rest/idle)"/>
-                    <NumericUpDown Grid.Row="2" Grid.Column="1"
-                                   Value="{Binding HealIfAboveMaResting, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Only cast heal spells while resting / idle when MA / KAI is at or above this — below it, heals are skipped so the pool regenerates. 0 = always heal."/>
-                    <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding HealIfAboveMaRestingConverted}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Heal if above (rest/idle)"/>
+                            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                           Value="{Binding HealIfAboveMaResting, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Only cast heal spells while resting / idle when MA / KAI is at or above this — below it, heals are skipped so the pool regenerates. 0 = always heal."/>
+                            <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding HealIfAboveMaRestingConverted}"/>
 
-                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Heal if above (combat)"/>
-                    <NumericUpDown Grid.Row="3" Grid.Column="1"
-                                   Value="{Binding HealIfAboveMaCombat, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Same mana-floor for heal spells but applied in combat. 0 = always heal (survival over conservation)."/>
-                    <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding HealIfAboveMaCombatConverted}"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Heal if above (combat)"/>
+                            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                           Value="{Binding HealIfAboveMaCombat, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Same mana-floor for heal spells but applied in combat. 0 = always heal (survival over conservation)."/>
+                            <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding HealIfAboveMaCombatConverted}"/>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Run if below"/>
-                    <NumericUpDown Grid.Row="4" Grid.Column="1"
-                                   Value="{Binding RunIfBelowMa, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Flee when caster runs out of MA / KAI to cast. 0 = off (never flee on mana)."/>
-                    <TextBlock Grid.Row="4" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding RunIfBelowMaConverted}"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Run if below"/>
+                            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                                           Value="{Binding RunIfBelowMa, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Flee when caster runs out of MA / KAI to cast. 0 = off (never flee on mana)."/>
+                            <TextBlock Grid.Row="4" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding RunIfBelowMaConverted}"/>
 
-                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Bless if above"/>
-                    <NumericUpDown Grid.Row="5" Grid.Column="1"
-                                   Value="{Binding BlessIfAboveMa, Mode=TwoWay}"
-                                   Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Re-cast party / self buffs when MA recovers past this point."/>
-                    <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
-                               VerticalAlignment="Center" Margin="8,0,0,0"
-                               Text="{Binding BlessIfAboveMaConverted}"/>
-                </Grid>
+                            <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Bless if above"/>
+                            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                                           Value="{Binding BlessIfAboveMa, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Re-cast party / self buffs when MA recovers past this point."/>
+                            <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Text="{Binding BlessIfAboveMaConverted}"/>
+                        </Grid>
+                    </StackPanel>
+                </Panel>
 
                 <!-- ============ Resting Options ============ -->
-                <DockPanel>
-                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                              IsChecked="{Binding RestingOptionsInProfile.IsIncluded, Mode=TwoWay}"
-                              ToolTip.Tip="{Binding RestingOptionsInProfile.Tooltip}"/>
-                    <TextBlock Classes="SectionHeader" Text="Resting Options"/>
-                </DockPanel>
-                <CheckBox Content="Use 'meditate' ability"
-                          IsChecked="{Binding UseMeditateAbility, Mode=TwoWay}"
-                          ToolTip.Tip="Use the class-specific meditate command on classes that have it."/>
-                <CheckBox Content="Meditate before resting"
-                          IsChecked="{Binding MeditateBeforeResting, Mode=TwoWay}"
-                          ToolTip.Tip="Sit and meditate first when MA is also low; rest only after MA tops off."/>
-                <CheckBox Content="Utilize shadowrest"
-                          IsChecked="{Binding UtilizeShadowRest, Mode=TwoWay}"
-                          IsVisible="{Binding ShadowRestAvailable}"
-                          ToolTip.Tip="For ShadowRest classes (Paradigm): when solo and hidden/sneaking, rest in place even with a monster in the room — the game keeps you un-attacked while stealthed. Inert on classes without the ability."/>
+                <Panel Classes="ProfileFrame">
+                    <Border Classes="ProfileGroup" IsVisible="{Binding RestingOptionsInProfile.IsIncluded}"
+                            Background="{Binding ActiveProfileAccentSoftBrush}"
+                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
+                    <StackPanel Classes="ProfileBody">
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                                      IsChecked="{Binding RestingOptionsInProfile.IsIncluded, Mode=TwoWay}"
+                                      ToolTip.Tip="{Binding RestingOptionsInProfile.Tooltip}"/>
+                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
+                                       IsVisible="{Binding RestingOptionsInProfile.IsIncluded}"/>
+                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Resting Options"/>
+                        </DockPanel>
+                        <CheckBox Content="Use 'meditate' ability"
+                                  IsChecked="{Binding UseMeditateAbility, Mode=TwoWay}"
+                                  ToolTip.Tip="Use the class-specific meditate command on classes that have it."/>
+                        <CheckBox Content="Meditate before resting"
+                                  IsChecked="{Binding MeditateBeforeResting, Mode=TwoWay}"
+                                  ToolTip.Tip="Sit and meditate first when MA is also low; rest only after MA tops off."/>
+                        <CheckBox Content="Utilize shadowrest"
+                                  IsChecked="{Binding UtilizeShadowRest, Mode=TwoWay}"
+                                  IsVisible="{Binding ShadowRestAvailable}"
+                                  ToolTip.Tip="For ShadowRest classes (Paradigm): when solo and hidden/sneaking, rest in place even with a monster in the room — the game keeps you un-attacked while stealthed. Inert on classes without the ability."/>
+                    </StackPanel>
+                </Panel>
 
                 <!-- ============ Emergency escape ============
                      Substitute for the low-HP hangup: break combat + sys goto to a
                      curated location. Gated on the active BBS's Sysop goto power. -->
-                <DockPanel>
-                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                              IsChecked="{Binding EmergencyEscapeInProfile.IsIncluded, Mode=TwoWay}"
-                              ToolTip.Tip="{Binding EmergencyEscapeInProfile.Tooltip}"/>
-                    <TextBlock Classes="SectionHeader" Text="Emergency escape"/>
-                </DockPanel>
-                <CheckBox Content="Sys goto wimpy instead of hanging"
-                          IsEnabled="{Binding SysGotoAvailable}"
-                          IsChecked="{Binding SysGotoWimpyInsteadOfHanging, Mode=TwoWay}"
-                          ToolTip.Tip="When your HP crosses the 'Hang up if below' threshold with a hostile present, break combat and `sys goto` to the location below instead of dropping the connection. Needs the Sysop goto power on this BBS; falls back to the normal hangup if the power is off or the location is gone."/>
-                <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
-                           Foreground="{StaticResource ChromeFgMutedBrush}"
-                           IsVisible="{Binding !SysGotoAvailable}"
-                           Text="Enable the Sysop goto power on the BBS tab (and add a location) to use this."/>
-                <Grid ColumnDefinitions="140,240" Margin="0,4,0,0"
-                      IsVisible="{Binding SysGotoAvailable}">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Wimpy goto location"/>
-                    <ComboBox Grid.Column="1" HorizontalAlignment="Left" MinWidth="220"
-                              ItemsSource="{Binding WimpyGotoChoices}"
-                              SelectedItem="{Binding SysGotoWimpyLocation, Mode=TwoWay}"
-                              IsEnabled="{Binding SysGotoWimpyInsteadOfHanging}"
-                              PlaceholderText="pick a location"
-                              ToolTip.Tip="The Sys Goto location the wimpy escape jumps to — one of the keywords from this BBS's Sys Goto table."/>
-                </Grid>
+                <Panel Classes="ProfileFrame">
+                    <Border Classes="ProfileGroup" IsVisible="{Binding EmergencyEscapeInProfile.IsIncluded}"
+                            Background="{Binding ActiveProfileAccentSoftBrush}"
+                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
+                    <StackPanel Classes="ProfileBody">
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                                      IsChecked="{Binding EmergencyEscapeInProfile.IsIncluded, Mode=TwoWay}"
+                                      ToolTip.Tip="{Binding EmergencyEscapeInProfile.Tooltip}"/>
+                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
+                                       IsVisible="{Binding EmergencyEscapeInProfile.IsIncluded}"/>
+                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Emergency escape"/>
+                        </DockPanel>
+                        <CheckBox Content="Sys goto wimpy instead of hanging"
+                                  IsEnabled="{Binding SysGotoAvailable}"
+                                  IsChecked="{Binding SysGotoWimpyInsteadOfHanging, Mode=TwoWay}"
+                                  ToolTip.Tip="When your HP crosses the 'Hang up if below' threshold with a hostile present, break combat and `sys goto` to the location below instead of dropping the connection. Needs the Sysop goto power on this BBS; falls back to the normal hangup if the power is off or the location is gone."/>
+                        <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                   IsVisible="{Binding !SysGotoAvailable}"
+                                   Text="Enable the Sysop goto power on the BBS tab (and add a location) to use this."/>
+                        <Grid ColumnDefinitions="140,240" Margin="0,4,0,0"
+                              IsVisible="{Binding SysGotoAvailable}">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Wimpy goto location"/>
+                            <ComboBox Grid.Column="1" HorizontalAlignment="Left" MinWidth="220"
+                                      ItemsSource="{Binding WimpyGotoChoices}"
+                                      SelectedItem="{Binding SysGotoWimpyLocation, Mode=TwoWay}"
+                                      IsEnabled="{Binding SysGotoWimpyInsteadOfHanging}"
+                                      PlaceholderText="pick a location"
+                                      ToolTip.Tip="The Sys Goto location the wimpy escape jumps to — one of the keywords from this BBS's Sys Goto table."/>
+                        </Grid>
+                    </StackPanel>
+                </Panel>
 
                 <!-- ============ Resting commands ============ -->
-                <DockPanel>
-                    <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                              IsChecked="{Binding RestingCommandsInProfile.IsIncluded, Mode=TwoWay}"
-                              ToolTip.Tip="{Binding RestingCommandsInProfile.Tooltip}"/>
-                    <TextBlock Classes="SectionHeader" Text="Resting commands"/>
-                </DockPanel>
-                <!-- Left-aligned, fixed-width boxes: a chained rest command is
-                     short, so the box needn't stretch to the pane's right edge. -->
-                <Grid ColumnDefinitions="220,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,4">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel"
-                               Text="Pre-rest / meditate command"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Width="300" HorizontalAlignment="Left"
-                             Text="{Binding PreRestCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                             PlaceholderText="e.g. peer^M;look"
-                             ToolTip.Tip="Sent right before the rest / meditate command. `^M` and `;` are both treated as carriage returns so multiple commands can be chained."/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel"
-                               Text="Post-rest / meditate command"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Width="300" HorizontalAlignment="Left"
-                             Text="{Binding PostRestCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                             PlaceholderText="e.g. stand^M;look"
-                             ToolTip.Tip="Sent right after standing up. Same chaining rules as the pre-rest command."/>
-                </Grid>
+                <Panel Classes="ProfileFrame">
+                    <Border Classes="ProfileGroup" IsVisible="{Binding RestingCommandsInProfile.IsIncluded}"
+                            Background="{Binding ActiveProfileAccentSoftBrush}"
+                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
+                    <StackPanel Classes="ProfileBody">
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
+                                      IsChecked="{Binding RestingCommandsInProfile.IsIncluded, Mode=TwoWay}"
+                                      ToolTip.Tip="{Binding RestingCommandsInProfile.Tooltip}"/>
+                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
+                                       IsVisible="{Binding RestingCommandsInProfile.IsIncluded}"/>
+                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Resting commands"/>
+                        </DockPanel>
+                        <!-- Left-aligned, fixed-width boxes: a chained rest command is
+                             short, so the box needn't stretch to the pane's right edge. -->
+                        <Grid ColumnDefinitions="220,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,4">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel"
+                                       Text="Pre-rest / meditate command"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Width="300" HorizontalAlignment="Left"
+                                     Text="{Binding PreRestCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                     PlaceholderText="e.g. peer^M;look"
+                                     ToolTip.Tip="Sent right before the rest / meditate command. `^M` and `;` are both treated as carriage returns so multiple commands can be chained."/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel"
+                                       Text="Post-rest / meditate command"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Width="300" HorizontalAlignment="Left"
+                                     Text="{Binding PostRestCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                     PlaceholderText="e.g. stand^M;look"
+                                     ToolTip.Tip="Sent right after standing up. Same chaining rules as the pre-rest command."/>
+                        </Grid>
+                    </StackPanel>
+                </Panel>
 
-                  </StackPanel>
-                </Border>
             </StackPanel>
         </Grid>
     </ScrollViewer>
