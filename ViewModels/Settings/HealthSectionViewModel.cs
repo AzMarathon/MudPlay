@@ -141,6 +141,8 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     // Convenience for SettingsWindowViewModel, which builds the shared session and
     // passes the same instance to both the Combat and Health section VMs.
     // "Include in combat profile" checkboxes, one per header on this tab.
+    // The profile chips, so profiles can be switched from this tab too.
+    public CombatProfileChipBar ChipBar { get; }
     public CombatProfileGroupToggle HealthHpInProfile { get; }
     public CombatProfileGroupToggle HealthManaInProfile { get; }
     public CombatProfileGroupToggle RestingOptionsInProfile { get; }
@@ -184,6 +186,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         _session.ReloadAllRequested += OnSessionLoad;
         _session.ChipsChanged += OnSessionChipsChanged;
         _session.Committed += OnSessionCommitted;
+        ChipBar = new CombatProfileChipBar(_session);
         HealthHpInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.HealthHp, MarkDirty);
         HealthManaInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.HealthMana, MarkDirty);
         RestingOptionsInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.RestingOptions, MarkDirty);
@@ -203,6 +206,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
             _session.ReloadAllRequested -= OnSessionLoad;
             _session.ChipsChanged -= OnSessionChipsChanged;
             _session.Committed -= OnSessionCommitted;
+            ChipBar.Dispose();
             HealthHpInProfile.Dispose();
             HealthManaInProfile.Dispose();
             RestingOptionsInProfile.Dispose();

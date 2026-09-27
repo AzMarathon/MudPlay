@@ -1,15 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.115.8**
-> - A disarm that sets the trap off is recognised by every trap's own failure line, on both realms (Stock's walker no longer stalls on one)
-> - The Stock engine's exit refusals (spell, item, level, alignment, timed, add-on, dragging, closed door, too stunned) count as a refused move instead of stalling the walker
-> - "You took N damage." is no longer read as picking up an item
-> - Attacks and attack spells hold while you're feared; debuffs, heals, buffs and cures still go out
-> - A rest refused while poisoned waits for the poison to clear (or retries shortly) instead of leaving you standing
-> - "Meditation will not help" (mana already full) switches to resting instead of waiting on the meditate
-> - A disarm with no recognised reply is handled like a trap that went off, and the lines it got are logged for the bug report
-> - Each "Include in combat profile" group sits in its own profile-coloured border with the checkbox inside; unchecked, the border goes away (Party tab included)
+> **Version 3.115.11**
+> - Health, Spells and Party tabs get the combat-profile chips at the top, with add / remove, so profiles can be switched, compared, added and removed from any of them
+> - The Party tab's party healing and party bless follow the chips like the other tabs, instead of waiting for Apply
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

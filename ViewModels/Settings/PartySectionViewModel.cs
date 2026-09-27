@@ -154,15 +154,16 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     private readonly CombatProfileStagingSession? _session;
     public CombatProfileGroupToggle? PartyHealingInProfile { get; }
     public CombatProfileGroupToggle? PartyBlessInProfile { get; }
+    public CombatProfileChipBar? ChipBar { get; }
 
-    // The border / label for the groups above follow the saved active profile, whose
-    // party values this tab shows (it isn't staged per chip).
+    // The border / label for the groups above follow the staged active profile, the
+    // same as the Combat / Health / Spells tabs.
     public string ActiveProfileLabel => _session is null ? string.Empty
-        : $"Combat profile: {(string.IsNullOrWhiteSpace(_session.LiveActiveName) ? $"Profile {_session.LiveActiveIndex + 1}" : _session.LiveActiveName.Trim())}";
+        : $"Combat profile: {(string.IsNullOrWhiteSpace(_session.Active.Name) ? $"Profile {_session.ActiveIndex + 1}" : _session.Active.Name.Trim())}";
     public Avalonia.Media.IBrush ActiveProfileAccentBrush =>
-        CombatProfilePalette.SolidBrush((_session?.LiveActiveIndex ?? 0) + 1);
+        CombatProfilePalette.SolidBrush((_session?.ActiveIndex ?? 0) + 1);
     public Avalonia.Media.IBrush ActiveProfileAccentSoftBrush =>
-        CombatProfilePalette.SoftBrush((_session?.LiveActiveIndex ?? 0) + 1);
+        CombatProfilePalette.SoftBrush((_session?.ActiveIndex ?? 0) + 1);
 
     public PartySectionViewModel(CombatProfileStagingSession? session = null)
         : this(AppServices.Current.Profile, session) { }
@@ -180,8 +181,12 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         {
             PartyHealingInProfile = new CombatProfileGroupToggle(session, CombatProfileGroup.PartyHealing, MarkDirty);
             PartyBlessInProfile = new CombatProfileGroupToggle(session, CombatProfileGroup.PartyBless, MarkDirty);
+            ChipBar = new CombatProfileChipBar(session);
             session.Committing += OnSessionCommitting;
             session.Committed += OnSessionCommitted;
+            session.CaptureRequested += CapturePartyBoxesToActive;
+            session.LoadRequested += LoadPartyBoxesFromActive;
+            session.ChipsChanged += OnChipsChanged;
         }
         OnDispose(() =>
         {
@@ -190,10 +195,14 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
             _spellbook.Changed -= OnSpellbookChanged;
             PartyHealingInProfile?.Dispose();
             PartyBlessInProfile?.Dispose();
+            ChipBar?.Dispose();
             if (_session is not null)
             {
                 _session.Committing -= OnSessionCommitting;
                 _session.Committed -= OnSessionCommitted;
+                _session.CaptureRequested -= CapturePartyBoxesToActive;
+                _session.LoadRequested -= LoadPartyBoxesFromActive;
+                _session.ChipsChanged -= OnChipsChanged;
             }
         });
         _suppressDirty = true;
@@ -205,10 +214,12 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
 
     public override void Apply()
     {
-        // A pending combat-profile commit writes this tab first (OnSessionCommitting)
-        // and reloads it afterwards.
-        if (_session is { IsDirty: true })
+        // With the window's combat-profile session, save through it: it writes this
+        // tab first (OnSessionCommitting), folds the party healing / bless boxes into
+        // the active profile, and reloads the tab afterwards.
+        if (_session is not null)
         {
+            _session.MarkDirty();
             _session.CommitIfDirty();
             return;
         }
@@ -224,56 +235,84 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         if (IsDirty) Write();
     }
 
-    // A chip switch in the window can make another profile's party healing / bless
-    // live on commit; reload so the tab shows it.
+    // The commit made the active profile's party healing / bless live; reload so the
+    // tab reads back exactly what was saved.
     private void OnSessionCommitted()
     {
         _suppressDirty = true;
         LoadFromProfile();
         _suppressDirty = false;
         ClearDirty();
+    }
+
+    // Chip switch: fold this tab's party healing / bless boxes into the outgoing
+    // profile (CaptureRequested), then load the incoming one's (LoadRequested).
+    private void CapturePartyBoxesToActive() => _session?.Active.Party.CaptureFrom(BuildDto());
+
+    private void LoadPartyBoxesFromActive()
+    {
+        if (_session is null) return;
+        CombatProfileParty p = _session.Active.Party;
+        _suppressDirty = true;
+        MinorPartyHealSpell    = p.MinorPartyHealSpell;
+        MinorPartyHealAoeSpell = p.MinorPartyHealAoeSpell;
+        MajorPartyHealSpell    = p.MajorPartyHealSpell;
+        MajorPartyHealAoeSpell = p.MajorPartyHealAoeSpell;
+        MinorHealMemberThresholdPercent = p.MinorHealMemberThresholdPercent;
+        MajorHealMemberThresholdPercent = p.MajorHealMemberThresholdPercent;
+        AoeMinMembers          = p.AoeMinMembers;
+        BlessWhileResting      = p.BlessWhileResting;
+        BlessDuringCombat      = p.BlessDuringCombat;
+        _suppressDirty = false;
+    }
+
+    private void OnChipsChanged()
+    {
         OnPropertyChanged(nameof(ActiveProfileLabel));
         OnPropertyChanged(nameof(ActiveProfileAccentBrush));
         OnPropertyChanged(nameof(ActiveProfileAccentSoftBrush));
     }
 
+    // The Party section from the current boxes.
+    private PartySettings BuildDto() => new()
+    {
+        ParPollFrequencySec      = Math.Clamp(ParPollFrequencySec, 1, 60),
+        AutoInviteReconnecting   = AutoInviteReconnecting,
+        ResetStatisticsOnLoopStart = ResetStatisticsOnLoopStart,
+        Rank = RankFront ? PartyRank.Front
+             : RankBack  ? PartyRank.Back
+             : PartyRank.Mid,
+        JoinNagInitialDelaySec   = Math.Clamp(JoinNagInitialDelaySec, 1, 60),
+        JoinNagFrequencySec      = Math.Clamp(JoinNagFrequencySec,    1, 60),
+        JoinNagMaxTotalSec       = Math.Clamp(JoinNagMaxTotalSec,     5, 600),
+        SendJoinToInvited        = SendJoinToInvited,
+        SendHealthToMembers      = SendHealthToMembers,
+        ProbeStatsOnPartyJoin    = ProbeStatsOnPartyJoin,
+        IfLeadingWaitTotalSec    = Math.Clamp(IfLeadingWaitTotalSec,  0, 3600),
+        ReturnDistanceRooms      = Math.Clamp(ReturnDistanceRooms,    1, 500),
+
+        MinorPartyHealSpell    = NullIfBlank(MinorPartyHealSpell),
+        MinorPartyHealAoeSpell = NullIfBlank(MinorPartyHealAoeSpell),
+        MajorPartyHealSpell    = NullIfBlank(MajorPartyHealSpell),
+        MajorPartyHealAoeSpell = NullIfBlank(MajorPartyHealAoeSpell),
+        MinorHealMemberThresholdPercent = Math.Clamp(MinorHealMemberThresholdPercent, 0, 100),
+        MajorHealMemberThresholdPercent = Math.Clamp(MajorHealMemberThresholdPercent, 0, 100),
+        AoeMinMembers          = Math.Clamp(AoeMinMembers, 2, 6),
+        MaxMonstersWhenPartying = Math.Clamp(MaxMonstersWhenPartying, 1, 20),
+        WaitIfMemberBelowPercent = Math.Clamp(WaitIfMemberBelowPercent, 0, 100),
+        IgnoreWaitWhenLeading  = IgnoreWaitWhenLeading,
+        HelpLeaderOpenDoors    = HelpLeaderOpenDoors,
+        UsePanicWhileLeading   = UsePanicWhileLeading,
+        IgnorePanics           = IgnorePanics,
+        BlessWhileResting      = BlessWhileResting,
+        BlessDuringCombat      = BlessDuringCombat,
+    };
+
     private void Write()
     {
         if (_profile.Current is not { } profile) return;
 
-        PartySettings dto = new()
-        {
-            ParPollFrequencySec      = Math.Clamp(ParPollFrequencySec, 1, 60),
-            AutoInviteReconnecting   = AutoInviteReconnecting,
-            ResetStatisticsOnLoopStart = ResetStatisticsOnLoopStart,
-            Rank = RankFront ? PartyRank.Front
-                 : RankBack  ? PartyRank.Back
-                 : PartyRank.Mid,
-            JoinNagInitialDelaySec   = Math.Clamp(JoinNagInitialDelaySec, 1, 60),
-            JoinNagFrequencySec      = Math.Clamp(JoinNagFrequencySec,    1, 60),
-            JoinNagMaxTotalSec       = Math.Clamp(JoinNagMaxTotalSec,     5, 600),
-            SendJoinToInvited        = SendJoinToInvited,
-            SendHealthToMembers      = SendHealthToMembers,
-            ProbeStatsOnPartyJoin    = ProbeStatsOnPartyJoin,
-            IfLeadingWaitTotalSec    = Math.Clamp(IfLeadingWaitTotalSec,  0, 3600),
-            ReturnDistanceRooms      = Math.Clamp(ReturnDistanceRooms,    1, 500),
-
-            MinorPartyHealSpell    = NullIfBlank(MinorPartyHealSpell),
-            MinorPartyHealAoeSpell = NullIfBlank(MinorPartyHealAoeSpell),
-            MajorPartyHealSpell    = NullIfBlank(MajorPartyHealSpell),
-            MajorPartyHealAoeSpell = NullIfBlank(MajorPartyHealAoeSpell),
-            MinorHealMemberThresholdPercent = Math.Clamp(MinorHealMemberThresholdPercent, 0, 100),
-            MajorHealMemberThresholdPercent = Math.Clamp(MajorHealMemberThresholdPercent, 0, 100),
-            AoeMinMembers          = Math.Clamp(AoeMinMembers, 2, 6),
-            MaxMonstersWhenPartying = Math.Clamp(MaxMonstersWhenPartying, 1, 20),
-            WaitIfMemberBelowPercent = Math.Clamp(WaitIfMemberBelowPercent, 0, 100),
-            IgnoreWaitWhenLeading  = IgnoreWaitWhenLeading,
-            HelpLeaderOpenDoors    = HelpLeaderOpenDoors,
-            UsePanicWhileLeading   = UsePanicWhileLeading,
-            IgnorePanics           = IgnorePanics,
-            BlessWhileResting      = BlessWhileResting,
-            BlessDuringCombat      = BlessDuringCombat,
-        };
+        PartySettings dto = BuildDto();
 
         profile.Settings ??= new();
         profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
