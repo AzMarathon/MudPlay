@@ -1,5 +1,10 @@
 # Version history
 
+## 3.111.21
+
+- Clearer Run if BS fails tooltip and Help: what it covers, when it holds back, and how it pairs with Hit and Run tactics
+- Settings → Combat: backstab options grouped under Do BS attacks (greyed out while it's off); the combat-off stealth-running option sits on its own
+
 ## 3.111.19
 
 - A step waits for the sneak to take (retrying up to 15s), including a loop's first step, instead of walking in unsneaked

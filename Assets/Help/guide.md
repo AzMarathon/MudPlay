@@ -2408,6 +2408,8 @@ Off (the default) is the current behavior: if you engage a room of 8 with Min se
 **What it does:** When on, attempts a backstab as the very first action when you enter a room with a sneakable target. Backstab only ever lands on that opening action — once anything else has happened in the room (a spell, a swing, another backstab attempt), the surprise is gone for that room until you leave and re-approach freshly.
 **Important notes:** A monster with the "see-hidden" ability reveals you before the opener, forcing a normal attack instead. A successful backstab is silent (no public "moves to attack" announcement) — you only know it worked from the "surprise" damage line.
 
+The backstab options that depend on it (*Don't BS if multi-attack room spell is firing*, *Run if BS fails*, *Hit and Run tactics*) sit indented beneath it and are greyed out while it's off. *Clear hostiles when sneak broken by see-hidden monster* is a separate combat-off stealth-running option, so it's listed on its own below them.
+
 ### Don't BS if multi-attack room spell is firing
 
 **Default:** On
@@ -2416,12 +2418,18 @@ Off (the default) is the current behavior: if you engage a room of 8 with Min se
 ### Run if BS fails
 
 **Default:** Off
-**What it does:** Automatically triggers flee behavior if your backstab attempt clearly failed (no "surprise" in the result line) — on the theory that a failed backstab means the target is now fully alert and the fight is riskier than planned. It also runs when your sneak breaks on the way in (`You make a sound as you enter the room!`): you entered seen, so the backstab would fail, and MudPlay runs instead of opening with a plain attack.
+**What it does:** Runs instead of fighting when your backstab opener can't work. A failed backstab leaves the target alert and swinging at you, so the fight is riskier than the one you planned. It covers two cases:
+- **The backstab swings without "surprise".** It missed its surprise and you're now in an ordinary fight. MudPlay waits for that round to finish, and doesn't run if the same round killed the target and nothing else is in the room.
+- **Your sneak broke on the way in.** Either `You make a sound as you enter the room!`, or the room showed up without the game's `Sneaking...` line (a silent break). You entered seen, so a backstab is bound to fail, and MudPlay runs rather than opening with a plain attack.
+
+It runs the way *Run distance* and *Go backwards if running* set for any flee, only sends `break` when you're actually engaged, and needs a running loop or walk.
+
+**With Hit and Run tactics:** the two cover different moments, so turn both on for full hit-and-run play. *Hit and Run tactics* handles what happens **after a backstab lands**, plus any fight that would start with a plain attack (a monster walking in, one that chases you). *Run if BS fails* handles the backstab that **doesn't land**. On its own, *Run if BS fails* is a safety net for backstab openers: when one fails you back off, and otherwise you fight as normal.
 
 ### Hit and Run tactics / Give up and fight after N runs
 
 **Default:** Off / 3 runs
-**What it does:** Never fight without a backstab. Once a backstab lands, anything still standing — the monster you hit, or anything else in the room — is left for next time: you run, your loop or walk re-sneaks, comes back in and opens with another backstab. The same goes for any fight that would start with a plain attack: a monster that walks in after your backstab, one that chases you, a room you entered seen. It runs the way *Run distance* and *Go backwards if running* set for any flee, and needs **Do BS attacks** and a running loop or walk.
+**What it does:** Never fight without a backstab (pair it with *Run if BS fails*, which handles the backstab that doesn't land). Once a backstab lands, anything still standing — the monster you hit, or anything else in the room — is left for next time: you run, your loop or walk re-sneaks, comes back in and opens with another backstab. The same goes for any fight that would start with a plain attack: a monster that walks in after your backstab, one that chases you, a room you entered seen. It runs the way *Run distance* and *Go backwards if running* set for any flee, and needs **Do BS attacks** and a running loop or walk.
 
 It doesn't run where a backstab couldn't work anyway: a room with a see-hidden monster, or a monster marked *don't backstab*.
 
