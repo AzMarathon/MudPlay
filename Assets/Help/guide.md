@@ -2900,6 +2900,12 @@ Settings → Cash + Items.
 **What it does:** Skips picking up a coin if doing so would push your encumbrance into the named bracket. The three are nested by strictness — checking "Light" implies "Medium" and "Heavy" are also refused, since those are looser thresholds.
 **When you might change it:** Turn on "Don't make you Medium" if you want to stay light on your feet while exploring or fighting.
 
+### Don't collect past 90% encumbrance
+
+**Default:** Off
+**What it does:** Lets you pick up coin all the way into Heavy, but stops at 90% of your max carry weight. The spare 10% is there because a debuff such as *frail* can lower your max mid-fight. If you're filled to the brim, that leaves you **too heavy to move** until you drop something or it wears off (see *If leading, wait only*).
+**Important notes:** Any bracket gate above already stops lower, so turning one on ticks and locks this box.
+
 ### Collect after combat finished (Cash and Items)
 
 **Default:** Off
@@ -2913,7 +2919,7 @@ Settings → Cash + Items.
 ### Don't get item if it makes you Light / Medium / Heavy
 
 **Default:** all Off
-**What it does:** Same nested-strictness idea as the coin version above, but applied to picking up ground *items* instead of coin.
+**What it does:** Same nested-strictness idea as the coin version above, but applied to picking up ground *items* instead of coin. **Don't get item past 90% encumbrance** is the item twin of *Don't collect past 90% encumbrance*.
 
 ---
 

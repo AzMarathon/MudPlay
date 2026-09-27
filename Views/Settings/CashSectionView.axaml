@@ -159,6 +159,10 @@
                           IsChecked="{Binding SkipCollectIfMakesHeavy, Mode=TwoWay}"
                           IsEnabled="{Binding SkipHeavyEnabled}"
                           ToolTip.Tip="Skip pickups that would push past Medium → Heavy. Auto-checked + locked while a stricter gate (Light or Medium) is on."/>
+                <CheckBox Content="Don't collect past 90% encumbrance"
+                          IsChecked="{Binding SkipCollectPast90Percent, Mode=TwoWay}"
+                          IsEnabled="{Binding SkipPast90Enabled}"
+                          ToolTip.Tip="Load up (Heavy included) but stop at 90% of your max, so a debuff that cuts how much you can carry (frail) doesn't leave you too heavy to move. Auto-checked + locked while a bracket gate is on."/>
                 <CheckBox Content="Collect after combat finished (Cash and Items)"
                           IsChecked="{Binding CollectAfterCombatFinished, Mode=TwoWay}"
                           ToolTip.Tip="Defer pickups until the room's combat is over before sending get commands. Shared by Cash auto-collect and the Items auto-get engine."/>
@@ -184,6 +188,10 @@
                           IsChecked="{Binding SkipGetItemIfMakesHeavy, Mode=TwoWay}"
                           IsEnabled="{Binding GetItemHeavyEnabled}"
                           ToolTip.Tip="Skip a ground-item pickup that would push past Medium → Heavy. Auto-checked + locked while a stricter gate (Light or Medium) is on."/>
+                <CheckBox Content="Don't get item past 90% encumbrance"
+                          IsChecked="{Binding SkipGetItemPast90Percent, Mode=TwoWay}"
+                          IsEnabled="{Binding GetItemPast90Enabled}"
+                          ToolTip.Tip="Load up (Heavy included) but stop at 90% of your max, so a debuff that cuts how much you can carry (frail) doesn't leave you too heavy to move. Auto-checked + locked while a bracket gate is on."/>
 
             </StackPanel>
         </Grid>

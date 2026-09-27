@@ -5410,7 +5410,8 @@ public sealed class AppServices
             {
                 Models.Profile.CashSettings c =
                     ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
-                return (c.SkipGetItemIfMakesLight, c.SkipGetItemIfMakesMedium, c.SkipGetItemIfMakesHeavy);
+                return (c.SkipGetItemIfMakesLight, c.SkipGetItemIfMakesMedium, c.SkipGetItemIfMakesHeavy,
+                        c.SkipGetItemPast90Percent);
             },
             log: Log,
             isParadigm: onParadigm);
