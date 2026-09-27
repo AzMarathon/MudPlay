@@ -65,8 +65,12 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
             case EventTriggerType.Relog:  IsTriggerRelog  = true; break;
             case EventTriggerType.AtTime: IsTriggerAtTime = true; break;
             case EventTriggerType.Every:  IsTriggerEvery  = true; break;
+            case EventTriggerType.State:  IsTriggerState  = true; break;
             default:                      IsTriggerLogon  = true; break;
         }
+        foreach (EventCondition c in existing.Conditions ?? new List<EventCondition>())
+            Conditions.Add(new EventConditionRowViewModel(c, RemoveCondition));
+        Conditions.CollectionChanged += (_, _) => Refresh();
         AtTime = existing.AtTime ?? "12:00";
         EveryAmount = existing.EveryAmount ?? 30;
         EveryUnit = existing.EveryUnit ?? EventTimeUnit.Seconds;
@@ -76,8 +80,12 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
             case EventActionType.Loop:     IsActionLoop     = true; break;
             case EventActionType.AutoLair: IsActionAutoLair = true; break;
             case EventActionType.Command:  IsActionCommand  = true; break;
+            case EventActionType.Roomba:   IsActionRoomba   = true; break;
             default:                       IsActionWalkTo   = true; break;
         }
+        SelectedRoombaMode = existing.RoombaMode == EventRoombaMode.InventoryOnly
+            ? RoombaModeOptions[1]
+            : RoombaModeOptions[0];
         WalkToText = existing.WalkToTarget is { } t ? $"{t.Map}/{t.Room}" : string.Empty;
         LoopName = existing.LoopName;
         AutoLairSetupName = existing.AutoLairSetupName;
@@ -115,6 +123,28 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
 
     [ObservableProperty] private EventTimeUnit _everyUnit = EventTimeUnit.Seconds;
 
+    // "When" — fires once the listed conditions all hold (EventTriggerType.State).
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConditionsError))]
+    private bool _isTriggerState;
+
+    public ObservableCollection<EventConditionRowViewModel> Conditions { get; } = new();
+
+    public string ConditionsError =>
+        IsTriggerState && Conditions.Count == 0 ? "Add at least one condition." : string.Empty;
+    public bool HasConditionsError => ConditionsError.Length > 0;
+
+    [RelayCommand]
+    private void AddCondition()
+    {
+        Conditions.Add(new EventConditionRowViewModel(
+            new EventCondition { Stat = EventConditionStat.Money, Comparison = EventComparison.AtLeast },
+            RemoveCondition));
+        IsTriggerState = true;
+    }
+
+    private void RemoveCondition(EventConditionRowViewModel row) => Conditions.Remove(row);
+
     // Picker source for the EveryUnit ComboBox.
     public IReadOnlyList<EventTimeUnit> EveryUnits { get; } =
         new[] { EventTimeUnit.Seconds, EventTimeUnit.Minutes, EventTimeUnit.Hours };
@@ -145,6 +175,10 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     [ObservableProperty] private bool _isActionCommand;
     [ObservableProperty] private string _commandText = string.Empty;
 
+    [ObservableProperty] private bool _isActionRoomba;
+    public IReadOnlyList<string> RoombaModeOptions { get; } = new[] { "Sort", "Inventory only" };
+    [ObservableProperty] private string _selectedRoombaMode = "Sort";
+
     // WHAT-side validation happens on Save (popup), not inline — fewer red labels
     // cluttering the form. WHEN-side format errors stay inline because they're
     // objectively wrong syntax the user can see at a glance. Command never errors
@@ -155,7 +189,8 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
 
     public bool CanSave =>
         AtTimeError.Length == 0
-        && EveryError.Length == 0;
+        && EveryError.Length == 0
+        && ConditionsError.Length == 0;
 
     // ----- Save / Cancel ----------------------------------------------
 
@@ -193,6 +228,9 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
                 result.EveryAmount = EveryAmount;
                 result.EveryUnit = EveryUnit;
                 break;
+            case EventTriggerType.State:
+                result.Conditions = Conditions.Select(static c => c.ToModel()).ToList();
+                break;
         }
 
         switch (result.ActionType)
@@ -210,6 +248,11 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
                 break;
             case EventActionType.Command:
                 result.CommandText = CommandText;
+                break;
+            case EventActionType.Roomba:
+                result.RoombaMode = SelectedRoombaMode == RoombaModeOptions[1]
+                    ? EventRoombaMode.InventoryOnly
+                    : EventRoombaMode.Sort;
                 break;
         }
 
@@ -244,47 +287,57 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     // how the property was set.
     partial void OnIsTriggerLogonChanged(bool value)
     {
-        if (value) { IsTriggerLogoff = IsTriggerRelog = IsTriggerAtTime = IsTriggerEvery = false; }
+        if (value) { IsTriggerLogoff = IsTriggerRelog = IsTriggerAtTime = IsTriggerEvery = IsTriggerState = false; }
         Refresh();
     }
     partial void OnIsTriggerLogoffChanged(bool value)
     {
-        if (value) { IsTriggerLogon = IsTriggerRelog = IsTriggerAtTime = IsTriggerEvery = false; }
+        if (value) { IsTriggerLogon = IsTriggerRelog = IsTriggerAtTime = IsTriggerEvery = IsTriggerState = false; }
         Refresh();
     }
     partial void OnIsTriggerRelogChanged(bool value)
     {
-        if (value) { IsTriggerLogon = IsTriggerLogoff = IsTriggerAtTime = IsTriggerEvery = false; }
+        if (value) { IsTriggerLogon = IsTriggerLogoff = IsTriggerAtTime = IsTriggerEvery = IsTriggerState = false; }
         Refresh();
     }
     partial void OnIsTriggerAtTimeChanged(bool value)
     {
-        if (value) { IsTriggerLogon = IsTriggerLogoff = IsTriggerRelog = IsTriggerEvery = false; }
+        if (value) { IsTriggerLogon = IsTriggerLogoff = IsTriggerRelog = IsTriggerEvery = IsTriggerState = false; }
         Refresh();
     }
     partial void OnIsTriggerEveryChanged(bool value)
     {
-        if (value) { IsTriggerLogon = IsTriggerLogoff = IsTriggerRelog = IsTriggerAtTime = false; }
+        if (value) { IsTriggerLogon = IsTriggerLogoff = IsTriggerRelog = IsTriggerAtTime = IsTriggerState = false; }
+        Refresh();
+    }
+    partial void OnIsTriggerStateChanged(bool value)
+    {
+        if (value) { IsTriggerLogon = IsTriggerLogoff = IsTriggerRelog = IsTriggerAtTime = IsTriggerEvery = false; }
         Refresh();
     }
     partial void OnIsActionWalkToChanged(bool value)
     {
-        if (value) { IsActionLoop = IsActionAutoLair = IsActionCommand = false; }
+        if (value) { IsActionLoop = IsActionAutoLair = IsActionCommand = IsActionRoomba = false; }
         Refresh();
     }
     partial void OnIsActionLoopChanged(bool value)
     {
-        if (value) { IsActionWalkTo = IsActionAutoLair = IsActionCommand = false; }
+        if (value) { IsActionWalkTo = IsActionAutoLair = IsActionCommand = IsActionRoomba = false; }
         Refresh();
     }
     partial void OnIsActionAutoLairChanged(bool value)
     {
-        if (value) { IsActionWalkTo = IsActionLoop = IsActionCommand = false; }
+        if (value) { IsActionWalkTo = IsActionLoop = IsActionCommand = IsActionRoomba = false; }
         Refresh();
     }
     partial void OnIsActionCommandChanged(bool value)
     {
-        if (value) { IsActionWalkTo = IsActionLoop = IsActionAutoLair = false; }
+        if (value) { IsActionWalkTo = IsActionLoop = IsActionAutoLair = IsActionRoomba = false; }
+        Refresh();
+    }
+    partial void OnIsActionRoombaChanged(bool value)
+    {
+        if (value) { IsActionWalkTo = IsActionLoop = IsActionAutoLair = IsActionCommand = false; }
         Refresh();
     }
     partial void OnAtTimeChanged(string value)          => OnPropertyChanged(nameof(AtTimeError));
@@ -296,6 +349,8 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         OnPropertyChanged(nameof(EveryError));
         OnPropertyChanged(nameof(HasAtTimeError));
         OnPropertyChanged(nameof(HasEveryError));
+        OnPropertyChanged(nameof(ConditionsError));
+        OnPropertyChanged(nameof(HasConditionsError));
         OnPropertyChanged(nameof(CanSave));
     }
 
@@ -305,6 +360,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         if (IsTriggerRelog)  return EventTriggerType.Relog;
         if (IsTriggerAtTime) return EventTriggerType.AtTime;
         if (IsTriggerEvery)  return EventTriggerType.Every;
+        if (IsTriggerState)  return EventTriggerType.State;
         return EventTriggerType.Logon;
     }
 
@@ -313,6 +369,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         if (IsActionLoop)     return EventActionType.Loop;
         if (IsActionAutoLair) return EventActionType.AutoLair;
         if (IsActionCommand)  return EventActionType.Command;
+        if (IsActionRoomba)   return EventActionType.Roomba;
         return EventActionType.WalkTo;
     }
 

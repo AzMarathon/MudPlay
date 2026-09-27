@@ -3392,7 +3392,7 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 ### Event list (New… / Modify… / Remove)
 
 **What it does:** Shows every scheduled event you've defined, with its **Name**, its trigger (**When**), a live countdown to its next fire (**Next**), and its action (**What**). **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
-**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time** and **Every** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, so they show a dash.
+**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time** and **Every** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
 
 ### Event editor — trigger types
 
@@ -3401,6 +3401,15 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 - **Re-log** — fires like Logon, but only on reconnects — never the very first connect.
 - **At time** — fires once at a specific daily clock time. If MudPlay wasn't connected when the time passed, that occurrence is simply skipped, not caught up later.
 - **Every** — a recurring interval (seconds/minutes/hours). The timer restarts fresh at every connect and stops on disconnect.
+- **When** — fires when your character reaches a state. Use **+ Add condition** to build a list; the event fires when **all** of them are true.
+  - **Money:** coin you're carrying, entered as an amount of a coin type, e.g. `≥ 5 Platinum`.
+  - **Encumbrance %:** carried weight as a percent of your max.
+  - **Experience** and **Level:** your totals.
+  - **Comparisons:** each condition compares with `≥`, `≤`, `>`, `<`, `=` or `≠`. Example: money `≥ 5 Platinum` **and** encumbrance `≥ 60`% to trigger a bank or stash run.
+  - **Fires once, not repeatedly.** It fires when the conditions become true, then waits until they stop being true before it can fire again, so picking up more coin while you're already over the line doesn't fire it on every coin.
+  - **Login counts.** If the conditions are already true when you log in, it fires once.
+  - **Only in the game.** Like the timed triggers, it only fires while you're in the game.
+  - **Needs readings first.** Money and encumbrance aren't known until MudPlay has read your inventory, and experience / level until it has read your stats. A condition on something not read yet doesn't count as true.
 
 ### Event editor — action types
 
@@ -3408,6 +3417,7 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 - **Start loop** — starts a saved Loop by name.
 - **Auto-lair** — starts a saved Auto-Lair setup by name.
 - **Command** — sends free-form text to the game; an empty command is valid (useful for paging through a prompt).
+- **Roomba** — starts a Roomba sweep of your actively-managed rooms: **Sort** (a full sweep) or **Inventory only** (walks the circuit and refreshes the item log without moving anything). It stops any running walk, loop or Auto-Lair first. If the sweep can't start (fewer than 2 rooms set to Actively Manage, or a sweep already running), the reason is written to the Program Log.
 
 ---
 

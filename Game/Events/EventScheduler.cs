@@ -64,6 +64,13 @@ public sealed class EventScheduler : IDisposable
     private readonly Dictionary<ScheduledEvent, string> _atTimeFiredAt = new();
 
     private bool _isInGame;
+
+    // True between the first prompt after connecting and the disconnect.
+    public bool IsInGame => _isInGame;
+
+    // Raised on game entry, after the Logon / Re-log events: the moment state
+    // triggers first have live readings to check.
+    public event Action? EnteredGame;
     private bool _hadInSessionDisconnect;
     // Latched true after the first cleanup-warning observation fires Logoff
     // events. The BBS warns repeatedly during a cleanup cycle ("5 min", "4 min",
@@ -183,6 +190,7 @@ public sealed class EventScheduler : IDisposable
         _atTimeFiredAt.Clear();
         _atTimeTicker.Start();
         RebuildEveryTimers();
+        EnteredGame?.Invoke();
     }
 
     // ----- Profile lifecycle -----------------------------------------

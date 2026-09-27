@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using MudPlay.Models.Profile;
 
 namespace MudPlay.Models.GameData;
@@ -40,6 +41,10 @@ public sealed class ScheduledEvent
     // Every.
     public EventTimeUnit? EveryUnit { get; set; }
 
+    // The checks a State trigger waits on; all must hold. Null for other
+    // trigger types.
+    public List<EventCondition>? Conditions { get; set; }
+
     // Which action the event runs when fired.
     public EventActionType ActionType { get; set; }
 
@@ -61,6 +66,9 @@ public sealed class ScheduledEvent
     // multi-fire via ^M and ; separators — each chunk is split out and sent
     // as its own CR-terminated line. Null for other action types.
     public string? CommandText { get; set; }
+
+    // Sweep mode for EventActionType.Roomba. Null for other action types.
+    public EventRoombaMode? RoombaMode { get; set; }
 
     // Tries to parse AtTime as 24-hour HH:mm into a TimeOnly. Returns null
     // when the field is blank or malformed. Centralised here so the editor

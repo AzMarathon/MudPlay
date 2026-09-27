@@ -14,6 +14,9 @@ internal enum SupersedeKeep
     Walker,
     Loop,
     Lair,
+    // Stop all three: the starting engine (a Roomba sweep) drives the loop runner
+    // itself and refuses to start while any of them is busy.
+    None,
 }
 
 // Stop whichever of the three concurrent movement engines would collide

@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.113.2**
-> - Auto-combat no longer attacks a monster that enters the room you're leaving as you step out (it sent `bs <rat>` into the next room); the room you arrive in decides
-> - Sneaking with Auto-Sneak, buffs and cures wait until you've arrived in a room instead of going out mid-step, where they broke sneak in the room you were entering
+> **Version 3.114.0**
+> - Events: new When trigger that fires once your character reaches a state (money in a coin type, encumbrance %, experience, level), compared with ≥ ≤ > < = ≠; list several conditions and it fires when all hold, once per crossing
+> - Events: new Roomba action starts a Roomba sweep (Sort or Inventory only)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

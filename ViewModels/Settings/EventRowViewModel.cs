@@ -53,6 +53,7 @@ public sealed partial class EventRowViewModel : ObservableObject
                                       ? "At time —"
                                       : $"At {Source.AtTime}",
         EventTriggerType.Every  => FormatEvery(),
+        EventTriggerType.State  => "When " + Game.Events.EventConditionEvaluator.Describe(Source.Conditions),
         _ => "—",
     };
 
@@ -70,6 +71,9 @@ public sealed partial class EventRowViewModel : ObservableObject
         EventActionType.Command => string.IsNullOrEmpty(Source.CommandText)
                                        ? "Command —"
                                        : $"Command \"{Source.CommandText}\"",
+        EventActionType.Roomba  => Source.RoombaMode == EventRoombaMode.InventoryOnly
+            ? "Roomba (inventory only)"
+            : "Roomba sort",
         _ => "—",
     };
 
