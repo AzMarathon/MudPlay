@@ -626,7 +626,7 @@ public static class CharacterCalculator
             HasWeapon: hasWeapon,
             ArmourClass: stats.ArmourClass,
             Dodge: CombatCalculator.CalcDodge(
-                stats.Level, stats.Agility, stats.Charm, t.PlusDodge, encum.CurrentWeight, encum.MaxWeight),
+                stats.Level, stats.Agility, stats.Charm, t.PlusDodge, encum.CurrentWeight, encum.MaxWeight, realm),
             ProtEvil: t.PlusProtEvil,
             ProtGood: t.PlusProtGood,
             DamageResist: (int)t.PlusDR,

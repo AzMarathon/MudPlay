@@ -342,13 +342,16 @@
                     </StackPanel>
 
                     <StackPanel Grid.Row="1" Spacing="6" Margin="0,8,0,6">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
+                        <!-- The dropdown fills the row rather than sizing to its selection,
+                             so stepping through the criteria doesn't resize it. -->
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Margin="6,0,0,0"
+                                    Content="Find Best" Command="{Binding FindBestCommand}"
+                                    ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat (or, with a search order below, in that priority order)."/>
                             <ComboBox ItemsSource="{Binding TrialFilterOptions}"
                                       SelectedItem="{Binding SelectedTrialFilter, Mode=TwoWay}"
-                                      MinWidth="150"/>
-                            <Button Content="Find Best" Command="{Binding FindBestCommand}"
-                                    ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat (or, with a search order below, in that priority order)."/>
-                        </StackPanel>
+                                      HorizontalAlignment="Stretch" MinWidth="150"/>
+                        </DockPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock Classes="FieldLabel" Text="Target weight" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding TargetWeightOptions}"

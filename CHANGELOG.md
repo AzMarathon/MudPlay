@@ -1,5 +1,10 @@
 # Version history
 
+## 3.112.2
+
+- Character Info, Calculators and Monster Intel: Paradigm accuracy and dodge keep the light-load bonus at exactly 33% encumbrance, matching the game's `stat all` (it was 11 accuracy / 7 dodge low there)
+- Gear Finder: the Find Best dropdown keeps a steady width instead of resizing to each criterion as you scroll through them
+
 ## 3.112.0
 
 - Item Finder: new Backstab attack type — one strike with a backstab-capable weapon

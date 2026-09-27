@@ -1018,7 +1018,7 @@ Encumbrance isn't applied on top — the Stealth value already carries it.
 
 **Crit rating** = `clamp( Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30, 1, 75 )`. *(AGI term unverified on Paradigm.)*
 
-**Dodge** (raw value, before the vs-accuracy % conversion) = `Level/5 + (CHM−50)/5 + (AGI−50)/3` (+ gear `+Dodge`, + a bonus while under 33% encumbrance).
+**Dodge** (raw value, before the vs-accuracy % conversion) = `Level/5 + (CHM−50)/5 + (AGI−50)/3` (+ gear `+Dodge`, + a light-load bonus below 33% encumbrance; on Paradigm, exactly 33% still counts). Accuracy has the same light-load bonus with the same cutoff.
 
 **Stealth** = `StealthLevel + 20 + stat terms`, where `StealthLevel = Level×2` at level ≤ 15, else `Level+15`. The stat terms differ by realm:
 - **Stock**: `trunc(AGI/4) + trunc(INT/8) + trunc(CHM/6)` (each term truncated)

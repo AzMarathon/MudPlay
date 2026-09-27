@@ -946,7 +946,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             ComputeOffense();
 
             _actualAc = _stats.ArmourClass;
-            _actualDodge = CombatCalculator.CalcDodge(_level, _agi, _chm, t.PlusDodge, _encumCur, _encumMax);
+            _actualDodge = CombatCalculator.CalcDodge(_level, _agi, _chm, t.PlusDodge, _encumCur, _encumMax, _realm);
             _protEvil = t.PlusProtEvil;
             _protGood = t.PlusProtGood;
             _damageResist = (int)Math.Round(t.PlusDR, MidpointRounding.AwayFromZero);
