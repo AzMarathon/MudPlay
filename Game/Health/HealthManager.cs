@@ -628,6 +628,9 @@ public sealed class HealthManager : IDisposable
     // True while the server is auto-attacking (CombatStateTracker.IsServerEngaged).
     // Null (tests) keeps the old always-break behavior.
     public Func<bool>? IsServerEngaged { get; set; }
+
+    // The room the flee's latest step left from — a "change" back to it isn't a landing.
+    private Map.RoomKey? _fleeFromRoom;
     private string? _deferredFleeReason;
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
@@ -1739,6 +1742,7 @@ public sealed class HealthManager : IDisposable
         if (combat.BreakBeforeFleeing && IsServerEngaged?.Invoke() != false)
             SendCommand("break");
 
+        _fleeFromRoom = _lastKnownRoom;
         Map.Direction first = _fleeQueue.Dequeue();
         _log?.Combat(LogCategory,
             $"flee start engine={engine.Name} mode={combat.RunDirection} " +
@@ -1948,6 +1952,15 @@ public sealed class HealthManager : IDisposable
     {
         if (newRoom is { } r) _lastKnownRoom = r;
 
+        // A flee step only lands on a confirmed arrival somewhere new. While its move
+        // is still in flight a re-display of the room we're leaving can swing the
+        // tracker back to it — that isn't the retreat landing (report
+        // paradigm-20260927-010239: a "flee complete" in the fight room re-armed the
+        // engage and we swung at the monster we were running from).
+        bool fleeArrival = _fleeEngine is null
+            || (IsMovePending?.Invoke() != true
+                && !(newRoom is { } nr && _fleeFromRoom is { } from && nr.Equals(from)));
+
         // A flee held for the move in flight: that move just landed, so start it now,
         // routed from this room. This arrival is the flee's starting point, not one of
         // its steps (and not the hit-and-run engine "moving on").
@@ -1962,12 +1975,14 @@ public sealed class HealthManager : IDisposable
         // Flee step continuation — fire BEFORE the rest-latch reset
         // so the engine's pause flag doesn't get cleared by a
         // racing post-flee rest cycle.
-        if (startedHeldFlee)
+        if (startedHeldFlee || !fleeArrival)
         {
-            // Nothing to step or land yet — the held flee's first move just went out.
+            // Nothing to step or land yet — the held flee's first move just went out,
+            // or this "change" isn't the flee's move arriving.
         }
         else if (_fleeEngine is not null && _fleeQueue.Count > 0)
         {
+            _fleeFromRoom = _lastKnownRoom;
             Map.Direction next = _fleeQueue.Dequeue();
             _fleeEngine.SendBacktrackMove(next);
             _log?.Combat(LogCategory,

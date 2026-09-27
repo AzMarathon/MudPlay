@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.111.9**
+> **Version 3.111.11**
 > - New Combat option "Hit and Run tactics": never fight without a backstab. Once a backstab lands, anything still standing is run from, and so is any fight that would open with a plain attack (a walk-in, a chaser); the loop re-sneaks and comes back to backstab again
 > - "Give up and fight after N runs" (default 3) caps the runs between backstabs
 > - A flee that starts while a move is still landing waits for it, then runs back from the right room (no more fleeing off the loop)
@@ -11,6 +11,8 @@
 > - Flees only send `break` when you're actually engaged (no "Your command had no effect" after a backstab kill)
 > - The sneak sent on arrival holds movement until the game answers it, so a resuming route can't walk in unsneaked
 > - Hit and run: a fight that starts while a run is already under way doesn't attack or spend another run
+> - After a flee the loop re-plans straight from the room it landed in, with no `rm` check (no more "getting lost" pauses each lap)
+> - A flee only counts as landed on a real arrival somewhere new, so it can't "finish" in the fight room and swing at the monster it's running from
 > - Picture emotes in the Conversation window are drawn a bit larger, so they're no longer squashed to text height
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

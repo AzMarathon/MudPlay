@@ -2027,6 +2027,39 @@ public sealed class HealthManagerTests
         Assert.Contains("break", h.SentLines);
     }
 
+    // Report paradigm-20260927-010239: with the flee's move still unconfirmed, a
+    // re-display swung the tracker back to the room we were leaving; that was taken as
+    // the flee landing, the run looked over, and the next engage swung at the monster.
+    [Fact]
+    public void Flee_SwingBackToTheRoomWeLeft_IsNotALanding()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.HitAndRunMaxRuns = 1;
+
+        h.Health.BackstabLanded(runNow: true);                      // run from 1/50
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));      // a re-display swings back to it
+
+        Assert.Null(h.Engine!.ResumedAtRoom);                       // not landed
+        Assert.True(h.Health.RunInsteadOfFight("the lunge"));        // still running — no swing
+    }
+
+    [Fact]
+    public void Flee_ArrivalWhileAMoveIsPending_IsNotALanding()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        bool pending = false;
+        h.Health.IsMovePending = () => pending;
+
+        h.Health.BackstabLanded(runNow: true);
+        pending = true;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));      // not confirmed yet
+        Assert.Null(h.Engine!.ResumedAtRoom);
+
+        pending = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 48));      // confirmed arrival
+        Assert.Equal(new Game.Map.RoomKey(1, 48), h.Engine.ResumedAtRoom);
+    }
+
     // HitAndRunMaxRuns caps the runs between backstabs (the first included); then fight.
     [Fact]
     public void HitAndRun_RunsUntilTheBudget_ThenFights_AndABackstabResetsIt()

@@ -483,8 +483,12 @@ public sealed class LoopRunner : IRecoverableEngine
         // expected target. Rather than fail to Idle, reroute the loop from where we
         // actually ended up (the gate call is terminal — FinishTier3Success does
         // nothing after this, so detaching + re-planning here is safe).
-        _log?.Warn("LoopRunner",
-            $"ResumeAfterRecovery: desync at step {_index + 1} — recovered at {recoveredAnchor} but expected {_expectedMoveTarget}; rerouting from re-determined room");
+        if (_resumingAfterFlee)
+            _log?.Info("LoopRunner",
+                $"ResumeAfterFlee: landed at {recoveredAnchor} (step {_index + 1} was headed for {_expectedMoveTarget}); re-planning from here");
+        else
+            _log?.Warn("LoopRunner",
+                $"ResumeAfterRecovery: desync at step {_index + 1} — recovered at {recoveredAnchor} but expected {_expectedMoveTarget}; rerouting from re-determined room");
         EnterRecovery($"step {_index + 1} desynced (recovered at {recoveredAnchor})");
     }
 
@@ -1845,6 +1849,14 @@ public sealed class LoopRunner : IRecoverableEngine
         // reads whatever room the tracker holds at that moment, corrected or not —
         // so a failed/unavailable resync (stock realm, no wire, throttled) falls
         // through to exactly the prior behavior.
+        // A flee's own move just landed and confirmed the room — there's no doubt to
+        // settle, so skip the `rm` (report paradigm-20260927-010144: every hit-and-run
+        // lap paused to "check the room").
+        if (_resumingAfterFlee && _tracker.State.Confidence == RoomConfidence.Confirmed)
+        {
+            RerouteFromCurrentRoom();
+            return;
+        }
         if (_recovery?.TryResyncOnce?.Invoke(reason, _ => RerouteFromCurrentRoom(), RerouteFromCurrentRoom) == true)
         {
             _log?.Warn("LoopRunner",
