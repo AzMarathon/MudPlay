@@ -637,11 +637,12 @@ How a character earns and spends character points (CP), how exp needed per level
 - The CP tooltip lists mana regen only under the character's actual casting stat(s).
 
 ### Spellcasting skill (spellLvl, 0x604)
-*Status: CONFIRMED Stock (RE'd DLL `dll-stats-map.md`, verified asm 0x41aae0); Paradigm unverified*
+*Status: CONFIRMED Stock (RE'd DLL `dll-stats-map.md`, verified asm 0x41aae0); Paradigm: MMUD-Explorer uses the same five blends on both realms [OBSERVED] 2026-09-28*
 
 - **Formula:** `Level*2 + manaStat + mageryLevel*5 + spellcastingAbility(70)` — 70 is the +spellcasting ability code (gear/innate).
 - **The blended `manaStat` differs from the mana-regen stat:** type 1 = (3*Int+Wil)/6, 2 = (3*Wil+Int)/6, 3 = (Int+Wil)/3, 4 = (3*Chm+Wil)/6. So for a Priest each WIL point is ~+0.5 spellcasting (+1 per 2).
-- **Non-casters / Mystics have no standard spellcasting skill.**
+- **Mystics (type 5) use a flat `manaStat` of 500**, so their Spellcasting is `500 + Level*2 + mageryLevel*5 (+70)` and no stat moves it *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p `_calculate_secondary_stats` and MMUD-Explorer `CalcSpellCasting`)*. (An earlier note said Mystics have no spellcasting skill; superseded 2026-09-28.)
+- **Non-casters have no spellcasting skill.**
 
 **Client use:**
 - `CharacterCalculator.CalcSpellcasting`; the CP tooltip shows it under the casting stat(s) with the exact next breakpoint.

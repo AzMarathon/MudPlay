@@ -46,7 +46,7 @@ public sealed class LevelProjectionRow
     public string Thievery { get; }
     public string Traps { get; }
     public string Picklocks { get; }
-    // Spellcasting skill; "—" for non-casters and Mystics (Kai has no skill).
+    // Spellcasting skill; "—" for non-casters.
     public string Spellcasting { get; }
     public string Tracking { get; }
     // Backstab accuracy; "—" for a class/race with no stealth source.
@@ -86,8 +86,8 @@ public sealed class LevelProjectionRow
         Traps = p.Traps.ToString(CultureInfo.InvariantCulture);
         Picklocks = p.Picklocks.ToString(CultureInfo.InvariantCulture);
         Tracking = p.Tracking.ToString(CultureInfo.InvariantCulture);
-        // CalcSpellcasting returns 0 for non-casters and Mystics alike — show the
-        // same "—" the Mana column uses rather than a misleading 0.
+        // CalcSpellcasting returns 0 for non-casters — show the same "—" the Mana
+        // column uses rather than a misleading 0.
         Spellcasting = p.Spellcasting > 0
             ? p.Spellcasting.ToString(CultureInfo.InvariantCulture)
             : "—";

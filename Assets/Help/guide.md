@@ -1011,7 +1011,7 @@ Mark a quest **Complete** on the Quest Status tab and its bonuses flow in here a
 Seven columns are **off by default**, because they only matter to some builds:
 
 - **BS Accy** — backstab accuracy (see below).
-- **Spellcast** — your spellcasting skill (`—` for non-casters and Mystics).
+- **Spellcast** — your spellcasting skill (`—` for non-casters). A Mystic's is a flat 500 plus level and magery tier, which no stat changes.
 - **Percep** — Perception. Every class has it, and it's INT's biggest non-caster payoff.
 - **Thievery**, **Traps**, **Picklocks**, **Tracking** — the four thief skills.
 

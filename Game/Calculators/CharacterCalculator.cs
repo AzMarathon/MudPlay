@@ -274,9 +274,9 @@ public static class CharacterCalculator
     // Spellcasting skill (spellLvl, 0x604): Level*2 + manaStat + mageryLevel*5 +
     // the +spellcasting ability (0x46 = 70, gear/innate). manaStat blends the caster
     // stat by class type — 1=(3*Int+Wil)/6 (Mage), 2=(3*Wil+Int)/6 (Priest),
-    // 3=(Int+Wil)/3 (Druid), 4=(3*Chm+Wil)/6 (Bard). Non-casters and Mystics (Kai)
-    // have no standard spellcasting skill. Stock DLL (verified asm 0x41aae0);
-    // Paradigm unverified.
+    // 3=(Int+Wil)/3 (Druid), 4=(3*Chm+Wil)/6 (Bard), and a flat 500 for Mystics (Kai),
+    // which no stat moves. Non-casters have none. Stock DLL (verified asm 0x41aae0);
+    // MMUD-Explorer has the same five on both realms.
     public static int CalcSpellcasting(int level, int intellect, int willpower, int charm,
                                        int mageryType, int mageryLevel, int plusSpellcasting)
     {
@@ -286,7 +286,8 @@ public static class CharacterCalculator
             2 => (3 * willpower + intellect) / 6,
             3 => (intellect + willpower) / 3,
             4 => (3 * charm + willpower) / 6,
-            _ => -1,   // non-caster / Kai — no standard spellcasting
+            5 => 500,
+            _ => -1,   // non-caster — no spellcasting
         };
         if (manaStat < 0) return 0;
         return level * 2 + manaStat + mageryLevel * 5 + plusSpellcasting;
