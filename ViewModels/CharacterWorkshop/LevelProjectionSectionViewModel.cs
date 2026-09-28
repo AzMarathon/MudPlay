@@ -39,6 +39,11 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
     private readonly CpPlanState _planState;
     private readonly Game.Inventory.InventoryManager _inventory;
     private readonly QuestBonusState _questBonuses;
+
+    // The active set's trainers, for the per-level train cost. Enumerating walks the
+    // whole Rooms table (for room names), and Rebuild runs on every CP-plan edit, so
+    // it's done once per game-data set rather than per rebuild.
+    private IReadOnlyList<TrainerShop>? _trainers;
     private Control? _view;
     private bool _suppress;
     // Last character race/class we synced to — lets a what-if pick survive
@@ -245,6 +250,7 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
     // Rebuild the option lists and re-adopt the character against them.
     private void OnActiveSetChanged(string? setName)
     {
+        _trainers = null;
         _suppress = true;
         try
         {
@@ -333,7 +339,7 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         // Enumerate once; the resolver picks min markup and the price formula
         // turns (level, markup) into copper.
         int classNumber = GetInt(classRow, "Number");
-        var trainers = TrainerCatalog.Enumerate(_gameData);
+        IReadOnlyList<TrainerShop> trainers = _trainers ??= TrainerCatalog.Enumerate(_gameData);
 
         // Floor at level 2 — level 1 is the 0-exp starting point, not a row.
         int from = Math.Max(2, FromLevel);

@@ -210,13 +210,35 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     // Persist the current (clamped) plan to the loaded profile. Called after every
     // structural edit (add / remove / reset) and cell edit, so the plan saves itself
     // without a dedicated button; an empty grid clears the stored plan. No-op when no
-    // character profile is loaded.
+    // character profile is loaded. The plan lands in the in-memory profile at once;
+    // the disk write waits for a pause in editing, because a whole-profile save per
+    // cell or added row made the tab lag and churn the disk. A profile swap saves the
+    // outgoing profile itself, and Dispose flushes a pending write.
     private void Persist()
     {
         if (_profile.Current is not { } p) return;
         p.CharacterPlan = Rows.Count == 0 ? null : Rows.Select(r => r.ToEntry()).ToList();
-        _profile.Save();
         SyncAutoTrain();   // the saved plan drives auto-train — refresh "can train now"
+        _saveTimer ??= CreateSaveTimer();
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    private static readonly TimeSpan SaveDelay = TimeSpan.FromSeconds(1);
+    private Avalonia.Threading.DispatcherTimer? _saveTimer;
+
+    private Avalonia.Threading.DispatcherTimer CreateSaveTimer()
+    {
+        var timer = new Avalonia.Threading.DispatcherTimer { Interval = SaveDelay };
+        timer.Tick += (_, _) => FlushSave();
+        return timer;
+    }
+
+    private void FlushSave()
+    {
+        if (_saveTimer is not { IsEnabled: true }) return;
+        _saveTimer.Stop();
+        _profile.Save();
     }
 
     private bool HasRows() => Rows.Count > 0;
@@ -571,6 +593,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private void OnInventoryChanged() => RefreshBaseline();
     private void OnProfileLoaded(CharacterProfile _)
     {
+        _saveTimer?.Stop();   // the swap already saved the outgoing profile
         LoadPlanFromProfile();
         RefreshBaseline();
         SyncAutoTrain();
@@ -579,6 +602,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     public override void Dispose()
     {
+        FlushSave();
         _stats.PropertyChanged -= OnStatsChanged;
         _inventory.Changed -= OnInventoryChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
