@@ -3578,15 +3578,17 @@ public sealed class AppServices
 
         // Ally-drop rescue. Distinct from PlayerDropped (which owns OUR drop):
         // reacts to another party / recently-partied member hitting 0 HP — aids
-        // them, holds movement via AllyDownGate to stay in the room, polls their
-        // off-roster vitals via @health, and re-invites once aided when we lead.
+        // them, holds movement via AllyDownGate for as long as the climb back to
+        // positive HP can take (bounded by the realm's death floor), then polls their
+        // off-roster vitals via @health and re-invites once they're up when we lead.
         // The heal-by-name is delegated to CastDirector via the downed-ally
         // provider wired below. Gated on AutoHealRest (shared party-heal master).
         AllyDropped = new Game.AllyDroppedHandler(
             Router, PartyState, Party, Chat, MovementCoordinator,
             readParty: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             isEnabled: () => ReadAutoModeFlag(d => d.AutoHealRest),
-            log: Log);
+            log: Log,
+            readDeathFloor: () => ResolveActiveRealm()?.Realm.PlayerDiesAtHp ?? -25);
 
         // CombatManager. Picks a target on each
         // classifier emit and sends the configured attack command via

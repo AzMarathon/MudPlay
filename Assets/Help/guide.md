@@ -624,6 +624,8 @@ One character leads; the rest follow. A follower tracks the leader's movement an
 
 With party heal spells configured (Settings → Party), members watch each other's health broadcasts and heal whoever drops below the minor/major thresholds — single-target, or an area heal once enough members qualify.
 
+**A partymate who drops to the ground** is aided at once, and movement holds so the party doesn't walk off (or drag them into a lair) while they're down. Aid only stops the bleeding: they climb back 1 HP every 30 s and can't act until their HP is positive. So the hold lasts as long as that climb can take — worked out from their HP if their client answers, otherwise from the realm's death floor (Settings → BBS + Display) as the worst case. Your downed-ally heal speeds it up. Once they should be up, MudPlay checks their health; when they answer standing, a leader re-invites them, and the hold releases once they're back to the party-heal bar.
+
 ## Remote @-commands
 
 Party members can drive each other with `@`-commands sent over chat. Commands are accepted on three channels — **telepath**, **gangpath**, and **say (local)** — and the reply always comes back on the same channel it arrived on. A reply to a **say**-channel command is a **directed say** (`>Name <reply>`) aimed at whoever sent it, so in a room with several players that person knows the answer is for them. (Gossip — which also carries auctions — yell, and broadcast are ignored for `@`-commands; there's no separate "page" channel — pages count as telepaths. `@dupe` is stricter still: telepath and gangpath only, never say.)

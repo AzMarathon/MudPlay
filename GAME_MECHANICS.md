@@ -836,11 +836,11 @@ How HP works from full health down through dropping and death, how monster healt
 - **Two reversals bring a dropped character back into the positive:**
   - **another player** issues `aid <name>` on them, or
   - a **healing spell** lifts their HP above 0.
-- **On Stock, `aid` stops the bleeding; it doesn't heal** *([OBSERVED] `wccmmud.dll` 1.11p `aid` + `_slow_update_character`; [CONFIRMED] 2026-09-27, user)*.
+- **`aid` stops the bleeding; it doesn't stand them up — on both realms** *([CONFIRMED] 2026-09-27, user; Stock mechanics [OBSERVED] `wccmmud.dll` 1.11p `aid` + `_slow_update_character`)*. They stay down until their HP is **positive** — 0 doesn't count.
   - `aid` on a character at HP ≤ 0 marks them stabilised, and from then on the 30 s tick gives **+1 HP** instead of taking one, until HP is positive. The mark clears once HP is above 0.
-  - So without heals, an aided character at `−n` stands up after about `(n + 1)·30 s`. A heal can end that at any point.
+  - So without heals, an aided character at `−n` stands up after about `(n + 1)·30 s`. A heal can end that at any point. The deepest living HP is the death floor + 1, so the longest the climb can take is `|floor|·30 s`. *(The 30 s rate is from the Stock engine; the client assumes it on Paradigm too — [NEEDS CONFIRMATION] Paradigm's rate.)*
   - Wire text: the aider sees `You have aided <name>, <his/her> wounds are now healing.`; the target sees `<name> has aided you.`; `aid` on someone above 0 HP answers `<name> is in no need of assistance.`.
-  - *(Earlier notes read "aid lifts them back above 0" as immediate; on Stock it's the slow climb. Superseded 2026-09-27.)*
+  - *(Earlier notes read "aid lifts them back above 0" as immediate; it's the slow climb on both realms. Superseded 2026-09-27.)*
 - **Any player can `drag <name>` a dropped character** *([CONFIRMED] 2026-09-26, user)*. The dropped character then **follows wherever the dragging player moves** — their only way out of the room until aided or healed. In a party the client leaves it to the leader (see *Party → Dropped ally rescue*).
 - **A dropped character can still hang up.** Dropping blocks in-realm *actions* (move / fight / cast), but the **carrier drop / main-menu exit** (the Game-Exit command, e.g. `=x` / `;o`; see *Wire, prompt & command output → Realm exit / logoff sequence*) **still goes through at 0 HP or below** *([NEEDS CONFIRMATION] is it the BBS-level =x that works at 0 HP?)*. So the emergency-hangup escape stays available all the way through the bleeding-out window.
 - **HP percentage goes negative while bleeding out.** HP% is a plain `hp / maxHp` ratio with no clamp at zero, so a dropped character reads a **negative percentage**. Where `par` still lists the member it shows it as such (e.g. a member driven to −12/200 HP reads a negative HP%) — but **by realm** (2026-09-26, user): on **Stock** a dropped member is removed from the party at once, so `par` never shows them; on **Paradigm** `par` is believed to show the negative HP% *([NEEDS CONFIRMATION])* — see *Party → Dropping (0 HP) or instant death removes you from the party*. A percentage-based threshold is therefore a continuous scale from 100 % down through 0 % into the negatives, exactly like an absolute-HP scale.
@@ -4265,7 +4265,7 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 - **The drag prints to the dragged character on every move.** Once someone starts it, the drag prints `<leader> is dragging you around.` to the dragged character on each of the dragger's moves (observed: `MudPlay is dragging you around.`).
 - **Drag is manual, never automatic.** **Any player** can `drag <name>` a dropped character *([CONFIRMED] 2026-09-26, user)*; in a party it's normally the leader who does it after seeing the drop line. Nothing drags them on its own. Dragging only relocates the still-mortally-wounded body. It does **not** revive them or restore party membership.
 - **A dropped ally is revived with `aid` and/or a heal.** A dropped ally sits at 0 HP or below and can't act for themselves. They must be brought back by **`aid <name>`** and/or a **heal** that lifts their HP above 0. So a party leader watching `<member> drops to the ground!` should **aid and heal that member** (drag is a separate, optional relocation choice, not the rescue).
-  - On Stock, `aid` alone doesn't lift them at once: it stops the bleeding and they climb 1 HP per 30 s until positive (see *Health, resting & recovery → 0 HP — dropped / bleeding out*). Until then they still can't act, answer an `@health` or accept an invite. A heal gets them up sooner.
+  - `aid` alone doesn't lift them at once, on either realm: it stops the bleeding and they climb 1 HP per 30 s until positive (see *Health, resting & recovery → 0 HP — dropped / bleeding out*). Until then they still can't act, answer an `@health` or accept an invite. A heal gets them up sooner.
 - **A dropped ally leaves `par` — immediately on Stock** *([CONFIRMED] 2026-09-26, user)*. On **Stock** a dropped member is removed from the party at once and no longer appears in the `par` roster (`par` lists live membership only). On **Paradigm** `par` is believed to keep showing them with a negative HP% *([NEEDS CONFIRMATION])*; they can't be moved except by `drag`, and what happens to their party standing once dragged and moved on Paradigm isn't known. Their vitals therefore stop refreshing from `par`, so tracking a dropped, then partially-recovered ally's HP needs an out-of-band poll.
 - **An `@health` telepath polls a member's vitals.** *([CONFIRMED])* Sending an ally a telepath `@health` makes their client's @health responder reply with their current HP / MA. This is an out-of-band way to read a member's health when `par` won't show it (e.g. after they've dropped off the roster).
 - **A name-targeted heal still lands on a dropped ally who's been aided.** *([CONFIRMED])* Even though an aided-but-still-dropped ally isn't in `par` anymore, a heal cast **at them by name** still reaches them. A party healer can keep topping them up until they fully recover / rejoin.
@@ -4273,14 +4273,16 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - The **party leader must `invite <name>` again** to pull them back into the group. Until then, the recovered character is solo even though they're standing right there.
   - This holds both ways. When the **local** character recovers from a self-drop, the client must NOT resurrect the wiped roster; it waits for a real follow / `par` signal (which only arrives after the leader's re-invite). When a **leader** revives a dropped member, the rescue sequence is `aid` + heal **then** `invite <name>`.
 - **Client use:**
-  - Client reaction (party healer, self is a member with party heals): treat a member's drop as a **wait condition** and pause farming / movement to stay with them. Once they've been **aided** back above 0, keep **healing them by name** despite their absence from `par`, and poll their HP periodically via an `@health` telepath until they recover. Then (if leading) **re-invite** them.
+  - Client reaction: treat a member's drop as a **wait condition** and pause farming / movement to stay with them. Aid them, keep **healing them by name** despite their absence from `par`, and wait out the climb to positive HP. Then check their HP via an `@health` telepath until they recover, and (if leading) **re-invite** them once they're up.
+  - **Client policy (user, 2026-09-27):** the hold is timed off the climb, not a fixed timeout. A `@health` reply at negative HP gives the exact time (`(1 − hp)·30 s`); with no reply, the realm's death floor gives the longest it can take (`|floor|·30 s`).
   - Implemented in `AllyDroppedHandler`. It:
     - asserts `MovementCoordinator.AllyDownGate`
-    - sends `aid <name>`
+    - sends `aid <name>` and one `@health`
+    - restarts the stand-up clock when our aid lands (the death-floor worst case unless a reply timed it)
     - exposes the aided ally to `CastingDirector`'s downed-ally heal category
-    - polls `@health`
-    - releases on a full-HP reply / rejoin / rescue timeout
-    - re-invites when leading
+    - polls `@health` from the expected stand-up time on
+    - re-invites, when leading, on the first positive `@health`
+    - releases once they reach the party-heal bar, rejoin, leave or die — or 60 s past the expected stand-up with no sign of them, or 120 s after standing without reaching the bar
   - Its own recent-leader memory recognises a dropped leader that a leader-disconnect already wiped from the roster.
 
 ### Member death shows as an invited slot in `par`
