@@ -226,9 +226,10 @@ how many swings or spell fires a player or monster gets inside one round.
 What the game prints on the wire, including the prompt/statline, the command rate limiter, the output formats of informational commands (`spells`, `health`; the `bank` output is in *Money, banks & shops → Bank commands: balance / withdraw / deposit*), social/interaction lines, the realm exit sequence, the catalogue of lines the client parses, and the MegaMUD `messages.md` source format.
 
 ### Statline & prompt shape
-*Status: Unrated*
+*Status: CONFIRMED 2026-09-28 (user) · Realm: both*
 
-- **The prompt/statline is user-defined.** MajorMUD's `set statline` lets a player format the prompt however they like. The default is bracketed HP/mana (`[HP=%h/MA=%m]: %r`, or `KAI`, or HP-only), and that is what the vast majority run. A custom statline can be any shape (`set statline full custom <template>`). Stock 1.11p accepts `ON`, `OFF`, `FULL`, `CUSTOM xxx` and `FULL CUSTOM xxx` (`Valid statline options: ON, OFF, FULL, CUSTOM xxx, FULL CUSTOM xxx`) *([OBSERVED] `wccmmud.dll` 1.11p)*.
+- **The prompt/statline is user-defined.** MajorMUD's `set statline` lets a player format the prompt however they like. The default is bracketed HP/mana (`[HP=%h/MA=%m]: %r`, or `KAI`, or HP-only), and that is what the vast majority run. A custom statline can be any shape (`set statline full custom <template>`). Stock 1.11p accepts `ON`, `OFF`, `FULL`, `CUSTOM xxx` and `FULL CUSTOM xxx` (`Valid statline options: ON, OFF, FULL, CUSTOM xxx, FULL CUSTOM xxx`) *([OBSERVED] `wccmmud.dll` 1.11p)*. Paradigm takes the same options *([CONFIRMED] 2026-09-28, user)*.
+- **Paradigm may sometimes reset the statline to the default mid-session** *([NEEDS CONFIRMATION] 2026-09-28, user: a Paradigm bug that may since have been fixed)*. The client's re-send on a parser mismatch covers it either way.
 - **Template static text is exact; dynamic parts are `%`-wildcards** (`%h`, `%m`, `%r`, …).
 - **The configured statline is what actually prints on the wire.** MudPlay is the source of truth for the live statline: it sends `set statline` on logon and re-sends it on any parser mismatch.
 - **Echo detection keys off the player's configured prompt, not a hardcoded `[HP=..]:`.** The same template compiles into the exact matcher used to read HP/mana AND to find the echoed command after the prompt, so the move-echo gate works whatever statline the player sets.
@@ -257,7 +258,14 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - Roomba releases `get`/`drop` at most one per wire prompt AND no faster than an 800 ms floor (`GhSweepManager.MinCommandInterval`). The game's own prompt acts as the meter, so no rate has to be guessed. Because the prompt alone is not sufficient, it is used as a gate on top of a time floor.
 
 ### Message catalogue (lines the client parses)
-*Status: Unrated; the Thorns/ShockShield row is CONFIRMED 2026-08-15 (user)*
+*Status: rows Unrated; realm rule CONFIRMED 2026-09-28 (user); the Thorns/ShockShield row is CONFIRMED 2026-08-15 (user)*
+
+- **Lines built into the engine read the same on both realms; lines from the editable message table can differ** *([CONFIRMED] 2026-09-28, user)*. The message table is the part a sysop can change with Nightmare Redux, and Paradigm likely has extra or reworded messages there. A line the client doesn't know is logged as an unrecognized line, which is how a Paradigm difference shows up.
+- **Checked against the Stock 1.11p DLL** *([OBSERVED] 2026-09-28, `wccmmud.dll` strings + `wccmsg2.dat`)*:
+  - Built into the engine: the equip / remove, sneak, weapon / fists / spell no-effect, death and lives, drop and drag, coin pickup / drop / hide, corpse drop, no-exit, door / gate, darkness, guard, toll and `Your command had no effect.` rows. The engine capitalizes `The door is Closed!` and `The gate is Closed!`.
+  - From the message table: the mob hit / miss lines and the Thorns / ShockShield reflect.
+  - Not in the Stock DLL at all: `You have been slain by <killer>.`, `<Name> has died.`, the bank deposit and room cash survey lines, the blocked-way forms, the monster walk-out lines and both train-success lines. These may be Paradigm-only, or assembled from smaller pieces.
+
 
 | Event | Line |
 |---|---|
@@ -603,11 +611,13 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Formula:** `(INT + 3*WIL)/4`. WIL is the heaviest term (~0.75/pt vs INT ~0.25/pt).
 
 ### Health (HEA) — max HP and HP regen
-*Status: Unrated*
+*Status: mixed (per-bullet tags) · Stock checked against `wccmmud.dll` 1.11p and MMUD-Explorer 2026-09-28*
 
 - **HEA feeds max HP and HP regen, both level-scaled** (see *Health, resting & recovery → Max-HP sources*).
 - **Max-HP marginal per HEA point is `(1/2 + level/16)`** (the `HEA/2` + `(HEA-50)*level/16` terms of `CalcMaxHp`), so it rises nearly every point and steepens with level.
-- **HP regen idle is `(level+20)*HEA/divisor`** (750 stock / 500 Para).
+- **Stock max HP (Hits) is `HEA/2 + level × class min hits + ((HEA−50) × level)/16 + your accumulated level rolls + level × race HP-per-level + MaxHP (ability 88)`**, each division rounding toward zero *([OBSERVED] `wccmmud.dll` 1.11p `_calculate_secondary_stats`; MMUD-Explorer has the same formula)*. The engine adds one more stored per-character bonus on top that isn't identified yet.
+- **Stock max HP reads your trained Health; regen reads your current Health** *([OBSERVED] `wccmmud.dll` 1.11p)*. The engine keeps two copies of each stat, and a spell that raises Health changes only the current one. So a Health buff speeds regen but doesn't raise max Hits. *([NEEDS CONFIRMATION] Does a Health buff or +Health gear change your max Hits on Stock? MMUD-Explorer counts gear Health toward max HP, and the client's Level Projection uses the Health your `stat` screen shows.)*
+- **HP regen idle is `max(1, (level+20)*HEA/divisor)`, scaled by `HPregen%`** (750 Stock *([OBSERVED] `wccmmud.dll` 1.11p `_slow_update_character`)*; 500 Paradigm *([NEEDS CONFIRMATION] MMUD-Explorer's Paradigm branch uses 500, noted there as a developer's proposal)*).
 - **Resting on Stock adds a second tick rather than tripling the first** *([OBSERVED] `wccmmud.dll` 1.11p; [CONFIRMED] 2026-09-27, user)*. The 30 s tick keeps paying the idle amount, and resting adds `3 × max(1, (level+20)*HEA/750)` every 21 s on top, scaled by `HPregen%`. See *Health, resting & recovery → Rest and meditate tick timing*.
 - **Paradigm resting works differently** *([NEEDS CONFIRMATION] user 2026-09-27: MMUD-Explorer has the Paradigm details)*. The client measures it on a 10 s grid at 3× the idle amount.
 
@@ -1005,7 +1015,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - `<player> is poised to assault the room!` is also treated as a room commit for attack-last (we cast our room spell after the poised member, so ours lands last).
 
 ### Player attack order and "Attack last"
-*Status: Unrated*
+*Status: CONFIRMED 2026-09-28 (user) · Realm: both*
 
 - **Player attack order = announce order, FIFO.** Players deal their damage in the order they engaged/announced their attacks — first to announce fires first. Party rank does NOT change this order.
 - **Backstab is pre-emptive.** A successful backstab always resolves **first**, ahead of the normal order.
@@ -2400,11 +2410,13 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 
 ### Summoned monster key drop
 
-*Status: Unrated · Realm: Paradigm 1.9.1 (worked example)*
+*Status: CONFIRMED 2026-09-28 (user) · Realm: both (worked example from Paradigm 1.9.1)*
 
 - **A conjured monster drops loot exactly like a lair-spawned one.** Being conjured rather than lair-spawned changes nothing about the drop: the item lands loose on the ground, isn't announced on the death line, and has to be re-surveyed (`look`) before anything can see it, then `get`-ed by name — exactly the rule in *Items, inventory & equipment → Monster drops land on the ground* (the worked chain is also in *Movement & navigation → Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*).
 - **Worked example (Paradigm 1.9.1):** room 8/461 "Black Steel Gate" carries `CMD 863` = `touch statue:summon 347` / `move statue:summon 347`; monster 347 "obsidian statue" is `GameLimit 1`, `Summoned By: Textblock #863`, and carries `DropItem-0: 806` (gate key) at `DropItem%-0: 100`. That key opens 8/461's south exit (`Key: 806 [or 101 picklocks]`).
 - **This is the shape that makes a key worth routing for** — the spawn is on demand and the drop is certain, so the whole chain is deterministic, unlike a lair key such as the black star key (item 172, dropped at 1–10% by lair-spawned cultists) which can never be relied on mid-route.
+- **An item at a 100% drop rate always drops to the floor, summoned or not** *([CONFIRMED] 2026-09-28, user)*.
+- **A monster summoned by a room trigger can be summoned again once it's dead, unless it has a regen timer** *([CONFIRMED] 2026-09-28, user)*. Its item dropping changes nothing: kill it, take the item, leave the room and come back, and it's there to kill for another. Examples: the golden lion key in the pyramid, and the monster guarding the dark elf city.
 - **Re-typing the summon keyword is *not* a known way to force a second monster** while one is already up.
 
 ### Monster movement lines
@@ -3930,7 +3942,7 @@ There is no room to drop amethyst pendant here.
 - `Your <item> has been removed.` makes `AlignmentGearCheck` send a `who` to learn the new alignment.
 
 ### Item charges (`Uses` / `UseCount`)
-*Status: Unrated*
+*Status: CONFIRMED 2026-09-28 (user) · Realm: both*
 
 - **A positive value is the item's real charge count.** Charges are consumed to zero, then the item is gone.
 - **`<= 0` means unlimited.**
@@ -4398,8 +4410,8 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 ### Dropped ally rescue
 *Status: mixed (per-bullet tags below; bullets without a tag are Unrated)*
 
-- **The drop line is seen party-side and by the dropped character.** When a character drops, everyone in the room (the party included) sees `<name> drops to the ground!`. The dropped character sees it with their **own** name (observed: `Raijin drops to the ground!`). That line is the party-side signal that a member has gone down.
-- **The drag prints to the dragged character on every move.** Once someone starts it, the drag prints `<leader> is dragging you around.` to the dragged character on each of the dragger's moves (observed: `MudPlay is dragging you around.`).
+- **The drop line is seen party-side and by the dropped character** *([CONFIRMED] 2026-09-28, user; same wording on Stock)*. When a character drops, everyone in the room (the party included) sees `<name> drops to the ground!`. The dropped character sees it with their **own** name (observed: `Raijin drops to the ground!`). That line is the party-side signal that a member has gone down.
+- **The drag prints to the dragged character on every move** *([CONFIRMED] 2026-09-28, user; same wording on Stock)*. Once someone starts it, the drag prints `<leader> is dragging you around.` to the dragged character on each of the dragger's moves (observed: `MudPlay is dragging you around.`).
 - **Drag is manual, never automatic.** **Any player** can `drag <name>` a dropped character *([CONFIRMED] 2026-09-26, user)*; in a party it's normally the leader who does it after seeing the drop line. Nothing drags them on its own. Dragging only relocates the still-mortally-wounded body. It does **not** revive them or restore party membership.
 - **A dropped ally is revived with `aid` and/or a heal.** A dropped ally sits at 0 HP or below and can't act for themselves. They must be brought back by **`aid <name>`** and/or a **heal** that lifts their HP above 0. So a party leader watching `<member> drops to the ground!` should **aid and heal that member** (drag is a separate, optional relocation choice, not the rescue).
   - `aid` alone doesn't lift them at once, on either realm: it stops the bleeding and they climb 1 HP per 30 s until positive (see *Health, resting & recovery → 0 HP — dropped / bleeding out*). Until then they still can't act, answer an `@health` or accept an invite. A heal gets them up sooner.
@@ -4702,9 +4714,12 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
 - **Auto-recovery procedure:** on entering the death room, read the `You notice … here.` survey; if it holds `corpse of <ourGivenName>`, send one `recover corpse <name>` and finalise on `You have recovered the corpse of <name>.`; if the corpse is NOT in the survey, the pile is gone (looted / decayed) — mark it Missing and send nothing (never per-item `get`, which just spams `You don't see <item> here.`).
 
 ### Coins in the deathpile
-*Status: Unrated*
+*Status: CONFIRMED 2026-09-28 (user) · Realm: both, with the per-realm differences below*
 
-- **Coins on hand drop into the deathpile too**, alongside the non-loyal items — recoverable from the deathpile / corpse like the rest of the drop (per *Deathpile — where the items go*).
+- **Coins on hand drop at death too, exactly as you carried them — never converted**, alongside the non-loyal items and recoverable like the rest (per *Deathpile — where the items go*).
+  - **Stock:** they land in the room as-is and follow the room item limits like other items. Coins are believed never to spread to other rooms *([NEEDS CONFIRMATION] user 2026-09-28: "I think coins don't spread at all")*.
+  - **Paradigm:** they go into your corpse container, the same way you were holding them.
+  - **Client policy:** the PvP realm's slightly different corpse rules aren't modelled.
 - **Five denominations** (largest first): `runic coin`, `platinum piece`, `gold crown`, `silver noble`, `copper farthing` — values per *Money, banks & shops → Currency denominations & value ladder*.
 - **The deathpile display lists each denomination by its own count** (e.g. `100 gold crowns` + `1 platinum piece`), **not** re-bucketed into a consolidated wealth total.
 

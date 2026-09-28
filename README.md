@@ -10,6 +10,7 @@
 > - GAME_MECHANICS: Lawful Evil aggression on Paradigm, freedom fully clearing knockdown, no searching while engaged, =x at any HP
 > - Confusions that have no fumble message of their own (e.g. Stock mesmerize, blink, hypnotic hands; card-void, rainbow2) now recognize the engine's default `You look around stupidly and do nothing!` fumble in the message seeds
 > - GAME_MECHANICS: how the engine picks a confusion's fumble line, Paradigm's search-while-engaged refusal, searches always finding stashed coin, Stock statline options and item-charge countdown
+> - GAME_MECHANICS: settled — Stock max HP and regen (checked against the DLL), attack order, re-summoning trigger monsters, item charges, drop/drag wording and coins at death on both realms; which message lines Paradigm can change
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
