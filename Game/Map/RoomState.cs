@@ -33,6 +33,12 @@ public sealed partial class RoomState : ObservableObject
     [ObservableProperty] [field: Owner(typeof(RoomTracker))]
     private System.Collections.Generic.IReadOnlySet<Direction>? _openDoorDirections;
 
+    // Directions from the latest observation whose modifier was "closed door" /
+    // "closed gate" — shown on the exits line but shut. Kept so a shown exit can be
+    // told apart from a shut barrier.
+    [ObservableProperty] [field: Owner(typeof(RoomTracker))]
+    private System.Collections.Generic.IReadOnlySet<Direction>? _closedDoorDirections;
+
     // Every direction on the latest observation's "Obvious exits:" line. The
     // walker checks this before searching a graph-hidden exit — if the direction
     // is already showing (a prior `sea` uncovered it, or it simply isn't hidden

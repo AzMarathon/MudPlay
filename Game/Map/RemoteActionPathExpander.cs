@@ -65,7 +65,8 @@ public static class RemoteActionPathExpander
         IReadOnlyList<Direction> directions,
         BfsMapper? bfs = null,
         IRoomFilter? filter = null,
-        LogService? log = null)
+        LogService? log = null,
+        IReadOnlySet<Direction>? openAtSource = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(directions);
@@ -99,9 +100,14 @@ public static class RemoteActionPathExpander
             // multi-action exits keep the single-MoveStep form below
             // (SpecialExitDispatch owns them). A detour that can't be routed
             // truncates the path.
+            // A remote-lever exit out of the room we're standing in that already
+            // shows as open (openAtSource: its levers were pulled, or it opened by
+            // itself) is crossed as it stands — no detour to pull them again.
+            bool openNow = steps.Count == 0 && current.Equals(source) && openAtSource?.Contains(dir) == true;
             if (exit.Hint == RoomExitHint.MultiActionHidden
                 && exit.MultiAction is { HasRemoteActions: true } maData
-                && bfs is not null)
+                && bfs is not null
+                && !openNow)
             {
                 // Actions sharing a StepNumber are interchangeable alternatives (e.g.
                 // two guardroom levers that open the same gate); only one per step is

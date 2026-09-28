@@ -59,13 +59,35 @@ public sealed partial class MovementRefusalDetector : IDisposable
             return;
         }
 
-        // Ambient "The door to the <dir> just closed." — the tracker gates on
-        // whether that direction is the one we're heading before reacting.
-        if (DoorToDirectionJustClosed().Match(text) is { Success: true } namedClose
-            && DirectionExtensions.TryFromLongName(namedClose.Groups[1].Value, out Direction closedDir))
+        // Door and exit changes someone else made, which name the direction
+        // (Stock DLL _cmd_open / _cmd_close / _background_update_exits; the same
+        // on Paradigm). The tracker decides how each applies to where we are.
+        if (DoorToDirectionChanged().Match(text) is { Success: true } doorChange
+            && DirectionExtensions.TryFromLongName(doorChange.Groups["dir"].Value, out Direction doorDir))
         {
-            _tracker.NoteNamedDoorClosed(closedDir, when);
-            _log?.Info("MoveRefusal", $"door to {closedDir.ToLongName()} just closed: {text.Trim()}");
+            if (doorChange.Groups["what"].Value.Equals("opened", StringComparison.OrdinalIgnoreCase))
+                _tracker.NoteNamedDoorOpened(doorDir);
+            else
+                _tracker.NoteNamedDoorClosed(doorDir, when);
+            _log?.Info("MoveRefusal", $"door to {doorDir.ToLongName()} {doorChange.Groups["what"].Value}: {text.Trim()}");
+            return;
+        }
+        if (SeenDoorChanged().Match(text) is { Success: true } seen
+            && DirectionExtensions.TryFromLongName(seen.Groups["dir"].Value, out Direction seenDir))
+        {
+            if (seen.Groups["what"].Value.Equals("open", StringComparison.OrdinalIgnoreCase))
+                _tracker.NoteNamedDoorOpened(seenDir);
+            else
+                _tracker.NoteNamedDoorClosed(seenDir, when);
+            _log?.Info("MoveRefusal", $"saw the door to {seenDir.ToLongName()} {seen.Groups["what"].Value}ed: {text.Trim()}");
+            return;
+        }
+        if (ExitToDirectionChanged().Match(text) is { Success: true } exitChange
+            && DirectionExtensions.TryFromLongName(exitChange.Groups["dir"].Value, out Direction exitDir))
+        {
+            bool opened = exitChange.Groups["what"].Value.Equals("opened", StringComparison.OrdinalIgnoreCase);
+            _tracker.NoteNamedExitChanged(exitDir, opened);
+            _log?.Info("MoveRefusal", $"exit to {exitDir.ToLongName()} {(opened ? "opened" : "closed")}: {text.Trim()}");
             return;
         }
 
@@ -167,13 +189,27 @@ public sealed partial class MovementRefusalDetector : IDisposable
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DoorIsClosed();
 
-    // Ambient door-shut announcement carrying the direction — "The door to the
-    // north just closed." Captures the long-form direction word so the tracker
-    // can gate on whether we're heading that way.
+    // A door or gate in this room changed from the other side or by itself: "The
+    // door to the north just closed.", "…just opened.", "The gate to the east just
+    // locked!" (a timed re-lock also shuts it).
     [GeneratedRegex(
-        @"^\s*The door to the (\w+) just closed[.!]?\s*$",
+        @"^\s*The (?:door|gate) to the (?<dir>\w+) just (?<what>closed|opened|locked)[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex DoorToDirectionJustClosed();
+    private static partial Regex DoorToDirectionChanged();
+
+    // Someone in this room opened or closed one of its doors: "You see Bob close
+    // the door to the north."
+    [GeneratedRegex(
+        @"^\s*You see .+? (?<what>open|close) the (?:door|gate) to the (?<dir>\w+)[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SeenDoorChanged();
+
+    // A timed or action-opened exit (a lever's hidden passage) opened or shut:
+    // "The exit to the west just opened!"
+    [GeneratedRegex(
+        @"^\s*The exit to the (?<dir>\w+) just (?<what>opened|closed)[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ExitToDirectionChanged();
 
     // Alignment-gated exit — Paradigm refuses an exit whose "(Alignment: X to Y)"
     // band excludes the mover ("Your current alignment prevents you from entering

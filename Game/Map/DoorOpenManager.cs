@@ -51,6 +51,7 @@ public sealed class DoorOpenManager : IDisposable
     private readonly LogService? _log;
     private readonly IDisposable _bashOkSub;
     private readonly IDisposable _bashFailSub;
+    private readonly IDisposable _bashRefusedSub;
     private readonly IDisposable _pickOkSub;
     private readonly IDisposable _pickFailSub;
     private readonly IDisposable _notLockedSub;
@@ -129,6 +130,7 @@ public sealed class DoorOpenManager : IDisposable
 
         _bashOkSub      = _router.Subscribe(KnownPatterns.DoorBashSuccess,      OnBashSuccess);
         _bashFailSub    = _router.Subscribe(KnownPatterns.DoorBashFailure,      OnBashFailure);
+        _bashRefusedSub = _router.Subscribe(KnownPatterns.DoorBashRefused,      OnBashRefused);
         _pickOkSub      = _router.Subscribe(KnownPatterns.DoorPickSuccess,      OnPickSuccess);
         _pickFailSub    = _router.Subscribe(KnownPatterns.DoorPickFailure,      OnPickFailure);
         _notLockedSub   = _router.Subscribe(KnownPatterns.DoorPickNotLocked,    OnPickNotLocked);
@@ -153,6 +155,7 @@ public sealed class DoorOpenManager : IDisposable
         DisarmWatchdog();
         _bashOkSub.Dispose();
         _bashFailSub.Dispose();
+        _bashRefusedSub.Dispose();
         _pickOkSub.Dispose();
         _pickFailSub.Dispose();
         _notLockedSub.Dispose();
@@ -452,6 +455,16 @@ public sealed class DoorOpenManager : IDisposable
         // SendVerb pauses for rest first when HP is low, so the retries pace
         // themselves around the rest cycle rather than a fixed attempt count.
         SendVerb();
+    }
+
+    // The server refused the bash outright (no weapon in hand / no bash ability).
+    // Re-bashing can only get the same answer — and with no pattern for it the
+    // watchdog used to re-bash forever — so try pick, then the key.
+    private void OnBashRefused(MatchResult m)
+    {
+        if (_state != DoorState.WaitingBash) return;
+        if (_current is null) return;
+        TryFallbackOrFail($"can't bash ('{m.Text.Trim()}')");
     }
 
     private void OnPickSuccess(MatchResult _)

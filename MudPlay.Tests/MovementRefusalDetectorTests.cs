@@ -322,7 +322,7 @@ public sealed class MovementRefusalDetectorTests : IDisposable
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
     }
 
-    // A door closing in a direction we're NOT heading is someone else's door —
+    // Moving another way, the line may belong to the room being left or entered —
     // leave the pending move and the open-door cache untouched.
     [Fact]
     public void NamedDoorJustClosed_NotHeadingThatWay_Ignored()
@@ -339,5 +339,67 @@ public sealed class MovementRefusalDetectorTests : IDisposable
 
         Assert.Contains(Direction.N, tracker.State.OpenDoorDirections!);
         Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+    }
+
+    // Standing still, the line is about this room's own exit: clear its open flag so
+    // the next move through it opens the door first instead of bouncing off it
+    // (report paradigm-20260928-110224).
+    [Fact]
+    public void NamedDoorJustClosed_StandingStill_ClearsThatDoorsOpenFlag()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        tracker.SetLocated(new RoomKey(1, 1));
+        tracker.NoteRoomObserved(new RoomObservation(
+            "Origin",
+            new HashSet<Direction> { Direction.N },
+            new HashSet<Direction> { Direction.N }));
+        Assert.Contains(Direction.N, tracker.State.OpenDoorDirections!);
+
+        detector.FeedTestLine("The door to the north just closed.");
+
+        Assert.Null(tracker.State.OpenDoorDirections);
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+    }
+
+    // Door and exit changes someone else made (Stock DLL _cmd_open / _cmd_close /
+    // _background_update_exits), applied to the room we're standing in.
+    [Fact]
+    public void DoorOpenedOrClosedByOthers_KeepsTheRoomsDoorsInStep()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        tracker.SetLocated(new RoomKey(1, 1));
+        tracker.NoteRoomObserved(new RoomObservation(
+            "Origin",
+            new HashSet<Direction> { Direction.N, Direction.E },
+            null,
+            new HashSet<Direction> { Direction.N, Direction.E }));
+
+        detector.FeedTestLine("The door to the north just opened.");
+        Assert.Contains(Direction.N, tracker.State.OpenDoorDirections!);
+
+        detector.FeedTestLine("You see Bob close the door to the north.");
+        Assert.Null(tracker.State.OpenDoorDirections);
+
+        detector.FeedTestLine("You see Bob open the gate to the east.");
+        Assert.Contains(Direction.E, tracker.State.OpenDoorDirections!);
+
+        detector.FeedTestLine("The gate to the east just locked!");
+        Assert.Null(tracker.State.OpenDoorDirections);
+    }
+
+    // A lever-opened / timed exit opening or shutting while we stand here keeps the
+    // room's shown exits right, so the engines can cross it without the lever.
+    [Fact]
+    public void ExitJustOpenedOrClosed_UpdatesTheShownExits()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        tracker.SetLocated(new RoomKey(1, 1));
+        tracker.NoteRoomObserved(new RoomObservation("Origin", new HashSet<Direction> { Direction.N }));
+
+        detector.FeedTestLine("The exit to the west just opened!");
+        Assert.Contains(Direction.W, tracker.ShownOpenExits()!);
+
+        detector.FeedTestLine("The exit to the west just closed!");
+        Assert.DoesNotContain(Direction.W, tracker.ShownOpenExits()!);
     }
 }

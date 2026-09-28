@@ -523,6 +523,7 @@ public static class KnownPatterns
     // realms render "gate" for the same lock state) and the bash / pick / open
     // verbs.
     public const string DoorBashSuccess       = "door.bash.success";       // "you bashed the door open" / "bashed the gate open"
+    public const string DoorBashRefused       = "door.bash.refused";       // "you need a weapon to bash with" / "don't know the first thing about bashing"
     public const string DoorBashFailure       = "door.bash.failure";       // "your attempts to bash through fail"
     public const string DoorPickSuccess       = "door.pick.success";       // "you successfully unlocked the door" (also present-tense "unlock(s)")
     public const string DoorPickFailure       = "door.pick.failure";       // "your lockpicking skill fails you"

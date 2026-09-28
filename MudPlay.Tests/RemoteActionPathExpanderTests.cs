@@ -167,6 +167,24 @@ public sealed class RemoteActionPathExpanderTests : IDisposable
         Assert.True(cross.SkipSpecialDispatch);   // prerequisites already emitted
     }
 
+    // Standing in the host room with the gated exit already showing open (its lever
+    // was pulled, or "The exit to the east just opened!"): cross it as it stands,
+    // no detour to pull the lever again.
+    [Fact]
+    public void CrossRoomMultiAction_AlreadyOpenAtSource_NoDetour()
+    {
+        RoomGraphManager graph = NewGraph(RemoteActionGraphJson);
+        BfsMapper bfs = new(graph);
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 2), new[] { Direction.E }, bfs,
+            openAtSource: new HashSet<Direction> { Direction.E });
+
+        MoveStep cross = Assert.IsType<MoveStep>(Assert.Single(steps));
+        Assert.Equal(Direction.E, cross.Direction);
+        Assert.Equal(new RoomKey(1, 9), cross.ExpectedTarget);
+    }
+
     // Crypt-style layout: the gated door is several rooms past a junction, and
     // both levers branch off that junction — not off the door's host room. The
     // approach threads the junction (1/2) on the way to the host (1/4).

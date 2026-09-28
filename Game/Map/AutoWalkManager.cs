@@ -1170,7 +1170,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
             else
             {
-                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter, _log);
+                // A lever exit out of the room we're in that already shows open is
+                // walked straight through rather than detoured to its levers.
+                IReadOnlySet<Direction>? openHere = _tracker.State.CurrentRoom?.Key.Equals(source.Key) == true
+                    ? _tracker.ShownOpenExits()
+                    : null;
+                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter, _log, openHere);
             }
         }
         finally { gateScope?.Dispose(); }

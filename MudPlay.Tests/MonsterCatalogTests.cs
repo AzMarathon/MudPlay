@@ -52,7 +52,8 @@ public sealed class MonsterCatalogTests : IDisposable
     //    (502 icebolt) so CastsElements should read {Fire, Cold}; also carries
     //    Resist-Fire 50, Magical 3, SpellImmu 5, Dodge 12, NonLiving.
     // #3 "giant rat" (again) — a second record sharing #1's name, so a duplicate
-    //    display name across two numbers is exercised in the parsed set.
+    //    display name across two numbers is exercised in the parsed set; it's
+    //    out of play ("In Game": 0), like the extra giant rats in the real data.
     // #4 "ghost" — casts only a Normal (4) attack spell (turn undead) and a
     //    Poison (6) mid-spell (plague) — CastsElements should read {Poison}
     //    only (Normal excluded), and an unresolved spell number (999) in a
@@ -74,7 +75,7 @@ public sealed class MonsterCatalogTests : IDisposable
             "Abil-2": 139, "AbilVal-2": 5,
             "Abil-3": 34,  "AbilVal-3": 12,
             "Abil-4": 109, "AbilVal-4": 0 },
-          { "Number": 3, "Name": "giant rat", "HP": 5 },
+          { "Number": 3, "Name": "giant rat", "HP": 5, "In Game": 0 },
           { "Number": 4, "Name": "ghost",
             "AttType-0": 2, "Att%-0": 100, "AttAcc-0": 503,
             "AttType-1": 2, "Att%-1": 50,  "AttAcc-1": 999,
@@ -276,6 +277,18 @@ public sealed class MonsterCatalogTests : IDisposable
     [Fact]
     public void All_ReturnsEveryParsedMonster()
         => Assert.Equal(4, NewCatalog().All.Count);
+
+    // Monster Intel lists InPlay — the Game Data Browser's Monsters tab — so an
+    // out-of-play record isn't offered (report paradigm-20260928-105509: the extra
+    // giant rats on the Unobtainable tab showed up there). A lookup by number still
+    // finds it.
+    [Fact]
+    public void InPlay_LeavesOutOutOfPlayMonsters()
+    {
+        MonsterCatalog catalog = NewCatalog();
+        Assert.Equal(new[] { 1, 2, 4 }, catalog.InPlay.Select(e => e.Number).OrderBy(n => n));
+        Assert.NotNull(catalog.Get(3));
+    }
 
     [Fact]
     public void Get_ActiveSetSwitch_RebuildsAgainstNewSet()
