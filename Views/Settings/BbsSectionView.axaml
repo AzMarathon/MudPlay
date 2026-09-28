@@ -250,94 +250,107 @@
                             <Button Content="Add realm" Command="{Binding AddRealmCommand}"
                                     ToolTip.Tip="Add a realm to this BBS. It starts with default settings and no collected data."/>
                             <Button Content="Remove realm" Command="{Binding RemoveRealmCommand}"
-                                    ToolTip.Tip="Remove the selected realm (a BBS keeps at least one). Its characters move to the first realm when you press OK; its collected data stays on disk."/>
+                                    ToolTip.Tip="Remove the selected realm (a BBS keeps at least one). This DELETES every character on it and its collected data when you press OK — you're asked to confirm first, with the characters named. The realm your loaded character plays can't be removed here."/>
                         </StackPanel>
                     </Grid>
 
-                    <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
-                          Margin="0,10,0,0" ColumnSpacing="8" RowSpacing="4">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Realm name"/>
-                        <TextBox   Grid.Row="0" Grid.Column="1" Width="220"
-                                   Text="{Binding RealmName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                   ToolTip.Tip="The selected realm's name (also its data folder's). Renaming it keeps its data and its characters."/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Game data"/>
-                        <ComboBox  Grid.Row="1" Grid.Column="1" Width="260"
-                                   ItemsSource="{Binding GameDataSetOptions}"
-                                   SelectedItem="{Binding RealmGameDataSet, Mode=TwoWay}"
-                                   ToolTip.Tip="The imported game data (MDB) this realm uses. Global default follows File → Game Data's default set."/>
-                    </Grid>
+                    <!-- The selected realm's settings, framed in the realm accent (the way
+                         combat-profile groups are framed in their profile's colour) so
+                         it's clear everything inside belongs to that one realm. -->
+                    <Panel Classes="ProfileFrame">
+                        <Border Classes="ProfileGroup"
+                                Background="{StaticResource AccentMagentaSoftBrush}"
+                                BorderBrush="{StaticResource AccentMagentaBrush}"/>
+                        <StackPanel Classes="ProfileBody">
+                            <TextBlock Classes="ProfileGroupHeader" HorizontalAlignment="Left" Margin="0,2,0,2"
+                                       Foreground="{StaticResource AccentMagentaBrush}"
+                                       Text="{Binding SelectedRealmName, StringFormat='Realm: {0}'}"/>
+                            <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
+                                  Margin="0,10,0,0" ColumnSpacing="8" RowSpacing="4">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Realm name"/>
+                                <TextBox   Grid.Row="0" Grid.Column="1" Width="220"
+                                           Text="{Binding RealmName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                           ToolTip.Tip="The selected realm's name (also its data folder's). Renaming it keeps its data and its characters."/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Game data"/>
+                                <ComboBox  Grid.Row="1" Grid.Column="1" Width="260"
+                                           ItemsSource="{Binding GameDataSetOptions}"
+                                           SelectedItem="{Binding RealmGameDataSet, Mode=TwoWay}"
+                                           ToolTip.Tip="The imported game data (MDB) this realm uses. Global default follows File → Game Data's default set."/>
+                            </Grid>
 
-                    <TextBlock Classes="FieldLabel" FontWeight="SemiBold" Margin="0,12,0,0" Text="Game-menu commands"/>
+                            <TextBlock Classes="FieldLabel" FontWeight="SemiBold" Margin="0,12,0,0" Text="Game-menu commands"/>
 
-                    <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
-                          Margin="0,6,0,0" ColumnSpacing="8" RowSpacing="4">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Game entry command"/>
-                        <TextBox   Grid.Row="0" Grid.Column="1"
-                                   Text="{Binding GameEntryCommand, Mode=TwoWay}"
-                                   Width="120" FontFamily="{StaticResource FontMono}"
-                                   ToolTip.Tip="Sent at the MajorMUD main menu to enter this realm. Default 'E'."/>
+                            <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
+                                  Margin="0,6,0,0" ColumnSpacing="8" RowSpacing="4">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Game entry command"/>
+                                <TextBox   Grid.Row="0" Grid.Column="1"
+                                           Text="{Binding GameEntryCommand, Mode=TwoWay}"
+                                           Width="120" FontFamily="{StaticResource FontMono}"
+                                           ToolTip.Tip="Sent at the MajorMUD main menu to enter this realm. Default 'E'."/>
 
-                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Game exit command"/>
-                        <TextBox   Grid.Row="1" Grid.Column="1"
-                                   Text="{Binding GameExitCommand, Mode=TwoWay}"
-                                   Width="120" FontFamily="{StaticResource FontMono}"
-                                   ToolTip.Tip="Sent at the MajorMUD main menu to log off. Default '=x'. Also sent when a permitted player telepaths @hangup and by the cleanup log-off."/>
-                    </Grid>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Game exit command"/>
+                                <TextBox   Grid.Row="1" Grid.Column="1"
+                                           Text="{Binding GameExitCommand, Mode=TwoWay}"
+                                           Width="120" FontFamily="{StaticResource FontMono}"
+                                           ToolTip.Tip="Sent at the MajorMUD main menu to log off. Default '=x'. Also sent when a permitted player telepaths @hangup and by the cleanup log-off."/>
+                            </Grid>
 
-                    <!-- The negative-HP death floor. 0 HP only drops a character
-                         into a revivable bleed-out; death happens at this value.
-                         The emergency auto-hangup reads it so the disconnect keeps
-                         firing all the way through the bleeding-out window. -->
-                    <TextBlock Classes="FieldLabel" FontWeight="SemiBold" Margin="0,12,0,0" Text="Realm mechanics"/>
+                            <!-- The negative-HP death floor. 0 HP only drops a character
+                                 into a revivable bleed-out; death happens at this value.
+                                 The emergency auto-hangup reads it so the disconnect keeps
+                                 firing all the way through the bleeding-out window. -->
+                            <TextBlock Classes="FieldLabel" FontWeight="SemiBold" Margin="0,12,0,0" Text="Realm mechanics"/>
 
-                    <Grid ColumnDefinitions="180,Auto,*" Margin="0,6,0,0" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Player dies at (HP):"/>
-                        <NumericUpDown Grid.Column="1"
-                                       Value="{Binding PlayerDiesAtHp, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                       Minimum="-999" Maximum="0" Increment="1"
-                                       FormatString="0" Width="140"
-                                       HorizontalAlignment="Left"
-                                       ToolTip.Tip="Negative-HP floor at which a character actually dies. 0 HP only drops you into a revivable bleed-out — death happens here. The emergency auto-hangup keeps firing through the whole bleeding-out window down to this floor. Default -25."/>
-                    </Grid>
+                            <Grid ColumnDefinitions="180,Auto,*" Margin="0,6,0,0" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Player dies at (HP):"/>
+                                <NumericUpDown Grid.Column="1"
+                                               Value="{Binding PlayerDiesAtHp, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                               Minimum="-999" Maximum="0" Increment="1"
+                                               FormatString="0" Width="140"
+                                               HorizontalAlignment="Left"
+                                               ToolTip.Tip="Negative-HP floor at which a character actually dies. 0 HP only drops you into a revivable bleed-out — death happens here. The emergency auto-hangup keeps firing through the whole bleeding-out window down to this floor. Default -25."/>
+                            </Grid>
 
-                    <!-- Auto-refine traces the true floor from slow deaths: a
-                         bleed-out crosses the floor one tick at a time and lands
-                         right at it, so its HP reading measures the real value.
-                         The seed above is only a guess; a single big overkill hit
-                         over-negatives the floor and is discarded. Off pins the
-                         manual value. -->
-                    <CheckBox IsChecked="{Binding AutoRefineDeathFloor, Mode=TwoWay}"
-                              Margin="0,6,0,0"
-                              Content="Auto-refine the floor from slow deaths"
-                              ToolTip.Tip="Learn the realm's true death floor from deaths where you bled out gradually (which land right at the floor). A single big overkill hit blows past the floor and is ignored. Turn off to keep the value you set above."/>
+                            <!-- Auto-refine traces the true floor from slow deaths: a
+                                 bleed-out crosses the floor one tick at a time and lands
+                                 right at it, so its HP reading measures the real value.
+                                 The seed above is only a guess; a single big overkill hit
+                                 over-negatives the floor and is discarded. Off pins the
+                                 manual value. -->
+                            <CheckBox IsChecked="{Binding AutoRefineDeathFloor, Mode=TwoWay}"
+                                      Margin="0,6,0,0"
+                                      Content="Auto-refine the floor from slow deaths"
+                                      ToolTip.Tip="Learn the realm's true death floor from deaths where you bled out gradually (which land right at the floor). A single big overkill hit blows past the floor and is ignored. Turn off to keep the value you set above."/>
 
-                    <!-- Nightly boss cleanup: "Respawns @ Cleanup" bosses on the
-                         Bosses tab read DEAD once marked and flip back to ALIVE at
-                         this daily wall-clock time (in the chosen zone). -->
-                    <Grid ColumnDefinitions="180,Auto,Auto,*" Margin="0,12,0,0" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Boss cleanup time:"/>
-                        <TextBox Grid.Column="1" Width="90" HorizontalAlignment="Left"
-                                 FontFamily="{StaticResource FontMono}"
-                                 Text="{Binding CleanupTimeOfDay, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                 PlaceholderText="21:00"
-                                 ToolTip.Tip="Daily server-cleanup time as HH:mm (24-hour) in the time zone at right. Cleanup-only bosses flip from DEAD back to ALIVE at this time. Blank disables cleanup-boss timers."/>
-                        <ComboBox Grid.Column="2" Width="240" HorizontalAlignment="Left"
-                                  FontFamily="{StaticResource FontMono}"
-                                  ItemsSource="{Binding TimeZoneIds}"
-                                  SelectedItem="{Binding CleanupTimeZoneId, Mode=TwoWay}"
-                                  ToolTip.Tip="Time zone the cleanup time is in. Defaults to your computer's own zone; change it to override (e.g. if the board's cleanup runs on a different zone)."/>
-                    </Grid>
+                            <!-- Nightly boss cleanup: "Respawns @ Cleanup" bosses on the
+                                 Bosses tab read DEAD once marked and flip back to ALIVE at
+                                 this daily wall-clock time (in the chosen zone). -->
+                            <Grid ColumnDefinitions="180,Auto,Auto,*" Margin="0,12,0,0" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Boss cleanup time:"/>
+                                <TextBox Grid.Column="1" Width="90" HorizontalAlignment="Left"
+                                         FontFamily="{StaticResource FontMono}"
+                                         Text="{Binding CleanupTimeOfDay, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                         PlaceholderText="21:00"
+                                         ToolTip.Tip="Daily server-cleanup time as HH:mm (24-hour) in the time zone at right. Cleanup-only bosses flip from DEAD back to ALIVE at this time. Blank disables cleanup-boss timers."/>
+                                <ComboBox Grid.Column="2" Width="240" HorizontalAlignment="Left"
+                                          FontFamily="{StaticResource FontMono}"
+                                          ItemsSource="{Binding TimeZoneIds}"
+                                          SelectedItem="{Binding CleanupTimeZoneId, Mode=TwoWay}"
+                                          ToolTip.Tip="Time zone the cleanup time is in. Defaults to your computer's own zone; change it to override (e.g. if the board's cleanup runs on a different zone)."/>
+                            </Grid>
 
-                    <!-- The realm's label for the runic currency. Some realms
-                         relabel "runic", which changes the coin wording the server
-                         sends — so the pickup/drop/hide parsers have to match the
-                         custom name, not the literal "runic". -->
-                    <Grid ColumnDefinitions="180,Auto,*" Margin="0,12,0,0" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Runic currency name"/>
-                        <TextBox Grid.Column="1" Text="{Binding RunicCurrencyName, Mode=TwoWay}"
-                                 Width="220" HorizontalAlignment="Left"
-                                 ToolTip.Tip="What this realm calls the runic currency, if it relabels it. Blank falls back to 'runic'."/>
-                    </Grid>
+                            <!-- The realm's label for the runic currency. Some realms
+                                 relabel "runic", which changes the coin wording the server
+                                 sends — so the pickup/drop/hide parsers have to match the
+                                 custom name, not the literal "runic". -->
+                            <Grid ColumnDefinitions="180,Auto,*" Margin="0,12,0,0" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Runic currency name"/>
+                                <TextBox Grid.Column="1" Text="{Binding RunicCurrencyName, Mode=TwoWay}"
+                                         Width="220" HorizontalAlignment="Left"
+                                         ToolTip.Tip="What this realm calls the runic currency, if it relabels it. Blank falls back to 'runic'."/>
+                            </Grid>
+                        </StackPanel>
+                    </Panel>
 
                     <!-- ============================================================
                          SECTION 2 — Character profile settings (per-character).

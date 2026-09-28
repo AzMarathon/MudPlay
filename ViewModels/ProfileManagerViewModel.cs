@@ -40,6 +40,10 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private readonly LogService? _log;
     private bool _disposed;
 
+    // Load hands the window its close: once a character is loaded there's nothing
+    // left to do here.
+    public event Action? CloseRequested;
+
     public ObservableCollection<string> Bbses { get; } = new();
     public ObservableCollection<ProfileManagerRow> Profiles { get; } = new();
 
@@ -301,11 +305,14 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
             && string.Equals(_bbs.Get(bbs)?.RealmFor(_profile.Current?.Realm)?.Name, name,
                 StringComparison.OrdinalIgnoreCase);
         if (loadedOnIt && !EnsureDisconnected("remove the realm your loaded character plays")) return;
-        int count = _realms.CharacterCount(bbs, name);
-        string who = count == 0 ? "" : $" Its {count} character{(count == 1 ? "" : "s")} will play the first realm.";
-        if (!await _confirm.ConfirmAsync("Remove realm",
-                $"Remove the realm “{name}” from “{bbs}”?{who} Its collected data stays on disk.", "Remove"))
-            return;
+        // Characters on the realm are deleted with it, so that confirmation always
+        // shows; an empty realm follows the "confirm deletes" setting.
+        IReadOnlyList<ProfileRef> characters = _realms.CharactersOn(bbs, name);
+        (string body, string yes) = RealmCatalog.RemovalPrompt(bbs, name, characters);
+        bool confirmed = characters.Count > 0
+            ? await _confirm.ConfirmAsync("Remove realm", body, yes)
+            : await _confirm.ConfirmDeleteAsync($"the realm “{name}” from “{bbs}”");
+        if (!confirmed) return;
         if (!_realms.Remove(bbs, name)) return;
         RepinIfLoadedOn(bbs);
         ReloadRealms(keep: null);
@@ -528,14 +535,16 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         if (!_isDisconnected())
         {
             LaunchNewClients(targets);   // playing → leave this client be
-            return;
         }
-
-        // Idle client: the first selection loads here (already loaded → no-op),
-        // the rest open new.
-        ProfileManagerRow first = targets[0];
-        if (!first.IsCurrent) _swapToProfile(first.Ref);
-        if (targets.Count > 1) LaunchNewClients(targets.Skip(1).ToList());
+        else
+        {
+            // Idle client: the first selection loads here (already loaded → no-op),
+            // the rest open new.
+            ProfileManagerRow first = targets[0];
+            if (!first.IsCurrent) _swapToProfile(first.Ref);
+            if (targets.Count > 1) LaunchNewClients(targets.Skip(1).ToList());
+        }
+        CloseRequested?.Invoke();
     }
 
     private void LaunchNewClients(IReadOnlyList<ProfileManagerRow> targets)

@@ -69,7 +69,7 @@ public sealed class BbsRealmTests : IDisposable
     }
 
     [Fact]
-    public void RenamingOrRemovingARealm_RepointsItsCharacters()
+    public void RenamingARealm_RepointsItsCharacters()
     {
         new BbsProfileStore().Save(new BbsProfile { Name = _bbs, Realms = { new() { Name = "PVE" }, new() { Name = "PVP" } } });
         ProfileService profiles = new();
@@ -77,10 +77,9 @@ public sealed class BbsRealmTests : IDisposable
         profiles.AssignRealm(Seed("Paladin"), "PVP");
 
         profiles.RenameRealm(_bbs, "PVE", "Classic");
-        profiles.RenameRealm(_bbs, "PVP", null);
 
         Assert.Equal("Classic", profiles.RealmOf(new ProfileRef(_bbs, "Priest")));
-        Assert.Null(profiles.RealmOf(new ProfileRef(_bbs, "Paladin")));
+        Assert.Equal("PVP", profiles.RealmOf(new ProfileRef(_bbs, "Paladin")));
     }
 
     private ProfileRef Seed(string name)
@@ -92,7 +91,7 @@ public sealed class BbsRealmTests : IDisposable
     }
 
     [Fact]
-    public void Catalog_AddRenameRemove_KeepDataAndCharactersTogether()
+    public void Catalog_AddRenameRemove()
     {
         BbsProfileStore store = new();
         store.Save(new BbsProfile { Name = _bbs });   // one realm, named after the BBS
@@ -109,10 +108,12 @@ public sealed class BbsRealmTests : IDisposable
         Assert.Null(realms.Rename(_bbs, added, "PVE"));
         Assert.True(File.Exists(AppPaths.RealmPlayersFile(AppPaths.RealmFolder(_bbs, "PVE"))));
         Assert.Equal("PVE", profiles.RealmOf(new ProfileRef(_bbs, "Priest")));
-        Assert.Equal(1, realms.CharacterCount(_bbs, "PVE"));
+        Assert.Equal("Priest", Assert.Single(realms.CharactersOn(_bbs, "PVE")).Name);
 
+        // Removing a realm deletes the characters on it and its data.
         Assert.True(realms.Remove(_bbs, "PVE"));
-        Assert.Null(profiles.RealmOf(new ProfileRef(_bbs, "Priest")));
+        Assert.False(profiles.Exists(_bbs, "Priest"));
+        Assert.False(Directory.Exists(AppPaths.RealmFolder(_bbs, "PVE")));
         Assert.False(realms.Remove(_bbs, _bbs));            // a BBS keeps one realm
         Assert.Single(store.Get(_bbs)!.Realms);
     }

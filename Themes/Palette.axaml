@@ -56,6 +56,9 @@
     <Color x:Key="AccentYellowColor">#FFE0B040</Color>
     <Color x:Key="AccentGreenColor">#FF7AB870</Color>
     <Color x:Key="AccentMagentaColor">#FFB868B8</Color>
+    <!-- MagentaSoft: magenta at ~18% opacity — the fill of a realm's settings
+         frame (Settings → BBS), a hue no combat-profile colour uses. -->
+    <Color x:Key="AccentMagentaSoftColor">#2EB868B8</Color>
     <Color x:Key="AccentVioletColor">#FF9D86E0</Color>
 
     <SolidColorBrush x:Key="AccentAmberBrush"      Color="{StaticResource AccentAmberColor}"/>
@@ -67,6 +70,7 @@
     <SolidColorBrush x:Key="AccentYellowBrush"     Color="{StaticResource AccentYellowColor}"/>
     <SolidColorBrush x:Key="AccentGreenBrush"      Color="{StaticResource AccentGreenColor}"/>
     <SolidColorBrush x:Key="AccentMagentaBrush"    Color="{StaticResource AccentMagentaColor}"/>
+    <SolidColorBrush x:Key="AccentMagentaSoftBrush" Color="{StaticResource AccentMagentaSoftColor}"/>
     <SolidColorBrush x:Key="AccentVioletBrush"     Color="{StaticResource AccentVioletColor}"/>
 
     <!-- ============ Severity mapping ============ -->

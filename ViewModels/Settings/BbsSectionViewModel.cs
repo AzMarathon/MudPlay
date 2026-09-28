@@ -143,10 +143,10 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private string _realmGameDataSet = GlobalDefaultSet;
 
     // Realm renames / removals made in the window, applied on OK: a rename moves
-    // the realm's data folder and re-points its characters, a removal sends them
-    // to the first realm (its folder is left on disk).
+    // the realm's data folder and re-points its characters; a removal deletes the
+    // characters that play it (confirmed by name when it was staged) and its folder.
     private readonly List<(string Bbs, string Old, string New)> _realmRenames = new();
-    private readonly List<(string Bbs, string Name)> _realmRemovals = new();
+    private readonly List<(string Bbs, string Name, IReadOnlyList<ProfileRef> Characters)> _realmRemovals = new();
 
     // The loaded character's realm on its own BBS — editable only while that BBS
     // is the one selected. Committed on OK.
@@ -820,29 +820,48 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         Dirty();
     }
 
-    // Remove the selected realm (a BBS keeps at least one). Its characters move to
-    // the first realm on OK; its data folder stays on disk.
+    // Remove the selected realm (a BBS keeps at least one). Removing a realm
+    // deletes the characters that play it and its collected data, on OK — so a
+    // realm with characters is confirmed by name first, and the realm the loaded
+    // character plays can't be removed here.
     [RelayCommand(CanExecute = nameof(CanRemoveRealm))]
-    private void RemoveRealm()
+    private async Task RemoveRealmAsync()
     {
         if (SelectedBbsName is not { } bbs || !_loaded.TryGetValue(bbs, out BbsProfile? profile)) return;
         if (SelectedRealm() is not { } realm || profile.Realms.Count <= 1) return;
-        profile.Realms.Remove(realm);
-        // A realm added in this window and removed again leaves nothing to undo.
+        if (AppServices.CurrentOrNull is not { } svcs) return;
+
         int renamed = _realmRenames.FindIndex(r =>
             string.Equals(r.Bbs, bbs, StringComparison.OrdinalIgnoreCase)
             && string.Equals(r.New, realm.Name, StringComparison.OrdinalIgnoreCase));
-        string original = realm.Name;
-        if (renamed >= 0)
+        string original = renamed >= 0 ? _realmRenames[renamed].Old : realm.Name;
+        // A realm added in this window isn't on disk: nothing plays it, nothing to delete.
+        bool saved = _bbsStore.Get(bbs)?.Realms.Any(r =>
+            string.Equals(r.Name, original, StringComparison.OrdinalIgnoreCase)) == true;
+        IReadOnlyList<ProfileRef> characters = saved ? svcs.Realms.CharactersOn(bbs, original) : Array.Empty<ProfileRef>();
+
+        if (characters.Any(c => string.Equals(c.Bbs, _profile.CurrentBbsName, StringComparison.OrdinalIgnoreCase)
+                                && string.Equals(c.Name, _profile.CurrentProfileName, StringComparison.Ordinal)))
         {
-            original = _realmRenames[renamed].Old;
-            _realmRenames.RemoveAt(renamed);
+            svcs.Dialogs.ShowInfo("Realm not removed",
+                $"Your loaded character plays “{realm.Name}”. Disconnect and remove it from Profile Management instead.");
+            return;
         }
-        _realmRemovals.Add((bbs, original));
+        if (saved)
+        {
+            (string body, string yes) = RealmCatalog.RemovalPrompt(bbs, realm.Name, characters);
+            bool confirmed = characters.Count > 0
+                ? await svcs.Confirm.ConfirmAsync("Remove realm", body, yes)
+                : await svcs.Confirm.ConfirmDeleteAsync($"the realm “{realm.Name}” from “{bbs}”");
+            if (!confirmed) return;
+        }
+
+        profile.Realms.Remove(realm);
+        if (renamed >= 0) _realmRenames.RemoveAt(renamed);
+        if (saved) _realmRemovals.Add((bbs, original, characters));
 
         // Removing the list entry clears the pickers' selections; restore them with
-        // changes suppressed. A character on the removed realm shows the first one,
-        // which is where ProfileService.RenameRealm sends it on OK.
+        // changes suppressed.
         string? characterRealm =
             string.Equals(CharacterRealm, realm.Name, StringComparison.OrdinalIgnoreCase)
                 ? profile.Realms[0].Name : CharacterRealm;
@@ -870,8 +889,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         if (AppServices.CurrentOrNull?.Realms is not { } realms) return;
         foreach ((string bbs, string oldName, string newName) in _realmRenames)
             realms.MoveData(bbs, oldName, newName);
-        foreach ((string bbs, string name) in _realmRemovals)
-            realms.ReleaseCharacters(bbs, name);
+        foreach ((string bbs, string name, IReadOnlyList<ProfileRef> characters) in _realmRemovals)
+            realms.DeleteContents(bbs, name, characters);
     }
 
     // OK: put the loaded character on the realm picked for it.

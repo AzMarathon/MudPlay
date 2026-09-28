@@ -103,7 +103,7 @@
                                 ToolTip.Tip="Rename the realm. Its data and its characters come along."/>
                         <Button Grid.Column="2" Content="Remove" HorizontalAlignment="Stretch"
                                 Command="{Binding RemoveRealmCommand}" IsEnabled="{Binding CanRemoveRealm}"
-                                ToolTip.Tip="Remove the realm (a BBS keeps at least one). Its characters move to the first realm; its collected data stays on disk."/>
+                                ToolTip.Tip="Remove the realm (a BBS keeps at least one). This DELETES every character on it and its collected data — you're asked to confirm first, with the characters named."/>
                     </Grid>
                     <TextBlock Text="Game data" Foreground="{StaticResource ChromeFgSecBrush}" Margin="0,2,0,0"/>
                     <ComboBox HorizontalAlignment="Stretch"
