@@ -1,15 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.0**
-> - A BBS can host several named realms (Settings → BBS + Display): each has its own game data, game-menu commands, death floor, boss cleanup time and runic currency name
-> - What you collect while playing (players seen, room blacklist, leaderboard, Roomba labels and sightings, quest edits, boss timers, realm game-data edits) is kept per realm, shared by the characters playing it
-> - Characters are put on a realm under Settings → BBS + Display or Profile Management; an existing BBS becomes one realm holding its current settings and data
-> - The "Only for this BBS" game-data tier is now "Only for this realm"
-> - Profile Management is laid out as BBSes → Realms → Characters: add, rename and remove realms, pick a realm's game data, and move characters between realms and BBSes
-> - Removing a realm deletes the characters on it and its collected data, after a confirmation that names them
-> - A realm's settings in Settings → BBS + Display sit in a frame in that realm's own colour, listing the characters that play it
-> - Load in Profile Management closes the window once the character is loaded
+> **Version 3.116.3**
+> - The title bar shows the BBS and realm (BBS:realm) of the loaded character
+> - File → Recent profiles show each character's BBS and realm
+> - Your alignment comes from your row in the realm's player list again (a `who` updates it), so Good/Evil-only gear and spells gate without a `who` every session
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -2583,9 +2583,9 @@ public sealed class AppServices
         //
         // Alignment comes from the SAME source as the Equipment Manager's own
         // GoodOnly/EvilOnly gating (CanCharacterEquipItem / IsEquipRestricted
-        // above) — AlignmentTracker.SelfAlignment, our own row as a `who` showed it
-        // this session, not the stat screen (which doesn't report alignment at
-        // all). Unknown until a `who` has shown our own row, in which case
+        // above) — AlignmentTracker.SelfAlignment, our own row in the realm's
+        // players list (a `who` rewrites it), not the stat screen (which doesn't
+        // report alignment at all). Unknown until a `who` has shown us, in which case
         // charAlign stays 0 and IsUsable skips alignment filtering entirely
         // rather than guessing.
         void SeedSpellbook(Models.Profile.LastKnownStats? snap, bool reseed = false)

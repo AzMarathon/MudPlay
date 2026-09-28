@@ -226,10 +226,11 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Window title — "MudPlay v{version} — {profile} — {bbs}". The version is
-    // the running build's AppInfo.Version. When no profile is loaded the
+    // Window title — "MudPlay v{version} — {profile} — {bbs}:{realm}". The version
+    // is the running build's AppInfo.Version. When no profile is loaded the
     // placeholder {default} stands in; when no BBS is selected {No BBS} stands
-    // in. Both slots always render so the title bar shape stays consistent.
+    // in. Both slots always render so the title bar shape stays consistent. The
+    // realm tells apart two clients on different realms of the same board.
     //
     // While an update is waiting, the scrolling banner replaces the version slot
     // rather than the whole title: the version is the stale part anyway, and the
@@ -240,7 +241,9 @@ public partial class MainWindowViewModel : ObservableObject
         get
         {
             string profile = AppServices.Current.Profile.CurrentProfileName ?? "{default}";
-            string bbs     = ActiveBbsName ?? "{No BBS}";
+            string bbs     = _quickConnectTarget is null && AppServices.Current.ResolveActiveRealm() is { } active
+                ? $"{active.Bbs.Name}:{active.Realm.Name}"
+                : ActiveBbsName ?? "{No BBS}";
             string lead    = _marqueeTimer is null
                 ? $"MudPlay v{AppInfo.Version}"
                 : UpdateTitleMarquee.Frame(_marqueeFrame);
@@ -793,7 +796,8 @@ public partial class MainWindowViewModel : ObservableObject
         // named profiles and unsaved drafts (Save no-ops on drafts but
         // the mutation signal still fires).
         AppServices.Current.Profile.ProfileMutated += _ => OnProfileMutatedForBbs();
-        AppServices.Current.Profile.BbsPinApplied += _ => { ClearQuickConnect(); RefreshBbsBindings(); };
+        // A realm change re-pins: the title and the recent list show the realm.
+        AppServices.Current.Profile.BbsPinApplied += _ => { ClearQuickConnect(); RefreshBbsBindings(); RebuildRecentProfiles(); };
 
         // Seed the BBS-pin sentinel so OnProfileMutatedForBbs can detect
         // the first real change against a known baseline.
@@ -3852,10 +3856,10 @@ public partial class MainWindowViewModel : ObservableObject
     // fragile across popup ownership). Binding to the parent VM directly
     // sidesteps that entirely.
     //
-    // RecentLabel format: "<profile> - <bbs>" (or just "<profile>" when
+    // RecentLabel format: "<profile> - <bbs>:<realm>" (or just "<profile>" when
     // no BBS is pinned yet). The menu XAML prepends the slot number /
     // mnemonic "_N)  ". Lets the user disambiguate generically-named
-    // profiles by the BBS they connect to.
+    // profiles by the BBS and realm they play.
     public string? Recent0 => RecentLabel(0);
     public string? Recent1 => RecentLabel(1);
     public string? Recent2 => RecentLabel(2);
@@ -3886,7 +3890,10 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (index < 0 || index >= RecentProfiles.Count) return null;
         ProfileRef recent = RecentProfiles[index];
-        return string.IsNullOrEmpty(recent.Bbs) ? recent.Name : $"{recent.Name} - {recent.Bbs}";
+        if (string.IsNullOrEmpty(recent.Bbs)) return recent.Name;
+        AppServices svc = AppServices.Current;
+        string? realm = svc.Bbs.Get(recent.Bbs)?.RealmFor(svc.Profile.RealmOf(recent))?.Name;
+        return realm is null ? $"{recent.Name} - {recent.Bbs}" : $"{recent.Name} - {recent.Bbs}:{realm}";
     }
 
     // True when at least one recent profile is queued — gates the Separator.

@@ -23,12 +23,13 @@ public sealed class AlignmentTracker : IDisposable
     // True when a dark-cloud line has fired since the last `who` refresh.
     public bool IsStale { get; private set; }
 
-    // Our own alignment word as a `who` showed it this profile session, or null until
-    // one has. The saved players list is per BBS and persists, so our row there can be
-    // hours old, or written by a same-named character of ours on another realm of the
-    // board: a Good paladin was read as Villain and its Good-only gear blocked (report
-    // paradigm-20260927-134201). Whatever gates on our alignment reads this instead.
-    public string? SelfAlignment { get; private set; }
+    // Our own alignment word: our row in the realm's players list, which every `who`
+    // that shows us rewrites. The list is kept per realm, so a same-named character
+    // of ours on another realm of the board can't overwrite it (it once did: a Good
+    // paladin read as Villain and its Good-only gear blocked, report
+    // paradigm-20260927-134201). null until a `who` has shown us on this realm.
+    // Whatever gates on our alignment reads this.
+    public string? SelfAlignment => _players.Find(_stats.Name)?.Alignment;
 
     // Raised whenever IsStale changes.
     public event Action? StaleChanged;
@@ -55,16 +56,11 @@ public sealed class AlignmentTracker : IDisposable
         if (string.IsNullOrEmpty(self)
             || !string.Equals(self, givenName, StringComparison.OrdinalIgnoreCase))
             return;
-        SelfAlignment = _players.Find(_stats.Name)?.Alignment;
         SetStale(false);
     }
 
-    // A new profile is a new character: forget what the last `who` said about us.
-    public void ResetForProfile()
-    {
-        SelfAlignment = null;
-        SetStale(false);
-    }
+    // A new profile is a new character: its alignment isn't stale from the last one's.
+    public void ResetForProfile() => SetStale(false);
 
     private void SetStale(bool value)
     {

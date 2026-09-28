@@ -596,9 +596,8 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
                 EquipmentSlotMap.GetItemsForSlot(_gameData, row.Slot, level, cls, bucket));
     }
 
-    // Our alignment as a `who` showed it this session (AlignmentTracker) — the saved
-    // players row can be stale or another same-named character's. Null until then,
-    // which leaves the pickers unfiltered by alignment.
+    // Our alignment (AlignmentTracker: our row in the realm's players list). Null
+    // until a `who` has shown us, which leaves the pickers unfiltered by alignment.
     private string? LocalAlignmentWord() => _alignment?.SelfAlignment;
 
     // ----- equipment bonuses ----------------------------------------------

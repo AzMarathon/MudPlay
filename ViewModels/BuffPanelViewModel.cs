@@ -498,9 +498,9 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // RemovesSpell tie-break has no way to know which of the two is even usable.
     private void RefreshSelfBlessCandidates(HashSet<string> slotted)
     {
-        // Our own alignment as a `who` showed it this session — the same source the
-        // Equipment Manager trusts. Null until then; IsAlignmentEligible treats that
-        // as "don't know, don't filter".
+        // Our own alignment (AlignmentTracker) — the same source the Equipment
+        // Manager trusts. Null until a `who` has shown us; IsAlignmentEligible
+        // treats that as "don't know, don't filter".
         AlignmentBucket? alignment = ItemEquipFilter.BucketForWord(
             AppServices.Current.Alignment.SelfAlignment);
 

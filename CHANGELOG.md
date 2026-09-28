@@ -1,5 +1,11 @@
 # Version history
 
+## 3.116.3
+
+- The title bar shows the BBS and realm (BBS:realm) of the loaded character
+- File → Recent profiles show each character's BBS and realm
+- Your alignment comes from your row in the realm's player list again (a `who` updates it), so Good/Evil-only gear and spells gate without a `who` every session
+
 ## 3.116.0
 
 - A BBS can host several named realms (Settings → BBS + Display): each has its own game data, game-menu commands, death floor, boss cleanup time and runic currency name
