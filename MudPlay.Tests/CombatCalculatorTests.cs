@@ -560,25 +560,25 @@ public sealed class CombatCalculatorTests
     }
 
     [Fact]
-    public void CalcMartialArtsDamage_Paradigm_FoldsPositiveStrengthOnly()
+    public void CalcMartialArtsDamage_Paradigm_IgnoresStrength()
     {
-        // Paradigm: max gets (STR-50)/10 (>0 only); min gets (STR-100)/10 (NOT
-        // doubled), floored 0. STR 150: max +10, min +5. L30 punch base 5/12.
+        // Paradigm's strike damage has no strength term (Stock's does). L30 punch
+        // at STR 150 stays at the 5 / 12 base.
         MeleeDamageResult r = CombatCalculator.CalcMartialArtsDamage(
             MudAttackType.Punch, RealmType.ParaMud, level: 30, maPlusSkill: 1,
             strength: 150, plusMaxDamage: 0, maPlusDamage: 0);
 
-        Assert.Equal(10, r.MinDamage);  // 5 + 5
-        Assert.Equal(22, r.MaxDamage);  // 12 + 10
+        Assert.Equal(5, r.MinDamage);
+        Assert.Equal(12, r.MaxDamage);
     }
 
     [Theory]
     // Level-1 Kang Mystic, STR 80, on the Paradigm server formula: band min
-    // 1/8+2 = 2; max (1+3)/4+6 = 7 punch, 1/5+7 = 7 kick, 1/6+7 = 7 jk. STR 80
-    // adds +3 to max only. Kick ×1.33 / jumpkick ×1.66 truncate afterward.
-    [InlineData(MudAttackType.Punch, 2, 10)]
-    [InlineData(MudAttackType.Kick, 2, 13)]
-    [InlineData(MudAttackType.Jumpkick, 3, 16)]
+    // 1/8+2 = 2; max (1+3)/4+6 = 7 punch, 1/5+7 = 7 kick, 1/6+7 = 7 jk. STR adds
+    // nothing on Paradigm. Kick ×1.33 / jumpkick ×1.66 truncate afterward.
+    [InlineData(MudAttackType.Punch, 2, 7)]
+    [InlineData(MudAttackType.Kick, 2, 9)]
+    [InlineData(MudAttackType.Jumpkick, 3, 11)]
     public void CalcMartialArtsDamage_Paradigm_Level1Mystic(
         MudAttackType attack, int expectedMin, int expectedMax)
     {

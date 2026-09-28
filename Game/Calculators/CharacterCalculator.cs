@@ -632,7 +632,8 @@ public static class CharacterCalculator
             ProtGood: t.PlusProtGood,
             DamageResist: (int)t.PlusDR,
             CritChancePercent: critChance,
-            AvgCritDamage: avgCritDamage);
+            AvgCritDamage: avgCritDamage,
+            MonsterDrMultiplier: CombatCalculator.DrMultiplierFor(type, realm));
     }
 
     // Maps a single MajorMUD ability ID + value onto the matching summary field

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.116.14
+
+- Paradigm Mystic punch / kick / jumpkick damage no longer adds a strength bonus (Paradigm's strikes have none)
+- Stock bash and smash take a monster's damage resist off before the ×3 / ×5, so Monster Intel counts armour 3× / 5× against them
+- GAME_MECHANICS: martial-arts and weapon / bash / smash damage compared side by side for Stock and Paradigm, with sources
+
 ## 3.116.12
 
 - Failed hides on Stock are recognised (Stock puts a space before "You don't think you are hidden.")

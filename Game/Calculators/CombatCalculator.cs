@@ -367,6 +367,17 @@ public static class CombatCalculator
         return new MeleeDamageResult(min, max);
     }
 
+    // How many times a defender's DR counts against one hit. Stock takes DR off the
+    // rolled damage BEFORE the bash ×3 / smash ×5, so it's multiplied with the hit;
+    // Paradigm takes it off after (GAME_MECHANICS "Bash and smash damage vs DR").
+    public static int DrMultiplierFor(MudAttackType attackType, RealmType realmType) =>
+        realmType != RealmType.Stock ? 1 : attackType switch
+        {
+            MudAttackType.Bash => 3,
+            MudAttackType.Smash => 5,
+            _ => 1,
+        };
+
     // Per-hit damage range for a Mystic martial-arts MajorMUD attack (Punch /
     // Kick / Jumpkick) for the realm selected by realmType. Requires a positive
     // maPlusSkill; returns a zero range otherwise.
@@ -388,13 +399,14 @@ public static class CombatCalculator
     //   min = lvl/8+2 below 20 (else lvl/6 floored 5) + plusMinDamage;
     //   per-type max (lvl+3)/4+6 / lvl/5+7 / lvl/6+7 below 20 (else lvl/4
     //   floored 12/10/10) + plusMaxDamage. No skill term.
-    // Strength then folds in exactly as CalcMeleeDamage does (max gets
-    // (STR-50)/10, min gets (STR-100)/10 doubled in Stock, floored at 0; ParaMUD
-    // has no negative-strength penalty). After the range is clamped, the item
-    // martial-arts damage bonus (maPlusDamage, Abil 92/93/94) is added to both
-    // bounds, then the kick x1.33 / jumpkick x1.66 multiplier (truncated).
-    // plusMaxDamage is the item +max-damage sum (Abil 4); strength is added
-    // internally.
+    // On Stock, strength then folds in as CalcMeleeDamage does (max gets
+    // (STR-50)/10, min gets (STR-100)/10 doubled, floored at 0); Paradigm adds no
+    // strength. After the range is clamped, the item martial-arts damage bonus
+    // (maPlusDamage, Abil 92/93/94) is added to both bounds, then the kick x1.33 /
+    // jumpkick x1.66 multiplier (truncated) — on Paradigm too, pending a check
+    // against a Mystic's `stat all`.
+    // plusMaxDamage is the item +max-damage sum (Abil 4); strength (Stock only) is
+    // added internally.
     public static MeleeDamageResult CalcMartialArtsDamage(MudAttackType attackType, RealmType realmType,
                                                           int level, int maPlusSkill, int strength,
                                                           int plusMaxDamage, int maPlusDamage,
@@ -431,17 +443,14 @@ public static class CombatCalculator
             };
         }
 
-        int strMaxBonus = (strength - 50) / 10;
-        if (realmType == RealmType.ParaMud && strMaxBonus < 0)
-            strMaxBonus = 0;                  // GreaterMUD has no negative-strength penalty
-
-        int strMinBonus = (strength - 100) / 10;
+        // Stock folds strength in as CalcMeleeDamage does; Paradigm's strike damage
+        // has no strength term.
         if (realmType == RealmType.Stock)
-            strMinBonus *= 2;
-        strMinBonus = Math.Max(strMinBonus, 0);
-
-        min += strMinBonus;
-        max += strMaxBonus + plusMaxDamage;
+        {
+            min += Math.Max((strength - 100) / 10 * 2, 0);
+            max += (strength - 50) / 10;
+        }
+        max += plusMaxDamage;
         if (min > max) min = max;
         if (min < 0) min = 0;
         if (max < 0) max = 0;

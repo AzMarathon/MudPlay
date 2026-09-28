@@ -1123,23 +1123,50 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - The Character Info combat panel gates each strike row on the class ability — not on `MartialArts > 0`.
 
 ### Martial-arts strike damage
-*Status: Paradigm [OBSERVED] server source, shared by a Paradigm developer via the user, 2026-09-27; Stock from MMUD-Explorer (Unrated) · Realm: differs*
+*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (`_move_player_to_fighter`, `_calculate_attack`); Paradigm [OBSERVED] server source shared by a Paradigm developer via the user, kick / jumpkick multipliers from MMUD-Explorer's GreaterMUD branch; both CONFIRMED to follow 2026-09-27 (user) · Realm: differs*
 
-- **Paradigm base damage is a level band, integer division throughout** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27)*. Levels under 20 use the first form; 20 and up use the second, floored:
+Punch, kick and jumpkick damage are worked out differently on each realm.
 
-  | Strike | Min | Max |
-  |---|---|---|
-  | Punch | `lvl/8 + 2` · `max(5, lvl/6)` | `(lvl+3)/4 + 6` · `max(12, lvl/4)` |
-  | Kick | same as punch | `lvl/5 + 7` · `max(10, lvl/4)` |
-  | Jumpkick | same as punch | `lvl/6 + 7` · `max(10, lvl/4)` |
+| Step | Stock | Paradigm |
+|---|---|---|
+| **Base min** | `skill·L/8 + 2` | `lvl/8 + 2` under level 20, else `max(5, lvl/6)` |
+| **Base max** | punch `skill·(L+3)/4 + 6` · kick `skill·L/6 + 7` · jumpkick `skill·L/6 + 8` | punch `(lvl+3)/4 + 6`, else `max(12, lvl/4)` · kick `lvl/5 + 7`, else `max(10, lvl/4)` · jumpkick `lvl/6 + 7`, else `max(10, lvl/4)` |
+| **What scales it** | the class's strike ability value (`skill`: Punch 29 / Kick 30 / Jumpkick 35) × level, with `L` = level capped at 20 | level alone; no skill term |
+| **Strength** | max `+ (STR − 50)/10`; min `+ 2·(STR − 100)/10` when positive | none |
+| **+max damage (ability 4)** | added to max | added to max |
+| **+min damage** | none | added to min |
+| **Strike damage bonus** (abilities 92 / 93 / 94) | added to min and max | added to min and max |
+| **Kick / jumpkick multiplier** | ×1.33 / ×1.66 (`(100 + 33)/100`, `(100 + 66)/100`) | ×1.33 / ×1.66 *([NEEDS CONFIRMATION] — MMUD-Explorer applies them; the developer's source doesn't show them. Settle against a Paradigm Mystic's `stat all`.)* |
 
-  - Each strike then adds its own damage bonus (`PunchDamage` / `KickDamage` / `JumpkickDamage`) to both ends, the character's **+min damage** to the min and **+max damage** to the max.
-  - There's **no martial-arts skill term** in the damage.
-  - The source is labelled "base damage", so whether strength and the kick ×1.33 / jumpkick ×1.66 multipliers apply on top isn't shown. *[NEEDS CONFIRMATION]* The client still applies both, as on Stock.
-- **Stock** (MMUD-Explorer) scales the skill by level (capped at 20): min `skill·lvl/8 + 2`; max punch `skill·(lvl+3)/4 + 6`, kick `skill·lvl/6 + 7`, jumpkick `skill·lvl/6 + 8`; then strength, the strike's damage bonus, and the kick / jumpkick multipliers.
+- **All division is integer (truncated)** on both realms.
+- **Strike accuracy** comes from abilities 89 / 90 / 91 (punch / kick / jumpkick) on Stock. On Paradigm, kick is −10 and jumpkick −15 accuracy (MMUD-Explorer's GreaterMUD branch).
 
 **Client use:**
-- `CombatCalculator.CalcMartialArtsDamage`. Before 2026-09-27 the Paradigm branch followed MMUD-Explorer: it rounded the level terms, added a flat +1 skill, and left out +min damage.
+- `CombatCalculator.CalcMartialArtsDamage` implements both columns.
+
+### Bash and smash damage vs DR
+*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (`_move_player_to_fighter`, `_calculate_attack`), matching MMUD-Explorer's Stock branch; Paradigm from the Paradigm developer's source (bash) and MMUD-Explorer's GreaterMUD branch; CONFIRMED to follow 2026-09-27 (user) · Realm: differs*
+
+How one weapon hit (normal, bash or smash) is built, by realm.
+
+| Step | Stock | Paradigm |
+|---|---|---|
+| **Base** | the weapon's min / max | the weapon's min / max |
+| **Strength** | max `+ (STR − 50)/10` (negative below 50); min `+ 2·(STR − 100)/10` when positive | max `+ (STR − 50)/10`, never negative; min `+ (STR − 100)/10` when positive *(MMUD-Explorer)* |
+| **+max damage (ability 4)** | added to max | added to max |
+| **+min damage (ability 1)** | not used — the Stock engine has no +min-damage stat, and no Stock item carries it | added to min |
+| **Before the roll** | bash ×1.1, smash ×1.2 | bash ×1.1, smash ×1.2 |
+| **Crit** | chance above 40 becomes `40 + (c − 40)/3`; a crit rolls 2×–4× max; bash and smash never crit | a crit averages 3× max; bash and smash never crit |
+| **Defender's DR** | taken off the rolled damage **first** | taken off **last** |
+| **After the roll** | bash ×3, smash ×5 — so DR counts **3× / 5×** against a bash / smash | bash ×2.5 min / ×3 max, smash ×5 — DR counts once |
+| **Accuracy** | bash −15, smash −25 | bash −15, smash −25 (smash accuracy ×1.5 first) |
+| **Energy** | bash costs 2× energy; smash takes the whole round; under the weapon's strength requirement, energy ×`(200 + 3·shortfall)/200` | bash 2×; smash the whole round |
+
+- All steps truncate to whole numbers.
+
+**Client use:**
+- `CombatCalculator.CalcMeleeDamage` builds the range.
+- `CombatCalculator.DrMultiplierFor` gives how many times the monster's DR counts. Monster Intel's rounds-to-kill and damage-per-hit use it. Before 2026-09-27 Stock bash / smash took DR off only once.
 
 ### Physical damage per round — Paradigm
 *Status: [OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; bash multipliers and the 3× crit match `CombatCalculator` · Realm: Paradigm*
