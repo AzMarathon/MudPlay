@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.117.6**
-> - Monster Intel lists only monsters placed in the realm, matching the Game Data Browser (no Unobtainable records)
-> - A lowered Max Rnds to Kill also hides monsters the chosen attack can't kill at all
-> - A door that shuts while you stand in the room ("The door to the north just closed.") is opened on the next move instead of bounced off
-> - Doors others open, close or re-lock in your room, and lever exits that open or shut, are tracked; an already-open lever exit is walked straight through
-> - When the game won't let you bash, the door is picked or keyed instead of bashed forever; a key that doesn't fit fails at once
+> **Version 3.117.7**
+> - Game mechanics reference: how robbing players works on Stock (refusals, Thievery roll, what gets stolen, the evil record)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

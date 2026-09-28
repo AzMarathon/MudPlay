@@ -698,7 +698,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - **How much one dark cloud adds, Stock.** *([OBSERVED] `wccmmud.dll` 1.11p `_add_evil_points`.)* One cloud per evil act, printed before the points are added; the amount varies:
   - attacking a good monster (`Align` 0 Good or 4 Lawful Good): **10**;
   - attacking a player: **10**, **×2 (20)** if they're Good, **×3 (30)** if they're Saint or lawful;
-  - robbing: **1–3**;
+  - robbing: **1–3** (the rest of robbing is in *Combat → Robbing players (`rob`)*);
   - **attacking or robbing a player who's already Seedy or worse is free** — no points, no cloud.
   - **From a good (negative) alignment, one cloud always lands you at exactly 10 (Neutral)**: the add is raised to reach 10 if it would stop short.
 - **How much an evil act adds, Paradigm** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27)*:
@@ -1442,6 +1442,54 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
   - With talk slow **off**, the unrecognised command is spoken: `a kobold thief` → `You say "a kobold thief"`.
   - With talk slow **on** it's `Your command had no effect.` — whether or not anyone else is in the room.
 - **Both mean the target is gone** — typically a monster a party member killed, whose death gives us no exp line and so is never seen (report `stock-20260924-013525`).
+
+### Robbing players (`rob`)
+*Status: OBSERVED 2026-09-28 (`wccmmud.dll` 1.11p: `_cmd_rob`, `_rob_user`, `_rob_monster`, `_add_evil_points`, the PvP-eligibility check at `0x46c417`, the evil-timer routines) · Realm: Stock (Paradigm not recorded)*
+
+Recorded for future PvP settings; the client doesn't act on any of it yet.
+
+- **Syntax: `rob <player>`.** With no argument the command prints `Syntax: ROB {user/monster}`.
+  - An unknown target, or a hidden player you can't see, gets `You don't see that anywhere!`. "Can't see" is a status bit set by an item or spell ability, presumably see-hidden; that wasn't traced further.
+  - Naming an item or anything else that isn't a player or monster gets `Why would you want to rob from that?`.
+  - **Nothing can be named to steal.** The robbing code can take a named coin or item, but `rob` always calls it without one, so `rob bob gold` robs Bob the same way `rob bob` does.
+- **`rob` on a player or a monster ends your sneak and your hide, before anything else is checked.** It also adds a 1-unit action delay (`_add_delay`; the unit wasn't traced). The full list is under *Movement & navigation → Sneaking — commands, equip order, and the sneak state machine*.
+- **Robbing a monster does nothing.** `_rob_monster` only prints its lawful refusal when a named item is passed, and `rob` never passes one. So `rob <monster>` prints nothing and takes nothing; you only lose your sneak/hide and pay the delay.
+- **Monsters can't rob you either.** Monster attacks have a `Rob` attack type (the sysop monster display lists `Normal` / `Spell` / `Rob`), but its handler, `_monster_rob_user`, is an empty stub.
+- **Refusals, checked in this order.** Each one prints its line and stops, with nothing taken and no evil points:
+  1. **`You have chosen a way of life which prevents this action.`** — you're lawful, **or your evil warnings are on**. Evil warnings are on by default at character creation. Note the wording: it is `prevents`, not the `does not allow` of *Character stats & progression → How your alignment moves during play*. With evil warnings on, `rob` gives this line, never `To do this action, you must turn off your evil warnings.`
+  2. `Why would you want to rob yourself?`
+  3. **`Such an action would result in a very unbalanced game.`** — the victim fails the PvP eligibility check. The check, in order:
+     - PvP is off realm-wide (sysop config option #57 set to `-1`) → refused;
+     - either of you is below level 4 → refused;
+     - the victim has an active evil record against **you** (they attacked or robbed you recently; see *The evil record*, below) → allowed;
+     - the victim is **FIEND** (evil points ≥ 210) → allowed;
+     - otherwise, your levels must be within the config #57 range (1–100; the DLL's built-in value is 10) → refused if they're further apart.
+
+     PvP attacks use the same check, with the wording `Such an attack would result in a very unbalanced combat round.` An engine-side per-user exemption flag skips it; that flag wasn't identified.
+  4. **`You are overcome with a feeling of guilt and return your hands to your own pockets`** (no trailing period) — you're standing in a **Protected** room (a room flag), or in an **Arena** room while arenas are in normal mode. Normal mode is where death doesn't count; the sysop switches modes with `SYSOP ARENA [status/normal/combat]`. In an arena in combat mode you can rob.
+- **The roll.** Roll 1–100 against your **Thievery** (see *Character stats & progression → Utility skills — Perception + the thief four*). With no Thievery, a success is impossible.
+  - **Roll > Thievery + 10: caught.** You see `You bump <victim> as you try to rob <him/her>.` The victim sees `<you> bumps you as <he/she> tries to rob you!`. **This is the only outcome that tells the victim.**
+  - **Thievery < roll ≤ Thievery + 10: a quiet fail.** You see `Your skills fail as you try to rob <victim>.`, and the victim sees nothing.
+  - **Roll ≤ Thievery: success.** Something is picked (below). The victim sees nothing.
+  - **Every outcome counts as an evil act, caught or not.** The evil-points call comes before the result is shown. If it refuses you (`You have progressed too far to the evil side to do this action.` over 300, or one of the refusals above), you get that line and the rob stops.
+  - The points: **1** for a Neutral victim, **2** for a Good one, **3** for a Saint or lawful one, and **none** against a Seedy-or-worse victim (evil points ≥ 30). See *Character stats & progression → How your alignment moves during play*.
+- **What a success takes.** The pick is random:
+  - **Coins, about half the time** (a 1–100 roll under 50). One denomination is picked at random from copper, silver, gold, platinum and runic. The amount is a uniform random 0 to the victim's whole holding of that coin, and it moves straight into your purse.
+    - You see `You stole <n> <coin name> from <victim>.`, e.g. `You stole 12 gold crowns from Bob.` The coin name is the singular or plural form from *Money, banks & shops → Coin wire wording*.
+    - **A roll of 0, or a denomination the victim doesn't carry, prints `Your skills fail as you try to rob <victim>.`** So a "success" can still read as a fail.
+  - **Otherwise, an item.** Each inventory slot is considered in turn, with about a 50% chance of being picked (a later pick replaces an earlier one). If no pick survives, the victim's **keys** are tried the same way.
+  - **A picked item fails with the quiet fail line in these cases:**
+    - it lacks an item-record flag the MDB import doesn't carry (offset `0x42b`; presumably the item's robbable setting);
+    - it is the victim's **only** copy and they're wearing or wielding it;
+    - you can't carry it (it goes back to the victim).
+  - **Otherwise** it moves to your inventory and you see `You successfully stole <item> from <victim>.`
+  - **[NEEDS CONFIRMATION] — the inventory pick seems to favour Loyal items.** As read, an inventory pick survives only when the item **has** ability 100 (`LoyalItem`, the kept-on-death flag). Loyal items can't be `stock`ed, and they stay with you when you die. So an ordinary inventory item is never taken, and the keys are tried instead. Loyal items being the only ones you can steal from inventory seems backwards. Is that how rob behaves live, or is the Loyal test a disassembly misread?
+- **The evil record.** Every rob that isn't refused, caught or not and even against a free Seedy-or-worse victim, stores a record of *you* against *the victim*. Each new rob replaces it.
+  - **It lasts 11 of your 30-second slow-update ticks**, about 5½ minutes.
+  - A rob the victim didn't notice (a quiet fail or a success) is flagged unnoticed; a bump isn't.
+  - **While it's live, the victim can attack or rob you regardless of the level range**, since the eligibility check allows retaliation.
+  - **The room display stars players** you have a record with (either direction), or who are Outlaw or worse (evil points ≥ 40), with a `*` marker. The exception is a thief whose only record is an unnoticed rob of **you**: they aren't starred, so a quiet thief stays unmarked.
+  - The sysop evil-timer list prints `<actor> robbed <victim> <n> rounds to go.` (or `attacked`).
 
 ---
 
