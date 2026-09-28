@@ -1,5 +1,9 @@
 # Version history
 
+## 3.117.1
+
+- 35 more MegaMUD loops in the default loop set (15 Stock, 20 Paradigm), converted with the new importer and verified walkable
+
 ## 3.117.0
 
 - MegaMUD `.mp` import review: the file decoded (header, path details, every step's options and action) beside the MudPlay loop it becomes, one row per step

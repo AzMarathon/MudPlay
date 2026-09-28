@@ -1,0 +1,423 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Crumbling Temple (Level 1)",
+  "Waypoints": [
+    {
+      "Room": "12/2224",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2225",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2226",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2227",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2228",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2229",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2230",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2231",
+      "Command": "push ruby",
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2230",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2229",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2228",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2227",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2232",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2233",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2234",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2235",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2236",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2386",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2387",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2388",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2387",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2386",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2236",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2235",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2234",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2233",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2232",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2227",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2237",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2238",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2239",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2240",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2241",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2242",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2243",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2244",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2243",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2242",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2241",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2240",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2239",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2238",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2237",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2227",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2226",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "12/2225",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp by Winterhhawk (Scorching Desert/SDCT).",
+  "Favorite": false,
+  "OnlyAttackInLairRooms": false
+}

@@ -1,0 +1,243 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dhelvanen, Trade Loop",
+  "Waypoints": [
+    {
+      "Room": "7/199",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/201",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/372",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/373",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/374",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/375",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/376",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/377",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/378",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/379",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/380",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/1006",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/1007",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/1008",
+      "Command": "give spider silk to dhelvanen",
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/1007",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/1006",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/189",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/190",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/191",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/192",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/193",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/194",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/195",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/196",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/197",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "7/198",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp by Kitty \u0026 Wulfman (Black House/FFSB).",
+  "Favorite": false,
+  "OnlyAttackInLairRooms": false
+}

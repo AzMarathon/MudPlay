@@ -1,0 +1,819 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Frozen Caverns (wolves)",
+  "Waypoints": [
+    {
+      "Room": "10/35",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/217",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/299",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/216",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/213",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/214",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/213",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/212",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/211",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/300",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/35",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/186",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/187",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/301",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/188",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/207",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/206",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/205",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/204",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/203",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/202",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/200",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/198",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/196",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/197",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/196",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/195",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/194",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/193",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/192",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/191",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/190",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/189",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/188",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/301",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/186",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/35",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/160",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/161",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/162",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/163",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/164",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/165",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/166",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/179",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/180",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/181",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/182",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/183",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/184",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/185",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/184",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/183",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/182",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/181",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/180",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/179",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/166",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/167",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/168",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/167",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/169",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/170",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/171",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/172",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/173",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/174",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/175",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/176",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/255",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/177",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/178",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/177",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/255",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/176",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/175",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/174",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/173",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/172",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/171",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/170",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/169",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/167",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/166",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/165",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/164",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/163",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/162",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/161",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    },
+    {
+      "Room": "10/160",
+      "Command": null,
+      "DelayMs": 0,
+      "DoNotRest": false,
+      "DoNotAttack": false,
+      "RestHereHp": false,
+      "RestHereMana": false
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp (Rocky Trail/FRZN).",
+  "Favorite": false,
+  "OnlyAttackInLairRooms": false
+}
