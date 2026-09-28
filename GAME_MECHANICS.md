@@ -2787,8 +2787,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A successful `pick <dir>` prints `You successfully unlocked the door.`** — **past tense**, and the *same* line the use-key unlock emits (the two are distinguished only by which command was in flight, not by wording).
 - **A pick failure is `Your skill fails you this time.`**
 - **A bash opens the door itself — no `open` afterwards.** *([CONFIRMED] 2026-09-28, user.)* `open <dir>` is only needed after a key (or a pick) has unlocked the door, or for a door that's shut but not locked.
-- **Unlocking does not open the door** — a separate `open <dir>` is required, whose success prints **`You open the door.`** (not "The door is now open.").
-  - [CONFLICT — ask the user] The Stock 1.11p `wccmmud.dll` `_cmd_open` has no `You open the door.`; it prints `The door is now open.` / `The %s is now open.`. Which does the live game print (the capture above, or a different build)? The client matches both.
+- **Unlocking does not open the door** — a separate `open <dir>` is required. Its success line comes in two wordings, and **the game prints both**: `You open the door.` (the capture above) and `The door is now open.` / `The %s is now open.` (the Stock 1.11p `wccmmud.dll` `_cmd_open` text). *([CONFIRMED] 2026-09-28, user. An earlier note said only `You open the door.`, and the DLL has only the second form; superseded 2026-09-28.)* The client matches both.
 - **Bashing a door drains the basher's HP.** Each `bash <dir>` swing at a door costs HP (a bashable door opens after some number of swings, gated by RNG, not a single hit), so sustained bashing whittles the character down.
 - **Picking does not drain HP.**
 
