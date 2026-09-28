@@ -954,6 +954,11 @@ public static class DefaultPatterns
             @"^Your (?<item>.+) has been removed\.\s*$");
         yield return new RegexPattern(KnownPatterns.AlignmentForgiven,
             @"^The gods have forgiven you for your action\.");
+        // Paradigm's `pro` rows: our exact evil points and the `set mineps` floor.
+        yield return new RegexPattern(KnownPatterns.AlignmentEvilPoints,
+            @"^EPs:\s+(?<ep>-?\d+(?:\.\d+)?)\s*$");
+        yield return new RegexPattern(KnownPatterns.AlignmentMinEvilPoints,
+            @"^Min\. EPs:\s+(?<min>-?\d+(?:\.\d+)?)\s*$");
 
         // ----- Training --------------------------------------------------
         // "You hand over 1 gold crown and you receive training to attain

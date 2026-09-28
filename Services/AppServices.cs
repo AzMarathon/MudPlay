@@ -5234,26 +5234,27 @@ public sealed class AppServices
                 Equipment.ReevaluateAllBlocks();
         };
 
-        // A gear set that disagrees with our recorded alignment gets a `who` to
-        // verify it — alignment moves during play, so this re-checks whenever the
-        // answer may have changed (Paradigm also on a timer, since it drifts toward
-        // good). Wire-sender bound by MainWindowVM.
+        // Ask the game for our alignment when our gear says the record may be wrong —
+        // Paradigm's `pro` shows the exact evil points, Stock's doesn't, so Stock asks
+        // `who`. No timers: it checks when the game says alignment moved (gear taken
+        // off, a wear refused, a forgive, a dark cloud out of Good) or when a gear set
+        // disagrees with the record. Wire-sender bound by MainWindowVM.
         AlignmentCheck = new Game.Inventory.AlignmentGearCheck(
             GearAlignmentNeedsCheck,
-            driftsDuringPlay: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
-            Log);
+            verifyCommand: () => GameData.ActiveRealm == Game.RealmType.ParaMud ? "pro" : "who",
+            log: Log);
+        Alignment.Refreshed += Equipment.ReevaluateAllBlocks;
         Equipment.BlocksChanged += AlignmentCheck.RequestCheck;
         Equipment.SetsEdited += AlignmentCheck.RequestCheck;
-        Equipment.CurrentSetChanged += AlignmentCheck.RequestRoutineCheck;
         Profile.ProfileLoaded += _ => AlignmentCheck.RequestCheck();
-        // A dark cloud that takes us out of Good blocks Good-only gear at once and
-        // asks `who` where we landed; one from Neutral or worse changes nothing.
+        // A dark cloud out of Good blocks Good-only gear at once and asks where we
+        // landed; one from Neutral or worse changes nothing.
         Alignment.LeftGood += () =>
         {
             Equipment.ReevaluateAllBlocks();
-            AlignmentCheck.RequestCheck();
+            AlignmentCheck.RequestVerify();
         };
-        // Gear stripped on a band change, or a victim's forgive: the record is old.
+        // Gear taken off on a band change, or a victim's forgive: the record is old.
         _alignmentMovedSubs = new[]
         {
             Router.Subscribe(Services.Patterns.KnownPatterns.AlignmentGearRemoved, _ => AlignmentCheck.RequestVerify()),
@@ -5264,10 +5265,19 @@ public sealed class AppServices
         {
             if (m.Groups.Count > 0) Equipment.NoteEquipSucceeded(m.Groups[0]);
         });
+        // A refused wear / wield may be our alignment having moved: check it too.
         _equipWearFailSub = Router.Subscribe(
-            Services.Patterns.KnownPatterns.UserEquipFailed, _ => Equipment.NoteWearRefused());
+            Services.Patterns.KnownPatterns.UserEquipFailed, _ =>
+            {
+                Equipment.NoteWearRefused();
+                AlignmentCheck.RequestVerify();
+            });
         _equipWieldFailSub = Router.Subscribe(
-            Services.Patterns.KnownPatterns.UserWieldFailed, _ => Equipment.NoteWeaponRefused());
+            Services.Patterns.KnownPatterns.UserWieldFailed, _ =>
+            {
+                Equipment.NoteWeaponRefused();
+                AlignmentCheck.RequestVerify();
+            });
 
         // Hold auto-rest while a gear-set swap streams its paced wear/rem commands —
         // each stands the character up, and without this the rest engine re-sends

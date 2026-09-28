@@ -4,100 +4,67 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// A gear set that disagrees with our recorded alignment gets a `who` to verify it —
-// on a prompt only, again whenever the answer may have changed, but a confirmed
-// mismatch isn't re-checked every prompt.
+// Asking the game for our alignment: only on a prompt, when the game says it moved
+// or a gear set disagrees with the record — no timers — and not more than once a
+// minute (gear is stripped one line per item).
 public sealed class AlignmentGearCheckTests
 {
     private DateTimeOffset _now = new(2026, 9, 27, 12, 0, 0, TimeSpan.Zero);
 
-    private (AlignmentGearCheck Check, List<byte[]> Sent) Build(bool mismatch = true, bool drifts = false)
+    private (AlignmentGearCheck Check, List<byte[]> Sent) Build(bool mismatch = true, string command = "who")
     {
-        AlignmentGearCheck check = new(() => mismatch, () => drifts, now: () => _now);
+        AlignmentGearCheck check = new(() => mismatch, () => command, now: () => _now);
         List<byte[]> sent = new();
         check.SetWireSender(sent.Add);
         return (check, sent);
     }
 
-    private static int Whos(List<byte[]> sent) =>
-        sent.Count(b => Encoding.Latin1.GetString(b).TrimEnd('\r') == "who");
+    private static List<string> Lines(List<byte[]> sent) =>
+        sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
 
     [Fact]
-    public void SendsOnlyOnAPrompt_AndOnlyWhenTheSetsDisagree()
+    public void AMismatch_ChecksOnTheNextPrompt_OnlyWhileTheSetsDisagree()
     {
         var (check, sent) = Build();
         check.RequestCheck();
-        Assert.Equal(0, Whos(sent));      // not in the game until a prompt
-
+        Assert.Empty(sent);               // not in the game until a prompt
         check.OnPrompt();
-        Assert.Equal(1, Whos(sent));
+        Assert.Equal(new[] { "who" }, Lines(sent));
 
         var (quiet, quietSent) = Build(mismatch: false);
         quiet.RequestCheck();
         quiet.OnPrompt();
-        Assert.Equal(0, Whos(quietSent));
-    }
-
-    [Fact]
-    public void NewEvidence_ReChecksAfterAMinute_ButNotEveryPrompt()
-    {
-        var (check, sent) = Build();
-        check.RequestCheck();
-        check.OnPrompt();
-
-        check.RequestCheck();             // e.g. the dark-cloud line
-        check.OnPrompt();
-        Assert.Equal(1, Whos(sent));      // too soon
-
-        _now += TimeSpan.FromMinutes(1);
-        check.OnPrompt();
-        Assert.Equal(2, Whos(sent));
-    }
-
-    [Fact]
-    public void ReapplyingASet_WaitsTheLongerGap()
-    {
-        var (check, sent) = Build();
-        check.RequestCheck();
-        check.OnPrompt();
-
-        _now += TimeSpan.FromMinutes(2);
-        check.RequestRoutineCheck();
-        check.OnPrompt();
-        Assert.Equal(1, Whos(sent));
-
-        _now += TimeSpan.FromMinutes(8);
-        check.OnPrompt();
-        Assert.Equal(2, Whos(sent));
-    }
-
-    [Fact]
-    public void ARealmThatDrifts_ReChecksOnATimer()
-    {
-        var (check, sent) = Build(drifts: true);
-        check.OnPrompt();                 // first prompt: the timer is due
-        Assert.Equal(1, Whos(sent));
-
-        _now += TimeSpan.FromMinutes(5);
-        check.OnPrompt();
-        Assert.Equal(1, Whos(sent));
-
-        _now += TimeSpan.FromMinutes(5);
-        check.OnPrompt();
-        Assert.Equal(2, Whos(sent));
+        Assert.Empty(quietSent);
     }
 
     [Fact]
     public void TheGameSayingAlignmentMoved_ChecksEvenWhenTheSetsAgree()
     {
-        var (check, sent) = Build(mismatch: false);
-        check.RequestVerify();            // "Your … has been removed." / a forgive
+        var (check, sent) = Build(mismatch: false, command: "pro");
+        check.RequestVerify();            // "Your … has been removed." / a refusal / a forgive
         check.OnPrompt();
-        Assert.Equal(1, Whos(sent));
+        Assert.Equal(new[] { "pro" }, Lines(sent));
+    }
 
-        check.RequestCheck();
+    [Fact]
+    public void NoTimers_AndAtMostOneCheckAMinute()
+    {
+        var (check, sent) = Build();
+        check.OnPrompt();
+        Assert.Empty(sent);               // nothing asked for
+
+        check.RequestVerify();
+        check.OnPrompt();
+        check.RequestVerify();            // the next stripped item
+        check.OnPrompt();
+        Assert.Single(sent);
+
         _now += TimeSpan.FromMinutes(1);
         check.OnPrompt();
-        Assert.Equal(1, Whos(sent));      // the forced one was a one-off
+        Assert.Equal(2, sent.Count);      // the held one goes out
+
+        _now += TimeSpan.FromHours(2);
+        check.OnPrompt();
+        Assert.Equal(2, sent.Count);      // and nothing on its own after that
     }
 }

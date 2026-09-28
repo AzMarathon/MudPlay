@@ -37,6 +37,21 @@ public static partial class AlignmentBands
         return ValueByBand.TryGetValue(band.Trim(), out int v) ? v : null;
     }
 
+    // The who title for an exact evil-point count (Paradigm's `pro` shows it as
+    // "EPs:"), from the realm's band thresholds — each title takes over at its
+    // number, and Fiend starts at 300 on Paradigm, 210 on Stock.
+    public static string TitleForEvilPoints(double evilPoints, RealmType realm) => evilPoints switch
+    {
+        <= -201 => "Saint",
+        <= -51  => "Good",
+        < 30    => "Neutral",
+        < 40    => "Seedy",
+        < 80    => "Outlaw",
+        < 120   => "Criminal",
+        _ when evilPoints < (realm == RealmType.Stock ? 210 : 300) => "Villain",
+        _       => "Fiend",
+    };
+
     // Parse an exit's "(Alignment: <low> to <high>)" modifier text into the numeric
     // window [Lo, Hi]. Returns null when the text isn't an alignment gate or either
     // band name is unrecognised (so the exit stays ungated rather than mis-gated).

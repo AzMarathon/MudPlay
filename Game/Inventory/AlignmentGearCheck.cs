@@ -2,48 +2,44 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Inventory;
 
-// Sends `who` to verify our alignment when a gear set disagrees with the one on
-// record — an item blocked on alignment alone, or alignment-gated gear with no
-// alignment known yet. The `who` line rewrites our row in the realm's players list
-// and the Equipment Manager re-evaluates its blocks against it.
+// Asks the game for our alignment when our gear says the recorded one may be wrong.
+// On Paradigm that's `pro` (its "EPs:" row is the exact number); on Stock it's
+// `who` (Stock's `pro` doesn't show alignment). Either reply updates our recorded
+// alignment and the Equipment Manager re-evaluates its blocks against it.
 //
-// Alignment moves during a session (Paradigm drifts toward good unless the player
-// blocks it; attacking good monsters moves either realm toward evil), so this isn't
-// a once-per-session check. New evidence — a new block, edited sets, a dark cloud
-// that took us out of Good, a fresh session — re-checks after a short gap; a mismatch that a `who`
-// already confirmed is only re-checked on a slow cadence (when a set is applied,
-// and on Paradigm on a timer), so a genuinely off-alignment set doesn't spam `who`.
+// Two kinds of trigger, no timers:
+//  • The game says our alignment moved (RequestVerify): gear taken off us ("Your …
+//    has been removed."), a wear refused, a victim's forgive, a dark cloud that took
+//    us out of Good. The record is what's stale, so this checks whatever the sets say.
+//  • A gear set disagrees with the record (RequestCheck): an item blocked on
+//    alignment alone, or alignment-gated gear with no alignment known yet — raised
+//    when a block appears, sets are edited, or a profile loads. Checks only while
+//    the disagreement is there.
+// One check at most a minute: the game strips gear one line per item.
 //
 // Checks only go out on a prompt, so nothing is sent before we're in the game.
 public sealed class AlignmentGearCheck
 {
-    private static readonly TimeSpan UrgentGap = TimeSpan.FromMinutes(1);
-    private static readonly TimeSpan RoutineGap = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan Gap = TimeSpan.FromMinutes(1);
 
     private readonly Func<bool> _needsCheck;
-    private readonly Func<bool> _driftsDuringPlay;
+    private readonly Func<string> _verifyCommand;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
 
-    // When a pending check was last evaluated (sent or found unneeded); both gaps
-    // count from here, so the realm timer doesn't rescan the sets on every prompt.
-    private DateTimeOffset _lastChecked = DateTimeOffset.MinValue;
-    private TimeSpan? _pendingGap;
-    // The game told us our alignment moved (gear stripped, a forgive): verify even
-    // when the sets agree with the old record, since the record is what's stale.
+    private DateTimeOffset _lastSent = DateTimeOffset.MinValue;
+    private bool _checkPending;
     private bool _verifyPending;
 
-    // needsCheck: a set disagrees with our recorded alignment. driftsDuringPlay: the
-    // realm moves alignment toward good while playing (Paradigm), so a confirmed
-    // mismatch is worth re-checking on a timer too.
-    public AlignmentGearCheck(Func<bool> needsCheck, Func<bool> driftsDuringPlay,
+    // needsCheck: a set disagrees with our recorded alignment. verifyCommand: what
+    // asks the game for our alignment (`pro` / `who`).
+    public AlignmentGearCheck(Func<bool> needsCheck, Func<string>? verifyCommand = null,
         LogService? log = null, Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(needsCheck);
-        ArgumentNullException.ThrowIfNull(driftsDuringPlay);
         _needsCheck = needsCheck;
-        _driftsDuringPlay = driftsDuringPlay;
+        _verifyCommand = verifyCommand ?? (static () => "who");
         _log = log;
         _now = now ?? (static () => DateTimeOffset.UtcNow);
     }
@@ -52,41 +48,27 @@ public sealed class AlignmentGearCheck
 
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
-    // Something new may have changed the answer: a block raised or lifted, sets
-    // edited, a dark cloud that took us out of Good, a new session.
-    public void RequestCheck() => Arm(UrgentGap);
+    // A block appeared, sets were edited, a profile loaded: check if the sets now
+    // disagree with the record.
+    public void RequestCheck() => _checkPending = true;
 
     // The game says our alignment moved: check it, sets or no sets.
-    public void RequestVerify()
-    {
-        _verifyPending = true;
-        Arm(UrgentGap);
-    }
+    public void RequestVerify() => _verifyPending = true;
 
-    // The same set was applied again: worth another look, but not often.
-    public void RequestRoutineCheck() => Arm(RoutineGap);
-
-    private void Arm(TimeSpan gap)
-    {
-        if (_pendingGap is not { } current || gap < current) _pendingGap = gap;
-    }
-
-    // Every prompt. Sends the pending check once its gap has passed, and on a realm
-    // whose alignment drifts during play, re-arms a routine check on its own.
+    // Every prompt: send what's pending once the gap has passed.
     public void OnPrompt()
     {
+        if (!_checkPending && !_verifyPending) return;
         DateTimeOffset now = _now();
-        if (_pendingGap is null && now - _lastChecked >= RoutineGap && _driftsDuringPlay())
-            _pendingGap = RoutineGap;
-        if (_pendingGap is not { } gap || now - _lastChecked < gap) return;
-        _pendingGap = null;
-        _lastChecked = now;
+        if (now - _lastSent < Gap) return;
         bool verify = _verifyPending;
-        _verifyPending = false;
+        _checkPending = _verifyPending = false;
         if (!verify && !_needsCheck()) return;
-        _wire.Send("who");
+        string command = _verifyCommand();
+        _lastSent = now;
+        _wire.Send(command);
         _log?.Info("Equipment", verify
-            ? "the game says our alignment moved — sent `who` to learn where it is"
-            : "gear set disagrees with our recorded alignment — sent `who` to verify it");
+            ? $"the game says our alignment moved — sent `{command}` to learn where it is"
+            : $"gear set disagrees with our recorded alignment — sent `{command}` to verify it");
     }
 }

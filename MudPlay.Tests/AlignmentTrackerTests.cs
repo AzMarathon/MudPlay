@@ -119,4 +119,23 @@ public sealed class AlignmentTrackerTests
         Assert.Equal("Villain", tracker.SelfAlignment);
         Assert.Equal(0, left);
     }
+
+    // Paradigm's `pro`: "EPs:" is our exact alignment (its title from the band
+    // thresholds) and wins until a newer `who`; "Min. EPs:" is the mineps floor.
+    [Fact]
+    public void ParadigmPro_SetsOurAlignmentFromTheEvilPoints()
+    {
+        (MessageRouter router, PlayerDatabase db, AlignmentTracker tracker) = Build("Fujin");
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Seedy", null, null, null, DateTime.UtcNow.AddHours(-1));
+
+        router.Dispatch(Line("EPs:                  -15.066666"));
+        router.Dispatch(Line("Min. EPs:             -199"));
+
+        Assert.Equal("Neutral", tracker.SelfAlignment);
+        Assert.Equal(-15.066666, tracker.EvilPoints!.Value, 5);
+        Assert.Equal(-199, tracker.MinEvilPoints);
+
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Good", null, null, null, DateTime.UtcNow);
+        Assert.Equal("Good", tracker.SelfAlignment);      // a newer `who` wins
+    }
 }

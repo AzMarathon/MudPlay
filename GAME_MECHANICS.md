@@ -674,7 +674,9 @@ How a character earns and spends character points (CP), how exp needed per level
 
 - **Alignment moves during a session, both ways.** Where you stand is only what your last `who` showed (alignment isn't on the `stat` screen); the ladder and its numbers are in *Combat → Monster `Align` values and your alignment-title ladder*.
 - **Attacking good-aligned monsters moves you toward evil.** *([CONFIRMED] both realms.)*
-- **Paradigm: you gain alignment toward good constantly while playing, unless you set the blocker for it.** *([CONFIRMED] user.)* `[NEEDS CONFIRMATION]` What is the blocker — a command or a setting, and what does it print?
+- **Paradigm: you drift toward good while playing — 2 evil points every hour** (`-2` an hour), not in one shot at cleanup as on Stock. *([CONFIRMED] 2026-09-27, user.)*
+- **Paradigm: `set mineps <n>` sets how far toward good the drift may take you** — your evil points won't drift below that floor. Without it you drift toward good as on Stock. It can be set anywhere, even at Fiend, to stay there for good with no drift. Paradigm only. *([CONFIRMED] 2026-09-27, user.)* `[NEEDS CONFIRMATION]` What does `set mineps` print when you set it?
+- **Paradigm's `pro` shows your exact alignment and your floor** *([CONFIRMED] 2026-09-27, user screenshots)*: `EPs:` is your evil points, fractional (e.g. `EPs:  -15.066666`), and `Min. EPs:` is the `set mineps` floor (e.g. `Min. EPs:  -199`). With EPs above the floor you're still drifting toward good. **Stock's `pro` shows neither** — no `EPs` or `Min. EPs` rows, so on Stock only `who` shows your alignment (as a title).
 - **Stock: points toward good are only awarded at the cleanup cycle.** *([CONFIRMED] user.)* Evil moves during play, as on Paradigm. The details are below.
 - **A shift toward evil prints `A dark cloud passes over you`.** *(Wording [OBSERVED] `wccmmud.dll` 1.11p string table.)*
 - **From Good, a dark cloud leaves you Neutral at best, so Good-only gear can no longer be worn.** *([CONFIRMED] 2026-09-27, user.)* From Neutral or worse it only moves you further toward evil.
@@ -689,17 +691,22 @@ How a character earns and spends character points (CP), how exp needed per level
   - `You have progressed too far to the evil side to do this action.` — over 300;
   - `You have chosen a way of life which does not allow this action.` — you're lawful (see *Combat → Monster `Align` values and your alignment-title ladder*: lawful is permanent).
 - **A victim can `forgive` you.** *([CONFIRMED] 2026-09-27, user: on a PvP realm, when you attack a player by accident because your evil warnings are off, they can `forgive <your name>` to restore alignment toward good.)* On Stock *([OBSERVED] `wccmmud.dll` 1.11p)* it refunds exactly the points that attack cost; you see `The gods have forgiven you for your action.`, the victim `The gods have forgiven <name> for his/her action.`, and a refusal reads `The gods refuse to forgive <name> for his/her actions.`
-- **How Stock drifts toward good.** *([OBSERVED] `wccmmud.dll` 1.11p user-cleanup routine; the per-night amounts are sysop settings whose defaults aren't known.)* It happens only at the nightly cleanup, and prints nothing to you — a Stock cleanup takes the BBS down, so everyone is offline when the points are awarded *([CONFIRMED] 2026-09-27, user)*:
-  - no drift unless you played since the last cleanup;
-  - any evil gained since the last cleanup cuts that night's drift to 2;
-  - levels 1–3 only drift down to 0;
-  - the drift stops at -200 (Good) — it never makes you a Saint;
-  - lawful doesn't stop it.
+- **How Stock drifts toward good.** *([OBSERVED] `wccmmud.dll` 1.11p user-cleanup routine at `0x40a322`.)* It happens only at the nightly cleanup, and prints nothing to you — a Stock cleanup takes the BBS down, so everyone is offline when the points are awarded *([CONFIRMED] 2026-09-27, user)*. Per character:
+  - **No play, no drift:** nothing unless you played since the last cleanup (a minutes-played counter, reset each cleanup).
+  - **The award:** `2` if you gained any evil points since the last cleanup; otherwise `(minutes played ÷ 2 ÷ A) × B + 3`, capped at `C`. `A`, `B` and `C` are sysop config options #69 (minutes per step, 15–360), #70 (points per step, 1–100) and #68 (most per night, 4–100), read from the realm's `.MSG` config — their values aren't in the DLL. `[NEEDS CONFIRMATION]` What are the usual values?
+  - **Who gets it:** level 4 and up always; levels 1–3 only while their evil points are above 0, and never below 0.
+  - **Below zero:** 2 points come back after each award, so the net step is the award minus 2.
+  - **The floor:** a step that would pass -200 lands exactly on -200 (Good) — it never makes you a Saint.
+  - Lawful doesn't stop it.
+- **On Stock you can't see your own evil-point number** — only the title in `who` — unless you have sysop powers. *([CONFIRMED] 2026-09-27, user.)* In the DLL *([OBSERVED] `wccmmud.dll` 1.11p strings)* the number shows in the sysop's limited-items purge (`Race %s, Class %s, EP %d`), and the sysop `list` command has an `EVIL` list; that list's output format isn't in the strings.
 
 **Client use:**
 - `AlignmentTracker` flags the recorded alignment stale on the dark-cloud line; our alignment is our row in the realm's players list, which each `who` that shows us rewrites. A dark cloud while recorded Good reads as Neutral until the next `who` (`LeftGood`), so Good-only gear is blocked at once.
-- `Your <item> has been removed.` and `The gods have forgiven you for your action.` make `AlignmentGearCheck` send a `who` whatever the sets say, since the record is what's stale.
-- `AlignmentGearCheck` sends `who` when a gear set disagrees with the recorded alignment (an item blocked on alignment alone, or alignment-gated gear with none recorded). It re-checks whenever the answer may have changed — a new block, edited sets, a dark cloud that took us out of Good (only then: from Neutral or worse it changes nothing), a new session — and a confirmed mismatch on a slow cadence (a set re-applied; on Paradigm also on a timer, since it drifts toward good).
+- `AlignmentTracker` reads Paradigm's `pro` `EPs:` / `Min. EPs:` rows; the title from the EPs wins over our `who` row until a newer `who`.
+- `AlignmentGearCheck` asks the game for our alignment — `pro` on Paradigm, `who` on Stock — with no timers *(**Client policy**, user 2026-09-27: only when the game gives a reason)*:
+  - when the game says it moved, whatever the sets say: `Your <item> has been removed.`, a refused wear / wield, `The gods have forgiven you for your action.`, or a dark cloud that took us out of Good;
+  - when a gear set disagrees with the recorded alignment (an item blocked on alignment alone, or alignment-gated gear with none recorded) — checked as a block appears, sets are edited, or a profile loads.
+  - At most once a minute, since the game strips gear one line per item.
 
 ---
 
