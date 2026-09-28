@@ -1200,6 +1200,28 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
     }
 
+    // Report paradigm-20260928-125823: a monster crept in right after the bash opened the
+    // door. The crossing now waits on the coordinator like any step, and crosses the
+    // now-open door without opening it again.
+    [Fact]
+    public void Walker_DoorOpened_WhilePaused_CrossesOnResume_WithoutReopening()
+    {
+        Harness h = NewHarness(DoorGraphJson);
+        FakeDoorEnqueuer door = new();
+        h.Walker.SetDoorEnqueuer(door.Enqueue);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "monster crept in");
+        door.Calls[0].Reply(DoorOpenResult.Opened.Instance);
+        Assert.Empty(h.Sent);
+
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "killed it");
+        Assert.Single(h.Sent);
+        Assert.Equal("e\r", Encoding.Latin1.GetString(h.Sent[0]));
+        Assert.Single(door.Calls);
+    }
+
     [Fact]
     public void Walker_DoorOpenFails_FailsTheWalk()
     {

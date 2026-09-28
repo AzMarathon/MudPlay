@@ -85,6 +85,7 @@ public sealed class SneakGuardTests
     [InlineData("rem torch", true)]
     [InlineData("sea", true)]
     [InlineData("open north", true)]
+    [InlineData("bash n", true)]
     [InlineData(".@poisoned", true)]
     [InlineData(">Raijin {ok}", true)]
     [InlineData("rest", true)]

@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.117.7**
-> - Game mechanics reference: how robbing players works on Stock (refusals, Thievery roll, what gets stolen, the evil record)
+> **Version 3.117.8**
+> - After opening a door the walk re-sneaks and handles a monster that just walked in before stepping through
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
