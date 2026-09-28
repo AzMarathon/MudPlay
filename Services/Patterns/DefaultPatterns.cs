@@ -872,6 +872,10 @@ public static class DefaultPatterns
             @"\bbashed the (?:door|gate) open\b");
         yield return new RegexPattern(KnownPatterns.DoorBashFailure,
             @"\battempts? to bash through fails?\b");
+        // The server won't let us bash at all (Stock DLL _cmd_bash): no weapon in
+        // hand, or no bash ability. Retrying can't help.
+        yield return new RegexPattern(KnownPatterns.DoorBashRefused,
+            @"^You (?:need a weapon to bash with|don't know the first thing about bashing)!$");
         // Picklock success. The live stock wording is PAST tense —
         // "You successfully unlocked the door." — which is the same phrasing the
         // use-key path emits (DoorKeyUnlockSuccess). Both patterns match that
@@ -917,7 +921,7 @@ public static class DefaultPatterns
         // — generic missing-key reply. Coarse to cover both phrasings;
         // the manager only consults it during WaitingUseKey.
         yield return new RegexPattern(KnownPatterns.DoorKeyUnknown,
-            @"\b(?:you have no |you don'?t have|nothing happens)\b",
+            @"\b(?:you have no |you don'?t have|nothing happens)\b|doesn't seem to fit that lock",
             options: RegexOptions.IgnoreCase);
 
         // Winch pull results (CONFIRMED Paradigm wording). Success = the winch winds

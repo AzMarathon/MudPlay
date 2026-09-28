@@ -469,11 +469,11 @@ Hovering a room shows its details in a tooltip:
 
 **Getting past obstacles.** En route, MudPlay clears most of what stands between you and a destination, stopping only when it hits something it genuinely can't solve:
 
-- **Doors** — closed or locked, handled by key, pick, or bash.
+- **Doors** — closed or locked, handled by key, pick, or bash. If the game won't let you bash at all (no weapon in hand, or no bash skill) it tries picking, then the key, instead. It follows doors other people open and close, or that lock again by themselves, in the room you're standing in, so it opens a door that's been shut on you before walking into it.
 - **Traps** — searched and disarmed, or delegated to a capable party member.
 - **Hidden exits** — searched out and revealed. The game won't search while you're blind (`sea` just answers *You are blind.*), so the walker waits there and searches once you can see again.
 - **NPC ask-transport** — a sealed room whose only way out is asking a resident NPC to port you elsewhere (the Floating Citadel's Grey Lord ports you to Town Square). It sends the `ask <npc> <keyword>` for you, so those pockets aren't dead-ends. A **class-restricted** one (the barmaid's bard-only jump) is offered only to the right class; everyone else is routed around it. And because some are a **skill roll** that can quietly fail, the walker confirms it actually arrived and **re-asks until it does**.
-- **Action-gated exits** — a lever or switch in *another* room (the magenta "Action required" stubs). It drives a go-pull-return detour, visiting each lever room on the way past then crossing the primed exit — even when a lever alcove is itself behind another action-gated door (it opens each inner door first). Only a very deep (4+ levels) or self-referential puzzle is left unsolved: those fail cleanly at plan time (*"route needs an action-gated exit the walker can't auto-solve"*) and log the exit that stopped it.
+- **Action-gated exits** — a lever or switch in *another* room (the magenta "Action required" stubs). If the exit is already open where you stand — someone else pulled the levers, or the game says *The exit to the west just opened!* — it simply walks through. Otherwise it drives a go-pull-return detour, visiting each lever room on the way past then crossing the primed exit — even when a lever alcove is itself behind another action-gated door (it opens each inner door first). Only a very deep (4+ levels) or self-referential puzzle is left unsolved: those fail cleanly at plan time (*"route needs an action-gated exit the walker can't auto-solve"*) and log the exit that stopped it.
 - **Room-command reveals** — a hidden passage opened by typing a command *in the room itself* (e.g. `clear rubble`), sent before stepping through.
 - **Room teleports with a party** — most room and NPC teleports move only the person who uses them and drop their followers, so a leader first relays the command to the party (`.@party <command>`), takes it, and then re-invites everyone on the other side. A teleport that's a spell aimed at the whole party moves everyone together, so the leader just uses it — no relay, no re-invite.
 - **Item-use teleports** — where *using* an item transports you across (e.g. `use potion of levitation`); it uses the item for you.
@@ -1595,7 +1595,7 @@ Prot Evil and Vile Ward are **evil-only** wards — they raise your defense only
 
 Because the seed already assumes your **configured self-buffs are up**, the numbers reflect how you'll actually fight, not how exposed you are standing around unbuffed.
 
-The left list is filterable by name and shows six columns:
+The left list holds every monster placed in the realm — the same set as the Game Data Browser's **Monsters** tab (records the game marks out of play are on its **Unobtainable** tab, not here). It's filterable by name and shows six columns:
 
 - **Name**, **HP**, **EXP** — the basics.
 - **Accuracies** — every one of the monster's physical attacks' accuracies, most-used first, so you see the full spread that feeds Hits You %, not just its best (blank for a spell-only monster).
@@ -1604,7 +1604,7 @@ The left list is filterable by name and shows six columns:
 
 A monster that would take longer than the **rounds-to-kill cap** (a spinner beside the Hits-You-% filter dropdown, default 999, editable right in this window) is **filtered out of the list entirely**, so you see only fights you can finish quickly — a superboss projecting into the millions of rounds simply drops out rather than showing a noise number. Because that filter is otherwise invisible, an amber note beside the spinner says how many monsters the cap is currently hiding; raise the cap to bring them back.
 
-Raise the cap to include tougher monsters; a monster the selected attack *can't* kill at all still shows as "—" (a different axis — can't-kill, not slow-kill — whose Hits You % is still worth seeing). Editing the cap re-applies immediately and saves per character.
+Raise the cap to include tougher monsters. At the default 999, a monster the selected attack *can't* kill at all still shows as "—" (a different axis — can't-kill, not slow-kill — whose Hits You % is still worth seeing). Lower the cap and those drop out too, since you're asking what you can finish in that many rounds — so Backstab with a cap of 1 lists only the monsters one stab kills. Editing the cap re-applies immediately and saves per character.
 
 Every column is independently sortable (click a header; click again to reverse), and **double-clicking a monster opens its full record in the Game Data Browser**. Once a character is loaded, a monster with no computable Hits You % (an NPC/caster-only record with no catalogued physical attack — a trainer, quest-giver, etc.) is dropped from the list entirely — it isn't a meaningful "can this thing hurt me" entry.
 

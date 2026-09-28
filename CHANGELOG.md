@@ -1,5 +1,14 @@
 # Version history
 
+## 3.117.6
+
+- Monster Intel lists only monsters placed in the realm, matching the Game Data Browser (no Unobtainable records)
+- A lowered Max Rnds to Kill also hides monsters the chosen attack can't kill at all
+- A door that shuts while you stand in the room ("The door to the north just closed.") is opened on the next move instead of bounced off
+- Doors others open, close or re-lock in your room, and lever exits that open or shut, are tracked; an already-open lever exit is walked straight through
+- When the game won't let you bash, the door is picked or keyed instead of bashed forever; a key that doesn't fit fails at once
+- bug reports addressed: paradigm-20260928-105509, paradigm-20260928-110224
+
 ## 3.117.2
 
 - A loop no longer stands still being hit after a reconnect: a fight hold in a room the loop doesn't attack in is released within a second

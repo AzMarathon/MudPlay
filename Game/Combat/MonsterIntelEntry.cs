@@ -96,7 +96,9 @@ public sealed class MonsterIntelEntry : INotifyPropertyChanged
     public static IReadOnlyList<MonsterIntelEntry> BuildCatalog(MonsterCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        return catalog.All
+        // Only monsters placed in the realm — out-of-play records (the Game Data
+        // Browser's Unobtainable list) aren't anything you can meet.
+        return catalog.InPlay
             .Select(static e => new MonsterIntelEntry { Source = e })
             .OrderBy(static e => e.Name, System.StringComparer.OrdinalIgnoreCase)
             .ThenBy(static e => e.Number)

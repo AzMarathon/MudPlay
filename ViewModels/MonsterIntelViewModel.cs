@@ -147,7 +147,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         int hidden = 0;
         if (_hasCharacterContext)
             foreach (MonsterIntelEntry e in _all)
-                if (e.EstimatedRoundsToKill > RoundsToKillCap && PassesFilter(e, applyRoundsCap: false)) hidden++;
+                if (OverRoundsCap(e) && PassesFilter(e, applyRoundsCap: false)) hidden++;
         HiddenByCap = hidden;
         OnPropertyChanged(nameof(CountText));
     }
@@ -359,7 +359,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // in the constructor; every edit persists straight back via WriteAt and
     // re-stamps every entry's cap without a full RebuildCharacterCapabilities
     // (only the display ceiling changed, not the underlying projections).
-    [ObservableProperty] private int _roundsToKillCap = 999;
+    [ObservableProperty] private int _roundsToKillCap = NoRoundsCap;
 
     // Recomputes weapon HitMagic, the owned-attack-spell set, and the live
     // AC/Dodge/ward totals behind the Hits-You-% threshold checkboxes,
@@ -903,6 +903,19 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     private bool PassesFilter(object o) => o is MonsterIntelEntry e && PassesFilter(e, applyRoundsCap: true);
 
+    // The cap's default, which reads as "no limit".
+    private const int NoRoundsCap = 999;
+
+    // Over the rounds cap: needs more rounds than it — or, once the cap is lowered
+    // from its no-limit default, can't be killed by the selected attack at all ("—",
+    // or no HP to judge by). At the default a can't-kill monster stays listed for its
+    // Hits-You-% read; a lowered cap asks "what can I finish in N rounds", which a
+    // can't-kill monster isn't (report paradigm-20260928-105509: Backstab at 1 round
+    // still listed monsters one stab can't drop).
+    private bool OverRoundsCap(MonsterIntelEntry e) =>
+        e.EstimatedRoundsToKill > RoundsToKillCap
+        || (RoundsToKillCap < NoRoundsCap && e.EstimatedRoundsToKill <= 0);
+
     // applyRoundsCap: false answers "would this monster show if the cap were off" —
     // the hidden-by-cap count is exactly the monsters that pass with it off and fail
     // with it on.
@@ -922,10 +935,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         // The rounds-to-kill cap FILTERS rather than captioning: a monster the
         // selected attack needs more than the cap to drop is removed (it used to
-        // show "<cap>+"). A monster it can't drop at all still shows as "—" — a
-        // different axis (can't-kill, not slow-kill) whose Hits-You-% read stays
-        // useful — so only a positive projection over the cap is filtered.
-        if (applyRoundsCap && _hasCharacterContext && e.EstimatedRoundsToKill > RoundsToKillCap) return false;
+        // show "<cap>+").
+        if (applyRoundsCap && _hasCharacterContext && OverRoundsCap(e)) return false;
 
         // Hits-You-% bands: selecting none shows every monster; selecting any
         // keeps a monster whose Hits You % falls in ANY selected band. Each band

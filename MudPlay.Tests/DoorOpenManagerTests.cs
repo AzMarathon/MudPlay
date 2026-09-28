@@ -113,6 +113,41 @@ public sealed class DoorOpenManagerTests
         Assert.Equal(DoorOpenManager.DoorState.Idle, h.Mgr.CurrentState);
     }
 
+    // The server refuses the bash outright (no weapon / no bash ability): re-bashing
+    // can't help, and with no pattern it used to re-bash forever on the watchdog.
+    // It falls back to pick instead (Stock DLL _cmd_bash).
+    [Theory]
+    [InlineData("You need a weapon to bash with!")]
+    [InlineData("You don't know the first thing about bashing!")]
+    public void Bash_Refused_FallsBackToPick(string refusal)
+    {
+        using Harness h = new();
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.E, 0, canBash: true, "walker", r => result = r);
+        Assert.Equal("bash e", h.LastSent);
+
+        h.Line(refusal);
+
+        Assert.Equal("pick e", h.LastSent);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingPick, h.Mgr.CurrentState);
+        Assert.Null(result);
+    }
+
+    // "The <key> doesn't seem to fit that lock." — the wrong key: fail now rather
+    // than wait out the watchdog.
+    [Fact]
+    public void UseKey_WrongKey_FailsAtOnce()
+    {
+        using Harness h = new();
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.W, 0, canBash: false, keyItemId: 172, "walker", r => result = r);
+        Assert.Equal("use black star key w", h.LastSent);
+
+        h.Line("The black star key doesn't seem to fit that lock.");
+
+        Assert.IsType<DoorOpenResult.Failed>(result);
+    }
+
     // ----- response watchdog (no-hang) ------------------------------
 
     [Fact]

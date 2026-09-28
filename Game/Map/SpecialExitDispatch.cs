@@ -78,6 +78,15 @@ internal static class SpecialExitDispatch
         // caller and the old "loop circuits" wording misled on a plain walk.
         if (exit.Hint == RoomExitHint.MultiActionHidden && exit.MultiAction is { } maData)
         {
+            // Already open — its actions were done by someone else, or it opened on
+            // its own ("The exit to the <dir> just opened!"): just walk through.
+            if (tracker.ShownOpenExits() is { } shown && shown.Contains(direction))
+            {
+                tracker.NoteMoveSent(direction);
+                recovery?.NoteEngineStepSent(direction);
+                emitMove(AutoWalkManager.EncodeMove(direction), $"move {direction} (multi-action exit already open)");
+                return SpecialExitSend.Sent;
+            }
             if (maData.HasRemoteActions)
             {
                 failReason = "multi-action exit requires actions in another room, which can't be auto-crossed on this route";

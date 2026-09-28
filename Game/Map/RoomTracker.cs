@@ -750,6 +750,7 @@ public sealed class RoomTracker
         // door FSM ("open door south" → skip the bash/pick wait,
         // send the cardinal move directly).
         State.OpenDoorDirections = observation.OpenDoorDirections;
+        State.ClosedDoorDirections = observation.ClosedDoorDirections;
 
         switch (State.Confidence)
         {
@@ -993,16 +994,74 @@ public sealed class RoomTracker
     // "The door to the <dir> just closed." — an ambient door-shut announcement
     // that names its own direction, unlike the bare "The door is closed!"
     // refusal (which carries none and reads the direction off the pending move).
-    // Only act when the named direction is the one we're heading: a door shutting
-    // in our path must clear its stale "open" flag and revert the pending move
-    // exactly like NoteDoorClosed, so the next attempt routes through the
-    // door-open FSM (bash / pick / key) instead of bonking the now-closed door.
-    // A closure in any other direction is someone else's door — ignore it.
+    //   - Heading that way: the door shut in our path — clear its stale "open"
+    //     flag and revert the pending move exactly like NoteDoorClosed, so the
+    //     next attempt routes through the door-open FSM (bash / pick / key)
+    //     instead of bonking the now-closed door.
+    //   - Standing still: it's this room's exit that shut, so clear its flag now;
+    //     the next move through it opens it first instead of bouncing off it
+    //     (report paradigm-20260928-110224).
+    //   - Moving another way: the line may belong to the room being left or the
+    //     one being entered, so leave the flags alone.
     public void NoteNamedDoorClosed(Direction closedDir, DateTimeOffset? whenUtc = null)
     {
+        if (_pending.IsEmpty)
+        {
+            ClearOpenDoorDirection(closedDir);
+            return;
+        }
         if (MostRecentPendingCardinal() != closedDir) return;
         ClearOpenDoorDirection(closedDir);
         NoteMoveBlocked(whenUtc);
+    }
+
+    // "The door to the <dir> just opened." / "You see <name> open the door to the
+    // <dir>." — someone opened one of this room's doors. Standing still, mark it
+    // open so the next move through it doesn't try to open it again; mid-move the
+    // line could be about either room, so leave it.
+    public void NoteNamedDoorOpened(Direction dir)
+    {
+        if (!_pending.IsEmpty) return;
+        if (State.ClosedDoorDirections is { } shut && shut.Contains(dir))
+        {
+            HashSet<Direction> stillShut = new(shut);
+            stillShut.Remove(dir);
+            State.ClosedDoorDirections = stillShut.Count > 0 ? stillShut : null;
+        }
+        HashSet<Direction> next = State.OpenDoorDirections is { } open ? new(open) : new();
+        if (!next.Add(dir)) return;
+        State.OpenDoorDirections = next;
+        _log?.Log(LogSeverity.Info, "RoomTracker", $"Door {dir} reported opened — marked open.");
+    }
+
+    // Exits the latest display of the room we're confirmed in shows as passable —
+    // listed, and not a shut door or gate. A lever-opened passage shows here once
+    // it's open, so the engines can cross it without re-pulling the lever. Null
+    // while unsure where we are.
+    public IReadOnlySet<Direction>? ShownOpenExits()
+    {
+        if (State.Confidence != RoomConfidence.Confirmed || State.ObservedExitDirections is not { } seen) return null;
+        if (State.ClosedDoorDirections is not { Count: > 0 } shut) return seen;
+        HashSet<Direction> open = new(seen);
+        open.ExceptWith(shut);
+        return open;
+    }
+
+    // "The exit to the <dir> just opened!" / "…just closed!" — a timed or
+    // action-opened exit (a lever's hidden passage) changed while we stand here.
+    // Keep the room's shown exits in step, so the engines cross an opened one
+    // without re-pulling its lever and don't count on a shut one. Mid-move the
+    // line could be about either room, so leave it.
+    public void NoteNamedExitChanged(Direction dir, bool opened)
+    {
+        if (!_pending.IsEmpty) return;
+        HashSet<Direction> exits = State.ObservedExitDirections is { } seen ? new(seen) : new();
+        bool changed = opened ? exits.Add(dir) : exits.Remove(dir);
+        if (!opened) ClearOpenDoorDirection(dir);
+        if (!changed) return;
+        State.ObservedExitDirections = exits;
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"Exit {dir} reported {(opened ? "opened" : "closed")} — {(opened ? "added to" : "removed from")} the room's shown exits.");
     }
 
     // Tier-3 manual override — the user pointed at a room on the map and said
@@ -1913,6 +1972,8 @@ public sealed class RoomTracker
     // back to the door FSM instead of trusting a stale "already open" reading.
     private void ClearOpenDoorDirection(Direction dir)
     {
+        if (State.ClosedDoorDirections is not { } shut || !shut.Contains(dir))
+            State.ClosedDoorDirections = new HashSet<Direction>(State.ClosedDoorDirections ?? new HashSet<Direction>()) { dir };
         if (State.OpenDoorDirections is not { } open || !open.Contains(dir)) return;
         var next = new HashSet<Direction>(open);
         next.Remove(dir);

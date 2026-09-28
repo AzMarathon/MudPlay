@@ -299,6 +299,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 | Move refused — no exit | `There is no exit in that direction!` |
 | Move refused — blocked way | `You can't go that way.` / `You can't move (in) that direction.` (the forms the client's refusal detector matches; an earlier note wrote `You can't move that way.`, never seen in a capture) |
 | Move refused — shut door / gate (the client matches case-insensitively, `.` or `!`) | `The door is closed.` / `The door is Closed!` (captured forms); gate form `The gate is closed!` |
+| A door / exit in your room changes (someone else, or the engine's reset — the full set is in *Movement & navigation → Door and gate barriers in the room display*) | `The door to the <direction> just closed.` / `…just opened.` / `…just locked!`; `You see <name> open/close the door to the <direction>.`; `The exit to the <direction> just opened!` / `…just closed!` |
 | Room too dark to see (starves name + exits + Also-here) | `The room is very dark - you can't see anything.` |
 | Room considerably darker (same starving) | `The room is pitch black...` |
 | Guard interposes for a guarded monster (no trailing period, no prefix) | `<guard> moves to protect <protected>` |
@@ -2786,11 +2787,26 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A successful `pick <dir>` prints `You successfully unlocked the door.`** — **past tense**, and the *same* line the use-key unlock emits (the two are distinguished only by which command was in flight, not by wording).
 - **A pick failure is `Your skill fails you this time.`**
 - **Unlocking does not open the door** — a separate `open <dir>` is required, whose success prints **`You open the door.`** (not "The door is now open.").
+  - [CONFLICT — ask the user] The Stock 1.11p `wccmmud.dll` `_cmd_open` has no `You open the door.`; it prints `The door is now open.` / `The %s is now open.`. Which does the live game print (the capture above, or a different build)? The client matches both.
 - **Bashing a door drains the basher's HP.** Each `bash <dir>` swing at a door costs HP (a bashable door opens after some number of swings, gated by RNG, not a single hit), so sustained bashing whittles the character down.
 - **Picking does not drain HP.**
 
+- **The engine's door, bash and pick wire text** *([OBSERVED] 2026-09-28, Stock 1.11p `wccmmud.dll` `_cmd_bash` / `_cmd_picklock` / `_cmd_open` / `_cmd_close` / `_cmd_lock` and the key-use path; the same on Paradigm per the user 2026-09-28, with unrecognised-line capture catching any difference)*. `%s` is the game's fill-in: `door` / `gate`, a direction, or a player name.
+  - **`bash <dir>`:**
+    - success `You bashed the %s open.`; miss `Your attempts to bash through fail!`;
+    - refused outright `You need a weapon to bash with!` (nothing wielded) or `You don't know the first thing about bashing!` (no bash ability);
+    - `You take %d damage for bashing the door!` (the HP drain above); `The %s is already open.`;
+    - others in the room see `You see %s bash the %s to the %s.` / `…attempt to bash the %s to the %s.` (and `…above you.` / `…below you.` forms).
+    - The engine also has `You bash the door open and walk through` followed by `The door slams shut behind you!`, which moves the basher through the exit. **No exit in the game uses it** *([CONFIRMED] 2026-09-28, user: never seen in play)*.
+  - **`pick <dir>`:** `You successfully unlocked the %s.` / `Your skill fails you this time.`; others see `You see %s pick the lock on the %s to the %s.` (and above / below forms). The picklock command has no "not locked" line of its own.
+  - **`use <key> <dir>`:** `You successfully unlocked the door.` / `…the %s.`; `The door was not locked.` / `The %s was not locked.`; a wrong key `The %s doesn't seem to fit that lock.`
+  - **`open <dir>`:** `The door is now open.` / `The %s is now open.`; `The door was already open.` / `The %s was already open.`; `The door is locked.` / `The %s is locked.`; `That is not a door or a gate!`
+  - **`close` / `lock <dir>`** (the client never sends these): `The door is now closed.`, `The door is now locked.`, `The gate is now locked.`, `That %s is not open. Closing it will do nothing!`, `You must close the door before you may lock it.` (gate form too), `There is no benefit to locking in that direction.`, `You may not close doors or gates while attacking or being attacked!` (lock form too).
+  - The lines other players' door actions print in *your* room are under *Door and gate barriers in the room display*.
+
 **Client use:**
 - `DoorOpenManager` keys on all three pick/open lines; matching only present-tense "unlock(s)" or "is now open" stranded the walker at a picked door (report stock-20260730-182812).
+- `DoorOpenManager` treats the two bash refusals as "can't bash" and falls back to pick, then the key, instead of re-bashing on the response watchdog forever (2026-09-28); the wrong-key line fails the key step at once.
 - `DoorOpenManager` bashes a *bashable* door (per `DoorPolicy`) **uncapped** — no fixed attempt limit — but interleaves rest: once HP falls to the Health-tab **rest-if-below** trigger it pauses bashing so `HealthManager` can rest to **rest-max**, then resumes. (Confirmed by user direction; replaced the old fixed `MaxBashAttempts` cap.)
 - Picking keeps its `MaxPickAttempts` retry cap.
 
@@ -3096,10 +3112,25 @@ Among protectable hazards, a further split governs whether the navigator may off
   loud nearby rumbling of a gate") it becomes `open gate north, …`.
 - **The barrier noun on the wire is "gate", and the open/closed prefix carries its live state exactly
   like a door's.** Treat "gate" and "door" as the same door-type barrier class for display parsing.
+- **A door in your room changing because of someone else prints a line naming its direction.** *([OBSERVED] 2026-09-28, Stock 1.11p `wccmmud.dll` `_cmd_open` / `_cmd_close` / `_background_update_exits`; the same on Paradigm per the user 2026-09-28. The "just closed" form captured on Paradigm, report `paradigm-20260928-110224`: standing at 1/2150 with `open door north` showing, the line named north, and the next `n` got `The door is closed!`.)*
+  - Opened or closed **from the other side**: `The door to the %s just opened.` / `The door to the %s just closed.` (`The %s to the %s just …` for a gate). The engine sends it to the room on the far side of the door, so the direction is an exit of the room you're in.
+  - Opened or closed **by someone in your room**: `You see %s open the door to the %s.` / `You see %s close the door to the %s.` (gate forms too).
+  - **Re-locked by the engine's periodic exit reset:** `The door to the %s just locked!` / `The gate to the %s just locked!`
+- **A timed or action-opened exit (a lever's hidden passage) opening or shutting prints `The exit to the %s just opened!` / `The exit to the %s just closed!`** *([OBSERVED] 2026-09-28, Stock 1.11p `_background_update_exits`; the same on Paradigm per the user)*. The user's read: it's what you see standing in the exit's room when someone else works the remote actions, or when a timed exit (the pyramid's room-spell doors) shuts again.
 - **Client use:**
   - `RoomDisplayParser.ParseExits` strips an `<open|closed> <door|gate>` prefix off each exit token,
     feeding the open ones into `OpenDoorDirections` so the walker skips the door-open FSM on an
     already-raised gate.
+  - `RoomTracker.NoteNamedDoorClosed` (via `MovementRefusalDetector`) clears that direction from
+    `OpenDoorDirections` when nothing is moving, so the next move opens the door first
+    (report `paradigm-20260928-110224`); with a move in flight that way it also reverts the move.
+    `NoteNamedDoorOpened` marks one open the same way; the "You see …" and "just locked!" lines use
+    the same two paths. Mid-move (another direction) all of them are ignored: the line could be about
+    either room.
+  - `RoomTracker.NoteNamedExitChanged` adds or removes the direction from the room's shown exits
+    (standing still only). `RoomTracker.ShownOpenExits` (shown, and not a shut door or gate) lets
+    `SpecialExitDispatch` and the walk planner (`RemoteActionPathExpander`) cross a lever exit that is
+    already open instead of re-pulling its levers or detouring to them.
 
 ### Multi-action exits and levers
 *Status: CONFIRMED (timed window, fire-and-forget); CONFIRMED 2026-08-17 (user; relative order, nesting); CONFIRMED 2026-07-28 (capture, report 180730 — supersedes report 195552; redundant levers) · per-fact tags inline*

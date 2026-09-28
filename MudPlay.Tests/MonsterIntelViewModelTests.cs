@@ -208,6 +208,24 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.False(vm.HasCapHidden);
     }
 
+    // A monster the rounds attack can't kill ("—") stays listed at the default cap,
+    // but a lowered cap asks what can be finished in N rounds, so it drops out and
+    // counts as hidden (report paradigm-20260928-105509: Backstab at 1 round still
+    // listed monsters one stab can't drop).
+    [Fact]
+    public void RoundsCap_Lowered_HidesMonstersTheAttackCantKill()
+    {
+        using MonsterIntelViewModel vm = BuildViewModelWithSyntheticEntry(50);
+        MonsterIntelEntry goblin = Assert.Single(vm.RowsView.Cast<MonsterIntelEntry>());
+        goblin.EstimatedRoundsToKill = 0;
+        vm.RoundsToKillCap = 999;
+        Assert.Single(vm.RowsView.Cast<MonsterIntelEntry>());
+
+        vm.RoundsToKillCap = 1;
+        Assert.Empty(vm.RowsView.Cast<MonsterIntelEntry>());
+        Assert.True(vm.HasCapHidden);
+    }
+
     // A caster class with one single-target damage spell (1000 dmg/round at any
     // level) it has learned, plus a monster only that spell can drop quickly. Written
     // over the shared fixture set before its GameDataCache is constructed.
