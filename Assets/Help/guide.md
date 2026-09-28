@@ -793,6 +793,11 @@ A member's chip clears on the first of:
 
 If a member drops, the party can auto-re-invite and reform on reconnect, and a member left behind can `@comeback` to rejoin the leader.
 
+- **A follower who reconnects** telepaths `@comeback <map/room>` to their leader, so the leader walks straight to them. MudPlay waits up to 10 seconds after re-entering for your room to be confirmed, since the game can put you back somewhere other than where you dropped. Only if it can't confirm your room does a bare `@comeback` go out, and the leader backtracks along their own path instead.
+- **A leader** still takes that `@comeback` after the member has re-entered the realm (within the *wait for party members* window).
+- **If the leader is already backtracking** for that member and their `@comeback` names a room, the leader heads for that room instead.
+- **If the leader gave up looking** and went idle, a `@comeback` from that member within 5 minutes still recovers them, and the leader then resumes the walk, loop or Auto-Lair the search interrupted.
+
 ---
 
 # Healing & Spells

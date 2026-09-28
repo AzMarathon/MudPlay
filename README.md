@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.38**
-> - A party leader's reply to your `@goto` draws their route on the Navigation map, like an `@path` reply
+> **Version 3.116.39**
+> - A reconnecting follower's `@comeback` now waits for its room to confirm and sends it, so the leader walks straight there
+> - A leader honours the `@comeback` of a member who just re-entered the realm, instead of refusing it as not allowed
+> - A leader backtracking for a member heads for their room once they send it, and one that gave up still recovers them and resumes afterwards
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

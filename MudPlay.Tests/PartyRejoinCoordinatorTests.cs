@@ -18,8 +18,9 @@ namespace MudPlay.Tests;
 // leaving clears it, and a reconnect (Arm + first in-game statline prompt)
 // telepaths @comeback to the remembered leader. The fire keys on the prompt, not
 // the room display, so a dark room can't defer it past the reconnect. There's no
-// follower-side wait — the leader owns the pickup once @comeback is on the wire —
-// so this only covers the memory bookkeeping, the one-shot fire, the
+// follower-side wait beyond a short one for our room to confirm — the leader owns
+// the pickup once @comeback is on the wire — so this covers the memory
+// bookkeeping, the one-shot fire with or without our room, the
 // remembered-leader force-accept predicate, and the @forget-decline forget path.
 public sealed class PartyRejoinCoordinatorTests : IDisposable
 {
@@ -160,19 +161,54 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public void HydratedLeader_ArmThenFirstPrompt_SendsBareComeback()
+    public void HydratedLeader_NoRoomConfirmed_SendsBareComebackAfterTheWait()
     {
         var f = Setup();
         f.Coord.HydrateRememberedLeader("MudPlay");
         f.Coord.Arm();
 
         f.EnterGame();
+        Assert.Empty(f.Coord.LastSentForTests);   // waiting for our room
 
+        f.Coord.FireRoomWaitForTests();
         Assert.Equal("/MudPlay @comeback", f.Sent().Single());
     }
 
+    // The room confirms a moment after the first prompt (a Paradigm `rm` resync):
+    // @comeback waits for it and carries it, so the leader walks straight to us
+    // (report paradigm-20260928-074527).
     [Fact]
-    public void ConfirmedRoom_SendsComebackWithRoomKey()
+    public void RoomConfirmedAfterThePrompt_SendsComebackWithRoomKey()
+    {
+        var f = Setup();
+        f.Coord.HydrateRememberedLeader("MudPlay");
+        f.Coord.Arm();
+
+        f.EnterGame();
+        f.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.Equal("/MudPlay @comeback 1/1", f.Sent().Single());
+        f.Coord.FireRoomWaitForTests();
+        Assert.Single(f.Coord.LastSentForTests);   // the wait was cancelled
+    }
+
+    [Fact]
+    public void RoomConfirmedBeforeThePrompt_SendsComebackWithRoomKeyAtOnce()
+    {
+        var f = Setup();
+        f.Coord.HydrateRememberedLeader("MudPlay");
+        f.Coord.Arm();
+        f.Tracker.SetLocated(new RoomKey(1, 1));
+
+        f.EnterGame();
+
+        Assert.Equal("/MudPlay @comeback 1/1", f.Sent().Single());
+    }
+
+    // The room we dropped from is still Confirmed in the tracker, but the server can
+    // put us back elsewhere — only a confirmation since this connect counts.
+    [Fact]
+    public void RoomFromBeforeTheDrop_IsNotSent()
     {
         var f = Setup();
         f.Tracker.SetLocated(new RoomKey(1, 1));
@@ -180,8 +216,10 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.Arm();
 
         f.EnterGame();
+        Assert.Empty(f.Coord.LastSentForTests);
 
-        Assert.Equal("/MudPlay @comeback 1/1", f.Sent().Single());
+        f.Coord.FireRoomWaitForTests();
+        Assert.Equal("/MudPlay @comeback", f.Sent().Single());
     }
 
     [Fact]
@@ -197,6 +235,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.Arm();
 
         f.EnterGame(); // statline only — still in the dark, no exits shown
+        f.Coord.FireRoomWaitForTests();
         Assert.Equal("/MudPlay @comeback", f.Sent().Single());
 
         // A light finally reveals the room; the latch is already spent.
@@ -225,6 +264,8 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
 
         f.EnterGame();
         f.EnterGame();
+        f.Coord.FireRoomWaitForTests();
+        f.Coord.FireRoomWaitForTests();
 
         Assert.Single(f.Coord.LastSentForTests); // latch consumed on first prompt
     }

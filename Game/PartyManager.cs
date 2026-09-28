@@ -50,6 +50,14 @@ public sealed partial class PartyManager : IDisposable
     // Lazy-expires on access.
     private readonly Dictionary<string, DateTimeOffset> _recentlyDisconnected
         = new(StringComparer.OrdinalIgnoreCase);
+
+    // Members who re-entered the realm inside the grace window, stamped with when.
+    // Re-entry spends their _recentlyDisconnected entry (so they're invited once),
+    // but the @comeback their client telepaths straight after must still count as
+    // from a recent member, or it's refused as not allowed (report
+    // paradigm-20260928-074527).
+    private readonly Dictionary<string, DateTimeOffset> _returnedInGrace
+        = new(StringComparer.OrdinalIgnoreCase);
     private Action<byte[]>? _wireSender;
 
     // "Wait for party members" grace window — how long after a disconnect we'll
@@ -393,6 +401,8 @@ public sealed partial class PartyManager : IDisposable
                 (stale ??= new()).Add(key);
         if (stale is not null)
             foreach (string key in stale) _recentlyDisconnected.Remove(key);
+        foreach (string key in _returnedInGrace.Keys.Where(k => GivenNameOf(k).Equals(given, StringComparison.OrdinalIgnoreCase)).ToList())
+            _returnedInGrace.Remove(key);
         RemoveMember(given);
     }
 
@@ -919,6 +929,7 @@ public sealed partial class PartyManager : IDisposable
             return;
         }
         _recentlyDisconnected.Remove(name);
+        _returnedInGrace[name] = NowProvider();
         if (State.IsInParty && !State.SelfIsLeader) return;
         if (!AutoInviteEnabled) return;
         // Signal the recovery manager before the bare invite: if they came back
@@ -976,7 +987,7 @@ public sealed partial class PartyManager : IDisposable
         if (string.IsNullOrEmpty(sender)) return false;
         string senderGiven = GivenNameOf(sender);
         DateTimeOffset now = NowProvider();
-        foreach (KeyValuePair<string, DateTimeOffset> kv in _recentlyDisconnected)
+        foreach (KeyValuePair<string, DateTimeOffset> kv in _recentlyDisconnected.Concat(_returnedInGrace))
         {
             if (now - kv.Value > DisconnectGraceWindow) continue;
             if (kv.Key.Equals(sender, StringComparison.OrdinalIgnoreCase)

@@ -135,6 +135,30 @@ public sealed class PartyDisconnectDeathTests
         Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
     }
 
+    // Re-entry spends the grace entry on the invite, but the @comeback the member's
+    // client telepaths straight after must still be honoured (report
+    // paradigm-20260928-074527: refused as "command invalid or not allowed").
+    [Fact]
+    public void ReEnteredMember_StaysEligibleForComeback()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        mgr.NowProvider = () => Now;
+        mgr.SetWireSender(_ => { });
+
+        router.Dispatch(Line("Raijin started to follow you."));
+        router.Dispatch(Line("Raijin stops following you."));
+        router.Dispatch(Line("Raijin just entered the Realm."));
+
+        Assert.DoesNotContain("Raijin", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.True(mgr.WasRecentlyPartied("Raijin"));
+
+        mgr.ForgetReconnectMember("Raijin");
+        Assert.False(mgr.WasRecentlyPartied("Raijin"));
+    }
+
     [Fact]
     public void ParPoll_MissingMemberInPartyOf3_StampsLostAndRemoves()
     {
