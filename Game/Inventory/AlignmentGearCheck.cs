@@ -9,8 +9,8 @@ namespace MudPlay.Game.Inventory;
 //
 // Alignment moves during a session (Paradigm drifts toward good unless the player
 // blocks it; attacking good monsters moves either realm toward evil), so this isn't
-// a once-per-session check. New evidence — a new block, edited sets, the dark-cloud
-// line, a fresh session — re-checks after a short gap; a mismatch that a `who`
+// a once-per-session check. New evidence — a new block, edited sets, a dark cloud
+// that took us out of Good, a fresh session — re-checks after a short gap; a mismatch that a `who`
 // already confirmed is only re-checked on a slow cadence (when a set is applied,
 // and on Paradigm on a timer), so a genuinely off-alignment set doesn't spam `who`.
 //
@@ -50,7 +50,7 @@ public sealed class AlignmentGearCheck
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
     // Something new may have changed the answer: a block raised or lifted, sets
-    // edited, the dark-cloud line, a new session.
+    // edited, a dark cloud that took us out of Good, a new session.
     public void RequestCheck() => Arm(UrgentGap);
 
     // The same set was applied again: worth another look, but not often.

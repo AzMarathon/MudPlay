@@ -676,11 +676,12 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Attacking good-aligned monsters moves you toward evil.** *([CONFIRMED] both realms.)*
 - **Paradigm: you gain alignment toward good constantly while playing, unless you set the blocker for it.** *([CONFIRMED] user.)* `[NEEDS CONFIRMATION]` What is the blocker — a command or a setting, and what does it print?
 - **Stock: points toward good are only awarded at the cleanup cycle.** *([CONFIRMED] user.)* Evil moves during play, as on Paradigm.
-- **A shift toward evil prints `A dark cloud passes over you`.** *(Unrated — the client's pattern; the source wasn't recorded.)*
+- **A shift toward evil prints `A dark cloud passes over you`.** *(Wording [OBSERVED] `wccmmud.dll` 1.11p string table.)*
+- **From Good, a dark cloud leaves you Neutral at best, so Good-only gear can no longer be worn.** *([CONFIRMED] 2026-09-27, user.)* From Neutral or worse it only moves you further toward evil.
 
 **Client use:**
-- `AlignmentTracker` flags the recorded alignment stale on the dark-cloud line; our alignment is our row in the realm's players list, which each `who` that shows us rewrites.
-- `AlignmentGearCheck` sends `who` when a gear set disagrees with the recorded alignment (an item blocked on alignment alone, or alignment-gated gear with none recorded). It re-checks whenever the answer may have changed — a new block, edited sets, the dark-cloud line, a new session — and a confirmed mismatch on a slow cadence (a set re-applied; on Paradigm also on a timer, since it drifts toward good).
+- `AlignmentTracker` flags the recorded alignment stale on the dark-cloud line; our alignment is our row in the realm's players list, which each `who` that shows us rewrites. A dark cloud while recorded Good reads as Neutral until the next `who` (`LeftGood`), so Good-only gear is blocked at once.
+- `AlignmentGearCheck` sends `who` when a gear set disagrees with the recorded alignment (an item blocked on alignment alone, or alignment-gated gear with none recorded). It re-checks whenever the answer may have changed — a new block, edited sets, a dark cloud that took us out of Good (only then: from Neutral or worse it changes nothing), a new session — and a confirmed mismatch on a slow cadence (a set re-applied; on Paradigm also on a timer, since it drifts toward good).
 
 ---
 

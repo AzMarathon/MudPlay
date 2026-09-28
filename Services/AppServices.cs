@@ -1564,7 +1564,6 @@ public sealed class AppServices
     // (wear-confirmed / armor-refused / weapon-refused). Held for the app lifetime
     // — AppServices is the singleton, so these live as long as the router.
     private IDisposable? _equipWearOkSub;
-    private IDisposable? _alignmentShiftSub;
     private IDisposable? _equipWearFailSub;
     private IDisposable? _equipWieldFailSub;
 
@@ -5246,8 +5245,13 @@ public sealed class AppServices
         Equipment.SetsEdited += AlignmentCheck.RequestCheck;
         Equipment.CurrentSetChanged += AlignmentCheck.RequestRoutineCheck;
         Profile.ProfileLoaded += _ => AlignmentCheck.RequestCheck();
-        _alignmentShiftSub = Router.Subscribe(Services.Patterns.KnownPatterns.AlignmentDarkCloud,
-            _ => AlignmentCheck.RequestCheck());
+        // A dark cloud that takes us out of Good blocks Good-only gear at once and
+        // asks `who` where we landed; one from Neutral or worse changes nothing.
+        Alignment.LeftGood += () =>
+        {
+            Equipment.ReevaluateAllBlocks();
+            AlignmentCheck.RequestCheck();
+        };
         PromptScanner.PromptObserved += _ => AlignmentCheck.OnPrompt();
         _equipWearOkSub = Router.Subscribe(Services.Patterns.KnownPatterns.UserEquipped, m =>
         {

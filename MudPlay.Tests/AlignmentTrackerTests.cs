@@ -84,4 +84,39 @@ public sealed class AlignmentTrackerTests
         db.RecordObservation("Fujin", "Paladin", "Kang", "Saint", "Chosen", null, null, DateTime.UtcNow);
         Assert.Equal("Saint", tracker.SelfAlignment);
     }
+
+    // A dark cloud while Good leaves us Neutral at best, so Good-only gear is out at
+    // once and a `who` is worth sending; from Neutral or worse it changes nothing.
+    [Fact]
+    public void DarkCloud_WhileGood_ReadsNeutral_UntilTheNextWho()
+    {
+        (MessageRouter router, PlayerDatabase db, AlignmentTracker tracker) = Build("Fujin");
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Saint", null, null, null, DateTime.UtcNow);
+        int left = 0;
+        tracker.LeftGood += () => left++;
+
+        router.Dispatch(Line("A dark cloud passes over you."));
+        Assert.Equal("Neutral", tracker.SelfAlignment);
+        Assert.Equal(1, left);
+
+        router.Dispatch(Line("A dark cloud passes over you."));
+        Assert.Equal(1, left);                            // already out of Good
+
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Seedy", null, null, null, DateTime.UtcNow);
+        Assert.Equal("Seedy", tracker.SelfAlignment);     // the `who` says where we landed
+    }
+
+    [Fact]
+    public void DarkCloud_WhenNotGood_ChangesNothing()
+    {
+        (MessageRouter router, PlayerDatabase db, AlignmentTracker tracker) = Build("Fujin");
+        db.RecordObservation("Fujin", "Priest", "Halfling", "Villain", null, null, null, DateTime.UtcNow);
+        int left = 0;
+        tracker.LeftGood += () => left++;
+
+        router.Dispatch(Line("A dark cloud passes over you."));
+
+        Assert.Equal("Villain", tracker.SelfAlignment);
+        Assert.Equal(0, left);
+    }
 }
