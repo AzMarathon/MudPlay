@@ -946,6 +946,19 @@ public static class DefaultPatterns
         // until the next `who` refresh.
         yield return new RegexPattern(KnownPatterns.AlignmentDarkCloud,
             @"^A dark cloud passes over you");
+        // The band changed and the game stripped gear it can't wear, one line per
+        // item; and a victim's `forgive` refunding evil points. Both mean our
+        // recorded alignment is out of date (GAME_MECHANICS "How your alignment
+        // moves during play").
+        yield return new RegexPattern(KnownPatterns.AlignmentGearRemoved,
+            @"^Your (?<item>.+) has been removed\.\s*$");
+        yield return new RegexPattern(KnownPatterns.AlignmentForgiven,
+            @"^The gods have forgiven you for your action\.");
+        // Paradigm's `pro` rows: our exact evil points and the `set mineps` floor.
+        yield return new RegexPattern(KnownPatterns.AlignmentEvilPoints,
+            @"^EPs:\s+(?<ep>-?\d+(?:\.\d+)?)\s*$");
+        yield return new RegexPattern(KnownPatterns.AlignmentMinEvilPoints,
+            @"^(?:Min\. EPs:\s+|Minimum EPs set to\s+)(?<min>-?\d+(?:\.\d+)?)\s*$");
 
         // ----- Training --------------------------------------------------
         // "You hand over 1 gold crown and you receive training to attain

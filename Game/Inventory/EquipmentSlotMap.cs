@@ -187,7 +187,7 @@ public static class EquipmentSlotMap
         {
             string? name = GetString(row, "Name");
             if (string.IsNullOrEmpty(name)) continue;
-            if (matches(row) && ItemEquipFilter.CanEquip(row, level, classProfile, alignment))
+            if (matches(row) && ItemEquipFilter.CanEquip(row, level, classProfile, alignment, cache.ActiveRealm))
                 names.Add(name);
         }
         return names.ToList();

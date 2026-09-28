@@ -265,4 +265,20 @@ public sealed class ItemEquipFilterTests
         Assert.False(ItemEquipFilter.CanEquip(magical.RootElement, level: 0, Cls(20, antiMagic: true), null));
         Assert.True(ItemEquipFilter.CanEquip(magical.RootElement, level: 0, Cls(20), null));
     }
+
+    // The Stock engine's gear check: Seedy wears as Neutral (its Evil gear bucket
+    // starts at Outlaw) and not-Neutral (113) is never checked. Paradigm keeps both.
+    [Fact]
+    public void Stock_SeedyWearsAsNeutral_AndNotNeutralIsIgnored()
+    {
+        Assert.Equal(AlignmentBucket.Neutral, ItemEquipFilter.GearBucketForWord("Seedy", MudPlay.Game.RealmType.Stock));
+        Assert.Equal(AlignmentBucket.Evil, ItemEquipFilter.GearBucketForWord("Seedy", MudPlay.Game.RealmType.ParaMud));
+        Assert.Equal(AlignmentBucket.Evil, ItemEquipFilter.GearBucketForWord("Outlaw", MudPlay.Game.RealmType.Stock));
+
+        using JsonDocument notNeutral = JsonDocument.Parse("""{ "Abil-0": 113 }""");
+        Assert.True(ItemEquipFilter.CanEquip(notNeutral.RootElement, 0, ClassEquipProfile.Unknown,
+            AlignmentBucket.Neutral, MudPlay.Game.RealmType.Stock));
+        Assert.False(ItemEquipFilter.CanEquip(notNeutral.RootElement, 0, ClassEquipProfile.Unknown,
+            AlignmentBucket.Neutral, MudPlay.Game.RealmType.ParaMud));
+    }
 }

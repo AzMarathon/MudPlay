@@ -152,6 +152,10 @@ public static class BugReportBuilder
         Kv(sb, "Active game-data set", svc.GameData.ActiveSet ?? "(none)");
         Kv(sb, "Character", svc.Profile.CurrentProfileName ?? "(none loaded)");
         Kv(sb, "BBS", svc.Profile.CurrentBbsName ?? "(none)");
+        Kv(sb, "Our alignment", $"{svc.Alignment.SelfAlignment ?? "(unknown)"}"
+            + (svc.Alignment.EvilPoints is { } ep ? $" · EPs {ep:0.##}" : "")
+            + (svc.Alignment.MinEvilPoints is { } floor ? $" · min EPs {floor:0.##}" : "")
+            + (svc.Alignment.IsStale ? " · stale (dark cloud since the last check)" : ""));
         Kv(sb, "BBS realm", svc.ResolveActiveRealm() is { } bbsRealm
             ? $"{bbsRealm.Realm.Name} (game data {bbsRealm.Realm.ActiveGameDataSet ?? "global default"}; "
               + $"{bbsRealm.Bbs.Realms.Count} realm(s) on the BBS)"

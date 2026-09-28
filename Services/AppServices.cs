@@ -1544,6 +1544,9 @@ public sealed class AppServices
     // (AutoEquip).
     public Game.Inventory.EquipmentManager Equipment { get; private set; } = null!;
 
+    // Sends `who` to verify our alignment when a gear set disagrees with it.
+    public Game.Inventory.AlignmentGearCheck AlignmentCheck { get; private set; } = null!;
+
     // Location-based auto-equip (Settings → Other). Wears a rule's item while
     // we're inside its matched map area (room number(s) and/or room-name
     // substring) and reverts on exit; driven off RoomTracker transitions so every
@@ -1561,6 +1564,7 @@ public sealed class AppServices
     // (wear-confirmed / armor-refused / weapon-refused). Held for the app lifetime
     // — AppServices is the singleton, so these live as long as the router.
     private IDisposable? _equipWearOkSub;
+    private IDisposable[]? _alignmentMovedSubs;
     private IDisposable? _equipWearFailSub;
     private IDisposable? _equipWieldFailSub;
 
@@ -2583,9 +2587,9 @@ public sealed class AppServices
         //
         // Alignment comes from the SAME source as the Equipment Manager's own
         // GoodOnly/EvilOnly gating (CanCharacterEquipItem / IsEquipRestricted
-        // above) — AlignmentTracker.SelfAlignment, our own row as a `who` showed it
-        // this session, not the stat screen (which doesn't report alignment at
-        // all). Unknown until a `who` has shown our own row, in which case
+        // above) — AlignmentTracker.SelfAlignment, our own row in the realm's
+        // players list (a `who` rewrites it), not the stat screen (which doesn't
+        // report alignment at all). Unknown until a `who` has shown us, in which case
         // charAlign stays 0 and IsUsable skips alignment filtering entirely
         // rather than guessing.
         void SeedSpellbook(Models.Profile.LastKnownStats? snap, bool reseed = false)
@@ -5229,14 +5233,51 @@ public sealed class AppServices
                 && string.Equals(self, givenName, StringComparison.OrdinalIgnoreCase))
                 Equipment.ReevaluateAllBlocks();
         };
+
+        // Ask the game for our alignment when our gear says the record may be wrong —
+        // Paradigm's `pro` shows the exact evil points, Stock's doesn't, so Stock asks
+        // `who`. No timers: it checks when the game says alignment moved (gear taken
+        // off, a wear refused, a forgive, a dark cloud out of Good) or when a gear set
+        // disagrees with the record. Wire-sender bound by MainWindowVM.
+        AlignmentCheck = new Game.Inventory.AlignmentGearCheck(
+            GearAlignmentNeedsCheck,
+            verifyCommand: () => GameData.ActiveRealm == Game.RealmType.ParaMud ? "pro" : "who",
+            log: Log);
+        Alignment.Refreshed += Equipment.ReevaluateAllBlocks;
+        Equipment.BlocksChanged += AlignmentCheck.RequestCheck;
+        Equipment.SetsEdited += AlignmentCheck.RequestCheck;
+        Profile.ProfileLoaded += _ => AlignmentCheck.RequestCheck();
+        // A dark cloud out of Good blocks Good-only gear at once and asks where we
+        // landed; one from Neutral or worse changes nothing.
+        Alignment.LeftGood += () =>
+        {
+            Equipment.ReevaluateAllBlocks();
+            AlignmentCheck.RequestVerify();
+        };
+        // Gear taken off on a band change, or a victim's forgive: the record is old.
+        _alignmentMovedSubs = new[]
+        {
+            Router.Subscribe(Services.Patterns.KnownPatterns.AlignmentGearRemoved, _ => AlignmentCheck.RequestVerify()),
+            Router.Subscribe(Services.Patterns.KnownPatterns.AlignmentForgiven, _ => AlignmentCheck.RequestVerify()),
+        };
+        PromptScanner.PromptObserved += _ => AlignmentCheck.OnPrompt();
         _equipWearOkSub = Router.Subscribe(Services.Patterns.KnownPatterns.UserEquipped, m =>
         {
             if (m.Groups.Count > 0) Equipment.NoteEquipSucceeded(m.Groups[0]);
         });
+        // A refused wear / wield may be our alignment having moved: check it too.
         _equipWearFailSub = Router.Subscribe(
-            Services.Patterns.KnownPatterns.UserEquipFailed, _ => Equipment.NoteWearRefused());
+            Services.Patterns.KnownPatterns.UserEquipFailed, _ =>
+            {
+                Equipment.NoteWearRefused();
+                AlignmentCheck.RequestVerify();
+            });
         _equipWieldFailSub = Router.Subscribe(
-            Services.Patterns.KnownPatterns.UserWieldFailed, _ => Equipment.NoteWeaponRefused());
+            Services.Patterns.KnownPatterns.UserWieldFailed, _ =>
+            {
+                Equipment.NoteWeaponRefused();
+                AlignmentCheck.RequestVerify();
+            });
 
         // Hold auto-rest while a gear-set swap streams its paced wear/rem commands —
         // each stands the character up, and without this the rest engine re-sends
@@ -7559,8 +7600,8 @@ public sealed class AppServices
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
         Game.Calculators.AlignmentBucket? bucket =
-            Game.Inventory.ItemEquipFilter.BucketForWord(Alignment.SelfAlignment);
-        return Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket);
+            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, GameData.ActiveRealm);
+        return Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket, GameData.ActiveRealm);
     }
 
     // True when the item EXISTS in game data but the live character can't wear it
@@ -7568,6 +7609,34 @@ public sealed class AppServices
     // CanCharacterEquipItem, an UNKNOWN item resolves false here (not a block): a
     // name that isn't in the active set's Items table just isn't a wearability
     // problem to flag — it simply never queues. Only a real restriction blocks.
+    // A gear set disagrees with our recorded alignment: it holds an item blocked on
+    // alignment alone (wearable at our level and class), or alignment-gated gear
+    // while no alignment is known yet.
+    private bool GearAlignmentNeedsCheck()
+    {
+        if (Profile.Current?.Equipment?.Sets is not { Count: > 0 } sets) return false;
+        Game.Inventory.ClassEquipProfile cls =
+            Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
+        Game.RealmType realm = GameData.ActiveRealm;
+        Game.Calculators.AlignmentBucket? bucket =
+            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, realm);
+        foreach (Models.Profile.EquipmentSet set in sets)
+        foreach (Models.Profile.EquipmentSlotEntry slot in set.Slots)
+        {
+            if (string.IsNullOrWhiteSpace(slot.ItemName)) continue;
+            if (GameData.FindRowByName("Items", slot.ItemName.Trim()) is not System.Text.Json.JsonElement row) continue;
+            bool Fits(Game.Calculators.AlignmentBucket? b) =>
+                Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, b, realm);
+            if (!Fits(null)) continue;   // unwearable for another reason
+            bool alignmentGated = bucket is { } known
+                ? !Fits(known)
+                : !(Fits(Game.Calculators.AlignmentBucket.Good) && Fits(Game.Calculators.AlignmentBucket.Neutral)
+                    && Fits(Game.Calculators.AlignmentBucket.Evil));
+            if (alignmentGated) return true;
+        }
+        return false;
+    }
+
     private bool IsEquipRestricted(string itemName)
     {
         if (GameData.FindRowByName("Items", itemName) is not System.Text.Json.JsonElement row)
@@ -7575,8 +7644,8 @@ public sealed class AppServices
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
         Game.Calculators.AlignmentBucket? bucket =
-            Game.Inventory.ItemEquipFilter.BucketForWord(Alignment.SelfAlignment);
-        return !Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket);
+            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, GameData.ActiveRealm);
+        return !Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket, GameData.ActiveRealm);
     }
 
     // Read a single boolean off the active profile's

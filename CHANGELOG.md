@@ -1,5 +1,14 @@
 # Version history
 
+## 3.116.6
+
+- The title bar shows the BBS and realm (BBS:realm) of the loaded character
+- File → Recent profiles show each character's BBS and realm
+- Your alignment comes from your row in the realm's player list again (a `who` updates it), so Good/Evil-only gear and spells gate without a `who` every session
+- MudPlay asks the game for your alignment (`pro` on Paradigm, `who` on Stock) when a gear set disagrees with it, or when the game shows it moved — no timed checks
+- On Stock, Seedy wears gear as Neutral and the "not Neutral" item flag is ignored, matching the Stock engine
+- Gear taken off by an alignment change, a refused wear, a victim's forgive, or the dark-cloud line while Good all trigger that check
+
 ## 3.116.0
 
 - A BBS can host several named realms (Settings → BBS + Display): each has its own game data, game-menu commands, death floor, boss cleanup time and runic currency name

@@ -19,19 +19,44 @@ public sealed class AlignmentTracker : IDisposable
     private readonly PlayerStats _stats;
     private readonly PlayerDatabase _players;
     private readonly IDisposable _darkCloudSub;
+    private readonly IDisposable _evilPointsSub;
+    private readonly IDisposable _minEvilPointsSub;
 
     // True when a dark-cloud line has fired since the last `who` refresh.
     public bool IsStale { get; private set; }
 
-    // Our own alignment word as a `who` showed it this profile session, or null until
-    // one has. The saved players list is per BBS and persists, so our row there can be
-    // hours old, or written by a same-named character of ours on another realm of the
-    // board: a Good paladin was read as Villain and its Good-only gear blocked (report
-    // paradigm-20260927-134201). Whatever gates on our alignment reads this instead.
-    public string? SelfAlignment { get; private set; }
+    // Our own alignment word: our row in the realm's players list, which every `who`
+    // that shows us rewrites. The list is kept per realm, so a same-named character
+    // of ours on another realm of the board can't overwrite it (it once did: a Good
+    // paladin read as Villain and its Good-only gear blocked, report
+    // paradigm-20260927-134201). null until a `who` has shown us on this realm.
+    // After a dark cloud while recorded Good, it reads "Neutral" until the next `who`
+    // (see OnDarkCloud). Whatever gates on our alignment reads this.
+    // A Paradigm `pro` reading, when newer than our last `who` row, wins: it's the
+    // exact number, not just the title.
+    public string? SelfAlignment =>
+        _leftGood ? "Neutral" : _proTitle ?? _players.Find(_stats.Name)?.Alignment;
+
+    // Paradigm's `pro`: our exact evil points and the `set mineps` floor our drift
+    // toward good stops at (null until a `pro` shows them; Stock's `pro` never does).
+    public double? EvilPoints { get; private set; }
+    public double? MinEvilPoints { get; private set; }
+
+    private string? _proTitle;
+
+    // Our alignment reading changed (a `pro` EPs line) — gear gating re-evaluates.
+    public event Action? Refreshed;
+
+    // A dark cloud landed while we were recorded Good: we're Neutral at best now, so
+    // Good-only gear can't be worn, even before a `who` says exactly where we are.
+    private bool _leftGood;
 
     // Raised whenever IsStale changes.
     public event Action? StaleChanged;
+
+    // Raised when a dark cloud takes us out of Good — the one shift that changes what
+    // we can wear, and worth a `who` to learn exactly where we landed.
+    public event Action? LeftGood;
 
     public AlignmentTracker(MessageRouter router, PlayerStats stats, PlayerDatabase players)
     {
@@ -42,7 +67,14 @@ public sealed class AlignmentTracker : IDisposable
         _players = players;
 
         _darkCloudSub = router.Subscribe(
-            Services.Patterns.KnownPatterns.AlignmentDarkCloud, _ => SetStale(true));
+            Services.Patterns.KnownPatterns.AlignmentDarkCloud, _ => OnDarkCloud());
+        _evilPointsSub = router.Subscribe(
+            Services.Patterns.KnownPatterns.AlignmentEvilPoints, m => OnEvilPoints(m));
+        _minEvilPointsSub = router.Subscribe(
+            Services.Patterns.KnownPatterns.AlignmentMinEvilPoints, m =>
+            {
+                if (m.Groups.Count > 0 && TryParse(m.Groups[0], out double floor)) MinEvilPoints = floor;
+            });
         _players.ObservationRecorded += OnObservationRecorded;
     }
 
@@ -55,14 +87,47 @@ public sealed class AlignmentTracker : IDisposable
         if (string.IsNullOrEmpty(self)
             || !string.Equals(self, givenName, StringComparison.OrdinalIgnoreCase))
             return;
-        SelfAlignment = _players.Find(_stats.Name)?.Alignment;
+        _leftGood = false;
+        _proTitle = null;   // the `who` row is now the newest reading
         SetStale(false);
     }
 
-    // A new profile is a new character: forget what the last `who` said about us.
+    // A Paradigm `pro` "EPs:" line: our exact alignment. The line only exists on
+    // Paradigm, so its thresholds apply.
+    private void OnEvilPoints(MatchResult m)
+    {
+        if (m.Groups.Count == 0 || !TryParse(m.Groups[0], out double ep)) return;
+        EvilPoints = ep;
+        _proTitle = Calculators.AlignmentBands.TitleForEvilPoints(ep, RealmType.ParaMud);
+        _leftGood = false;
+        SetStale(false);
+        Refreshed?.Invoke();
+    }
+
+    private static bool TryParse(string text, out double value) =>
+        double.TryParse(text, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out value);
+
+    // An evil shift. From Good it lands at Neutral at best (the alignment ladder in
+    // GAME_MECHANICS), so Good-only gear is out from this moment. From Neutral or
+    // worse it only goes further evil, which changes nothing we'd act on — no check.
+    private void OnDarkCloud()
+    {
+        SetStale(true);
+        if (_leftGood
+            || Inventory.ItemEquipFilter.BucketForWord(SelfAlignment) != Calculators.AlignmentBucket.Good)
+            return;
+        _leftGood = true;
+        LeftGood?.Invoke();
+    }
+
+    // A new profile is a new character: its alignment isn't stale from the last one's.
     public void ResetForProfile()
     {
-        SelfAlignment = null;
+        _leftGood = false;
+        _proTitle = null;
+        EvilPoints = null;
+        MinEvilPoints = null;
         SetStale(false);
     }
 
@@ -76,6 +141,8 @@ public sealed class AlignmentTracker : IDisposable
     public void Dispose()
     {
         _darkCloudSub.Dispose();
+        _evilPointsSub.Dispose();
+        _minEvilPointsSub.Dispose();
         _players.ObservationRecorded -= OnObservationRecorded;
     }
 }

@@ -67,24 +67,78 @@ public sealed class AlignmentTrackerTests
         Assert.True(tracker.IsStale);
     }
 
-    // Our own alignment counts only once a `who` shows us this session: a saved row
-    // (stale, or a same-named character's on another realm) is ignored (report
-    // paradigm-20260927-134201).
+    // Our own alignment is our row in the (per-realm) players list: the saved row
+    // counts, and a `who` that shows us rewrites it.
     [Fact]
-    public void SelfAlignment_IgnoresTheSavedRow_UntilAWhoShowsUs()
+    public void SelfAlignment_ReadsOurRow_AndAWhoUpdatesIt()
     {
         var router = new MessageRouter();
         DefaultPatterns.Seed(router);
         var db = new PlayerDatabase();
-        db.RecordObservation("Fujin", "Paladin", "Kang", "Villain", "Chosen", null, null, DateTime.UtcNow.AddHours(-9));
         var tracker = new AlignmentTracker(router, new PlayerStats { Name = "Fujin" }, db);
-
         Assert.Null(tracker.SelfAlignment);
+
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Villain", "Chosen", null, null, DateTime.UtcNow.AddHours(-9));
+        Assert.Equal("Villain", tracker.SelfAlignment);
 
         db.RecordObservation("Fujin", "Paladin", "Kang", "Saint", "Chosen", null, null, DateTime.UtcNow);
         Assert.Equal("Saint", tracker.SelfAlignment);
+    }
 
-        tracker.ResetForProfile();
-        Assert.Null(tracker.SelfAlignment);
+    // A dark cloud while Good leaves us Neutral at best, so Good-only gear is out at
+    // once and a `who` is worth sending; from Neutral or worse it changes nothing.
+    [Fact]
+    public void DarkCloud_WhileGood_ReadsNeutral_UntilTheNextWho()
+    {
+        (MessageRouter router, PlayerDatabase db, AlignmentTracker tracker) = Build("Fujin");
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Saint", null, null, null, DateTime.UtcNow);
+        int left = 0;
+        tracker.LeftGood += () => left++;
+
+        router.Dispatch(Line("A dark cloud passes over you."));
+        Assert.Equal("Neutral", tracker.SelfAlignment);
+        Assert.Equal(1, left);
+
+        router.Dispatch(Line("A dark cloud passes over you."));
+        Assert.Equal(1, left);                            // already out of Good
+
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Seedy", null, null, null, DateTime.UtcNow);
+        Assert.Equal("Seedy", tracker.SelfAlignment);     // the `who` says where we landed
+    }
+
+    [Fact]
+    public void DarkCloud_WhenNotGood_ChangesNothing()
+    {
+        (MessageRouter router, PlayerDatabase db, AlignmentTracker tracker) = Build("Fujin");
+        db.RecordObservation("Fujin", "Priest", "Halfling", "Villain", null, null, null, DateTime.UtcNow);
+        int left = 0;
+        tracker.LeftGood += () => left++;
+
+        router.Dispatch(Line("A dark cloud passes over you."));
+
+        Assert.Equal("Villain", tracker.SelfAlignment);
+        Assert.Equal(0, left);
+    }
+
+    // Paradigm's `pro`: "EPs:" is our exact alignment (its title from the band
+    // thresholds) and wins until a newer `who`; "Min. EPs:" is the mineps floor.
+    [Fact]
+    public void ParadigmPro_SetsOurAlignmentFromTheEvilPoints()
+    {
+        (MessageRouter router, PlayerDatabase db, AlignmentTracker tracker) = Build("Fujin");
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Seedy", null, null, null, DateTime.UtcNow.AddHours(-1));
+
+        router.Dispatch(Line("EPs:                  -15.066666"));
+        router.Dispatch(Line("Min. EPs:             -199"));
+
+        Assert.Equal("Neutral", tracker.SelfAlignment);
+        Assert.Equal(-15.066666, tracker.EvilPoints!.Value, 5);
+        Assert.Equal(-199, tracker.MinEvilPoints);
+
+        db.RecordObservation("Fujin", "Paladin", "Kang", "Good", null, null, null, DateTime.UtcNow);
+        Assert.Equal("Good", tracker.SelfAlignment);      // a newer `who` wins
+
+        router.Dispatch(Line("Minimum EPs set to 300"));   // `set mineps 300`
+        Assert.Equal(300, tracker.MinEvilPoints);
     }
 }

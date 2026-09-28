@@ -426,6 +426,16 @@ public static class KnownPatterns
     // AlignmentTracker flags it stale on this line and clears the flag once our
     // own row is re-observed.
     public const string AlignmentDarkCloud = "alignment.dark-cloud";
+    // "Your <item> has been removed." — our alignment band changed and the game took off
+    // gear the new band can't wear; "The gods have forgiven you for your action." — a
+    // victim's `forgive` refunded evil points. Either way our recorded alignment is old.
+    public const string AlignmentGearRemoved = "alignment.gear-removed";
+    public const string AlignmentForgiven    = "alignment.forgiven";
+    // Paradigm's `pro`: "EPs: -15.066666" (our exact evil points) and "Min. EPs: -199"
+    // (the `set mineps` floor our drift toward good stops at; setting it replies
+    // "Minimum EPs set to -199"). Stock's `pro` has neither.
+    public const string AlignmentEvilPoints    = "alignment.evil-points";
+    public const string AlignmentMinEvilPoints = "alignment.min-evil-points";
 
     // ----- Training ------------------------------------------------------
     // "You hand over <cost> and you receive training to attain level N." — the
