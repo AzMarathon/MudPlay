@@ -183,6 +183,11 @@ public sealed class AppServices
     public void SetLeaderRouteOpener(Action<string, Game.Remote.PathReport> opener) => _leaderRouteOpener = opener;
     public void ShowLeaderRoute(string sender, Game.Remote.PathReport report) => _leaderRouteOpener?.Invoke(sender, report);
 
+    // Same, for our party leader's reply to an @goto they accepted.
+    private Action<string, Game.Map.RoomKey>? _leaderGotoOpener;
+    public void SetLeaderGotoOpener(Action<string, Game.Map.RoomKey> opener) => _leaderGotoOpener = opener;
+    public void ShowLeaderGoto(string sender, Game.Map.RoomKey dest) => _leaderGotoOpener?.Invoke(sender, dest);
+
     // Single source of truth for "are you sure?" prompts (exit /
     // hangup / save / delete). Lives at Global tier; mirrored from
     // SettingsService on startup and every save.
@@ -6818,8 +6823,12 @@ public sealed class AppServices
 
         // @path reply → the other player's route on the nav map (see
         // NavigationViewModel.LeaderRoute). Built from the reply alone; nothing is sent.
-        PathReply = new Game.Remote.PathReplyTracker(Router, Log);
+        PathReply = new Game.Remote.PathReplyTracker(Router,
+            isPartyLeader: sender => PartyState.IsInParty && !PartyState.SelfIsLeader
+                && string.Equals(GivenNameOf(PartyState.LeaderName), sender, StringComparison.OrdinalIgnoreCase),
+            log: Log);
         PathReply.PathReported += ShowLeaderRoute;
+        PathReply.GotoReported += ShowLeaderGoto;
 
         // Auto-deposit reroute. Built here
         // (after the movement engines) so it can snapshot / stop / restart

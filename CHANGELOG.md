@@ -1,5 +1,9 @@
 # Version history
 
+## 3.116.38
+
+- A party leader's reply to your `@goto` draws their route on the Navigation map, like an `@path` reply
+
 ## 3.116.37
 
 - Auto-Sneak keeps the sneak: gear swaps, searches, light changes, in-between spells, optional rests, invites and chat wait until a backstab fires, or until a room with no NPCs, then re-sneak

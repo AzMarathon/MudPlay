@@ -1392,6 +1392,10 @@ public static class BugReportBuilder
                   + (p.Report.Destination is { } pd ? $"walking to {pd}" : p.Report.LoopName is { } pl ? $"loop '{pl}'" : "no destination")
                   + $", step {p.Report.Step}/{p.Report.TotalSteps}"
                 : "(none)");
+        Kv(sb, "Last leader @goto reply",
+            svc.PathReply?.LastGoto is { } g
+                ? $"from {g.Sender} {(DateTimeOffset.UtcNow - g.At).TotalSeconds:F0}s ago: walking to {g.Destination}"
+                : "(none)");
 
         sb.Append("\n**Obstacle handlers (door / hidden exit / trap)**\n\n");
         Game.Map.DoorOpenManager door = svc.Door;

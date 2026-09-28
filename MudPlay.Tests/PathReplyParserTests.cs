@@ -64,4 +64,23 @@ public sealed class PathReplyParserTests
         Assert.Equal(10, r!.Step);
         Assert.Equal(1, r.StepsRemaining);
     }
+
+    // An accepted @goto's reply (MovePlayerHandler) names only the destination.
+    [Theory]
+    [InlineData("{walking to Grassy Cart Path, Dead End (1/2447)}", 1, 2447)]
+    [InlineData("{walking to GOTO 'bank' (1/12)}", 1, 12)]
+    [InlineData("{walking to boss Giant Rat, stopping just outside (3/70)}", 3, 70)]
+    public void Goto_ReadsDestination(string reply, int map, int room)
+    {
+        Assert.True(PathReplyParser.TryParseGoto(reply, out RoomKey dest));
+        Assert.Equal(new RoomKey(map, room), dest);
+    }
+
+    [Theory]
+    [InlineData("{walking to 6/1249; Rocky Path, Valley View (map 9, room 747); step 94/166}")]  // @path
+    [InlineData("{already walking to Town Square (1/12)}")]
+    [InlineData("{no match for 'bank'}")]
+    [InlineData("walking to Town Square (1/12)")]                                               // no braces
+    public void NonGotoReplies_DoNotParseAsGoto(string message)
+        => Assert.False(PathReplyParser.TryParseGoto(message, out _));
 }

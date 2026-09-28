@@ -708,6 +708,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
         AppServices.Current.SetHighlightWhereOpener(HighlightWhereRoomIfOpen);
         AppServices.Current.SetLeaderRouteOpener(ShowLeaderRouteIfOpen);
+        AppServices.Current.SetLeaderGotoOpener(ShowLeaderGotoIfOpen);
         AppServices.Current.SetNavManagerOpener(OpenNavManager);
         AppServices.Current.SetTypedInputSender(SendUserText);
 
@@ -4934,6 +4935,12 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (_navigationWindow?.DataContext is ViewModels.Navigation.NavigationViewModel vm)
             vm.ShowLeaderRoute(sender, report);
+    }
+
+    private void ShowLeaderGotoIfOpen(string sender, Game.Map.RoomKey dest)
+    {
+        if (_navigationWindow?.DataContext is ViewModels.Navigation.NavigationViewModel vm)
+            vm.ShowLeaderGoto(sender, dest);
     }
 
     // Toolbar Start, which doubles as Resume. USER-paused → resume. Idle with a
