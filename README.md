@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.40**
-> - A reconnecting follower's `@comeback` now waits (up to 5 s) for its room to confirm and sends it, so the leader walks straight there
-> - A leader honours the `@comeback` of a member who just re-entered the realm, instead of refusing it as not allowed
-> - A leader backtracking for a member heads for their room once they send it, and one that gave up still recovers them and resumes afterwards
-> - New Party setting *If leading, accept @comeback for* (default 2 min); a follower offline longer sends no `@comeback`
+> **Version 3.116.41**
+> - Dropping (or selling, giving away, using up) the last copy of a charged item forgets its charges instead of looking at the one on the floor
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
