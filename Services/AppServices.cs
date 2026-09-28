@@ -7304,6 +7304,18 @@ public sealed class AppServices
             },
             log: Log);
         Tokens.TokenUsed += TokenRoute.OnTokenUsed;
+        MovementControl.Stopping += TokenRoute.Cancel;
+        // After the coordinator has seen it: a token the route didn't send (the user
+        // used one by hand) ends all movement where we land — nothing walks on from
+        // there — and either way the followers it drops aren't left-behind members.
+        Tokens.TokenUsed += place =>
+        {
+            PartyComeback.NoteOwnTeleport();
+            if (TokenRoute.AwaitingLanding) return;
+            Log.Info("Tokens", $"token of {place} used by hand — stopping movement where we land");
+            TokenRoute.Cancel();
+            MovementControl.Stop();
+        };
         Tokens.MemberDeparted += TokenRoute.OnMemberDeparted;
         Walker.Event += TokenRoute.OnWalkEvent;
         RoomTracker.StateChanged += t =>

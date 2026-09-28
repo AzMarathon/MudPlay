@@ -80,6 +80,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Recovery.TierChanged    += OnRecoveryTierChanged;
         _services.Walker.Event += OnWalkerEvent;
         _services.TokenRoute.RegroupFailed += OnTokenRegroupFailed;
+        _services.TokenRoute.Changed += OnTokenRouteChanged;
         _services.MovementCoordinator.PauseStateChanged += OnPauseChanged;
         _services.MovementCoordinator.GatesChanged += OnGatesChanged;
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
@@ -179,6 +180,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Recovery.TierChanged    -= OnRecoveryTierChanged;
         _services.Walker.Event -= OnWalkerEvent;
         _services.TokenRoute.RegroupFailed -= OnTokenRegroupFailed;
+        _services.TokenRoute.Changed -= OnTokenRouteChanged;
         _services.MovementCoordinator.PauseStateChanged -= OnPauseChanged;
         _services.MovementCoordinator.GatesChanged -= OnGatesChanged;
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
@@ -3080,7 +3082,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private bool _isWalking;
 
     [RelayCommand]
-    private void StopWalk() => _services.Walker.Stop("user stop from Navigation");
+    private void StopWalk()
+    {
+        _services.TokenRoute.Cancel();
+        _services.Walker.Stop("user stop from Navigation");
+    }
 
     // Backs the walk-to Pause/Resume chip (col 4, replacing the disabled Save
     // button during a walk-to). Routes through the shared controller so it keys
@@ -3751,6 +3757,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // (then it acts as Stop).
     public bool CanRun =>
         IsAnyExecuting
+        || _services.TokenRoute.Active
         || QueuedDestination is not null
         || (CurrentMode == NavigationMode.LoopBuild && LoopBuilder?.CanSave == true)
         || (CurrentMode == NavigationMode.AutoLair && _services.AutoLair.Marked.Count > 0);
@@ -3783,8 +3790,19 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // chip) and Stop (the mode chip) without duplication.
             if (_services.AutoLair.IsActive)
                 return _services.AutoLair.IsPaused ? "Run" : "Pause";
-            return IsAnyExecuting ? "Stop" : "Run";
+            // A picked token route between walks (regrouping / using / landing) is
+            // still a run the user can stop, though the walker is idle.
+            return IsAnyExecuting || _services.TokenRoute.Active ? "Stop" : "Run";
         }
+    }
+
+    // A token route's phase moved — refresh the chip and the header line, which
+    // read it while the walker is idle.
+    private void OnTokenRouteChanged()
+    {
+        OnPropertyChanged(nameof(RunStopLabel));
+        OnPropertyChanged(nameof(CanRun));
+        OnPropertyChanged(nameof(TopBarStatusText));
     }
 
 
@@ -3874,6 +3892,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 }
                 default:
                 {
+                    if (_services.TokenRoute.StatusText is { } tokenStatus) return tokenStatus;
                     if (EngineError is { Length: > 0 } err) return $"⚠ {err}";
                     // A route is armed but not running yet — say so, and why if
                     // something already holds movement (e.g. Auto-All off), so a
@@ -4171,6 +4190,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // A picked token route between walks (the party tokening across, our own use,
+        // the landing): Stop abandons it where we stand.
+        if (_services.TokenRoute.Active && _services.Walker.State is WalkState.Idle)
+        {
+            _services.Log?.Info("Navigation", "token route stopped by the user");
+            _services.TokenRoute.Cancel();
+            return;
+        }
+
         // Loop paused → resume (clear the user-pause gate). If the
         // builder was auto-opened by Pause AND the user edited the
         // click list while paused, treat Run as "stop + restart with
@@ -4355,6 +4383,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void StopAll()
     {
+        _services.TokenRoute.Cancel();
         if (_services.AutoLair.IsActive) _services.AutoLair.Stop();
         if (_services.LoopRunner.State != Game.Map.LoopState.Idle)
             _services.LoopRunner.Stop();

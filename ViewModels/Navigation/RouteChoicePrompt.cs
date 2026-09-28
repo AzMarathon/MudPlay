@@ -537,9 +537,14 @@ public static class RouteChoicePrompt
                     CommitWalk(services, destination, gated: false);
                     break;
                 case RouteChoiceResult.Token when choice.TokenPlace is { } place && choice.TokenLanding is { } landing:
-                    // Use the token, then resume from its landing. The coordinator
-                    // declines (returns false) in a party — party regroup is a later
-                    // stage — so fall back to the plain overland walk there.
+                    // Use the token, then resume from its landing. A walk still in
+                    // progress is taken over first, as CommitWalk does, so it can't keep
+                    // stepping while the party tokens across. The coordinator declines
+                    // (returns false) for a party follower, who walks overland instead.
+                    if (services.Walker.State is WalkState.Walking or WalkState.Paused)
+                        services.Walker.Stop("superseded by token route");
+                    services.MovementCoordinator.ClearGate(
+                        MovementCoordinator.UserGate, nameof(RouteChoicePrompt));
                     if (!services.TokenRoute.TryBegin(place, landing, destination))
                         CommitWalk(services, destination, gated: false);
                     break;

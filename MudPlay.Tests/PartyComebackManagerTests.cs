@@ -516,6 +516,23 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.False(h.Lair.IsActive);                 // the replaced engine isn't resumed
     }
 
+    // Our own token teleport drops everyone following us; that isn't a held member
+    // to go back for.
+    [Fact]
+    public void LeftBehind_RightAfterOurOwnToken_DoesNotBacktrack()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        h.Comeback.NoteOwnTeleport();
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
     [Fact]
     public void Cancel_DropsTheRecoveryAndParkedResume()
     {
