@@ -243,6 +243,43 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         Assert.Single(f.Coord.LastSentForTests);
     }
 
+    // Offline longer than the @comeback window: the party has moved on, so
+    // re-entry asks nothing of the leader.
+    [Fact]
+    public void DropLongerThanTheComebackWindow_SendsNoComeback()
+    {
+        var f = Setup();
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        f.Coord.NowProvider = () => now;
+        f.Coord.HydrateRememberedLeader("MudPlay");
+
+        f.Coord.NoteDisconnected();
+        now += TimeSpan.FromMinutes(3);
+        f.Coord.Arm();
+        f.EnterGame();
+        f.Coord.FireRoomWaitForTests();
+
+        Assert.Empty(f.Coord.LastSentForTests);
+    }
+
+    [Fact]
+    public void DropInsideTheComebackWindow_SendsComeback()
+    {
+        var f = Setup();
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        f.Coord.NowProvider = () => now;
+        f.Coord.HydrateRememberedLeader("MudPlay");
+
+        f.Coord.NoteDisconnected();
+        now += TimeSpan.FromSeconds(90);
+        f.Coord.NoteDisconnected();   // a failed redial doesn't restamp the drop
+        f.Coord.Arm();
+        f.EnterGame();
+        f.Coord.FireRoomWaitForTests();
+
+        Assert.Equal("/MudPlay @comeback", f.Sent().Single());
+    }
+
     [Fact]
     public void PromptWithoutArm_DoesNothing()
     {

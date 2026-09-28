@@ -76,7 +76,7 @@ public sealed class PartyRejoinCoordinator : IDisposable
     // Waiting on that confirmation before firing: the leader to telepath.
     private string? _pendingLeader;
     private readonly DispatcherTimer _roomWaitTimer;
-    public static readonly TimeSpan RoomWait = TimeSpan.FromSeconds(10);
+    public static readonly TimeSpan RoomWait = TimeSpan.FromSeconds(5);
 
     // Write-through sink for the crash-survivable memory. AppServices wires this
     // to stamp the loaded profile + Save() so a crash retains the value. Null in
@@ -86,6 +86,16 @@ public sealed class PartyRejoinCoordinator : IDisposable
     // The leader we'd try to rejoin on the next reconnect, or null when there's
     // no party to return to. Surfaced in the bug report's Party section.
     public string? RememberedLeader => _rememberedLeader;
+
+    // "If leading, accept @comeback for up to" (Settings → Party): a drop longer than
+    // this and the party has moved on, so re-entry sends no @comeback.
+    public TimeSpan ComebackWindow { get; set; } = TimeSpan.FromMinutes(2);
+
+    public Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.UtcNow;
+
+    // When this session last lost the connection; null after a relaunch (a crash
+    // leaves no drop time), and then the @comeback goes out.
+    private DateTimeOffset? _droppedAt;
 
     // The leader we're about to @comeback, while we wait for our room to confirm.
     public string? WaitingForRoomToRejoin => _pendingLeader;
@@ -134,11 +144,16 @@ public sealed class PartyRejoinCoordinator : IDisposable
     {
         _rememberedLeader = Normalize(leader);
         _armed = false;
+        _droppedAt = null;
         CancelRoomWait();
     }
 
     // Open the one-shot rejoin latch. Called on every connect; the @comeback
     // only actually fires on the next in-game prompt if a leader is remembered.
+    // The connection dropped while we were in-game. Only the first drop of an outage
+    // counts; failed redials don't restamp it.
+    public void NoteDisconnected() => _droppedAt ??= NowProvider();
+
     public void Arm()
     {
         _armed = true;
@@ -221,11 +236,19 @@ public sealed class PartyRejoinCoordinator : IDisposable
     {
         if (!_armed) return;
         _armed = false; // one-shot per connect
+        DateTimeOffset? droppedAt = _droppedAt;
+        _droppedAt = null;
         if (_rememberedLeader is null) return;
         if (!_isAutoEnabled())
         {
             _log?.Info(LogCategory,
                 $"Auto-responses off — not auto-rejoining {_rememberedLeader}.");
+            return;
+        }
+        if (droppedAt is { } at && NowProvider() - at > ComebackWindow)
+        {
+            _log?.Info(LogCategory,
+                $"Offline {(NowProvider() - at).TotalMinutes:0.#} min, past the {ComebackWindow.TotalMinutes:0} min @comeback window — not asking {_rememberedLeader} to come back.");
             return;
         }
         if (FreshRoom() is not null)

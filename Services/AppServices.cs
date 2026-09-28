@@ -10459,6 +10459,17 @@ public sealed class AppServices
     // Settings window. Pre-fix the cadence stayed at the 5 s default
     // for every character because the section-VM-only ApplyToServices
     // never fired until Settings was opened.
+    // "If leading, accept @comeback for up to" — the leader's eligibility window,
+    // how long a failed search keeps its engine to resume, and the follower's own
+    // cut-off for sending @comeback after a drop.
+    public void ApplyComebackWindow(int minutes)
+    {
+        TimeSpan window = TimeSpan.FromMinutes(Math.Clamp(minutes, 0, 60));
+        Party.ComebackWindow = window;
+        PartyComeback.ComebackWindow = window;
+        PartyRejoin.ComebackWindow = window;
+    }
+
     public void ApplyPartyFromActiveProfile()
     {
         Models.Profile.PartySettings dto = ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party");
@@ -10478,6 +10489,7 @@ public sealed class AppServices
         // Leader-side recovery reach — the farthest we'll BFS-walk to re-collect a
         // returning member before declining via @forget.
         PartyComeback.ReturnDistanceRooms = Math.Clamp(dto.ReturnDistanceRooms, 1, 500);
+        ApplyComebackWindow(dto.AcceptComebackMinutes);
         Party.LocalRankPreference = dto.Rank;
         PartyBroadcaster.AutoExpResetEnabled = dto.ResetStatisticsOnLoopStart;
         // Shared nag cadence — same Settings.Party knobs feed both the
@@ -10509,6 +10521,7 @@ public sealed class AppServices
         PartyDisconnectMovement.GraceWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
         PartyComeback.FollowWaitWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
         PartyComeback.ReturnDistanceRooms = defaults.ReturnDistanceRooms;
+        ApplyComebackWindow(defaults.AcceptComebackMinutes);
         Party.LocalRankPreference = defaults.Rank;
         PartyBroadcaster.AutoExpResetEnabled = defaults.ResetStatisticsOnLoopStart;
         TimeSpan nagInitial = TimeSpan.FromSeconds(defaults.JoinNagInitialDelaySec);

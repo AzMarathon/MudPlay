@@ -793,10 +793,10 @@ A member's chip clears on the first of:
 
 If a member drops, the party can auto-re-invite and reform on reconnect, and a member left behind can `@comeback` to rejoin the leader.
 
-- **A follower who reconnects** telepaths `@comeback <map/room>` to their leader, so the leader walks straight to them. MudPlay waits up to 10 seconds after re-entering for your room to be confirmed, since the game can put you back somewhere other than where you dropped. Only if it can't confirm your room does a bare `@comeback` go out, and the leader backtracks along their own path instead.
-- **A leader** still takes that `@comeback` after the member has re-entered the realm (within the *wait for party members* window).
+- **A follower who reconnects** within the *If leading, accept @comeback for* time (default 2 minutes) telepaths `@comeback <map/room>` to their leader, so the leader walks straight to them. After a longer drop the party has moved on, and no `@comeback` goes out. MudPlay waits up to 5 seconds after re-entering for your room to be confirmed, since the game can put you back somewhere other than where you dropped. Only if it can't confirm your room does a bare `@comeback` go out, and the leader backtracks along their own path instead.
+- **A leader** takes that `@comeback` for up to *If leading, accept @comeback for* minutes after the member dropped, even once they've re-entered the realm.
 - **If the leader is already backtracking** for that member and their `@comeback` names a room, the leader heads for that room instead.
-- **If the leader gave up looking** and went idle, a `@comeback` from that member within 5 minutes still recovers them, and the leader then resumes the walk, loop or Auto-Lair the search interrupted.
+- **If the leader gave up looking** and went idle, a `@comeback` from that member within the same number of minutes still recovers them, and the leader then resumes the walk, loop or Auto-Lair the search interrupted.
 
 ---
 
@@ -2992,6 +2992,11 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 **Default:** `30`
 **What it does:** How far (in map rooms) the leader is willing to walk to go retrieve a reconnected party member. Beyond this, the leader gives up on walking over and tells them to catch up on their own.
 
+### If leading, accept @comeback for (min)
+
+**Default:** `2`
+**What it does:** How many minutes after a member drops (or is left behind) you'll still honour their `@comeback` and go back for them. If a search for them gives up, the walk, loop or Auto-Lair it stopped is kept this long, so a later `@comeback` still recovers them and then resumes it. As a follower, the same value limits your own rejoin: after a longer drop, you don't send `@comeback` when you re-enter. `0` turns `@comeback` rejoin off.
+
 ### par poll frequency (s)
 
 **Default:** `5` seconds
@@ -3819,6 +3824,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Max monsters when partying | `20` | 1–20 | `MaxMonstersWhenPartying` | Models/Profile/PartySettings.cs |
 | Wait if members below % | `0` | 0–100 | `WaitIfMemberBelowPercent` | Models/Profile/PartySettings.cs |
 | If leading, wait only (s) / Return distance (rooms) | 90 / 30 | 0–3600 / 1–500 | `IfLeadingWaitTotalSec` / `ReturnDistanceRooms` | Models/Profile/PartySettings.cs |
+| If leading, accept @comeback for (min) | 2 | 0–60 | `AcceptComebackMinutes` | Models/Profile/PartySettings.cs |
 | par poll frequency (s) | `5` | 1–60 | `ParPollFrequencySec` | Models/Profile/PartySettings.cs |
 | Copper / Silver / Gold / Platinum / Runic policy | Ignore/Collect×4 | Collect / Ignore / Discard | `CopperPolicy` etc. | Models/Profile/CashSettings.cs |
 | Auto-deposit if wealth / coins exceed | 0 / 0 | 0–100,000,000 | `AutoDepositIfWealthExceeds` / `AutoDepositIfCoinsExceed` | Models/Profile/CashSettings.cs |

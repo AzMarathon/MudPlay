@@ -391,12 +391,15 @@ public sealed class PartyManagerTests
         DateTimeOffset t0 = new(2026, 6, 10, 0, 0, 0, TimeSpan.Zero);
         var (router, p) = Setup(localCharacterName: "MudPlay");
         p.DisconnectGraceWindow = TimeSpan.FromSeconds(30);
+        p.ComebackWindow = TimeSpan.FromMinutes(2);
         p.NowProvider = () => t0;
         router.Dispatch(Line("Raijin started to follow you."));
         router.Dispatch(Line("Raijin stops following you."));
 
-        // Past the grace window → stale → not eligible.
+        // Eligibility runs on the @comeback window, not the re-invite one.
         p.NowProvider = () => t0.AddSeconds(31);
+        Assert.True(p.WasRecentlyPartied("Raijin"));
+        p.NowProvider = () => t0.AddSeconds(121);
         Assert.False(p.WasRecentlyPartied("Raijin"));
     }
 

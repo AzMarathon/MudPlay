@@ -115,13 +115,14 @@ public sealed class PartyComebackManager : IDisposable
     // The engine a recovery stopped, kept when that recovery gave up (backtracked
     // and never found them). We're idle only because we went looking, so their own
     // @comeback afterwards — typically once they're back online and can tell us
-    // where they are — still recovers them and then resumes it.
+    // where they are — still recovers them and then resumes it, for ComebackWindow.
     private (string Given, ResumeTarget Resume, DateTimeOffset At)? _parkedResume;
 
     // For the bug report: whom we gave up on and what we'd resume for them.
     public string? ParkedResumeSummary => _parkedResume is { } p
         ? $"{p.Given} → {p.Resume.Kind}, {(NowProvider() - p.At).TotalSeconds:F0}s ago" : null;
-    private static readonly TimeSpan ParkedResumeWindow = TimeSpan.FromMinutes(5);
+    // "If leading, accept @comeback for up to" (Settings → Party).
+    public TimeSpan ComebackWindow { get; set; } = TimeSpan.FromMinutes(2);
 
     // A member left behind this soon after their own @ok wasn't really free to move.
     private static readonly TimeSpan PrematureOkWindow = TimeSpan.FromSeconds(5);
@@ -599,7 +600,7 @@ public sealed class PartyComebackManager : IDisposable
         {
             _parkedResume = (_senderGiven, _resume, NowProvider());
             _log?.Info(LogCategory,
-                $"gave up on {_senderGiven}; keeping {_resume.Kind} to resume if they @comeback within {ParkedResumeWindow.TotalMinutes:0} min");
+                $"gave up on {_senderGiven}; keeping {_resume.Kind} to resume if they @comeback within {ComebackWindow.TotalMinutes:0} min");
         }
         GoIdle();
     }
@@ -608,7 +609,7 @@ public sealed class PartyComebackManager : IDisposable
     {
         if (_parkedResume is not { } p) return null;
         if (!string.Equals(p.Given, given, StringComparison.OrdinalIgnoreCase)) return null;
-        if (NowProvider() - p.At > ParkedResumeWindow) { _parkedResume = null; return null; }
+        if (NowProvider() - p.At > ComebackWindow) { _parkedResume = null; return null; }
         _log?.Info(LogCategory, $"{given} came back after we gave up — recovering, then resuming {p.Resume.Kind}");
         return p.Resume;
     }

@@ -33,6 +33,13 @@ public sealed class PartySettings
     // 1..500; default 30 rooms.
     public int ReturnDistanceRooms { get; set; } = 30;
 
+    // "If leading, accept @comeback for up to" — minutes after a member drops (or
+    // is left behind) that we still honour their @comeback, and keep an engine a
+    // failed search stopped for them to resume. As a follower, the same value is how
+    // long a drop can last before we stop sending @comeback on re-entry — past it
+    // the party has moved on. Range 0..60; 0 turns @comeback rejoin off. Default 2.
+    public int AcceptComebackMinutes { get; set; } = 2;
+
     // When leading a party, drop incoming @wait broadcasts so the leader's
     // automation keeps running instead of pausing on a follower's request. Off
     // (default) honours @wait regardless of leadership. Consumed by
