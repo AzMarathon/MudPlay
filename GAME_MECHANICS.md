@@ -1640,12 +1640,12 @@ How one damage spell cast against a monster is worked out.
   | `enslave` #55 | Mage | 18 | living only (108) | — | 60 |
 
 - **The engine checks a charm in this order; each target check answers `Your spell has no effect on <monster>.`** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p `_cast_monster_target`, `_user_can_use_spell`)*:
-  1. **Caster:** an EvilOnly spell (control undead) can't be cast unless your alignment counts as evil.
+  1. **Caster:** an EvilOnly spell (control undead, value 0) needs you to be Outlaw through Fiend; see *Items, inventory & equipment → Item wear restrictions (ability-code flags)* for the value rule.
   2. **Target type:** living-only fails on a NonLiving (109) monster, animals-only on a monster without Animal (78), and undead-only on a monster whose `Undead` is 0.
   3. **Spell immunity:** a monster whose SpellImmu (139) is higher than the spell's level ignores it.
   4. **Resist:** all four are `TypeOfResists` 2, so the full-resist roll applies (`You attempt to cast <spell> at <monster>, but the spell is resisted.`). For Enslave spells the engine rolls against a separate per-monster value (monster record `+0x1a0`) instead of Magic Resist, falling back to Magic Resist when that value is 0. *[NEEDS CONFIRMATION] what that value is — none of the imported Monsters columns matches it.*
   5. **Level:** `CharmLVL`, below.
-- **A charm takes only when your level is at least the monster's `CharmLVL`** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p `_cast_monster_target`; Stock)*. `CharmLVL` is a Monsters-table column (monster record `+0x120`, checked against the raw `wccknms2.dat`), e.g. giant rat 1, lashworm 3, cave worm 12. Values of 999 / 9999 (most monsters) put a monster out of reach, and `0` means anyone can charm it. (An earlier note said no charm-level column existed and looked for one on the Spells row; superseded 2026-09-28.) *[NEEDS CONFIRMATION] what the game prints when your level is too low — the engine code reaches no message of its own there — and whether Paradigm uses the same rule.*
+- **A charm takes only when your level is at least the monster's `CharmLVL`** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p `_cast_monster_target`; Stock)*. `CharmLVL` is a Monsters-table column (monster record `+0x120`, checked against the raw `wccknms2.dat`), e.g. giant rat 1, lashworm 3, cave worm 12. Values of 999 / 9999 (most monsters) put a monster out of reach, and `0` means anyone can charm it. (An earlier note said no charm-level column existed and looked for one on the Spells row; superseded 2026-09-28.) Paradigm is assumed to use the same rule *(**Client policy**, user 2026-09-28)*. *[NEEDS CONFIRMATION] what the game prints when your level is too low; the level check itself prints nothing.*
   - The charm applies only through a spell aimed at one target: Targets `4` (Monster), `6` (Any) or `8` (Monster or User). All four charm spells are Targets `4`.
   - **Duration:** a spell `Dur` of `0` charms permanently; otherwise the charm is a timed spell on the monster, and when it ends the charm ends.
   - **What the charm does:** the monster is tied to the caster by name. It never attacks the caster and stops wandering; it moves with the caster instead of rolling its usual follow chance. Only the caster sees ` (Charmed)` after its name in the room.
@@ -3949,6 +3949,11 @@ There is no room to drop amethyst pendant here.
   | Good, Saint | `98` Evil-only, `110` not-Good, `112` Neutral-only |
 
   So on Stock **Seedy wears gear as Neutral** (the evil gear bucket starts at Outlaw), and **`113` not-Neutral is never checked**.
+- **Evil-only (`98`) carries an evil-point threshold in its value** *([CONFIRMED] 2026-09-28, user; applies to items and spells alike)*:
+  - **`98` with value `0`**: you must be Outlaw through Fiend (Seedy doesn't count).
+  - **`98` with a value `N`**: you need **at least `N` evil points**. Example: crimson blood robes, EvilOnly 200.
+  - The data carries such values on both realms, e.g. hellblade 250 and laen longsword 210 (Stock and Paradigm), and up to 300 on Paradigm. All spells' `98` values are 0.
+  - *[CONFLICT — ask the user] Stock 1.11p's engine only tests whether `98` is present, on both the gear check (`_user_can_use`) and the spell check (`_user_can_use_spell`); it never reads the value. So on a stock 1.11p realm an EvilOnly 200 item may wear at any Outlaw-or-worse title. Does the Stock realm enforce the number?*
 - **When your title changes, the game takes off gear the new title can't wear**, one line per item: `Your <item> has been removed.` *([OBSERVED] `wccmmud.dll` 1.11p: the check runs after an evil-point gain that changes the title, and after a `forgive`.)*
 
 **Client use:**
