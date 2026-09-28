@@ -44,7 +44,7 @@ public sealed class MpFileParserTests
         Assert.Equal(32,                     file.Steps.Count);
         Assert.Equal(Direction.W,            file.Steps[0].Compass);
         Assert.True(file.Steps[0].IsCompass);
-        Assert.Equal("w",                    file.Steps[0].ActionText);
+        Assert.Equal("w",                    file.Steps[0].RawAction);
         Assert.Equal("3C900060",             file.Steps[0].HashExits);
     }
 
@@ -66,10 +66,10 @@ public sealed class MpFileParserTests
         Assert.Equal(2,            file.Steps.Count);
     }
 
-    // ----- rejection paths ------------------------------------------
+    // ----- problems are reported, not thrown ------------------------
 
     [Fact]
-    public void Parse_StartHashNotEqualEndHash_RejectsAsPath()
+    public void Parse_GotoPath_IsReadButFlaggedNotALoop()
     {
         string text =
             "[][]\n" +
@@ -78,28 +78,14 @@ public sealed class MpFileParserTests
             "AAAAAAAA:BBBBBBBB:2:-1:0:::\n" +
             "AAAAAAAA:0000:n\n" +
             "AAAAAAAA:0000:s\n";
-        MpFileFormatException ex =
-            Assert.Throws<MpFileFormatException>(() => MpFileParser.Parse(text));
-        Assert.Contains("path-style", ex.Message, StringComparison.OrdinalIgnoreCase);
+        MpLoopFile file = MpFileParser.Parse(text);
+        Assert.False(file.IsLoop);
+        Assert.Equal("OTHR", file.End.Code);
+        Assert.Contains(file.Problems, p => p.Contains("goto path"));
     }
 
     [Fact]
-    public void Parse_DualHeaderDifferentCodes_RejectsAsPath()
-    {
-        string text =
-            "[][]\n" +
-            "[ABCD:Group:Name]\n" +
-            "[WXYZ:Group:Other]\n" +
-            "AAAAAAAA:AAAAAAAA:2:-1:0:::\n" +
-            "AAAAAAAA:0000:n\n" +
-            "AAAAAAAA:0000:s\n";
-        MpFileFormatException ex =
-            Assert.Throws<MpFileFormatException>(() => MpFileParser.Parse(text));
-        Assert.Contains("path-style", ex.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Parse_StepCountMismatch_Throws()
+    public void Parse_StepCountMismatch_IsAProblem()
     {
         string text =
             "[][]\n" +
@@ -107,9 +93,77 @@ public sealed class MpFileParserTests
             "AAAAAAAA:AAAAAAAA:5:-1:0:::\n" +    // promises 5
             "AAAAAAAA:0000:n\n" +                // delivers 2
             "AAAAAAAA:0000:s\n";
-        MpFileFormatException ex =
-            Assert.Throws<MpFileFormatException>(() => MpFileParser.Parse(text));
-        Assert.Contains("declared 5", ex.Message);
+        MpLoopFile file = MpFileParser.Parse(text);
+        Assert.Equal(2, file.Steps.Count);
+        Assert.Contains(file.Problems, p => p.Contains("says 5"));
+    }
+
+    // Three of MegaMUD's stock loops end in a DOS Ctrl-Z byte, which used to fail the
+    // whole file as a malformed last step (issue #243: Cplnloop / Cplsloop / Fungloop).
+    [Fact]
+    public void Parse_TrailingCtrlZ_IsIgnored()
+    {
+        string text = "[Loop][]\r\n[CODE:G:N]\r\nAAAAAAAA:AAAAAAAA:2:-1:0:::\r\nAAAAAAAA:0000:n\r\nBBBBBBBB:0000:s\r\n\u001A";
+        MpLoopFile file = MpFileParser.Parse(text);
+        Assert.Equal(2, file.Steps.Count);
+        Assert.Empty(file.Problems);
+    }
+
+    // Dhelloop.mp repeats the [label][author] line, the second carrying the author.
+    [Fact]
+    public void Parse_SecondLabelLine_FillsTheAuthor()
+    {
+        string text =
+            "[Dhelvanen, Trade Loop-7 199][]\n" +
+            "[Dhelvanen, Trade Loop][Kitty & Wulfman]\n" +
+            "[FFSB:Black House:Fungus Forest (Stone Bridge)-7 199]\n" +
+            "86605041:86605041:2:-1:0:::FNG1LOOP.MP\n" +
+            "86605041:0000:sw\n" +
+            "1BC01040:0000:w\n";
+        MpLoopFile file = MpFileParser.Parse(text);
+        Assert.Equal("Dhelvanen, Trade Loop-7 199", file.Label);
+        Assert.Equal("Kitty & Wulfman", file.Author);
+        Assert.Equal("FFSB", file.Code4);
+        Assert.Equal("FNG1LOOP.MP", file.SuccessPath);
+    }
+
+    [Fact]
+    public void Parse_PathDetailsAndStepOptions()
+    {
+        string text =
+            "[Loop][Me]\n" +
+            "[CODE:G:N]\n" +
+            "AAAAAAAA:AAAAAAAA:3:-1:25:rope and grapple:FAILPATH.MP:NEXT.MP\n" +
+            "AAAAAAAA:0014:s[search s]\n" +          // don't rest + stash point
+            "BBBBBBBB:0242:e[use black star key e]\n" +  // rest here + no attack + disarm
+            "CCCCCCCC:0000:E -- (Hidden/Needs 1 Actions\n";
+        MpLoopFile file = MpFileParser.Parse(text);
+        Assert.Equal(25, file.Gold);
+        Assert.Equal("rope and grapple", file.RequiredItem);
+        Assert.Equal("FAILPATH.MP", file.FailPath);
+        Assert.Equal("NEXT.MP", file.SuccessPath);
+        Assert.Equal("-1", file.Use);
+
+        Assert.Equal(MpStepFlags.DontRest | MpStepFlags.Stash, file.Steps[0].Flags);
+        Assert.Equal(Direction.S, file.Steps[0].Compass);
+        Assert.Equal(new[] { "search s" }, file.Steps[0].PreActions);
+
+        Assert.Equal(MpStepFlags.RestHere | MpStepFlags.NoAttack | MpStepFlags.Disarm, file.Steps[1].Flags);
+        Assert.Equal(new[] { "use black star key e" }, file.Steps[1].PreActions);
+
+        Assert.Equal(Direction.E, file.Steps[2].Compass);
+        Assert.Equal("(Hidden/Needs 1 Actions", file.Steps[2].Note);
+    }
+
+    [Fact]
+    public void Parse_MalformedRow_IsSkippedWithAProblem()
+    {
+        string text =
+            "[][]\n[CODE:G:N]\nAAAAAAAA:AAAAAAAA:2:-1:0:::\n" +
+            "AAAAAAAA:0000:n\ngarbage\nBBBBBBBB:0000:s\n";
+        MpLoopFile file = MpFileParser.Parse(text);
+        Assert.Equal(2, file.Steps.Count);
+        Assert.Contains(file.Problems, p => p.Contains("malformed"));
     }
 
     [Fact]
@@ -128,14 +182,14 @@ public sealed class MpFileParserTests
         MpLoopFile file = MpFileParser.Parse(text);
         Assert.False(file.Steps[0].IsCompass);
         Assert.Null(file.Steps[0].Compass);
-        Assert.Equal("go path", file.Steps[0].ActionText);
+        Assert.Equal("go path", file.Steps[0].Command);
         Assert.True(file.Steps[1].IsCompass);
     }
 
     [Fact]
     public void Parse_TooShort_Throws()
     {
-        string text = "[][]\n[CODE:Group:Name]\n";
+        string text = "[][]\n";
         Assert.Throws<MpFileFormatException>(() => MpFileParser.Parse(text));
     }
 

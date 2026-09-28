@@ -1,5 +1,13 @@
 # Version history
 
+## 3.117.0
+
+- MegaMUD `.mp` import review: the file decoded (header, path details, every step's options and action) beside the MudPlay loop it becomes, one row per step
+- A step that won't translate leaves a blank line instead of failing the import; set a room on it, then Verify loop in MudPlay checks our navigation walks the whole loop before Accept
+- Start rooms found from the `-map room` hint (or the Rooms.md it asks for) when the start room's exits changed; Ctrl-Z-terminated and header-less files now read
+- New per-room loop options: Rest up here (HP) and (mana) — rest to rest-max there before moving on
+- A Stash column adds a step's room to your stash rooms on Accept, ticked already where MegaMUD marked a stash point
+
 ## 3.116.41
 
 - Dropping (or selling, giving away, using up) the last copy of a charged item forgets its charges instead of looking at the one on the floor

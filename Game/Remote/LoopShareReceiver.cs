@@ -156,7 +156,9 @@ public sealed class LoopShareReceiver : IDisposable
             && (p.First.Command ?? "") == (p.Second.Command ?? "")
             && p.First.DelayMs == p.Second.DelayMs
             && p.First.DoNotRest == p.Second.DoNotRest
-            && p.First.DoNotAttack == p.Second.DoNotAttack);
+            && p.First.DoNotAttack == p.Second.DoNotAttack
+            && p.First.RestHereHp == p.Second.RestHereHp
+            && p.First.RestHereMana == p.Second.RestHereMana);
 
     // Parse "@loopdata <id> <i>/<n> <chunk>", tolerating the {} a remote reply is
     // wrapped in.

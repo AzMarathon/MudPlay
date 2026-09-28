@@ -3986,6 +3986,17 @@ public sealed class AppServices
                 && RoomTracker.State.CurrentRoom is { } here
                 && LoopRunner.CurrentLoop?.Waypoints is { } wps
                 && wps.Any(w => w.DoNotRest && w.Key.Equals(here.Key))));
+        // The loop's "rest up here" rooms: rest to rest-max there before moving on.
+        Health.SetRestHereSelector(() =>
+        {
+            if (LoopRunner.State == Game.Map.LoopState.Idle
+                || RoomTracker.State.CurrentRoom is not { } here
+                || LoopRunner.CurrentLoop?.Waypoints is not { } wps) return default;
+            bool hp = false, mana = false;
+            foreach (Game.Map.LoopWaypoint w in wps)
+                if (w.Key.Equals(here.Key)) { hp |= w.RestHereHp; mana |= w.RestHereMana; }
+            return (hp, mana);
+        });
 
         // Server-side resting state clears on move; drop our latch
         // too so the next threshold breach actually fires `rest`
@@ -6512,6 +6523,8 @@ public sealed class AppServices
         // gear before the sneak (equipping breaks sneak), then the move.
         LoopRunner.SetMoveReadyCheck(() =>
         {
+            // A "rest up here" room holds the step until the rest is done.
+            if (Health.HoldForRestHere()) return false;
             PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
             return Stealth.ReadyToMoveSneaking();
         });

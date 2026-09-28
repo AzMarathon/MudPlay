@@ -1103,6 +1103,8 @@ public static class BugReportBuilder
                 curLoop.Waypoints.Count(w => w.DoNotAttack).ToString());
             Kv(sb, "Loop do-not-rest waypoints",
                 curLoop.Waypoints.Count(w => w.DoNotRest).ToString());
+            Kv(sb, "Loop rest-up-here waypoints (HP / mana)",
+                $"{curLoop.Waypoints.Count(w => w.RestHereHp)} / {curLoop.Waypoints.Count(w => w.RestHereMana)}");
             // The verdict the engage gates act on, and which room it judged — the
             // room an in-flight loop move is entering, or the tracker's current room.
             (Game.Map.RoomKey? judged, bool suppressedNow, bool entering) = svc.CombatSuppressionVerdict();

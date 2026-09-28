@@ -296,16 +296,37 @@ Each waypoint can carry its own per-room settings, edited **inline in the Edit L
 
 - a **command** + **delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`);
 - a **"No rest"** flag;
-- a **"No atk"** flag.
+- a **"No atk"** flag;
+- **"Rest HP"** / **"Rest MA"** (rest up here) flags.
 
 Chain several commands in one waypoint with `;` or `^M` — each is sent as its own line (e.g. `get all;drop coins`), the same convention macros and the pre-/post-rest commands use. (You can set the same options by clicking a waypoint row in the CURRENT NAV strip — both while *building* a loop and while one is *running*; see *Live-editing a running loop* below.) If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
 
 - **No rest** — the loop won't rest in this room even when HP/MA drop below your "rest if below" gates; it advances instead. Only this exact room is protected.
 - **No atk (do not attack here)** — the loop skips combat in this room *as if auto-combat were off*, walking on even when the Min/Max monster count is met. The one exception: if a **rest** is triggered here (HP or MA below its gate), it still clears the room so the rest can proceed. Only this exact room is affected.
+- **Rest HP / Rest MA (rest up here)** — on reaching this room, the loop rests until HP (or mana) is back to its **rest-max** (the *rest to* value on the Health tab) before moving on, even when it's above your *rest if below* trigger. If it's already at rest-max, the loop walks straight on. Tick both to top up both pools. **No rest** on the same room wins. The rail marks these rooms with 💤.
 
 ### Live-editing a running loop
 
-While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** rows — the running counterpart of the builder's red list. **Click any room** to change its **command**, **delay**, **No rest**, or **No atk** right there, and use **⚙ Entire Loop Settings** to toggle **Only attack in lair rooms** — all applied **live**, with no stop/restart. The room the loop is currently in is **highlighted**, and the map draws matching **numbered green bubbles** on each waypoint (the running twin of the builder's red pins) so you can tell which rail row is which room. Flag changes take effect on the loop's next decision and a delay change on that step's next run; **adding or removing a command** re-plans the circuit on the **next lap**. You **can't add, remove, or reorder rooms** while running — for that, **Pause** and reopen the builder (the red list), then resume.
+While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** rows — the running counterpart of the builder's red list. **Click any room** to change its **command**, **delay**, **No rest**, **No atk** or **Rest up here** right there, and use **⚙ Entire Loop Settings** to toggle **Only attack in lair rooms** — all applied **live**, with no stop/restart. The room the loop is currently in is **highlighted**, and the map draws matching **numbered green bubbles** on each waypoint (the running twin of the builder's red pins) so you can tell which rail row is which room. Flag changes take effect on the loop's next decision and a delay change on that step's next run; **adding or removing a command** re-plans the circuit on the **next lap**. You **can't add, remove, or reorder rooms** while running — for that, **Pause** and reopen the builder (the red list), then resume.
+
+### Importing a MegaMUD loop
+
+**Game Data → Import loops (MegaMUD .mp)…** (or **Import .mp** in Manage Loops) opens a `.mp` file in the **import review** window. Nothing is saved until you accept.
+
+- **Left — what the file says.**
+  - The loop's name and author.
+  - Its start (and end) room, and the path details: steps, gold and item needed, the paths MegaMUD runs if it fails or when it's finished.
+  - **Rooms.md** (MegaMUD's named-rooms file) is read from the same folder when it's there; **Load Rooms.md…** points at it when it isn't. Its room names end in their map/room numbers, so it pins down rooms the hashes alone can't. When the loop's name doesn't say where it starts, a banner asks for it.
+  - Anything wrong with the file (a goto path rather than a loop, a step count that disagrees, a broken row) is listed with a ⚠.
+- **Right — the MudPlay loop it becomes.**
+  - Loop name and notes. When several rooms match the start, a **Start room** list picks which to walk from, best translation first.
+- **The step table** below lines up the two, one line per step: the MegaMUD step on the left (room hash, its Rooms.md name, the move, extra commands in brackets like `s[search s]`, and the step's options) and the MudPlay room on the right (its name and map/room).
+  - ✓ matches the recording; ≈ we walked there but the room's name or exits differ; ↺ found again after a gap; ✎ set by you; ✗ **untranslated** — the step couldn't be followed (a missing exit, a passage our map doesn't have), so its line is **left blank** rather than failing the whole import.
+  - Type a map/room into a step's **Set room** box (left of the room) to put a different room there (clear it to go back to the translation).
+  - **Stash** adds that step's room to your stash rooms when you accept — stash rooms are a character setting, not part of the loop. It's ticked already on the steps MegaMUD marked as stash points; untick to skip, tick any other room to add it.
+  - Each step's **command**, **delay** (ms to wait after the command) and **NR / NA / RH / RM** (no rest, no attack, rest up here HP / mana) can be edited. *Don't rest*, *don't attack* and *rest up here* carry over from the file; dark rooms, traps, locked doors and searches are handled from the map data as you walk, so they don't — ⓘ shows what wasn't carried over.
+- **Verify loop in MudPlay** puts in the rooms you typed, translates the steps after them again, and checks MudPlay's navigation can walk the result as a loop — every leg planned the way the loop runner would, back round to the start. A leg it can't route is marked ⚠ on the step it leaves from.
+- **Accept** verifies again, saves the loop (blank steps are left out, and the loop routes between the rooms either side of them) and adds the rooms ticked **Stash**. **Reject** closes without saving. The loop's notes record what couldn't carry over (gold, item, fail/finish paths).
 
 ### Entire Loop Settings
 
@@ -1350,7 +1371,7 @@ The top **Game Data** menu (in the menu bar) manages your data sets:
   - **"No game tables found"** means the MDB's internal catalog is damaged — usually from being opened and edited in Microsoft Access without a *Compact and Repair* afterward, which detaches the game tables from the database's object list. MudPlay won't switch to an empty set; to fix it, run Access's **Database Tools → Compact and Repair Database**, or re-export a fresh MDB from Nightmare Redux, then import again. (The Program Log records the catalog scan so you can confirm what the database reported.)
   - **Each table is verified on write** — re-read after writing and retried once if it didn't come back as valid JSON, so a truncated or interrupted write is caught during the import. A table that still can't be read (or one already corrupt from an older import) is reported as **unavailable** on the terminal in red rather than crashing, and the engines that rely on it stay missing data until you re-import.
 - **The set list** — every imported set appears at the top of the menu with a checkmark on the active one; click another to switch. The Browser's status bar shows *Set: <name>*.
-- **Import loops (MegaMUD .mp)…** — pull loops out of a MegaMUD `.mp` file into the active set, so a circuit you already built in MegaMUD comes across without re-walking it.
+- **Import loops (MegaMUD .mp)…** — bring a MegaMUD `.mp` loop into the active set, so a circuit you already built in MegaMUD comes across without re-walking it. Pick a file and the **import review** opens with two panes side by side (see *Importing a MegaMUD loop* under Navigation & Looping).
 - **Manage Game Data…** — copy or move a set's saved loops and lairs into another set, or delete a set.
 - **Modify Blacklist…** — hide specific rooms (by map/room number) from the map and room search, and mark ones the walker should treat as unreachable. You can also blacklist a room straight off the map — **right-click it → Add this room to Blacklist**. A room blacklisted from the map stays drawn (and selected) until you click a **different** room, so you can confirm you hid the right one before it disappears — handy for pruning rooms that aren't really reachable or that you'd rather not see on the map or in the search box.
 - **Modify avoid/stash rooms…** — a staged editor over your character's **avoid rooms** and **stash rooms** together. Each row is tagged by type (*Avoid Room* / *Stash Room*) with its map/room number and name. Avoid rooms are your personal no-go list — the walker, loops, and auto-lair route around them; stash rooms are the drop-off points the cash/item engines use. Quick-add a room by picking a type, typing its map and room number (the name fills in from the active set), and clicking **Add room**; select one or more rows and **Remove selected** to clear them. **Save** commits every change and redraws the map; **Cancel** or the title-bar X discards. (You can still mark either kind straight off the map with a right-click — this editor is for reviewing and bulk-editing the whole list.) The two sets are independent, so a room flagged as both appears once per type.

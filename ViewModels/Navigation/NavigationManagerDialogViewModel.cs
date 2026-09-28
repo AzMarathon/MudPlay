@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -48,6 +49,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private readonly MovementController? _movement;
     private readonly AutoLairManager? _autoLair;
     private readonly FavoritesStore? _favorites;
+    private readonly MovementFilter? _movementFilter;
     private readonly Action? _onDraftConsumed;
 
     // Flat backing rows for the Loops pane — source the tree is grouped from + drives HasLoops.
@@ -146,7 +148,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         MovementController? movement = null,
         AutoLairManager? autoLair = null,
         FavoritesStore? favorites = null,
-        bool startOnGotoTab = false)
+        bool startOnGotoTab = false,
+        MovementFilter? movementFilter = null)
     {
         ArgumentNullException.ThrowIfNull(loops);
         ArgumentNullException.ThrowIfNull(lairSetups);
@@ -169,6 +172,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         _movement = movement;
         _autoLair = autoLair;
         _favorites = favorites;
+        _movementFilter = movementFilter;
         Draft = draft;
         _onDraftConsumed = onDraftConsumed;
         _runningLoopName = runner?.CurrentLoop?.Name ?? string.Empty;
@@ -584,19 +588,15 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // ----- .mp importer ----------------------------------------------
 
     // One-line status / error surfaced in the Manage dialog after an import
-    // attempt. Empty until the user clicks "Import .mp" the first time;
-    // populated with success ("Imported loop 'X' — review + Save in the
-    // editor.") or failure (the importer's error reason).
+    // attempt. Empty until the user clicks "Import .mp" the first time.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasImportStatus))]
     private string _importStatus = string.Empty;
 
     public bool HasImportStatus => !string.IsNullOrEmpty(ImportStatus);
 
-    // Open a file picker, parse the chosen .mp, resolve against the active
-    // graph, and either open the LoopEditor with the loop pre-filled (single
-    // best candidate) OR pop the picker dialog for the user to disambiguate
-    // (multi-candidate tie).
+    // Pick a .mp file and open the import review: the file decoded beside our
+    // translation, editable, accepted or rejected there.
     [RelayCommand]
     private async Task ImportMpAsync()
     {
@@ -627,56 +627,24 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         string path = picked[0].Path.LocalPath;
 
         MpLoopFile file;
+        MegaMudRoomsFile? roomsMd;
         try
         {
             file = MpFileParser.ParseFile(path);
+            roomsMd = MegaMudRoomsFile.FindBeside(path);
         }
-        catch (MpFileFormatException ex)
+        catch (Exception ex) when (ex is MpFileFormatException or IOException or UnauthorizedAccessException)
         {
-            ImportStatus = $"Import failed: {ex.Message}";
-            _log?.Warn("MpImporter", $"parse failed for {path}: {ex.Message}");
+            ImportStatus = $"Can't read {Path.GetFileName(path)}: {ex.Message}";
+            _log?.Warn("MpImporter", $"read failed for {path}: {ex.Message}");
             return;
         }
 
-        MpImportResolution resolution = _mpImporter.Resolve(file);
-        if (resolution.Failed)
-        {
-            ImportStatus = $"Import failed: {resolution.Error}";
-            return;
-        }
-
-        RoomKey anchor;
-        if (resolution.HasUniqueBest)
-        {
-            anchor = resolution.BestCandidates[0].AnchorKey;
-        }
-        else
-        {
-            MpAnchorPickerDialogViewModel pickerVm = new(file, resolution.BestCandidates, _graph);
-            RoomKey? userChoice = await _dialogs
-                .OpenWindowAsync<MpAnchorPickerDialogViewModel, RoomKey?>(pickerVm);
-            if (userChoice is not { } chosen)
-            {
-                ImportStatus = "Import cancelled.";
-                return;
-            }
-            anchor = chosen;
-        }
-
-        Loop? built = _mpImporter.BuildLoop(file, anchor);
-        if (built is null)
-        {
-            ImportStatus = "Import failed: the chosen anchor didn't actually close the loop.";
-            return;
-        }
-
-        // Open the editor pre-filled in create mode so the user can
-        // rename / tweak / add commands before saving.
-        LoopEditorDialogViewModel editor = new(
-            built, _loops, _graph, _runner, _confirm, isNew: true);
-        await _dialogs.OpenWindowAsync<LoopEditorDialogViewModel, Loop?>(editor);
-
-        ImportStatus = $"Parsed '{file.Label}' ({file.Steps.Count} steps) — review and Save in the editor.";
+        MpImportReviewViewModel review = new(path, file, roomsMd, _mpImporter, _graph, _loops, _movementFilter, _log);
+        Loop? accepted = await _dialogs.OpenWindowAsync<MpImportReviewViewModel, Loop?>(review);
+        ImportStatus = accepted is null
+            ? $"Import of {Path.GetFileName(path)} cancelled."
+            : $"Imported '{accepted.Name}' ({accepted.Waypoints.Count} rooms).";
     }
 
     [RelayCommand]
