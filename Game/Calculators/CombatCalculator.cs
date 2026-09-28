@@ -280,6 +280,21 @@ public static class CombatCalculator
                                                int maxDmgBonus, bool hasClassStealth,
                                                RealmType realmType, int minDmgBonus = 0)
     {
+        (int minSide, int maxSide) = CalcBSSides(level, stealth, strength, weaponMin, weaponMax,
+            bsMinBonus, bsMaxBonus, maxDmgBonus, hasClassStealth, realmType, minDmgBonus);
+        return ResolveBSRange(minSide, maxSide, realmType);
+    }
+
+    // The two backstab sides before the realm decides which is the min: the side fed
+    // by the weapon min (+min damage, BS min) and the side fed by the weapon max
+    // (+max damage, BS max). Each side is a plain sum of its bonuses, which is what
+    // lets Find Best push one side at a time.
+    public static (int MinSide, int MaxSide) CalcBSSides(int level, int stealth, int strength,
+                                                         int weaponMin, int weaponMax,
+                                                         int bsMinBonus, int bsMaxBonus,
+                                                         int maxDmgBonus, bool hasClassStealth,
+                                                         RealmType realmType, int minDmgBonus = 0)
+    {
         int minStrBonus = (strength - 100) / 10;
         if (realmType == RealmType.Stock)
             minStrBonus *= 2;
@@ -293,19 +308,18 @@ public static class CombatCalculator
             + (realmType == RealmType.ParaMud ? minDmgBonus : 0);
         int maxDamage = weaponMax + maxStrBonus + maxDmgBonus;
 
-        int minBS = CalcBSDamageSingle(level, stealth, minDamage, bsMinBonus, hasClassStealth, realmType);
-        int maxBS = CalcBSDamageSingle(level, stealth, maxDamage, bsMaxBonus, hasClassStealth, realmType);
+        return (CalcBSDamageSingle(level, stealth, minDamage, bsMinBonus, hasClassStealth, realmType),
+                CalcBSDamageSingle(level, stealth, maxDamage, bsMaxBonus, hasClassStealth, realmType));
+    }
 
-        // The min and max sides are fed by independent bonuses (+min damage and BS
-        // min vs +max damage and BS max), so the min side can come out higher.
-        // Paradigm then swaps them; Stock raises the max to the min.
-        if (minBS > maxBS)
-        {
-            if (realmType == RealmType.ParaMud) (minBS, maxBS) = (maxBS, minBS);
-            else maxBS = minBS;
-        }
-
-        return new BSDamageResult(minBS, maxBS);
+    // The sides are fed by independent bonuses, so the min side can come out higher.
+    // Paradigm then swaps them; Stock raises the max to the min.
+    public static BSDamageResult ResolveBSRange(int minSide, int maxSide, RealmType realmType)
+    {
+        if (minSide <= maxSide) return new BSDamageResult(minSide, maxSide);
+        return realmType == RealmType.ParaMud
+            ? new BSDamageResult(maxSide, minSide)
+            : new BSDamageResult(minSide, minSide);
     }
 
     private static int CalcBSDamageSingle(int level, int stealth, int damage,

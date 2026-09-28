@@ -1,11 +1,12 @@
 # Version history
 
-## 3.116.15
+## 3.116.16
 
 - Paradigm Mystic punch / kick / jumpkick damage no longer adds a strength bonus (Paradigm's strikes have none)
 - Stock bash and smash take a monster's damage resist off before the ×3 / ×5, so Monster Intel counts armour 3× / 5× against them
 - Backstab follows each realm's engine: Stock adds your accuracy-ability bonus and level-scales race-only stealth; Paradigm counts +min damage and swaps a backstab whose min outgrows its max (Stock raises the max instead)
 - Workshop calculator's Paradigm martial-arts range counts +min damage
+- Item Finder's Find Best for backstab min / max tries pushing each end of the range and keeps the better set, so it catches a min / max flip that no single piece shows
 - GAME_MECHANICS: martial-arts and weapon / bash / smash damage compared side by side for Stock and Paradigm, with sources
 - GAME_MECHANICS: how quest stat rewards combine on Stock (`giveability` keeps the highest, `addability` stacks) and Paradigm (all stack)
 - GAME_MECHANICS: backstab accuracy and damage compared for Stock and Paradigm

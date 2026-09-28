@@ -1219,7 +1219,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 
 **Client use:**
 - `CombatCalculator.CalcBackstabAccuracy` / `CalcBSDamage`. Before 2026-09-27 the client left Stock's accuracy-ability bonus and race-only level scale out, didn't count +min damage on Paradigm, and swapped min / max on both realms.
-- Item Finder's Find Best scores each item alone against the current gear, so on Paradigm the swap makes the backstab min / max criteria unreliable (several +min items can flip the range together). "Backstab Dmg (avg)" isn't affected, because a swap doesn't change the average.
+- Item Finder's Find Best normally scores each item alone against the current gear, which the swap / clamp defeats: several +min pieces can flip the range together while none does alone. For the backstab min / max criteria `TrialGearFinder.FindBestOfPasses` runs a pass per side (`CalcBSSides` — each side is a plain sum of its bonuses) plus the average and the criterion's own score, prices each complete set with `ItemDamageModel.BackstabOfPicks`, and keeps the best. "Backstab Dmg (avg)" needs none of this: a swap doesn't change the average.
 
 ### Monster spell-attack damage — single cast, monster-owned energy
 *Status: CONFIRMED 2026-09-04 (user)*
