@@ -1,5 +1,10 @@
 # Version history
 
+## 3.116.41
+
+- Dropping (or selling, giving away, using up) the last copy of a charged item forgets its charges instead of looking at the one on the floor
+- bug reports addressed: paradigm-20260928-053429
+
 ## 3.116.40
 
 - A reconnecting follower's `@comeback` now waits (up to 5 s) for its room to confirm and sends it, so the leader walks straight there

@@ -19,7 +19,9 @@ namespace MudPlay.Game.Inventory;
 //   • re-looks an item after a use OR a stack removal (drop / sell / give / put), so a
 //     manual or remote use reconciles to the game's true count and a dropped top-of-stack
 //     copy hands off to the next copy's charges — a blocked / failed use never mis-
-//     decrements, because the look reply is the source of truth (tokens work this way too);
+//     decrements, because the look reply is the source of truth (tokens work this way too).
+//     When no copy is left, its count is forgotten instead: a look then would read the
+//     one on the floor;
 //   • treats a RECHARGEABLE item (Retain After Uses) as restocked to its game-data max
 //     once the BBS cleanup boundary passes, and a FINITE item's count as permanent.
 // Gated to Paradigm (Func onParadigm): stock realms print no such line and use the
@@ -219,9 +221,29 @@ public sealed class ItemChargeTracker : IDisposable
         _schedule(RelookDelayMs, () =>
         {
             if (_disposed || !_onParadigm()) return;
-            if (_relookGen.TryGetValue(number, out int cur) && cur == gen)
-                _sendLook($"look {name}");
+            if (!_relookGen.TryGetValue(number, out int cur) || cur != gen) return;
+            if (IsHeld(number)) _sendLook($"look {name}");
+            else Forget(number, name);
         });
+    }
+
+    private bool IsHeld(int number)
+    {
+        foreach (string held in _held())
+            if (!string.IsNullOrWhiteSpace(held) && _itemNumberOf(Singular(held)) == number)
+                return true;
+        return false;
+    }
+
+    // The last copy is gone (dropped, sold, given, put away, or used up): its count
+    // means nothing now, and the next one we pick up is looked afresh.
+    private void Forget(int number, string name)
+    {
+        _autoAttempted.Remove(number);
+        if (_profile.Current?.ItemCharges is not { } map || !map.Remove(number)) return;
+        _profile.Save();
+        _log?.Info("Items", $"charges: no {name} held any more — forgotten");
+        Changed?.Invoke();
     }
 
     private void OnLine(LineExtractor.EmittedLine emitted) => HandleLine(emitted.Text);

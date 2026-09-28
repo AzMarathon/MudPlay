@@ -250,6 +250,29 @@ public sealed class ItemChargeTrackerTests : IDisposable
         Assert.Equal(8, _tracker.RemainingFor(10));
     }
 
+    // Report paradigm-20260928-053429: dropping the only torch re-looked it, reading
+    // the one on the floor. With no copy left, the count is forgotten instead, and
+    // the next one picked up is looked afresh.
+    [Fact]
+    public void DroppingLastCopy_ForgetsItsCharges_InsteadOfLooking()
+    {
+        _carried.Add("gnarled wand");
+        Look("look gnarled"); Line("Uses remaining: 5");
+        _tracker.EnsureChargesKnown();
+
+        _sent.Clear();
+        _tracker.ObserveOutbound(Bytes("drop gnarled"));
+        _carried.Clear();                          // "You dropped gnarled wand."
+        FireTimers();
+
+        Assert.Empty(_sent);
+        Assert.Null(_tracker.RemainingFor(10));
+
+        _carried.Add("gnarled wand");              // picked up again
+        _tracker.EnsureChargesKnown();
+        Assert.Contains("look gnarled wand", _sent);
+    }
+
     [Fact]
     public void TokenLook_RecordsEvenWhenGameDataUseCountIsZero()
     {
