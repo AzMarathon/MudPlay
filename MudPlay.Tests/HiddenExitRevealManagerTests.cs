@@ -62,6 +62,7 @@ public sealed class HiddenExitRevealManagerTests : IDisposable
         public HiddenExitRevealManager Mgr { get; }
         public List<byte[]> Sent { get; } = new();
         public int MaxAttempts { get; set; } = 5;
+        public bool Blind { get; set; }
 
         public Harness(string root, bool withRouter = false)
         {
@@ -76,7 +77,8 @@ public sealed class HiddenExitRevealManagerTests : IDisposable
             if (withRouter) DefaultPatterns.Seed(Router);
             Mgr = new HiddenExitRevealManager(
                 Tracker, () => MaxAttempts,
-                router: withRouter ? Router : null);
+                router: withRouter ? Router : null,
+                isBlinded: () => Blind);
             Mgr.SetWireSender(Sent.Add);
         }
 
@@ -140,6 +142,42 @@ public sealed class HiddenExitRevealManagerTests : IDisposable
         Assert.Equal(new RoomKey(1, 2), left.NowIn);
         Assert.Single(h.Sent);                          // no retry in the wrong room
         Assert.False(h.Mgr.IsBusy);
+    }
+
+    // The game won't search blind (`sea` answers only "You are blind."), so a search
+    // waits for sight instead of hanging on a reply that never comes.
+    [Fact]
+    public void Blind_HoldsTheSearch_UntilSightReturns()
+    {
+        Harness h = new(_root) { Blind = true };
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Mgr.Enqueue(Direction.N, "walker", _ => { });
+        Assert.Empty(h.Sent);
+
+        h.Mgr.OnBlindnessChanged();                     // still blind
+        Assert.Empty(h.Sent);
+
+        h.Blind = false;
+        h.Mgr.OnBlindnessChanged();
+        Assert.Equal("sea n\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+    }
+
+    [Fact]
+    public void BlindRefusal_HoldsWithoutSpendingAnAttempt()
+    {
+        Harness h = new(_root, withRouter: true) { MaxAttempts = 1 };
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        HiddenSearchResult? result = null;
+        h.Mgr.Enqueue(Direction.N, "walker", r => result = r);
+        Assert.Single(h.Sent);
+
+        h.Blind = true;
+        h.FeedLine("You are blind.");
+        h.Blind = false;
+        h.Mgr.OnBlindnessChanged();
+
+        Assert.Equal(2, h.Sent.Count);                  // re-sent once sight returned
+        Assert.Null(result);                            // the refused try didn't hit the cap
     }
 
     [Fact]

@@ -3361,7 +3361,8 @@ public sealed class AppServices
             RoomTracker,
             maxAttemptsProvider: () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").MaxHiddenSearchAttempts,
             router: Router,
-            log: Log);
+            log: Log,
+            isBlinded: () => Conditions.IsBlinded);   // Conditions is built later; read live
 
         // Winch gates — the nav engines pull a winch, wait for it to turn AND the
         // gate to open (polling the room's open-gate exit, since there's no gate-open
@@ -4797,10 +4798,11 @@ public sealed class AppServices
         };
         Conditions.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(Game.Conditions.ConditionTracker.ActiveFlags))
-                TimeAnalysis.NoteAfflictions(
-                    Conditions.IsBlinded, Conditions.IsPoisoned, Conditions.IsDiseased,
-                    Conditions.IsConfused, Conditions.IsMovementPrevented);
+            if (e.PropertyName != nameof(Game.Conditions.ConditionTracker.ActiveFlags)) return;
+            TimeAnalysis.NoteAfflictions(
+                Conditions.IsBlinded, Conditions.IsPoisoned, Conditions.IsDiseased,
+                Conditions.IsConfused, Conditions.IsMovementPrevented);
+            HiddenSearch.OnBlindnessChanged();
         };
         RoomTracker.StateChanged += t =>
         {

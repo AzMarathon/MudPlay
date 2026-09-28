@@ -17,8 +17,9 @@ public static class EquipBonusRowBuilder
         var rows = new List<EquipBonusRow>();
         EquipmentStatSummary t = b.Totals;
 
-        // Worn AC and blur AC are shown as separate lines — blur is encumbrance-scaled,
-        // not flat armour — so the "Armour Class" figure excludes the blur portion.
+        // Worn AC and blur AC are shown as separate lines — blur is scaled down (by load
+        // on Paradigm, by armour worn on Stock), not flat armour — so the "Armour Class"
+        // figure excludes the blur portion.
         AddDouble(rows, b, "Armour Class", t.PlusAC - t.PlusAcBlur);
         AddDouble(rows, b, "AC Blur", t.PlusAcBlur);
         AddDouble(rows, b, "Damage Resist", t.PlusDR);

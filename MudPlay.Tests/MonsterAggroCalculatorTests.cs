@@ -124,19 +124,21 @@ public sealed class MonsterAggroCalculatorTests
     }
 
     [Fact]
-    public void Stock_LawfulEvil_SparesEvilBucket()
+    public void Stock_LawfulEvil_SparesOutlawOrWorse()
     {
         var res = StockAggroCalculator.Compute(align: 6, isGuard: false, followPercent: 50, new[]
         {
             new StockAggroMember("good", "Good", false, 0),
             new StockAggroMember("neutral", "Neutral", false, 0),
             new StockAggroMember("seedy", "Seedy", false, 0),
+            new StockAggroMember("outlaw", "Outlaw", false, 0),
             new StockAggroMember("fiend", "Fiend", false, 0),
         });
         Assert.True(res.Members[0].Aggroed);    // Good
         Assert.True(res.Members[1].Aggroed);    // Neutral
-        Assert.False(res.Members[2].Aggroed);   // Seedy — evil bucket, spared
-        Assert.False(res.Members[3].Aggroed);   // Fiend — spared
+        Assert.True(res.Members[2].Aggroed);    // Seedy — still attacked (EP < 40)
+        Assert.False(res.Members[3].Aggroed);   // Outlaw — spared
+        Assert.False(res.Members[4].Aggroed);   // Fiend — spared
     }
 
     [Fact]

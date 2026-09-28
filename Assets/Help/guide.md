@@ -449,7 +449,7 @@ Hovering a room shows its details in a tooltip:
 
 - **Doors** — closed or locked, handled by key, pick, or bash.
 - **Traps** — searched and disarmed, or delegated to a capable party member.
-- **Hidden exits** — searched out and revealed.
+- **Hidden exits** — searched out and revealed. The game won't search while you're blind (`sea` just answers *You are blind.*), so the walker waits there and searches once you can see again.
 - **NPC ask-transport** — a sealed room whose only way out is asking a resident NPC to port you elsewhere (the Floating Citadel's Grey Lord ports you to Town Square). It sends the `ask <npc> <keyword>` for you, so those pockets aren't dead-ends. A **class-restricted** one (the barmaid's bard-only jump) is offered only to the right class; everyone else is routed around it. And because some are a **skill roll** that can quietly fail, the walker confirms it actually arrived and **re-asks until it does**.
 - **Action-gated exits** — a lever or switch in *another* room (the magenta "Action required" stubs). It drives a go-pull-return detour, visiting each lever room on the way past then crossing the primed exit — even when a lever alcove is itself behind another action-gated door (it opens each inner door first). Only a very deep (4+ levels) or self-referential puzzle is left unsolved: those fail cleanly at plan time (*"route needs an action-gated exit the walker can't auto-solve"*) and log the exit that stopped it.
 - **Room-command reveals** — a hidden passage opened by typing a command *in the room itself* (e.g. `clear rubble`), sent before stepping through.
@@ -1041,7 +1041,7 @@ For the curious, here are the actual equations behind the numbers above, with ev
 
 **Max HP** = `HEA/2 + Level×MinHits + (HEA−50)×Level/16 + per-level rolls + RaceHPPerLevel×Level` (+ gear `+MaxHP`). The per-level rolls are random, which is why the projection shows HP as a range.
 
-**HP regen** (per tick) = `(Level+20)×HEA / divisor`, floored at 1, then **×3 while resting**, then **×(gearHPregen% + 100)/100**. `divisor` = **750 on Stock, 500 on Paradigm**.
+**HP regen** (per tick) = `(Level+20)×HEA / divisor`, floored at 1, then **×3 while resting**, then **×(gearHPregen% + 100)/100**. `divisor` = **750 on Stock, 500 on Paradigm**. On Stock the natural tick comes every 30 s, and resting adds a separate ×3 tick every 21 s on top of it. Meditating pays mana every 15 s on Stock and every 10 s on Paradigm.
 
 **Max mana** = `MageryLevel×Level×2 + 6` (+ gear `+MaxMana`); 0 for non-casters. Mystics instead use **Kai = Level − 1**. Note this has *no stat term* — no attribute raises max mana.
 
@@ -1183,7 +1183,7 @@ The monster rolls a **weighted lottery** over the scores, so each member's **Odd
 
 **On Stock** it's a different engine, so you pick the **monster**: type its record **number or name** (best match) and it fills in the matched **#/name**, its **Align** (shown as a label — it comes from the record), **Follow%**, and whether it's a **guard** (Follow% and guard stay editable). Each member sets their **alignment title**, whether they've **provoked** the mob (hit it first — forces it to aggro them), whether they **hit it last**, and how many **hits** they're already taking this beat. Per member the result shows:
 
-- **Opens?** — whether the monster is hostile to them unprovoked, from its alignment vs theirs: evil / chaotic-evil / neutral-evil mobs open on everyone, lawful-evil spares the evil-titled, good / neutral / lawful-good open on no one, and guards attack Outlaw-or-worse titles. Hover for the reason.
+- **Opens?** — whether the monster is hostile to them unprovoked, from its alignment vs theirs: evil / chaotic-evil / neutral-evil mobs open on everyone, lawful-evil spares Outlaw-or-worse (Seedy still gets attacked), good / neutral / lawful-good open on no one, and guards attack Outlaw-or-worse titles. Hover for the reason.
 - **Target%** — for members it's aggroed on, their chance of being *this beat's* target. Stock mobs spread away from whoever's already being piled on (each incoming hit lowers the odds), so a tank soaking hits pulls fire off the rest. Mark a member **Last hit** and the mob re-locks onto them **Follow%** of the time (the "attack last" behaviour), the rest re-spreading across the party.
 - **Follow% stickiness** — how tightly the mob holds one target before re-spreading (a high-Follow% mob is hard to peel; a passive-aligned mob you provoked never lets go).
 

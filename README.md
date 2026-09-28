@@ -1,13 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.6**
-> - The title bar shows the BBS and realm (BBS:realm) of the loaded character
-> - File → Recent profiles show each character's BBS and realm
-> - Your alignment comes from your row in the realm's player list again (a `who` updates it), so Good/Evil-only gear and spells gate without a `who` every session
-> - MudPlay asks the game for your alignment (`pro` on Paradigm, `who` on Stock) when a gear set disagrees with it, or when the game shows it moved — no timed checks
-> - On Stock, Seedy wears gear as Neutral and the "not Neutral" item flag is ignored, matching the Stock engine
-> - Gear taken off by an alignment change, a refused wear, a victim's forgive, or the dark-cloud line while Good all trigger that check
+> **Version 3.116.10**
+> - Failed hides on Stock are recognised (Stock puts a space before "You don't think you are hidden.")
+> - The walker waits out blindness before searching for a hidden exit, instead of stalling on "You are blind."
+> - Monster Aggro calculator: Stock lawful-evil monsters attack Seedy characters and spare Outlaw and worse
+> - Stock rest regen countdown uses the engine's 21 s tick
+> - GAME_MECHANICS: Stock engine facts (10-affect cap refuses the 11th, Blur AC by armour worn, bleeding out and aid, room item slots and stacking, party rank modifiers, meditate timing)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

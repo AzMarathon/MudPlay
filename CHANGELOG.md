@@ -1,5 +1,13 @@
 # Version history
 
+## 3.116.10
+
+- Failed hides on Stock are recognised (Stock puts a space before "You don't think you are hidden.")
+- The walker waits out blindness before searching for a hidden exit, instead of stalling on "You are blind."
+- Monster Aggro calculator: Stock lawful-evil monsters attack Seedy characters and spare Outlaw and worse
+- Stock rest regen countdown uses the engine's 21 s tick
+- GAME_MECHANICS: Stock engine facts (10-affect cap refuses the 11th, Blur AC by armour worn, bleeding out and aid, room item slots and stacking, party rank modifiers, meditate timing)
+
 ## 3.116.6
 
 - The title bar shows the BBS and realm (BBS:realm) of the loaded character

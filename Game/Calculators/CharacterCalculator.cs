@@ -647,7 +647,7 @@ public static class CharacterCalculator
             case 2: totals.PlusAC += abilVal; statKey = "Armour Class"; break;
             // Blur AC (Abil 10) folds into the inclusive PlusAC for combat math, but is
             // also tracked in PlusAcBlur and grouped under its own "AC Blur" stat key so
-            // readouts show it apart from flat worn AC (it's encumbrance-scaled, not flat).
+            // readouts show it apart from flat worn AC (it's scaled in play, not flat).
             case 10: totals.PlusAC += abilVal; totals.PlusAcBlur += abilVal; statKey = "AC Blur"; break;
             case 7: totals.PlusDR += abilVal / 10.0; statKey = "Damage Resist"; break;
 

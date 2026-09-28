@@ -1384,6 +1384,7 @@ public static class BugReportBuilder
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy
             ? $"searching dir={hidden.CurrentDirection ?? "(none)"}, queued={hidden.QueueDepth}"
+                + (hidden.HeldForBlindness ? ", held (blind)" : string.Empty)
             : hidden.QueueDepth > 0 ? $"idle, queued={hidden.QueueDepth}" : "idle");
         Game.TrapDisarmManager trap = svc.TrapDisarm;
         Kv(sb, "Trap disarm", $"{trap.CurrentState}"

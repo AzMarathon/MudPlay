@@ -4,10 +4,8 @@ namespace MudPlay.Game;
 // RegenTracker's cycles delivers an observable uptick. Selected off
 // GameDataCache.ActiveRealm and applied via RegenTracker.SetRealm.
 //
-// Stock uses the known MajorMUD constants for natural / rest (regen 30 s /
-// rest 20 s), one uptick per interval paying the full per-tick amount.
-// Meditate rides a 15 s grid from live re-measurement, overriding the
-// documented 10 s meditate-tick seed.
+// Stock uses the engine's own tick intervals (natural 30 s / rest 21 s /
+// meditate 15 s), one uptick per interval paying the full per-tick amount.
 //
 // ParaMud (GreaterMUD / Paradigm) splits each cycle's amount into three even
 // thirds delivered on a faster grid, so the same per-minute total arrives as
@@ -18,8 +16,7 @@ namespace MudPlay.Game;
 // +9 on the same 10 s grid — i.e. the stock 30 s natural cadence divided
 // into thirds, with rest riding the same grid at 3× the amount (the resting
 // multiplier lives in CharacterCalculator.CalcHpRegen, not here). Meditate is
-// not split into thirds on ParaMud — it keeps its native 10 s cadence,
-// pending re-verification against live captures.
+// not split into thirds on ParaMud — it ticks every 10 s (user-confirmed).
 //
 // This models only the observable interval — the per-tick amount is learned
 // live by RegenStat. Making the interval realm-correct is what keeps the
@@ -30,21 +27,19 @@ public readonly record struct RealmRegenProfile(
     TimeSpan RestingInterval,
     TimeSpan MeditatingInterval)
 {
-    // Classic Stock cadence — 30 / 20 s for standing / resting. Meditate
-    // rides a 15 s grid (live re-measurement), overriding the documented
-    // 10 s meditate-tick seed.
+    // Stock cadence — 30 / 21 / 15 s for standing / resting / meditating.
     public static readonly RealmRegenProfile Stock = new(
         RegenConstants.SeedStandingInterval,
         RegenConstants.SeedRestingInterval,
-        TimeSpan.FromSeconds(15));   // re-measured; overrides the 10 s seed.
+        RegenConstants.SeedMeditatingInterval);
 
     // ParaMud cadence — the stock natural cycle split into thirds on a 10 s
     // grid (measured), with rest riding the same grid. Meditate isn't split;
-    // it keeps the 10 s seed cadence pending re-verification.
+    // it ticks every 10 s.
     public static readonly RealmRegenProfile ParaMud = new(
         TimeSpan.FromSeconds(10),
         TimeSpan.FromSeconds(10),
-        RegenConstants.SeedMeditatingInterval);   // 10 s — to be re-verified.
+        TimeSpan.FromSeconds(10));
 
     // The cadence profile for a realm family — ParaMud, else Stock.
     public static RealmRegenProfile For(RealmType realm) =>

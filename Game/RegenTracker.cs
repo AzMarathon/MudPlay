@@ -7,11 +7,11 @@ namespace MudPlay.Game;
 //
 //   HpNatural — 30 s. Always running once anchored on the first observed HP
 //     uptick. Per-tick amount = HPRegen / 3.
-//   HpRest    — 20 s. Starts the moment the user enters Resting, stops when
+//   HpRest    — 21 s. Starts the moment the user enters Resting, stops when
 //     they leave. Anchor is independent of the natural cycle. Per-tick
 //     amount = HPRegen.
 //   MpNatural — 30 s. Always running once anchored. Per-tick amount = MPRegen.
-//   MpMedi    — 10 s. Starts on entering Meditating, stops on leaving.
+//   MpMedi    — 15 s. Starts on entering Meditating, stops on leaving.
 //     Per-tick amount = MeditateRate.
 //
 // The natural cycle and the bonus cycle can be (and usually are)

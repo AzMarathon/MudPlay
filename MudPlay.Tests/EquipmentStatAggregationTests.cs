@@ -89,7 +89,7 @@ public sealed class EquipmentStatAggregationTests : IDisposable
     [Fact]
     public void BlurAc_TrackedSeparatelyFromFlatAc()
     {
-        // Abil 2 = flat +6 AC (worn armour), Abil 10 = +12 blur AC (encumbrance-scaled).
+        // Abil 2 = flat +6 AC (worn armour), Abil 10 = +12 blur AC (scaled in play).
         GameDataCache cache = CacheWithItems(Item("manablade",
             ("Abil-0", 2), ("AbilVal-0", 6),
             ("Abil-1", 10), ("AbilVal-1", 12)));
