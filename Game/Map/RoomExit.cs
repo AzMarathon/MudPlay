@@ -103,6 +103,7 @@ public readonly partial record struct RoomExit(
     bool CastTeleportRandom = false,
     bool CastPocketEntrance = false,
     bool GatewayTeleport = false,
+    bool MovesWholeParty = false,
     IReadOnlyList<RoomKey>? CastTeleportTargets = null,
     (int Lo, int Hi)? AlignmentGate = null,
     long FareCopper = 0)

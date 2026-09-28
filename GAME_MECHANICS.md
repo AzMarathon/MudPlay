@@ -850,7 +850,8 @@ How HP works from full health down through dropping and death, how monster healt
   - Wire text: the aider sees `You have aided <name>, <his/her> wounds are now healing.`; the target sees `<name> has aided you.`; `aid` on someone above 0 HP answers `<name> is in no need of assistance.`.
   - *(Earlier notes read "aid lifts them back above 0" as immediate; it's the slow climb on both realms. Superseded 2026-09-27.)*
 - **Any player can `drag <name>` a dropped character** *([CONFIRMED] 2026-09-26, user)*. The dropped character then **follows wherever the dragging player moves** — their only way out of the room until aided or healed. In a party the client leaves it to the leader (see *Party → Dropped ally rescue*).
-- **A dropped character can still hang up.** Dropping blocks in-realm *actions* (move / fight / cast), but the **carrier drop / main-menu exit** (the Game-Exit command, e.g. `=x` / `;o`; see *Wire, prompt & command output → Realm exit / logoff sequence*) **still goes through at 0 HP or below** *([NEEDS CONFIRMATION] is it the BBS-level =x that works at 0 HP?)*. So the emergency-hangup escape stays available all the way through the bleeding-out window.
+- **A dropped character can still hang up.** Dropping blocks in-realm *actions* (move / fight / cast), but the **carrier drop / main-menu exit** (the Game-Exit command, e.g. `=x` / `;o`; see *Wire, prompt & command output → Realm exit / logoff sequence*) **still goes through at 0 HP or below** — the BBS-level `=x` works at any time *([CONFIRMED] 2026-09-28, user)*. So the emergency-hangup escape stays available all the way through the bleeding-out window.
+  - **Client use:** if the connection isn't closed after the exit command, the client closes the socket itself (`HealthManager.SetHangupDisconnect` → `MainWindowViewModel.RequestHangupDisconnect`, after a short flush delay).
 - **HP percentage goes negative while bleeding out.** HP% is a plain `hp / maxHp` ratio with no clamp at zero, so a dropped character reads a **negative percentage**. Where `par` still lists the member it shows it as such (e.g. a member driven to −12/200 HP reads a negative HP%) — but **by realm** (2026-09-26, user): on **Stock** a dropped member is removed from the party at once, so `par` never shows them; on **Paradigm** `par` is believed to show the negative HP% *([NEEDS CONFIRMATION])* — see *Party → Dropping (0 HP) or instant death removes you from the party*. A percentage-based threshold is therefore a continuous scale from 100 % down through 0 % into the negatives, exactly like an absolute-HP scale.
 - **Client use:**
   - The client's low-HP auto-hangup fires down to (but not past) the BBS death floor, giving a dropped-but-not-yet-dead character a last chance to disconnect before dying. Its "hang up if below" trigger can be set anywhere on the HP% scale, including negative.
@@ -1293,7 +1294,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 - **Layer 1 — alignment auto-aggro (every monster, straight from `Align`):**
   - `Align` **1 / 2 / 5** (Evil / Chaotic Evil / Neutral Evil) — **opens on everyone**, every title.
   - `Align` **0 / 3** (Good / Neutral) — **never** aggros anyone.
-  - `Align` **6** (Lawful Evil) — "honor among the wicked": opens on **Saint / Good / Neutral / Seedy** and spares **Outlaw and worse** *(Stock [OBSERVED] `wccmmud.dll` 1.11p monster pass, [CONFIRMED] 2026-09-27, user)*. The engine checks your EP, not the title bucket: a monster already fighting you keeps going, otherwise it skips you at **EP ≥ 40**. The separate free-attack path (a swing at you as you move) uses **EP ≥ 80** (Criminal and worse). *(An earlier note said it spared Seedy and asked about Saint; superseded 2026-09-27. Paradigm isn't recorded.)*
+  - `Align` **6** (Lawful Evil) — "honor among the wicked": opens on **Saint / Good / Neutral / Seedy** and spares **Outlaw and worse** *(Stock [OBSERVED] `wccmmud.dll` 1.11p monster pass, [CONFIRMED] 2026-09-27, user)*. The engine checks your EP, not the title bucket: a monster already fighting you keeps going, otherwise it skips you at **EP ≥ 40**. The separate free-attack path (a swing at you as you move) uses **EP ≥ 80** (Criminal and worse). *(An earlier note said it spared Seedy and asked about Saint; superseded 2026-09-27.)* **The same on Paradigm** *([CONFIRMED] 2026-09-28, user)*.
   - `Align` **4** (Lawful Good) — **never aggros by alignment**; the only Align-4 aggro is the guard subset via Layer 2.
   - So the only alignment-driven aggro that depends on *your* alignment is Align-6 (spares Outlaw+); 1/2/5 are unconditional, 0/3/4 never bite on alignment alone.
 - **Layer 2 — criminal / guard system** (the guard subset of Align 4; runtime reputation, NOT in the monster table). Keyed on **your title**, enforced by **guard** NPCs plus special actors:
@@ -2830,6 +2831,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   | A teleport **spell** (abilities 140 TeleportRoom / 141 TeleportMap) aimed at the whole party (target 13, "Full Party Area") | **stays together** — everyone moves | the duergar lord's transport (`cast 582`, "duergar teleport" → map 6 room 1398) |
 
   - So the two sides of one link can differ: `3/740` → `3/784` is party-safe, `3/784` → `3/740` splits.
+  - **The spell path, in the engine** *([OBSERVED] `wccmmud.dll` 1.11p `_cast_no_target`)*: a teleport spell with target 13 moves the caster, then each member of the caster's group to the same room, with no `_stop_following`. Any other target calls `_stop_following(<caster>, −1)` and moves only the caster.
+  - **Client use:** a room `CMD` that `cast`s a Full Party Area teleport becomes a Teleport edge flagged `RoomExit.MovesWholeParty` (`TBInfoCastTeleportResolver` reports `WholeParty`); `SpecialExitDispatch` sends only the leader's keyword across it — no `.@party` relay, no re-invite. Every other Teleport edge still relays and reforms.
   - The named random teleports (`teleport_silvermere`, `teleport_sewers`, … `teleport_obsidian`) pick a random room in their area and take the same path, so they split too.
 
 ### Greet teleports — an NPC transports a player who asks
@@ -3121,9 +3124,7 @@ Among protectable hazards, a further split governs whether the navigator may off
 ### Room-wide search during and after combat
 *Status: CONFIRMED 2026-07-27 (user; report `paradigm-20260727-185836`); start-room search from report `paradigm-20260909-055045`*
 
-- **A room-wide `search` (`sea`) is blocked only while you're *actively engaged* in combat.** Sent
-  mid-fight — right after the attack-announcement lines — it's lost; the game won't process a whole-room
-  search until the room is clear of hostiles.
+- **You can't search while you're engaged in combat — on every realm** *([CONFIRMED] 2026-09-28, user)*. Engaged means you've sent an attack, physical or spell, at a monster or player. A room-wide `search` (`sea`) sent then is refused; Stock answers `You may not search while attacking!` *([OBSERVED] `wccmmud.dll` 1.11p `_cmd_search`)*.
 - **Out of combat it's a quick command→reply** (just the ~150 ms network latency, no server-side delay),
   and the reveal doesn't always surface *everything* hidden (that's fine). *([NEEDS CONFIRMATION] does
   this apply to hidden items/players only, with stashed coin always surfacing?)*
@@ -4365,7 +4366,7 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - The fight at 19:54:24 was a tall nightshade and a vampire fledgling. Their hit spells (frail #949, absorb #950, spear of dark energy #5103, drain life #361, disease #5120) carry **no hold**.
   - No `is knocked flat!` line for the follower appears in the capture. Several holds have no witness line at all (e.g. gust of wind #1255, frigid blast of wind #900), so a hold on a party member can land unseen.
 - **Likely cause in that report: too heavy, not held** *(user, 2026-09-26)*. The fledgling's punches landed on the follower at 19:54:24, and its second punch carries frail's carry-weight cut, which nobody else sees land. Being over max encumbrance isn't a hold, so the follower's `freedom` couldn't fix it and their `@ok` was premature. See *Movement & navigation → Too heavy to move (over max encumbrance)*.
-- **[NEEDS CONFIRMATION]** Whether `freedom` fully clears knockdown #318. The data files freedom (81) as clearing HoldPerson (74) wholesale.
+- **`freedom` fully clears knockdown #318** *([OBSERVED] data + `wccmmud.dll` 1.11p; accepted 2026-09-28, user)*. Freedom (ability 81) removes spells that carry HoldPerson (74), and knockdown carries it. The engine removes a spell by clearing its whole slot and recalculating your stats, so **every** effect of the knockdown goes with it — the AC −10, accuracy and dodge penalties as well as the hold.
 
 **Client use:**
 - `PartyManager.OnLeftBehind` → `MemberLeftBehind` → `PartyComebackManager` path C: backtrack, re-invite, then `PartyAilmentTracker.NoteInferredHold` (Held chip + `@wait` pause over the full "If leading, wait only" window) and a `@waiting` telepath the follower answers with `@ok` once nothing holds it (`PartyEssentialHandlers.OnWaiting`).

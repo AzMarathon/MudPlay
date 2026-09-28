@@ -1,11 +1,13 @@
 # Version history
 
-## 3.116.24
+## 3.116.25
 
 - While you're afraid, navigation waits for the fear to wear off and the map follows the fear's random moves
 - Fear no longer shows as held: the fear message seeds drop Movement prevented, so no Held chip or @held to the party
+- Leading a party through a room teleport that's a whole-party spell (e.g. the duergar lord's) no longer relays it or re-invites — everyone moves together
 - Spell Book's Success % legend shows the realm's cap (Paradigm 100%) and notes your spell damage bonus
 - GAME_MECHANICS: settled — `*Combat Off*` on both realms, Paradigm's reply to attacking a monster that's gone, Saint treated as Good, how fear traps or runs you, and which teleports split the party (from the Stock DLL)
+- GAME_MECHANICS: Lawful Evil aggression on Paradigm, freedom fully clearing knockdown, no searching while engaged, =x at any HP
 
 ## 3.116.20
 

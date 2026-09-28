@@ -28,6 +28,8 @@ public static class TBInfoCastTeleportResolver
     // AbilVal-140 == 0 means "random room in MinBase..MaxBase"; non-zero is a
     // fixed room.
     private const int TeleportRoomCode = 140;
+    // Spells.Targets scope the engine moves as a group on a teleport.
+    private const int FullPartyAreaTargets = 13;
     private const int TeleportMapCode  = 141;
 
     // Defensive ceiling on a random range's size. A real teleport range
@@ -95,7 +97,11 @@ public static class TBInfoCastTeleportResolver
     // map when the spell carries no explicit TeleportMap (Abil 141) value.
     // catalog resolves the spell number to its formula + ability list. Lines
     // whose cast spell isn't a teleport are skipped.
-    public static IEnumerable<(string Keyword, IReadOnlyList<RoomKey> Destinations, bool Random, int MinLevel)>
+    // WholeParty: the spell targets the whole party (Targets 13, "Full Party Area"),
+    // which the engine moves together — the party stays formed. Any other teleport
+    // spell drops everyone following the caster (GAME_MECHANICS "CMD-driven room
+    // teleports split the party").
+    public static IEnumerable<(string Keyword, IReadOnlyList<RoomKey> Destinations, bool Random, int MinLevel, bool WholeParty)>
         EnumerateCastTeleports(TBInfoStore store, int roomCmd, int sourceMap, KnownSpellCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -171,7 +177,8 @@ public static class TBInfoCastTeleportResolver
             }
             if (dests.Count == 0) continue;
 
-            yield return (keyword, dests, random, minLevel);
+            bool wholeParty = catalog.GetTargetsByNumber(spellNumber) == FullPartyAreaTargets;
+            yield return (keyword, dests, random, minLevel, wholeParty);
         }
     }
 }
