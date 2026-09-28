@@ -400,7 +400,7 @@ authoritative and is used instead.
 
 ## The map and obstacles
 
-**Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target), then **Walk here**, **I am here** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list), **Use Teleport**, **Center on Player**, **Center on Destination** (only while a walk is under way — jumps the view to where the walk ends: the walk-to target, or the loop's start room / the next lair when a loop or Auto-Lair is walking there first), **Center on…**, and toggles to mark a room **Avoid** or **Stash**. Like a manual pan, a re-centre holds the view for a few seconds before it follows you again.
+**Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target), then **Walk here**, **I am here** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list), **Use Teleport**, **Center on Player**, **Center on Destination** (only while a walk is under way — jumps the view to where the walk ends: the walk-to target, or the loop's start room / the next lair when a loop or Auto-Lair is walking there first), **Center on…**, and toggles to mark a room **Avoid** or **Stash**. Like a manual pan, a re-centre holds the view for a while before it follows you again — 15 seconds by default, set in **Settings → Other → Navigation map: hold a browsed view for N seconds**.
 
 **Shift+right-click** skips the menu when a room's only jump is unambiguous — a room with just an up exit, just a down exit, or a single teleport destination immediately follows it (recentres the map there) instead of opening the menu.
 
@@ -1279,7 +1279,7 @@ The **Action menu** also carries commands you fire once, on demand, rather than 
 - (These are the local twins of the `@get-all` / `@drop-all` / `@hide-all` / `@equip` / `@deposit-all` remote commands.)
 
 **Toolbar split buttons.** The **Drop All**, **Hide All** and **Equip** toolbar buttons each have a small **▾** beside them. The ▾ picks **what the button does** — Drop All's unworn / everything / coins / keys, or which gear set Equip wears. Picking one only changes the button; nothing is sent until you click it. From then on a click on the button does your pick (its tooltip names it), and the pick is saved to your character. A keybind on one of these buttons follows the same pick.
-- **Reset States** — the recovery escape hatch. Clears your own stuck ailments, waits, and movement holds **and every party member's ailment chips** (blind / poison / disease / confuse / held), returning you to an idle state — reach for it when an engine looks wedged (e.g. the walker parked "held" or "waiting" with nothing actually happening) or a party row is stuck showing a condition that's already gone. It also **re-equips your Default gear set** (undoing a stuck Pre-rest swap) and **re-polls `health`** — the game's compact one-line HP/pool readout, far less scroll than the full stat screen — so a drifted max HP/mana snaps back to the real value. (Typing `health` yourself re-anchors the same way.) It's also on the terminal's right-click menu.
+- **Reset States** — the recovery escape hatch. It puts **every engine back to idle, as if you were standing in a room with nothing running**: it stops any walk, loop, Auto-Lair or Roomba sweep, and drops everything they were holding on to — detours (fetching a route item, buying a light, a token route, an auto-deposit or training trip), a party member recovery or backtrack, corpse recovery, door / trap / hidden-exit attempts, the maze and pyramid solvers, and any destination an engine was going to walk you back to afterwards. Your auto-engine toggles (Auto-Combat, Auto-Sneak, Auto-All and so on), lair markers, buff timers and settings are left exactly as they are. It also clears your own stuck ailments, waits, and movement holds **and every party member's ailment chips** (blind / poison / disease / confuse / held) — reach for it when an engine looks wedged (e.g. the walker parked "held" or "waiting" with nothing actually happening) or a party row is stuck showing a condition that's already gone. It also **re-equips your Default gear set** (undoing a stuck Pre-rest swap) and **re-polls `health`** — the game's compact one-line HP/pool readout, far less scroll than the full stat screen — so a drifted max HP/mana snaps back to the real value. (Typing `health` yourself re-anchors the same way.) It's also on the terminal's right-click menu.
 
 ## Base modes
 
@@ -3457,9 +3457,15 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 ### Paradigm transport tokens (route offering + rooms-saved threshold)
 
-**Default:** On, threshold 3 (Paradigm realms only — the rows are hidden otherwise)
+**Default:** On, threshold 50 (Paradigm realms only — the rows are hidden otherwise)
 **What it does:** When on, a walk-to whose destination a held transport token reaches faster surfaces a blue **"use token"** card in the route picker (see *Use a transport token* under navigation). The threshold sets how many rooms a token must save over walking before the card appears — a one- or two-room saving isn't worth a token's gold, daily charge, and buff-wipe. Turn the offering off entirely if you never want token routes suggested.
 **Important notes:** Global-tier — applies to every character on the install. A token is only ever used when you pick its card; it's never taken automatically.
+
+### Navigation map: hold a browsed view for N seconds
+
+**Default:** `15`
+**What it does:** After you pan or zoom the Navigation map, step between floors, or use **Center on…** / **Center on Destination**, the map stays where you're looking for this many seconds before it re-centres on you again. `0` makes it follow you again straight away.
+**Important notes:** Global-tier (one setting for the whole install). Takes effect as soon as you Apply — no need to reopen the map.
 
 ### Cleanup Player Database after N days
 

@@ -725,6 +725,12 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         _walker.ReportMazeSolveSucceeded(dest);
     }
 
+    // Reset States: drop the solve (its own moves and timers) where it stands.
+    public void Cancel(string reason)
+    {
+        if (Active) Abandon(reason);
+    }
+
     private void Abandon(string reason)
     {
         _log?.Log(LogSeverity.Info, LogSource, $"maze solve abandoned: {reason}");

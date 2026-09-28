@@ -58,6 +58,9 @@ public sealed class EventManager : IDisposable
     }
     private EventResumePlan? _pendingResume;
 
+    // Reset States: forget the engine an event-walk would have resumed.
+    public void CancelPendingResume() => _pendingResume = null;
+
     // Live delegate reference so we can unsubscribe symmetrically. Null when no
     // resume watcher is attached.
     private Action<WalkEvent>? _resumeWatcher;

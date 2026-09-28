@@ -713,6 +713,12 @@ public sealed class AutoDepositManager : IDisposable
         }
     }
 
+    // Reset States: stand down without resuming the walk it was part of.
+    public void Cancel()
+    {
+        if (_busy) GoIdle();
+    }
+
     private void GoIdle()
     {
         _buyTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);

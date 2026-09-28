@@ -84,7 +84,7 @@ public static class MenuActionCatalogue
     // stay.
     private static readonly Entry[] _action =
     {
-        new("action.resetstates", "Reset States", Kind.Command, "Action", CommandName: "ResetStatesCommand", Tooltip: "Clear my own stuck ailments, waits, and movement holds — return to idle"),
+        new("action.resetstates", "Reset States", Kind.Command, "Action", CommandName: "ResetStatesCommand", Tooltip: "Stop every engine and clear stuck ailments, waits, holds and pending walks — return to idle (auto toggles untouched)"),
         new("action.getall", "Get All", Kind.Command, "Action", CommandName: "GetAllCommand", Tooltip: "Pick up every item on the room floor"),
         new("action.dropall", "Drop All", Kind.Command, "Action", CommandName: "DropAllCommand", Tooltip: "Drop every carried (unworn) item"),
         new("action.dropeverything", "Drop Everything", Kind.Command, "Action", CommandName: "DropEverythingCommand", Tooltip: "Drop everything held — worn gear, light, keys and coins too"),

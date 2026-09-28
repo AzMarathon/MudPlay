@@ -147,6 +147,13 @@ public sealed class StealthManager : IDisposable
         _settleTimer.Start();
     }
 
+    // Reset States: release the sn-answer and combat-cooldown movement holds.
+    public void ReleaseMovementHolds(string why)
+    {
+        ReleaseSettleHold(why);
+        ReleaseCooldownHold(why);
+    }
+
     private void ReleaseSettleHold(string why)
     {
         _settleTimer?.Stop();

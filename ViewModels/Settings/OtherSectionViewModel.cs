@@ -176,6 +176,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // entirely; per-player Don't-auto-delete opts records out individually.
     [ObservableProperty] private int _playerCleanupDays = 90;
 
+    // Seconds the Navigation map holds a browsed view before following the player
+    // again. Global tier (GlobalSettings.MapRecenterHoldSeconds).
+    [ObservableProperty] private int _mapRecenterHoldSeconds = 15;
+
     // Navigation puzzle-solver master toggles. Both Global tier (one switch per
     // install) — Apply writes through to SettingsService, not the per-character
     // profile. Read live via PyramidSolver.Enabled / TeleportMazeSolver.Enabled
@@ -303,13 +307,15 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         // user's single Apply commits everything.
         int sanitized = Math.Clamp(PlayerCleanupDays, 0, 3650);
         int tokenMin = Math.Clamp(TokenRouteMinRoomsShorter, 1, 300);
+        int mapHold = Math.Clamp(MapRecenterHoldSeconds, 0, 300);
         GlobalSettings g = _globalSettings.Current;
         if (g.PlayerCleanupDays != sanitized
             || g.PyramidSolverEnabled != PyramidSolverEnabled
             || g.AsylumSolverEnabled != AsylumSolverEnabled
             || g.EnableTokenRoutes != EnableTokenRoutes
             || g.TokenRouteMinRoomsShorter != tokenMin
-            || g.TokenUseWhenPartyIncomplete != TokenUseWhenPartyIncomplete)
+            || g.TokenUseWhenPartyIncomplete != TokenUseWhenPartyIncomplete
+            || g.MapRecenterHoldSeconds != mapHold)
         {
             g.PlayerCleanupDays = sanitized;
             g.PyramidSolverEnabled = PyramidSolverEnabled;
@@ -317,6 +323,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             g.EnableTokenRoutes = EnableTokenRoutes;
             g.TokenRouteMinRoomsShorter = tokenMin;
             g.TokenUseWhenPartyIncomplete = TokenUseWhenPartyIncomplete;
+            g.MapRecenterHoldSeconds = mapHold;
             _globalSettings.Save();
         }
 
@@ -362,6 +369,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         EnableTokenRoutes = _globalSettings?.Current.EnableTokenRoutes ?? true;
         TokenRouteMinRoomsShorter = _globalSettings?.Current.TokenRouteMinRoomsShorter ?? 50;
         TokenUseWhenPartyIncomplete = _globalSettings?.Current.TokenUseWhenPartyIncomplete ?? false;
+        MapRecenterHoldSeconds = _globalSettings?.Current.MapRecenterHoldSeconds ?? 15;
 
         LocationEquipRules.Clear();
         foreach (LocationEquipRule rule in dto.LocationEquipRules)
@@ -428,6 +436,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnEnableTokenRoutesChanged(bool value) => MarkDirty();
     partial void OnTokenRouteMinRoomsShorterChanged(int value) => MarkDirty();
     partial void OnTokenUseWhenPartyIncompleteChanged(bool value) => MarkDirty();
+    partial void OnMapRecenterHoldSecondsChanged(int value) => MarkDirty();
 
     private void MarkDirty()
     {

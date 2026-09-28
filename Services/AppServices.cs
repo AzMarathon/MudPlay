@@ -10378,6 +10378,73 @@ public sealed class AppServices
             planThroughAcquirableGates: Needs.Outstanding(NeedKind.PathItem).Count > 0,
             supersedeSilently: true);
 
+    // Reset States: put every engine back where it would be if the player were
+    // standing idle in a room. Stops the running movement engines and every detour,
+    // recovery, FSM, solver and pending "resume / return-to" they hold, and releases
+    // the movement / send holds they own — through each owner, so its own
+    // bookkeeping agrees and it re-asserts on the next real trigger. The auto-mode
+    // toggles, Auto-All, lair markers, buff timers and user settings are left as
+    // they are. Conditions, combat state and gear are reset by the caller.
+    public void ResetEngineStates(string reason)
+    {
+        // Movement engines first, so nothing below races a live walk.
+        MovementControl.Stop();
+        GhSweep.Stop(reason);
+        Walker.ReleaseAbandonedCombatHold();
+        LoopRunner.ClearPendingReconnectResume();
+        MazeSolver.Cancel(reason);
+        PyramidSolver.Cancel(reason);
+
+        // Exit FSMs (doors, hidden exits, winches, traps).
+        Door.StopAll();
+        HiddenSearch.StopAll();
+        Winch.StopAll();
+        TrapDisarm.StopAll();
+        TrapDelegation.Cancel();
+
+        // Detours and trips that hold a destination to walk back to afterwards.
+        PathItemShopRouter.Cancel();
+        PathItemGiveRouter.Cancel();
+        PathItemSummonRouter.Cancel();
+        MonsterDropRouter.Cancel();
+        ShortcutSource.Cancel();
+        AutoLightShopRouter.Cancel();
+        TokenRoute.Cancel();
+        AutoDeposit.Cancel();
+        TrainerWalk.Cancel(reason);
+        TrainFunding.Cancel(reason);
+        TrainerMenu.ForceExit(reason);
+        Events.CancelPendingResume();
+        PartyComeback.Cancel(reason);
+        DeathRecovery.CancelTrip();
+
+        // Outstanding needs and deferred pickups / searches.
+        Needs.Clear();
+        PartyPathItemGate.Clear();
+        Cash.CancelDeferredCollect(reason);
+        AutoGetItems.CancelDeferredCollect(reason);
+        AutoSearch.OnRoomChanged(null);
+
+        // Party waits and holds.
+        AutoParty.AbortReformWaits(reason);
+        PartyEssentials.ClearAllWaits();
+        PartyDisconnectMovement.Clear();
+        AllyDropped.Clear(reason);
+
+        // Stealth, combat, casting, gear and send latches.
+        Stealth.ReleaseMovementHolds(reason);
+        SneakGuard.Reset();
+        Combat.ClearBackstabLatch();
+        Equipment.DropHeldGear();
+        ManaRegen.Reset();
+        CastDirector.ResumeBuffTimers();
+        SuicidePassword.Cancel(reason);
+        Health.CancelFlee();
+
+        Log.Info("Navigation", $"{reason} — every engine returned to idle (walks, loops, lair, detours, "
+            + "recoveries, exit FSMs, solvers, party waits and movement holds); auto toggles untouched.");
+    }
+
     // True when a PathItem need for itemId is still outstanding. Scanned rather
     // than indexed: the list holds one entry per gate item on the current route, so
     // it's a handful at most even on a long gated walk.

@@ -327,6 +327,9 @@ public sealed class TokenRouteCoordinator
         _walkToDest(dest);
     }
 
+    // Reset States: stand down without resuming the walk it was part of.
+    public void Cancel() => StandDown();
+
     private void StandDown()
     {
         _phase = Phase.Idle;

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.117.11
+
+- Walking somewhere new now calls off a party member backtrack, instead of each later walk heading back toward where the party split (e.g. a token)
+- Reset States stops every engine and clears their pending walks, detours, recoveries and holds; auto toggles untouched
+- Settings → Other: how long the Navigation map holds a browsed view before following you again (default 15 s)
+
 ## 3.117.9
 
 - Map right-click: **Center on Destination** jumps the view to where the current walk ends (walk-to target, loop start or next lair)

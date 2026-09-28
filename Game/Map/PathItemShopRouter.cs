@@ -413,6 +413,9 @@ public sealed class PathItemShopRouter : IDisposable
         _post(() => _walkTo(dest));
     }
 
+    // Reset States: stand down without resuming the walk it was part of.
+    public void Cancel() => Reset();
+
     private void Reset()
     {
         DisarmBuyTimer();

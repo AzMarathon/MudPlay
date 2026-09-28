@@ -295,6 +295,12 @@ public sealed class SuicidePasswordTracker : IDisposable
         Reset(reason: "Reroll — character rerolled.");
     }
 
+    // Reset States: unlock the engine send gate if a password flow was left open.
+    public void Cancel(string reason)
+    {
+        if (_state != FlowState.Idle) Reset(reason);
+    }
+
     private void Reset(string reason)
     {
         _state = FlowState.Idle;

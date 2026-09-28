@@ -35,6 +35,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // it — a Settings → General Apply raises GlobalSettingsChanged and repaints
         // the map without reopening the window.
         _navLineStyles = _services.Settings.Current.NavLines;
+        _mapRecenterHoldSeconds = _services.Settings.Current.MapRecenterHoldSeconds;
         _services.Settings.GlobalSettingsChanged += OnGlobalSettingsChanged;
 
         // Reopen in the collapse mode the user last left. Set the backing field
@@ -156,7 +157,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Global settings changed (a Settings → General Apply) — refresh the nav-line
     // appearance so the map repaints with the new colours / thickness live.
     private void OnGlobalSettingsChanged(MudPlay.Models.Settings.GlobalSettings settings)
-        => NavLineStyles = settings.NavLines;
+    {
+        NavLineStyles = settings.NavLines;
+        MapRecenterHoldSeconds = settings.MapRecenterHoldSeconds;
+    }
+
+    // Bound to MapControl.AutoFollowHoldSeconds — the Settings → Other hold time.
+    [ObservableProperty] private int _mapRecenterHoldSeconds;
 
     public void Dispose()
     {

@@ -1632,6 +1632,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     // Settle elapsed with the room still clear of hostiles — no follower engaged, so
     // drop the abandon hold and let the route resume.
+    // Reset States: release the abandon-combat hold even with the walker idle (a
+    // loop can leave it asserted, and Stop is a no-op when Idle).
+    public void ReleaseAbandonedCombatHold() => ReleaseAbandonHold();
+
     private void ReleaseAbandonHold()
     {
         _abandonSettle?.Dispose();
