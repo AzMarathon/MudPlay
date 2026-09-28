@@ -2525,7 +2525,7 @@
         "Number": 300
       }
     ],
-    "ConfuseFumbleLine": "You fumble in confusion!",
+    "ConfuseFumbleLine": "You fumble in confusion!\nYou look around stupidly and do nothing!",
     "CastResponse": ""
   },
   {
@@ -9354,7 +9354,8 @@
         "Table": "Spells",
         "Number": 1391
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You look around stupidly and do nothing!"
   },
   {
     "Id": "72a2f6e4bcacc7be",
@@ -13451,7 +13452,8 @@
         "Table": "Spells",
         "Number": 976
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You look around stupidly and do nothing!"
   },
   {
     "Id": "e6fb2aadd2babf69",
@@ -14063,7 +14065,8 @@
         "Table": "Spells",
         "Number": 1163
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You look around stupidly and do nothing!"
   },
   {
     "Id": "2fd44ef3c5b95af5",
@@ -15355,7 +15358,8 @@
         "Table": "Spells",
         "Number": 502
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You look around stupidly and do nothing!"
   },
   {
     "Id": "7616030cf06238c7",
@@ -21723,7 +21727,8 @@
         "Table": "Spells",
         "Number": 1225
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You look around stupidly and do nothing!"
   },
   {
     "Id": "ffe19e8fcf045161",

@@ -1,6 +1,6 @@
 # Version history
 
-## 3.116.25
+## 3.116.26
 
 - While you're afraid, navigation waits for the fear to wear off and the map follows the fear's random moves
 - Fear no longer shows as held: the fear message seeds drop Movement prevented, so no Held chip or @held to the party
@@ -8,6 +8,8 @@
 - Spell Book's Success % legend shows the realm's cap (Paradigm 100%) and notes your spell damage bonus
 - GAME_MECHANICS: settled — `*Combat Off*` on both realms, Paradigm's reply to attacking a monster that's gone, Saint treated as Good, how fear traps or runs you, and which teleports split the party (from the Stock DLL)
 - GAME_MECHANICS: Lawful Evil aggression on Paradigm, freedom fully clearing knockdown, no searching while engaged, =x at any HP
+- Confusions that have no fumble message of their own (e.g. Stock mesmerize, blink, hypnotic hands; card-void, rainbow2) now recognize the engine's default `You look around stupidly and do nothing!` fumble in the message seeds
+- GAME_MECHANICS: how the engine picks a confusion's fumble line, Paradigm's search-while-engaged refusal, searches always finding stashed coin, Stock statline options and item-charge countdown
 
 ## 3.116.20
 
