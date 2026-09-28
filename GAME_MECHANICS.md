@@ -675,7 +675,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Alignment moves during a session, both ways.** Where you stand is only what your last `who` showed (alignment isn't on the `stat` screen); the ladder and its numbers are in *Combat → Monster `Align` values and your alignment-title ladder*.
 - **Attacking good-aligned monsters moves you toward evil.** *([CONFIRMED] both realms.)*
 - **Paradigm: you drift toward good while playing — 2 evil points every hour** (`-2` an hour), not in one shot at cleanup as on Stock. *([CONFIRMED] 2026-09-27, user.)*
-- **Paradigm: `set mineps <n>` sets how far toward good the drift may take you** — your evil points won't drift below that floor. Without it you drift toward good as on Stock. It can be set anywhere, even at Fiend, to stay there for good with no drift. Paradigm only. *([CONFIRMED] 2026-09-27, user.)* `[NEEDS CONFIRMATION]` What does `set mineps` print when you set it?
+- **Paradigm: `set mineps <n>` sets how far toward good the drift may take you** — your evil points won't drift below that floor. Without it you drift toward good as on Stock. It can be set anywhere, even at Fiend, to stay there for good with no drift. Paradigm only. *([CONFIRMED] 2026-09-27, user.)* Setting it replies `Minimum EPs set to <n>` — e.g. `set mineps -199` → `Minimum EPs set to -199` *([CONFIRMED] 2026-09-27, user screenshot)*.
 - **Paradigm's `pro` shows your exact alignment and your floor** *([CONFIRMED] 2026-09-27, user screenshots)*: `EPs:` is your evil points, fractional (e.g. `EPs:  -15.066666`), and `Min. EPs:` is the `set mineps` floor (e.g. `Min. EPs:  -199`). With EPs above the floor you're still drifting toward good. **Stock's `pro` shows neither** — no `EPs` or `Min. EPs` rows, so on Stock only `who` shows your alignment (as a title).
 - **Stock: points toward good are only awarded at the cleanup cycle.** *([CONFIRMED] user.)* Evil moves during play, as on Paradigm. The details are below.
 - **A shift toward evil prints `A dark cloud passes over you`.** *(Wording [OBSERVED] `wccmmud.dll` 1.11p string table.)*
@@ -702,7 +702,7 @@ How a character earns and spends character points (CP), how exp needed per level
 
 **Client use:**
 - `AlignmentTracker` flags the recorded alignment stale on the dark-cloud line; our alignment is our row in the realm's players list, which each `who` that shows us rewrites. A dark cloud while recorded Good reads as Neutral until the next `who` (`LeftGood`), so Good-only gear is blocked at once.
-- `AlignmentTracker` reads Paradigm's `pro` `EPs:` / `Min. EPs:` rows; the title from the EPs wins over our `who` row until a newer `who`.
+- `AlignmentTracker` reads Paradigm's `pro` `EPs:` / `Min. EPs:` rows and the `Minimum EPs set to <n>` reply; the title from the EPs wins over our `who` row until a newer `who`.
 - `AlignmentGearCheck` asks the game for our alignment — `pro` on Paradigm, `who` on Stock — with no timers *(**Client policy**, user 2026-09-27: only when the game gives a reason)*:
   - when the game says it moved, whatever the sets say: `Your <item> has been removed.`, a refused wear / wield, `The gods have forgiven you for your action.`, or a dark cloud that took us out of Good;
   - when a gear set disagrees with the recorded alignment (an item blocked on alignment alone, or alignment-gated gear with none recorded) — checked as a block appears, sets are edited, or a profile loads.

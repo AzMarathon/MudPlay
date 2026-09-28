@@ -137,5 +137,8 @@ public sealed class AlignmentTrackerTests
 
         db.RecordObservation("Fujin", "Paladin", "Kang", "Good", null, null, null, DateTime.UtcNow);
         Assert.Equal("Good", tracker.SelfAlignment);      // a newer `who` wins
+
+        router.Dispatch(Line("Minimum EPs set to 300"));   // `set mineps 300`
+        Assert.Equal(300, tracker.MinEvilPoints);
     }
 }

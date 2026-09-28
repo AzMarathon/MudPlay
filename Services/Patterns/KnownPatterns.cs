@@ -432,7 +432,8 @@ public static class KnownPatterns
     public const string AlignmentGearRemoved = "alignment.gear-removed";
     public const string AlignmentForgiven    = "alignment.forgiven";
     // Paradigm's `pro`: "EPs: -15.066666" (our exact evil points) and "Min. EPs: -199"
-    // (the `set mineps` floor our drift toward good stops at). Stock's `pro` has neither.
+    // (the `set mineps` floor our drift toward good stops at; setting it replies
+    // "Minimum EPs set to -199"). Stock's `pro` has neither.
     public const string AlignmentEvilPoints    = "alignment.evil-points";
     public const string AlignmentMinEvilPoints = "alignment.min-evil-points";
 

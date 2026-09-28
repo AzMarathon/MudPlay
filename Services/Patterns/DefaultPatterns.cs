@@ -958,7 +958,7 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.AlignmentEvilPoints,
             @"^EPs:\s+(?<ep>-?\d+(?:\.\d+)?)\s*$");
         yield return new RegexPattern(KnownPatterns.AlignmentMinEvilPoints,
-            @"^Min\. EPs:\s+(?<min>-?\d+(?:\.\d+)?)\s*$");
+            @"^(?:Min\. EPs:\s+|Minimum EPs set to\s+)(?<min>-?\d+(?:\.\d+)?)\s*$");
 
         // ----- Training --------------------------------------------------
         // "You hand over 1 gold crown and you receive training to attain
