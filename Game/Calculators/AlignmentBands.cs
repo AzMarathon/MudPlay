@@ -3,29 +3,29 @@ using System.Text.RegularExpressions;
 
 namespace MudPlay.Game.Calculators;
 
-// Numeric alignment values per who-title band, and the parser for a room exit's
-// "(Alignment: <low> to <high>)" gate. Values are the underlying alignment number
-// the engine keys on, most-good (negative) to most-evil (positive), user-confirmed
-// (GAME_MECHANICS.md, capture paradigm-20260827-144553):
-//   Saint -201 · Good -100 · Neutral 0 · Seedy 40 · Outlaw 80 · Criminal 120 ·
-//   Villain 180 · Fiend 300.
-// The ladder is identical on stock and Paradigm (Paradigm just also shows the exact
-// number). "Lawful" is NOT its own band — it's a self-imposed "never do evil" flag
-// treated as Good, so it maps to Good's value. An exit "(Alignment: X to Y)" admits
-// a character iff their alignment value is inclusively within [value(X), value(Y)].
+// A representative alignment number per who-title band, and the parser for a room
+// exit's "(Alignment: <low> to <high>)" gate. Each value is where that title takes
+// over (GAME_MECHANICS "Monster `Align` values and your alignment-title ladder"):
+//   Saint -201 · Good -51 · Neutral 0 · Seedy 30 · Outlaw 40 · Criminal 80 ·
+//   Villain 120 · Fiend 300 (Paradigm; Stock's Fiend starts at 210).
+// Only their order matters here — a character's title and an exit's bounds are
+// both bands, so the comparison is band against band. "Lawful" is NOT its own band
+// — it's a self-imposed "never do evil" flag treated as Good, so it maps to Good's
+// value. An exit "(Alignment: X to Y)" admits a character iff their value is
+// inclusively within [value(X), value(Y)].
 public static partial class AlignmentBands
 {
     private static readonly Dictionary<string, int> ValueByBand =
         new(System.StringComparer.OrdinalIgnoreCase)
         {
             ["Saint"]    = -201,
-            ["Lawful"]   = -100,   // a Good-with-a-flag title; same value as Good
-            ["Good"]     = -100,
+            ["Lawful"]   = -51,    // a Good-with-a-flag title; same value as Good
+            ["Good"]     = -51,
             ["Neutral"]  = 0,
-            ["Seedy"]    = 40,
-            ["Outlaw"]   = 80,
-            ["Criminal"] = 120,
-            ["Villain"]  = 180,
+            ["Seedy"]    = 30,
+            ["Outlaw"]   = 40,
+            ["Criminal"] = 80,
+            ["Villain"]  = 120,
             ["Fiend"]    = 300,
         };
 

@@ -655,7 +655,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         if (BackstabOnly && !e.CanBackstab) return false;
 
         if (_activeCharFilter &&
-            !ItemEquipFilter.CanEquip(e.Row, UsableLevel, _activeClass, _activeAlignment))
+            !ItemEquipFilter.CanEquip(e.Row, UsableLevel, _activeClass, _activeAlignment, _gameData.ActiveRealm))
             return false;
 
         if (MinHp > 0 && e.Hp < MinHp) return false;
@@ -869,7 +869,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
             if (remaining.Count == 0) break;
             Dictionary<EquipmentSlot, string> best = TrialGearFinder.FindBest(
                 candidates, remaining, filled, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
-                weightBudget: weightBudget);
+                weightBudget: weightBudget, realm: _gameData.ActiveRealm);
             foreach ((EquipmentSlot slot, string name) in best)
             {
                 TrialSlots.First(r => r.Slot == slot).SetItemQuiet(name);

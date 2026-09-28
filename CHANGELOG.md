@@ -1,11 +1,13 @@
 # Version history
 
-## 3.116.4
+## 3.116.6
 
 - The title bar shows the BBS and realm (BBS:realm) of the loaded character
 - File → Recent profiles show each character's BBS and realm
 - Your alignment comes from your row in the realm's player list again (a `who` updates it), so Good/Evil-only gear and spells gate without a `who` every session
 - Gear sets that disagree with your recorded alignment get an automatic `who` to verify it, re-checked through the session as alignment moves
+- On Stock, Seedy wears gear as Neutral and the "not Neutral" item flag is ignored, matching the Stock engine
+- Gear removed by an alignment change, or a victim's forgive, sends a `who` to learn your new alignment
 
 ## 3.116.0
 

@@ -63,6 +63,14 @@ public static class ItemEquipFilter
     // Matches the canonical ladder (Saint / Lawful / Good → Good; Neutral →
     // Neutral; Seedy / Outlaw / Criminal / Villain / Fiend → Evil),
     // case-insensitively.
+    // The bucket a who title wears gear as. The Stock engine lets Seedy wear gear as
+    // Neutral — its Evil gear bucket starts at Outlaw (GAME_MECHANICS "Item wear
+    // restrictions") — so on Stock Seedy maps to Neutral; elsewhere it's BucketForWord.
+    public static AlignmentBucket? GearBucketForWord(string? whoWord, RealmType realm) =>
+        realm == RealmType.Stock && string.Equals(whoWord?.Trim(), "seedy", StringComparison.OrdinalIgnoreCase)
+            ? AlignmentBucket.Neutral
+            : BucketForWord(whoWord);
+
     public static AlignmentBucket? BucketForWord(string? whoWord)
     {
         if (string.IsNullOrWhiteSpace(whoWord)) return null;
@@ -99,8 +107,11 @@ public static class ItemEquipFilter
 
     // True when a character of the given level / class / alignment can equip
     // itemRow. A non-positive level, an unknown class profile, or a null
-    // alignment bucket disables that dimension's filter.
-    public static bool CanEquip(JsonElement itemRow, int level, ClassEquipProfile cls, AlignmentBucket? alignment)
+    // alignment bucket disables that dimension's filter. realm picks the engine's
+    // alignment rules for gear: the Stock engine never checks not-Neutral (113)
+    // (GAME_MECHANICS "Item wear restrictions"); Paradigm keeps every code.
+    public static bool CanEquip(JsonElement itemRow, int level, ClassEquipProfile cls, AlignmentBucket? alignment,
+        RealmType realm = RealmType.ParaMud)
     {
         if (itemRow.ValueKind != JsonValueKind.Object) return false;
 
@@ -133,7 +144,8 @@ public static class ItemEquipFilter
         }
 
         if (!PassesLevel(level, minLevel, maxLevel)) return false;
-        if (!PassesAlignment(alignment, goodOnly, evilOnly, neutralOnly, notGood, notEvil, notNeutral))
+        if (!PassesAlignment(alignment, goodOnly, evilOnly, neutralOnly, notGood, notEvil,
+                notNeutral && realm != RealmType.Stock))
             return false;
 
         // No class known ⇒ class / weapon / armour gating is skipped entirely.

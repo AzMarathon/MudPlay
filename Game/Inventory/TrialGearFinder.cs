@@ -108,7 +108,8 @@ public static class TrialGearFinder
         Func<ItemFinderEntry, double> score,
         int level, ClassEquipProfile cls, AlignmentBucket? alignment,
         Func<ItemFinderEntry, bool>? extraFilter = null,
-        int? weightBudget = null)
+        int? weightBudget = null,
+        RealmType realm = RealmType.ParaMud)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(targetSlots);
@@ -124,7 +125,7 @@ public static class TrialGearFinder
             double s = score(e);
             if (s <= 0) continue;
             if (extraFilter is not null && !extraFilter(e)) continue;
-            if (!ItemEquipFilter.CanEquip(e.Row, level, cls, alignment)) continue;
+            if (!ItemEquipFilter.CanEquip(e.Row, level, cls, alignment, realm)) continue;
             if (!bySlot.TryGetValue(e.Slot, out var list)) bySlot[e.Slot] = list = new();
             list.Add((e, s));
         }

@@ -30,6 +30,9 @@ public sealed class AlignmentGearCheck
     // count from here, so the realm timer doesn't rescan the sets on every prompt.
     private DateTimeOffset _lastChecked = DateTimeOffset.MinValue;
     private TimeSpan? _pendingGap;
+    // The game told us our alignment moved (gear stripped, a forgive): verify even
+    // when the sets agree with the old record, since the record is what's stale.
+    private bool _verifyPending;
 
     // needsCheck: a set disagrees with our recorded alignment. driftsDuringPlay: the
     // realm moves alignment toward good while playing (Paradigm), so a confirmed
@@ -53,6 +56,13 @@ public sealed class AlignmentGearCheck
     // edited, a dark cloud that took us out of Good, a new session.
     public void RequestCheck() => Arm(UrgentGap);
 
+    // The game says our alignment moved: check it, sets or no sets.
+    public void RequestVerify()
+    {
+        _verifyPending = true;
+        Arm(UrgentGap);
+    }
+
     // The same set was applied again: worth another look, but not often.
     public void RequestRoutineCheck() => Arm(RoutineGap);
 
@@ -71,8 +81,12 @@ public sealed class AlignmentGearCheck
         if (_pendingGap is not { } gap || now - _lastChecked < gap) return;
         _pendingGap = null;
         _lastChecked = now;
-        if (!_needsCheck()) return;
+        bool verify = _verifyPending;
+        _verifyPending = false;
+        if (!verify && !_needsCheck()) return;
         _wire.Send("who");
-        _log?.Info("Equipment", "gear set disagrees with our recorded alignment — sent `who` to verify it");
+        _log?.Info("Equipment", verify
+            ? "the game says our alignment moved — sent `who` to learn where it is"
+            : "gear set disagrees with our recorded alignment — sent `who` to verify it");
     }
 }

@@ -670,17 +670,35 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Unverified on Paradigm:** **crit's AGL term, encumbrance, and magic resistance use the stock formula for Paradigm as well and are unverified there** — treat as close-but-unconfirmed until a Paradigm source or capture pins them.
 
 ### How your alignment moves during play
-*Status: CONFIRMED 2026-09-27 (user) · Realm: differs*
+*Status: CONFIRMED 2026-09-27 (user) and [OBSERVED] `wccmmud.dll` 1.11p (Stock), tagged per bullet · Realm: differs*
 
 - **Alignment moves during a session, both ways.** Where you stand is only what your last `who` showed (alignment isn't on the `stat` screen); the ladder and its numbers are in *Combat → Monster `Align` values and your alignment-title ladder*.
 - **Attacking good-aligned monsters moves you toward evil.** *([CONFIRMED] both realms.)*
 - **Paradigm: you gain alignment toward good constantly while playing, unless you set the blocker for it.** *([CONFIRMED] user.)* `[NEEDS CONFIRMATION]` What is the blocker — a command or a setting, and what does it print?
-- **Stock: points toward good are only awarded at the cleanup cycle.** *([CONFIRMED] user.)* Evil moves during play, as on Paradigm.
+- **Stock: points toward good are only awarded at the cleanup cycle.** *([CONFIRMED] user.)* Evil moves during play, as on Paradigm. The details are below.
 - **A shift toward evil prints `A dark cloud passes over you`.** *(Wording [OBSERVED] `wccmmud.dll` 1.11p string table.)*
 - **From Good, a dark cloud leaves you Neutral at best, so Good-only gear can no longer be worn.** *([CONFIRMED] 2026-09-27, user.)* From Neutral or worse it only moves you further toward evil.
+- **How much one dark cloud adds, Stock.** *([OBSERVED] `wccmmud.dll` 1.11p `_add_evil_points`.)* One cloud per evil act, printed before the points are added; the amount varies:
+  - attacking a good monster (`Align` 0 Good or 4 Lawful Good): **10**;
+  - attacking a player: **10**, **×2 (20)** if they're Good, **×3 (30)** if they're Saint or lawful;
+  - robbing: **1–3**;
+  - **attacking or robbing a player who's already Seedy or worse is free** — no points, no cloud.
+  - **From a good (negative) alignment, one cloud always lands you at exactly 10 (Neutral)**: the add is raised to reach 10 if it would stop short.
+- **An evil act can be refused instead, Stock**, with no points added *([OBSERVED] `wccmmud.dll` 1.11p)*:
+  - `To do this action, you must turn off your evil warnings.` — your evil warnings are on (toggled with `You will now be warned and stopped from doing most evil actions.` / `You will no longer be stopped from performing evil actions.`);
+  - `You have progressed too far to the evil side to do this action.` — over 300;
+  - `You have chosen a way of life which does not allow this action.` — you're lawful (see *Combat → Monster `Align` values and your alignment-title ladder*: lawful is permanent).
+- **A victim can `forgive` you.** *([CONFIRMED] 2026-09-27, user: on a PvP realm, when you attack a player by accident because your evil warnings are off, they can `forgive <your name>` to restore alignment toward good.)* On Stock *([OBSERVED] `wccmmud.dll` 1.11p)* it refunds exactly the points that attack cost; you see `The gods have forgiven you for your action.`, the victim `The gods have forgiven <name> for his/her action.`, and a refusal reads `The gods refuse to forgive <name> for his/her actions.`
+- **How Stock drifts toward good.** *([OBSERVED] `wccmmud.dll` 1.11p user-cleanup routine; the per-night amounts are sysop settings whose defaults aren't known.)* It happens only at the nightly cleanup, and prints nothing to you — a Stock cleanup takes the BBS down, so everyone is offline when the points are awarded *([CONFIRMED] 2026-09-27, user)*:
+  - no drift unless you played since the last cleanup;
+  - any evil gained since the last cleanup cuts that night's drift to 2;
+  - levels 1–3 only drift down to 0;
+  - the drift stops at -200 (Good) — it never makes you a Saint;
+  - lawful doesn't stop it.
 
 **Client use:**
 - `AlignmentTracker` flags the recorded alignment stale on the dark-cloud line; our alignment is our row in the realm's players list, which each `who` that shows us rewrites. A dark cloud while recorded Good reads as Neutral until the next `who` (`LeftGood`), so Good-only gear is blocked at once.
+- `Your <item> has been removed.` and `The gods have forgiven you for your action.` make `AlignmentGearCheck` send a `who` whatever the sets say, since the record is what's stale.
 - `AlignmentGearCheck` sends `who` when a gear set disagrees with the recorded alignment (an item blocked on alignment alone, or alignment-gated gear with none recorded). It re-checks whenever the answer may have changed — a new block, edited sets, a dark cloud that took us out of Good (only then: from Neutral or worse it changes nothing), a new session — and a confirmed mismatch on a slow cadence (a set re-applied; on Paradigm also on a timer, since it drifts toward good).
 
 ---
@@ -1103,17 +1121,34 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - Without this, killing the last guard emits a *Combat Off* with the chief alive but unengaged, and auto-combat stalls until the user manually attacks (`aa b`) — the reported symptom.
 
 ### Monster `Align` values and your alignment-title ladder
-*Status: `Align` values CONFIRMED (matches `LookupEnums.MonAlignmentNames`); numeric values CONFIRMED by user 2026-08-27 (capture `paradigm-20260827-144553`) · Realm: both*
+*Status: `Align` values CONFIRMED (matches `LookupEnums.MonAlignmentNames`); band thresholds CONFIRMED by user 2026-09-27 (Paradigm help screen) and [OBSERVED] `wccmmud.dll` 1.11p (Stock) · Realm: both, Fiend's threshold differs*
 
 - **Monster `Align` values** (the Monsters-table `Align` column, int 0–6): `0` Good · `1` Evil · `2` Chaotic Evil · `3` Neutral · `4` Lawful Good · `5` Neutral Evil · `6` Lawful Evil.
 - **Your alignment-title ladder** (good → evil, from the who column): Saint → Good → Neutral → **Seedy → Outlaw → Criminal → Villain → Fiend**. The last five (Seedy and worse) are the **"Evil bucket."**
-- **Numeric alignment values** — the underlying alignment number per band, most-good (negative) → most-evil (positive): `Saint -201 · Good -100 · Neutral 0 · Seedy 40 · Outlaw 80 · Criminal 120 · Villain 180 · Fiend 300`.
-- **The ladder is identical on stock and Paradigm** — the only difference is Paradigm shows your exact number where stock shows just the band title.
-- **"Lawful" is NOT its own band.** It's a user-set flag that forbids the character from ever committing evil acts, and it's treated as **Good** (-100) for all alignment math.
+- **Your alignment is a number — evil points (EP): negative is good, positive is evil.** Each title covers a range; the published numbers are where the title changes over *([CONFIRMED] 2026-09-27, user, from Paradigm's alignment help screen; Stock [OBSERVED] in `wccmmud.dll` 1.11p's band function, EP a signed 16-bit value)*:
+
+  | Title | Paradigm | Stock |
+  |---|---|---|
+  | Saint | -201 and below | -201 and below |
+  | Good | -200 to -51 | -200 to -51 |
+  | Neutral | -50 to 29 | -50 to 29 |
+  | Seedy | 30 to 39 | 30 to 39 |
+  | Outlaw | 40 to 79 | 40 to 79 |
+  | Criminal | 80 to 119 | 80 to 119 |
+  | Villain | 120 to 299 | 120 to 209 |
+  | Fiend | 300 and up | 210 and up |
+
+  (An earlier note gave single values `Saint -201 · Good -100 · Neutral 0 · Seedy 40 · Outlaw 80 · Criminal 120 · Villain 180 · Fiend 300`, CONFIRMED 2026-08-27 from capture `paradigm-20260827-144553`; superseded 2026-09-27 — they weren't the thresholds.)
+- **Saint isn't reached in normal play.** *([CONFIRMED] 2026-09-27, user.)* A sysop has to enable or award it; players normally cap at -200, Good. Stock's own drift toward good stops at -200 (see *Character stats & progression → How your alignment moves during play*), and the DLL's `You will have to complete a quest to regain your Saint status.` points the same way.
+- **The ladder is otherwise the same on Stock and Paradigm** — Paradigm shows your exact number where Stock shows just the band title.
+- **"Lawful" is NOT its own band.** It's a user-set flag that forbids the character from ever committing evil acts, and it's treated as **Good** for all alignment math. *(An earlier note gave it Good's value as -100; the Good band is -200 to -51.)*
+- **Lawful is permanent.** *([CONFIRMED] 2026-09-27, user.)* A lawful character can't engage in evil acts and can never shed the flag — only rerolling a new character gets rid of it.
 - **The finer evil titles (Villain / Fiend) matter mainly for item-equip gating** on items in that range — a separate system from the exit gate.
+- **Gear uses its own buckets:** on Stock, Seedy wears gear as Neutral (see *Items, inventory & equipment → Item wear restrictions (ability-code flags)*). The "Evil bucket" above is for aggro.
 
 **Client use:**
-- `AlignmentBucket` collapses the ladder to Good / Neutral / Evil for item filtering; the criminal / guard layer needs the finer title.
+- `AlignmentBucket` collapses the ladder to Good / Neutral / Evil for item filtering (`ItemEquipFilter.GearBucketForWord`: Seedy → Neutral on Stock); the criminal / guard layer needs the finer title.
+- `AlignmentBands` keeps one value per title — where it takes over — for the exit gates; only their order matters there.
 
 ### Monster aggression — who opens on you unprovoked
 *Status: CONFIRMED (Layer 1 alignment auto-aggro; Layer 2 criminal/guard behaviour; guard identification)*
@@ -3677,10 +3712,21 @@ There is no room to drop amethyst pendant here.
 - **Alignment codes:** `97` Good-only, `98` Evil-only, `110` not-Good, `111` not-Evil, `112` Neutral-only, `113` not-Neutral.
 - **Level codes:** `135` min-level, `136` max-level.
 - **Class is a separate `ClassRest-0..9` allow-list** of class Numbers.
+- **Which alignment codes block which title, Stock.** *([OBSERVED] `wccmmud.dll` 1.11p gear-usability check; Paradigm not recorded.)*
+
+  | Your title | Can't wear |
+  |---|---|
+  | Neutral, Seedy | `97` Good-only, `98` Evil-only |
+  | Outlaw, Criminal, Villain, Fiend | `97` Good-only, `111` not-Evil, `112` Neutral-only |
+  | Good, Saint | `98` Evil-only, `110` not-Good, `112` Neutral-only |
+
+  So on Stock **Seedy wears gear as Neutral** (the evil gear bucket starts at Outlaw), and **`113` not-Neutral is never checked**.
+- **When your title changes, the game takes off gear the new title can't wear**, one line per item: `Your <item> has been removed.` *([OBSERVED] `wccmmud.dll` 1.11p: the check runs after an evil-point gain that changes the title, and after a `forgive`.)*
 
 **Client use:**
-- `ItemEquipFilter.CanEquip` evaluates all of these against the live character.
+- `ItemEquipFilter.CanEquip` evaluates all of these against the live character; on Stock (`RealmType.Stock`) it skips `113`, and `GearBucketForWord` maps Seedy to Neutral.
 - The Equipment Manager blocks a slot whose item fails the check, and also blocks it on the EP-zap refusal.
+- `Your <item> has been removed.` makes `AlignmentGearCheck` send a `who` to learn the new alignment.
 
 ### Item charges (`Uses` / `UseCount`)
 *Status: Unrated*

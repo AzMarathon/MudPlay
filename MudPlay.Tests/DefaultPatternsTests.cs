@@ -448,4 +448,17 @@ public sealed class DefaultPatternsTests
     [InlineData("An arrow shoots out of the wall and strikes you!")]
     public void TrapDisarmTriggeredRegex_MatchesEachTrapsWording(string line)
         => Assert.True(PatternById(KnownPatterns.TrapDisarmTriggered).TryMatch(Line(line), out _));
+
+    // Our alignment moved: the game stripped gear the new band can't wear, or a
+    // victim forgave us.
+    [Fact]
+    public void AlignmentMovedLines_Match()
+    {
+        Assert.True(PatternById(KnownPatterns.AlignmentGearRemoved)
+            .TryMatch(Line("Your white gold ring has been removed."), out _));
+        Assert.True(PatternById(KnownPatterns.AlignmentForgiven)
+            .TryMatch(Line("The gods have forgiven you for your action."), out _));
+        Assert.False(PatternById(KnownPatterns.AlignmentGearRemoved)
+            .TryMatch(Line("Raijin has been removed from your followers."), out _));
+    }
 }

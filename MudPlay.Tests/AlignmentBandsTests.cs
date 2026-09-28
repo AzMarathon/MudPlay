@@ -9,13 +9,13 @@ public sealed class AlignmentBandsTests
 {
     [Theory]
     [InlineData("Saint", -201)]
-    [InlineData("Good", -100)]
-    [InlineData("Lawful", -100)]   // a Good-with-a-flag title → Good's value
+    [InlineData("Good", -51)]
+    [InlineData("Lawful", -51)]   // a Good-with-a-flag title → Good's value
     [InlineData("Neutral", 0)]
-    [InlineData("Seedy", 40)]
-    [InlineData("Outlaw", 80)]
-    [InlineData("Criminal", 120)]
-    [InlineData("Villain", 180)]
+    [InlineData("Seedy", 30)]
+    [InlineData("Outlaw", 40)]
+    [InlineData("Criminal", 80)]
+    [InlineData("Villain", 120)]
     [InlineData("Fiend", 300)]
     [InlineData("fiend", 300)]      // case-insensitive
     public void ValueOf_KnownBand_ReturnsValue(string band, int expected)
@@ -46,10 +46,10 @@ public sealed class AlignmentBandsTests
         => Assert.Null(AlignmentBands.ParseGate("Level: 10 to 20"));
 
     [Theory]
-    [InlineData(-100, false)]   // Good — below the [0,300] window (the blocked evil entrance)
+    [InlineData(-51, false)]    // Good — below the [0,300] window (the blocked evil entrance)
     [InlineData(-201, false)]   // Saint — below
     [InlineData(0, true)]       // Neutral — inside
-    [InlineData(40, true)]      // Seedy — inside
+    [InlineData(30, true)]      // Seedy — inside
     [InlineData(300, true)]     // Fiend — inside
     public void Admits_NeutralToFiend_InclusiveWindow(int value, bool admitted)
         => Assert.Equal(admitted, AlignmentBands.Admits((0, 300), value));

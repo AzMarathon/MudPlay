@@ -86,4 +86,18 @@ public sealed class AlignmentGearCheckTests
         check.OnPrompt();
         Assert.Equal(2, Whos(sent));
     }
+
+    [Fact]
+    public void TheGameSayingAlignmentMoved_ChecksEvenWhenTheSetsAgree()
+    {
+        var (check, sent) = Build(mismatch: false);
+        check.RequestVerify();            // "Your … has been removed." / a forgive
+        check.OnPrompt();
+        Assert.Equal(1, Whos(sent));
+
+        check.RequestCheck();
+        _now += TimeSpan.FromMinutes(1);
+        check.OnPrompt();
+        Assert.Equal(1, Whos(sent));      // the forced one was a one-off
+    }
 }

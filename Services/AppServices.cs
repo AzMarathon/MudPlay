@@ -1564,6 +1564,7 @@ public sealed class AppServices
     // (wear-confirmed / armor-refused / weapon-refused). Held for the app lifetime
     // — AppServices is the singleton, so these live as long as the router.
     private IDisposable? _equipWearOkSub;
+    private IDisposable[]? _alignmentMovedSubs;
     private IDisposable? _equipWearFailSub;
     private IDisposable? _equipWieldFailSub;
 
@@ -5252,6 +5253,12 @@ public sealed class AppServices
             Equipment.ReevaluateAllBlocks();
             AlignmentCheck.RequestCheck();
         };
+        // Gear stripped on a band change, or a victim's forgive: the record is old.
+        _alignmentMovedSubs = new[]
+        {
+            Router.Subscribe(Services.Patterns.KnownPatterns.AlignmentGearRemoved, _ => AlignmentCheck.RequestVerify()),
+            Router.Subscribe(Services.Patterns.KnownPatterns.AlignmentForgiven, _ => AlignmentCheck.RequestVerify()),
+        };
         PromptScanner.PromptObserved += _ => AlignmentCheck.OnPrompt();
         _equipWearOkSub = Router.Subscribe(Services.Patterns.KnownPatterns.UserEquipped, m =>
         {
@@ -7583,8 +7590,8 @@ public sealed class AppServices
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
         Game.Calculators.AlignmentBucket? bucket =
-            Game.Inventory.ItemEquipFilter.BucketForWord(Alignment.SelfAlignment);
-        return Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket);
+            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, GameData.ActiveRealm);
+        return Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket, GameData.ActiveRealm);
     }
 
     // True when the item EXISTS in game data but the live character can't wear it
@@ -7600,15 +7607,16 @@ public sealed class AppServices
         if (Profile.Current?.Equipment?.Sets is not { Count: > 0 } sets) return false;
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
+        Game.RealmType realm = GameData.ActiveRealm;
         Game.Calculators.AlignmentBucket? bucket =
-            Game.Inventory.ItemEquipFilter.BucketForWord(Alignment.SelfAlignment);
+            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, realm);
         foreach (Models.Profile.EquipmentSet set in sets)
         foreach (Models.Profile.EquipmentSlotEntry slot in set.Slots)
         {
             if (string.IsNullOrWhiteSpace(slot.ItemName)) continue;
             if (GameData.FindRowByName("Items", slot.ItemName.Trim()) is not System.Text.Json.JsonElement row) continue;
             bool Fits(Game.Calculators.AlignmentBucket? b) =>
-                Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, b);
+                Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, b, realm);
             if (!Fits(null)) continue;   // unwearable for another reason
             bool alignmentGated = bucket is { } known
                 ? !Fits(known)
@@ -7626,8 +7634,8 @@ public sealed class AppServices
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
         Game.Calculators.AlignmentBucket? bucket =
-            Game.Inventory.ItemEquipFilter.BucketForWord(Alignment.SelfAlignment);
-        return !Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket);
+            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, GameData.ActiveRealm);
+        return !Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket, GameData.ActiveRealm);
     }
 
     // Read a single boolean off the active profile's
