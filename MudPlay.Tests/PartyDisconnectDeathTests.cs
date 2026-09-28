@@ -135,6 +135,56 @@ public sealed class PartyDisconnectDeathTests
         Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
     }
 
+    // Re-entry spends the grace entry on the invite, but the @comeback the member's
+    // client telepaths straight after must still be honoured (report
+    // paradigm-20260928-074527: refused as "command invalid or not allowed").
+    [Fact]
+    public void ReEnteredMember_StaysEligibleForComeback()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        mgr.NowProvider = () => Now;
+        mgr.SetWireSender(_ => { });
+
+        router.Dispatch(Line("Raijin started to follow you."));
+        router.Dispatch(Line("Raijin stops following you."));
+        router.Dispatch(Line("Raijin just entered the Realm."));
+
+        Assert.DoesNotContain("Raijin", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.True(mgr.WasRecentlyPartied("Raijin"));
+
+        mgr.ForgetReconnectMember("Raijin");
+        Assert.False(mgr.WasRecentlyPartied("Raijin"));
+    }
+
+    // "If leading, accept @comeback for up to" runs from the drop, not the
+    // re-invite window: a member back after the invite window is still accepted,
+    // one back after the comeback window isn't.
+    [Fact]
+    public void ComebackEligibility_FollowsTheComebackWindowFromTheDrop()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        DateTimeOffset now = Now;
+        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        mgr.NowProvider = () => now;
+        mgr.DisconnectGraceWindow = TimeSpan.FromSeconds(90);
+        mgr.ComebackWindow = TimeSpan.FromMinutes(2);
+        mgr.SetWireSender(_ => { });
+
+        router.Dispatch(Line("Raijin started to follow you."));
+        router.Dispatch(Line("Raijin stops following you."));
+        now += TimeSpan.FromSeconds(100);   // past the invite window
+        router.Dispatch(Line("Raijin just entered the Realm."));
+        Assert.True(mgr.WasRecentlyPartied("Raijin"));
+
+        now += TimeSpan.FromSeconds(30);    // 130 s since the drop
+        Assert.False(mgr.WasRecentlyPartied("Raijin"));
+    }
+
     [Fact]
     public void ParPoll_MissingMemberInPartyOf3_StampsLostAndRemoves()
     {

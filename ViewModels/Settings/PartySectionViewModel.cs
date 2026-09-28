@@ -100,6 +100,9 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     //       declining via @forget. 1..500; default 30.
     [ObservableProperty] private int _returnDistanceRooms = 30;
 
+    // ----- "If leading, accept @comeback for up to" (minutes). 0..60; default 2.
+    [ObservableProperty] private int _acceptComebackMinutes = 2;
+
     // ----- Party-cast heal pickers (consumed by CastingDirector) -----
     // Each Minor / Major slot owns a single-target spell AND an AOE / party
     // spell sharing one threshold; CastingDirector picks single vs AOE at
@@ -290,6 +293,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         ProbeStatsOnPartyJoin    = ProbeStatsOnPartyJoin,
         IfLeadingWaitTotalSec    = Math.Clamp(IfLeadingWaitTotalSec,  0, 3600),
         ReturnDistanceRooms      = Math.Clamp(ReturnDistanceRooms,    1, 500),
+        AcceptComebackMinutes    = Math.Clamp(AcceptComebackMinutes,  0, 60),
 
         MinorPartyHealSpell    = NullIfBlank(MinorPartyHealSpell),
         MinorPartyHealAoeSpell = NullIfBlank(MinorPartyHealAoeSpell),
@@ -361,6 +365,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         ProbeStatsOnPartyJoin      = dto.ProbeStatsOnPartyJoin;
         IfLeadingWaitTotalSec      = dto.IfLeadingWaitTotalSec;
         ReturnDistanceRooms        = dto.ReturnDistanceRooms;
+        AcceptComebackMinutes      = dto.AcceptComebackMinutes;
 
         MinorPartyHealSpell    = dto.MinorPartyHealSpell;
         MinorPartyHealAoeSpell = dto.MinorPartyHealAoeSpell;
@@ -428,6 +433,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         svcs.PartyProbe.Enabled                = dto.ProbeStatsOnPartyJoin;
         svcs.Party.DisconnectGraceWindow   = TimeSpan.FromSeconds(Math.Clamp(dto.IfLeadingWaitTotalSec,  0, 3600));
         svcs.PartyComeback.ReturnDistanceRooms = Math.Clamp(dto.ReturnDistanceRooms, 1, 500);
+        svcs.ApplyComebackWindow(dto.AcceptComebackMinutes);
     }
 
     // ----- IsDirty plumbing -----
@@ -452,6 +458,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     partial void OnProbeStatsOnPartyJoinChanged(bool value)     => MarkDirty();
     partial void OnIfLeadingWaitTotalSecChanged(int value)      => MarkDirty();
     partial void OnReturnDistanceRoomsChanged(int value)        => MarkDirty();
+    partial void OnAcceptComebackMinutesChanged(int value)      => MarkDirty();
     partial void OnMinorPartyHealSpellChanged(string? value)    => MarkDirty();
     partial void OnMinorPartyHealAoeSpellChanged(string? value) => MarkDirty();
     partial void OnMajorPartyHealSpellChanged(string? value)    => MarkDirty();

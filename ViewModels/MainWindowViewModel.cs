@@ -3025,6 +3025,8 @@ public partial class MainWindowViewModel : ObservableObject
                 // in-game drop; a failed redial (wasConnected=false) keeps the good
                 // snapshot from the preceding drop rather than overwriting it empty.
                 if (wasConnected) AppServices.Current.PartyReform.NoteDisconnected();
+                // The follower's reconnect @comeback is skipped after too long a drop.
+                if (wasConnected) AppServices.Current.PartyRejoin.NoteDisconnected();
                 // Cancel any pending stable-window reset — this drop
                 // happened before the 30s threshold, so the connect
                 // didn't earn a counter reset.

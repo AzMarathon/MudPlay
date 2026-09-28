@@ -112,6 +112,18 @@ public sealed class PartyComebackManager : IDisposable
     private bool _leftBehind;
     private bool _okPremature;
 
+    // The engine a recovery stopped, kept when that recovery gave up (backtracked
+    // and never found them). We're idle only because we went looking, so their own
+    // @comeback afterwards — typically once they're back online and can tell us
+    // where they are — still recovers them and then resumes it, for ComebackWindow.
+    private (string Given, ResumeTarget Resume, DateTimeOffset At)? _parkedResume;
+
+    // For the bug report: whom we gave up on and what we'd resume for them.
+    public string? ParkedResumeSummary => _parkedResume is { } p
+        ? $"{p.Given} → {p.Resume.Kind}, {(NowProvider() - p.At).TotalSeconds:F0}s ago" : null;
+    // "If leading, accept @comeback for up to" (Settings → Party).
+    public TimeSpan ComebackWindow { get; set; } = TimeSpan.FromMinutes(2);
+
     // A member left behind this soon after their own @ok wasn't really free to move.
     private static readonly TimeSpan PrematureOkWindow = TimeSpan.FromSeconds(5);
 
@@ -393,6 +405,19 @@ public sealed class PartyComebackManager : IDisposable
         if (string.IsNullOrEmpty(senderGiven)) return;
         if (_busy)
         {
+            // The member we're backtracking for now says where they are — go there.
+            if (target is { } there && _phase == ComebackPhase.WalkingBacktrack
+                && string.Equals(senderGiven, _senderGiven, StringComparison.OrdinalIgnoreCase))
+            {
+                _log?.Info(LogCategory, $"{senderGiven} is at {there.Map}/{there.Room} — backtrack dropped, walking there");
+                _reply = reply;
+                _backtrack.Clear();
+                _backtrackIndex = 0;
+                _walker.Stop("comeback: member gave their room");
+                reply("coming to your location for pickup");
+                BeginWalk(there, ComebackPhase.WalkingToRoom);
+                return;
+            }
             reply("comeback already in progress");
             return;
         }
@@ -442,11 +467,14 @@ public sealed class PartyComebackManager : IDisposable
         // Snapshot BEFORE stopping anything — Stop() clears the engine's
         // run-state, so the resume target must be captured first.
         ResumeTarget resume = SnapshotRunningEngine();
+        if (resume.Kind == ResumeKind.None && TakeParkedResume(senderGiven) is { } parked)
+            resume = parked;
         if (resume.Kind == ResumeKind.None)
         {
             reply("I can't I'm idle");
             return;
         }
+        _parkedResume = null;
 
         _busy = true;
         _phase = ComebackPhase.Idle;
@@ -471,7 +499,7 @@ public sealed class PartyComebackManager : IDisposable
         if (_backtrack.Count == 0)
         {
             reply("no path history to backtrack — going idle");
-            GoIdle();
+            ParkAndGoIdle();
             return;
         }
         reply($"backtracking up to {_backtrack.Count} room(s) to find you");
@@ -566,6 +594,26 @@ public sealed class PartyComebackManager : IDisposable
         }
     }
 
+    private void ParkAndGoIdle()
+    {
+        if (_resume.Kind != ResumeKind.None && !string.IsNullOrEmpty(_senderGiven))
+        {
+            _parkedResume = (_senderGiven, _resume, NowProvider());
+            _log?.Info(LogCategory,
+                $"gave up on {_senderGiven}; keeping {_resume.Kind} to resume if they @comeback within {ComebackWindow.TotalMinutes:0} min");
+        }
+        GoIdle();
+    }
+
+    private ResumeTarget? TakeParkedResume(string given)
+    {
+        if (_parkedResume is not { } p) return null;
+        if (!string.Equals(p.Given, given, StringComparison.OrdinalIgnoreCase)) return null;
+        if (NowProvider() - p.At > ComebackWindow) { _parkedResume = null; return null; }
+        _log?.Info(LogCategory, $"{given} came back after we gave up — recovering, then resuming {p.Resume.Kind}");
+        return p.Resume;
+    }
+
     private void GoIdle()
     {
         _busy = false;
@@ -618,7 +666,7 @@ public sealed class PartyComebackManager : IDisposable
                 break;
             case ComebackPhase.WalkingBacktrack:
                 if (e.Kind == WalkEventKind.Finished) OnBacktrackArrival();
-                else if (e.Kind == WalkEventKind.Failed) { _reply("backtrack path failed — going idle"); GoIdle(); }
+                else if (e.Kind == WalkEventKind.Failed) { _reply("backtrack path failed — going idle"); ParkAndGoIdle(); }
                 break;
         }
     }
@@ -640,7 +688,7 @@ public sealed class PartyComebackManager : IDisposable
         if (_backtrackIndex >= _backtrack.Count)
         {
             _reply("couldn't find you after backtracking — going idle");
-            GoIdle();
+            ParkAndGoIdle();
             return;
         }
         RoomKey next = _backtrack[_backtrackIndex++];

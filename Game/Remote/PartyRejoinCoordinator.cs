@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Avalonia.Threading;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 
@@ -9,8 +10,8 @@ namespace MudPlay.Game.Remote;
 // @comeback to the leader we were following so they walk back and re-collect us.
 // Once @comeback is on the wire the leader owns the whole recovery — they decide
 // whether to come (distance / party-full gates), walk to us, and re-invite. A
-// follower runs no movement of their own, so there is nothing here to wait on or
-// time out: fire @comeback and we're done.
+// follower runs no movement of their own, so beyond the short room wait below
+// there is nothing here to wait on: fire @comeback and we're done.
 //
 // Crash-vs-clean-close memory. The leader we follow is remembered in a
 // crash-survivable slot (AppServices write-throughs _rememberedLeader into the
@@ -33,6 +34,13 @@ namespace MudPlay.Game.Remote;
 // rejoined). The statline lands even in the dark, bounding the fire to the
 // reconnect window. If no leader is remembered the fire is a no-op, so a fresh
 // session with no prior party stays quiet.
+//
+// The @comeback carries our room ("@comeback M/R") so the leader walks straight to
+// us — but only a room confirmed since this connect. The tracker can still hold the
+// room we dropped from (the server may put us back somewhere else), and a Paradigm
+// `rm` resync lands a moment after the first prompt. So the prompt starts a short
+// wait for a fresh confirmation, and only if none comes in RoomWait does the bare
+// @comeback (leader backtracks) go out.
 //
 // Remembered-leader auto-join override. IsRememberedLeader is handed to
 // AutoPartyManager as a force-accept predicate: when the leader we're
@@ -62,6 +70,14 @@ public sealed class PartyRejoinCoordinator : IDisposable
     private bool _armed;
     private bool _disposed;
 
+    // A room confirmed since Arm — the only kind we'll hand the leader.
+    private bool _roomConfirmedSinceArm;
+
+    // Waiting on that confirmation before firing: the leader to telepath.
+    private string? _pendingLeader;
+    private readonly DispatcherTimer _roomWaitTimer;
+    public static readonly TimeSpan RoomWait = TimeSpan.FromSeconds(5);
+
     // Write-through sink for the crash-survivable memory. AppServices wires this
     // to stamp the loaded profile + Save() so a crash retains the value. Null in
     // tests (the in-memory _rememberedLeader is enough there).
@@ -70,6 +86,19 @@ public sealed class PartyRejoinCoordinator : IDisposable
     // The leader we'd try to rejoin on the next reconnect, or null when there's
     // no party to return to. Surfaced in the bug report's Party section.
     public string? RememberedLeader => _rememberedLeader;
+
+    // "If leading, accept @comeback for up to" (Settings → Party): a drop longer than
+    // this and the party has moved on, so re-entry sends no @comeback.
+    public TimeSpan ComebackWindow { get; set; } = TimeSpan.FromMinutes(2);
+
+    public Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.UtcNow;
+
+    // When this session last lost the connection; null after a relaunch (a crash
+    // leaves no drop time), and then the @comeback goes out.
+    private DateTimeOffset? _droppedAt;
+
+    // The leader we're about to @comeback, while we wait for our room to confirm.
+    public string? WaitingForRoomToRejoin => _pendingLeader;
 
     // Test seam — every outbound wire buffer, in order.
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
@@ -98,6 +127,9 @@ public sealed class PartyRejoinCoordinator : IDisposable
         // fire can't be deferred to a later light-reveal.
         _scanner.PromptObserved += OnInGamePrompt;
         _party.PropertyChanged += OnPartyChanged;
+        _tracker.StateChanged += OnRoomStateChanged;
+        _roomWaitTimer = new DispatcherTimer { Interval = RoomWait };
+        _roomWaitTimer.Tick += (_, _) => OnRoomWaitElapsed();
     }
 
     // Bind the outbound wire — the gate-wrapped engine sender the other party
@@ -112,11 +144,22 @@ public sealed class PartyRejoinCoordinator : IDisposable
     {
         _rememberedLeader = Normalize(leader);
         _armed = false;
+        _droppedAt = null;
+        CancelRoomWait();
     }
 
     // Open the one-shot rejoin latch. Called on every connect; the @comeback
     // only actually fires on the next in-game prompt if a leader is remembered.
-    public void Arm() => _armed = true;
+    // The connection dropped while we were in-game. Only the first drop of an outage
+    // counts; failed redials don't restamp it.
+    public void NoteDisconnected() => _droppedAt ??= NowProvider();
+
+    public void Arm()
+    {
+        _armed = true;
+        _roomConfirmedSinceArm = false;
+        CancelRoomWait();
+    }
 
     // Force-accept predicate for AutoPartyManager: true when name is the leader
     // we're remembering across a reconnect, so their re-invite is auto-followed
@@ -135,6 +178,8 @@ public sealed class PartyRejoinCoordinator : IDisposable
         _disposed = true;
         _party.PropertyChanged -= OnPartyChanged;
         _scanner.PromptObserved -= OnInGamePrompt;
+        _tracker.StateChanged -= OnRoomStateChanged;
+        CancelRoomWait();
     }
 
     // ----- Follower-membership tracking ---------------------------------
@@ -191,6 +236,8 @@ public sealed class PartyRejoinCoordinator : IDisposable
     {
         if (!_armed) return;
         _armed = false; // one-shot per connect
+        DateTimeOffset? droppedAt = _droppedAt;
+        _droppedAt = null;
         if (_rememberedLeader is null) return;
         if (!_isAutoEnabled())
         {
@@ -198,19 +245,62 @@ public sealed class PartyRejoinCoordinator : IDisposable
                 $"Auto-responses off — not auto-rejoining {_rememberedLeader}.");
             return;
         }
-        SendComeback(_rememberedLeader);
+        if (droppedAt is { } at && NowProvider() - at > ComebackWindow)
+        {
+            _log?.Info(LogCategory,
+                $"Offline {(NowProvider() - at).TotalMinutes:0.#} min, past the {ComebackWindow.TotalMinutes:0} min @comeback window — not asking {_rememberedLeader} to come back.");
+            return;
+        }
+        if (FreshRoom() is not null)
+        {
+            SendComeback(_rememberedLeader);
+            return;
+        }
+        _pendingLeader = _rememberedLeader;
+        _roomWaitTimer.Stop();
+        _roomWaitTimer.Start();
+        _log?.Info(LogCategory,
+            $"Reconnected while following {_pendingLeader} — waiting up to {RoomWait.TotalSeconds:0}s for our room to confirm before @comeback.");
     }
+
+    private void OnRoomStateChanged(RoomTransition t)
+    {
+        if (t.NewConfidence != RoomConfidence.Confirmed) return;
+        if (!_armed && _pendingLeader is null) return;
+        _roomConfirmedSinceArm = true;
+        if (_pendingLeader is { } leader && FreshRoom() is not null)
+        {
+            CancelRoomWait();
+            SendComeback(leader);
+        }
+    }
+
+    private void OnRoomWaitElapsed()
+    {
+        if (_pendingLeader is not { } leader) return;
+        CancelRoomWait();
+        _log?.Info(LogCategory, $"our room didn't confirm within {RoomWait.TotalSeconds:0}s — @comeback without it.");
+        SendComeback(leader);
+    }
+
+    // Test seam — the DispatcherTimer doesn't tick under headless xUnit.
+    internal void FireRoomWaitForTests() => OnRoomWaitElapsed();
+
+    private void CancelRoomWait()
+    {
+        _pendingLeader = null;
+        _roomWaitTimer.Stop();
+    }
+
+    private Room? FreshRoom() =>
+        _roomConfirmedSinceArm && _tracker.State.Confidence == RoomConfidence.Confirmed
+            ? _tracker.State.CurrentRoom
+            : null;
 
     private void SendComeback(string leader)
     {
-        // Attach our room only when we're confident of it — a stale guess would
-        // send the leader to the wrong place. A bare @comeback makes the leader
-        // backtrack their own trail to find us.
-        string payload = "@comeback";
-        if (_tracker.State.Confidence == RoomConfidence.Confirmed
-            && _tracker.State.CurrentRoom is { } room)
-            payload = $"@comeback {room.Key}";
-
+        // A bare @comeback makes the leader backtrack their own trail to find us.
+        string payload = FreshRoom() is { } room ? $"@comeback {room.Key}" : "@comeback";
         _wire.Send($"/{leader} {payload}");
         _log?.Info(LogCategory,
             $"Reconnected while following {leader} — sent {payload}; leader now owns the pickup.");

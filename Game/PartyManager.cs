@@ -50,6 +50,19 @@ public sealed partial class PartyManager : IDisposable
     // Lazy-expires on access.
     private readonly Dictionary<string, DateTimeOffset> _recentlyDisconnected
         = new(StringComparer.OrdinalIgnoreCase);
+
+    // Members who re-entered the realm after a drop, with when they dropped.
+    // Re-entry spends their _recentlyDisconnected entry (so they're invited once),
+    // but the @comeback their client telepaths straight after must still count as
+    // from a recent member, or it's refused as not allowed (report
+    // paradigm-20260928-074527).
+    private readonly Dictionary<string, DateTimeOffset> _returnedAfterDrop
+        = new(StringComparer.OrdinalIgnoreCase);
+
+    // "If leading, accept @comeback for up to" — how long after a member's drop
+    // their @comeback is still honoured (WasRecentlyPartied). Separate from the
+    // re-invite grace window above.
+    public TimeSpan ComebackWindow { get; set; } = TimeSpan.FromMinutes(2);
     private Action<byte[]>? _wireSender;
 
     // "Wait for party members" grace window — how long after a disconnect we'll
@@ -393,6 +406,8 @@ public sealed partial class PartyManager : IDisposable
                 (stale ??= new()).Add(key);
         if (stale is not null)
             foreach (string key in stale) _recentlyDisconnected.Remove(key);
+        foreach (string key in _returnedAfterDrop.Keys.Where(k => GivenNameOf(k).Equals(given, StringComparison.OrdinalIgnoreCase)).ToList())
+            _returnedAfterDrop.Remove(key);
         RemoveMember(given);
     }
 
@@ -912,6 +927,7 @@ public sealed partial class PartyManager : IDisposable
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
         if (!_recentlyDisconnected.TryGetValue(name, out DateTimeOffset droppedAt)) return;
+        _returnedAfterDrop[name] = droppedAt;
         if (NowProvider() - droppedAt > DisconnectGraceWindow)
         {
             // Past the window — clear the stale entry and bail.
@@ -957,7 +973,7 @@ public sealed partial class PartyManager : IDisposable
     internal IReadOnlyDictionary<string, DateTimeOffset> RecentlyDisconnected => _recentlyDisconnected;
 
     // Was sender a party member of ours who departed (got left behind / dropped
-    // / disconnected) inside the DisconnectGraceWindow — and NOT one we
+    // / disconnected) inside the ComebackWindow — and NOT one we
     // deliberately uninvited? Backs the leader-side authorisation of a stranded
     // follower's @comeback: a left-behind follower is dropped from the party
     // server-side (so IsActivePartyMember is false), but they're still
@@ -976,9 +992,9 @@ public sealed partial class PartyManager : IDisposable
         if (string.IsNullOrEmpty(sender)) return false;
         string senderGiven = GivenNameOf(sender);
         DateTimeOffset now = NowProvider();
-        foreach (KeyValuePair<string, DateTimeOffset> kv in _recentlyDisconnected)
+        foreach (KeyValuePair<string, DateTimeOffset> kv in _recentlyDisconnected.Concat(_returnedAfterDrop))
         {
-            if (now - kv.Value > DisconnectGraceWindow) continue;
+            if (now - kv.Value > ComebackWindow) continue;
             if (kv.Key.Equals(sender, StringComparison.OrdinalIgnoreCase)
                 || GivenNameOf(kv.Key).Equals(senderGiven, StringComparison.OrdinalIgnoreCase))
             {

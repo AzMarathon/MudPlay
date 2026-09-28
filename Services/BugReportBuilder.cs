@@ -268,6 +268,8 @@ public static class BugReportBuilder
         // next reconnect (crash-survivable). A "didn't auto-rejoin after a drop"
         // report hinges on whether the leader was remembered at all.
         Kv(sb, "Reconnect rejoin leader", svc.PartyRejoin.RememberedLeader ?? "(none remembered)");
+        if (svc.PartyRejoin.WaitingForRoomToRejoin is { } waitLeader)
+            Kv(sb, "Reconnect rejoin — waiting on our room", $"@comeback to {waitLeader} once our room confirms");
         // Leader-side reconnect reform state — the followers we snapshotted at the
         // last drop and will wait for on reconnect. A "leader sprinted off / didn't
         // wait after a nightly-cleanup reconnect" report hinges on whether they
@@ -287,6 +289,7 @@ public static class BugReportBuilder
             ? (svc.PartyComeback.RecoveringLeftBehind ? $"{rec} (left behind by our move)" : rec)
             : "(none in flight)");
         Kv(sb, "Recovery reach (rooms)", svc.PartyComeback.ReturnDistanceRooms.ToString());
+        Kv(sb, "Recovery given up, resume kept for", svc.PartyComeback.ParkedResumeSummary ?? "(none)");
         // Members we gave up chasing (return route un-crossable) — a "leader keeps
         // abandoning me" report should show the give-up was deliberate.
         var givenUp = svc.PartyComeback.GivenUpMembers;

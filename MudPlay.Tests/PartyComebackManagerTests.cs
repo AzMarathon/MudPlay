@@ -431,6 +431,46 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal(WalkState.Idle, h.Walker.State);
     }
 
+    // Report paradigm-20260928-074527: our backtrack gave up (they were offline)
+    // and we went idle; their @comeback once back online must still recover them,
+    // then resume what the backtrack stopped — not answer "I can't I'm idle".
+    [Fact]
+    public void ComebackAfterWeGaveUp_StillRecovers_ThenResumes()
+    {
+        using Harness h = NewHarness();
+        SeatFollower(h, "Tank");
+        StartLair(h);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback"));
+        Assert.Contains("no path history", h.LastReply);
+        Assert.False(h.Lair.IsActive);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/1"));
+        Assert.DoesNotContain("idle", h.LastReply);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        Assert.True(h.Lair.IsActive);
+    }
+
+    // They tell us where they are while we're still backtracking: go there instead.
+    [Fact]
+    public void RoomComebackDuringBacktrack_WalksToTheirRoom()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+
+        Assert.Contains("coming to your location", h.LastReply);
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+    }
+
     // ----- path C: a follower left behind by our move ----------------
 
     // Report paradigm-20260926-195517: a held follower couldn't move when the
