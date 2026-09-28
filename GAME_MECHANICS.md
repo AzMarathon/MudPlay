@@ -1545,6 +1545,7 @@ How one damage spell cast against a monster is worked out.
 | **Flat value** | a damage ability with a non-zero value replaces the roll | same |
 | **Elemental resist** | `× (100 − resist)/100` straight after the roll, truncated | after the magic-resist cut, rounded |
 | **Spell damage bonus** (AlterSpDmg, ability 165) | `× (100 + bonus)/100` on **Damage (1)** and **Damage(-MR) (17)**, flat values included; **not** drain (8) or heal (18) | on 1 and 17, and on drain and heal; scaled values only |
+| **Spellcasting's share of the bonus** | none | **+1% per full 50 Spellcasting above 100** — `(Spellcasting − 100)/50` *([CONFIRMED] 2026-09-28, user, following MMUD-Explorer)* |
 | **Magic-resist cut** (code 17 only) | AntiMagic: `MR/2`% (0–75); otherwise `(MR − 50)/2`% capped at 50; with no cut and no AntiMagic, **+(50 − MR)%** below MR 50 | same, rounded |
 | **Full resist** | chance `min(98, MR/2)`% after a successful cast, when `TypeOfResists` is 2, or 1 against AntiMagic | same |
 | **Rounding** | truncates at every step | rounds the resist steps |
@@ -1554,7 +1555,7 @@ How one damage spell cast against a monster is worked out.
 - **A monster's magic resist for this roll is its `MagicRes` field plus any magic-resist ability (36), floored at 1** *(Stock [OBSERVED] `wccmmud.dll` 1.11p `_cast_monster_target`)*.
 
 **Client use:**
-- `SpellCalculator` (per-round figures) and `SpellDamageCalculator` (the Game Data spell calculator) follow the table; `CharacterCalculator.SpellDamageBonus` sums the caster's AlterSpDmg from gear, race and class for the Spell Book and Monster Intel. Before 2026-09-28 no damage figure used the bonus, and the calculator rounded in MMUD-Explorer's order on both realms.
+- `SpellCalculator` (per-round figures) and `SpellDamageCalculator` (the Game Data spell calculator) follow the table; `CharacterCalculator.SpellDamageBonus` sums the caster's AlterSpDmg from gear, race and class (plus, on Paradigm, `SpellcastingSpellDamageBonus`) for the Spell Book and Monster Intel. Before 2026-09-28 no damage figure used the bonus, and the calculator rounded in MMUD-Explorer's order on both realms.
 - Monster Intel's spell matchups (`MonsterMatchupCalculatorSpells.RankAttackSpells`) price each spell by its **expected** damage a round: the average of the resisted min and max (`SpellDamageCalculator.AfterTargetResists`), times the chance it isn't resisted outright (`FullResistChance`), against the monster's `SpellMagicResist` and `AntiMagic`. Before, it used the unresisted max with only the elemental cut.
 
 ### Why an attack spell fails to damage — three independent mechanics

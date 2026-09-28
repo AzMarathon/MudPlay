@@ -1,9 +1,10 @@
 # Version history
 
-## 3.116.19
+## 3.116.20
 
 - Your +Spell Damage % now counts in the Spell Book, Monster Intel and the Game Data spell calculator (Stock: damage spells; Paradigm: drain and heal too)
 - Game Data spell calculator follows each realm's order and rounding, with a spell damage bonus input
+- Paradigm: Spellcasting above 100 adds 1% spell damage per 50
 - Monster Intel prices attack spells by their expected damage a round: the average, cut by the monster's magic resist and its chance to resist outright
 - GAME_MECHANICS: spell damage compared for Stock and Paradigm, with sources
 
