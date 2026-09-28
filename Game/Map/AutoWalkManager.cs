@@ -2057,6 +2057,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     Reset();
                     return;
                 }
+                // Same as LoopRunner.OnDoorReply: re-drive the step so the ready check
+                // (re-sneak after the bash) and a combat pause come first, crossing the
+                // now-open door from SendMoveStep's pre-open branch.
+                _tracker.NoteNamedDoorOpened(step.Direction);
+                if (_tracker.State.OpenDoorDirections?.Contains(step.Direction) == true)
+                {
+                    DisarmStallWatchdog();
+                    _stepInFlight = false;
+                    SendNextStep();
+                    return;
+                }
                 _tracker.NoteMoveSent(step.Direction);
                 _recovery?.NoteEngineStepSent(step.Direction);
                 byte[] bytes = EncodeMove(step.Direction);

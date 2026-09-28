@@ -1395,6 +1395,20 @@ public sealed class LoopRunner : IRecoverableEngine
                     FailStep($"post-door-open: no exit {step.Direction} from {_tracker.State.CurrentRoom?.Key.ToString() ?? "(unknown)"}");
                     return;
                 }
+                // Cross through the ordinary step path, not straight away: a bash or
+                // open ends a sneak (GAME_MECHANICS "What ends a sneak") and a monster
+                // may have walked in meanwhile, so the ready check (re-sneak) and a
+                // combat pause get their say first (report paradigm-20260928-125823).
+                // The door is marked open so the re-driven step crosses it rather than
+                // opening it again; if it can't be marked (a move still pending), cross
+                // now as before.
+                _tracker.NoteNamedDoorOpened(step.Direction);
+                if (_tracker.State.OpenDoorDirections?.Contains(step.Direction) == true)
+                {
+                    _stepInFlight = false;
+                    SendNextStep();
+                    return;
+                }
                 _expectedMoveTarget = exit.Target;
                 _expectedMoveSource = current.Key;
                 _stepInFlight = true;

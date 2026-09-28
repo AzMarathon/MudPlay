@@ -1,5 +1,10 @@
 # Version history
 
+## 3.117.8
+
+- After opening a door the walk re-sneaks and handles a monster that just walked in before stepping through
+- bug reports addressed: paradigm-20260928-125823
+
 ## 3.117.7
 
 - Game mechanics reference: how robbing players works on Stock (refusals, Thievery roll, what gets stolen, the evil record)

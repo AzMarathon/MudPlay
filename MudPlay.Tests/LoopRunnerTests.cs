@@ -2052,6 +2052,41 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("w\r", Encoding.Latin1.GetString(h.Sent[1]));
     }
 
+    // Report paradigm-20260928-125823: the bash that opened the door ended the sneak and
+    // a monster crept in, but the move went out the instant the door opened. The crossing
+    // now goes back through the step path, so the ready check (re-sneak) holds it — and
+    // the door, marked open, isn't opened a second time.
+    [Fact]
+    public void Circuit_DoorOpened_CrossesOnlyOnceTheReadyCheckPasses()
+    {
+        Harness h = NewHarness(DoorGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        int doorCalls = 0;
+        Action<DoorOpenResult>? doorReply = null;
+        h.Runner.SetDoorEnqueuer((_, _, _, _, _, reply) => { doorCalls++; doorReply = reply; });
+        h.Runner.SetDoorStopper(() => { });
+        bool ready = true;
+        h.Runner.SetMoveReadyCheck(() =>
+        {
+            if (!ready) h.Coordinator.AssertGate(MovementCoordinator.SneakSettleGate);
+            return ready;
+        });
+
+        h.Runner.Start(new Loop("house", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        Assert.Equal(1, doorCalls);
+
+        ready = false;                                   // the bash ended the sneak
+        doorReply!(DoorOpenResult.Opened.Instance);
+        Assert.Empty(h.Sent);                            // held for the re-sneak
+
+        ready = true;
+        h.Coordinator.ClearGate(MovementCoordinator.SneakSettleGate);
+        h.Drain();
+        Assert.Single(h.Sent);
+        Assert.Equal("e\r", Encoding.Latin1.GetString(h.Sent[0]));
+        Assert.Equal(1, doorCalls);
+    }
+
     [Fact]
     public void ClosedDoorInFlight_CombatPauseThenResume_WaitsForDoor_DoesNotRecoverOrResend()
     {

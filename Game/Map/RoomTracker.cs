@@ -1016,7 +1016,8 @@ public sealed class RoomTracker
     }
 
     // "The door to the <dir> just opened." / "You see <name> open the door to the
-    // <dir>." — someone opened one of this room's doors. Standing still, mark it
+    // <dir>." — someone opened one of this room's doors, or our own door FSM just
+    // did (the engines' OnDoorReply). Standing still, mark it
     // open so the next move through it doesn't try to open it again; mid-move the
     // line could be about either room, so leave it.
     public void NoteNamedDoorOpened(Direction dir)
