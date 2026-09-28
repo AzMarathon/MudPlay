@@ -102,16 +102,18 @@ public sealed class KnownSpellCatalog
     }
 
     // Query/IsUsable's charAlign encoding: 0 = unknown (skip alignment
-    // filtering entirely — see IsUsable), 1 = Good, 2 = Neutral, 3 = Evil. Not
-    // a straight cast of AlignmentBucket (Good=0/Neutral=1/Evil=2 there, since
-    // 0 there is a real band, not "unknown") — this is the adapter between the
-    // equip-filter's live AlignmentBucket? (ItemEquipFilter.BucketForWord) and
-    // this catalog's own int scheme.
-    public static int CharAlignFor(AlignmentBucket? bucket) => bucket switch
+    // filtering entirely — see IsUsable), 1 = Good, 2 = Neutral, 3 = Evil, 4 = evil
+    // but short of Outlaw (Paradigm's Seedy), which counts as Evil except that an
+    // evil-only spell needs Outlaw at least. Not a straight cast of AlignmentBucket
+    // (Good=0/Neutral=1/Evil=2 there, since 0 there is a real band, not "unknown") —
+    // this is the adapter between the live AlignmentBucket?
+    // (ItemEquipFilter.GearBucketForWord) plus evil points, and this catalog's own
+    // int scheme. Every spell's evil-only value is 0, so only the Outlaw floor matters.
+    public static int CharAlignFor(AlignmentBucket? bucket, EvilPointRange? evilPoints = null) => bucket switch
     {
         AlignmentBucket.Good => 1,
         AlignmentBucket.Neutral => 2,
-        AlignmentBucket.Evil => 3,
+        AlignmentBucket.Evil => evilPoints?.MeetsEvilOnly(0) == false ? 4 : 3,
         _ => 0,
     };
 
@@ -685,11 +687,12 @@ public sealed class KnownSpellCatalog
                         if (charAlign == 1 && code != 97) return false;
                         if (charAlign == 2 && code != 112) return false;
                         if (charAlign == 3 && code != 98) return false;
+                        if (charAlign == 4) return false;   // evil-only needs Outlaw
                         break;
                     case 110 or 111 or 113: // requires NOT good / evil / neutral
                         if (charAlign == 1 && code == 110) return false;
                         if (charAlign == 2 && code == 113) return false;
-                        if (charAlign == 3 && code == 111) return false;
+                        if (charAlign is 3 or 4 && code == 111) return false;
                         break;
                 }
             }

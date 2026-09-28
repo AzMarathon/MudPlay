@@ -112,7 +112,8 @@ public static class TrialGearFinder
         int level, ClassEquipProfile cls, AlignmentBucket? alignment,
         Func<ItemFinderEntry, bool>? extraFilter = null,
         int? weightBudget = null,
-        RealmType realm = RealmType.ParaMud)
+        RealmType realm = RealmType.ParaMud,
+        EvilPointRange? evilPoints = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(targetSlots);
@@ -128,7 +129,7 @@ public static class TrialGearFinder
             double s = score(e);
             if (s <= 0) continue;
             if (extraFilter is not null && !extraFilter(e)) continue;
-            if (!ItemEquipFilter.CanEquip(e.Row, level, cls, alignment, realm)) continue;
+            if (!ItemEquipFilter.CanEquip(e.Row, level, cls, alignment, realm, evilPoints)) continue;
             if (!bySlot.TryGetValue(e.Slot, out var list)) bySlot[e.Slot] = list = new();
             list.Add((e, s));
         }
@@ -185,7 +186,8 @@ public static class TrialGearFinder
         int level, ClassEquipProfile cls, AlignmentBucket? alignment,
         Func<ItemFinderEntry, bool>? extraFilter = null,
         int? weightBudget = null,
-        RealmType realm = RealmType.ParaMud)
+        RealmType realm = RealmType.ParaMud,
+        EvilPointRange? evilPoints = null)
     {
         ArgumentNullException.ThrowIfNull(passes);
         ArgumentNullException.ThrowIfNull(evaluate);
@@ -194,7 +196,7 @@ public static class TrialGearFinder
         foreach (Func<ItemFinderEntry, double> score in passes)
         {
             Dictionary<EquipmentSlot, string> picks = FindBest(catalog, targetSlots, heldSlots, current, score,
-                level, cls, alignment, extraFilter, weightBudget, realm);
+                level, cls, alignment, extraFilter, weightBudget, realm, evilPoints);
             double value = evaluate(picks);
             if (value > bestValue) (best, bestValue) = (picks, value);
         }

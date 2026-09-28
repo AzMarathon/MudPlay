@@ -1,11 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.26**
+> **Version 3.116.27**
 > - While you're afraid, navigation waits for the fear to wear off and the map follows the fear's random moves
 > - Fear no longer shows as held: the fear message seeds drop Movement prevented, so no Held chip or @held to the party
 > - Leading a party through a room teleport that's a whole-party spell (e.g. the duergar lord's) no longer relays it or re-invites — everyone moves together
 > - Spell Book's Success % legend shows the realm's cap (Paradigm 100%) and notes your spell damage bonus
+> - Evil-only gear and spells now need Outlaw or worse, and an evil-only item's number is checked against your evil points (exact on Paradigm; on Stock, learned from a refused equip)
 > - GAME_MECHANICS: settled — `*Combat Off*` on both realms, Paradigm's reply to attacking a monster that's gone, Saint treated as Good, how fear traps or runs you, and which teleports split the party (from the Stock DLL)
 > - GAME_MECHANICS: Lawful Evil aggression on Paradigm, freedom fully clearing knockdown, no searching while engaged, =x at any HP
 > - Confusions that have no fumble message of their own (e.g. Stock mesmerize, blink, hypnotic hands; card-void, rainbow2) now recognize the engine's default `You look around stupidly and do nothing!` fumble in the message seeds

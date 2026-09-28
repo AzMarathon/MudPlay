@@ -63,9 +63,10 @@ public static class ItemEquipFilter
     // Matches the canonical ladder (Saint / Lawful / Good → Good; Neutral →
     // Neutral; Seedy / Outlaw / Criminal / Villain / Fiend → Evil),
     // case-insensitively.
-    // The bucket a who title wears gear as. The Stock engine lets Seedy wear gear as
-    // Neutral — its Evil gear bucket starts at Outlaw (GAME_MECHANICS "Item wear
-    // restrictions") — so on Stock Seedy maps to Neutral; elsewhere it's BucketForWord.
+    // The bucket a who title wears gear and casts spells as. The Stock engine's gear
+    // and spell checks both let Seedy count as Neutral — its Evil bucket starts at
+    // Outlaw (GAME_MECHANICS "Item wear restrictions") — so on Stock Seedy maps to
+    // Neutral; elsewhere it's BucketForWord.
     public static AlignmentBucket? GearBucketForWord(string? whoWord, RealmType realm) =>
         realm == RealmType.Stock && string.Equals(whoWord?.Trim(), "seedy", StringComparison.OrdinalIgnoreCase)
             ? AlignmentBucket.Neutral
@@ -81,6 +82,14 @@ public static class ItemEquipFilter
             "seedy" or "outlaw" or "criminal" or "villain" or "fiend" => AlignmentBucket.Evil,
             _ => null,
         };
+    }
+
+    // An item's evil-only (98) value, or null when it isn't evil-only.
+    public static int? EvilOnlyValue(JsonElement itemRow)
+    {
+        for (int i = 0; i < ItemAbilSlots; i++)
+            if (GetInt(itemRow, $"Abil-{i}") == EvilOnlyCode) return GetInt(itemRow, $"AbilVal-{i}");
+        return null;
     }
 
     // Resolve a class name (as PlayerStats.Class carries it) to the
@@ -110,13 +119,17 @@ public static class ItemEquipFilter
     // alignment bucket disables that dimension's filter. realm picks the engine's
     // alignment rules for gear: the Stock engine never checks not-Neutral (113)
     // (GAME_MECHANICS "Item wear restrictions"); Paradigm keeps every code.
+    // evilPoints, when known, also gates evil-only gear on its value (Outlaw at
+    // least, and N evil points for an EvilOnly N item); a range that straddles the
+    // value lets the item through for the game to decide.
     public static bool CanEquip(JsonElement itemRow, int level, ClassEquipProfile cls, AlignmentBucket? alignment,
-        RealmType realm = RealmType.ParaMud)
+        RealmType realm = RealmType.ParaMud, EvilPointRange? evilPoints = null)
     {
         if (itemRow.ValueKind != JsonValueKind.Object) return false;
 
         int minLevel = 0, maxLevel = 0;
         bool goodOnly = false, evilOnly = false, neutralOnly = false;
+        int evilOnlyValue = 0;
         bool notGood = false, notEvil = false, notNeutral = false;
         bool classOk = false;   // Abil-59 grant for this class — bypasses type gating.
         bool magical = false;   // Abil-28 — blocked for anti-magic classes.
@@ -135,7 +148,7 @@ public static class ItemEquipFilter
                     break;
                 case MagicalCode: magical = true; break;
                 case GoodOnlyCode: goodOnly = true; break;
-                case EvilOnlyCode: evilOnly = true; break;
+                case EvilOnlyCode: evilOnly = true; evilOnlyValue = GetInt(itemRow, $"AbilVal-{i}"); break;
                 case NeutralOnlyCode: neutralOnly = true; break;
                 case NotGoodCode: notGood = true; break;
                 case NotEvilCode: notEvil = true; break;
@@ -147,6 +160,7 @@ public static class ItemEquipFilter
         if (!PassesAlignment(alignment, goodOnly, evilOnly, neutralOnly, notGood, notEvil,
                 notNeutral && realm != RealmType.Stock))
             return false;
+        if (evilOnly && evilPoints?.MeetsEvilOnly(evilOnlyValue) == false) return false;
 
         // No class known ⇒ class / weapon / armour gating is skipped entirely.
         if (cls.ClassNumber <= 0) return true;

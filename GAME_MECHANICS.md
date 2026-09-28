@@ -3948,7 +3948,7 @@ There is no room to drop amethyst pendant here.
   | Outlaw, Criminal, Villain, Fiend | `97` Good-only, `111` not-Evil, `112` Neutral-only |
   | Good, Saint | `98` Evil-only, `110` not-Good, `112` Neutral-only |
 
-  So on Stock **Seedy wears gear as Neutral** (the evil gear bucket starts at Outlaw), and **`113` not-Neutral is never checked**.
+  So on Stock **Seedy wears gear as Neutral** (the evil gear bucket starts at Outlaw), and **`113` not-Neutral is never checked**. The engine's spell check (`_user_can_use_spell`) uses the same table, so the same holds for spells *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p)*.
 - **Evil-only (`98`) carries an evil-point threshold in its value** *([CONFIRMED] 2026-09-28, user; applies to items and spells alike)*:
   - **`98` with value `0`**: you must be Outlaw through Fiend (Seedy doesn't count).
   - **`98` with a value `N`**: you need **at least `N` evil points**. Example: crimson blood robes, EvilOnly 200.
@@ -3958,7 +3958,10 @@ There is no room to drop amethyst pendant here.
 - **When your title changes, the game takes off gear the new title can't wear**, one line per item: `Your <item> has been removed.` *([OBSERVED] `wccmmud.dll` 1.11p: the check runs after an evil-point gain that changes the title, and after a `forgive`.)*
 
 **Client use:**
-- `ItemEquipFilter.CanEquip` evaluates all of these against the live character; on Stock (`RealmType.Stock`) it skips `113`, and `GearBucketForWord` maps Seedy to Neutral.
+- `ItemEquipFilter.CanEquip` evaluates all of these against the live character; on Stock (`RealmType.Stock`) it skips `113`, and `GearBucketForWord` maps Seedy to Neutral (for spells too).
+- **Evil-only values:** `EvilPointRange` holds where our evil points can be: Paradigm's exact `pro` number (only a floor after a dark cloud), else the title's band, narrowed by a refusal (`AlignmentTracker.SelfEvilPoints` / `NoteEvilOnlyRefused`).
+  - `CanEquip`, `BuffClassifier.IsAlignmentEligible` and `KnownSpellCatalog.CharAlignFor` block evil-only only when the whole range falls short; a range that straddles the value lets the game decide.
+  - A refused wear or wield of an evil-only `N` item narrows the range when we're known Outlaw or worse and nothing else bars the item (`AppServices.LearnFromEvilOnlyRefusal`). A dark cloud or a new `pro` reading clears it.
 - The Equipment Manager blocks a slot whose item fails the check, and also blocks it on the EP-zap refusal.
 - `Your <item> has been removed.` makes `AlignmentGearCheck` send a `who` to learn the new alignment.
 

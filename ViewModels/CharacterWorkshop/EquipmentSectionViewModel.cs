@@ -349,7 +349,8 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     {
         var finder = new ItemFinderViewModel(
             _gameData, _stats, _inventory,
-            ItemEquipFilter.GearBucketForWord(LocalAlignmentWord(), _gameData.ActiveRealm));
+            ItemEquipFilter.GearBucketForWord(LocalAlignmentWord(), _gameData.ActiveRealm),
+            _alignment?.SelfEvilPoints(_gameData.ActiveRealm));
         await AppServices.Current.Dialogs
             .OpenWindowAsync<ItemFinderViewModel, bool>(finder);
     }
@@ -591,9 +592,10 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         int level = _stats.Level;
         ClassEquipProfile cls = ItemEquipFilter.ResolveClassProfile(_gameData, _stats.Class);
         AlignmentBucket? bucket = ItemEquipFilter.GearBucketForWord(LocalAlignmentWord(), _gameData.ActiveRealm);
+        EvilPointRange? evilPoints = _alignment?.SelfEvilPoints(_gameData.ActiveRealm);
         foreach (EquipmentSlotRowViewModel row in Rows)
             row.SetAvailableItems(
-                EquipmentSlotMap.GetItemsForSlot(_gameData, row.Slot, level, cls, bucket));
+                EquipmentSlotMap.GetItemsForSlot(_gameData, row.Slot, level, cls, bucket, evilPoints));
     }
 
     // Our alignment (AlignmentTracker: our row in the realm's players list). Null

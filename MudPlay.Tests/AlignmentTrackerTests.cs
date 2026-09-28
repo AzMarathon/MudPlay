@@ -1,5 +1,6 @@
 using System;
 using MudPlay.Game;
+using MudPlay.Game.Calculators;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using MudPlay.Terminal;
@@ -140,5 +141,37 @@ public sealed class AlignmentTrackerTests
 
         router.Dispatch(Line("Minimum EPs set to 300"));   // `set mineps 300`
         Assert.Equal(300, tracker.MinEvilPoints);
+    }
+
+    // Stock shows only the title, so a refused evil-only item narrows the band; an
+    // evil gain (dark cloud) outdates the refusal.
+    [Fact]
+    public void EvilOnlyRefusal_NarrowsTheRange_UntilADarkCloud()
+    {
+        (MessageRouter router, PlayerDatabase db, AlignmentTracker tracker) = Build("Fujin");
+        db.RecordObservation("Fujin", "Warrior", "Human", "Villain", null, null, null, DateTime.UtcNow);
+        int refreshed = 0;
+        tracker.Refreshed += () => refreshed++;
+
+        Assert.Null(tracker.SelfEvilPoints(RealmType.Stock)!.Value.MeetsEvilOnly(200));
+        tracker.NoteEvilOnlyRefused(200, "crimson blood robes");
+        Assert.False(tracker.SelfEvilPoints(RealmType.Stock)!.Value.MeetsEvilOnly(200));
+        Assert.Equal(1, refreshed);
+
+        router.Dispatch(Line("A dark cloud passes over you."));
+        Assert.Null(tracker.SelfEvilPoints(RealmType.Stock)!.Value.MeetsEvilOnly(200));
+        Assert.Equal(2, refreshed);
+    }
+
+    // Paradigm's exact number, and after a dark cloud only a floor.
+    [Fact]
+    public void ParadigmPro_GivesTheExactRange_ThenAFloorAfterADarkCloud()
+    {
+        (MessageRouter router, _, AlignmentTracker tracker) = Build("Fujin");
+        router.Dispatch(Line("EPs:                  150"));
+        Assert.Equal(EvilPointRange.Exact(150), tracker.SelfEvilPoints(RealmType.ParaMud));
+
+        router.Dispatch(Line("A dark cloud passes over you."));
+        Assert.Equal(new EvilPointRange(150, double.PositiveInfinity), tracker.SelfEvilPoints(RealmType.ParaMud));
     }
 }
