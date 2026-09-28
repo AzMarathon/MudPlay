@@ -1,5 +1,6 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MudPlay.Game;
 using MudPlay.Game.Spells;
 
 namespace MudPlay.ViewModels.GameData.Edit;
@@ -13,15 +14,18 @@ namespace MudPlay.ViewModels.GameData.Edit;
 public sealed partial class SpellDamageCalcViewModel : ObservableObject
 {
     private readonly SpellFormulaInput _formula;
+    private readonly RealmType _realm;
 
-    public SpellDamageCalcViewModel(in SpellFormulaInput formula)
+    public SpellDamageCalcViewModel(in SpellFormulaInput formula, RealmType realm = RealmType.Stock)
     {
         _formula = formula;
+        _realm = realm;
         MinLevel = System.Math.Max(1, formula.ReqLevel);
         MaxLevel = formula.Cap > 0 ? System.Math.Max(formula.Cap, MinLevel) : System.Math.Max(MinLevel, 100);
         _level = MinLevel;
 
         ShowMagicResist = SpellDamageCalculator.UsesMagicResist(formula);
+        ShowSpellDamageBonus = SpellDamageCalculator.TakesSpellDamageBonus(formula, realm);
         SpellDamageElement element = SpellDamageCalculator.Element(formula);
         ShowElementalResist = element is not (SpellDamageElement.None or SpellDamageElement.Poison);
         ElementalResistLabel = element switch
@@ -50,12 +54,16 @@ public sealed partial class SpellDamageCalcViewModel : ObservableObject
     // Target's elemental resist %, when the spell is elemental.
     [ObservableProperty] private int _elementalResist;
 
+    // The caster's +Spell Damage % (AlterSpDmg), when the realm lets it lift this spell.
+    [ObservableProperty] private int _spellDamageBonus;
+
     // The live min/max damage a single cast lands ("24 to 42", or a single value).
     [ObservableProperty] private string _damageText = string.Empty;
 
     public int MinLevel { get; }
     public int MaxLevel { get; }
     public bool ShowMagicResist { get; }
+    public bool ShowSpellDamageBonus { get; }
     public bool ShowElementalResist { get; }
     public string ElementalResistLabel { get; }
 
@@ -66,10 +74,12 @@ public sealed partial class SpellDamageCalcViewModel : ObservableObject
     partial void OnLevelChanged(int value) => Recompute();
     partial void OnMagicResistChanged(int value) => Recompute();
     partial void OnElementalResistChanged(int value) => Recompute();
+    partial void OnSpellDamageBonusChanged(int value) => Recompute();
 
     private void Recompute()
     {
-        (long lo, long hi) = SpellDamageCalculator.Compute(_formula, Level, MagicResist, ElementalResist);
+        (long lo, long hi) = SpellDamageCalculator.Compute(_formula, Level, MagicResist, ElementalResist,
+            spellDamageBonus: SpellDamageBonus, realm: _realm);
         DamageText = lo == hi
             ? lo.ToString(CultureInfo.InvariantCulture)
             : $"{lo.ToString(CultureInfo.InvariantCulture)} to {hi.ToString(CultureInfo.InvariantCulture)}";

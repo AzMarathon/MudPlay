@@ -26,16 +26,24 @@ public static class SpellEffectFormatter
     // casts (for Abil-148 expansion); may be null. resolveMonsterName maps a
     // monster number to its name, so a Summon (Abil 12) renders "Summon hydra"
     // instead of "Summon +590"; may be null (then Summon falls back to the raw
-    // number).
+    // number). spellDamageBonus / realm describe the caster (their AlterSpDmg %
+    // lifts the damage / heal figures the realm's way); a plain data view leaves
+    // them at 0.
     public static string Format(
         in SpellFormulaInput formula,
         int level,
         Func<int, SpellFormulaInput?> resolveChain,
         Func<int, string?>? resolveSpellName = null,
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts = null,
-        Func<int, string?>? resolveMonsterName = null)
+        Func<int, string?>? resolveMonsterName = null,
+        int spellDamageBonus = 0,
+        RealmType realm = RealmType.Stock)
         => FormatCore(formula, level, resolveChain, resolveSpellName, resolveTextblockCasts,
-                      resolveMonsterName, visited: null, suppressDuration: false);
+                      resolveMonsterName, visited: null, suppressDuration: false,
+                      new Caster(spellDamageBonus, realm));
+
+    // The caster the damage / heal figures are for.
+    private readonly record struct Caster(int SpellDamageBonus, RealmType Realm);
 
     // Format implementation that threads the EndCast cycle-guard set. visited
     // carries the spell numbers already being expanded up the EndCast chain so a
@@ -50,12 +58,13 @@ public static class SpellEffectFormatter
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts,
         Func<int, string?>? resolveMonsterName,
         HashSet<int>? visited,
-        bool suppressDuration)
+        bool suppressDuration,
+        Caster caster)
     {
         List<string> parts = new();
 
-        long minDmg = SpellCalculator.MinDamage(formula, level, resolveChain);
-        long maxDmg = SpellCalculator.MaxDamage(formula, level, resolveChain);
+        long minDmg = SpellCalculator.MinDamage(formula, level, resolveChain, caster.SpellDamageBonus, caster.Realm);
+        long maxDmg = SpellCalculator.MaxDamage(formula, level, resolveChain, caster.SpellDamageBonus, caster.Realm);
         if (maxDmg > 0 && minDmg >= 0)
             parts.Add($"Dmg {Range(minDmg, maxDmg)}");
         else if (minDmg != 0 || maxDmg != 0)
@@ -65,8 +74,8 @@ public static class SpellEffectFormatter
             // folding it into a positive "Dmg" figure.
             parts.Add(DamageAbilityLabel(formula, minDmg, maxDmg));
 
-        long minHeal = SpellCalculator.MinHeal(formula, level, resolveChain);
-        long maxHeal = SpellCalculator.MaxHeal(formula, level, resolveChain);
+        long minHeal = SpellCalculator.MinHeal(formula, level, resolveChain, caster.SpellDamageBonus, caster.Realm);
+        long maxHeal = SpellCalculator.MaxHeal(formula, level, resolveChain, caster.SpellDamageBonus, caster.Realm);
         if (maxHeal > 0) parts.Add($"Heal {Range(minHeal, maxHeal)}");
 
         // Stat affects, plus any TextBlock-cast buff expansion. The expansion
@@ -76,7 +85,7 @@ public static class SpellEffectFormatter
         // single duration figure instead of printing both.
         string affects = BuildAffects(
             formula, level, resolveChain, resolveSpellName, resolveTextblockCasts, resolveMonsterName,
-            out long childDurTicks);
+            caster, out long childDurTicks);
 
         // Durations are stored in 3-second spell-round ticks; show seconds. When
         // this render is itself a suppressed TextBlock child the parent owns the
@@ -102,10 +111,10 @@ public static class SpellEffectFormatter
             string clause = a.Value != 0
                 ? BuildEndCast(
                     formula, a.Value, level, resolveChain, resolveSpellName, resolveTextblockCasts,
-                    resolveMonsterName, visited)
+                    resolveMonsterName, visited, caster)
                 : BuildRandomEndCast(
                     formula, level, resolveChain, resolveSpellName, resolveTextblockCasts,
-                    resolveMonsterName, visited);
+                    resolveMonsterName, visited, caster);
             if (clause.Length > 0) parts.Add(clause);
         }
 
@@ -215,6 +224,7 @@ public static class SpellEffectFormatter
         Func<int, string?>? resolveSpellName,
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts,
         Func<int, string?>? resolveMonsterName,
+        Caster caster,
         out long childDurTicks)
     {
         childDurTicks = 0;
@@ -252,7 +262,7 @@ public static class SpellEffectFormatter
             {
                 string expanded = ExpandTextblockCasts(
                     a.Value, level, resolveChain, resolveSpellName, resolveTextblockCasts,
-                    resolveMonsterName, out long tbDurTicks);
+                    resolveMonsterName, caster, out long tbDurTicks);
                 if (tbDurTicks > childDurTicks) childDurTicks = tbDurTicks;
                 if (expanded.Length > 0)
                 {
@@ -324,7 +334,8 @@ public static class SpellEffectFormatter
         Func<int, string?>? resolveSpellName,
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts,
         Func<int, string?>? resolveMonsterName,
-        HashSet<int>? visited)
+        HashSet<int>? visited,
+        Caster caster)
     {
         if (chainedNumber == 0) return string.Empty;
 
@@ -343,7 +354,7 @@ public static class SpellEffectFormatter
 
         string effect = resolveChain(chainedNumber) is { } chained
             ? FormatCore(chained, level, resolveChain, resolveSpellName, resolveTextblockCasts,
-                         resolveMonsterName, visited, suppressDuration: false)
+                         resolveMonsterName, visited, suppressDuration: false, caster)
             : string.Empty;
 
         return effect.Length == 0 || effect == "—" ? prefix : $"{prefix} ({effect})";
@@ -365,7 +376,8 @@ public static class SpellEffectFormatter
         Func<int, string?>? resolveSpellName,
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts,
         Func<int, string?>? resolveMonsterName,
-        HashSet<int>? visited)
+        HashSet<int>? visited,
+        Caster caster)
     {
         // A direct-damage / heal spell uses MinBase/MaxBase as its magnitude
         // range, not a spell pool — don't misread those as spell numbers.
@@ -390,7 +402,7 @@ public static class SpellEffectFormatter
                 : $"#{n.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
             string effect = FormatCore(
                 target, level, resolveChain, resolveSpellName, resolveTextblockCasts,
-                resolveMonsterName, visited, suppressDuration: false);
+                resolveMonsterName, visited, suppressDuration: false, caster);
             names.Add(name);
             effects.Add(effect == "—" ? string.Empty : effect);
         }
@@ -437,6 +449,7 @@ public static class SpellEffectFormatter
         Func<int, string?>? resolveSpellName,
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts,
         Func<int, string?>? resolveMonsterName,
+        Caster caster,
         out long maxChildDurTicks)
     {
         maxChildDurTicks = 0;
@@ -460,7 +473,7 @@ public static class SpellEffectFormatter
 
             string effect = FormatCore(
                 s.Formula, level, resolveChain, resolveSpellName,
-                resolveTextblockCasts: null, resolveMonsterName, visited: null, suppressDuration: true);
+                resolveTextblockCasts: null, resolveMonsterName, visited: null, suppressDuration: true, caster);
             if (effect.Length == 0 || effect == "—") continue;
             (IsRemovesOnlyEffect(effect) ? removes : gains).Add(effect);
         }

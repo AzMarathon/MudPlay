@@ -68,6 +68,11 @@ public readonly record struct SpellFormulaInput
     // against (see SpellDamageCalculator).
     public int AttType { get; init; }
 
+    // Full-resist eligibility (TypeOfResists): 0 never, 1 only against an
+    // AntiMagic target, 2 always (GAME_MECHANICS "Magic Resist (M.R.) and
+    // `TypeOfResists`").
+    public int TypeOfResists { get; init; }
+
     // The ten Abil-N / AbilVal-N pairs in slot order. Empty when the row sets no
     // ability slots.
     public IReadOnlyList<SpellAbility> Abilities { get; init; } = [];

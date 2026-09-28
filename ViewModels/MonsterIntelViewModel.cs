@@ -396,10 +396,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             : $"{weaponName} (HitMagic {_weaponHitMagic})";
 
         _ownedAttackSpells.Clear();
+        int spellBonus = CharacterCalculator.SpellDamageBonus(_stats!, worn, _gameData!);
         foreach (KnownSpell known in _spellbook!.Available)
         {
             if (!_spellbook.IsObtained(known.Number)) continue;
-            long maxDmg = SpellCalculator.MaxDamage(known.Formula, _stats!.Level);
+            long maxDmg = SpellCalculator.MaxDamage(known.Formula, _stats!.Level,
+                spellDamageBonus: spellBonus, realm: _gameData!.ActiveRealm);
             if (maxDmg <= 0) continue;   // not an attack spell
             int attType = _spellAttType.TryGetValue(known.Number, out int at) ? at : -1;
             // Abil 23 / 108 (AbilityNames.cs) — a caster-side target-type gate
@@ -408,11 +410,16 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             // a living-only spell does nothing to an undead one.
             bool undeadOnly = known.Formula.Abilities.Any(a => a.Code == 23);
             bool livingOnly = known.Formula.Abilities.Any(a => a.Code == 108);
+            long minDmg = SpellCalculator.MinDamage(known.Formula, _stats!.Level,
+                spellDamageBonus: spellBonus, realm: _gameData!.ActiveRealm);
             _ownedAttackSpells.Add(new PlayerAttackSpell(
                 known.Name, known.Short, known.ReqLevel, attType,
                 maxDmg, SpellCalculator.ManaCost(known.Formula),
                 undeadOnly, livingOnly, known.Targets,
-                ManaCostPerCast: known.Formula.ManaCost));
+                ManaCostPerCast: known.Formula.ManaCost,
+                MinDamagePerRound: minDmg,
+                UsesMagicResist: SpellDamageCalculator.UsesMagicResist(known.Formula),
+                TypeOfResists: known.Formula.TypeOfResists));
         }
         KnownAttackSpellCount = _ownedAttackSpells.Count;
 
@@ -639,7 +646,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private int SpellRoundsToKill(PlayerAttackSpell spell, MonsterCatalogEntry m)
     {
         SpellEffectivenessResult r = MonsterMatchupCalculatorSpells.RankAttackSpells(
-            new[] { spell }, m.SpellImmunity, m.ElementalResists, m.Undead)[0];
+            new[] { spell }, m.SpellImmunity, m.ElementalResists, m.Undead,
+            monsterMagicResist: m.SpellMagicResist, monsterAntiMagic: m.AntiMagic,
+            realm: _gameData!.ActiveRealm)[0];
         if (!r.Eligible || r.EffectiveDamage <= 0) return 0;
         double rounds = System.Math.Ceiling(m.Hp / (double)r.EffectiveDamage);
         return rounds >= int.MaxValue ? int.MaxValue : (int)rounds;
@@ -1182,7 +1191,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // HP lets each row carry rounds-to-kill + total mana-to-kill. (Stat debuffs
         // don't touch spell resist, so this side is unaffected by applied debuffs.)
         foreach (SpellEffectivenessResult r in MonsterMatchupCalculatorSpells.RankAttackSpells(
-            _ownedAttackSpells, m.SpellImmunity, m.ElementalResists, m.Undead, m.Hp))
+            _ownedAttackSpells, m.SpellImmunity, m.ElementalResists, m.Undead, m.Hp,
+            m.SpellMagicResist, m.AntiMagic, _gameData!.ActiveRealm))
         {
             if (_hiddenAttackKeys.Contains(SpellKey(r.Short))) continue;
             if (r.IsAoe) AttackSpellsAoe.Add(r);

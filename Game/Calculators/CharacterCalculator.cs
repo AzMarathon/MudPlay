@@ -499,6 +499,19 @@ public static class CharacterCalculator
         return attacks;
     }
 
+    // The caster's spell-damage bonus % (AlterSpDmg, ability 165): worn gear plus
+    // race and class abilities, the same sources the melee profile folds in.
+    public static int SpellDamageBonus(PlayerStats stats, IReadOnlyList<EquippedItem> worn, GameDataCache gameData)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+        ArgumentNullException.ThrowIfNull(worn);
+        ArgumentNullException.ThrowIfNull(gameData);
+        EquipmentStatBreakdown combined = AggregateEquipmentStats(worn, gameData);
+        if (gameData.FindRowByName("Races", stats.Race) is JsonElement r) ApplyAbilityBonuses(combined, r, stats.Race);
+        if (gameData.FindRowByName("Classes", stats.Class) is JsonElement c) ApplyAbilityBonuses(combined, c, stats.Class);
+        return combined.Totals.SpellDamageBonus;
+    }
+
     // Builds the matchup profile for one melee attack type. The defensive side
     // (AC / dodge / prot wards / DR) and the realm are identical across every
     // type; only the offensive fields (to-hit, avg damage, swings, crit) branch

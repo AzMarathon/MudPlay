@@ -1,9 +1,10 @@
+using MudPlay.Game;
 using MudPlay.Game.Spells;
 using Xunit;
 
 namespace MudPlay.Tests;
 
-// Pins the ported MMUD-Explorer damage/resist math: level scaling of the range,
+// Pins the realm damage/resist math (Stock from the engine, Paradigm from MMUD-Explorer): level scaling of the range,
 // the magic-resist partial cut (code 17 "Damage(-MR)" only), the elemental
 // flat-percent cut, and the low-MR amplification.
 public sealed class SpellDamageCalculatorTests
@@ -59,8 +60,44 @@ public sealed class SpellDamageCalculatorTests
     [Fact]
     public void Compute_NegativeElementalResist_AmplifiesDamage()
     {
-        // -50% cold resist = vulnerability: 12→18, 21→31.5→32 (banker's rounding).
-        Assert.Equal((18L, 32L), SpellDamageCalculator.Compute(ColdBolt(), level: 4, elementalResist: -50));
+        // -50% cold resist = vulnerability: 12→18, 21→31.5 — Stock truncates to 31,
+        // Paradigm rounds to 32.
+        Assert.Equal((18L, 31L), SpellDamageCalculator.Compute(ColdBolt(), level: 4, elementalResist: -50));
+        Assert.Equal((18L, 32L), SpellDamageCalculator.Compute(ColdBolt(), level: 4, elementalResist: -50,
+            realm: RealmType.ParaMud));
+    }
+
+    // The caster's spell-damage bonus lifts Damage (1) and Damage(-MR) (17) on both
+    // realms; drain (8) only on Paradigm.
+    [Fact]
+    public void Compute_SpellDamageBonus_ByCodeAndRealm()
+    {
+        Assert.Equal((14L, 25L), SpellDamageCalculator.Compute(ColdBolt(1), 4, spellDamageBonus: 20));
+        Assert.Equal((14L, 25L), SpellDamageCalculator.Compute(ColdBolt(17), 4, spellDamageBonus: 20));
+        Assert.Equal((12L, 21L), SpellDamageCalculator.Compute(ColdBolt(8), 4, spellDamageBonus: 20));
+        Assert.Equal((14L, 25L), SpellDamageCalculator.Compute(ColdBolt(8), 4, spellDamageBonus: 20,
+            realm: RealmType.ParaMud));
+    }
+
+    // Stock's order: elemental cut, then the bonus, then the MR cut, truncating each
+    // step. Max 21: ×50/100 = 10 → ×120/100 = 12 → MR 100 cuts 25% → 9.
+    [Fact]
+    public void Compute_Stock_ElementalThenBonusThenMagicResist()
+    {
+        Assert.Equal(9L, SpellDamageCalculator.Compute(ColdBolt(17), 4, magicResist: 100, elementalResist: 50,
+            spellDamageBonus: 20).Max);
+    }
+
+    // Stock lowers a min above the max to the max.
+    [Fact]
+    public void Compute_Stock_MinAboveMax_LoweredToMax()
+    {
+        SpellFormulaInput odd = new()
+        {
+            Number = 8, MinBase = 30, MaxBase = 20, ReqLevel = 1, AttType = 4,
+            Abilities = [new SpellAbility(1, 0)],
+        };
+        Assert.Equal((20L, 20L), SpellDamageCalculator.Compute(odd, 1));
     }
 
     [Fact]

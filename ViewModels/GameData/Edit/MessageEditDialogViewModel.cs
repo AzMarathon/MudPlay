@@ -262,7 +262,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         // the Game Data tab (see SpellDamageCalcViewModel); the redundant static
         // damage rows are suppressed upstream in SpellInfoRowsBuilder.
         if (spellFormula is { } f && MudPlay.Game.Spells.SpellDamageCalculator.IsDamageSpell(f))
-            DamageCalc = new SpellDamageCalcViewModel(f);
+            DamageCalc = new SpellDamageCalcViewModel(f, _cache?.ActiveRealm ?? Game.RealmType.Stock);
 
         if (original.Links is { Count: > 0 } links)
         {

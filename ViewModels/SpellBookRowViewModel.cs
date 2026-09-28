@@ -21,7 +21,8 @@ public sealed class SpellBookRowViewModel
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts = null,
         int teachLevel = 0,
         int spellcasting = 0,
-        bool isParadigm = false)
+        bool isParadigm = false,
+        int spellDamageBonus = 0)
     {
         Number = spell.Number;
         Short = spell.Short;
@@ -44,7 +45,9 @@ public sealed class SpellBookRowViewModel
         Mana = SpellCalculator.ManaCost(spell.Formula);
         ManaText = Mana.ToString();
         EffectText = SpellEffectFormatter.Format(
-            spell.Formula, level, resolveChain, resolveSpellName, resolveTextblockCasts);
+            spell.Formula, level, resolveChain, resolveSpellName, resolveTextblockCasts,
+            spellDamageBonus: spellDamageBonus,
+            realm: isParadigm ? Game.RealmType.ParaMud : Game.RealmType.Stock);
         FormulaText = BuildFormula(spell.Formula);
     }
 

@@ -101,6 +101,23 @@ public sealed record MonsterCatalogEntry(
     // the raw Exp field.
     public long EffectiveExp => (long)Exp * (ExpMulti > 0 ? ExpMulti : 1);
 
+    // The magic resist a spell is rolled against: the MagicRes field plus any
+    // magic-resist ability (36), never below 1 (GAME_MECHANICS "Spell damage —
+    // Stock vs Paradigm").
+    public int SpellMagicResist
+    {
+        get
+        {
+            int mr = MagicRes;
+            foreach (MonsterAbilitySlot a in Abilities) if (a.Code == 36) mr += a.Value;
+            return Math.Max(1, mr);
+        }
+    }
+
+    // AntiMagic (ability 51) raises the magic-resist cut's ceiling and lets a
+    // TypeOfResists-1 spell be resisted outright.
+    public bool AntiMagic => Abilities.Any(a => a.Code == 51);
+
     // The level this monster casts spellNumber at, or 0 when it doesn't cast it.
     //
     // Only real SPELL slots (AttType 2) and between-rounds spells count. On a spell
