@@ -5,27 +5,30 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Map.MpFile;
 
-// Resolves a parsed MpLoopFile against the active RoomGraphManager and produces a
-// ready-to-save Loop.
+// Translates a decoded MegaMUD loop onto our map, one row per .mp step, so the
+// review window can show the recording and our version side by side.
 //
-// The .mp format doesn't carry (map, room); it carries per-step hashExits tokens.
-// Anchoring is therefore a two-stage process:
-//   1. Candidate filter — decode the start hashExits into a (nameHash, exitSet)
-//      and collect every room in the active graph that matches both. Multiple
-//      matches are common because the 3-char hash is lossy.
-//   2. Closure walk + per-step scoring — for each candidate, walk the recorded
-//      direction sequence through the graph, verifying the per-step hashExits
-//      matches what our graph produces for the room we're standing in
-//      (informational), and verifying the final position equals the start room
-//      (mandatory: a loop file must close). Candidates that fail to close are
-//      discarded.
-//
-// Result: one MpImportResolution with the surviving candidates ranked by per-step
-// mismatch count (fewer = better). The caller (UI) picks the unique best, prompts
-// the user when several candidates tie for the best score, or surfaces the error
-// reason when no candidate closes.
+// The .mp file carries no (map, room) — only each step's hashExits (a 3-char hash of
+// the room name + the room's exits). Translation:
+//   1. Anchor: every room whose hashExits equals the file's start hash (the hash is
+//      lossy, so there can be several); each is walked, and the one with the fewest
+//      untranslated steps wins.
+//   2. Walk: from the room at step i, a compass step follows our exit; a command step
+//      ("go path", "pull lever", "sea") lands on the neighbour — or the room itself,
+//      for a command that reveals an exit — whose hash matches step i+1 (exact first,
+//      then a unique name-hash match, since exit sets drift between game versions).
+//   3. A step we can't follow leaves the next row BLANK rather than failing the
+//      import; the walk then looks for the following steps' rooms by hash near the
+//      last room it knew, and resumes when exactly one matches.
+//   4. Rooms the user sets by hand (fixedRooms) override the walk at their row and it
+//      carries on from there.
 public sealed partial class MpFileImporter
 {
+    // How far from the last known room to look for a step's room after a gap. Grows
+    // by one per blank step, capped, so a longer gap still finds its way back.
+    private const int ResyncRadius = 6;
+    private const int MaxResyncRadius = 12;
+
     private readonly RoomGraphManager _graph;
     private readonly LogService? _log;
 
@@ -36,359 +39,315 @@ public sealed partial class MpFileImporter
         _log = log;
     }
 
-    // Run anchor resolution for file against the active graph. Doesn't mutate any
-    // state — the caller decides what to do with the result (open the editor, pop a
-    // picker dialog, surface an error).
-    public MpImportResolution Resolve(MpLoopFile file)
+    // Most name-hash-only starts we'll walk when nothing better matches.
+    private const int MaxNameOnlyAnchors = 60;
+
+    // Where the loop could start: rooms whose hashExits match its start room, plus the
+    // room a "-map room" hint in the label or header names (MegaMUD's naming habit).
+    // When neither finds anything — the start room's exits changed since the file was
+    // recorded — rooms matching on the name hash alone.
+    public IReadOnlyList<RoomKey> FindAnchorCandidates(MpLoopFile file)
     {
         ArgumentNullException.ThrowIfNull(file);
-
-        // Sanity-check the token shape before touching the graph.
-        (string? nameHash, string? exitsCode) = MegaMudHash.Split(file.StartHashExits);
-        if (nameHash is null || exitsCode is null)
-        {
-            return MpImportResolution.Fail(
-                $"start hashExits '{file.StartHashExits}' isn't a parseable 8-char token");
-        }
-
-        // Filter: rooms whose full computed hashExits (door- and
-        // hidden-aware) matches the file's startHashExits exactly.
-        // Encoding doors ×2 and excluding hidden exits the same way
-        // MegaMUD's calcMegaMUDExitsCode does is what makes the
-        // 8-char compare actually agree with rooms.md.
-        List<RoomKey> candidates = new();
+        HashSet<RoomKey> found = new();
         foreach (Room room in _graph.Rooms)
-        {
-            string roomHash = MegaMudHash.ComputeHashExits(room);
-            if (string.Equals(roomHash, file.StartHashExits, StringComparison.OrdinalIgnoreCase))
-                candidates.Add(room.Key);
-        }
+            if (string.Equals(MegaMudHash.ComputeHashExits(room), file.StartHashExits, StringComparison.OrdinalIgnoreCase))
+                found.Add(room.Key);
+        foreach (string text in new[] { file.Label, file.Start.Name })
+            if (MapRoomHint(text) is { } hint && _graph.GetRoom(hint) is not null)
+                found.Add(hint);
 
-        _log?.Info("MpImporter",
-            $"Resolve: label='{file.Label}' startHash={file.StartHashExits} → {candidates.Count} candidate(s)");
+        if (found.Count == 0 && MegaMudHash.Split(file.StartHashExits).NameHash is { } nameHash)
+            foreach (Room room in _graph.Rooms)
+            {
+                if (!string.Equals(MegaMudHash.ComputeNameHash(room.Name), nameHash, StringComparison.OrdinalIgnoreCase)) continue;
+                found.Add(room.Key);
+                if (found.Count >= MaxNameOnlyAnchors) break;
+            }
 
-        if (candidates.Count == 0)
-        {
-            return MpImportResolution.Fail(
-                $"no rooms in the active BBS graph produce hashExits {file.StartHashExits} "
-              + $"(name hash {nameHash} + exits {exitsCode}). "
-              + "Most likely cause: the .mp file was built against a different game-data set.");
-        }
-
-        // Closure walk + per-step scoring for each candidate. Walks
-        // that fail log a Debug line per candidate with the step
-        // number + reason so a stale-graph diagnosis is one log scan
-        // away.
-        List<MpImportCandidate> scored = new();
-        List<string> walkFailures = new();
-        foreach (RoomKey start in candidates)
-        {
-            (MpImportCandidate? ok, string? failReason) = WalkCandidate(file, start);
-            if (ok is not null) { scored.Add(ok); continue; }
-            string reason = failReason ?? "unknown";
-            walkFailures.Add($"{start}: {reason}");
-            _log?.Log(LogSeverity.Debug, "MpImporter",
-                $"candidate {start} rejected: {reason}");
-        }
-
-        if (scored.Count == 0)
-        {
-            string detail = walkFailures.Count > 0
-                ? " First failure: " + walkFailures[0]
-                : string.Empty;
-            return MpImportResolution.Fail(
-                $"matched {candidates.Count} candidate room(s) on hash+exits but none closed the loop "
-              + "(each candidate either hit a missing exit mid-walk or didn't land back at the start). "
-              + "The .mp file was likely built against a different game-data set."
-              + detail);
-        }
-
-        // Best = fewest per-step mismatches. Ties (same mismatch
-        // count) all get returned so the UI can prompt the user.
-        scored.Sort((a, b) =>
-        {
-            int c = a.HashMismatches.CompareTo(b.HashMismatches);
-            if (c != 0) return c;
-            // Stable secondary sort by RoomKey so order is
-            // deterministic across runs.
-            int m = a.AnchorKey.Map.CompareTo(b.AnchorKey.Map);
-            return m != 0 ? m : a.AnchorKey.Room.CompareTo(b.AnchorKey.Room);
-        });
-        int bestScore = scored[0].HashMismatches;
-        List<MpImportCandidate> best = scored
-            .TakeWhile(c => c.HashMismatches == bestScore)
-            .ToList();
-
-        _log?.Info("MpImporter",
-            $"Resolve: {scored.Count} closed-loop candidate(s); {best.Count} tied at best score (mismatches={bestScore})");
-
-        return MpImportResolution.Success(file, best, scored.Count - best.Count);
+        List<RoomKey> sorted = found.ToList();
+        sorted.Sort((a, b) => a.Map != b.Map ? a.Map.CompareTo(b.Map) : a.Room.CompareTo(b.Room));
+        return sorted;
     }
 
-    // Assemble the persisted Loop from a chosen anchor + the parsed file. Strips
-    // the trailing "-mapNum roomNum" hint from the label per the common naming
-    // convention. Returns null when the walk doesn't actually close (defence in
-    // depth — the caller should already have filtered).
-    public Loop? BuildLoop(MpLoopFile file, RoomKey anchor)
+    // "Wererat loop-8 910" → 8/910.
+    internal static RoomKey? MapRoomHint(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        Match m = MapRoomHintRegex().Match(text.Trim());
+        return m.Success && int.TryParse(m.Groups["map"].Value, out int map) && int.TryParse(m.Groups["room"].Value, out int room)
+               && map > 0 && room > 0
+            ? new RoomKey(map, room)
+            : null;
+    }
+
+    [GeneratedRegex(@"-\s*(?<map>\d+)\s+(?<room>\d+)\s*$")]
+    private static partial Regex MapRoomHintRegex();
+
+    // Walk every anchor candidate and return them ranked best first (fewest blanks,
+    // then closing, then fewest hash drifts). Empty when no room matches the start.
+    public IReadOnlyList<MpTranslation> TranslateCandidates(MpLoopFile file)
+    {
+        List<MpTranslation> all = FindAnchorCandidates(file).Select(a => Translate(file, a)).ToList();
+        all.Sort(CompareQuality);
+        _log?.Info("MpImporter",
+            $"'{file.Label}': {all.Count} anchor candidate(s)"
+            + (all.Count > 0 ? $"; best {all[0].Anchor} — {all[0].Summary}" : ""));
+        return all;
+    }
+
+    private static int CompareQuality(MpTranslation a, MpTranslation b)
+    {
+        int c = a.Blanks.CompareTo(b.Blanks);
+        if (c != 0) return c;
+        c = b.Closes.CompareTo(a.Closes);
+        if (c != 0) return c;
+        c = a.Drift.CompareTo(b.Drift);
+        if (c != 0) return c;
+        return a.Anchor.Map != b.Anchor.Map ? a.Anchor.Map.CompareTo(b.Anchor.Map) : a.Anchor.Room.CompareTo(b.Anchor.Room);
+    }
+
+    public MpTranslation Translate(MpLoopFile file, RoomKey anchor, IReadOnlyDictionary<int, RoomKey>? fixedRooms = null)
     {
         ArgumentNullException.ThrowIfNull(file);
+        int n = file.Steps.Count;
+        RoomKey?[] rooms = new RoomKey?[n];
+        MpRowStatus[] status = new MpRowStatus[n];
+        string?[] notes = new string?[n];
+        bool[] passageKnown = new bool[n];
 
-        (MpImportCandidate? walk, _) = WalkCandidate(file, anchor);
-        if (walk is null) return null;
+        if (n == 0) return new MpTranslation(anchor, Array.Empty<MpTranslatedRow>(), false, "the file has no steps");
 
-        // Every visited room becomes a waypoint — "faithful" import.
-        // LoopExpander resolves each leg as a single-step BFS at
-        // runtime so the runtime path matches the .mp exactly.
-        List<LoopWaypoint> waypoints = walk.Visited
-            .Select(k => new LoopWaypoint(k))
-            .ToList();
+        rooms[0] = fixedRooms is not null && fixedRooms.TryGetValue(0, out RoomKey f0) ? f0 : anchor;
+        status[0] = fixedRooms?.ContainsKey(0) == true ? MpRowStatus.UserSet : StatusFor(rooms[0]!.Value, file.Steps[0]);
+        RoomKey lastKnown = rooms[0]!.Value;
+        int gap = 0;
+        bool closes = false;
+        string closure = string.Empty;
 
-        string cleanName = StripMapRoomSuffix(file.Label);
-        if (string.IsNullOrWhiteSpace(cleanName))
-            cleanName = $"Imported loop {DateTime.Now:HH-mm-ss}";
-
-        Loop loop = new(cleanName, waypoints)
+        for (int i = 0; i < n; i++)
         {
-            Notes = string.IsNullOrWhiteSpace(file.Author)
-                ? $"Imported from .mp ({file.GroupName}/{file.Code4})"
-                : $"Imported from .mp by {file.Author} ({file.GroupName}/{file.Code4})",
+            bool last = i == n - 1;
+            string destHash = last ? file.EndHashExits : file.Steps[i + 1].HashExits;
+            (RoomKey? dest, string? why, bool throughPassage) = rooms[i] is { } from
+                ? Follow(from, file.Steps[i], destHash)
+                : (null, "the step before didn't translate", false);
+            passageKnown[i] = throughPassage;
+
+            if (last)
+            {
+                if (dest is { } end)
+                {
+                    closes = rooms[0] is { } start && end.Equals(start);
+                    closure = closes
+                        ? "closes back at the start room"
+                        : $"the last step lands at {Describe(end)}, not back at the start";
+                }
+                else closure = $"the last step can't be followed: {why}";
+                break;
+            }
+
+            int next = i + 1;
+            if (fixedRooms is not null && fixedRooms.TryGetValue(next, out RoomKey userRoom))
+            {
+                rooms[next] = userRoom;
+                status[next] = MpRowStatus.UserSet;
+                if (dest is { } walked && !walked.Equals(userRoom))
+                    notes[next] = $"you set this; the recorded step leads to {Describe(walked)}";
+            }
+            else if (dest is { } d)
+            {
+                rooms[next] = d;
+                status[next] = StatusFor(d, file.Steps[next]);
+            }
+            else if (Resync(lastKnown, file.Steps[next].HashExits, Math.Min(ResyncRadius + gap, MaxResyncRadius)) is { } found)
+            {
+                rooms[next] = found;
+                status[next] = MpRowStatus.Resynced;
+                notes[next] = $"found by its hash near {Describe(lastKnown)}";
+            }
+            else
+            {
+                status[next] = MpRowStatus.Blank;
+                notes[next] = why;
+            }
+
+            if (rooms[next] is { } known) { lastKnown = known; gap = 0; }
+            else gap++;
+        }
+
+        List<MpTranslatedRow> rows = new(n);
+        for (int i = 0; i < n; i++)
+            rows.Add(new MpTranslatedRow(i, rooms[i], status[i], notes[i], passageKnown[i]));
+        return new MpTranslation(anchor, rows, closes, closure);
+    }
+
+    // Where step (taken from room) leads, or why it can't be followed. ThroughPassage
+    // is true when a command step moved us through one of our own exits — the walker
+    // takes that passage by itself, so the command needn't be carried.
+    private (RoomKey? Dest, string? Why, bool ThroughPassage) Follow(RoomKey from, MpStep step, string destHash)
+    {
+        if (_graph.GetRoom(from) is not { } room)
+            return (null, $"{from} isn't in the map data", false);
+
+        if (step.Compass is { } dir)
+        {
+            if (room.Exits.TryGetValue(dir, out RoomExit exit)) return (exit.Target, null, false);
+            string have = room.Exits.Count == 0
+                ? "none"
+                : string.Join(", ", room.Exits.Select(kv => $"{kv.Key}→{kv.Value.Target}"));
+            return (null, $"{Describe(from)} has no {dir} exit in our data (it has: {have})", false);
+        }
+
+        // A command: the neighbour (or this room, for a command that reveals an exit
+        // and so changes the room's hash) whose hash is the next step's.
+        IEnumerable<RoomKey> candidates = room.Exits.Values.Select(e => e.Target).Append(from).Distinct();
+        (string? destName, _) = MegaMudHash.Split(destHash);
+        RoomKey? byName = null;
+        int nameHits = 0;
+        foreach (RoomKey c in candidates)
+        {
+            if (_graph.GetRoom(c) is not { } cand) continue;
+            if (string.Equals(MegaMudHash.ComputeHashExits(cand), destHash, StringComparison.OrdinalIgnoreCase))
+                return (c, null, !c.Equals(from));
+            if (destName is not null && string.Equals(MegaMudHash.ComputeNameHash(cand.Name), destName, StringComparison.OrdinalIgnoreCase))
+            {
+                byName = c;
+                nameHits++;
+            }
+        }
+        if (nameHits == 1) return (byName, null, !byName!.Value.Equals(from));
+        return (null, nameHits > 1
+            ? $"'{step.RawAction}' from {Describe(from)}: {nameHits} neighbours share the next room's name hash"
+            : $"'{step.RawAction}' from {Describe(from)}: no neighbour matches the next room (hash {destHash}) — the passage isn't in our data", false);
+    }
+
+    // The one room within radius moves of near whose hashExits is hash, or null when
+    // none or several match.
+    private RoomKey? Resync(RoomKey near, string hash, int radius)
+    {
+        HashSet<RoomKey> seen = new() { near };
+        List<RoomKey> frontier = new() { near };
+        RoomKey? match = null;
+        for (int depth = 0; depth <= radius && frontier.Count > 0; depth++)
+        {
+            List<RoomKey> nextFrontier = new();
+            foreach (RoomKey k in frontier)
+            {
+                if (_graph.GetRoom(k) is not { } r) continue;
+                if (string.Equals(MegaMudHash.ComputeHashExits(r), hash, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (match is not null && !match.Value.Equals(k)) return null;
+                    match = k;
+                }
+                foreach (RoomExit e in r.Exits.Values)
+                    if (seen.Add(e.Target)) nextFrontier.Add(e.Target);
+            }
+            frontier = nextFrontier;
+        }
+        return match;
+    }
+
+    private MpRowStatus StatusFor(RoomKey key, MpStep step) =>
+        _graph.GetRoom(key) is { } r
+        && string.Equals(MegaMudHash.ComputeHashExits(r), step.HashExits, StringComparison.OrdinalIgnoreCase)
+            ? MpRowStatus.Exact
+            : MpRowStatus.HashDrift;
+
+    private string Describe(RoomKey k) =>
+        _graph.GetRoom(k) is { } r ? $"{k} '{r.Name}'" : k.ToString();
+
+    // The waypoint a translated row starts as, before the user edits it. MegaMUD's
+    // "Don't rest" / "Don't attack" carry over, and its "Rest up here" (rest to full
+    // before this step) becomes both rest-here flags. A command step keeps its
+    // command only when our map doesn't already know the passage — when it does, the
+    // walker takes it by itself. Searches never carry: hidden exits are searched for
+    // automatically.
+    public static LoopWaypoint DefaultWaypoint(MpStep step, RoomKey room, bool passageKnown)
+    {
+        string? command = step.Command is { } c && !passageKnown && !IsSearch(c) ? c : null;
+        bool rest = step.Flags.HasFlag(MpStepFlags.RestHere);
+        return new LoopWaypoint(room, command,
+            doNotRest: step.Flags.HasFlag(MpStepFlags.DontRest),
+            doNotAttack: step.Flags.HasFlag(MpStepFlags.NoAttack))
+        {
+            RestHereHp = rest,
+            RestHereMana = rest,
         };
-        return loop;
     }
 
-    // Walk file's step sequence from start, counting per-step hash mismatches.
-    // Returns (candidate, null) when the walk closes; returns (null, reason) with a
-    // human-readable step-level reason when it doesn't — the importer surfaces this
-    // to the user when every candidate fails so they can spot whether it was a
-    // missing compass exit, an unresolvable "go X" target, or a non-closure.
-    private (MpImportCandidate? Candidate, string? FailureReason)
-        WalkCandidate(MpLoopFile file, RoomKey start)
+    internal static bool IsSearch(string command)
     {
-        if (_graph.GetRoom(start) is not { } startRoom)
-            return (null, "start room not in graph (data swap mid-import?)");
-
-        List<RoomKey> visited = new(file.Steps.Count + 1) { start };
-        int mismatches = 0;
-        RoomKey cursor = start;
-        Room cursorRoom = startRoom;
-
-        for (int i = 0; i < file.Steps.Count; i++)
-        {
-            MpStep step = file.Steps[i];
-
-            // Per-step hash compare (soft signal). Uses the door-aware
-            // overload so rooms with doors are encoded exactly the
-            // way MegaMUD's rooms.md did.
-            string expectedHash = MegaMudHash.ComputeHashExits(cursorRoom);
-            if (!string.Equals(expectedHash, step.HashExits, StringComparison.OrdinalIgnoreCase))
-                mismatches++;
-
-            // Destination of this step =
-            //   - next step's source hashExits when there is one
-            //   - the loop's startHashExits when this is the final step
-            string destHash = i + 1 < file.Steps.Count
-                ? file.Steps[i + 1].HashExits
-                : file.StartHashExits;
-
-            RoomKey dest;
-            if (step.Compass is { } compass)
-            {
-                if (!cursorRoom.Exits.TryGetValue(compass, out RoomExit exit))
-                {
-                    LogNeighbourSnapshot(cursor, cursorRoom, destHash, step);
-                    return (null,
-                        $"step {i + 1}: room {cursor} ('{cursorRoom.Name}') has no {compass} exit "
-                      + "(graph data is missing this transition — see Info log for the room's actual neighbours)");
-                }
-                dest = exit.Target;
-            }
-            else
-            {
-                // Non-compass action ("go path", "climb wall", etc.).
-                // Pick the neighbour whose door-aware hashExits matches
-                // the next step's source. MegaMUD records the verb
-                // text because its engine has to type it; our walker
-                // reads room metadata at run time, so the verb is
-                // informational — the next-step hash is the
-                // authoritative target.
-                //
-                // Two-pass match (strict → tolerant):
-                //   1. Exact 8-char hashExits compare. When this
-                //      hits the candidate is definitively the right
-                //      room — no fuzz.
-                //   2. When no neighbour matches exactly, fall back
-                //      to the 3-char name-hash alone. The exits
-                //      portion of the recorded hash drifts whenever
-                //      a room's exit set differs from what MegaMUD
-                //      had at .mp-build time (a single exit added or
-                //      removed flips the 5-char code) — but the
-                //      name hash is far more stable. A unique
-                //      name-hash hit among the neighbours is almost
-                //      always the right room; the per-step
-                //      mismatch counter ticks so the candidate is
-                //      ranked lower than an exact-walk peer.
-                (string? destNameHash, _) = MegaMudHash.Split(destHash);
-                RoomKey? matchedExact = null;
-                RoomKey? matchedByName = null;
-                int nameMatchCount = 0;
-                foreach (RoomExit candidateExit in cursorRoom.Exits.Values)
-                {
-                    if (_graph.GetRoom(candidateExit.Target) is not { } cand) continue;
-                    string candHash = MegaMudHash.ComputeHashExits(cand);
-                    if (string.Equals(candHash, destHash, StringComparison.OrdinalIgnoreCase))
-                    {
-                        matchedExact = candidateExit.Target;
-                        break;
-                    }
-                    if (destNameHash is not null)
-                    {
-                        string candNameHash = MegaMudHash.ComputeNameHash(cand.Name);
-                        if (string.Equals(candNameHash, destNameHash, StringComparison.OrdinalIgnoreCase))
-                        {
-                            matchedByName = candidateExit.Target;
-                            nameMatchCount++;
-                        }
-                    }
-                }
-
-                if (matchedExact is { } exactPick)
-                {
-                    dest = exactPick;
-                }
-                else if (nameMatchCount == 1 && matchedByName is { } namePick)
-                {
-                    _log?.Log(LogSeverity.Info, "MpImporter",
-                        $"step {i + 1}: exact hashExits {destHash} not on any neighbour of {cursor}; "
-                      + $"falling back to unique name-hash match → {namePick} "
-                      + $"('{_graph.GetRoom(namePick)?.Name}'). Exit-set drift is the likely cause.");
-                    dest = namePick;
-                    mismatches++;
-                }
-                else
-                {
-                    LogNeighbourSnapshot(cursor, cursorRoom, destHash, step);
-                    string nameHashHint = destNameHash is null
-                        ? string.Empty
-                        : nameMatchCount > 1
-                            ? $" ({nameMatchCount} neighbours matched on name-hash {destNameHash} alone — too ambiguous to fall back)"
-                            : string.Empty;
-                    return (null,
-                        $"step {i + 1}: room {cursor} ('{cursorRoom.Name}') has no neighbour matching "
-                      + $"hashExits {destHash} for non-compass action '{step.ActionText}'"
-                      + nameHashHint
-                      + " (see Info log for the room's actual neighbours)");
-                }
-            }
-
-            cursor = dest;
-            if (_graph.GetRoom(cursor) is not { } nextRoom)
-                return (null, $"step {i + 1}: graph lookup failed for {cursor}");
-            cursorRoom = nextRoom;
-            visited.Add(cursor);
-        }
-
-        // For a closed loop the final position must equal the start.
-        if (!cursor.Equals(start))
-            return (null,
-                $"walked all {file.Steps.Count} steps but landed at {cursor} ('{cursorRoom.Name}'), not back at start {start}");
-
-        visited.RemoveAt(visited.Count - 1);
-        return (new MpImportCandidate(start, visited, mismatches), null);
+        string verb = command.Trim().Split(' ')[0];
+        return verb.Equals("sea", StringComparison.OrdinalIgnoreCase)
+            || verb.Equals("search", StringComparison.OrdinalIgnoreCase);
     }
 
-    // Log every outgoing exit on room with its target's computed hashExits so a
-    // user staring at a failed non-compass step can compare their graph against
-    // what MegaMUD's .mp expects. Logged at Info (not Debug) because it's the one
-    // diagnostic that actually fingers the data gap — without it the user can't
-    // tell whether the room is missing the action exit entirely OR has it pointed
-    // at a different room than MegaMUD's record.
-    private void LogNeighbourSnapshot(RoomKey from, Room room, string expectedHash, MpStep step)
+    // The loop's waypoints from edited rows: blanks dropped, and a row that repeats
+    // the room before it (a command that didn't move) folded into that waypoint, its
+    // command and flags merged in.
+    public static List<LoopWaypoint> Waypoints(IEnumerable<LoopWaypoint?> rows)
     {
-        if (_log is null) return;
-        _log.Log(LogSeverity.Info, "MpImporter",
-            $"non-compass walk failed at {from} ('{room.Name}'): expected neighbour hashExits {expectedHash} "
-          + $"for action '{step.ActionText}'. Actual neighbours:");
-        foreach (KeyValuePair<Direction, RoomExit> kv in room.Exits)
+        List<LoopWaypoint> result = new();
+        foreach (LoopWaypoint? w in rows)
         {
-            string targetSummary;
-            if (_graph.GetRoom(kv.Value.Target) is { } target)
+            if (w is null || w.Key.Equals(default(RoomKey))) continue;
+            if (result.Count > 0 && result[^1].Key.Equals(w.Key))
             {
-                string targetHash = MegaMudHash.ComputeHashExits(target);
-                targetSummary = $"{kv.Value.Target} ('{target.Name}') hash={targetHash}";
+                LoopWaypoint prev = result[^1];
+                prev.Command ??= w.Command;
+                prev.DoNotRest |= w.DoNotRest;
+                prev.DoNotAttack |= w.DoNotAttack;
+                prev.RestHereHp |= w.RestHereHp;
+                prev.RestHereMana |= w.RestHereMana;
+                continue;
             }
-            else
+            result.Add(new LoopWaypoint(w.Key, w.Command, w.DelayMs, w.DoNotRest, w.DoNotAttack)
             {
-                targetSummary = $"{kv.Value.Target} (not in graph)";
-            }
-            _log.Log(LogSeverity.Info, "MpImporter",
-                $"  {kv.Key,-2} → {targetSummary} hint={kv.Value.Hint}");
+                RestHereHp = w.RestHereHp,
+                RestHereMana = w.RestHereMana,
+            });
         }
+        // The loop closes back on its first room, so a trailing copy of it goes.
+        if (result.Count > 1 && result[^1].Key.Equals(result[0].Key)) result.RemoveAt(result.Count - 1);
+        return result;
     }
 
-    // Strip a trailing "-mapNum roomNum" (or similar all-digit) suffix that the
-    // common room-naming convention appends to labels and room names. Leaves the
-    // head alone when no suffix is present.
+    // Drop a trailing "-map room" hint ("Frozen Caverns (wolves)-10 35").
     internal static string StripMapRoomSuffix(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
         string trimmed = raw.Trim();
         Match m = SuffixRegex().Match(trimmed);
-        if (!m.Success) return trimmed;
-        return trimmed[..m.Index].TrimEnd();
+        return m.Success ? trimmed[..m.Index].TrimEnd() : trimmed;
     }
 
-    // Matches "-N M" or "-N" at end of string. N and M are positive
-    // integers. The dash is required so we don't strip legitimate
-    // trailing numbers ("Crypt Level 1" → don't strip the "1").
-    [GeneratedRegex(@"-\s*\d+(?:\s+\d+)?\s*$", RegexOptions.Compiled)]
+    // "-N M" or "-N" at the end; the dash is required so "Crypt Level 1" keeps its 1.
+    [GeneratedRegex(@"-\s*\d+(?:\s+\d+)?\s*$")]
     private static partial Regex SuffixRegex();
 }
 
-// One survivable anchor for an .mp loop import: the chosen start room (AnchorKey),
-// the full ordered list of rooms walked from there (Visited, length == file step
-// count), and the count of per-step hash mismatches discovered along the way
-// (HashMismatches — a soft "graph drift" signal, 0 = exact match throughout, lower
-// is better).
-public sealed record MpImportCandidate(
-    RoomKey AnchorKey,
-    IReadOnlyList<RoomKey> Visited,
-    int HashMismatches);
-
-// Result envelope from MpFileImporter.Resolve. Either carries one-or-more
-// candidates the UI can act on or an error reason to surface to the user.
-public sealed class MpImportResolution
+// How a translated row's room was found.
+public enum MpRowStatus
 {
-    private MpImportResolution(MpLoopFile? file, IReadOnlyList<MpImportCandidate>? best,
-        int dropped, string? error)
-    {
-        File = file;
-        BestCandidates = best ?? Array.Empty<MpImportCandidate>();
-        DroppedCandidateCount = dropped;
-        Error = error;
-    }
+    Exact,       // walked there, and its hash matches the recording
+    HashDrift,   // walked there, but its name or exits differ from the recording
+    Resynced,    // found by hash near the last known room after a gap
+    UserSet,     // set by hand in the review window
+    Blank,       // couldn't be translated
+}
 
-    // Parsed input file. Null when the resolution failed before walking.
-    public MpLoopFile? File { get; }
+// Row Index is the .mp step index; Room the room we stand in for that step.
+// PassageKnown marks a command step that moved us through one of our own exits.
+public sealed record MpTranslatedRow(int Index, RoomKey? Room, MpRowStatus Status, string? Note, bool PassageKnown);
 
-    // Candidates that closed AND tied for the lowest per-step mismatch count.
-    // Singleton when the importer found a unique best; multi-element when the UI
-    // must prompt the user.
-    public IReadOnlyList<MpImportCandidate> BestCandidates { get; }
+public sealed record MpTranslation(RoomKey Anchor, IReadOnlyList<MpTranslatedRow> Rows, bool Closes, string ClosureNote)
+{
+    public int Blanks => Rows.Count(r => r.Status == MpRowStatus.Blank);
+    public int Drift => Rows.Count(r => r.Status == MpRowStatus.HashDrift);
 
-    // Candidates that closed but lost on per-step score (i.e. the importer found a
-    // uniquely better match elsewhere). Exposed for diagnostics.
-    public int DroppedCandidateCount { get; }
-
-    // Human-readable reason when BestCandidates is empty.
-    public string? Error { get; }
-
-    public bool HasUniqueBest => Error is null && BestCandidates.Count == 1;
-    public bool NeedsUserPick => Error is null && BestCandidates.Count > 1;
-    public bool Failed        => Error is not null;
-
-    public static MpImportResolution Success(MpLoopFile file, IReadOnlyList<MpImportCandidate> best, int dropped)
-        => new(file, best, dropped, error: null);
-
-    public static MpImportResolution Fail(string error)
-        => new(file: null, best: null, dropped: 0, error: error);
+    public string Summary =>
+        (Blanks == 0 ? "every step translated" : $"{Blanks} step(s) untranslated")
+        + (Drift > 0 ? $", {Drift} room(s) differ from the recording" : "")
+        + $"; {ClosureNote}";
 }

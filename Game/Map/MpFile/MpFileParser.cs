@@ -1,17 +1,17 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 
 namespace MudPlay.Game.Map.MpFile;
 
-// Pure structural parser for MegaMUD .mp loop files. Reads the text into an
-// MpLoopFile with no graph resolution and no RoomKey assignment — that's
-// MpFileImporter's job. Path-style files (start != end hash) are rejected here so
-// the importer doesn't have to.
+// Structural decoder for MegaMUD .mp path files, no graph resolution (that's
+// MpFileImporter). Only a file with no recognisable header throws; anything else
+// that's off — a goto path rather than a loop, a step count that disagrees, a
+// broken step row — is recorded in MpLoopFile.Problems so the review window can
+// still show what the file says.
 public static partial class MpFileParser
 {
-    // Parse the file at path. Throws MpFileFormatException on any structural
-    // problem.
     public static MpLoopFile ParseFile(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -20,145 +20,127 @@ public static partial class MpFileParser
         return Parse(File.ReadAllText(path));
     }
 
-    // Parse text as a .mp loop file. Same error semantics as ParseFile.
     public static MpLoopFile Parse(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        // Pull non-empty lines preserving order. MegaMUD writes CRLF;
-        // in-the-wild files may also be plain LF.
+        // DOS-era editors end the file with a Ctrl-Z (0x1A) end-of-file byte, which
+        // otherwise reads as a malformed last step.
         List<string> lines = new();
-        foreach (string raw in text.Split('\n'))
+        foreach (string raw in text.Replace("\u001A", string.Empty).Split('\n'))
         {
             string line = raw.TrimEnd('\r').Trim();
-            if (line.Length == 0) continue;
-            lines.Add(line);
+            if (line.Length > 0) lines.Add(line);
         }
+        if (lines.Count < 2)
+            throw new MpFileFormatException("file too short — need at least a label line and a metadata line");
 
-        if (lines.Count < 3)
-            throw new MpFileFormatException(
-                "file too short — need at least a label line, a header room line, and a metadata line");
+        List<string> problems = new();
 
-        // ---- line 1: [label][author] -------------------------------
-        // Two consecutive bracketed tokens with no separator.
-        Match hdr1 = HeaderLine1Regex().Match(lines[0]);
+        Match hdr1 = LabelLineRegex().Match(lines[0]);
         if (!hdr1.Success)
-            throw new MpFileFormatException(
-                $"line 1 isn't a [label][author] pair: '{lines[0]}'");
-
+            throw new MpFileFormatException($"line 1 isn't a [label][author] pair: '{lines[0]}'");
         string label  = hdr1.Groups["label"].Value;
         string author = hdr1.Groups["author"].Value;
-
-        // ---- header room line(s) -----------------------------------
-        // V4 generator writes two ([start][end]); in-the-wild loop
-        // files often have just one. Both shapes are valid for us
-        // because the metadata line tells us they're identical when
-        // it's a loop.
         int cursor = 1;
-        Match? roomHdr = HeaderRoomRegex().Match(lines[cursor]);
-        if (!roomHdr.Success)
-            throw new MpFileFormatException(
-                $"line {cursor + 1} isn't a [CODE:Group:Name] header: '{lines[cursor]}'");
-        string code4    = roomHdr.Groups["code"].Value;
-        string group    = roomHdr.Groups["group"].Value;
-        string roomName = roomHdr.Groups["name"].Value;
-        cursor++;
 
-        // Optional second header room (V4 generator emits this).
-        // Tolerate it but verify it's a loop (start code == end code).
-        if (cursor < lines.Count && HeaderRoomRegex().IsMatch(lines[cursor]))
+        // Some files repeat the [label][author] line, the second carrying the author.
+        if (cursor < lines.Count && LabelLineRegex().Match(lines[cursor]) is { Success: true } again)
         {
-            Match second = HeaderRoomRegex().Match(lines[cursor]);
-            string secondCode4 = second.Groups["code"].Value;
-            if (!string.Equals(secondCode4, code4, StringComparison.OrdinalIgnoreCase))
-                throw new MpFileFormatException(
-                    "this is a path-style .mp file (start and end rooms differ); only loop files are supported");
+            if (author.Length == 0) author = again.Groups["author"].Value;
+            if (label.Length == 0) label = again.Groups["label"].Value;
             cursor++;
         }
 
-        // ---- metadata line -----------------------------------------
+        // Many goto-path files have no header room lines at all.
+        MpHeaderRoom start = new(string.Empty, string.Empty, string.Empty);
+        if (cursor < lines.Count && HeaderRoomRegex().Match(lines[cursor]) is { Success: true } startHdr)
+        {
+            start = Header(startHdr);
+            cursor++;
+        }
+        else problems.Add("no [code:group:name] header room line");
+        MpHeaderRoom end = start;
+        if (cursor < lines.Count && HeaderRoomRegex().Match(lines[cursor]) is { Success: true } endHdr)
+        {
+            end = Header(endHdr);
+            cursor++;
+        }
+
         if (cursor >= lines.Count)
             throw new MpFileFormatException("missing metadata line");
         string metaLine = lines[cursor++];
-        string[] metaParts = metaLine.Split(':');
-        if (metaParts.Length < 4)
+        string[] meta = metaLine.Split(':');
+        if (meta.Length < 3 || meta[0].Trim().Length != 8)
             throw new MpFileFormatException(
-                $"metadata line malformed: '{metaLine}' — expected at least 'startHash:endHash:N:-1'");
+                $"metadata line malformed: '{metaLine}' — expected 'startHash:endHash:steps:…'");
 
-        string startHash = metaParts[0].Trim();
-        string endHash   = metaParts[1].Trim();
-        if (!string.Equals(startHash, endHash, StringComparison.OrdinalIgnoreCase))
-            throw new MpFileFormatException(
-                $"this is a path-style .mp file (start hash {startHash} != end hash {endHash}); only loop files are supported");
-        if (startHash.Length != 8)
-            throw new MpFileFormatException(
-                $"start hashExits should be 8 hex chars, got '{startHash}' ({startHash.Length} chars)");
-
-        if (!int.TryParse(metaParts[2].Trim(), out int declaredStepCount) || declaredStepCount < 0)
-            throw new MpFileFormatException(
-                $"step count token '{metaParts[2]}' isn't a non-negative integer");
-
-        // metaParts[3] is the literal "-1" marker; rest are
-        // gold/item/failPath/successPath which we don't consume.
-
-        // ---- step rows ---------------------------------------------
-        List<MpStep> steps = new(declaredStepCount);
-        for (; cursor < lines.Count; cursor++)
+        string startHash = meta[0].Trim().ToUpperInvariant();
+        string endHash   = meta[1].Trim().ToUpperInvariant();
+        if (!int.TryParse(meta[2].Trim(), out int declared) || declared < 0)
         {
-            string row = lines[cursor];
-            string[] parts = row.Split(':');
-            if (parts.Length < 3)
-                throw new MpFileFormatException(
-                    $"step row {steps.Count + 1} malformed: '{row}' — expected 'hashExits:options:dir'");
+            problems.Add($"step count '{meta[2].Trim()}' isn't a number");
+            declared = -1;
+        }
+        string use       = Field(meta, 3);
+        int gold         = int.TryParse(Field(meta, 4), out int g) ? g : 0;
+        string item      = Field(meta, 5);
+        string failPath  = Field(meta, 6);
+        string donePath  = Field(meta, 7);
 
-            string hashExits = parts[0].Trim();
-            // parts[1] is the STEPF bitmask — discarded per UX.
-            string dirRaw    = parts[2].Trim();
+        if (!string.Equals(startHash, endHash, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(start.Code, end.Code, StringComparison.OrdinalIgnoreCase))
+            problems.Add("this is a goto path (it ends in a different room), not a loop");
 
-            if (hashExits.Length != 8)
-                throw new MpFileFormatException(
-                    $"step row {steps.Count + 1} hashExits '{hashExits}' isn't 8 hex chars");
-
-            // Compass token → MpStep with Compass set. Anything else
-            // (e.g. "go path", "climb wall", "open door") is preserved
-            // verbatim as ActionText; the resolver picks the right
-            // exit by matching the next step's hashExits against the
-            // current room's neighbours, since our graph keys exits
-            // by Direction and stores the verb text as RoomExit
-            // metadata.
-            Direction? compass = TryParseDirection(dirRaw, out Direction parsed)
-                ? parsed
-                : (Direction?)null;
-            string actionText = compass.HasValue ? dirRaw.ToLowerInvariant() : dirRaw;
-
-            steps.Add(new MpStep(hashExits.ToUpperInvariant(), compass, actionText));
+        List<MpStep> steps = new(Math.Max(declared, 0));
+        for (int row = 1; cursor < lines.Count; cursor++, row++)
+        {
+            string line = lines[cursor];
+            string[] parts = line.Split(':', 3);
+            if (parts.Length < 3 || parts[0].Trim().Length != 8)
+            {
+                problems.Add($"step row {row} is malformed and was skipped: '{line}'");
+                continue;
+            }
+            MpStepFlags flags = int.TryParse(parts[1].Trim(), NumberStyles.HexNumber, null, out int f)
+                ? (MpStepFlags)f : MpStepFlags.None;
+            steps.Add(ParseStep(parts[0].Trim().ToUpperInvariant(), flags, parts[2].Trim()));
         }
 
-        if (steps.Count != declaredStepCount)
-            throw new MpFileFormatException(
-                $"metadata declared {declaredStepCount} step(s) but found {steps.Count} step row(s)");
+        if (declared >= 0 && steps.Count != declared)
+            problems.Add($"the file says {declared} step(s) but has {steps.Count}");
         if (steps.Count < 2)
-            throw new MpFileFormatException(
-                $"loop has {steps.Count} step(s); need at least 2 to form a cycle");
+            problems.Add($"only {steps.Count} step(s) — a loop needs at least 2");
+        else if (!string.Equals(steps[0].HashExits, startHash, StringComparison.OrdinalIgnoreCase))
+            problems.Add($"the first step's room ({steps[0].HashExits}) isn't the start room ({startHash})");
 
-        // First step's hashExits must equal startHashExits — that's
-        // the room we're standing in for step 0. The V4 generator
-        // enforces this; in-the-wild files honour it.
-        if (!string.Equals(steps[0].HashExits, startHash, StringComparison.OrdinalIgnoreCase))
-            throw new MpFileFormatException(
-                $"first step hashExits '{steps[0].HashExits}' doesn't match metadata start hashExits '{startHash}'");
-
-        return new MpLoopFile(
-            Label:           label,
-            Author:          author,
-            Code4:           code4,
-            GroupName:       group,
-            RoomName:        roomName,
-            StartHashExits:  startHash.ToUpperInvariant(),
-            Steps:           steps);
+        return new MpLoopFile(label, author, start, end, startHash, endHash, declared, use, gold,
+            item, failPath, donePath, steps, problems);
     }
 
-    private static bool TryParseDirection(string raw, out Direction dir)
+    // "n", "s[search s]", "e[use black star key e]", "E -- (Hidden/Needs 1 Actions",
+    // or a plain command ("go path", "pull lever").
+    internal static MpStep ParseStep(string hash, MpStepFlags flags, string raw)
+    {
+        Match m = CompassActionRegex().Match(raw);
+        if (m.Success && TryParseDirection(m.Groups["dir"].Value, out Direction dir))
+        {
+            List<string> pre = new();
+            if (m.Groups["pre"].Success)
+                foreach (string p in m.Groups["pre"].Value.Split(','))
+                    if (p.Trim().Length > 0) pre.Add(p.Trim());
+            string? note = m.Groups["note"].Success ? m.Groups["note"].Value.Trim() : null;
+            return new MpStep(hash, flags, raw, dir, pre, null, string.IsNullOrEmpty(note) ? null : note);
+        }
+        return new MpStep(hash, flags, raw, null, Array.Empty<string>(), raw.Length == 0 ? null : raw, null);
+    }
+
+    private static MpHeaderRoom Header(Match m) =>
+        new(m.Groups["code"].Value, m.Groups["group"].Value, m.Groups["name"].Value);
+
+    private static string Field(string[] parts, int i) => i < parts.Length ? parts[i].Trim() : string.Empty;
+
+    internal static bool TryParseDirection(string raw, out Direction dir)
     {
         switch (raw.Trim().ToUpperInvariant())
         {
@@ -176,25 +158,18 @@ public static partial class MpFileParser
         }
     }
 
-    // ----- regexes -------------------------------------------------
+    [GeneratedRegex(@"^\[(?<label>[^\]]*)\]\[(?<author>[^\]]*)\]$")]
+    private static partial Regex LabelLineRegex();
 
-    // [label][author] — labels can contain ] in some files (rare), so
-    // we anchor on the closing ][ pair instead of greedy [^]] groups.
-    [GeneratedRegex(@"^\[(?<label>[^\]]*)\]\[(?<author>[^\]]*)\]$",
-        RegexOptions.Compiled)]
-    private static partial Regex HeaderLine1Regex();
-
-    // [CODE:Group:Name] — code is up to 4 chars, but the parser is
-    // permissive and just takes everything before the first colon.
-    [GeneratedRegex(@"^\[(?<code>[^:\]]+):(?<group>[^:\]]*):(?<name>[^\]]+)\]$",
-        RegexOptions.Compiled)]
+    [GeneratedRegex(@"^\[(?<code>[^:\]]+):(?<group>[^:\]]*):(?<name>[^\]]+)\]$")]
     private static partial Regex HeaderRoomRegex();
+
+    // A compass token, then optional [extra,commands], then an optional "-- note".
+    [GeneratedRegex(@"^(?<dir>[A-Za-z]{1,2})\s*(?:\[(?<pre>[^\]]*)\])?\s*(?:--(?<note>.*))?$")]
+    private static partial Regex CompassActionRegex();
 }
 
-// Raised for any structural error in a .mp file — path-style instead of loop,
-// malformed line, step count mismatch, unknown direction token, etc. Importer
-// surfaces the message directly to the user via the editor's SaveError-style
-// banner.
+// A .mp file with no recognisable header — nothing to show.
 public sealed class MpFileFormatException : Exception
 {
     public MpFileFormatException(string message) : base(message) { }

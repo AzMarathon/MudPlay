@@ -7,7 +7,7 @@
         x:Class="MudPlay.Views.Navigation.WaypointActionEditDialog"
         x:DataType="vm:WaypointActionEditDialogViewModel"
         Title="Waypoint action"
-        Width="380" Height="250"
+        Width="380" Height="300"
         WindowStartupLocation="CenterOwner">
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
@@ -57,6 +57,14 @@
                           Content="Do not attack in this room"
                           FontSize="11"
                           ToolTip.Tip="The loop skips combat in THIS room as if auto-combat were off, walking on even if the Min/Max monster count is met. One exception: if a rest is triggered here, it still clears the room so the rest can proceed. Only this exact room is affected (loops only)."/>
+                <CheckBox IsChecked="{Binding RestHereHp, Mode=TwoWay}"
+                          Content="Rest up here (HP)"
+                          FontSize="11"
+                          ToolTip.Tip="On arriving, rest until HP is back to its rest-max ('rest to' on the Health tab) before moving on — even above your 'rest if below' trigger. Skipped when HP is already there (loops only)."/>
+                <CheckBox IsChecked="{Binding RestHereMana, Mode=TwoWay}"
+                          Content="Rest up here (mana)"
+                          FontSize="11"
+                          ToolTip.Tip="On arriving, rest until mana is back to its rest-max before moving on — even above your 'rest if below' trigger. Skipped when mana is already there (loops only)."/>
             </StackPanel>
 
             <StackPanel Grid.Row="4" Orientation="Horizontal"

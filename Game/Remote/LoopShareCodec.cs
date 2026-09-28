@@ -53,7 +53,10 @@ public static class LoopShareCodec
         [property: JsonPropertyName("c")] string? Command,
         [property: JsonPropertyName("d")] int DelayMs,
         [property: JsonPropertyName("nr")] bool DoNotRest,
-        [property: JsonPropertyName("na")] bool DoNotAttack);
+        [property: JsonPropertyName("na")] bool DoNotAttack,
+        // Added after the first share format; an older client just ignores them.
+        [property: JsonPropertyName("rh")] bool RestHereHp = false,
+        [property: JsonPropertyName("rm")] bool RestHereMana = false);
 
     public static IReadOnlyList<string> Encode(Loop loop)
     {
@@ -65,7 +68,7 @@ public static class LoopShareCodec
             loop.Waypoints.Select(w => new Waypoint(
                 w.Room,
                 string.IsNullOrEmpty(w.Command) ? null : w.Command,
-                w.DelayMs, w.DoNotRest, w.DoNotAttack)).ToList());
+                w.DelayMs, w.DoNotRest, w.DoNotAttack, w.RestHereHp, w.RestHereMana)).ToList());
 
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(payload, Json);
         using MemoryStream packed = new();
@@ -105,7 +108,11 @@ public static class LoopShareCodec
                 throw new FormatException($"bad room '{w?.Room}'");
             if (w.Command is { Length: > MaxCommandChars }) throw new FormatException("command too long");
             if (w.DelayMs < 0) throw new FormatException("negative delay");
-            waypoints.Add(new LoopWaypoint(key, w.Command, w.DelayMs, w.DoNotRest, w.DoNotAttack));
+            waypoints.Add(new LoopWaypoint(key, w.Command, w.DelayMs, w.DoNotRest, w.DoNotAttack)
+            {
+                RestHereHp = w.RestHereHp,
+                RestHereMana = w.RestHereMana,
+            });
         }
 
         return new Loop(name, waypoints)

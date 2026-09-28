@@ -295,11 +295,10 @@ public partial class App : Application
                 MudPlay.ViewModels.Navigation.NavigationManagerDialogViewModel,
                 MudPlay.Views.Navigation.NavigationManagerDialog>();
 
-            // .mp importer disambiguation prompt — only fires when
-            // multiple candidate rooms tie on the closure score.
+            // MegaMUD .mp import review (the decoded file beside our translation).
             AppServices.Current.Dialogs.RegisterWindow<
-                MudPlay.ViewModels.Navigation.MpAnchorPickerDialogViewModel,
-                MudPlay.Views.Navigation.MpAnchorPickerDialog>();
+                MudPlay.ViewModels.Navigation.MpImportReviewViewModel,
+                MudPlay.Views.Navigation.MpImportReviewWindow>();
 
             // Free-vs-direct route picker — fires on a user-initiated walk when a
             // shorter route crosses an acquirable gate the crosser can't yet pass.

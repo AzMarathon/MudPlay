@@ -44,6 +44,13 @@ public sealed class LoopWaypoint
     // without the field behave as before.
     public bool DoNotAttack { get; set; }
 
+    // "Rest up here": on arriving, rest until HP (RestHereHp) / mana (RestHereMana) is
+    // back to its rest-max ("rest to" on the Health tab) before moving on, whatever
+    // the "rest if below" trigger says — unless it's already there. Carried over from
+    // MegaMUD's per-step "Rest up here". Defaults false.
+    public bool RestHereHp { get; set; }
+    public bool RestHereMana { get; set; }
+
     // Parsed RoomKey from Room. Default when malformed.
     [JsonIgnore]
     public RoomKey Key => RoomKey.TryParseWire(Room, out RoomKey k) ? k : default;

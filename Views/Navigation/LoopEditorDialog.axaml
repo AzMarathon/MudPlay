@@ -7,7 +7,7 @@
         x:Class="MudPlay.Views.Navigation.LoopEditorDialog"
         x:DataType="vm:LoopEditorDialogViewModel"
         Title="{Binding DialogTitle}"
-        Width="660" Height="560"
+        Width="760" Height="560"
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>
@@ -66,7 +66,7 @@
                  fixed (not Auto) so the empty header cells don't collapse and widen
                  the * column, and the Margin matches the row's ListBox-border +
                  WaypointRow-border + padding inset (1+1+6). -->
-            <Grid Grid.Row="2" ColumnDefinitions="32,*,150,72,50,50,30,30,30" ColumnSpacing="4"
+            <Grid Grid.Row="2" ColumnDefinitions="32,*,150,72,50,50,50,50,30,30,30" ColumnSpacing="4"
                   Margin="8,4,8,0">
                 <TextBlock Grid.Column="1" Text="Waypoints" FontSize="11"
                            Foreground="{StaticResource ChromeFgMutedBrush}"/>
@@ -78,6 +78,12 @@
                            HorizontalAlignment="Center"
                            Foreground="{StaticResource ChromeFgMutedBrush}"/>
                 <TextBlock Grid.Column="5" Text="No atk" FontSize="10"
+                           HorizontalAlignment="Center"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                <TextBlock Grid.Column="6" Text="Rest HP" FontSize="10"
+                           HorizontalAlignment="Center"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                <TextBlock Grid.Column="7" Text="Rest MA" FontSize="10"
                            HorizontalAlignment="Center"
                            Foreground="{StaticResource ChromeFgMutedBrush}"/>
             </Grid>
@@ -101,7 +107,7 @@
                         <Border Classes="WaypointRow">
                             <!-- ColumnDefinitions must stay identical to the header grid
                                  above (fixed ↑↓✕ widths, not Auto) so headers line up. -->
-                            <Grid ColumnDefinitions="32,*,150,72,50,50,30,30,30" ColumnSpacing="4">
+                            <Grid ColumnDefinitions="32,*,150,72,50,50,50,50,30,30,30" ColumnSpacing="4">
                                 <TextBlock Grid.Column="0"
                                            Text="{Binding Index}"
                                            HorizontalAlignment="Right"
@@ -136,17 +142,25 @@
                                           IsChecked="{Binding DoNotAttack, Mode=TwoWay}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"
                                           ToolTip.Tip="Do not attack in this room — the loop skips combat here (as if auto-combat were off), but a triggered rest still clears it."/>
-                                <Button Grid.Column="6"
+                                <CheckBox Grid.Column="6"
+                                          IsChecked="{Binding RestHereHp, Mode=TwoWay}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          ToolTip.Tip="Rest up here (HP) — on arriving, rest until HP is back to its rest-max ('rest to' on the Health tab) before moving on, even above your 'rest if below' trigger."/>
+                                <CheckBox Grid.Column="7"
+                                          IsChecked="{Binding RestHereMana, Mode=TwoWay}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          ToolTip.Tip="Rest up here (mana) — on arriving, rest until mana is back to its rest-max before moving on, even above your 'rest if below' trigger."/>
+                                <Button Grid.Column="8"
                                         Content="↑" FontSize="10" Padding="6,1"
                                         ToolTip.Tip="Move earlier in cycle"
                                         Command="{Binding $parent[ListBox].((vm:LoopEditorDialogViewModel)DataContext).MoveUpCommand}"
                                         CommandParameter="{Binding}"/>
-                                <Button Grid.Column="7"
+                                <Button Grid.Column="9"
                                         Content="↓" FontSize="10" Padding="6,1"
                                         ToolTip.Tip="Move later in cycle"
                                         Command="{Binding $parent[ListBox].((vm:LoopEditorDialogViewModel)DataContext).MoveDownCommand}"
                                         CommandParameter="{Binding}"/>
-                                <Button Grid.Column="8"
+                                <Button Grid.Column="10"
                                         Content="✕" FontSize="10" Padding="6,1"
                                         ToolTip.Tip="Remove waypoint"
                                         Foreground="{StaticResource AccentRedBrush}"

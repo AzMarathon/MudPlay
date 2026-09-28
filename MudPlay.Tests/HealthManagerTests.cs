@@ -82,6 +82,9 @@ public sealed class HealthManagerTests
         /// wires this to the running loop's current-room DoNotRest waypoint.</summary>
         public bool SkipRestHere { get; set; }
 
+        // A loop's "rest up here" flags for the room we're in.
+        public (bool Hp, bool Mana) RestHere { get; set; }
+
         /// <summary>Local character poisoned — AppServices wires this to
         /// ConditionTracker.IsPoisoned. Poison prevents a rest from taking.</summary>
         public bool Poisoned { get; set; }
@@ -162,6 +165,7 @@ public sealed class HealthManagerTests
                 isSolo: () => Solo,
                 onRecovered: () => ShadowRestResumeCount++);
             Health.SetDoNotRestSelector(() => SkipRestHere);
+            Health.SetRestHereSelector(() => RestHere);
             Health.SetEquipmentApplyingProbe(() => EquipmentApplying);
             Health.SetPartyRoleSync(
                 isPartyFollower: () => false,
@@ -4077,6 +4081,63 @@ public sealed class HealthManagerTests
 
         Assert.False(h.HealthGateHeld);
         Assert.False(h.ManaGateHeld);
+    }
+
+    // ----- "rest up here" (per-waypoint) ------------------------------
+
+    [Fact]
+    public void RestHereRoom_RestsToRestMax_EvenAboveTheTrigger()
+    {
+        // Defaults: rest if below 60 %, rest to 95 %. At 80 % a normal room walks on;
+        // a rest-up-here room holds for the rest, and the one-tick confirm keeps it.
+        using Harness h = new();
+        h.AutoHealRestEnabled = true;
+        h.SetPrompt(hp: 80, maxHp: 100, ma: 100, maxMa: 100);
+        h.Health.Evaluate();
+        Assert.False(h.HealthGateHeld);
+
+        h.RestHere = (true, false);
+        Assert.True(h.Health.HoldForRestHere());
+        Assert.True(h.HealthGateHeld);
+        Assert.False(h.ManaGateHeld);
+    }
+
+    [Fact]
+    public void RestHereRoom_AlreadyAtRestMax_DoesNotHold()
+    {
+        using Harness h = new();
+        h.AutoHealRestEnabled = true;
+        h.RestHere = (true, true);
+        h.SetPrompt(hp: 96, maxHp: 100, ma: 96, maxMa: 100);
+
+        Assert.False(h.Health.HoldForRestHere());
+        Assert.False(h.HealthGateHeld);
+        Assert.False(h.ManaGateHeld);
+    }
+
+    [Fact]
+    public void RestHereMana_HoldsOnlyForMana()
+    {
+        using Harness h = new();
+        h.AutoHealRestEnabled = true;
+        h.RestHere = (false, true);
+        h.SetPrompt(hp: 80, maxHp: 100, ma: 80, maxMa: 100);
+
+        Assert.True(h.Health.HoldForRestHere());
+        Assert.False(h.HealthGateHeld);
+        Assert.True(h.ManaGateHeld);
+    }
+
+    [Fact]
+    public void DoNotRest_WinsOverRestHere_OnTheSameRoom()
+    {
+        using Harness h = new();
+        h.AutoHealRestEnabled = true;
+        h.RestHere = (true, true);
+        h.SkipRestHere = true;
+        h.SetPrompt(hp: 80, maxHp: 100, ma: 80, maxMa: 100);
+
+        Assert.False(h.Health.HoldForRestHere());
     }
 
     [Fact]

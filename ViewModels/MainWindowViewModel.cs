@@ -4834,7 +4834,8 @@ public partial class MainWindowViewModel : ObservableObject
             s.Dialogs,
             runner: s.LoopRunner,
             mpImporter: s.MpImporter,
-            log: s.Log);
+            log: s.Log,
+            movementFilter: s.Movement);
         try
         {
             await vm.ImportMpCommand.ExecuteAsync(null);
@@ -5021,7 +5022,8 @@ public partial class MainWindowViewModel : ObservableObject
             movement: s.MovementControl,
             autoLair: s.AutoLair,
             favorites: s.Favorites,
-            startOnGotoTab: startOnGotoTab);
+            startOnGotoTab: startOnGotoTab,
+            movementFilter: s.Movement);
 
         Views.Navigation.NavigationManagerDialog window = new() { DataContext = vm };
         // The dialog's Close button raises CloseRequested; mirror what

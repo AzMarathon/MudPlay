@@ -1,0 +1,197 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.Navigation"
+        x:Class="MudPlay.Views.Navigation.MpImportReviewWindow"
+        x:DataType="vm:MpImportReviewViewModel"
+        Title="{Binding FileName, StringFormat='Import MegaMUD loop — {0}'}"
+        Width="1400" Height="820" MinWidth="900" MinHeight="500"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.Cell">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.Head">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.Info">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+        </Style>
+        <Style Selector="ListBox.Steps ListBoxItem">
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="MinHeight" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+        </Style>
+        <Style Selector="TextBox.CellEdit">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="MinHeight" Value="22"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Padding" Value="4,1"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="10">
+        <Grid RowDefinitions="*,Auto,Auto" RowSpacing="8">
+            <Grid Grid.Row="0" ColumnDefinitions="*,8,*">
+
+                <!-- ============ What the file says ============ -->
+                <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*" RowSpacing="6">
+                    <StackPanel Grid.Row="0" Spacing="2">
+                        <TextBlock Text="MegaMUD file" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <TextBlock Classes="Info" Text="{Binding Label, StringFormat='Name: {0}'}"/>
+                        <TextBlock Classes="Info" Text="{Binding Author, StringFormat='Author: {0}'}"/>
+                        <TextBlock Classes="Info" Text="{Binding StartRoomText, StringFormat='Start room: {0}'}"/>
+                        <TextBlock Classes="Info" Text="{Binding EndRoomText, StringFormat='End room: {0}'}"/>
+                        <ItemsControl ItemsSource="{Binding PathDetails}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Classes="Info" Text="{Binding}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Classes="Info" Text="{Binding RoomsMdNote}"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                        <ItemsControl ItemsSource="{Binding Problems}" IsVisible="{Binding HasProblems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Classes="Info" Foreground="#E0A040" Text="{Binding StringFormat='⚠ {0}'}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <Grid Grid.Row="1" ColumnDefinitions="36,72,170,90,*,150" Margin="8,0">
+                        <TextBlock Grid.Column="0" Classes="Head" Text="#"/>
+                        <TextBlock Grid.Column="1" Classes="Head" Text="Room hash"/>
+                        <TextBlock Grid.Column="2" Classes="Head" Text="Rooms.md"/>
+                        <TextBlock Grid.Column="3" Classes="Head" Text="Move"/>
+                        <TextBlock Grid.Column="4" Classes="Head" Text="Extra commands"/>
+                        <TextBlock Grid.Column="5" Classes="Head" Text="Step options"/>
+                    </Grid>
+
+                    <ListBox Grid.Row="2" Classes="Steps"
+                             ItemsSource="{Binding SourceRows}"
+                             SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MpSourceRow">
+                                <Grid ColumnDefinitions="36,72,170,90,*,150">
+                                    <TextBlock Grid.Column="0" Classes="Cell" Text="{Binding Number}"/>
+                                    <TextBlock Grid.Column="1" Classes="Cell" Text="{Binding Hash}" FontFamily="monospace"/>
+                                    <TextBlock Grid.Column="2" Classes="Cell" Text="{Binding RoomsMdName}"/>
+                                    <TextBlock Grid.Column="3" Classes="Cell" Text="{Binding Action}"
+                                               ToolTip.Tip="{Binding Action}"/>
+                                    <TextBlock Grid.Column="4" Classes="Cell" Text="{Binding Extra}"
+                                               ToolTip.Tip="{Binding Extra}"/>
+                                    <TextBlock Grid.Column="5" Classes="Cell" Text="{Binding Flags}"
+                                               ToolTip.Tip="{Binding Flags}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+
+                <!-- ============ What we'd make of it ============ -->
+                <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*" RowSpacing="6">
+                    <StackPanel Grid.Row="0" Spacing="4">
+                        <TextBlock Text="MudPlay loop" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <Grid ColumnDefinitions="80,*" ColumnSpacing="6">
+                            <TextBlock Grid.Column="0" Classes="Info" Text="Loop name" VerticalAlignment="Center"/>
+                            <TextBox Grid.Column="1" FontSize="11"
+                                     Text="{Binding LoopName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="80,*" ColumnSpacing="6" IsVisible="{Binding HasAnchorChoice}">
+                            <TextBlock Grid.Column="0" Classes="Info" Text="Start room" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="1" FontSize="11" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding AnchorChoices}"
+                                      SelectedItem="{Binding SelectedAnchor, Mode=TwoWay}"
+                                      ToolTip.Tip="Several rooms in the map data match the loop's start room. Pick the one to walk from — the list is ordered best translation first."/>
+                        </Grid>
+                        <Grid ColumnDefinitions="80,*" ColumnSpacing="6">
+                            <TextBlock Grid.Column="0" Classes="Info" Text="Notes" VerticalAlignment="Top"/>
+                            <TextBox Grid.Column="1" FontSize="11" AcceptsReturn="True" TextWrapping="Wrap"
+                                     Height="54"
+                                     Text="{Binding Notes, Mode=TwoWay}"/>
+                        </Grid>
+                        <TextBlock Classes="Info" Text="{Binding TranslationSummary}" FontWeight="SemiBold"/>
+                        <ItemsControl ItemsSource="{Binding StashChoices}" IsVisible="{Binding HasStashChoices}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MpStashChoice">
+                                    <CheckBox IsChecked="{Binding Add, Mode=TwoWay}" FontSize="11"
+                                              Content="{Binding Text, StringFormat='Add {0} as a stash room'}"
+                                              ToolTip.Tip="The loop marks this room as a stash point. Tick it to add it to your stash rooms when you accept the loop."/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <Grid Grid.Row="1" ColumnDefinitions="36,22,84,*,130,26,26,26,26" Margin="8,0">
+                        <TextBlock Grid.Column="0" Classes="Head" Text="#"/>
+                        <TextBlock Grid.Column="2" Classes="Head" Text="Room"/>
+                        <TextBlock Grid.Column="3" Classes="Head" Text="Name"/>
+                        <TextBlock Grid.Column="4" Classes="Head" Text="Command"/>
+                        <TextBlock Grid.Column="5" Classes="Head" Text="NR" ToolTip.Tip="Do not rest in this room"/>
+                        <TextBlock Grid.Column="6" Classes="Head" Text="NA" ToolTip.Tip="Do not attack in this room"/>
+                        <TextBlock Grid.Column="7" Classes="Head" Text="RH" ToolTip.Tip="Rest up here — HP"/>
+                        <TextBlock Grid.Column="8" Classes="Head" Text="RM" ToolTip.Tip="Rest up here — mana"/>
+                    </Grid>
+
+                    <ListBox Grid.Row="2" Classes="Steps"
+                             ItemsSource="{Binding Rows}"
+                             SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MpTranslatedRowViewModel">
+                                <Grid ColumnDefinitions="36,22,84,*,130,26,26,26,26"
+                                      ToolTip.Tip="{Binding Dropped, StringFormat='Not carried over: {0}'}"
+                                      ToolTip.IsEnabled="{Binding Dropped, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                    <TextBlock Grid.Column="0" Classes="Cell" Text="{Binding Number}"/>
+                                    <TextBlock Grid.Column="1" Classes="Cell" Text="{Binding StatusText}"
+                                               ToolTip.Tip="{Binding StatusTip}"/>
+                                    <TextBox Grid.Column="2" Classes="CellEdit"
+                                             Text="{Binding RoomText, Mode=TwoWay}"
+                                             PlaceholderText="map/room"
+                                             ToolTip.Tip="The room for this step (map/room). Change it, then press Re-walk to translate the steps after it from here."/>
+                                    <TextBlock Grid.Column="3" Classes="Cell" Margin="6,0,0,0"
+                                               Text="{Binding RoomName}" ToolTip.Tip="{Binding StatusTip}"/>
+                                    <TextBox Grid.Column="4" Classes="CellEdit"
+                                             Text="{Binding Command, Mode=TwoWay}"
+                                             PlaceholderText="command"
+                                             ToolTip.Tip="Sent when the loop reaches this room."/>
+                                    <CheckBox Grid.Column="5" IsChecked="{Binding DoNotRest, Mode=TwoWay}"
+                                              ToolTip.Tip="Do not rest in this room"/>
+                                    <CheckBox Grid.Column="6" IsChecked="{Binding DoNotAttack, Mode=TwoWay}"
+                                              ToolTip.Tip="Do not attack in this room"/>
+                                    <CheckBox Grid.Column="7" IsChecked="{Binding RestHereHp, Mode=TwoWay}"
+                                              ToolTip.Tip="Rest up here — rest until HP is back to its rest-max"/>
+                                    <CheckBox Grid.Column="8" IsChecked="{Binding RestHereMana, Mode=TwoWay}"
+                                              ToolTip.Tip="Rest up here — rest until mana is back to its rest-max"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Grid>
+
+            <TextBlock Grid.Row="1" Classes="Info" Text="{Binding Status}" Foreground="#E0A040"/>
+
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                <Button Grid.Column="0" Content="Re-walk" Command="{Binding ReWalkCommand}"
+                        ToolTip.Tip="Translate the file again, keeping every room you typed where you put it and walking on from each."/>
+                <TextBlock Grid.Column="1" Classes="Info" VerticalAlignment="Center"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           Text="✓ matches · ≈ room differs from the recording · ↺ found by hash · ✎ set by you · ✗ untranslated (left out unless you fill it in). Hover a row for what isn't carried over."/>
+                <Button Grid.Column="2" Content="Reject" Command="{Binding RejectCommand}" MinWidth="90" IsCancel="True"/>
+                <Button Grid.Column="3" Content="Accept" Command="{Binding AcceptCommand}" MinWidth="90"
+                        Classes="Accent" IsEnabled="{Binding CanAccept}"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

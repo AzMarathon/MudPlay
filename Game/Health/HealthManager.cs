@@ -130,6 +130,7 @@ public sealed class HealthManager : IDisposable
     private Action? _onRecoveryComplete;        // any rest gate topped off — resume a held neutral engage
     private bool _wasRecovering;                // falling-edge latch for _onRecoveryComplete
     private Func<bool>? _shouldSkipRestHere;    // running loop's current room is a "do not rest" waypoint
+    private Func<(bool Hp, bool Mana)>? _restHere;  // running loop's current room is a "rest up here" waypoint
     private Func<bool>? _equipmentApplying;     // a gear-set swap is streaming wear/rem — hold rest so we don't thrash it
     // Rest-target pool ceilings. _defaultSetMax* = the DEFAULT gear set's max HP/mana
     // — the loadout the user's rest %s are tuned against, so a Pre-rest set that swaps
@@ -468,6 +469,24 @@ public sealed class HealthManager : IDisposable
     // loop is running and the room we're standing in is a waypoint flagged
     // DoNotRest, so the rest hold is suppressed and the loop advances out of it.
     // Left unwired, resting is unaffected.
+    // A loop room flagged "rest up here" (HP and/or mana): rest to that pool's rest-max
+    // there, even above the rest-if-below trigger, unless it's already at rest-max.
+    public void SetRestHereSelector(Func<(bool Hp, bool Mana)> restHere) => _restHere = restHere;
+
+    // The loop's pre-step check: in a rest-up-here room, raise the rest hold now —
+    // before the next move goes out — rather than on the next prompt. True while a
+    // rest hold is up, so the step waits for it.
+    public bool HoldForRestHere()
+    {
+        if (_restHere?.Invoke() is not { } f || !(f.Hp || f.Mana)) return false;
+        Evaluate();
+        return _hpGateAsserted || _maGateAsserted;
+    }
+
+    // Do-not-rest wins over rest-up-here on the same room.
+    private (bool Hp, bool Mana) RestHereNow() =>
+        _shouldSkipRestHere?.Invoke() == true ? default : _restHere?.Invoke() ?? default;
+
     public void SetDoNotRestSelector(Func<bool> shouldSkipRestHere)
     {
         ArgumentNullException.ThrowIfNull(shouldSkipRestHere);
@@ -867,6 +886,7 @@ public sealed class HealthManager : IDisposable
         // the hold if it was already up. Only THIS room is protected; the moment
         // the loop steps into another room this re-evaluates and rests normally.
         bool skipRest = _shouldSkipRestHere?.Invoke() ?? false;
+        (bool restHereHp, bool restHereMa) = RestHereNow();
 
         // Falling edge: combat was on as of the previous Evaluate call, off now.
         // See the re-confirm block below (after the gate transitions) for why
@@ -890,7 +910,9 @@ public sealed class HealthManager : IDisposable
         (int hpRestTrigger, int hpRestMax) = ResolveRestThresholds(
             s.HpThresholdMode, s.RestIfBelowHp, s.RestMaxHp,
             _defaultSetMaxHp, _realMaxHp, _state.MaxHp);
-        int hpRestTarget  = follower
+        // A rest-up-here room rests whenever HP is under rest-max, to rest-max.
+        if (restHereHp) hpRestTrigger = hpRestMax;
+        int hpRestTarget  = follower && !restHereHp
             ? Math.Min(hpRestTrigger + 1, hpRestMax)
             : hpRestMax;
         // Before the rest command has actually gone out, the gate's clear floor
@@ -927,7 +949,7 @@ public sealed class HealthManager : IDisposable
             _hpGateConfirmed = false;
             _coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate,
                 AsserterName,
-                $"HP {_state.Hp}/{_state.MaxHp} < rest-trigger={hpRestTrigger}");
+                $"HP {_state.Hp}/{_state.MaxHp} < rest-trigger={hpRestTrigger}{(restHereHp ? " (loop room: rest up here)" : "")}");
             // Re-check one dispatch tick later before committing to an actual
             // rest send — see ConfirmHpGate for why.
             _post(ConfirmHpGate);
@@ -949,7 +971,8 @@ public sealed class HealthManager : IDisposable
         (int maRestTrigger, int maRestMax) = ResolveRestThresholds(
             s.MaThresholdMode, s.RestIfBelowMa, s.RestMaxMa,
             _defaultSetMaxMa, _realMaxMa, _state.MaxMa);
-        int maRestTarget  = follower
+        if (restHereMa) maRestTrigger = maRestMax;
+        int maRestTarget  = follower && !restHereMa
             ? Math.Min(maRestTrigger + 1, maRestMax)
             : maRestMax;
         // See hpClearFloor above — same pre-send-vs-resting distinction for MA, and
@@ -964,7 +987,7 @@ public sealed class HealthManager : IDisposable
             _maGateConfirmed = false;
             _coordinator.AssertGate(MovementCoordinator.ManaRecoveryGate,
                 AsserterName,
-                $"MA {_state.Ma}/{_state.MaxMa} < rest-trigger={maRestTrigger}");
+                $"MA {_state.Ma}/{_state.MaxMa} < rest-trigger={maRestTrigger}{(restHereMa ? " (loop room: rest up here)" : "")}");
             // Re-check one dispatch tick later before committing to an actual
             // rest send — see ConfirmMaGate for why.
             _post(ConfirmMaGate);
@@ -1438,9 +1461,10 @@ public sealed class HealthManager : IDisposable
     {
         if (!_hpGateAsserted || _hpGateConfirmed) return;
         HealthSettings s = _readSettings();
-        (int hpRestTrigger, _) = ResolveRestThresholds(
+        (int hpRestTrigger, int hpRestMax) = ResolveRestThresholds(
             s.HpThresholdMode, s.RestIfBelowHp, s.RestMaxHp,
             _defaultSetMaxHp, _realMaxHp, _state.MaxHp);
+        if (RestHereNow().Hp) hpRestTrigger = hpRestMax;
         // A "recovered above trigger" reading while the max is unsettled (a gear swap's
         // confirmations still streaming) can't be trusted — the trigger is riding a
         // transient max (report paradigm-20260916-141742). The breach that asserted this
@@ -1467,9 +1491,10 @@ public sealed class HealthManager : IDisposable
     {
         if (!_maGateAsserted || _maGateConfirmed) return;
         HealthSettings s = _readSettings();
-        (int maRestTrigger, _) = ResolveRestThresholds(
+        (int maRestTrigger, int maRestMax) = ResolveRestThresholds(
             s.MaThresholdMode, s.RestIfBelowMa, s.RestMaxMa,
             _defaultSetMaxMa, _realMaxMa, _state.MaxMa);
+        if (RestHereNow().Mana) maRestTrigger = maRestMax;
         // See ConfirmHpGate — a transient max can't retract a real breach (report
         // paradigm-20260916-141742).
         bool maMaxUnsettled = _maxMaChangedAt != default && _now() - _maxMaChangedAt < MaxPoolSettleWindow;
