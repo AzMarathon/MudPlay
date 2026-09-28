@@ -910,7 +910,7 @@ How HP works from full health down through dropping and death, how monster healt
 ### ShadowRest
 *Status: CONFIRMED (user) · Realm: Paradigm (not present in stock)*
 
-- **Some Paradigm classes have a ShadowRest class ability; it is not a stock MajorMUD mechanic.** In the imported game data it is **class-ability code 1103** on the Classes table (`AbilityNames` maps `1103 → "ShadowRest"`); a class row carrying that code in any `Abil-N` slot has the ability.
+- **Some Paradigm races and classes have a ShadowRest ability; it is not a stock MajorMUD mechanic.** Resting with it doesn't break sneak or hide *([CONFIRMED] 2026-09-28, user: the flag can sit on the race or the class)*. In the imported game data it is **class-ability code 1103** on the Classes table (`AbilityNames` maps `1103 → "ShadowRest"`); a class row carrying that code in any `Abil-N` slot has the ability.
 - **While hidden or sneaking, the character can `rest` (or meditate) and stay stealthed while resting in the room.** Monsters in the room **do not attack** the resting stealthed character. Normally a hostile in the room means you can't safely rest; ShadowRest lets a stealthed character rest right there without being engaged.
 - **Some ShadowRest classes gain an HP-regen bonus while resting this way** (e.g. thief gets extra regen). The bonus is server-side.
 - **No special messages mark the state.** The only observable sequence is a successful hide/sneak followed by `rest` — there is no "you shadow-rest" line.
@@ -2684,6 +2684,18 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - `You may not sneak right now!` — a **combat cooldown**: you can't sneak for a few seconds after being in combat or attacked, and a retry shortly after works. *([CONFIRMED] user, 2026-09-26; report `paradigm-20260926-233357`. An earlier note called it a hard block with no auto-retry; superseded 2026-09-26.)*
 - **Sneak breaks *silently* when you move into a room that doesn't re-emit `Sneaking...`** *([OBSERVED])* — no failure line, the stealth is just gone. `Sneaking...` arrives between the move and the new room's display, and the old room's `Attempting to sneak...` doesn't carry over. A room shown without it is a guaranteed backstab failure *([CONFIRMED] user, 2026-09-27; report `paradigm-20260927-014325`)*.
 - **Any NPC in the room prevents a sneak from taking** *([OBSERVED])* — an `sn` is wasted while a monster shares the room.
+- **What ends a sneak** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p: the 34 functions that clear the sneaking flag; treated as true on both realms — **Client policy**, user 2026-09-28)*. Where a function serves several commands, the command was read from the code and text around the clear, not traced line by line.
+  - **Fighting:** any attack command, backstab included (`_cmd_any_attack`); `bash`; attacking a monster; a monster attacking you; PvP attacks.
+  - **Casting any spell** (`_cmd_cast`, which also clears hidden) — see *Casting breaks both Sneak and Hide*.
+  - **Actions:** `aid`, `drag`, equipping (`_cmd_equip`), `ready` / `remove` gear, `give`, `search`, `rob`, `picklock`, `open` / `close` / `lock` a door, `disarm`, `follow`, the `move` command (moving an object).
+  - **Shops and banks:** `buy`, `sell`, `stock`, `unstock`, `markup`, `deposit`, `withdraw`.
+  - **Party and social:** `invite`, `share`, **saying something** (plain room speech) and **yelling**.
+  - **Resting or meditating** — starting either ends it, except on Paradigm for a race or class with the ShadowRest flag, whose rest keeps it *([CONFIRMED] 2026-09-28, user)* — see *Health, resting & recovery → ShadowRest*.
+  - **Room commands:** textblock / CMD actions (the "pull lever" kind).
+  - **Movement:** a move attempt that fails ("You can't seem to move anywhere!", too stunned); moving while dragging something; a loud entry (`You make a sound as you enter the room!`).
+  - **Being spotted:** by a monster with see-hidden, or by a Gaunt One player who has finished their level-15 race quest *([CONFIRMED] 2026-09-28, user)*.
+  - **Other:** `quit`, `suicide`; `sneak` itself resets the flag before it re-tries.
+  - Not on the list: `get` / `drop`, `look`, telepaths, gossip and other channels, `use` — none of these clear it in the DLL.
 
 **Client use:**
 - The backstab loadout is applied in the walker's pre-move step, ahead of the `sn`, rather than raced at room-clear (because of the equip-before-sneak rule).
