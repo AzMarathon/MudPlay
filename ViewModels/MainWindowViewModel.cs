@@ -4231,12 +4231,12 @@ public partial class MainWindowViewModel : ObservableObject
         await Task.CompletedTask;
     }
 
-    // Profile Management's "Edit settings…" on a BBS row — open Settings on the
+    // Profile Management's "BBS settings…" / "Realm settings…" — open Settings on the
     // BBS tab with that record selected, so a freshly-added BBS has an obvious
     // path to the host / port it still needs.
-    private void OpenBbsSettingsFor(string bbsName) => OpenSettingsAt("bbs", bbsName);
+    private void OpenBbsSettingsFor(string bbsName, string? realmName) => OpenSettingsAt("bbs", bbsName, realmName);
 
-    private void OpenSettingsAt(string? sectionId, string? bbsName = null)
+    private void OpenSettingsAt(string? sectionId, string? bbsName = null, string? realmName = null)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
@@ -4252,7 +4252,7 @@ public partial class MainWindowViewModel : ObservableObject
                 SettingsSectionViewModel? section = vm.Sections
                     .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
                 if (section is not null) vm.SelectedSection = section;
-                if (bbsName is not null) vm.SelectBbs(bbsName);
+                if (bbsName is not null) vm.SelectBbs(bbsName, realmName);
             }
             RaiseExisting(existing);
             return;
@@ -4265,7 +4265,8 @@ public partial class MainWindowViewModel : ObservableObject
                 svc.Profile, svc.Log,
                 sendText: SendTextFromSettings,
                 initialSectionId: sectionId,
-                initialBbsName: bbsName),
+                initialBbsName: bbsName,
+                initialRealmName: realmName),
         };
         window.Closed += (_, _) =>
         {

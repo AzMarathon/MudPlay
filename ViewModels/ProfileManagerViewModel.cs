@@ -10,9 +10,11 @@ using MudPlay.ViewModels.Profile;
 namespace MudPlay.ViewModels;
 
 // Modeless Profile Management window VM — the one place to add / rename / delete
-// / swap characters, assign a character to a BBS, and add / remove / rename
-// BBSes. A BBS's actual settings (host, port, logon) stay in the Settings BBS
-// tab; Edit hands off there with the row's record selected.
+// / swap characters, move a character to a BBS or realm, and add / remove /
+// rename BBSes and their realms. Three linked columns: BBSes → the selected BBS's
+// realms → the characters on the selected realm. A BBS's / realm's actual settings
+// (host, port, logon, realm mechanics) stay in the Settings BBS tab; the settings
+// buttons hand off there with the record selected.
 // Structural ops commit immediately via ProfileService / BbsProfileStore
 // (folder moves + deletes on disk), so the window needs no Save/Cancel staging.
 // Mutating the LOADED character (swap / delete / rename / assign of the current
@@ -27,7 +29,9 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private readonly Action<string?> _newProfile;
     private readonly Action _saveCurrent;
     private readonly Func<string?, Task> _saveCurrentAs;
-    private readonly Action<string> _editBbsSettings;
+    private readonly Action<string, string?> _editBbsSettings;
+    private readonly RealmCatalog _realms;
+    private bool _suppressRealmEdits;
     private readonly ProfileService _profile;
     private readonly BbsProfileStore _bbs;
     private readonly DialogService _dialogs;
@@ -54,8 +58,26 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
 
     [ObservableProperty] private string? _assignTargetBbs;
 
-    // Realms of the selected BBS, for "Assign to realm" (edited under Settings → BBS).
+    // The selected BBS's realms (the middle column) and the one selected, whose
+    // characters the right column lists.
     public ObservableCollection<string> Realms { get; } = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRealmSelection))]
+    [NotifyPropertyChangedFor(nameof(CanRemoveRealm))]
+    [NotifyPropertyChangedFor(nameof(CharactersHeader))]
+    private string? _selectedRealm;
+
+    public bool HasRealmSelection => SelectedRealm is not null;
+    public bool CanRemoveRealm => SelectedRealm is not null && Realms.Count > 1;
+    public string RealmsHeader => SelectedBbs is { } bbs ? $"Realms on {bbs}" : "Realms";
+    public string CharactersHeader => SelectedRealm is { } realm ? $"Characters on {realm}" : "Characters";
+
+    // The selected realm's game data, changed right here (committed at once).
+    public IReadOnlyList<string> GameDataSetOptions { get; }
+    [ObservableProperty] private string _realmGameDataSet = Settings.BbsSectionViewModel.GlobalDefaultSet;
+
+    // Destination for "Move to realm" (any realm of the character's BBS).
     [ObservableProperty] private string? _assignTargetRealm;
     [ObservableProperty] private bool _isProfilesEmpty = true;
     [ObservableProperty] private string _currentProfileLabel = "No character loaded";
@@ -67,7 +89,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     public bool HasBbsSelection => SelectedBbs is not null;
     public bool HasProfileSelection => SelectedProfile is not null;
 
-    // Destination choices for "Assign to BBS" — every saved BBS except the one
+    // Destination choices for "Move to BBS" — every saved BBS except the one
     // the selected character already lives under.
     public IEnumerable<string> AssignableBbses =>
         Bbses.Where(b => !string.Equals(b, SelectedBbs, StringComparison.OrdinalIgnoreCase));
@@ -78,7 +100,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         Action<string?> newProfile,
         Action saveCurrent,
         Func<string?, Task> saveCurrentAs,
-        Action<string> editBbsSettings)
+        Action<string, string?> editBbsSettings)
     {
         _isDisconnected = isDisconnected;
         _swapToProfile = swapToProfile;
@@ -92,10 +114,16 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         _confirm = AppServices.Current.Confirm;
         _settings = AppServices.Current.Settings;
         _log = AppServices.Current.Log;
+        _realms = AppServices.Current.Realms;
+        GameDataSetOptions = new[] { Settings.BbsSectionViewModel.GlobalDefaultSet }
+            .Concat(AppServices.Current.GameData.AvailableSets.OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
+            .ToList();
 
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileMutated += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedHandler;
+        // A realm edit in Settings → BBS re-pins; pick up the renamed / added realms.
+        _profile.BbsPinApplied += OnProfileChanged;
         AppServices.Current.TourActionChanged += OnTourActionChanged;
         OnTourActionChanged();
 
@@ -116,6 +144,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         _profile.ProfileLoaded -= OnProfileChanged;
         _profile.ProfileMutated -= OnProfileChanged;
         _profile.ProfileClosed -= OnProfileClosedHandler;
+        _profile.BbsPinApplied -= OnProfileChanged;
         AppServices.Current.TourActionChanged -= OnTourActionChanged;
     }
 
@@ -126,13 +155,32 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         HighlightAddCharacter = a == FirstRunTutorialViewModel.ActionAddCharacter;
     }
 
-    private void OnProfileChanged(CharacterProfile _) { RefreshCurrentLabel(); ReloadProfiles(); }
-    private void OnProfileClosedHandler() { RefreshCurrentLabel(); ReloadProfiles(); }
+    private void OnProfileChanged(CharacterProfile _) { RefreshCurrentLabel(); ReloadRealms(keep: SelectedRealm); }
+    private void OnProfileClosedHandler() { RefreshCurrentLabel(); ReloadRealms(keep: SelectedRealm); }
 
-    partial void OnSelectedBbsChanged(string? value) => ReloadProfiles();
+    partial void OnSelectedBbsChanged(string? value)
+    {
+        OnPropertyChanged(nameof(RealmsHeader));
+        ReloadRealms(keep: null);
+    }
+
+    partial void OnSelectedRealmChanged(string? value)
+    {
+        LoadRealmGameDataSet();
+        ReloadProfiles();
+    }
 
     partial void OnSelectedProfileChanged(ProfileManagerRow? value) =>
         AssignTargetRealm = value?.Realm;
+
+    // Commit the realm's game data as soon as it's picked; the loaded character's
+    // realm re-pins so its game data switches.
+    partial void OnRealmGameDataSetChanged(string value)
+    {
+        if (_suppressRealmEdits || SelectedBbs is not { } bbs || SelectedRealm is not { } realm) return;
+        _realms.SetGameDataSet(bbs, realm, value == Settings.BbsSectionViewModel.GlobalDefaultSet ? null : value);
+        RepinIfLoadedOn(bbs);
+    }
 
     private void RefreshCurrentLabel() =>
         CurrentProfileLabel = _profile.Current is null
@@ -157,25 +205,118 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         else if (SelectedBbs is not null) SelectedBbs = Bbses.FirstOrDefault();
     }
 
+    // Fill the realm column for the selected BBS, keeping `keep` selected when it's
+    // still there, else the loaded character's realm (on its own BBS), else the first.
+    private void ReloadRealms(string? keep)
+    {
+        Realms.Clear();
+        BbsProfile? board = SelectedBbs is { } bbs ? _bbs.Get(bbs) : null;
+        foreach (RealmProfile realm in board?.Realms ?? new()) Realms.Add(realm.Name);
+        string? loadedRealm = board is not null
+            && string.Equals(_profile.CurrentBbsName, board.Name, StringComparison.OrdinalIgnoreCase)
+                ? board.RealmFor(_profile.Current?.Realm)?.Name : null;
+        string? pick = board?.RealmFor(keep ?? loadedRealm)?.Name;
+        if (string.Equals(SelectedRealm, pick, StringComparison.Ordinal))
+        {
+            LoadRealmGameDataSet();
+            ReloadProfiles();
+        }
+        else SelectedRealm = pick;
+        OnPropertyChanged(nameof(CanRemoveRealm));
+    }
+
+    private void LoadRealmGameDataSet()
+    {
+        string? set = SelectedBbs is { } bbs && SelectedRealm is { } realm
+            ? _bbs.Get(bbs)?.RealmFor(realm)?.ActiveGameDataSet : null;
+        _suppressRealmEdits = true;
+        RealmGameDataSet = set is not null && GameDataSetOptions.Contains(set)
+            ? set : Settings.BbsSectionViewModel.GlobalDefaultSet;
+        _suppressRealmEdits = false;
+    }
+
+    // The characters on the selected realm (a character with no / an unknown realm
+    // plays the BBS's first).
     private void ReloadProfiles()
     {
         Profiles.Clear();
-        Realms.Clear();
-        if (SelectedBbs is { } bbs)
+        if (SelectedBbs is { } bbs && SelectedRealm is { } selectedRealm)
         {
-            Models.Settings.BbsProfile? board = _bbs.Get(bbs);
-            foreach (Models.Settings.RealmProfile realm in board?.Realms ?? new())
-                Realms.Add(realm.Name);
+            BbsProfile? board = _bbs.Get(bbs);
             foreach (ProfileRef r in _profile.ListAll()
                          .Where(r => string.Equals(r.Bbs, bbs, StringComparison.OrdinalIgnoreCase))
                          .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
             {
+                string? realm = board?.RealmFor(_profile.RealmOf(r))?.Name;
+                if (!string.Equals(realm, selectedRealm, StringComparison.OrdinalIgnoreCase)) continue;
                 bool isCurrent = string.Equals(_profile.CurrentBbsName, r.Bbs, StringComparison.OrdinalIgnoreCase)
                                  && string.Equals(_profile.CurrentProfileName, r.Name, StringComparison.Ordinal);
-                Profiles.Add(new ProfileManagerRow(r, isCurrent, board?.RealmFor(_profile.RealmOf(r))?.Name));
+                Profiles.Add(new ProfileManagerRow(r, isCurrent, realm));
             }
         }
         IsProfilesEmpty = Profiles.Count == 0;
+    }
+
+    // A realm change on the loaded character's BBS (rename, removal, game data)
+    // re-pins so its realm stores and game data follow.
+    private void RepinIfLoadedOn(string bbs)
+    {
+        if (string.Equals(_profile.CurrentBbsName, bbs, StringComparison.OrdinalIgnoreCase))
+            _profile.NotifyBbsPinApplied();
+    }
+
+    // ----- Realms ---------------------------------------------------------
+
+    [RelayCommand]
+    private void AddRealm()
+    {
+        if (SelectedBbs is not { } bbs || _realms.Add(bbs) is not { } name) return;
+        ReloadRealms(keep: name);
+    }
+
+    [RelayCommand]
+    private async Task RenameRealmAsync()
+    {
+        if (SelectedBbs is not { } bbs || SelectedRealm is not { } oldName) return;
+        ProfileNameInputDialogViewModel vm = new(
+            oldName,
+            n => !string.Equals(n, oldName, StringComparison.OrdinalIgnoreCase)
+                 && Realms.Contains(n, StringComparer.OrdinalIgnoreCase));
+        string? newName = await _dialogs.OpenWindowAsync<ProfileNameInputDialogViewModel, string>(vm);
+        if (string.IsNullOrWhiteSpace(newName)) return;
+        if (_realms.Rename(bbs, oldName, newName) is { } problem)
+        {
+            _dialogs.ShowInfo("Realm not renamed", problem);
+            return;
+        }
+        RepinIfLoadedOn(bbs);
+        ReloadRealms(keep: newName.Trim());
+    }
+
+    [RelayCommand]
+    private async Task RemoveRealmAsync()
+    {
+        if (SelectedBbs is not { } bbs || SelectedRealm is not { } name || Realms.Count <= 1) return;
+        bool loadedOnIt = string.Equals(_profile.CurrentBbsName, bbs, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(_bbs.Get(bbs)?.RealmFor(_profile.Current?.Realm)?.Name, name,
+                StringComparison.OrdinalIgnoreCase);
+        if (loadedOnIt && !EnsureDisconnected("remove the realm your loaded character plays")) return;
+        int count = _realms.CharacterCount(bbs, name);
+        string who = count == 0 ? "" : $" Its {count} character{(count == 1 ? "" : "s")} will play the first realm.";
+        if (!await _confirm.ConfirmAsync("Remove realm",
+                $"Remove the realm “{name}” from “{bbs}”?{who} Its collected data stays on disk.", "Remove"))
+            return;
+        if (!_realms.Remove(bbs, name)) return;
+        RepinIfLoadedOn(bbs);
+        ReloadRealms(keep: null);
+    }
+
+    // Realm settings (menu commands, death floor, cleanup time, currency name) are
+    // edited in Settings → BBS; open it on this realm.
+    [RelayCommand]
+    private void EditRealm()
+    {
+        if (SelectedBbs is { } bbs) _editBbsSettings(bbs, SelectedRealm);
     }
 
     // Put the selected character on the picked realm of its BBS. The loaded one
@@ -228,7 +369,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         // A fresh record has a placeholder name and no host — useless until it's
         // filled in, and nothing else in this window would tell the user that.
         // Hand straight off to the editor rather than leaving a dead entry.
-        _editBbsSettings(name);
+        _editBbsSettings(name, null);
     }
 
     // Structural ops (add / rename / remove) live here; everything else about a
@@ -238,7 +379,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private void EditBbs()
     {
         if (SelectedBbs is not { } name) return;
-        _editBbsSettings(name);
+        _editBbsSettings(name, null);
     }
 
     [RelayCommand]
@@ -306,6 +447,8 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
             return;
         }
         _profile.CreateProfile(bbs, name);
+        // A new character plays the realm selected in the middle column.
+        if (SelectedRealm is { } realm) _profile.AssignRealm(new ProfileRef(bbs, name), realm);
         AppServices.Current.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionCharacterAdded);
         ReloadProfiles();
         SelectedProfile = Profiles.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal));
@@ -431,7 +574,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         if (SelectedBbs is not { } fromBbs || SelectedProfile is not { } row) return;
         if (AssignTargetBbs is not { } toBbs || string.Equals(fromBbs, toBbs, StringComparison.OrdinalIgnoreCase))
         {
-            _dialogs.ShowInfo("Assign to BBS", "Pick a different destination BBS.");
+            _dialogs.ShowInfo("Move to BBS", "Pick a different destination BBS.");
             return;
         }
         if (row.IsCurrent && !EnsureDisconnected("move the loaded character to another BBS")) return;

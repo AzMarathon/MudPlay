@@ -472,7 +472,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // Commit the selected BBS's per-character credentials onto the loaded
     // profile. Selecting a BBS here is now editing-only — it NEVER re-homes /
     // pins the loaded character (that moved to the Profile Management window's
-    // explicit "Assign to BBS"). So this just writes the credential slice for
+    // explicit "Move to BBS"). So this just writes the credential slice for
     // whichever BBS the user is editing; the profile stays where it lives.
     private void ApplyToCurrentProfile()
     {
@@ -773,13 +773,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         string name = value?.Trim() ?? string.Empty;
         if (string.Equals(name, realm.Name, StringComparison.Ordinal)) return;
 
-        string? problem =
-            name.Length == 0 ? "A realm needs a name."
-            : name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ? $"“{name}” can't be used as a realm name."
-            : RealmNames.Any(n => !string.Equals(n, realm.Name, StringComparison.OrdinalIgnoreCase)
-                                  && string.Equals(n, name, StringComparison.OrdinalIgnoreCase))
-                ? $"This BBS already has a realm named “{name}”."
-            : null;
+        string? problem = RealmCatalog.NameProblem(name,
+            RealmNames.Where(n => !string.Equals(n, realm.Name, StringComparison.OrdinalIgnoreCase)));
         if (problem is not null)
         {
             AppServices.CurrentOrNull?.Dialogs.ShowInfo("Realm not renamed", problem);
@@ -818,9 +813,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     private void AddRealm()
     {
         if (SelectedBbsName is not { } bbs || !_loaded.TryGetValue(bbs, out BbsProfile? profile)) return;
-        int n = profile.Realms.Count + 1;
-        while (profile.Realms.Any(r => string.Equals(r.Name, $"Realm {n}", StringComparison.OrdinalIgnoreCase))) n++;
-        RealmProfile realm = new() { Name = $"Realm {n}" };
+        RealmProfile realm = new() { Name = RealmCatalog.NextFreeName(profile) };
         profile.Realms.Add(realm);
         RealmNames.Add(realm.Name);
         SelectedRealmName = realm.Name;
@@ -874,20 +867,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // folders still sit under the names they were made with.
     private void ApplyRealmChanges()
     {
+        if (AppServices.CurrentOrNull?.Realms is not { } realms) return;
         foreach ((string bbs, string oldName, string newName) in _realmRenames)
-        {
-            string from = AppPaths.RealmFolder(bbs, oldName);
-            string to = AppPaths.RealmFolder(bbs, newName);
-            if (Directory.Exists(from) && !Directory.Exists(to)) Directory.Move(from, to);
-            _profile.RenameRealm(bbs, oldName, newName);
-            AppServices.CurrentOrNull?.Log.Info("BBS", $"Renamed realm '{oldName}' → '{newName}' on '{bbs}'.");
-        }
+            realms.MoveData(bbs, oldName, newName);
         foreach ((string bbs, string name) in _realmRemovals)
-        {
-            _profile.RenameRealm(bbs, name, null);
-            AppServices.CurrentOrNull?.Log.Info("BBS",
-                $"Removed realm '{name}' from '{bbs}'; its characters now play the first realm.");
-        }
+            realms.ReleaseCharacters(bbs, name);
     }
 
     // OK: put the loaded character on the realm picked for it.

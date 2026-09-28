@@ -6,6 +6,7 @@
 > - What you collect while playing (players seen, room blacklist, leaderboard, Roomba labels and sightings, quest edits, boss timers, realm game-data edits) is kept per realm, shared by the characters playing it
 > - Characters are put on a realm under Settings → BBS + Display or Profile Management; an existing BBS becomes one realm holding its current settings and data
 > - The "Only for this BBS" game-data tier is now "Only for this realm"
+> - Profile Management is laid out as BBSes → Realms → Characters: add, rename and remove realms, pick a realm's game data, and move characters between realms and BBSes
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

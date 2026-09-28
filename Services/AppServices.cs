@@ -925,6 +925,9 @@ public sealed class AppServices
     // Read by the Character Workshop's Character Info tab.
     public Game.AlignmentTracker Alignment { get; }
 
+    // Add / rename / remove a BBS's realms (Profile Management, Settings → BBS).
+    public RealmCatalog Realms { get; }
+
     // Drives the train stats screen to apply the saved CP plan. Wrapped
     // by TrainerWalk, which owns the walk-to-trainer + level-up.
     public Game.AutoTrainManager AutoTrain { get; }
@@ -2260,6 +2263,7 @@ public sealed class AppServices
         // audit (load / swap / close / re-home) rides the always-on Info stream.
         Profile.Log = bootstrapLog;
         Bbs = new BbsProfileStore(() => Settings.Current.DefaultGameDataSet, bootstrapLog);
+        Realms = new RealmCatalog(Bbs, Profile, bootstrapLog);
 
         // Startup head start: parse the big MDB tables for whatever profile "Auto-load
         // last profile" is about to bring in, on a background thread, before Profile.Load

@@ -90,4 +90,30 @@ public sealed class BbsRealmTests : IDisposable
         JsonStore.Save(path, new CharacterProfile { Name = name });
         return new ProfileRef(_bbs, name);
     }
+
+    [Fact]
+    public void Catalog_AddRenameRemove_KeepDataAndCharactersTogether()
+    {
+        BbsProfileStore store = new();
+        store.Save(new BbsProfile { Name = _bbs });   // one realm, named after the BBS
+        ProfileService profiles = new();
+        RealmCatalog realms = new(store, profiles);
+
+        string added = realms.Add(_bbs)!;
+        Assert.Equal("Realm 2", added);
+        profiles.AssignRealm(Seed("Priest"), added);
+        Directory.CreateDirectory(AppPaths.RealmFolder(_bbs, added));
+        File.WriteAllText(AppPaths.RealmPlayersFile(AppPaths.RealmFolder(_bbs, added)), "[]");
+
+        Assert.NotNull(realms.Rename(_bbs, added, _bbs));   // name taken
+        Assert.Null(realms.Rename(_bbs, added, "PVE"));
+        Assert.True(File.Exists(AppPaths.RealmPlayersFile(AppPaths.RealmFolder(_bbs, "PVE"))));
+        Assert.Equal("PVE", profiles.RealmOf(new ProfileRef(_bbs, "Priest")));
+        Assert.Equal(1, realms.CharacterCount(_bbs, "PVE"));
+
+        Assert.True(realms.Remove(_bbs, "PVE"));
+        Assert.Null(profiles.RealmOf(new ProfileRef(_bbs, "Priest")));
+        Assert.False(realms.Remove(_bbs, _bbs));            // a BBS keeps one realm
+        Assert.Single(store.Get(_bbs)!.Realms);
+    }
 }
