@@ -1,5 +1,9 @@
 # Version history
 
+## 3.117.7
+
+- Game mechanics reference: how robbing players works on Stock (refusals, Thievery roll, what gets stolen, the evil record)
+
 ## 3.117.6
 
 - Monster Intel lists only monsters placed in the realm, matching the Game Data Browser (no Unobtainable records)
