@@ -133,6 +133,46 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(RemoveRealmCommand))]
     private string? _selectedRealmName;
 
+    // The selected realm's frame colour — its own per realm (by position in the
+    // list, so the first several never share one), so switching realms visibly
+    // switches what you're editing. Same palette as the combat-profile frames.
+    public Avalonia.Media.IBrush RealmAccentBrush => CombatProfilePalette.SolidBrush(SelectedRealmNumber());
+    public Avalonia.Media.IBrush RealmAccentSoftBrush => CombatProfilePalette.SoftBrush(SelectedRealmNumber());
+
+    private int SelectedRealmNumber() => Math.Max(0, RealmNames.IndexOf(SelectedRealmName ?? string.Empty)) + 1;
+
+    // Which characters play the selected realm, shown in its frame. Read from the
+    // saved assignments, then adjusted for this window's unsaved edits (a staged
+    // rename, a realm added here, the loaded character's pending "Plays on realm").
+    [ObservableProperty] private string _realmCharactersText = string.Empty;
+
+    private void RefreshRealmCharacters()
+    {
+        OnPropertyChanged(nameof(RealmAccentBrush));
+        OnPropertyChanged(nameof(RealmAccentSoftBrush));
+        if (SelectedBbsName is not { } bbs || SelectedRealmName is not { } realm
+            || AppServices.CurrentOrNull?.Realms is not { } realms)
+        {
+            RealmCharactersText = string.Empty;
+            return;
+        }
+        string original = _realmRenames.FirstOrDefault(r =>
+            string.Equals(r.Bbs, bbs, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(r.New, realm, StringComparison.OrdinalIgnoreCase)).Old ?? realm;
+        bool saved = _bbsStore.Get(bbs)?.Realms.Any(r =>
+            string.Equals(r.Name, original, StringComparison.OrdinalIgnoreCase)) == true;
+        List<string> names = saved ? realms.CharactersOn(bbs, original).Select(c => c.Name).ToList() : new();
+        if (_characterRealmTouched && CanPickCharacterRealm && _profile.CurrentProfileName is { } current)
+        {
+            names.RemoveAll(n => string.Equals(n, current, StringComparison.Ordinal));
+            if (string.Equals(CharacterRealm, realm, StringComparison.OrdinalIgnoreCase)) names.Add(current);
+            names.Sort(StringComparer.OrdinalIgnoreCase);
+        }
+        RealmCharactersText = names.Count == 0
+            ? "No characters play this realm yet."
+            : $"Characters on this realm: {string.Join(", ", names)}";
+    }
+
     // Rename box for the selected realm; commits when it loses focus.
     [ObservableProperty] private string _realmName = string.Empty;
 
@@ -732,6 +772,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         foreach (RealmProfile r in profile.Realms) RealmNames.Add(r.Name);
         SelectedRealmName = profile.RealmFor(select)?.Name;
         LoadRealmFields();
+        RefreshRealmCharacters();
     }
 
     // The realm selected in the list, inside the cached BbsProfile being edited.
@@ -758,6 +799,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 
     partial void OnSelectedRealmNameChanged(string? value)
     {
+        RefreshRealmCharacters();
         bool prev = _suppressDirty;
         _suppressDirty = true;
         LoadRealmFields();
@@ -879,6 +921,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     {
         if (_suppressDirty) return;
         _characterRealmTouched = true;
+        RefreshRealmCharacters();
         Dirty();
     }
 

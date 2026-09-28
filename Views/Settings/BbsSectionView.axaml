@@ -254,17 +254,22 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- The selected realm's settings, framed in the realm accent (the way
-                         combat-profile groups are framed in their profile's colour) so
-                         it's clear everything inside belongs to that one realm. -->
+                    <!-- The selected realm's settings, framed in that realm's own colour
+                         (the way combat-profile groups are framed in their profile's) so
+                         it's clear everything inside belongs to that one realm, and
+                         switching realms visibly switches the frame. -->
                     <Panel Classes="ProfileFrame">
                         <Border Classes="ProfileGroup"
-                                Background="{StaticResource AccentMagentaSoftBrush}"
-                                BorderBrush="{StaticResource AccentMagentaBrush}"/>
+                                Background="{Binding RealmAccentSoftBrush}"
+                                BorderBrush="{Binding RealmAccentBrush}"/>
                         <StackPanel Classes="ProfileBody">
                             <TextBlock Classes="ProfileGroupHeader" HorizontalAlignment="Left" Margin="0,2,0,2"
-                                       Foreground="{StaticResource AccentMagentaBrush}"
+                                       Foreground="{Binding RealmAccentBrush}"
                                        Text="{Binding SelectedRealmName, StringFormat='Realm: {0}'}"/>
+                            <TextBlock Classes="FieldLabel" TextWrapping="Wrap" Margin="0,2,0,0"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       Text="{Binding RealmCharactersText}"
+                                       ToolTip.Tip="The characters playing this realm. Change a character's realm with Plays on realm below (the loaded one) or Move to realm in Profile Management."/>
                             <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
                                   Margin="0,10,0,0" ColumnSpacing="8" RowSpacing="4">
                                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Realm name"/>

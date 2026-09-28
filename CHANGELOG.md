@@ -8,7 +8,7 @@
 - The "Only for this BBS" game-data tier is now "Only for this realm"
 - Profile Management is laid out as BBSes → Realms → Characters: add, rename and remove realms, pick a realm's game data, and move characters between realms and BBSes
 - Removing a realm deletes the characters on it and its collected data, after a confirmation that names them
-- A realm's settings in Settings → BBS + Display sit in their own highlighted frame
+- A realm's settings in Settings → BBS + Display sit in a frame in that realm's own colour, listing the characters that play it
 - Load in Profile Management closes the window once the character is loaded
 
 ## 3.115.12
