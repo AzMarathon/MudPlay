@@ -1,7 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.21**
+> **Version 3.116.23**
+> - While you're afraid, navigation waits for the fear to wear off and the map follows the fear's random moves
+> - Spell Book's Success % legend shows the realm's cap (Paradigm 100%) and notes your spell damage bonus
 > - GAME_MECHANICS: settled — `*Combat Off*` on both realms, Paradigm's reply to attacking a monster that's gone, Saint treated as Good, how fear traps or runs you, and which teleports split the party (from the Stock DLL)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

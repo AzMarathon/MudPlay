@@ -202,6 +202,10 @@ public sealed class MovementCoordinator
     // matters for a held leader / solo whose .@held pause has no one to signal.
     public const string HeldGate = "Held";
 
+    // Asserted by SelfFearMovementGate while we're afraid: fear runs us at random
+    // through obvious exits, so our own moves wait for it to wear off.
+    public const string FearGate = "Fear";
+
     private const int HistoryCapacity = 200;
 
     private readonly LogService? _log;

@@ -1990,6 +1990,9 @@ How one damage spell cast against a monster is worked out.
 - **While feared, the game runs you at random through the room's obvious exits** — only the exits on the `Obvious exits:` list, never a hidden one or a `go`/text exit — and re-renders each new room. Those forced moves carry **no command echo and no per-move line** (bare `[HP=..]:` prompts, just changing exits).
   - **A room with no obvious exits traps you in place** *([CONFIRMED] 2026-09-28, user)*: fear can't move you. E.g. the beholder boss in the Ancient Ruins fears you in a room whose only way out is hidden.
   - **Leaving such a room yourself starts the running**: send the move through the hidden exit (`w` there) and, once you're somewhere with obvious exits, fear runs you through them at random until it wears off — as terror beasts in the Black Wasteland do.
+  - **Fear walks you through trapped exits too** — a trap on an obvious exit doesn't stop it *([CONFIRMED] 2026-09-28, user)*.
+  - **A party feared together scatters**: each member is run off in their own random directions *([CONFIRMED] 2026-09-28, user)*.
+  - **Moving yourself mostly fights the fear**, so it's usually best to wait for it to wear off, then move on *([CONFIRMED] 2026-09-28, user)*.
   - *(An earlier note said fear moves you between cardinal-connected rooms and asked what a "trapped area" was; superseded 2026-09-28.)*
   - So the *direction* of each fear-move is unknown from the wire, but the *feared state itself is
     known* (onset → wear-off window).
@@ -1998,6 +2001,8 @@ How one damage spell cast against a monster is worked out.
   - A nav client can therefore recognise it's being fear-moved and stop treating the echo-less
     redisplays as re-looks — dropping to localisation instead of holding/guessing — rather than being
     "wire-indistinguishable."
+  - `SelfFearMovementGate` asserts `MovementCoordinator.FearGate` while afraid, so our own walk / loop / auto-lair waits for the wear-off (the nav readout shows "Waiting — afraid").
+  - `RoomTracker.TryFearMove`: while afraid, an unexpected room display is followed into the one neighbour behind the last obvious exits that matches it; an ambiguous display falls back to the usual recovery.
   - `CombatManager.SetFearGate` (`ConditionTracker.IsFeared`) holds weapon attacks and attack spells
     while feared, but not the pre-attack debuff. `CastingDirector`'s between-round casts aren't held.
   - `MovementRefusalDetector` reads `You are too afraid!` through the same self-guarding path as the

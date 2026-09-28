@@ -1473,7 +1473,7 @@ A command you typed yourself is never auto-repeated, and a fumbled move self-rec
 **Effects checkboxes** tag what condition a matched line *means*:
 
 - **Blinded / Confused / Poisoned / Diseased / Movement prevented** — drive the automatic cures, the navigation pauses, and the party ailment announcements.
-- **Fear** — marks a forced-movement debuff (the "You are afraid!" shriek — the game shoves you between rooms until it wears off) so it's tracked as its own condition. The seeded fear records also keep Movement prevented so navigation still halts while you're feared.
+- **Fear** — marks a forced-movement debuff (the "You are afraid!" shriek — the game runs you at random through the room's obvious exits until it wears off) so it's tracked as its own condition. While you're afraid your walk, loop or Auto-Lair waits (the status reads *Waiting — afraid*) instead of fighting it, the map follows you through the fear's moves, and navigation resumes from wherever you ended up once it wears off. The seeded fear records also keep Movement prevented.
 - **Attack prevented** — holds *all* combat output: while active (a stun / petrify / bind, until its wear-off), the engine issues no weapon swing, attack spell, or debuff and retries each round once it clears.
 - **Last action failed** — re-sends an action the server ate.
 - **Disabled (don't use)** — switches the whole record off, so you can silence a mis-firing line without deleting it.

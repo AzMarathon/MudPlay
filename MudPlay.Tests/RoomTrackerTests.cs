@@ -1430,4 +1430,59 @@ public sealed class RoomTrackerTests : IDisposable
         Assert.Null(rec.EquippedAtDeath);
         Assert.Null(rec.LostItems);
     }
+
+    // ----- fear moves ------------------------------------------------
+
+    // 9/1 Wasteland Edge {E→9/2, N→9/3}; 9/2 Black Wasteland {W}; 9/3 Ash Plain {S};
+    // 9/4 is a second Black Wasteland {W} elsewhere, so the name alone can't place us.
+    private const string FearGraphJson = """
+        [
+          { "Map Number": 9, "Room Number": 1, "Name": "Wasteland Edge", "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "9/3", "S": "0", "E": "9/2", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 9, "Room Number": 2, "Name": "Black Wasteland", "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "0", "E": "0", "W": "9/1", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 9, "Room Number": 3, "Name": "Ash Plain", "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "9/1", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 9, "Room Number": 4, "Name": "Black Wasteland", "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "0", "E": "0", "W": "9/5", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 9, "Room Number": 5, "Name": "Cinder Flats", "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "0", "E": "9/4", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private RoomTracker NewFearTracker(Func<bool> feared)
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "fear"));
+        File.WriteAllText(Path.Combine(_root, "fear", "Rooms.json"), FearGraphJson);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("fear");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("fear");
+        RoomTracker tracker = new(graph);
+        tracker.SetFearProbe(feared);
+        return tracker;
+    }
+
+    // Fear runs us through an obvious exit with no echo. While afraid, a display that
+    // matches exactly one neighbour behind those exits is followed there; without fear
+    // the same look-alike display can't be placed and drops to Suspect.
+    [Fact]
+    public void Feared_UnexpectedDisplay_FollowsTheMatchingNeighbour()
+    {
+        bool feared = true;
+        RoomTracker tracker = NewFearTracker(() => feared);
+        tracker.NoteRoomObserved(Obs("Wasteland Edge", Direction.E, Direction.N));
+        Assert.Equal(new RoomKey(9, 1), tracker.State.CurrentRoom?.Key);
+
+        tracker.NoteRoomObserved(Obs("Black Wasteland", Direction.W));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(9, 2), tracker.State.CurrentRoom?.Key);
+
+        feared = false;
+        RoomTracker calm = NewFearTracker(() => feared);
+        calm.NoteRoomObserved(Obs("Wasteland Edge", Direction.E, Direction.N));
+        calm.NoteRoomObserved(Obs("Black Wasteland", Direction.W));
+        Assert.NotEqual(RoomConfidence.Confirmed, calm.State.Confidence);
+    }
 }

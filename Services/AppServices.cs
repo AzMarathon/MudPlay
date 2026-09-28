@@ -2044,6 +2044,10 @@ public sealed class AppServices
     // back" and strand the tracker. Clears on "You get back on your feet.".
     public Game.Conditions.SelfHeldResponder SelfHeld { get; private set; } = null!;
 
+    // Self-fear bridge — holds our navigation (FearGate) while we're afraid, so our
+    // moves don't fight the fear's random running; RoomTracker follows its moves.
+    public Game.Conditions.SelfFearMovementGate SelfFear { get; private set; } = null!;
+
     // Self-ailment chip bridge — mirrors our own poison / blindness / disease onto
     // the self party-window chip. The say-driven mirror only lights OTHER members'
     // chips; our own state is owned by ConditionTracker, so without this our self
@@ -4111,6 +4115,11 @@ public sealed class AppServices
         // MovementPrevented state (no opt-out; a knockdown always holds).
         SelfHeld = new Game.Conditions.SelfHeldResponder(
             Conditions, Party, MovementCoordinator, log: Log);
+
+        // Self-fear bridge — the same local hold while afraid; the tracker reads the
+        // fear's echo-less moves through the obvious exits.
+        SelfFear = new Game.Conditions.SelfFearMovementGate(Conditions, MovementCoordinator, Log);
+        RoomTracker.SetFearProbe(() => Conditions.IsFeared);
 
         // Self-ailment chip bridge — the pure-chip sibling of the two responders
         // above for poison / blindness / disease (no movement gate). Lights the
