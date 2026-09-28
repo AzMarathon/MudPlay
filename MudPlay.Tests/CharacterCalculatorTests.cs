@@ -168,4 +168,18 @@ public sealed class CharacterCalculatorTests
         int without = CharacterCalculator.CalcMaxHp(100, 10, 5, 10, 0, 0, HpRollMode.Min);
         Assert.Equal(without + (2 * 10) + 50, withExtras);
     }
+
+    // Paradigm: +1% spell damage per full 50 Spellcasting above 100; Stock: none.
+    [Theory]
+    [InlineData(100, 0)]
+    [InlineData(149, 0)]
+    [InlineData(150, 1)]
+    [InlineData(199, 1)]
+    [InlineData(200, 2)]
+    [InlineData(300, 4)]
+    public void SpellcastingSpellDamageBonus_ParadigmOnly(int spellcasting, int expected)
+    {
+        Assert.Equal(expected, CharacterCalculator.SpellcastingSpellDamageBonus(spellcasting, RealmType.ParaMud));
+        Assert.Equal(0, CharacterCalculator.SpellcastingSpellDamageBonus(spellcasting, RealmType.Stock));
+    }
 }

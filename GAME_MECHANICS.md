@@ -1532,6 +1532,32 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
     an emergency heal — could sit queued and unfired for a full ~5s round (report
     `paradigm-20260918-190830`). That coupling was removed.
 
+### Spell damage — Stock vs Paradigm
+*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (`_cast_monster_target`, `_get_spell_random_modifier`); Paradigm from MMUD-Explorer's GreaterMUD branch (`CalculateSpellCast`, `CalculateResistDamage`); both CONFIRMED to follow 2026-09-28 (user) · Realm: differs*
+
+How one damage spell cast against a monster is worked out.
+
+| Step | Stock | Paradigm |
+|---|---|---|
+| **Level** | caster level, capped at the spell's `Cap` | same, and never below `ReqLevel` |
+| **Range** | min `= MinBase + MinInc·level / MinIncLVLs`, max likewise — whole numbers, multiply first | `base + Fix(inc / incLvls · level)` |
+| **Min above max** | the min is lowered to the max | — |
+| **Flat value** | a damage ability with a non-zero value replaces the roll | same |
+| **Elemental resist** | `× (100 − resist)/100` straight after the roll, truncated | after the magic-resist cut, rounded |
+| **Spell damage bonus** (AlterSpDmg, ability 165) | `× (100 + bonus)/100` on **Damage (1)** and **Damage(-MR) (17)**, flat values included; **not** drain (8) or heal (18) | on 1 and 17, and on drain and heal; scaled values only |
+| **Spellcasting's share of the bonus** | none | **+1% per full 50 Spellcasting above 100** — `(Spellcasting − 100)/50` *([CONFIRMED] 2026-09-28, user, following MMUD-Explorer)* |
+| **Magic-resist cut** (code 17 only) | AntiMagic: `MR/2`% (0–75); otherwise `(MR − 50)/2`% capped at 50; with no cut and no AntiMagic, **+(50 − MR)%** below MR 50 | same, rounded |
+| **Full resist** | chance `min(98, MR/2)`% after a successful cast, when `TypeOfResists` is 2, or 1 against AntiMagic | same |
+| **Rounding** | truncates at every step | rounds the resist steps |
+
+- The elemental resist for each `AttType` is in *Elemental resistance — flat, deterministic, pre-emptable*; M.R. and `TypeOfResists` in *Magic Resist (M.R.) and `TypeOfResists`*.
+- Stock also reads a resist for `AttType` 6 from ability 21 on that path.
+- **A monster's magic resist for this roll is its `MagicRes` field plus any magic-resist ability (36), floored at 1** *(Stock [OBSERVED] `wccmmud.dll` 1.11p `_cast_monster_target`)*.
+
+**Client use:**
+- `SpellCalculator` (per-round figures) and `SpellDamageCalculator` (the Game Data spell calculator) follow the table; `CharacterCalculator.SpellDamageBonus` sums the caster's AlterSpDmg from gear, race and class (plus, on Paradigm, `SpellcastingSpellDamageBonus`) for the Spell Book and Monster Intel. Before 2026-09-28 no damage figure used the bonus, and the calculator rounded in MMUD-Explorer's order on both realms.
+- Monster Intel's spell matchups (`MonsterMatchupCalculatorSpells.RankAttackSpells`) price each spell by its **expected** damage a round: the average of the resisted min and max (`SpellDamageCalculator.AfterTargetResists`), times the chance it isn't resisted outright (`FullResistChance`), against the monster's `SpellMagicResist` and `AntiMagic`. Before, it used the unresisted max with only the elemental cut.
+
 ### Why an attack spell fails to damage — three independent mechanics
 *Status: CONFIRMED (worked examples use the 1.11p data set)*
 
@@ -1735,10 +1761,9 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
     `TypeOfResists 2`.
 - **Client use:**
   - The Game Data spell view's interactive damage calculator (`SpellDamageCalculator`) implements the
-    reduction: the per-cast range comes from Min/MaxBase scaling, then the code-17 **magic-resist partial
-    cut** (fraction `(MR−50)/200`, cap 50%; AntiMagic `MR/200` cap 75%; below MR 50 it amplifies), then
-    the **elemental flat-% cut** on any elemental spell. The probabilistic full-resist chance is shown
-    separately, never folded into the range.
+    reduction in each realm's order — see *Spell damage — Stock vs Paradigm*. Below MR 50 the hit is
+    amplified by `(50 − MR)%`. The probabilistic full-resist chance is shown separately, never folded
+    into the range.
   - **The combat engine never estimates M.R.-reduced damage** — it only pre-empts spells on
     deterministic signals (elemental ≥100% resist via `MonsterResistIndex`, `SpellImmu`, and the
     `Magical` weapon-hit gate) — M.R. is never a resist-block (see *Elemental resistance — flat,

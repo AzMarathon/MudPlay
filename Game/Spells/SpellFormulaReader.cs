@@ -40,6 +40,7 @@ public static class SpellFormulaReader
             ManaCost = ReadInt(row, "ManaCost"),
             Diff = ReadInt(row, "Diff"),
             AttType = ReadInt(row, "AttType"),
+            TypeOfResists = ReadInt(row, "TypeOfResists"),
             Abilities = abilities,
         };
     }

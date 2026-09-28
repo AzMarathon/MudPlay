@@ -8,6 +8,10 @@ namespace MudPlay.Game.Spells;
 // We only ever compute for the player, so the monster path (which skips the
 // energy multiplier and the override clamp) is dropped — players always apply
 // the multiplier.
+//
+// spellDamageBonus is the caster's AlterSpDmg % (ability 165); which casts it
+// lifts depends on the realm (GAME_MECHANICS "Spell damage — Stock vs Paradigm",
+// see AppliesDamageBonus). 0 for a plain data view with no caster.
 public static class SpellCalculator
 {
     // MajorMUD ability codes that carry a damage/heal magnitude.
@@ -19,15 +23,17 @@ public static class SpellCalculator
 
     // Minimum per-round damage at level.
     public static long MinDamage(in SpellFormulaInput spell, int level,
-        Func<int, SpellFormulaInput?>? resolveChain = null)
+        Func<int, SpellFormulaInput?>? resolveChain = null,
+        int spellDamageBonus = 0, RealmType realm = RealmType.Stock)
         => Scaled(spell, level, healsInstead: false, useMax: false, resolveChain, energyRem: 0,
-                  applyEnergyMultiplier: true, visited: null);
+                  applyEnergyMultiplier: true, visited: null, new DamageBonus(spellDamageBonus, realm));
 
     // Maximum per-round damage at level.
     public static long MaxDamage(in SpellFormulaInput spell, int level,
-        Func<int, SpellFormulaInput?>? resolveChain = null)
+        Func<int, SpellFormulaInput?>? resolveChain = null,
+        int spellDamageBonus = 0, RealmType realm = RealmType.Stock)
         => Scaled(spell, level, healsInstead: false, useMax: true, resolveChain, energyRem: 0,
-                  applyEnergyMultiplier: true, visited: null);
+                  applyEnergyMultiplier: true, visited: null, new DamageBonus(spellDamageBonus, realm));
 
     // Single-cast damage (one discrete cast), NOT the per-round total. A monster's
     // spell attack fires the spell once when the attack lands — how many times per
@@ -39,24 +45,26 @@ public static class SpellCalculator
     public static long SingleCastMinDamage(in SpellFormulaInput spell, int level,
         Func<int, SpellFormulaInput?>? resolveChain = null)
         => Scaled(spell, level, healsInstead: false, useMax: false, resolveChain, energyRem: 0,
-                  applyEnergyMultiplier: false, visited: null);
+                  applyEnergyMultiplier: false, visited: null, default);
 
     public static long SingleCastMaxDamage(in SpellFormulaInput spell, int level,
         Func<int, SpellFormulaInput?>? resolveChain = null)
         => Scaled(spell, level, healsInstead: false, useMax: true, resolveChain, energyRem: 0,
-                  applyEnergyMultiplier: false, visited: null);
+                  applyEnergyMultiplier: false, visited: null, default);
 
     // Minimum per-round healing at level.
     public static long MinHeal(in SpellFormulaInput spell, int level,
-        Func<int, SpellFormulaInput?>? resolveChain = null)
+        Func<int, SpellFormulaInput?>? resolveChain = null,
+        int spellDamageBonus = 0, RealmType realm = RealmType.Stock)
         => Scaled(spell, level, healsInstead: true, useMax: false, resolveChain, energyRem: 0,
-                  applyEnergyMultiplier: true, visited: null);
+                  applyEnergyMultiplier: true, visited: null, new DamageBonus(spellDamageBonus, realm));
 
     // Maximum per-round healing at level.
     public static long MaxHeal(in SpellFormulaInput spell, int level,
-        Func<int, SpellFormulaInput?>? resolveChain = null)
+        Func<int, SpellFormulaInput?>? resolveChain = null,
+        int spellDamageBonus = 0, RealmType realm = RealmType.Stock)
         => Scaled(spell, level, healsInstead: true, useMax: true, resolveChain, energyRem: 0,
-                  applyEnergyMultiplier: true, visited: null);
+                  applyEnergyMultiplier: true, visited: null, new DamageBonus(spellDamageBonus, realm));
 
     // Seconds per spell-duration round. Duration is returned in spell rounds;
     // multiply by this for wall-clock seconds. Deliberately distinct from the
@@ -122,11 +130,13 @@ public static class SpellCalculator
         Func<int, SpellFormulaInput?>? resolveChain,
         int energyRem,
         bool applyEnergyMultiplier,
-        HashSet<int>? visited)
+        HashSet<int>? visited,
+        DamageBonus bonus)
     {
         long result = 0;
         bool doesDamage = false;
         int endCast = 0;
+        int damageCode = 0;
 
         foreach (SpellAbility ability in spell.Abilities)
         {
@@ -148,6 +158,7 @@ public static class SpellCalculator
                         if (healsInstead) continue; // want heal — skip damage slot
                     }
                     doesDamage = true;
+                    damageCode = ability.Code;
                     if (ability.Value != 0) result = ability.Value; // flat override, last wins
                     break;
                 case AbilEndCast:
@@ -156,6 +167,7 @@ public static class SpellCalculator
             }
         }
 
+        bool flat = result != 0;
         if (result == 0)
         {
             if (!doesDamage) return 0;
@@ -168,6 +180,8 @@ public static class SpellCalculator
                 : ScaleBase(spell.MinBase, spell.MinInc, spell.MinIncLVLs, level);
             castLevel = level;
         }
+        if (bonus.Percent != 0 && AppliesDamageBonus(damageCode, healsInstead, flat, bonus.Realm))
+            result = result * (100 + bonus.Percent) / 100;
 
         // Single cast (a monster's spell attack, one discrete cast): no per-round
         // energy fold. An EndCast chain still fires once on completion (acid bolt →
@@ -182,7 +196,7 @@ public static class SpellCalculator
                 if (spell.Number != 0) visited.Add(spell.Number);
                 if (visited.Add(endCast))
                     result += Scaled(chainedOnce, castLevel, healsInstead: false, useMax,
-                        resolveChain, energyRem: 0, applyEnergyMultiplier: false, visited);
+                        resolveChain, energyRem: 0, applyEnergyMultiplier: false, visited, bonus);
             }
             return result;
         }
@@ -204,18 +218,29 @@ public static class SpellCalculator
                 // Chained end-cast is always computed in damage mode — the
                 // recursion drops the heal flag.
                 result += Scaled(chained, castLevel, healsInstead: false, useMax, resolveChain,
-                    energyRem, applyEnergyMultiplier: true, visited);
+                    energyRem, applyEnergyMultiplier: true, visited, bonus);
             }
         }
 
         return result;
     }
 
-    // Base value plus per-level slope, truncated toward zero. The slope is
-    // skipped when no per-level denominator is set or the clamped level is below
-    // 1.
+    // Base value plus per-level slope. The engine multiplies before it divides, in
+    // whole numbers (inc × level / incLvls, truncated). The slope is skipped when no
+    // per-level denominator is set or the clamped level is below 1.
     private static long ScaleBase(int baseVal, int inc, int incLvls, int level)
-        => (incLvls == 0 || level < 1) ? baseVal : baseVal + Fix((double)inc / incLvls * level);
+        => (incLvls == 0 || level < 1) ? baseVal : baseVal + (long)inc * level / incLvls;
+
+    // The caster's spell-damage bonus and the realm whose rules decide which casts
+    // it lifts.
+    private readonly record struct DamageBonus(int Percent, RealmType Realm);
+
+    // Stock lifts Damage (1) and Damage(-MR) (17), a flat value as well as a scaled
+    // one. Paradigm also lifts drain (8) and heals, but only a scaled value.
+    internal static bool AppliesDamageBonus(int code, bool heal, bool flat, RealmType realm) =>
+        realm == RealmType.ParaMud
+            ? !flat && (heal ? code is 18 or 8 : code is 1 or 17 or 8)
+            : !heal && code is 1 or 17;
 
     private static int ClampLevel(int level, int cap, int reqLevel)
     {

@@ -197,20 +197,25 @@ public readonly record struct MonsterMatchupResult(
 
 // One of the player's known, damage-dealing attack spells — the input
 // MonsterMatchupCalculator.RankAttackSpells scores against a specific
-// monster's SpellImmu and elemental resist. MaxDamagePerRound and
-// ManaCostPerRound are already level-scaled and energy-multiplied (see
-// SpellCalculator.MaxDamage / ManaCost) — this record carries the RESULT of
-// that player-side math, not the raw formula, so this file stays free of a
-// Game.Spells dependency. AffectsUndeadOnly / AffectsLivingOnly mirror the
-// spell's own Abil 23 / Abil 108 flags (AbilityNames.cs) — a caster-side
-// target-type gate independent of SpellImmu and elemental resist.
+// monster's SpellImmu, resists and magic resist. Min/MaxDamagePerRound and
+// ManaCostPerRound are already level-scaled, energy-multiplied and lifted by the
+// caster's spell-damage bonus (see SpellCalculator.MinDamage / MaxDamage /
+// ManaCost) — this record carries the RESULT of that player-side math, not the
+// raw formula; the target-side resists are applied here. AffectsUndeadOnly /
+// AffectsLivingOnly mirror the spell's own Abil 23 / Abil 108 flags
+// (AbilityNames.cs) — a caster-side target-type gate independent of SpellImmu
+// and elemental resist.
 //   Targets — the spell's raw target-scope code; area scopes (DebuffTargeting.
 //     IsAreaEnemy: 3/5/9/11/12) mark it an AOE attack, the rest single-target.
+//   MinDamagePerRound — null for a flat spell (same as the max).
+//   UsesMagicResist — a Damage(-MR) spell the target's M.R. cuts.
+//   TypeOfResists — the spell's full-resist eligibility (0 / 1 / 2).
 public readonly record struct PlayerAttackSpell(
     string Name, string Short, int ReqLevel, int AttType,
     long MaxDamagePerRound, long ManaCostPerRound,
     bool AffectsUndeadOnly = false, bool AffectsLivingOnly = false, int Targets = 0,
-    int ManaCostPerCast = 0);
+    int ManaCostPerCast = 0, long? MinDamagePerRound = null, bool UsesMagicResist = false,
+    int TypeOfResists = 0);
 
 // One spell's effectiveness against a specific monster — either blocked
 // (SpellImmu too high, or the monster resists its element at or above 100%)
@@ -353,7 +358,10 @@ public static class MonsterMatchupCalculatorSpells
         int monsterSpellImmunity,
         IReadOnlyDictionary<int, int> monsterElementalResists,
         bool monsterIsUndead = false,
-        long monsterHp = 0)
+        long monsterHp = 0,
+        int monsterMagicResist = 0,
+        bool monsterAntiMagic = false,
+        RealmType realm = RealmType.Stock)
     {
         ArgumentNullException.ThrowIfNull(spells);
         ArgumentNullException.ThrowIfNull(monsterElementalResists);
@@ -399,8 +407,17 @@ public static class MonsterMatchupCalculatorSpells
                 continue;
             }
 
+            // Expected damage a round: the average of the resisted min and max, in
+            // the realm's resist order, less the chance the cast is resisted outright
+            // (GAME_MECHANICS "Spell damage — Stock vs Paradigm").
+            long lo = Game.Spells.SpellDamageCalculator.AfterTargetResists(s.MinDamagePerRound ?? s.MaxDamagePerRound,
+                s.UsesMagicResist, monsterMagicResist, monsterAntiMagic, resistPercent, realm);
+            long hi = Game.Spells.SpellDamageCalculator.AfterTargetResists(s.MaxDamagePerRound,
+                s.UsesMagicResist, monsterMagicResist, monsterAntiMagic, resistPercent, realm);
+            int fullResist = Game.Spells.SpellDamageCalculator.FullResistChance(
+                s.TypeOfResists, monsterMagicResist, monsterAntiMagic);
             long effective = (long)System.Math.Round(
-                s.MaxDamagePerRound * (100 - resistPercent) / 100.0, System.MidpointRounding.AwayFromZero);
+                System.Math.Max(0, (lo + hi) / 2.0) * (100 - fullResist) / 100.0, System.MidpointRounding.AwayFromZero);
             // Kill estimate against this monster (only when a HP was supplied):
             // rounds = ceil(HP / effective-per-round), mana-to-kill = rounds × mana/round.
             int roundsToKill = effective > 0 && monsterHp > 0

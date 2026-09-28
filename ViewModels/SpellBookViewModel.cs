@@ -21,6 +21,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     private readonly Func<string?>? _classNameProvider;
     private readonly Func<int>? _spellcastingProvider;
     private readonly Func<bool>? _isParadigmProvider;
+    private readonly Func<int>? _spellDamageBonusProvider;
     private IReadOnlyList<ClassCastItem> _allCastItems = System.Array.Empty<ClassCastItem>();
     private bool _disposed;
 
@@ -28,7 +29,8 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         SpellbookState book,
         Func<string?>? classNameProvider = null,
         Func<int>? spellcastingProvider = null,
-        Func<bool>? isParadigmProvider = null)
+        Func<bool>? isParadigmProvider = null,
+        Func<int>? spellDamageBonusProvider = null)
     {
         ArgumentNullException.ThrowIfNull(book);
         _book = book;
@@ -38,6 +40,9 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         _spellcastingProvider = spellcastingProvider;
         // Paradigm lifts the Success % cap from 98 to 100 (SpellCastChance.Cap).
         _isParadigmProvider = isParadigmProvider;
+        // The character's AlterSpDmg %, so the Effect column's damage / heal
+        // figures are what they actually cast for. Null in tests (no bonus).
+        _spellDamageBonusProvider = spellDamageBonusProvider;
         _book.Changed += OnBookChanged;
         _allCastItems = _book.GetCastItems();
         Rebuild();
@@ -172,6 +177,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
 
         int spellcasting = _spellcastingProvider?.Invoke() ?? 0;
         bool isParadigm = _isParadigmProvider?.Invoke() ?? false;
+        int spellDamageBonus = _spellDamageBonusProvider?.Invoke() ?? 0;
 
         string filter = SearchText.Trim();
         Rows.Clear();
@@ -188,7 +194,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
             if (!SpellBookCategoryClassifier.Matches(SelectedCategory, spell, _book.Level, ResolveChain)) continue;
             Rows.Add(new SpellBookRowViewModel(
                 spell, obtained, _book.Level, ResolveChain, _book.ResolveSpellName,
-                ResolveTextblockCasts, teachLevel, spellcasting, isParadigm));
+                ResolveTextblockCasts, teachLevel, spellcasting, isParadigm, spellDamageBonus));
         }
 
         // Cast-on-use items: a separate section, filtered by the same search

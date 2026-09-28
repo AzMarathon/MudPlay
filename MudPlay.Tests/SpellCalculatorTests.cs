@@ -1,3 +1,4 @@
+using MudPlay.Game;
 using MudPlay.Game.Spells;
 using Xunit;
 
@@ -398,5 +399,37 @@ public sealed class SpellCalculatorTests
 
         // A(10) → B(5) → A already visited, stops → 15.
         Assert.Equal(15, SpellCalculator.SingleCastMinDamage(a, 5, Resolve));
+    }
+
+    // The engine scales in whole numbers, multiplying before it divides:
+    // 10 + 1 × 3 / 3 = 11 at level 3 (a floating 1/3 × 3 can land a hair under 1).
+    [Fact]
+    public void LevelScaling_MultipliesBeforeDividing()
+    {
+        SpellFormulaInput f = new()
+        {
+            Number = 20, MinBase = 10, MaxBase = 10, MinInc = 1, MinIncLVLs = 3, MaxInc = 1, MaxIncLVLs = 3,
+            ReqLevel = 1, EnergyCost = 1000, Abilities = [new SpellAbility(1, 0)],
+        };
+        Assert.Equal(11, SpellCalculator.MaxDamage(f, 3));
+    }
+
+    // The caster's spell-damage bonus lifts each cast before the per-round energy
+    // multiplier: 20 ×120/100 = 24 a cast, two casts at 500 energy = 48. Stock
+    // leaves heals alone; Paradigm lifts them too.
+    [Fact]
+    public void SpellDamageBonus_LiftsDamagePerCast_HealsOnParadigmOnly()
+    {
+        SpellFormulaInput bolt = new()
+        {
+            Number = 21, MinBase = 20, MaxBase = 20, ReqLevel = 1, EnergyCost = 500,
+            Abilities = [new SpellAbility(1, 0)],
+        };
+        SpellFormulaInput heal = bolt with { Number = 22, Abilities = [new SpellAbility(18, 0)] };
+
+        Assert.Equal(40, SpellCalculator.MaxDamage(bolt, 1));
+        Assert.Equal(48, SpellCalculator.MaxDamage(bolt, 1, spellDamageBonus: 20));
+        Assert.Equal(40, SpellCalculator.MaxHeal(heal, 1, spellDamageBonus: 20));
+        Assert.Equal(48, SpellCalculator.MaxHeal(heal, 1, spellDamageBonus: 20, realm: RealmType.ParaMud));
     }
 }

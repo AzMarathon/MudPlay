@@ -5054,7 +5054,11 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.Spellbook,
                 () => AppServices.Current.Profile.Current?.LastKnownStats?.Class,
                 () => AppServices.Current.PlayerStats.Spellcasting,
-                () => AppServices.Current.GameData.ActiveRealm == Game.RealmType.ParaMud),
+                () => AppServices.Current.GameData.ActiveRealm == Game.RealmType.ParaMud,
+                () => Game.Calculators.CharacterCalculator.SpellDamageBonus(
+                    AppServices.Current.PlayerStats,
+                    AppServices.Current.Inventory.Snapshot.EquippedItems,
+                    AppServices.Current.GameData)),
         };
         window.Closed += (_, _) => _spellBook = null;
         _spellBook = window;

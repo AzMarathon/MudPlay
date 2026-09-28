@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Combat;
 using Xunit;
@@ -97,4 +98,25 @@ public sealed class MonsterSpellEfficiencyTests
     [Fact]
     public void ElementName_UnknownCode_IsNull()
         => Assert.Null(ElementalResistIndex.NameForCode(999));
+
+    // Monster Intel prices a spell by its expected damage a round: the average of
+    // the resisted min and max, less the chance it's resisted outright. A 60-100
+    // Damage(-MR) spell against M.R. 100: Stock cuts 25% → 45 / 75, average 60;
+    // TypeOfResists 2 adds a 50% full-resist chance → 30. TypeOfResists 0 → 60.
+    [Fact]
+    public void RankAttackSpells_FoldsMagicResistAverageAndFullResist()
+    {
+        PlayerAttackSpell harm = new("Harm", "harm", 1, 4, MaxDamagePerRound: 100, ManaCostPerRound: 10,
+            MinDamagePerRound: 60, UsesMagicResist: true, TypeOfResists: 2);
+        PlayerAttackSpell missile = harm with { Name = "Missile", Short = "mmis", TypeOfResists = 0 };
+
+        IReadOnlyList<SpellEffectivenessResult> r = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { harm, missile }, 0, NoResists, false, monsterHp: 300,
+            monsterMagicResist: 100, realm: RealmType.Stock);
+
+        Assert.Equal(60, r[0].EffectiveDamage);   // missile ranks first
+        Assert.Equal("mmis", r[0].Short);
+        Assert.Equal(30, r[1].EffectiveDamage);
+        Assert.Equal(10, r[1].RoundsToKill);      // ceil(300 / 30)
+    }
 }

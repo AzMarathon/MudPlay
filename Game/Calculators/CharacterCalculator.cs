@@ -499,6 +499,25 @@ public static class CharacterCalculator
         return attacks;
     }
 
+    // The caster's spell-damage bonus % (AlterSpDmg, ability 165): worn gear plus
+    // race and class abilities, the same sources the melee profile folds in, and on
+    // Paradigm the Spellcasting share (SpellcastingSpellDamageBonus).
+    public static int SpellDamageBonus(PlayerStats stats, IReadOnlyList<EquippedItem> worn, GameDataCache gameData)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+        ArgumentNullException.ThrowIfNull(worn);
+        ArgumentNullException.ThrowIfNull(gameData);
+        EquipmentStatBreakdown combined = AggregateEquipmentStats(worn, gameData);
+        if (gameData.FindRowByName("Races", stats.Race) is JsonElement r) ApplyAbilityBonuses(combined, r, stats.Race);
+        if (gameData.FindRowByName("Classes", stats.Class) is JsonElement c) ApplyAbilityBonuses(combined, c, stats.Class);
+        return combined.Totals.SpellDamageBonus + SpellcastingSpellDamageBonus(stats.Spellcasting, gameData.ActiveRealm);
+    }
+
+    // Paradigm turns Spellcasting above 100 into spell damage: +1% per full 50
+    // (GAME_MECHANICS "Spell damage — Stock vs Paradigm"). Stock has no such term.
+    public static int SpellcastingSpellDamageBonus(int spellcasting, RealmType realm) =>
+        realm == RealmType.ParaMud ? Math.Max(0, spellcasting - 100) / 50 : 0;
+
     // Builds the matchup profile for one melee attack type. The defensive side
     // (AC / dodge / prot wards / DR) and the realm are identical across every
     // type; only the offensive fields (to-hit, avg damage, swings, crit) branch
