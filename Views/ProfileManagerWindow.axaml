@@ -4,12 +4,12 @@
         xmlns:vmp="using:MudPlay.ViewModels.Profile"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="860" d:DesignHeight="480"
+        mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="480"
         x:Class="MudPlay.Views.ProfileManagerWindow"
         x:DataType="vm:ProfileManagerViewModel"
         Title="Profile Management"
-        Width="860" Height="480"
-        MinWidth="720" MinHeight="340"
+        Width="920" Height="480"
+        MinWidth="780" MinHeight="340"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
@@ -22,6 +22,12 @@
         <!-- Bold the currently-loaded character's row. -->
         <Style Selector="TextBlock.current">
             <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <!-- The pane action rows pack several buttons into a narrow column: tighter
+             side padding and centred labels keep "Rename" / "Remove" whole. -->
+        <Style Selector="Grid.PaneActions > Button">
+            <Setter Property="Padding" Value="4,5"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
         <!-- First-run tour: glow the button the current step points at. -->
         <Style Selector="Button.tutTarget">
@@ -52,13 +58,13 @@
         <!-- Three linked columns: BBSes → the selected BBS's realms → the
              characters on the selected realm. Each pane lists on top and keeps
              its actions underneath. -->
-        <Grid ColumnDefinitions="200,1,220,1,*" Margin="10">
+        <Grid ColumnDefinitions="230,1,230,1,*" Margin="10">
 
             <!-- ===== BBSes ===== -->
             <DockPanel Grid.Column="0" Margin="0,0,10,0">
                 <TextBlock DockPanel.Dock="Top" Classes="PaneHeader" Text="BBSes"/>
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0" Spacing="4">
-                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="4">
+                    <Grid Classes="PaneActions" ColumnDefinitions="*,*,*" ColumnSpacing="4">
                         <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
                                 Classes.tutTarget="{Binding HighlightAddBbs}"
                                 Command="{Binding AddBbsCommand}"/>
@@ -88,7 +94,7 @@
                 <TextBlock DockPanel.Dock="Top" Classes="PaneHeader" Text="{Binding RealmsHeader}"
                            TextTrimming="CharacterEllipsis"/>
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0" Spacing="4">
-                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="4">
+                    <Grid Classes="PaneActions" ColumnDefinitions="*,*,*" ColumnSpacing="4">
                         <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
                                 Command="{Binding AddRealmCommand}" IsEnabled="{Binding HasBbsSelection}"
                                 ToolTip.Tip="Add a realm to this BBS. It starts with default settings and no collected data."/>
@@ -125,7 +131,7 @@
                 <TextBlock DockPanel.Dock="Top" Classes="PaneHeader" Text="{Binding CharactersHeader}"
                            TextTrimming="CharacterEllipsis"/>
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0" Spacing="4">
-                    <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="4">
+                    <Grid Classes="PaneActions" ColumnDefinitions="*,*,*,*,*" ColumnSpacing="4">
                         <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
                                 Classes.tutTarget="{Binding HighlightAddCharacter}"
                                 Command="{Binding AddProfileCommand}" IsEnabled="{Binding HasBbsSelection}"
