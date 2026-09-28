@@ -1685,8 +1685,8 @@
   {
     "Id": "68ea4007977480c3",
     "Name": "fear",
-    "Flags": "Fear, MovementPrevented",
-    "RawFlagsHex": 24,
+    "Flags": "Fear",
+    "RawFlagsHex": 8,
     "CasterMessage": "You cast {spellname} on {target}, healing {damage} damage!",
     "TargetMessage": "{source} casts {spellname} on you!",
     "WitnessMessage": "{source} casts {spellname} on {target}!",

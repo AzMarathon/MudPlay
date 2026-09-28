@@ -2001,6 +2001,7 @@ How one damage spell cast against a monster is worked out.
   - A nav client can therefore recognise it's being fear-moved and stop treating the echo-less
     redisplays as re-looks — dropping to localisation instead of holding/guessing — rather than being
     "wire-indistinguishable."
+  - The fear message seeds carry only the **Fear** flag. They used to add Movement prevented, which made a feared character read as held (Held chip, `@held` to the party, "Waiting — held"); dropped 2026-09-28 (user), since fear now has its own wait.
   - `SelfFearMovementGate` asserts `MovementCoordinator.FearGate` while afraid, so our own walk / loop / auto-lair waits for the wear-off (the nav readout shows "Waiting — afraid").
   - `RoomTracker.TryFearMove`: while afraid, an unexpected room display is followed into the one neighbour behind the last obvious exits that matches it; an ambiguous display falls back to the usual recovery.
   - `CombatManager.SetFearGate` (`ConditionTracker.IsFeared`) holds weapon attacks and attack spells
