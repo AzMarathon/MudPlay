@@ -86,6 +86,13 @@ public sealed class PartyDisconnectMovementGate : IDisposable
 
     // Assert while any member is pending, clear when none remain. Idempotent —
     // only touches the coordinator on the held-state flip.
+    // Reset States: stop waiting out the reconnect grace for dropped members.
+    public void Clear()
+    {
+        _pending.Clear();
+        UpdateGate();
+    }
+
     private void UpdateGate()
     {
         bool shouldHold = _pending.Count > 0;

@@ -109,6 +109,11 @@ public sealed class GlobalSettings
     // only worth offering for a big saving). Install-wide; default 50.
     public int TokenRouteMinRoomsShorter { get; set; } = 50;
 
+    // How many seconds the Navigation map holds where the user browsed to (a pan,
+    // zoom, floor step or Center on…) before it follows the player again.
+    // Install-wide; 0 = follow again straight away. Surfaced in Settings → Other.
+    public int MapRecenterHoldSeconds { get; set; } = 15;
+
     // Party token-route behaviour when some members fail to token across after the
     // regroup retries. false (default) — the leader does NOT token; it fails out in
     // the room and sits so you can sort out the stragglers. true — the leader uses its

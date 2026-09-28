@@ -691,6 +691,7 @@
                                  HighlightShops="{Binding HighlightShops}"
                                  SpellMode="{Binding SpellMode}"
                                  NavLineStyles="{Binding NavLineStyles}"
+                                 AutoFollowHoldSeconds="{Binding MapRecenterHoldSeconds}"
                                  WalkPath="{Binding WalkPath}"
                                  PreviewPath="{Binding PreviewPath}"
                                  LeaderRoutePath="{Binding LeaderRouteLine}"

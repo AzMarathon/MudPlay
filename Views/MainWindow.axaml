@@ -191,7 +191,7 @@
                      movement holds / party-wait signals they drive, returning me
                      to an idle, unafflicted state. -->
                 <MenuItem Header="Reset States" Command="{Binding ResetStatesCommand}"
-                          ToolTip.Tip="Clear my own stuck ailments, waits, and movement holds — return to idle"/>
+                          ToolTip.Tip="Stop every engine and clear stuck ailments, waits, holds and pending walks — return to idle (auto toggles untouched)"/>
                 <Separator/>
 
                 <!-- Casting spell profiles: a fly-out of every configured combat-spell

@@ -128,6 +128,40 @@ public sealed class TokenRouteCoordinatorTests
         Assert.False(h.Coord.Active);
     }
 
+    // The user retargets while the party is tokening across: the new walk starting
+    // abandons the route, and nothing walks to the old destination afterwards.
+    [Fact]
+    public void Leader_NewWalkWhileRegrouping_AbandonsTheRoute()
+    {
+        var h = new Harness { InParty = true, IsLeader = true };
+        h.Members.Add("Boost");
+        h.Coord.TryBegin("Silvermere", Landing, Dest);
+        Assert.True(h.Coord.Active);
+
+        h.Coord.OnWalkEvent(new WalkEvent(WalkEventKind.Started, "user walk", new RoomKey(1, 7)));
+
+        Assert.False(h.Coord.Active);
+        h.Coord.OnMemberDeparted("Boost");
+        Assert.DoesNotContain("use token of Silvermere", h.Sent);   // leader never tokens
+        Assert.Empty(h.Walked);
+    }
+
+    // Stop mid-route (the Navigation Stop, which calls Cancel) — nothing resumes.
+    [Fact]
+    public void Solo_CancelWhileLanding_NeverResumes()
+    {
+        var h = new Harness();
+        h.Coord.TryBegin("Silvermere", Landing, Dest);
+        h.Coord.OnTokenUsed("Silvermere");
+        Assert.True(h.Coord.AwaitingLanding);
+
+        h.Coord.Cancel();
+        h.Coord.OnRoomChanged(Landing);
+
+        Assert.False(h.Coord.Active);
+        Assert.Empty(h.Walked);
+    }
+
     [Fact]
     public void Leader_RetriesRemaining_ByRoomCheck_ThenTokens()
     {

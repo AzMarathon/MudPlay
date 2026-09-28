@@ -157,8 +157,13 @@ public sealed class MovementController : IDisposable
     // Fully back out of whichever engine is running — same intent as the
     // per-mode Stop buttons in the Navigation window. Clears the user gate
     // afterwards so a stale pause can't strand the next run.
+    // Raised as Stop begins, so a run the engines here don't own (a picked token
+    // route between walks) stops with them.
+    public event Action? Stopping;
+
     public void Stop()
     {
+        Stopping?.Invoke();
         if (_autoLair.IsActive) _autoLair.Stop("user stop from toolbar");
         if (_loops.State != LoopState.Idle) _loops.Stop("user stop from toolbar");
         if (_walker.State is WalkState.Walking or WalkState.Paused)

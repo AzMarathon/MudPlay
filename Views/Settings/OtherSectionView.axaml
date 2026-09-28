@@ -219,7 +219,7 @@
                                    Minimum="1" Maximum="300" Increment="1"
                                    FormatString="0" ShowButtonSpinner="True"
                                    Width="120" MinWidth="120"
-                                   ToolTip.Tip="A token route is only offered when it reaches the destination at least this many rooms sooner than walking. A one- or two-room saving isn't worth a token's gold, daily charge, and buff-wipe. Default 3. Applies to every character on this install."/>
+                                   ToolTip.Tip="A token route is only offered when it reaches the destination at least this many rooms sooner than walking. A one- or two-room saving isn't worth a token's gold, daily charge, and buff-wipe. Default 50. Applies to every character on this install."/>
                     <TextBlock Classes="FieldLabel" Text="rooms."/>
                 </StackPanel>
                 <CheckBox Content="Take a token route even if a party member can't follow"
@@ -227,6 +227,19 @@
                           Margin="0,6,0,0"
                           IsEnabled="{Binding EnableTokenRoutes}"
                           ToolTip.Tip="Only matters as a party leader. On a token route the leader sends the party across FIRST and waits for everyone to follow (retrying a few times), then tokens across itself LAST. When UNCHECKED (default): if a member still can't follow, the leader does NOT token — it stays in the room with the reason in the nav header so you can sort it out. When checked: the leader tokens across anyway and walks on, leaving the stragglers behind. Applies to every character on this install."/>
+            </StackPanel>
+
+            <!-- Navigation map re-centre hold (Global tier): after a pan, zoom, floor
+                 step or Center on…, the map stays where you looked for this many
+                 seconds before following the player again. -->
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,14,0,0" VerticalAlignment="Center">
+                <TextBlock Classes="FieldLabel" Text="Navigation map: hold a browsed view for"/>
+                <NumericUpDown Value="{Binding MapRecenterHoldSeconds, Mode=TwoWay}"
+                               Minimum="0" Maximum="300" Increment="1"
+                               FormatString="0" ShowButtonSpinner="True"
+                               Width="120" MinWidth="120"
+                               ToolTip.Tip="After you pan or zoom the Navigation map, step floors, or use Center on… / Center on Destination, the map stays where you're looking for this many seconds before it re-centres on you again. 0 = follow you again straight away. Default 15. Applies to every character on this install."/>
+                <TextBlock Classes="FieldLabel" Text="seconds before following you again."/>
             </StackPanel>
 
             <!-- Cleanup-Player-Database row: prose-style "Cleanup Player

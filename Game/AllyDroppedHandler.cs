@@ -465,6 +465,12 @@ public sealed partial class AllyDroppedHandler : IDisposable
 
     // Drop a tracked ally and, once the last one is resolved, release the movement
     // hold + stop the poll timer. Idempotent — an untracked name is a no-op.
+    // Reset States: stop the rescue of every downed ally and release the hold.
+    public void Clear(string reason)
+    {
+        foreach (string given in _downed.Keys.ToList()) Resolve(given, reason);
+    }
+
     private void Resolve(string given, string reason)
     {
         if (!_downed.Remove(given)) return;

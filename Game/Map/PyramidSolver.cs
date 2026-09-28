@@ -743,6 +743,17 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
 
     // ----- terminal transitions --------------------------------------
 
+    // Reset States: drop the climb (its own moves and timers) where it stands.
+    public void Cancel(string reason)
+    {
+        if (!Active) return;
+        _log?.Log(LogSeverity.Info, LogSource, $"pyramid climb cancelled: {reason}");
+        StopTimers();
+        _heldMembers.Clear();
+        _phase = Phase.Idle;
+        Active = false;
+    }
+
     private void Finish()
     {
         _log?.Log(LogSeverity.Info, LogSource, $"pyramid climb complete → {_goal.Map}/{_goal.Room}");

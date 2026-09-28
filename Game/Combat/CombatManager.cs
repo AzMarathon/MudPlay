@@ -3204,6 +3204,9 @@ public sealed partial class CombatManager : IDisposable
     // that the fight has moved past the opener (room change, target death, room
     // clear, target-gone) so a resolution line we never saw can't leave the watch
     // (and its re-fire suppression) latched.
+    // Reset States: an unresolved backstab latch holds sneak-keeping (SneakGuard).
+    public void ClearBackstabLatch() => ClearBackstabResolution();
+
     private void ClearBackstabResolution()
     {
         _awaitingBackstabResolution = false;

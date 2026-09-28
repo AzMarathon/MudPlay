@@ -1025,6 +1025,19 @@ public sealed class TrainerWalkManager : IDisposable
         else _log?.Info("AutoTrain", report);
     }
 
+    // Reset States: end any run or party trip where it stands — nothing resumed,
+    // no report and no post-train deposit offer.
+    public void Cancel(string reason)
+    {
+        if (_phase == Phase.Idle && !_partyTrip) return;
+        _partyTrip = false;
+        _partyTripTrained = false;
+        _resume = default;
+        _partyDone = null;
+        _levelsTrained = 0;
+        Finish(reason);
+    }
+
     private void Finish(string? reason)
     {
         if (reason is not null) _log?.Info("AutoTrain", reason);

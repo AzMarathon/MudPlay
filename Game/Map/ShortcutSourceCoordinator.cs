@@ -146,6 +146,9 @@ public sealed class ShortcutSourceCoordinator
             Resume();
     }
 
+    // Reset States: stand down without resuming the walk it was part of.
+    public void Cancel() => _phase = Phase.Idle;
+
     private void EnterSettling()
     {
         _phase = Phase.Settling;

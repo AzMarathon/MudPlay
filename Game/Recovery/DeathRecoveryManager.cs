@@ -1205,6 +1205,24 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _assertRecoveryGate?.Invoke();
     }
 
+    // Reset States: drop the recovery trip in progress (spill-over collect, stock
+    // sweep, paced re-equip) and release its movement hold. The deathpile records
+    // stay, so a recovery can be started again.
+    public void CancelTrip()
+    {
+        _sweep.Cancel();
+        _collectPhase = CollectPhase.None;
+        _collectRoute.Clear();
+        _collectRecord = null;
+        _grabOnSurvey = false;
+        _stockRecovering = false;
+        _stockSweepPending = false;
+        _spilloverGrabOnSurvey = false;
+        _spilloverRecovering = false;
+        _deliberateRecovery = false;
+        AbandonPendingEquip();
+    }
+
     private void ReleaseRecoveryGate()
     {
         if (!_recoveryGateHeld) return;

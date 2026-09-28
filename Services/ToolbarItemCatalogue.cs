@@ -168,7 +168,7 @@ public static class ToolbarItemCatalogue
         // state (unsticks a condition that latched but never saw its wear-off).
         new("ResetStates",        "Reset States",         "IconLoop",
             "ResetStatesCommand",
-            Tooltip: "Reset States — clear my own stuck ailments, waits, and movement holds (return to idle)"),
+            Tooltip: "Reset States — stop every engine and clear stuck ailments, waits, holds and pending walks (return to idle; auto toggles untouched)"),
 
         // Master auto-responses switch. Active = auto-engines run; clicking
         // off kills every Auto-* (remembering which were on) and also gates

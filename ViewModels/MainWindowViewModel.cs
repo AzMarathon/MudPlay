@@ -5471,7 +5471,10 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void AllAutoOff() => AppServices.Current.AutoModeController.ToggleAll();
 
-    // "Reset States" — the manual recovery escape hatch. Drops every condition
+    // "Reset States" — the manual recovery escape hatch. First every engine goes
+    // back to idle (AppServices.ResetEngineStates: walks, loops, lair, detours,
+    // recoveries and any room an engine meant to walk back to — a user's walk kept
+    // ending by heading back toward where they'd used a token). Then it drops every condition
     // active on us (ConditionTracker.ClearAll), which cascades through each
     // owner's ActiveFlags edge: the Confused / Held self-chips clear, their
     // ConfusionGate / HeldGate release, and the ailment @wait balances to @ok.
@@ -5490,6 +5493,10 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ResetStates()
     {
+        // Every engine back to idle first — a walk, detour or recovery left running
+        // (or holding a room to walk back to) is exactly what a reset has to clear.
+        AppServices.Current.ResetEngineStates("Reset States (manual)");
+
         AppServices.Current.Conditions.ClearAll("reset");
 
         // Clear the ailment chips for EVERY party member, not just self. A stuck
@@ -5519,6 +5526,10 @@ public partial class MainWindowViewModel : ObservableObject
         Game.Inventory.EquipResult equip =
             AppServices.Current.Equipment.ApplyByTrigger(Models.Profile.EquipTriggerType.Default);
         SendUserText("health");
+        // Re-observe the room so the trackers and the post-force-clear rest hold
+        // settle on what's actually here.
+        SendUserInput(System.Text.Encoding.Latin1.GetBytes("\r"));
+        AppServices.Current.Health.Evaluate();
 
         AppServices.Current.Log.Info(Game.Conditions.ConditionTracker.LogCategory,
             "Reset States — self conditions, ailment chips, combat state, and derived movement holds cleared; "

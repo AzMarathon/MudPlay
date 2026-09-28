@@ -64,7 +64,6 @@ public sealed class TokenRouteCoordinator
     // carries the nav-header reason. The leader does not token; it sits.
     public event Action<string>? RegroupFailed;
 
-    private Phase _phase = Phase.Idle;
     private string _place = "";          // normalized, for matching the success line
     private string _displayPlace = "";   // original casing/article, for building the use command
     private RoomKey _landing;
@@ -103,6 +102,37 @@ public sealed class TokenRouteCoordinator
     }
 
     public bool Active => _phase != Phase.Idle;
+
+    // Our own token use has gone through and we're waiting to land. Read right after
+    // TokenTracker.TokenUsed to tell a picked route's token from one the user used by
+    // hand.
+    public bool AwaitingLanding => _phase == Phase.AwaitingLanding;
+
+    // Raised whenever the route's phase changes, so the Navigation window can show it
+    // as a running route (Run/Stop reads Stop) while the walker itself is idle.
+    public event Action? Changed;
+
+    // One line for the Navigation header while the route is between walks. Null when
+    // idle or while it's walking (the walk has its own status line).
+    public string? StatusText => _phase switch
+    {
+        Phase.Regrouping => $"Token route to {_displayPlace}: waiting for {_regroupPending.Count} party member(s) to token across",
+        Phase.AwaitingUse => $"Token route to {_displayPlace}: using the token",
+        Phase.AwaitingLanding => $"Token route to {_displayPlace}: landing",
+        _ => null,
+    };
+
+    private Phase _phaseBacking = Phase.Idle;
+    private Phase _phase
+    {
+        get => _phaseBacking;
+        set
+        {
+            if (_phaseBacking == value) return;
+            _phaseBacking = value;
+            Changed?.Invoke();
+        }
+    }
 
     // Begin a picked token route. Returns false — so the caller walks overland — when
     // in a party but NOT the leader (a follower can't drive a token route). Solo or
@@ -171,6 +201,7 @@ public sealed class TokenRouteCoordinator
         if (_regroupPending.Remove(given))
         {
             _log?.Info("Tokens", $"token route to {_place}: {given} ported ({_regroupPending.Count} still here)");
+            Changed?.Invoke();
             if (_regroupPending.Count == 0)
             {
                 _log?.Info("Tokens", $"token route to {_place}: whole party across — leader following");
@@ -293,9 +324,20 @@ public sealed class TokenRouteCoordinator
         }
     }
 
-    // Walker.Event — only meaningful while walking overland toward a clear room.
+    // Walker.Event. While regrouping, using the token or landing, the route drives no
+    // walk of its own — so any walk starting then is the user retargeting: abandon.
+    // While walking overland to a clear room, the route ends with that walk.
     public void OnWalkEvent(WalkEvent e)
     {
+        if (_phase is Phase.Regrouping or Phase.AwaitingUse or Phase.AwaitingLanding)
+        {
+            if (e.Kind == WalkEventKind.Started)
+            {
+                _log?.Info("Tokens", $"token route to {_place}: a new walk was started — abandoning the token route");
+                StandDown();
+            }
+            return;
+        }
         if (_phase != Phase.WalkingToClear) return;
         switch (e.Kind)
         {
@@ -326,6 +368,9 @@ public sealed class TokenRouteCoordinator
         StandDown();
         _walkToDest(dest);
     }
+
+    // Reset States: stand down without resuming the walk it was part of.
+    public void Cancel() => StandDown();
 
     private void StandDown()
     {

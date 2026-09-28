@@ -510,14 +510,24 @@ public sealed class MapControl : Control
     // user isn't standing on (floor-crawl / search jump) is still
     // honoured immediately — only the movement-driven recentre waits.
     private DateTime _autoFollowSuppressedUntil = DateTime.MinValue;
-    private const int AutoFollowSuppressionSeconds = 15;
+
+    // How long the hold lasts. The user's Settings → Other value
+    // (GlobalSettings.MapRecenterHoldSeconds), bound in by the Navigation window.
+    public static readonly StyledProperty<int> AutoFollowHoldSecondsProperty =
+        AvaloniaProperty.Register<MapControl, int>(nameof(AutoFollowHoldSeconds), 15);
+
+    public int AutoFollowHoldSeconds
+    {
+        get => GetValue(AutoFollowHoldSecondsProperty);
+        set => SetValue(AutoFollowHoldSecondsProperty, value);
+    }
 
     private void SuppressAutoFollow()
-        => _autoFollowSuppressedUntil = DateTime.UtcNow.AddSeconds(AutoFollowSuppressionSeconds);
+        => _autoFollowSuppressedUntil = DateTime.UtcNow.AddSeconds(Math.Max(0, AutoFollowHoldSeconds));
 
     // True while the player-room auto-centre is paused because the user is
     // actively browsing (pan-drag, zoom, crawler step, or an explicit view
-    // re-root). Time-boxed — lapses AutoFollowSuppressionSeconds after the last
+    // re-root). Time-boxed — lapses AutoFollowHoldSeconds after the last
     // browse gesture. The Navigation VM reads this to defer a movement-driven
     // layout rebuild while the user is looking elsewhere, so a stairs / U-D step
     // doesn't yank the map back mid-browse; once it lapses, the next step rebounds.

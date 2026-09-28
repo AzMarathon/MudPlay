@@ -253,6 +253,12 @@ public sealed class PartyPathItemGate
     // Inventory-change callback (wired to InventoryManager.Changed): re-checks
     // each in-flight provisioning and coordinates the hand-off the moment the
     // pool becomes whole. A no-op when the leader isn't provisioning anything.
+    // Reset States: forget the party provisioning probes in flight.
+    public void Clear()
+    {
+        lock (_gate) _pending.Clear();
+    }
+
     public void OnInventoryChanged()
     {
         int[] ids;

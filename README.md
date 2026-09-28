@@ -1,8 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.117.9**
-> - Map right-click: **Center on Destination** jumps the view to where the current walk ends (walk-to target, loop start or next lair)
+> **Version 3.117.13**
+> - Walking somewhere new now calls off a party member backtrack, instead of each later walk heading back toward where the party split (e.g. a token)
+> - Using a transport token by hand stops the walk / loop / lair where you land, and the members it drops aren't backtracked for
+> - A token route from a route card waits for the party to token across, then continues; Stop or a new walk abandons it (Navigation shows it as running)
+> - Reset States stops every engine and clears their pending walks, detours, recoveries and holds; auto toggles untouched
+> - Settings → Other: how long the Navigation map holds a browsed view before following you again (default 15 s)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -106,6 +106,9 @@ public sealed class PartyComebackManager : IDisposable
     private string _senderGiven = string.Empty;
     private Action<string> _reply = static _ => { };
     private readonly List<RoomKey> _backtrack = new();
+    // The room our current recovery walk is headed for — a walker event for any
+    // other destination belongs to someone else's walk.
+    private RoomKey? _walkTarget;
     private int _backtrackIndex;
     // The recovery in flight is for a follower our move left behind (path C), and
     // whether their @ok landed just before that move (so it can't be trusted).
@@ -381,9 +384,23 @@ public sealed class PartyComebackManager : IDisposable
     // a manual move leaves the pickup to the player — so an idle leader stays silent
     // rather than telling the member "I'm idle". Recovery backtracks along the path
     // just taken, since that's where they were left.
+    // Our own token use (TokenTracker.TokenUsed). A teleport drops everyone
+    // following us — they weren't held, the token split us — so for a short while
+    // afterwards a "no longer following you" isn't a left-behind member to go back
+    // for. A route-card token sends the party across first; a hand-used one leaves
+    // the regroup to the player.
+    public void NoteOwnTeleport() => _ownTeleportAt = NowProvider();
+    private DateTimeOffset? _ownTeleportAt;
+    private static readonly TimeSpan OwnTeleportWindow = TimeSpan.FromSeconds(15);
+
     private void OnMemberLeftBehind(string given)
     {
         if (string.IsNullOrEmpty(given) || _busy) return;
+        if (_ownTeleportAt is { } at && NowProvider() - at <= OwnTeleportWindow)
+        {
+            _log?.Info(LogCategory, $"{given} was dropped by our own token teleport — not going back for them.");
+            return;
+        }
         if (SnapshotRunningEngine().Kind == ResumeKind.None)
         {
             _log?.Info(LogCategory, $"{given} was left behind, but no engine is running — leaving the pickup to you.");
@@ -413,6 +430,9 @@ public sealed class PartyComebackManager : IDisposable
                 _reply = reply;
                 _backtrack.Clear();
                 _backtrackIndex = 0;
+                // Our own stop — idle the phase so OnWalkEvent doesn't read it as
+                // the user taking over; BeginWalk sets the new phase.
+                _phase = ComebackPhase.Idle;
                 _walker.Stop("comeback: member gave their room");
                 reply("coming to your location for pickup");
                 BeginWalk(there, ComebackPhase.WalkingToRoom);
@@ -614,9 +634,23 @@ public sealed class PartyComebackManager : IDisposable
         return p.Resume;
     }
 
+    // Reset States: drop every in-flight recovery, pending probe and parked resume
+    // so nothing re-issues a walk later. Doesn't stop the walker — the caller does.
+    public void Cancel(string reason)
+    {
+        bool had = _busy || _parkedResume is not null || _crPendingName is not null || _pendingProbes.Count > 0;
+        _parkedResume = null;
+        _crPendingName = null;
+        _crFallbackTimer.Stop();
+        _pendingProbes.Clear();
+        GoIdle();
+        if (had) _log?.Info(LogCategory, $"recovery state cleared ({reason})");
+    }
+
     private void GoIdle()
     {
         _busy = false;
+        _walkTarget = null;
         _leftBehind = false;
         _okPremature = false;
         _phase = ComebackPhase.Idle;
@@ -630,6 +664,7 @@ public sealed class PartyComebackManager : IDisposable
     private void BeginWalk(RoomKey room, ComebackPhase phase)
     {
         _phase = phase;
+        _walkTarget = room;
         // WalkTo can synchronously raise Finished ("already at
         // destination") which re-enters OnWalkEvent before this returns;
         // _phase is set above so that re-entry is handled correctly.
@@ -658,6 +693,23 @@ public sealed class PartyComebackManager : IDisposable
     private void OnWalkEvent(WalkEvent e)
     {
         if (!_busy) return;
+        // Our own recovery walks are only ever started on an idle walker, so a
+        // Stopped mid-recovery — or a Finished for some other room — means the user
+        // (or another engine) took the wheel with a walk of their own. Stand down and
+        // drop the resume: carrying on would re-issue the next backtrack room after
+        // every later walk, and resuming would drag them back onto the walk they
+        // just replaced (report: a token mid-walk split the party, and every walk the
+        // player set afterwards ended by heading back toward the token room).
+        if (_phase is ComebackPhase.WalkingToRoom or ComebackPhase.WalkingBacktrack
+            && (e.Kind == WalkEventKind.Stopped
+                || (e.Kind == WalkEventKind.Finished && !Equals(e.Destination, _walkTarget))))
+        {
+            _log?.Info(LogCategory,
+                $"recovery of {_senderGiven} called off — our walk was replaced ({e.Kind}: {e.Detail})");
+            _parkedResume = null;
+            GoIdle();
+            return;
+        }
         switch (_phase)
         {
             case ComebackPhase.WalkingToRoom:

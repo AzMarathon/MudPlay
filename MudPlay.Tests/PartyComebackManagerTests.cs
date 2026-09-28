@@ -494,6 +494,61 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal("Tank", h.Comeback.RecoveringMember);
     }
 
+    // User report (a token mid-walk split the party): the player set a new walk-to
+    // over the backtrack, and every walk they finished afterwards sent them on to the
+    // next backtrack room. Replacing our walk now calls the recovery off.
+    [Fact]
+    public void LeftBehind_UserStartsANewWalk_CallsTheRecoveryOff()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+
+        h.Walker.WalkTo(new RoomKey(1, 3));            // the user's own walk-to
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Null(h.Comeback.ParkedResumeSummary);
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+        Assert.False(h.Lair.IsActive);                 // the replaced engine isn't resumed
+    }
+
+    // Our own token teleport drops everyone following us; that isn't a held member
+    // to go back for.
+    [Fact]
+    public void LeftBehind_RightAfterOurOwnToken_DoesNotBacktrack()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        h.Comeback.NoteOwnTeleport();
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    [Fact]
+    public void Cancel_DropsTheRecoveryAndParkedResume()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        h.Comeback.Cancel("test");
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Null(h.Comeback.ParkedResumeSummary);
+    }
+
     [Fact]
     public void LeftBehind_Rejoins_HoldsForTheirOk_AndTellsThem()
     {

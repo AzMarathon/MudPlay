@@ -1747,6 +1747,9 @@ public sealed class LoopRunner : IRecoverableEngine
     // genuine Start() call — see NotifyDisconnected's rationale.
     private Loop? _pendingReconnectResume;
 
+    // Reset States: don't restart the loop on the next prompt after a reconnect.
+    public void ClearPendingReconnectResume() => _pendingReconnectResume = null;
+
     // Torn down by a connection drop (wired from MainWindowViewModel's
     // client.Disconnected, mirroring every other subsystem's NotifyDisconnected).
     // Nothing in the recovery ladder (the gate's Tier2/Tier3/awaiting-rm wait, or

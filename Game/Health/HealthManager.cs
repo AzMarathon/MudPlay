@@ -2094,6 +2094,23 @@ public sealed class HealthManager : IDisposable
 
     public void NoteRoomChanged() => NoteRoomChanged(newRoom: null);
 
+    // Reset States: drop a flee in progress, and the engine it would resume once HP
+    // recovers, so a stopped loop / walk isn't restarted afterwards.
+    public void CancelFlee()
+    {
+        if (_fleeEngine is null && _deferredFleeReason is null && _fleeQueue.Count == 0) return;
+        _log?.Combat(LogCategory, "flee cancelled (reset) — nothing will be resumed");
+        _fleeEngine = null;
+        _fleeQueue.Clear();
+        _fleeLanded = false;
+        _fleeFromRoom = null;
+        _fleeFromGates = false;
+        _fledThisCombat = false;
+        _deferredFleeReason = null;
+        _deferredFleeFromGates = false;
+        _post(Evaluate);
+    }
+
     // A flee move was refused — the route ran into a wall. Stop the retreat where we
     // stand rather than wait forever for a landing that can't come (report
     // paradigm-20260927-011659: stuck "already running" beside an acid slime).
