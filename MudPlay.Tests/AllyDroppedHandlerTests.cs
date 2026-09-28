@@ -31,6 +31,7 @@ public sealed class AllyDroppedHandlerTests
         public List<byte[]> Wire { get; } = new();
 
         public bool Enabled { get; set; } = true;
+        public int DeathFloor { get; set; } = -10;   // worst case: 10 ticks = 300 s
         public DateTime Clock { get; set; } = new(2026, 7, 5, 19, 32, 0, DateTimeKind.Utc);
 
         public Harness(string selfName = "Raijin")
@@ -43,7 +44,8 @@ public sealed class AllyDroppedHandlerTests
                 readParty: () => Cfg,
                 isEnabled: () => Enabled,
                 useTimer: false,
-                log: null)
+                log: null,
+                readDeathFloor: () => DeathFloor)
             {
                 NowProvider = () => Clock,
             };
@@ -167,8 +169,8 @@ public sealed class AllyDroppedHandlerTests
     public void NoPartyHealConfigured_StillAidsAndHolds()
     {
         // A non-healer (no party-heal spell — e.g. a Mystic whose only heal is a
-        // self-power) must still aid a dropped ally: `aid` is universal and lifts
-        // them back above 0 HP on its own. The reported case.
+        // self-power) must still aid a dropped ally: `aid` is universal and starts
+        // their climb back above 0 HP on its own. The reported case.
         using Harness h = new();
         h.Cfg.MinorPartyHealSpell = null;
         h.Cfg.MajorPartyHealSpell = null;
@@ -181,8 +183,10 @@ public sealed class AllyDroppedHandlerTests
         Assert.True(h.Handler.IsTrackingForTests("MudPlay"));
     }
 
+    // Aid only stops the bleeding — they can't accept an invite until their HP is
+    // positive, so the leader re-invites when a @health reply shows them up.
     [Fact]
-    public void AidConfirmation_WhenLeading_ReInvites()
+    public void WhenLeading_ReInvitesOnceTheyAreUp_NotOnAid()
     {
         using Harness h = new();
         h.Party.SelfIsLeader = true;
@@ -190,12 +194,14 @@ public sealed class AllyDroppedHandlerTests
         h.Drop("MudPlay");
 
         h.Aid("MudPlay");
+        Assert.False(h.ManagerSent("invite MudPlay\r"));
 
+        h.Handler.NoteHealthReplyForTests("MudPlay", "{HP=1/200}");
         Assert.True(h.ManagerSent("invite MudPlay\r"));
     }
 
     [Fact]
-    public void AidConfirmation_WhenFollowing_DoesNotReInvite()
+    public void WhenFollowing_DoesNotReInvite()
     {
         // A follower's leader re-invites THEM, not the other way round.
         using Harness h = new();
@@ -203,8 +209,9 @@ public sealed class AllyDroppedHandlerTests
         h.Party.LeaderName = "MudPlay WuzHere";
         h.Party.LeaderName = null;
         h.Drop("MudPlay");
-
         h.Aid("MudPlay");
+
+        h.Handler.NoteHealthReplyForTests("MudPlay", "{HP=1/200}");
 
         Assert.False(h.ManagerSent("invite MudPlay\r"));
     }
@@ -289,22 +296,22 @@ public sealed class AllyDroppedHandlerTests
     }
 
     [Fact]
-    public void RescueTimeout_ReleasesHold()
+    public void Drop_AsksTheirHealthOnce()
     {
         using Harness h = new();
         h.Party.Members.Add(new PartyMember { Name = "MudPlay WuzHere" });
+
         h.Drop("MudPlay");
-        Assert.True(h.GateAsserted);
 
-        h.Clock = h.Clock.AddSeconds(121); // past RescueTimeout
-        h.Handler.TickPollForTests();
-
-        Assert.False(h.GateAsserted);
-        Assert.False(h.Handler.IsTrackingForTests("MudPlay"));
+        Assert.True(h.WireHas("/MudPlay @health\r"));
     }
 
+    // With their HP unknown, the rescue waits the longest the climb can take: from
+    // the deepest living HP (floor + 1) to 1 HP at a tick each — 10 ticks for a −10
+    // floor — and only then starts asking. It holds the whole time; a fixed short
+    // timeout used to walk off while they were still down.
     [Fact]
-    public void AidedAlly_PollsHealthOnTick()
+    public void UnknownHp_HoldsForTheWorstCaseClimb_ThenChecks()
     {
         using Harness h = new();
         h.Party.Members.Add(new PartyMember { Name = "MudPlay WuzHere" });
@@ -312,25 +319,52 @@ public sealed class AllyDroppedHandlerTests
         h.Aid("MudPlay");
         h.Wire.Clear();
 
-        h.Clock = h.Clock.AddSeconds(6); // past PollCadence
+        h.Clock = h.Clock.AddSeconds(299);
         h.Handler.TickPollForTests();
+        Assert.False(h.WireHas("/MudPlay @health\r"));    // can't be up yet
+        Assert.True(h.GateAsserted);
 
+        h.Clock = h.Clock.AddSeconds(1);
+        h.Handler.TickPollForTests();
+        Assert.True(h.WireHas("/MudPlay @health\r"));
+        Assert.True(h.GateAsserted);
+    }
+
+    [Fact]
+    public void NegativeHpReply_TimesTheCheckExactly()
+    {
+        using Harness h = new();
+        h.Party.Members.Add(new PartyMember { Name = "MudPlay WuzHere" });
+        h.Drop("MudPlay");
+        h.Aid("MudPlay");
+
+        h.Handler.NoteHealthReplyForTests("MudPlay", "{HP=-3/200}");   // 4 ticks to 1 HP
+        h.Wire.Clear();
+
+        h.Clock = h.Clock.AddSeconds(119);
+        h.Handler.TickPollForTests();
+        Assert.False(h.WireHas("/MudPlay @health\r"));
+
+        h.Clock = h.Clock.AddSeconds(1);
+        h.Handler.TickPollForTests();
         Assert.True(h.WireHas("/MudPlay @health\r"));
     }
 
     [Fact]
-    public void UnaidedAlly_NotPolled()
+    public void NeverStands_ReleasesAfterTheGrace()
     {
-        // A still-mortally-wounded ally can't answer a telepath, so we don't poll
-        // until our aid lands.
         using Harness h = new();
         h.Party.Members.Add(new PartyMember { Name = "MudPlay WuzHere" });
         h.Drop("MudPlay");
-        h.Wire.Clear();
+        h.Aid("MudPlay");
 
-        h.Clock = h.Clock.AddSeconds(6);
+        h.Clock = h.Clock.AddSeconds(300 + 59);
         h.Handler.TickPollForTests();
+        Assert.True(h.GateAsserted);
 
-        Assert.False(h.WireHas("/MudPlay @health\r"));
+        h.Clock = h.Clock.AddSeconds(1);
+        h.Handler.TickPollForTests();
+        Assert.False(h.GateAsserted);
+        Assert.False(h.Handler.IsTrackingForTests("MudPlay"));
     }
 }

@@ -2,18 +2,19 @@ namespace MudPlay.Game;
 
 // Seed values for HP / MA regen tick intervals. Used by RegenTracker as the
 // initial estimate until live observation refines the average. These are the
-// documented Stock MajorMUD tick intervals (30 s natural / 20 s rest / 10 s
-// meditate).
+// Stock engine's own tick intervals (30 s natural / 21 s rest / 15 s meditate —
+// GAME_MECHANICS "Rest and meditate tick timing"); ParaMud runs its own cadence, see
+// RealmRegenProfile.
 public static class RegenConstants
 {
     // Passive (standing) regen tick interval.
     public static readonly TimeSpan SeedStandingInterval   = TimeSpan.FromSeconds(30);
 
     // Resting HP-recovery tick interval.
-    public static readonly TimeSpan SeedRestingInterval    = TimeSpan.FromSeconds(20);
+    public static readonly TimeSpan SeedRestingInterval    = TimeSpan.FromSeconds(21);
 
     // Meditating MA-recovery tick interval (kai / mana classes).
-    public static readonly TimeSpan SeedMeditatingInterval = TimeSpan.FromSeconds(10);
+    public static readonly TimeSpan SeedMeditatingInterval = TimeSpan.FromSeconds(15);
 
     // How long after a heal-shaped command (cast / drink / quaff / etc.) to
     // ignore HP / MA increases — the conservative artifact filter. Hard-coded

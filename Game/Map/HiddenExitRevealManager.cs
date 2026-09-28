@@ -15,13 +15,19 @@ namespace MudPlay.Game.Map;
 // auto-search-room feature. The attempt cap reads live from
 // Settings.Other.MaxHiddenSearchAttempts on each retry so the user can
 // tune mid-session.
+//
+// The game won't search while you're blind — `sea` answers only "You are
+// blind." — so a search waits out the blindness (OnBlindnessChanged) instead of
+// burning attempts or hanging on a reply that never comes.
 public sealed class HiddenExitRevealManager : IDisposable
 {
     private readonly RoomTracker _tracker;
     private readonly MessageRouter? _router;
     private readonly IDisposable? _searchOkSub;
     private readonly IDisposable? _searchFailSub;
+    private readonly IDisposable? _blindSub;
     private readonly Func<int> _maxAttemptsProvider;
+    private readonly Func<bool> _isBlinded;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
     private bool _disposed;
@@ -29,6 +35,7 @@ public sealed class HiddenExitRevealManager : IDisposable
     private readonly Queue<HiddenRequest> _queue = new();
     private HiddenRequest? _current;
     private int _attempts;
+    private bool _heldForBlindness;
     // The room the in-flight search started in (null when unknown). A confirmed move
     // to another room ends the search — see HiddenSearchResult.LeftRoom.
     private RoomKey? _searchRoom;
@@ -44,17 +51,22 @@ public sealed class HiddenExitRevealManager : IDisposable
     // True when a search is in flight (sent sea, awaiting room obs).
     public bool IsBusy => _current is not null;
 
+    // The in-flight search is waiting for blindness to clear.
+    public bool HeldForBlindness => _heldForBlindness;
+
     public HiddenExitRevealManager(
         RoomTracker tracker,
         Func<int> maxAttemptsProvider,
         MessageRouter? router = null,
-        LogService? log = null)
+        LogService? log = null,
+        Func<bool>? isBlinded = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(maxAttemptsProvider);
         _tracker = tracker;
         _router = router;
         _maxAttemptsProvider = maxAttemptsProvider;
+        _isBlinded = isBlinded ?? (static () => false);
         _log = log;
         _tracker.StateChanged += OnTrackerStateChanged;
 
@@ -71,7 +83,35 @@ public sealed class HiddenExitRevealManager : IDisposable
         {
             _searchOkSub   = _router.Subscribe(KnownPatterns.UserSearchSucceeded, OnSearchSucceededPattern);
             _searchFailSub = _router.Subscribe(KnownPatterns.UserSearchFailed,    OnSearchFailedPattern);
+            _blindSub      = _router.Subscribe(KnownPatterns.BlindMoveStarved,    OnBlindRefusal);
         }
+    }
+
+    // The blind flag changed: a search held for blindness goes out once it clears.
+    public void OnBlindnessChanged()
+    {
+        if (!_heldForBlindness || _isBlinded()) return;
+        _heldForBlindness = false;
+        _log?.Info("Hidden", "can see again — resuming the held search.");
+        SendSea();
+    }
+
+    // "You are blind." while our `sea` is out: the game refused the search. The
+    // walker holds every move until the reveal answers, so no move of ours can be
+    // what drew this line. Hold (the refused try doesn't count) until the blind
+    // flag clears.
+    private void OnBlindRefusal(MatchResult _)
+    {
+        if (_current is not { } cur || _heldForBlindness || _attempts == 0) return;
+        _attempts--;
+        HoldForBlindness(cur);
+    }
+
+    private void HoldForBlindness(HiddenRequest cur)
+    {
+        _heldForBlindness = true;
+        _log?.Info("Hidden",
+            $"reveal {DirectionShort(cur.Direction)} held — the game won't search while you're blind; waiting to see again.");
     }
 
     // Bind the wire-sender — same shape as the rest of the engine-side handlers.
@@ -87,6 +127,7 @@ public sealed class HiddenExitRevealManager : IDisposable
         _tracker.StateChanged -= OnTrackerStateChanged;
         _searchOkSub?.Dispose();
         _searchFailSub?.Dispose();
+        _blindSub?.Dispose();
     }
 
     private void OnSearchSucceededPattern(MatchResult m)
@@ -157,6 +198,7 @@ public sealed class HiddenExitRevealManager : IDisposable
             cur.Reply(new HiddenSearchResult.Failed("hidden search stopped"));
             _current = null;
         }
+        _heldForBlindness = false;
         while (_queue.Count > 0)
         {
             HiddenRequest q = _queue.Dequeue();
@@ -179,6 +221,11 @@ public sealed class HiddenExitRevealManager : IDisposable
     private void SendSea()
     {
         if (_current is not { } cur) return;
+        if (_isBlinded())
+        {
+            if (!_heldForBlindness) HoldForBlindness(cur);
+            return;
+        }
         _attempts++;
         _wire.Send($"sea {DirectionShort(cur.Direction)}");
         _log?.Info("Hidden",
@@ -216,7 +263,8 @@ public sealed class HiddenExitRevealManager : IDisposable
             return;
         }
 
-        // Still not visible — retry or exhaust.
+        // Still not visible — retry or exhaust (a blind hold waits for sight instead).
+        if (_heldForBlindness) return;
         if (_attempts >= _maxAttemptsProvider())
         {
             cur.Reply(new HiddenSearchResult.Failed(
@@ -232,6 +280,7 @@ public sealed class HiddenExitRevealManager : IDisposable
         _current = null;
         _attempts = 0;
         _searchRoom = null;
+        _heldForBlindness = false;
         TryStartNext();
     }
 

@@ -23,13 +23,18 @@ namespace MudPlay.Game;
 //     down. The dropper sees it with their own name, so a self-match is ignored.
 //   • A dropped ally leaves `par` — their vitals stop refreshing — so once we've
 //     brought them back we poll their HP out-of-band via an `@health` telepath.
-//   • `aid <name>` (universal) lifts a dropped ally back to positive HP; a heal
-//     cast AT THEM BY NAME still lands even though they're off the roster. So we
-//     aid first, then keep topping them up by name (fed to CastingDirector via
-//     AidedDownedGivenNames) until they recover.
+//   • `aid <name>` (universal) stops the bleeding; it doesn't stand them up. HP
+//     then climbs 1 per 30 s tick until it's positive, and until then they can't
+//     act or answer a telepath. A heal cast AT THEM BY NAME still lands even though
+//     they're off the roster and gets them up sooner (fed to CastingDirector via
+//     AidedDownedGivenNames).
+//   • So the rescue is timed off the climb: a `@health` reply at negative HP gives
+//     the exact wait, else the realm's death floor gives the longest it can take
+//     (the deepest living HP is floor + 1). We check on them once that's up.
 //   • Recovery to positive HP does NOT auto-rejoin the party — an explicit
-//     `invite <name>` is required. Only the leader can do that, so the re-invite
-//     step is gated on SelfIsLeader (a follower's leader re-invites THEM instead).
+//     `invite <name>` is required, and they can't accept it until they're up. Only
+//     the leader can send it, so the re-invite waits for a positive `@health` and
+//     is gated on SelfIsLeader (a follower's leader re-invites THEM instead).
 //   • The drop is treated as a wait condition: AllyDownGate holds every movement
 //     engine so we stay in the room and keep aiding / healing rather than walking
 //     the farm loop off without the downed member.
@@ -52,11 +57,19 @@ public sealed partial class AllyDroppedHandler : IDisposable
     // LogService category — party-flavoured lifecycle rows.
     private const string LogCategory = "Party";
 
-    // Give up on a downed ally that never got aided / never recovered after this
-    // long, so a botched rescue can't wedge the movement hold forever.
-    private static readonly TimeSpan RescueTimeout = TimeSpan.FromSeconds(120);
+    // One regen tick: an aided ally climbs 1 HP per tick (GAME_MECHANICS "0 HP —
+    // dropped / bleeding out").
+    private static readonly TimeSpan HpTick = TimeSpan.FromSeconds(30);
 
-    // Cadence for the `/given @health` poll on an aided-but-off-roster ally.
+    // How long past the expected stand-up time we keep asking before giving up, so
+    // a botched rescue can't wedge the movement hold forever.
+    private static readonly TimeSpan CheckGrace = TimeSpan.FromSeconds(60);
+
+    // Once they're up, how long we keep holding (and healing by name) for them to
+    // reach the party-heal bar before moving on.
+    private static readonly TimeSpan TopUpWindow = TimeSpan.FromSeconds(120);
+
+    // Cadence for the `/given @health` poll once they should be able to answer.
     private static readonly TimeSpan PollCadence = TimeSpan.FromSeconds(5);
 
     // Window after our leader is lost (LeaderName → null) during which a drop line
@@ -72,6 +85,7 @@ public sealed partial class AllyDroppedHandler : IDisposable
     private readonly MovementCoordinator _coordinator;
     private readonly Func<PartySettings> _readParty;
     private readonly Func<bool> _isEnabled;
+    private readonly Func<int> _readDeathFloor;
     private readonly LogService? _log;
     private readonly List<IDisposable> _subs = new();
     private readonly DispatcherTimer? _pollTimer;
@@ -86,6 +100,13 @@ public sealed partial class AllyDroppedHandler : IDisposable
         public bool Aided;
         public bool Invited;
         public DateTime? LastPollAt;
+        // When they should be up (first @health), and when we stop waiting.
+        public DateTime CheckAt;
+        public DateTime Deadline;
+        // A @health reply gave their negative HP, so CheckAt is exact.
+        public bool HpKnown;
+        // A @health reply showed positive HP — they're on their feet.
+        public bool Up;
     }
 
     private readonly Dictionary<string, DownedAlly> _downed =
@@ -118,9 +139,10 @@ public sealed partial class AllyDroppedHandler : IDisposable
         MovementCoordinator coordinator,
         Func<PartySettings> readParty,
         Func<bool> isEnabled,
-        LogService? log = null)
+        LogService? log = null,
+        Func<int>? readDeathFloor = null)
         : this(router, party, manager, chat, coordinator, readParty, isEnabled,
-               useTimer: true, log) { }
+               useTimer: true, log, readDeathFloor) { }
 
     internal AllyDroppedHandler(
         MessageRouter router,
@@ -131,7 +153,8 @@ public sealed partial class AllyDroppedHandler : IDisposable
         Func<PartySettings> readParty,
         Func<bool> isEnabled,
         bool useTimer,
-        LogService? log = null)
+        LogService? log = null,
+        Func<int>? readDeathFloor = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(party);
@@ -147,6 +170,7 @@ public sealed partial class AllyDroppedHandler : IDisposable
         _coordinator = coordinator;
         _readParty = readParty;
         _isEnabled = isEnabled;
+        _readDeathFloor = readDeathFloor ?? (static () => -25);
         _log = log;
 
         _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberDropped, OnDropped));
@@ -248,16 +272,23 @@ public sealed partial class AllyDroppedHandler : IDisposable
         if (_downed.ContainsKey(given)) return; // already rescuing this ally
 
         bool first = _downed.Count == 0;
-        _downed[given] = new DownedAlly { Given = given, DroppedAt = NowProvider() };
+        DateTime now = NowProvider();
+        DownedAlly ally = new() { Given = given, DroppedAt = now };
+        _downed[given] = ally;
         if (first)
         {
             _coordinator.AssertGate(MovementCoordinator.AllyDownGate, AsserterName,
                 $"ally-down={given}");
             EnsurePollTimerRunning();
         }
+        TimeSpan worst = WorstCaseStand();
+        ScheduleCheck(ally, now + worst);
         SendAid(given);
+        // Worth one ask: a reply at negative HP times the rescue exactly.
+        SendHealthPoll(given);
         _log?.Info(LogCategory,
-            $"Ally {given} dropped — aiding + holding movement to rescue.");
+            $"Ally {given} dropped — aiding + holding movement; up within {worst.TotalSeconds:0}s " +
+            $"(death floor {_readDeathFloor()}) unless healed.");
     }
 
     private void HandleAided(string name)
@@ -265,22 +296,38 @@ public sealed partial class AllyDroppedHandler : IDisposable
         string given = GivenName(name);
         if (given.Length == 0) return;
         if (!_downed.TryGetValue(given, out DownedAlly? a)) return;
-        // Aided back to positive HP — the name-targeted heal will land now (fed to
-        // CastingDirector), and the @health poll can get a reply (a still-mortally-
-        // wounded ally bounces every action, including answering a telepath).
+        // Aided: the bleeding stops and the climb to positive HP starts now, so the
+        // stand-up clock restarts here (unless a @health reply already timed it).
+        // The name-targeted heal can land from here on (fed to CastingDirector).
         a.Aided = true;
-        // Recovery does NOT auto-rejoin the party — an explicit invite is required,
-        // and only the leader can send it. A follower's leader re-invites THEM.
-        if (_party.SelfIsLeader && !a.Invited)
-        {
-            _manager.Invite(given);
-            a.Invited = true;
-            _log?.Info(LogCategory, $"Ally {given} aided — re-invited to the party.");
-        }
-        else
-        {
-            _log?.Info(LogCategory, $"Ally {given} aided — healing by name until recovered.");
-        }
+        if (!a.HpKnown && !a.Up)
+            ScheduleCheck(a, NowProvider() + WorstCaseStand());
+        _log?.Info(LogCategory,
+            $"Ally {given} aided — healing by name; checking on them at {a.CheckAt:HH:mm:ss}.");
+    }
+
+    // The longest an aided ally can take to stand: from the deepest living HP
+    // (floor + 1) up to 1 HP, one HP per tick.
+    private TimeSpan WorstCaseStand()
+    {
+        int floor = Math.Min(_readDeathFloor(), 0);
+        return HpTick * Math.Max(1, -floor);
+    }
+
+    private static void ScheduleCheck(DownedAlly a, DateTime checkAt)
+    {
+        a.CheckAt = checkAt;
+        a.Deadline = checkAt + CheckGrace;
+    }
+
+    // Recovery does NOT auto-rejoin the party — an explicit invite is required, and
+    // only the leader can send it. A follower's leader re-invites THEM.
+    private void ReInviteIfLeading(DownedAlly a)
+    {
+        if (!_party.SelfIsLeader || a.Invited) return;
+        _manager.Invite(a.Given);
+        a.Invited = true;
+        _log?.Info(LogCategory, $"Ally {a.Given} is up — re-invited to the party.");
     }
 
     private void HandleAllyGone(string name)
@@ -357,12 +404,28 @@ public sealed partial class AllyDroppedHandler : IDisposable
         if (entry.Channel != ChatChannel.TelepathIncoming) return;
         if (string.IsNullOrEmpty(entry.Speaker)) return;
         string given = GivenName(entry.Speaker);
-        if (!_downed.TryGetValue(given, out DownedAlly? _)) return;
+        if (!_downed.TryGetValue(given, out DownedAlly? a)) return;
         if (string.IsNullOrEmpty(entry.Message)) return;
         Match m = HealthReply().Match(entry.Message);
         if (!m.Success) return;
         int hpCur = int.Parse(m.Groups["hp"].Value,    CultureInfo.InvariantCulture);
         int hpMax = int.Parse(m.Groups["hpmax"].Value, CultureInfo.InvariantCulture);
+        DateTime now = NowProvider();
+        if (hpCur <= 0)
+        {
+            // Still down: they reach 1 HP after (1 − hp) ticks. 0 isn't up.
+            a.HpKnown = true;
+            ScheduleCheck(a, now + HpTick * (1 - hpCur));
+            _log?.Info(LogCategory,
+                $"Ally {given} at HP {hpCur} — up in about {(a.CheckAt - now).TotalSeconds:0}s; checking then.");
+            return;
+        }
+        if (!a.Up)
+        {
+            a.Up = true;
+            a.Deadline = now + TopUpWindow;
+            ReInviteIfLeading(a);
+        }
         int pct = hpMax > 0 ? hpCur * 100 / hpMax : 0;
         // Recovered once they're back at / above the party-heal trigger — no longer
         // hurt enough to heal, so stop holding + stop topping them up. Clamp to a
@@ -382,14 +445,16 @@ public sealed partial class AllyDroppedHandler : IDisposable
         foreach (string given in _downed.Keys.ToArray())
         {
             if (!_downed.TryGetValue(given, out DownedAlly? a)) continue;
-            if (now - a.DroppedAt >= RescueTimeout)
+            if (now >= a.Deadline)
             {
-                Resolve(given, $"rescue timeout ({RescueTimeout.TotalSeconds:0}s)");
+                Resolve(given, a.Up
+                    ? $"up but not back to the heal bar within {TopUpWindow.TotalSeconds:0}s"
+                    : $"no sign of them standing {CheckGrace.TotalSeconds:0}s past the expected time");
                 continue;
             }
-            // Poll vitals only once aided — a still-mortally-wounded ally can't
-            // answer an @health telepath (every action bounces until aided).
-            if (!a.Aided) continue;
+            // Don't poll before they can stand — a downed ally can't answer a
+            // telepath (every action bounces until their HP is positive).
+            if (!a.Up && now < a.CheckAt) continue;
             if (a.LastPollAt is { } last && now - last < PollCadence) continue;
             SendHealthPoll(given);
             a.LastPollAt = now;

@@ -489,10 +489,11 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Worked example** — Kang (mSTR 55, mAGL 30, mHEA 50) at level 10 with 190 CP: STR 55→99 = 120 CP, AGI 30→60 = 60, HEA 50→60 = 10 → exactly 190. The **next** STR point (99→100) costs `(99-55)/10 + 1 = 5` CP, which 190 can't afford, so **99 is the real ceiling** at that level — a plan must not offer 100.
 
 ### Class/race exp modifier — the `ExpTable` field carries a −100 baseline
-*Status: CONFIRMED 2026-09-23 (user + GreaterMUD Explorer screenshots, Paradigm 1.9.1) · Realm: Paradigm* *([NEEDS CONFIRMATION] the client applies the +100 baseline on Stock too — does Stock's table include it?)*
+*Status: CONFIRMED 2026-09-23 (user + GreaterMUD Explorer screenshots, Paradigm 1.9.1); Stock CONFIRMED 2026-09-27 (user, after `wccmmud.dll` 1.11p `_new_calc_exp_needed`) · Realm: both*
 
 - **The class exp modifier a player reads (and MMUD / GreaterMUD Explorer shows) is `ExpTable + 100`**, not the raw MDB field: the stored `ExpTable` is the class's delta ABOVE the 100% baseline. E.g. Warrior `320` → **420%**, Thief `230` → **330%**, Paladin `490` → **590%** — a uniform +100 across every class.
 - **The race exp modifier is added raw (no +100):** the game's exp-chart percentage is **`(classExpTable + 100) + raceExpTable`** (`ExperienceTableCalculator.CalcExpChart`), so the 100% baseline is counted once, on the class term.
+- **Stock applies the same +100 baseline.** The engine sums class and race `ExpTable` and computes the base as `(sum·1000 + 100000)/100`, i.e. `(sum + 100)·10`. Stock 1.11p data stores Warrior `0` and Thief `−20`, so they read 100% and 80%. *(Was [NEEDS CONFIRMATION]; settled 2026-09-27.)*
 
 **Client use:**
 - The Game-Data **Classes** tab renders `ExpTable` as the modifier (`+100`, with a `%`) to match this; the raw field still drives search/sort.
@@ -559,7 +560,7 @@ How a character earns and spends character points (CP), how exp needed per level
 
 - **Light-load bonus boundary: Paradigm still grants it at exactly 33%.** The percentage is `current*100/max`, truncated. *([OBSERVED] Paradigm, 2026-09-27, the user's `stat all` screenshot.)*
   - **The capture:** a level-2 Gypsy at 964/2880, which the game shows as `Light [33%]`, read Attack `43`, Bash `27` and Dodge `9`. All three are only reachable with the bonus: accuracy +12 and dodge +7.
-  - **Stock:** MMUD-Explorer's `CalculateAccuracy` gates on `< 33`, which excludes 33%. Stock is kept on that. `[NEEDS CONFIRMATION]` Does Stock also grant it at exactly 33%?
+  - **Stock does NOT grant it at exactly 33%** *([OBSERVED] `wccmmud.dll` 1.11p, `_move_player_to_fighter`; [CONFIRMED] 2026-09-27, user)*. The engine gives the bonus only when the load is under 33% and HP is above 0: accuracy `+ (15 − pct/10)`, dodge `+ (10 − pct/10)`. This matches MMUD-Explorer's `< 33` gate.
 
 **Client use:**
 - `StatEffects.BashAccuracyFromStats` computes the bash/smash form; the CP tooltip labels each accuracy line with the attacks it applies to.
@@ -606,7 +607,9 @@ How a character earns and spends character points (CP), how exp needed per level
 
 - **HEA feeds max HP and HP regen, both level-scaled** (see *Health, resting & recovery → Max-HP sources*).
 - **Max-HP marginal per HEA point is `(1/2 + level/16)`** (the `HEA/2` + `(HEA-50)*level/16` terms of `CalcMaxHp`), so it rises nearly every point and steepens with level.
-- **HP regen idle is `(level+20)*HEA/divisor`** (750 stock / 500 Para), tripled while resting.
+- **HP regen idle is `(level+20)*HEA/divisor`** (750 stock / 500 Para).
+- **Resting on Stock adds a second tick rather than tripling the first** *([OBSERVED] `wccmmud.dll` 1.11p; [CONFIRMED] 2026-09-27, user)*. The 30 s tick keeps paying the idle amount, and resting adds `3 × max(1, (level+20)*HEA/750)` every 21 s on top, scaled by `HPregen%`. See *Health, resting & recovery → Rest and meditate tick timing*.
+- **Paradigm resting works differently** *([NEEDS CONFIRMATION] user 2026-09-27: MMUD-Explorer has the Paradigm details)*. The client measures it on a 10 s grid at 3× the idle amount.
 
 **Client use:**
 - The CP tooltip shows the current-value max-HP marginal and the next HEA that ticks regen up.
@@ -686,6 +689,11 @@ How a character earns and spends character points (CP), how exp needed per level
   - robbing: **1–3**;
   - **attacking or robbing a player who's already Seedy or worse is free** — no points, no cloud.
   - **From a good (negative) alignment, one cloud always lands you at exactly 10 (Neutral)**: the add is raised to reach 10 if it would stop short.
+- **How much an evil act adds, Paradigm** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27)*:
+  - attacking a **Good** monster: **10**; a **Lawful Good** monster: **30**; any other monster: nothing;
+  - attacking a **player** who hasn't recently attacked you: **20** if they're Good, **10** if Neutral, nothing if they're evil. A player who recently attacked you costs nothing;
+  - **robbing a player**: at most **10** for the first rob; each later rob of a Good or Neutral player **2**;
+  - **from a good (negative) alignment, a gain that would leave you still good lands you at exactly 0** (Neutral) instead, for monsters and players alike. (A source comment says −50 for PvP; the developer corrected it to 0.) Stock lands you at 10 instead.
 - **An evil act can be refused instead, Stock**, with no points added *([OBSERVED] `wccmmud.dll` 1.11p)*:
   - `To do this action, you must turn off your evil warnings.` — your evil warnings are on (toggled with `You will now be warned and stopped from doing most evil actions.` / `You will no longer be stopped from performing evil actions.`);
   - `You have progressed too far to the evil side to do this action.` — over 300;
@@ -754,13 +762,28 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 - The client counts **ProtGood only on Stock** and **VileWard only on Paradigm**.
 - Monster Intel shows the Prot Good what-if field on Stock and the Vile Ward field (+ evil-tier picker) on Paradigm.
 
-### Blur AC (ability code 10) — encumbrance-scaled, NOT flat
-*Status: CONFIRMED 2026-08-08 (user)*
+### Blur AC (ability code 10) — scaled by realm, NOT flat
+*Status: Paradigm CONFIRMED 2026-08-08 (user; realm settled 2026-09-27); Stock [OBSERVED] `wccmmud.dll` 1.11p `_move_player_to_fighter`, [CONFIRMED] 2026-09-27 (user) · Realm: differs*
 
-- **Blur AC is fundamentally different from flat worn AC (code 2).** Ability code **10**, the item field shown as "AC Blur" — its effective value **scales inversely with carried encumbrance**.
-- **Full value at 0% load, 0 at 100% (heavy), linear in between.** A "AC Blur 12" item gives 12 AC when unburdened and nothing when maxed out — it linearly interpolates between.
+- **Blur AC is fundamentally different from flat worn AC (code 2).** Ability code **10** is the item field shown as "AC Blur". Its effective value is scaled down in play, and the scaling differs by realm.
+- **Paradigm: scaled by carried encumbrance.** Full value at 0% load, 0 at 100% (heavy), linear in between. A "AC Blur 12" item gives 12 AC when unburdened and nothing when maxed out.
+  - **Exact formula** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27)*: `bonus = (100 − load%)·Blur / 10`, in tenths of AC (AC is stored at 10×), truncated. With `load% = Encum·100 / MaxEnc`, also truncated.
+  - Blur 4 at 25% load → `75·4/10 = 30` → **3.0 AC**. At 76% → `24·4/10 = 9` → **0.9 AC**.
+  - It reaches 0 only at full load. (The developer's aside that "75%+ is 0" contradicts his own 76% example; the formula wins.)
+- **Stock: scaled by the heaviest armour you're wearing, not by load.** The summed blur is divided by a factor set by the worn items' armour type (`Items.ArmourType`):
+
+  | Heaviest armour worn | Blur counts |
+  |---|---|
+  | Platemail (9) | ÷4 |
+  | Chainmail (7) or Scalemail (8) | ÷3 |
+  | Leather (3–6) | ÷2 |
+  | anything lighter | full value |
+
+  - Against a backstab, what's left is divided by 4 again.
+  - There is no encumbrance term on Stock. *(An earlier note applied the encumbrance rule to both realms; superseded 2026-09-27.)*
 
 **Client use:**
+- Neither scaling is modelled yet.
 - Blur is surfaced **as its own "AC Blur" line/column**, never merged into the flat "Armour Class" figure (the Item Finder, trial-set readout, and Equipment Manager all split it out).
 - Internally the aggregate `PlusAC` still carries the nominal blur value for the combat/projected formulas — the split is a **display** distinction.
 - The finder shows the nominal (max) value, not an encumbrance-adjusted one, since it's a planning aid without a fixed load assumption.
@@ -770,6 +793,7 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 
 - **A physical hit chance never reaches 0%.** No matter how high a defender's AC/Dodge climbs, an attacker's chance to land a physical hit is **clamped to a floor**. The floor is realm-dependent, and on ParaMUD it also depends on the **defender's class armour type**.
 - **Stock: 8%.** Flat, regardless of armour type.
+  - *[NEEDS CONFIRMATION]* `wccmmud.dll` 1.11p `_calculate_attack` clamps the hit chance to **10–99** before the roll (`random(1,100) < chance`). Depending on how the random range is bounded, that's a floor of 9–10%, not 8%. **Client policy (user, 2026-09-27):** keep the MMUD-Explorer 8% until there's data from a full Stock realm.
 - **ParaMUD: 2% normally, dropping to 1% when the defender's class `ArmourType` is 1..6** — the light-armour tiers **Silk (1), Ninja (2), Leather (3–6)**. Heavier classes — **Chainmail (7), Scalemail (8), Platemail (9)** — and **Natural (0)** stay at the 2% floor.
 - **`ArmourType` is a per-class field (Classes table),** so it's the *character's* class armour tier that lowers the floor, not the gear currently worn. Value→name map (LookupEnums): 0 = Natural, 1 = Silk, 2 = Ninja, 3–6 = Leather, 7 = Chainmail, 8 = Scalemail, 9 = Platemail.
 - **Sibling dodge caps (also in `CombatCalculator`):** Stock hard-caps dodge at **95%**; ParaMUD applies a **soft cap at 55%** (diminishing returns above it) then a **hard cap at 98%**.
@@ -814,17 +838,39 @@ How HP works from full health down through dropping and death, how monster healt
 
 - **Hitting 0 HP drops the character.** They can **no longer move on their own**, and can **no longer fight or cast spells**. A dropped character is out of the action entirely, not merely immobile.
 - **A drop means bleeding out.** Left unreversed, HP keeps trending toward the BBS death threshold (see *Death & corpse recovery → Death threshold & consequences*).
+- **Stock bleeds 1 HP every 30 s** *([OBSERVED] `wccmmud.dll` 1.11p `_slow_update_character`; [CONFIRMED] 2026-09-27, user)*. At HP ≤ 0 the 30 s tick takes 1 HP instead of paying regen, then checks the death threshold. So an un-aided character at `−n` dies after about `(|threshold| − n)·30 s` unless aided or healed. Paradigm's rate isn't recorded.
 - **Dropping removes you from the party** — see *Party → Dropping (0 HP) or instant death removes you from the party* and *Party → Dropped ally rescue*.
 - **The game rejects every action command while dropped / mortally wounded** — except `sys …` commands (see *Sysop commands → Sysop power gating*). Movement, casting, aiding and telepaths all bounce with `You may not do that while you are mortally wounded!`, `Your command had no effect.`, or (for remote / telepath commands) `{command invalid or not allowed}`.
 - **Two reversals bring a dropped character back into the positive:**
   - **another player** issues `aid <name>` on them, or
   - a **healing spell** lifts their HP above 0.
+- **`aid` stops the bleeding; it doesn't stand them up — on both realms** *([CONFIRMED] 2026-09-27, user; Stock mechanics [OBSERVED] `wccmmud.dll` 1.11p `aid` + `_slow_update_character`)*. They stay down until their HP is **positive** — 0 doesn't count.
+  - `aid` on a character at HP ≤ 0 marks them stabilised, and from then on the 30 s tick gives **+1 HP** instead of taking one, until HP is positive. The mark clears once HP is above 0.
+  - So without heals, an aided character at `−n` stands up after about `(n + 1)·30 s`. A heal can end that at any point. The deepest living HP is the death floor + 1, so the longest the climb can take is `|floor|·30 s`. *(The 30 s rate is from the Stock engine; the client assumes it on Paradigm too — [NEEDS CONFIRMATION] Paradigm's rate.)*
+  - Wire text: the aider sees `You have aided <name>, <his/her> wounds are now healing.`; the target sees `<name> has aided you.`; `aid` on someone above 0 HP answers `<name> is in no need of assistance.`.
+  - *(Earlier notes read "aid lifts them back above 0" as immediate; it's the slow climb on both realms. Superseded 2026-09-27.)*
 - **Any player can `drag <name>` a dropped character** *([CONFIRMED] 2026-09-26, user)*. The dropped character then **follows wherever the dragging player moves** — their only way out of the room until aided or healed. In a party the client leaves it to the leader (see *Party → Dropped ally rescue*).
 - **A dropped character can still hang up.** Dropping blocks in-realm *actions* (move / fight / cast), but the **carrier drop / main-menu exit** (the Game-Exit command, e.g. `=x` / `;o`; see *Wire, prompt & command output → Realm exit / logoff sequence*) **still goes through at 0 HP or below** *([NEEDS CONFIRMATION] is it the BBS-level =x that works at 0 HP?)*. So the emergency-hangup escape stays available all the way through the bleeding-out window.
 - **HP percentage goes negative while bleeding out.** HP% is a plain `hp / maxHp` ratio with no clamp at zero, so a dropped character reads a **negative percentage**. Where `par` still lists the member it shows it as such (e.g. a member driven to −12/200 HP reads a negative HP%) — but **by realm** (2026-09-26, user): on **Stock** a dropped member is removed from the party at once, so `par` never shows them; on **Paradigm** `par` is believed to show the negative HP% *([NEEDS CONFIRMATION])* — see *Party → Dropping (0 HP) or instant death removes you from the party*. A percentage-based threshold is therefore a continuous scale from 100 % down through 0 % into the negatives, exactly like an absolute-HP scale.
 - **Client use:**
   - The client's low-HP auto-hangup fires down to (but not past) the BBS death floor, giving a dropped-but-not-yet-dead character a last chance to disconnect before dying. Its "hang up if below" trigger can be set anywhere on the HP% scale, including negative.
   - Client engines that keep firing commands while dropped accomplish nothing but noise — a dropped / mortally-wounded local player must suppress engine command output until healed / aided.
+
+### Rest and meditate tick timing
+*Status: per-bullet tags · Realm: differs*
+
+- **Stock engine timers** *([OBSERVED] `wccmmud.dll` 1.11p timer setup)*. The engine runs four background timers:
+  - a 1 s tick (rest and meditate counters);
+  - a 3 s tick (spell-round durations);
+  - a 5 s tick (combat energy);
+  - a 30 s tick (passive regen and bleeding out).
+- **Passive regen: every 30 s, both realms' base** — see *Character stats & progression → Health (HEA) — max HP and HP regen* and *Mana regeneration & the ManaRgn breakpoints*.
+- **Resting on Stock: an extra HP tick every 21 s** *([OBSERVED] DLL; [CONFIRMED] 2026-09-27, user)*. It pays `3 × max(1, (level+20)·HEA/750)`, then the HP-regen percent bonus, **in addition to** the 30 s tick.
+- **Resting on Paradigm: different** *([NEEDS CONFIRMATION] user 2026-09-27: MMUD-Explorer has the Paradigm details)*. Live captures show natural and rest both paying on a 10 s grid, rest at 3× the natural amount.
+- **Meditating: every 15 s on Stock, every 10 s on Paradigm** *([CONFIRMED] 2026-09-27, user; Stock also [OBSERVED] DLL)*. On Stock the meditate tick pays the base mana formula **without** the `ManaRgn%` modifier, and the 30 s passive tick keeps running alongside it.
+
+**Client use:**
+- `RealmRegenProfile` / `RegenConstants`: Stock 30 / 21 / 15 s, Paradigm 10 / 10 / 10 s for natural / rest / meditate. `RegenTracker` learns the per-tick amounts live.
 
 ### Poison prevents resting
 *Status: CONFIRMED 2026-08-17 (user; report `paradigm-20260817-092945`)*
@@ -877,9 +923,10 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 - **`ManaRgn%` is the sum of every code-145 source.** That is gear/quest `addability 145 N` bonuses (`+N ManaRgn`) **plus** a cast mana-regen roll spell's rolled magnitude. It is a **percent modifier on the tick, not flat mana**.
 - **Breakpoints are emergent, not a table.** Because `tick` is truncated, it steps up by 1 MP only when `ManaRgn%` (or level / stat) crosses the integer threshold `(N·100/base − 100)`. Between thresholds, extra ManaRgn% does nothing.
 - **Roll spells (nature tap / mana flux) carry a code-145 slot with stored value 0.** The magnitude is rolled per cast from the level-scaled range `Min/Max = base + trunc(inc/incLVLs · level)` (the same `SpellCalculator.AffectMagnitude` scaling every affect uses). So the worst roll = Min, best = Max, and the rolled value adds straight into `ManaRgn%`. This is why a reroll only helps when the range can cross a truncation breakpoint at the current level — otherwise it just burns mana.
+- **Meditating** ticks every 15 s on Stock and every 10 s on Paradigm, and on Stock that tick leaves `ManaRgn%` out — see *Rest and meditate tick timing*. *(Previously a reverse-engineered 10 s model; settled 2026-09-27.)*
 - **Unverified / modelled (not from the engine reference, don't hard-depend):**
   - the roll's *distribution* across `[Min,Max]` is treated as linear for "where on the range" purposes but is not proven uniform;
-  - the meditate path (10 s tick, ManaRgn% excluded) is a reverse-engineered model;
+  - whether Paradigm's meditate tick also leaves `ManaRgn%` out;
   - whether the live engine caps summed ManaRgn% is unknown.
 - **Client use:**
   - `CharacterCalculator.CalcManaRegen` implements the formula; the Level Projection grid already relies on it.
@@ -929,6 +976,7 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   | very critically wounded | (0, 20) | 1–13 |
   | mortally wounded | ≤ 0 (dead/dying) | ≤0 |
 
+- **On Stock a monster never reads "mortally wounded"** *([OBSERVED] `wccmmud.dll` 1.11p monster-look routine; [CONFIRMED] 2026-09-27, user)*. The engine computes `pct = HP·100/max` (truncated) and checks only `< 20` very critically, `< 30` critically, `< 50` severely, `< 70` heavily, `< 85` moderately, `< 100` slightly, else unwounded. So 0 HP or below still reads **very critically wounded**. "Mortally wounded" is player-side wording (e.g. the `You may not do that while you are mortally wounded!` refusal).
 - **Band → HP range.** For a band `[lo, hi)`: `Low = ceil(lo·M/100)`, `High = ceil(hi·M/100) − 1` — exactly the integer HP values that read as that band.
 - **Why the range is worth having.** Against a **high-HP boss with fast regen / self-heal**, the per-round scroll outpaces any attempt to tally HP by counting damage lines, so the wound band is the only reliable read of where the boss's "HP gate" sits.
 - **Client use:**
@@ -1074,6 +1122,37 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 **Client use:**
 - The Character Info combat panel gates each strike row on the class ability — not on `MartialArts > 0`.
 
+### Martial-arts strike damage
+*Status: Paradigm [OBSERVED] server source, shared by a Paradigm developer via the user, 2026-09-27; Stock from MMUD-Explorer (Unrated) · Realm: differs*
+
+- **Paradigm base damage is a level band, integer division throughout** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27)*. Levels under 20 use the first form; 20 and up use the second, floored:
+
+  | Strike | Min | Max |
+  |---|---|---|
+  | Punch | `lvl/8 + 2` · `max(5, lvl/6)` | `(lvl+3)/4 + 6` · `max(12, lvl/4)` |
+  | Kick | same as punch | `lvl/5 + 7` · `max(10, lvl/4)` |
+  | Jumpkick | same as punch | `lvl/6 + 7` · `max(10, lvl/4)` |
+
+  - Each strike then adds its own damage bonus (`PunchDamage` / `KickDamage` / `JumpkickDamage`) to both ends, the character's **+min damage** to the min and **+max damage** to the max.
+  - There's **no martial-arts skill term** in the damage.
+  - The source is labelled "base damage", so whether strength and the kick ×1.33 / jumpkick ×1.66 multipliers apply on top isn't shown. *[NEEDS CONFIRMATION]* The client still applies both, as on Stock.
+- **Stock** (MMUD-Explorer) scales the skill by level (capped at 20): min `skill·lvl/8 + 2`; max punch `skill·(lvl+3)/4 + 6`, kick `skill·lvl/6 + 7`, jumpkick `skill·lvl/6 + 8`; then strength, the strike's damage bonus, and the kick / jumpkick multipliers.
+
+**Client use:**
+- `CombatCalculator.CalcMartialArtsDamage`. Before 2026-09-27 the Paradigm branch followed MMUD-Explorer: it rounded the level terms, added a flat +1 skill, and left out +min damage.
+
+### Physical damage per round — Paradigm
+*Status: [OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; bash multipliers and the 3× crit match `CombatCalculator` · Realm: Paradigm*
+
+- **A normal attack's expected damage per round:**
+  ```
+  avg   = (min + max) / 2
+  dmg   = avg · (1 − crit%) + max · crit% · 3
+  round = floor(dmg · min(swings, MAX_SWINGS))
+  ```
+  So a crit averages **3× the max**. The pre-roll and damage multipliers are 1 for a normal attack.
+- **Bash** pre-rolls min and max ×1.1, then multiplies the min by **2.5** and the max by **3**: `round = (min·1.1·2.5 + max·1.1·3)/2 · min(swings, MAX_SWINGS)`. Bash has no crit term.
+
 ### Backstab
 *Status: mixed — per-fact tags inline*
 
@@ -1083,8 +1162,17 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **Success line** *([CONFIRMED])*: a landed backstab is a **single** swing containing the word **`surprise`** — e.g. `You surprise punch large wild dog for 36 damage!`. A surprise line making it through **proves the sneak did not fail** — the opener connected.
 - **Backstab is silent to onlookers and resolves first** — see *Attack announce lines and round commits* and *Player attack order and "Attack last"*.
 - **The opener is always `bs`, never `pu`** *([CONFIRMED])*. The stock realm has been observed to still run the surprise round even when the opener was a normal `pu` on the mystic — but that leeway is **realm-specific** and must not be relied on; other game types may require the literal `bs` opener to trigger the surprise at all. So whenever backstab is enabled and the character is armed (a successful sneak, or hidden with a monster in the room), the opening command is **always** `bs <target>` — the client must never substitute `pu` and hope the surprise still fires.
+  - **Why the Stock `pu` still surprised** *([OBSERVED] `wccmmud.dll` 1.11p `_cmd_punch`; [CONFIRMED] 2026-09-27, user)*: on Stock, `pu <target>` **is** a backstab when you're sneaking or hidden, hold no weapon, and have the punch ability (29). Paradigm isn't recorded, so the always-`bs` rule stands.
+- **A `bs` while not sneaking or hidden quietly becomes a normal attack on Stock** *([OBSERVED] `wccmmud.dll` 1.11p `_cmd_backstab`; [CONFIRMED] 2026-09-27, user)*. No refusal line is printed.
 - **Only the opener needs to be `bs`, and follow-on attacks must stay quiet** *([OBSERVED, mechanism unconfirmed])*. In one live capture the opener `bs large wild dog` was followed by two client-sent `pu large wild dog` during the `*Combat Off*` / `*Combat Engaged*` interrupt bounce, and `You surprise punch ... for 36 damage!` still landed. **Do not read this as "the engine continues the backstab through follow-on attacks"** — the likelier explanation is timing: the `pu` commands simply hadn't registered server-side before the `bs` surprise round resolved. So a well-timed follow-on `pu` *could* have sabotaged the surprise. Practical rule: send `bs` as the opener, then stay quiet — don't spam follow-on attack commands that might register and clobber the surprise (let the server's auto-repeat carry the fight). Never send a second `bs`.
 - **Failure signals — the reliable single-line tell** *([CONFIRMED])*. The surprise round is a **single** swing, so the **first** of the player's own combat-result lines after the `bs` settles the outcome: it either **carries `surprise`** (landed) or **lacks it** (failed). A failure surfaces either as a **whiff** (`You swing at <target>!` — no "for N damage", renders dark-cyan) or as a **folded normal round** (`You punch <target> for N damage!` with no "surprise"). Detection is **text-only** — the `surprise` token, not the color.
+- **Paradigm backstab accuracy** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; matches `CombatCalculator.CalcBackstabAccuracy`)*:
+  ```
+  acc = Stealth/3 + ((AGL − 50) + Level)/2 + 15 + BSAccu + Accuracy (all three accuracy abilities)
+  acc −= 15 if the weapon is too heavy for you
+  ```
+  The +15 was added to help lower levels after a stealth change.
+- **Paradigm backstab defence (against a player)** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; matches `CombatCalculator`)*: `(AC + prev + Perception·0.8 + ward)/2 + shadow`.
 - **`You cannot backstab with this weapon.`** *([CONFIRMED])* — you tried to `bs` while sneaking with a weapon that isn't backstab-capable. No weapon-type flag in the game data exposes this ahead of time; it is only knowable reactively from this line.
 
 **Client use:**
@@ -1164,9 +1252,9 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **Layer 1 — alignment auto-aggro (every monster, straight from `Align`):**
   - `Align` **1 / 2 / 5** (Evil / Chaotic Evil / Neutral Evil) — **opens on everyone**, every title.
   - `Align` **0 / 3** (Good / Neutral) — **never** aggros anyone.
-  - `Align` **6** (Lawful Evil) — "honor among the wicked": aggros **Lawful / Good / Neutral** titles *([NEEDS CONFIRMATION] there is no Lawful title band — does this cover Saint too?)*, but **spares the Evil bucket** (Seedy and worse).
+  - `Align` **6** (Lawful Evil) — "honor among the wicked": opens on **Saint / Good / Neutral / Seedy** and spares **Outlaw and worse** *(Stock [OBSERVED] `wccmmud.dll` 1.11p monster pass, [CONFIRMED] 2026-09-27, user)*. The engine checks your EP, not the title bucket: a monster already fighting you keeps going, otherwise it skips you at **EP ≥ 40**. The separate free-attack path (a swing at you as you move) uses **EP ≥ 80** (Criminal and worse). *(An earlier note said it spared Seedy and asked about Saint; superseded 2026-09-27. Paradigm isn't recorded.)*
   - `Align` **4** (Lawful Good) — **never aggros by alignment**; the only Align-4 aggro is the guard subset via Layer 2.
-  - So the only alignment-driven aggro that depends on *your* title is Align-6 (spares Seedy+); 1/2/5 are unconditional, 0/3/4 never bite on alignment alone.
+  - So the only alignment-driven aggro that depends on *your* alignment is Align-6 (spares Outlaw+); 1/2/5 are unconditional, 0/3/4 never bite on alignment alone.
 - **Layer 2 — criminal / guard system** (the guard subset of Align 4; runtime reputation, NOT in the monster table). Keyed on **your title**, enforced by **guard** NPCs plus special actors:
 
 | Your title | Guards | Extra actors |
@@ -1185,7 +1273,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **A monster that opens on you unprovoked is an enemy, not a neutral** — e.g. storm giants. The client models those as the `Enemy` relationship (see *Neutral monsters and kill-on-sight*).
 
 **Client use:**
-- **Hostile-in-room test.** For each monster in the room, read its `Align`: hostile if `Align ∈ {1,2,5}` (always), or `Align == 6` and our title is Lawful / Good / Neutral, or the monster is a **guard** (casts `jail` 583 — the guard proxy in this topic) **and** our title is Outlaw-or-worse. Our own title comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
+- **Hostile-in-room test.** For each monster in the room, read its `Align`: hostile if `Align ∈ {1,2,5}` (always), or `Align == 6` and our title is Seedy or better, or the monster is a **guard** (casts `jail` 583 — the guard proxy in this topic) **and** our title is Outlaw-or-worse. Our own title comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
 
 ### Neutral monsters and kill-on-sight
 *Status: CONFIRMED 2026-08-15 (user)*
@@ -1200,7 +1288,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **Hand-attacking a passive neutral.** If *you* hand-attack one (a manual swing or combat cast), it turns hostile per the mechanic above, so the client marks that instance user-engaged and the auto-combat engine **takes over finishing it** — treating it like an enemy until it dies (and holding the walker in the room) instead of stopping the moment you engaged it. It's keyed per-instance by name and pruned once the mob is gone, so it never leaks onto a freshly-arrived same-named passive neutral; the *other* un-engaged neutrals stay passive and rest-safe. `Enemy` monsters are unchanged.
 
 ### Monster target selection — who it swings at once fighting
-*Status: Stock CONFIRMED (stock DLL source, user-provided); Paradigm CONFIRMED (user writeup, Paradigm only); realm split CONFIRMED 2026-09-26 (user) · Realm: differs — see bullets*
+*Status: Stock CONFIRMED (stock DLL source, user-provided); Paradigm CONFIRMED (user writeup, Paradigm only; matches the Paradigm developer's write-up shared by the user 2026-09-27); realm split CONFIRMED 2026-09-26 (user) · Realm: differs — see bullets*
 
 - **Distinct from *whether* a monster opens on you:** once a monster is in a fight it picks **one target per beat**, and the two realms use different engines.
 - **Stock** *([CONFIRMED] — stock DLL source, user-provided)*. A stock monster attacks a single **locked target** at a time (not everyone it has aggroed). Each beat:
@@ -1217,7 +1305,12 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   - **Party rank** — **frontrank** raises the odds of being targeted, **backrank** lowers them (midrank between).
   - **Attacking last** raises the odds; **attacking first** lowers them.
   - These stack: a **frontrank member attacking last** is the most likely target; a **backrank member attacking first** the least — but it's still a weighted roll.
-- **On Stock, rank doesn't matter**; "attacking last" works through the lock re-point and Follow% stickiness above, not a score.
+- **On Stock, rank doesn't matter** for who gets targeted; "attacking last" works through the lock re-point and Follow% stickiness above, not a score.
+- **Stock rank does change your combat stats** *([OBSERVED] `wccmmud.dll` 1.11p `_move_player_to_fighter`; [CONFIRMED] 2026-09-27, user)*:
+  - **back rank:** accuracy −10, defence +15;
+  - **front rank:** net accuracy +5, defence +5 (it takes the front bonus, +15 accuracy / −10 defence, and then the back-rank adjustment too);
+  - **middle rank or solo:** no change.
+  - Paradigm's rank effects differ and aren't captured yet (user, 2026-09-27).
 
 **Client use:**
 - Surfaced in the **Monster Aggro** calculator (Workshop → Calculators), which shows the loaded set's model: `StockAggroCalculator` (acquisition → spread pick → Follow% stickiness) or `ParadigmAggroCalculator` (weighted lottery).
@@ -1320,12 +1413,14 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
   success% = clamp(Spellcasting + Diff, 0, cap)
   ```
 
-  **Which wire line a failed Spellcasting+Diff roll prints isn't pinned down** *([NEEDS CONFIRMATION]
-  — user, 2026-09-26: only the recorded lines are known)*. The recorded cast-failure line is
-  `You attempt to cast <spell>, but fail.` (see *"You attempt to cast <spell>, but fail." — cast but
-  missed*); no separate fizzle line has been recorded. The other ways a cast comes to nothing have
-  their own lines or tells: target-type immunity (see *"Your spell has no effect" — immunity spends no
-  round*) and elemental resist (see *Elemental resistance — flat, deterministic, pre-emptable*).
+  **A failed Spellcasting+Diff roll prints `You attempt to cast <spell>, but fail.`** (targeted:
+  `You attempt to cast <spell> at <target>, but fail.`; the room sees `<name> attempted to cast
+  <spell>, but failed.`) *(Stock [OBSERVED] `wccmmud.dll` 1.11p `_cast_no_target`: the cast lands when
+  `min(98, Spellcasting + Diff)` beats a random roll, and `Diff ≥ 200` always lands; [CONFIRMED] 2026-09-27, user. Was [NEEDS
+  CONFIRMATION].)* On Stock the same line also answers a spell refused by the 10-affect cap (see
+  *Stock "10 spelling" affect cap*). The other ways a cast comes to nothing have their own lines or
+  tells: target-type immunity (see *"Your spell has no effect" — immunity spends no round*) and
+  elemental resist (see *Elemental resistance — flat, deterministic, pre-emptable*).
 
 - **`Diff` is the Spells-table `Diff` column, normally ≤ 0.** A harder spell is more negative, so it
   lowers the chance (`ethereal shield` = −5). It's added directly to Spellcasting.
@@ -1345,9 +1440,10 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
 *Status: CONFIRMED 2026-08-05 (user)*
 
 - **The line means the spell DID cast — mana was spent — but it missed the target (a hit-roll
-  failure).** It is NOT out-of-mana. Whether it is also the outcome of a failed Spellcasting+Diff
-  roll isn't known — no separate fizzle line has been recorded *([NEEDS CONFIRMATION])*; see *Spell
-  cast-success chance and the `Diff` column*.
+  failure).** It is NOT out-of-mana. It is also what a failed Spellcasting+Diff roll prints, and on
+  Stock what a spell refused by the full 10-affect cap prints *([OBSERVED] `wccmmud.dll` 1.11p;
+  [CONFIRMED] 2026-09-27, user)* — see *Spell cast-success chance and the `Diff` column* and *Stock
+  "10 spelling" affect cap*.
 - **An attack spell drains mana every round it repeats, whether it lands or misses.** A "but fail" round
   is a spent round (mana down, zero damage), not a free retry.
 - **Client use:**
@@ -1766,11 +1862,15 @@ and how the engine applies and cures conditions (fear, poison, disease, blind, h
     so the victim's latch is dropped too.
 
 ### Stock "10 spelling" affect cap
-*Status: CONFIRMED 2026-09-10 (user) · Realm: Stock*
+*Status: cap CONFIRMED 2026-09-10 (user); refusal rule CONFIRMED 2026-09-27 (user, after `wccmmud.dll` 1.11p) · Realm: Stock*
 
 - **Paradigm has unlimited buff/affect slots; stock caps active affects at 10** (buffs + debuffs
   combined).
-- **Casting/receiving an 11th pushes an existing affect off** — the exact eviction rule is not yet known.
+- **An 11th affect is refused; nothing is pushed off** *([OBSERVED] `wccmmud.dll` 1.11p `_add_cast_spell_to_user`; [CONFIRMED] 2026-09-27, user)*.
+  - A player carries exactly 10 affect slots.
+  - A spell that's already on you is refreshed in its own slot (or, for some casts, refused) — it never takes a second slot.
+  - With all 10 full, a new spell fails with `You attempt to cast <spell>, but fail.`, the same line as a failed cast roll.
+  - *(An earlier note, from memory of an older engine, said the 11th pushes an existing affect off; superseded 2026-09-27.)*
 - **Client use:**
   - Not modelled in the client yet.
 
@@ -2503,6 +2603,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Hide state machine** *(lines all [CONFIRMED] — from paired two-character POV captures)*:
   - `Attempting to hide...` (alone, no suffix) — the attempt fired and the server ran a hide check, but the outcome is **NOT reported to you**. This line is **ambiguous**: it means "a check happened," not "you are hidden." You cannot tell success from failure off this line alone.
   - `Attempting to hide...You don't think you are hidden.` — explicit hide **FAILURE**. This is the only self-observable failure signal.
+    - **Stock prints a space before the suffix:** `Attempting to hide... You don't think you are hidden.` *([OBSERVED] `wccmmud.dll` 1.11p string table; [CONFIRMED] 2026-09-27, user)*. `UserHideFailed` accepts either form; matching only the unspaced one missed every failed hide on Stock.
 - **Hide SUCCESS is not self-observable.** There is no self-side "you are now hidden" confirmation. The only 100%-reliable confirmation is **external**: another player displaying the room and finding you **absent** from the `Also here:` line (or their `search` failing to turn you up). From your own output stream, the best you can know is "an attempt fired" (`Attempting to hide...`) or "it failed" (`...You don't think you are hidden.`) — never a positive success.
 - **Reveal (search) mechanic:**
   - A player runs `search` / `sea`. On a hit they see `You see <name> hiding in the shadows.` and the hidden character is revealed (returned to `Also here:`); on a miss they see `Your search revealed nothing.`.
@@ -2542,19 +2643,22 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - Picking keeps its `MaxPickAttempts` retry cap.
 
 ### Hidden exits — `sea <dir>` reveal wording
-*Status: CONFIRMED (capture 2026-07-14, report 121106); works-while-blind: Unrated*
+*Status: CONFIRMED (capture 2026-07-14, report 121106); blocked-while-blind: Stock [OBSERVED] `wccmmud.dll` 1.11p, applied to both realms by the user 2026-09-27 pending a Paradigm retest*
 
 - **Revealing a hidden exit is `sea <dir>`; the reply wording is axis-dependent:**
   - **success** — cardinals `You found an exit to the <dir>!`; up/down `You found an exit upwards!` / `You found an exit downwards!` (no "to the", `<dir>wards` suffix). *`upwards` confirmed on the wire; `downwards` confirmed from an earlier capture.*
   - **failure** — cardinals `You notice nothing different to the <dir>.`; up/down `You notice nothing different above you.` / `You notice nothing different below you.` (no "to the", no direction word). *Both vertical forms confirmed (`above you` on the wire, `below you` by the user).*
 - **A "bonked" `sea` is distinct from a bonked *move*:** the `sea` reply above is not a move refusal.
-- **Searching for a hidden exit works while blind** *(Unrated)*. `search` / `sea <dir>` reveals a hidden exit regardless of blindness. Blindness suppresses only the descriptive room lines — room name, room description (if enabled), the `Also here:` roster, and the `Obvious exits:` line — it does NOT block the search itself or its outcome.
-  - The reveal carries its own confirmation line (`You found an exit to the <dir>!` and its vertical forms) that fires whether or not you can see the room, so an engine driving a walk can rely on that confirmation to know the hidden exit opened, even mid-blindness.
+- **You can't search while blind.** `search` / `sea <dir>` answers only `You are blind.` and searches nothing *(Stock [OBSERVED] `wccmmud.dll` 1.11p `_cmd_search` → `_can_see`)*.
+  - **Paradigm: treated the same for now** *([NEEDS CONFIRMATION] user 2026-09-27 will retest on Paradigm — does `sea <dir>` work blind there?)*.
+  - `You are blind.` is also what a move made while blind prints, so the line alone doesn't say which command drew it.
+  - A room too dark to see in refuses the same way on Stock: `The room is <light> - you can't see anything`.
+  - *(An earlier, unrated note said the search works while blind; superseded 2026-09-27.)*
 
 **Client use:**
 - The client keys on both to drive the reveal retry loop (`HiddenExitRevealManager`): a failure line triggers another `sea` up to the attempt cap, a success line resolves the reveal so the walker sends the move.
 - Because the up/down failure form drops "to the" entirely, a failure regex that only matched the cardinal `to the <dir>` shape never registered an up/down miss — so up/down searches never retried cleanly and stalled (the reported symptom).
-- The auto-walker's "is this exit already revealed?" pre-check must not skip the `sea <dir>` just because the character is blind — the search still works and is required to unveil the exit.
+- `HiddenExitRevealManager` holds a search while the character is blind. It sends no `sea` while `ConditionTracker` has the blind flag. A `You are blind.` answer to its `sea` counts as a hold, not a spent attempt. It sends the `sea` once the blind flag clears. Before this, a blind `sea` got no success or failure line and left the walker waiting.
 - It also must not trust a stale observed-exits set from a room it only dead-reckoned into — see RoomTracker.SetRoom clearing ObservedExitDirections; a stale set made the walker skip the required search and ram a wall.
 
 ### Exit traps — search and disarm
@@ -3612,7 +3716,7 @@ A `get <item>` that can't succeed replies with one of these shapes:
   — never a bare `hide`, which would hide the character instead.
 
 ### Room item capacity: drop refusal
-*Status: CONFIRMED 2026-09-02 (user, live capture); per-object stacking 2026-09-03 (user; mechanism NEEDS CONFIRMATION); realm CONFIRMED 2026-09-26 (user) · Realm: Stock — Paradigm rooms have no item cap*
+*Status: CONFIRMED 2026-09-02 (user, live capture); per-object stacking 2026-09-03 (user); capacity + stacking rule [OBSERVED] `wccmmud.dll` 1.11p `_add_item_to_room`, CONFIRMED 2026-09-27 (user); realm CONFIRMED 2026-09-26 (user) · Realm: Stock — Paradigm rooms have no item cap*
 
 On Stock, a room holds a limited number of items (Paradigm rooms have no item cap; the capture below didn't record its realm). The same cap drives the Stock deathpile spill-over (see *Death & corpse recovery → Deathpile — where the items go*). A `drop` into a room already at that limit is refused:
 
@@ -3623,14 +3727,15 @@ There is no room to drop amethyst pendant here.
 
 - **The reply carries the item's FULL canonical name**, not the word typed. The command above abbreviated it to `pend`, and the refusal still named `amethyst pendant`. Unlike the `get` failures, where the echo can be truncated and name-matching is explicitly unsafe, a drop refusal CAN be correlated to the outstanding drop by name.
 - **It is per-drop, not per-batch.** A batch of N drops into a full room produces N refusals, one per command, and none of them confirm.
-- **The exact capacity is unknown, and the client never needs it.** "Full" is only ever learned by being refused.
-- **Capacity is per OBJECT, not per item, so a stacking drop may still fit a "full" room** *(2026-09-03, user; [NEEDS CONFIRMATION] mechanism)*.
+- **A Stock room holds 17 visible floor objects and 15 hidden (stashed) ones.** A full hidden side refuses with `There is no room to hide <item> here.`. The client still learns "full" only by being refused.
+- **Capacity is per OBJECT, not per item, so a stacking drop may still fit a "full" room** *(2026-09-03, user)*.
   - The sysop dump counts floor *objects*, and an id can appear more than once. Two black star keys dropped singly read `172(0) 172(0)` (two objects), while two diamonds read `902(1)` (one object of two).
   - So stacking is item-dependent. An item that stacks onto a pile already on the floor consumes no new slot, which means a room that refuses one item can still accept another that stacks with its existing contents.
-- **What isn't known: which items stack.**
-  - There may be a column in the Items table for it. This is unchecked; don't assume a plausibly-named column means this without confirming.
-  - A stack may itself have a size limit.
-  - **The experiment:** in a room that has just refused a drop, try dropping an item that matches something already on its floor. Success means stacking bypasses the object cap. A second refusal means it doesn't, or that pile is itself full.
+- **Which items stack** *([OBSERVED] `wccmmud.dll` 1.11p; [CONFIRMED] 2026-09-27, user)*. A dropped item joins a pile already on the floor only when both hold:
+  - the pile is the **same item number**;
+  - the dropped item carries **no per-instance uses value**.
+
+  An item with a uses/charges value (a key, a charged wand) always takes a new slot. A stacked drop takes no slot, so it fits even in a full room.
 
 **Client use (Roomba Mode):**
 - **A refusal marks that room full for the rest of the sweep.**
@@ -3639,7 +3744,7 @@ There is no room to drop amethyst pendant here.
 - **The same mark makes the room a *preferred pickup source***, since the foreign items sitting in it are the only ones whose removal frees its capacity.
 - **The mark is per-sweep**: a full room is only full until someone loots it.
 - **The sweep is correct but conservative.** It treats a refusal as "this room is full for everything" and re-targets the whole batch, so it gives up on stackable items that would have fitted.
-- **The cheap empirical fix is deliberately NOT implemented** while the mechanism is unverified. That fix would retry an item whose name already appears in that room's survey, once, before re-targeting it.
+- **The stacking retry isn't built yet.** Now that the rule is known, the sweep could retry an item that already has a pile in that room's survey (and carries no uses value) before re-targeting it.
 
 ### Equip / remove verbs
 *Status: CONFIRMED*
@@ -4206,6 +4311,7 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 - **The drag prints to the dragged character on every move.** Once someone starts it, the drag prints `<leader> is dragging you around.` to the dragged character on each of the dragger's moves (observed: `MudPlay is dragging you around.`).
 - **Drag is manual, never automatic.** **Any player** can `drag <name>` a dropped character *([CONFIRMED] 2026-09-26, user)*; in a party it's normally the leader who does it after seeing the drop line. Nothing drags them on its own. Dragging only relocates the still-mortally-wounded body. It does **not** revive them or restore party membership.
 - **A dropped ally is revived with `aid` and/or a heal.** A dropped ally sits at 0 HP or below and can't act for themselves. They must be brought back by **`aid <name>`** and/or a **heal** that lifts their HP above 0. So a party leader watching `<member> drops to the ground!` should **aid and heal that member** (drag is a separate, optional relocation choice, not the rescue).
+  - `aid` alone doesn't lift them at once, on either realm: it stops the bleeding and they climb 1 HP per 30 s until positive (see *Health, resting & recovery → 0 HP — dropped / bleeding out*). Until then they still can't act, answer an `@health` or accept an invite. A heal gets them up sooner.
 - **A dropped ally leaves `par` — immediately on Stock** *([CONFIRMED] 2026-09-26, user)*. On **Stock** a dropped member is removed from the party at once and no longer appears in the `par` roster (`par` lists live membership only). On **Paradigm** `par` is believed to keep showing them with a negative HP% *([NEEDS CONFIRMATION])*; they can't be moved except by `drag`, and what happens to their party standing once dragged and moved on Paradigm isn't known. Their vitals therefore stop refreshing from `par`, so tracking a dropped, then partially-recovered ally's HP needs an out-of-band poll.
 - **An `@health` telepath polls a member's vitals.** *([CONFIRMED])* Sending an ally a telepath `@health` makes their client's @health responder reply with their current HP / MA. This is an out-of-band way to read a member's health when `par` won't show it (e.g. after they've dropped off the roster).
 - **A name-targeted heal still lands on a dropped ally who's been aided.** *([CONFIRMED])* Even though an aided-but-still-dropped ally isn't in `par` anymore, a heal cast **at them by name** still reaches them. A party healer can keep topping them up until they fully recover / rejoin.
@@ -4213,14 +4319,16 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - The **party leader must `invite <name>` again** to pull them back into the group. Until then, the recovered character is solo even though they're standing right there.
   - This holds both ways. When the **local** character recovers from a self-drop, the client must NOT resurrect the wiped roster; it waits for a real follow / `par` signal (which only arrives after the leader's re-invite). When a **leader** revives a dropped member, the rescue sequence is `aid` + heal **then** `invite <name>`.
 - **Client use:**
-  - Client reaction (party healer, self is a member with party heals): treat a member's drop as a **wait condition** and pause farming / movement to stay with them. Once they've been **aided** back above 0, keep **healing them by name** despite their absence from `par`, and poll their HP periodically via an `@health` telepath until they recover. Then (if leading) **re-invite** them.
+  - Client reaction: treat a member's drop as a **wait condition** and pause farming / movement to stay with them. Aid them, keep **healing them by name** despite their absence from `par`, and wait out the climb to positive HP. Then check their HP via an `@health` telepath until they recover, and (if leading) **re-invite** them once they're up.
+  - **Client policy (user, 2026-09-27):** the hold is timed off the climb, not a fixed timeout. A `@health` reply at negative HP gives the exact time (`(1 − hp)·30 s`); with no reply, the realm's death floor gives the longest it can take (`|floor|·30 s`).
   - Implemented in `AllyDroppedHandler`. It:
     - asserts `MovementCoordinator.AllyDownGate`
-    - sends `aid <name>`
+    - sends `aid <name>` and one `@health`
+    - restarts the stand-up clock when our aid lands (the death-floor worst case unless a reply timed it)
     - exposes the aided ally to `CastingDirector`'s downed-ally heal category
-    - polls `@health`
-    - releases on a full-HP reply / rejoin / rescue timeout
-    - re-invites when leading
+    - polls `@health` from the expected stand-up time on
+    - re-invites, when leading, on the first positive `@health`
+    - releases once they reach the party-heal bar, rejoin, leave or die — or 60 s past the expected stand-up with no sign of them, or 120 s after standing without reaching the bar
   - Its own recent-leader memory recognises a dropped leader that a leader-disconnect already wiped from the roster.
 
 ### Member death shows as an invited slot in `par`

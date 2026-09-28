@@ -5,7 +5,7 @@ namespace MudPlay.Game;
 // One regen cycle — anchored at a moment in wall-clock time and firing at
 // fixed Interval steps thereafter, until stopped. The natural HP / MP cycles
 // (30 s) anchor when the first matching observation arrives and stay running
-// forever; the rest (20 s) and meditate (10 s) bonus cycles anchor when the
+// forever; the rest and meditate bonus cycles anchor when the
 // user enters the matching position and stop when they leave.
 public sealed partial class RegenCycle : ObservableObject
 {

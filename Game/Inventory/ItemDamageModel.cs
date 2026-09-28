@@ -135,7 +135,8 @@ public sealed record ItemDamageModel(
         // Martial Arts stat — the same input Monster Intel's profile passes.
         const int maPlusSkill = 1;
         MeleeDamageResult d = CombatCalculator.CalcMartialArtsDamage(
-            type, Realm, Level, maPlusSkill, Strength + item.Strength, Rest.PlusMax + item.PlusMax, maDmg);
+            type, Realm, Level, maPlusSkill, Strength + item.Strength, Rest.PlusMax + item.PlusMax, maDmg,
+            plusMinDamage: Rest.PlusMin + item.PlusMin);
         double swings = CombatCalculator.CalcSwings(
             CombatLevel, Level, speed, Agility + item.Agility, Strength + item.Strength, weaponStrReq: 0,
             CurrentEncum, MaxEncum, realmType: Realm).RawSwings;

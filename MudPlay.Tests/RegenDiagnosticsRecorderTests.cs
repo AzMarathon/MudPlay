@@ -100,7 +100,7 @@ public sealed class RegenDiagnosticsRecorderTests
 
         state.Hp = 100;
         state.Position = PlayerPosition.Resting;
-        clock.Advance(TimeSpan.FromSeconds(20));
+        clock.Advance(TimeSpan.FromSeconds(21));
         state.Hp = 112;                           // a rest tick.
 
         LogEntry row = Assert.Single(entries);

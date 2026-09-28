@@ -382,10 +382,12 @@ public static class CombatCalculator
     //   min = skill*nTemp/8 + 2; punch max = skill*(nTemp+3)/4 + 6,
     //   kick max = skill*nTemp/6 + 7, jumpkick max = skill*nTemp/6 + 8
     //   (all Fix() truncated).
-    // GreaterMUD / ParaMUD uses a level-driven band with the skill added flat —
-    //   min = round(lvl/8+2) + skill below 20 (else round(lvl/6) floored 5);
-    //   per-type max round((lvl+3)/4+6) / round(lvl/5+7) / round(lvl/6+7) below
-    //   20 (else round(lvl/4) floored 12/10/10) + skill — rounding half-to-even.
+    // Paradigm uses a level-driven band, integer division throughout, with the
+    // item +min / +max damage added to its own bound (the server's own formula,
+    // GAME_MECHANICS "Martial-arts strike damage") —
+    //   min = lvl/8+2 below 20 (else lvl/6 floored 5) + plusMinDamage;
+    //   per-type max (lvl+3)/4+6 / lvl/5+7 / lvl/6+7 below 20 (else lvl/4
+    //   floored 12/10/10) + plusMaxDamage. No skill term.
     // Strength then folds in exactly as CalcMeleeDamage does (max gets
     // (STR-50)/10, min gets (STR-100)/10 doubled in Stock, floored at 0; ParaMUD
     // has no negative-strength penalty). After the range is clamped, the item
@@ -395,7 +397,8 @@ public static class CombatCalculator
     // internally.
     public static MeleeDamageResult CalcMartialArtsDamage(MudAttackType attackType, RealmType realmType,
                                                           int level, int maPlusSkill, int strength,
-                                                          int plusMaxDamage, int maPlusDamage)
+                                                          int plusMaxDamage, int maPlusDamage,
+                                                          int plusMinDamage = 0)
     {
         if (maPlusSkill <= 0)
             return new MeleeDamageResult(0, 0);
@@ -403,16 +406,16 @@ public static class CombatCalculator
         int min, max;
         if (realmType == RealmType.ParaMud)
         {
-            // GreaterMUD: a level-driven band with the skill added flat (not the
-            // Stock skill×level scaling).
-            min = GmudMaBand(level, level / 8.0 + 2, level / 6.0, floor: 5) + maPlusSkill;
+            // Paradigm: a level-driven band (not the Stock skill×level scaling),
+            // +min damage on the low end; +max damage joins the high end below.
+            min = GmudMaBand(level, level / 8 + 2, level / 6, floor: 5) + plusMinDamage;
             max = attackType switch
             {
-                MudAttackType.Punch => GmudMaBand(level, (level + 3) / 4.0 + 6, level / 4.0, floor: 12),
-                MudAttackType.Kick => GmudMaBand(level, level / 5.0 + 7, level / 4.0, floor: 10),
-                MudAttackType.Jumpkick => GmudMaBand(level, level / 6.0 + 7, level / 4.0, floor: 10),
+                MudAttackType.Punch => GmudMaBand(level, (level + 3) / 4 + 6, level / 4, floor: 12),
+                MudAttackType.Kick => GmudMaBand(level, level / 5 + 7, level / 4, floor: 10),
+                MudAttackType.Jumpkick => GmudMaBand(level, level / 6 + 7, level / 4, floor: 10),
                 _ => 0,
-            } + maPlusSkill;
+            };
         }
         else
         {
@@ -476,17 +479,10 @@ public static class CombatCalculator
         _ => 0,
     };
 
-    // One GreaterMUD martial-arts level band: under level 20 the subTwenty term
-    // is used; at 20+ the twentyPlus term is used and floored at floor. Both
-    // round half-to-even, mirroring the game's Double→Long assignment (which uses
-    // /, not the Fix() the Stock branch uses).
-    private static int GmudMaBand(int level, double subTwenty, double twentyPlus, int floor)
-    {
-        if (level < 20)
-            return (int)Math.Round(subTwenty, MidpointRounding.ToEven);
-        int t = (int)Math.Round(twentyPlus, MidpointRounding.ToEven);
-        return t < floor ? floor : t;
-    }
+    // One Paradigm martial-arts level band: under level 20 the subTwenty term is
+    // used; at 20+ the twentyPlus term, floored at floor.
+    private static int GmudMaBand(int level, int subTwenty, int twentyPlus, int floor) =>
+        level < 20 ? subTwenty : Math.Max(floor, twentyPlus);
 
     // Backstab accuracy. ParaMUD:
     //   (Stealth/3) + ((AGI-50+LVL)/2) + 15 + PlusBSAccy + NormAccy, minus 15

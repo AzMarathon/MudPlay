@@ -227,6 +227,18 @@ public sealed class StealthManagerTests
     }
 
     [Fact]
+    public void HideFailed_StockSpacedSuffix_DropsOptimisticHidden()
+    {
+        // Stock prints a space before the failure suffix.
+        using Harness h = new();
+        h.Feed("Attempting to hide...");
+        h.Feed("Attempting to hide... You don't think you are hidden.");
+
+        Assert.Equal(StealthState.Idle, h.Stealth.State);
+        Assert.False(h.State.IsHidden);
+    }
+
+    [Fact]
     public void HideInitiate_DoesNotMatchFailureLine()
     {
         // The $-anchored initiate pattern must not fire on the suffixed failure

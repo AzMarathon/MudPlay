@@ -604,7 +604,8 @@ public static class CharacterCalculator
                 // to 1, never the Martial Arts skill stat (that stat drives accuracy).
                 const int maPlusSkill = 1;
                 MeleeDamageResult d = CombatCalculator.CalcMartialArtsDamage(
-                    type, realm, stats.Level, maPlusSkill, stats.Strength, t.PlusMaxDamage, maPlusDmg);
+                    type, realm, stats.Level, maPlusSkill, stats.Strength, t.PlusMaxDamage, maPlusDmg,
+                    plusMinDamage: t.PlusMinDamage);
                 avgDamage = (d.MinDamage + d.MaxDamage) / 2;
 
                 swingsPerRound = CombatCalculator.CalcSwings(
@@ -647,7 +648,7 @@ public static class CharacterCalculator
             case 2: totals.PlusAC += abilVal; statKey = "Armour Class"; break;
             // Blur AC (Abil 10) folds into the inclusive PlusAC for combat math, but is
             // also tracked in PlusAcBlur and grouped under its own "AC Blur" stat key so
-            // readouts show it apart from flat worn AC (it's encumbrance-scaled, not flat).
+            // readouts show it apart from flat worn AC (it's scaled in play, not flat).
             case 10: totals.PlusAC += abilVal; totals.PlusAcBlur += abilVal; statKey = "AC Blur"; break;
             case 7: totals.PlusDR += abilVal / 10.0; statKey = "Damage Resist"; break;
 

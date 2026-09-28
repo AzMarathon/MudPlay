@@ -62,7 +62,7 @@ public sealed class RegenTrackerTests
         var (state, tracker, clock) = Setup();
         state.Hp = 100;
         state.Position = PlayerPosition.Resting;   // anchors HpRest at now.
-        clock.Advance(TimeSpan.FromSeconds(20));   // one rest cycle later.
+        clock.Advance(TimeSpan.FromSeconds(21));   // one rest cycle later.
         state.Hp = 108;
 
         Assert.Equal(1, tracker.HpRest.Stat.SampleCount);
@@ -148,7 +148,7 @@ public sealed class RegenTrackerTests
         var (state, tracker, clock) = Setup();
         state.Ma = 50;
         state.Position = PlayerPosition.Meditating;
-        clock.Advance(TimeSpan.FromSeconds(10));   // one medi cycle.
+        clock.Advance(TimeSpan.FromSeconds(15));   // one medi cycle.
         state.Ma = 55;
 
         Assert.Equal(1, tracker.MpMedi.Stat.SampleCount);
@@ -262,13 +262,13 @@ public sealed class RegenTrackerTests
     }
 
     [Fact]
-    public void SeedIntervalsMatchMmudExplorerValues()
+    public void SeedIntervalsMatchTheStockEngine()
     {
-        // Pin the documented constants from MMUD-Explorer's modExpPerHour.bas
-        // so a stray refactor doesn't silently re-tune them.
+        // Pin the Stock engine's tick intervals (30 s natural, rest every 21 s,
+        // meditate every 15 s) so a stray refactor doesn't silently re-tune them.
         Assert.Equal(TimeSpan.FromSeconds(30), RegenConstants.SeedStandingInterval);
-        Assert.Equal(TimeSpan.FromSeconds(20), RegenConstants.SeedRestingInterval);
-        Assert.Equal(TimeSpan.FromSeconds(10), RegenConstants.SeedMeditatingInterval);
+        Assert.Equal(TimeSpan.FromSeconds(21), RegenConstants.SeedRestingInterval);
+        Assert.Equal(TimeSpan.FromSeconds(15), RegenConstants.SeedMeditatingInterval);
     }
 
     [Fact]

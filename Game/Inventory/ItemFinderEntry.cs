@@ -102,8 +102,8 @@ public sealed record ItemFinderEntry
     // Flat worn armour class (base ArmourClass/10 + Abil-2), EXCLUDING blur AC.
     public double Ac { get; init; }
 
-    // Blur AC (Abil-10) — kept apart from Ac because it's encumbrance-scaled (0 at
-    // 100% heavy, full value at 0% load), not the flat armour the Ac column shows.
+    // Blur AC (Abil-10) — kept apart from Ac because it's scaled down in play (by load
+    // on Paradigm, by the armour worn on Stock), not the flat armour the Ac column shows.
     public double AcBlur { get; init; }
 
     // Total damage resist (base DamageResist/10 + Abil-7/10).

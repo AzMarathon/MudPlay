@@ -17,8 +17,7 @@ namespace MudPlay.Game.Calculators;
 // ParadigmAggroCalculator; the two never share a formula.
 public static class StockAggroCalculator
 {
-    private static readonly int SeedyValue = AlignmentBands.ValueOf("Seedy") ?? 30;    // evil bucket floor
-    private static readonly int OutlawValue = AlignmentBands.ValueOf("Outlaw") ?? 40;   // guard-aggro floor
+    private static readonly int OutlawValue = AlignmentBands.ValueOf("Outlaw") ?? 40;   // guard / lawful-evil floor
 
     // align         — Monsters-table Align: 0 Good, 1 Evil, 2 Chaotic Evil,
     //                 3 Neutral, 4 Lawful Good, 5 Neutral Evil, 6 Lawful Evil.
@@ -94,8 +93,8 @@ public static class StockAggroCalculator
     //   provoked                → always aggroed (you hit it first).
     //   guard vs Outlaw+ title  → aggroed.
     //   Align 1/2/5             → opens on everyone.
-    //   Align 6 (Lawful Evil)   → opens on non-evil (Neutral-or-better), spares the
-    //                             evil bucket (Seedy and worse).
+    //   Align 6 (Lawful Evil)   → opens on Seedy-or-better, spares Outlaw and worse
+    //                             (the engine checks EP ≥ 40, not the Seedy gear bucket).
     //   Align 0/3/4             → passive by alignment (won't open unprovoked).
     private static (bool Aggroed, string Reason) Acquire(int align, bool isGuard, StockAggroMember m)
     {
@@ -110,9 +109,9 @@ public static class StockAggroCalculator
             case 1 or 2 or 5:
                 return (true, "evil mob — opens on all");
             case 6:
-                return v >= SeedyValue
-                    ? (false, "lawful evil spares the evil-titled")
-                    : (true, "lawful evil opens on non-evil");
+                return v >= OutlawValue
+                    ? (false, "lawful evil spares Outlaw-or-worse")
+                    : (true, "lawful evil opens on Seedy-or-better");
             default:   // 0 Good, 3 Neutral, 4 Lawful Good
                 return (false, "passive align — won't open unprovoked");
         }
