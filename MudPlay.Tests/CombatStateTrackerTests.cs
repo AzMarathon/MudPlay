@@ -590,6 +590,25 @@ public sealed class CombatStateTrackerTests
         Assert.False(h.CombatGateHeld);     // released without a re-display
     }
 
+    // Report paradigm-20260928-130856: the gate went up on the re-entry room while the
+    // loop was still stopped by the disconnect; the loop then resumed and the room read
+    // as suppressed ("do not attack"), so the engine never attacked and nothing
+    // re-displayed the room — the character stood being hit for 18 minutes. The combat
+    // tick now notices the gate held under a suppressed room and lets it go.
+    [Fact]
+    public void GateHeldWhenTheRoomTurnsSuppressed_ReleasesOnTheNextTick()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.True(h.CombatGateHeld);
+
+        h.AutoAttackEnabled = false;   // the resumed loop suppresses combat here
+        h.Tracker.OnCombatTick();
+
+        Assert.False(h.CombatGateHeld);
+    }
+
     [Fact]
     public void OnAutoAttackChanged_NoObservationYet_NoThrow()
     {

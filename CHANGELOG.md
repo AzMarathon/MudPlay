@@ -1,5 +1,10 @@
 # Version history
 
+## 3.117.2
+
+- A loop no longer stands still being hit after a reconnect: a fight hold in a room the loop doesn't attack in is released within a second
+- bug reports addressed: paradigm-20260928-130856
+
 ## 3.117.1
 
 - 35 more MegaMUD loops in the default loop set (15 Stock, 20 Paradigm), converted with the new importer and verified walkable
