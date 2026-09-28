@@ -27,12 +27,13 @@ public static class ManaRegenBreakpointCalculator
 
     public readonly record struct Inputs(
         int Level,
-        int MageryType,        // 1 = mage (INT), 3 = druid ((INT+WIL)/2)
+        int MageryType,        // 1 = mage (INT), 2 = priest (WIL), 3 = druid ((INT+WIL)/2), 4 = bard (CHA), 5 = kai
         int Intellect,
         int Willpower,
         int MageryLevel,       // class magery tier (Classes.MageryLVL), constant per class
         int GearRegenPercent,  // summed +ManaRgn% from gear / quests (code 145), no spell
-        RealmType Realm);
+        RealmType Realm,
+        int Charm = 0);
 
     // One reachable tick step the roll spell can push us to: the tick it yields,
     // the total +ManaRgn% and roll value it needs, and where that roll sits in the
@@ -54,7 +55,7 @@ public static class ManaRegenBreakpointCalculator
     // folded in; the engine formula truncates, so this is the whole-MP tick.
     public static int Tick(in Inputs i, int rolledRegenPercent)
         => CharacterCalculator.CalcManaRegen(
-            i.Level, i.Intellect, i.Willpower, charm: 0,
+            i.Level, i.Intellect, i.Willpower, i.Charm,
             i.MageryType, i.MageryLevel, i.GearRegenPercent + rolledRegenPercent,
             isMeditating: false, i.Realm);
 
@@ -68,7 +69,7 @@ public static class ManaRegenBreakpointCalculator
         if (rollMax < rollMin) (rollMin, rollMax) = (rollMax, rollMin);
 
         int baseTick = CharacterCalculator.CalcManaRegen(
-            i.Level, i.Intellect, i.Willpower, charm: 0,
+            i.Level, i.Intellect, i.Willpower, i.Charm,
             i.MageryType, i.MageryLevel, mpRegenPercent: 0, isMeditating: false, i.Realm);
         int gearTick = Tick(i, 0);
         int worst = Tick(i, rollMin);
@@ -91,6 +92,19 @@ public static class ManaRegenBreakpointCalculator
         if (recommended is null && steps.Count > 0) recommended = steps[0].RollValueNeeded;
 
         return new Result(baseTick, gearTick, worst, best, rollMin, rollMax, steps, recommended);
+    }
+
+    // The rolls in [rollMin, rollMax] whose natural tick is exactly `tick` — how Stock,
+    // with no `abil 145`, reads a landed roll back off the mana it pays. The engine
+    // truncates, so one tick covers a band of rolls, not a single value. Null when no
+    // roll in range gives that tick (gear or stats changed under the reading).
+    public static (int Lo, int Hi)? RollsForTick(in Inputs i, int tick, int rollMin, int rollMax)
+    {
+        if (rollMax < rollMin) (rollMin, rollMax) = (rollMax, rollMin);
+        int lo = Tick(i, rollMin) >= tick ? rollMin : MinRollFor(i, tick, rollMin, rollMax) ?? int.MaxValue;
+        if (lo > rollMax || Tick(i, lo) != tick) return null;
+        int hi = MinRollFor(i, tick + 1, lo, rollMax) is { } next ? next - 1 : rollMax;
+        return (lo, hi);
     }
 
     // Smallest roll value in [lo,hi] whose tick reaches at least targetTick, or

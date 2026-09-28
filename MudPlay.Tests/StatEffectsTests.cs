@@ -184,6 +184,8 @@ public sealed class StatEffectsTests
         Assert.Equal(expected, CharacterCalculator.CalcSpellcasting(20, 60, 80, 40, 2, 4, 0));
         // Non-casters have no spellcasting skill.
         Assert.Equal(0, CharacterCalculator.CalcSpellcasting(20, 60, 80, 40, 0, 0, 0));
+        // Mystics: a flat 500 instead of a stat blend (DLL + MMUD-Explorer).
+        Assert.Equal(500 + 40 + 15, CharacterCalculator.CalcSpellcasting(20, 60, 80, 40, 5, 3, 0));
     }
 
     // The magnitude complaints: HP regen and carry weight must show real numbers.

@@ -34,10 +34,14 @@ public readonly record struct ManaRegenRerollConfig(int? Threshold, int Cap, boo
 // query / recast / afford actions. This keeps the decision logic deterministic and
 // unit-testable.
 //
-// The Stock realm has no abil breakdown to read, so the reroll path is
-// Paradigm-only; the caller gates construction / invocation on the active
-// realm. Stock infers roll quality from observed regen ticks on a separate
-// path.
+// The Stock realm has no abil breakdown to read, so there the landed roll is read
+// back off the next natural mana tick instead: the engine pays
+// (100 + gear% + roll) × base / 100 per 30 s tick, truncated, so the tick pins the
+// roll to a band (ManaRegenBreakpointCalculator.RollsForTick). A meditate tick pays
+// the unscaled base and lands on the same prompt as every other natural tick, so a
+// meditating jump above the base is base + natural. Both realms compare the roll
+// percent against the threshold; on Stock a band straddling it counts as a pass (a
+// reroll only when the roll is definitely below).
 //
 // Cycle life: a cast while idle opens a cycle and zeroes the reroll counter;
 // a cast mid-cycle is the recast we asked for and preserves the counter.
@@ -71,10 +75,12 @@ public sealed class ManaRegenReroller : IDisposable
     private readonly Action _sendAbilQuery;
     private readonly Action<string> _recast;
     private readonly Func<bool> _canAffordReroll;
-    // True on the Stock realm — there's no `abil 145`, so roll quality is judged from
-    // the observed passive mana TICK (an MP jump on the statline) instead. The
-    // threshold then means the desired tick, not the rolled percent.
+    // True on the Stock realm — there's no `abil 145`, so roll quality is read back
+    // off the observed natural mana tick (an MP jump on the statline) instead.
     private readonly Func<bool> _useTickMonitor;
+    // Stock's tick inputs (null when the character's stats / class aren't known yet).
+    private readonly Func<StockManaRollContext?> _stockContext;
+    private readonly Func<DateTimeOffset> _clock;
     // A reroll is a between-round cast, and a between-round cast mid-fight turns combat
     // OFF — it breaks a running room spell and costs the round's attack (report
     // paradigm-20260924-123009: rerolled flux twice while an obsidian golem went
@@ -86,6 +92,7 @@ public sealed class ManaRegenReroller : IDisposable
     private int _rerollsUsed;
     private bool _awaitingAbil;
     private bool _awaitingTick;
+    private DateTimeOffset _awaitingTickSince;
     // True when a cycle has more rerolls left but the next recast couldn't be paid
     // without dropping under the mana floor. The cycle is SUSPENDED, not ended: the
     // reroll counter is preserved and OnRecoveryTick resumes it once mana recovers,
@@ -104,7 +111,9 @@ public sealed class ManaRegenReroller : IDisposable
         Func<bool> canAffordReroll,
         Func<bool> useTickMonitor,
         LogService? log = null,
-        Func<bool>? inCombat = null)
+        Func<bool>? inCombat = null,
+        Func<StockManaRollContext?>? stockContext = null,
+        Func<DateTimeOffset>? clock = null)
     {
         ArgumentNullException.ThrowIfNull(parser);
         _parser = parser;
@@ -114,6 +123,8 @@ public sealed class ManaRegenReroller : IDisposable
         _canAffordReroll = canAffordReroll;
         _useTickMonitor = useTickMonitor;
         _inCombat = inCombat ?? (() => false);
+        _stockContext = stockContext ?? (() => null);
+        _clock = clock ?? (() => DateTimeOffset.Now);
         _log = log;
         _parser.BreakdownParsed += OnBreakdown;
     }
@@ -134,10 +145,19 @@ public sealed class ManaRegenReroller : IDisposable
     // True while a cycle's next reroll is held for the current fight to end.
     public bool WaitingForCombat => _waitingForCombat;
 
-    // The roll quality last judged — the abil-145 spells value (Paradigm) or the
-    // observed tick (Stock). Null until the first roll is evaluated. For the bug
-    // report, so a "reroll isn't working" capture shows what value the engine saw.
+    // The roll quality last judged — the abil-145 spells value (Paradigm) or, on Stock,
+    // the top of the band the observed tick allows (a band straddling the threshold
+    // passes). Null until the first roll is evaluated.
     public int? LastObservedValue { get; private set; }
+
+    // The last judged roll as shown in logs and the bug report: the abil value on
+    // Paradigm, "lo..hi (tick N)" on Stock.
+    public string? LastObservedText { get; private set; }
+
+    // The natural tick pays at least 1 MP for any roll that isn't terrible, so a
+    // cycle that sees none this long after the cast (mana below max, the tick not
+    // hidden by a full pool) read the roll as paying 0. A natural tick is every 30 s.
+    private static readonly TimeSpan NoTickTimeout = TimeSpan.FromSeconds(40);
 
     // The roll spell spellShort was just CAST (from the CastingDirector's send path;
     // the cast is already on the wire, so the abil query below reads the fresh roll).
@@ -183,7 +203,8 @@ public sealed class ManaRegenReroller : IDisposable
         if (_useTickMonitor())
         {
             _awaitingTick = true;
-            _log?.Debug(LogCategory, "awaiting the next passive mana tick to judge the roll");
+            _awaitingTickSince = _clock();
+            _log?.Debug(LogCategory, "awaiting the next natural mana tick to read the roll");
         }
         else
         {
@@ -204,15 +225,69 @@ public sealed class ManaRegenReroller : IDisposable
         Decide(b.Spells, "roll");
     }
 
-    // A passive mana tick was observed (Stock): the MP jump IS the roll's quality, so
-    // it stands in for the abil read. Only consumed while a reroll cycle is awaiting a
-    // tick; the caller supplies only CLEAN passive ticks (not while resting / meditating).
-    public void OnManaTickObserved(int tickAmount)
+    // A mana uptick was observed (Stock): read the landed roll back off it. Only
+    // consumed while a cycle awaits a tick. A jump that filled the pool was cut short
+    // and says nothing. While meditating, a jump of exactly the base is the meditate
+    // tick alone (wait for the next); a bigger one is base + the natural tick.
+    public void OnManaTickObserved(RegenSample sample, bool reachedMax)
     {
         if (!_awaitingTick) return;
+        if (reachedMax)
+        {
+            _log?.Debug(LogCategory, $"mana tick +{sample.Delta} filled the pool — can't read the roll off it");
+            return;
+        }
+        if (_stockContext() is not { } ctx)
+        {
+            _awaitingTick = false;
+            _log?.Info(LogCategory, "can't read the roll (stats or class unknown) — accepting it");
+            Accept();
+            return;
+        }
+        if (!ctx.GearSettled)
+        {
+            _log?.Debug(LogCategory, $"mana tick +{sample.Delta} landed mid gear swap — waiting for the next");
+            return;
+        }
+
+        int natural = sample.Delta;
+        if (sample.Position == PlayerPosition.Meditating)
+        {
+            if (sample.Delta == ctx.MeditateTick) return;   // the meditate tick alone
+            if (sample.Delta < ctx.MeditateTick)
+            {
+                _log?.Debug(LogCategory,
+                    $"mana tick +{sample.Delta} below the meditate tick {ctx.MeditateTick} — skipping it");
+                return;
+            }
+            natural = sample.Delta - ctx.MeditateTick;
+        }
+        JudgeNaturalTick(natural, ctx);
+    }
+
+    private void JudgeNaturalTick(int natural, StockManaRollContext ctx)
+    {
         _awaitingTick = false;
-        _log?.Debug(LogCategory, $"observed passive mana tick={tickAmount}");
-        Decide(tickAmount, "tick");
+        if (Calculators.ManaRegenBreakpointCalculator.RollsForTick(ctx.Inputs, natural, ctx.RollMin, ctx.RollMax)
+            is not { } band)
+        {
+            _log?.Info(LogCategory,
+                $"natural mana tick {natural} matches no roll in {ctx.RollMin}..{ctx.RollMax} " +
+                "(gear or stats changed?) — accepting it");
+            Accept();
+            return;
+        }
+        string shown = band.Lo == band.Hi ? $"{band.Lo} (tick {natural})" : $"{band.Lo}..{band.Hi} (tick {natural})";
+        _log?.Debug(LogCategory, $"natural mana tick {natural} → roll {band.Lo}..{band.Hi}");
+        Decide(band.Hi, "roll", shown);
+    }
+
+    // Close the cycle on a roll we can't judge, remembering nothing about it.
+    private void Accept()
+    {
+        LastObservedValue = null;
+        LastObservedText = null;
+        Reset();
     }
 
     // Host heartbeat (~1s). Resume a cycle suspended at the mana floor once mana has
@@ -221,6 +296,15 @@ public sealed class ManaRegenReroller : IDisposable
     // loop), so it takes the round's cast slot cleanly rather than racing a swing.
     public void OnRecoveryTick()
     {
+        // Stock: no natural tick since the cast though mana could show one — the roll
+        // pays 0 MP (the natural tick is a whole-MP amount that can round to nothing).
+        if (_awaitingTick && _clock() - _awaitingTickSince >= NoTickTimeout
+            && _stockContext() is { ManaBelowMax: true, GearSettled: true } ctx)
+        {
+            _log?.Debug(LogCategory, $"no natural mana tick in {NoTickTimeout.TotalSeconds:0}s — the roll pays 0");
+            JudgeNaturalTick(0, ctx);
+            return;
+        }
         if (!_waitingForMana && !_waitingForCombat) return;
         if (_activeShort is not { } shortCode) { _waitingForMana = _waitingForCombat = false; return; }
 
@@ -246,16 +330,18 @@ public sealed class ManaRegenReroller : IDisposable
     // The shared accept-or-reroll decision. value is the roll's quality — the rolled
     // percent on Paradigm, the observed tick on Stock — compared against the configured
     // threshold; reroll while below it, up to the cap, pausing at the mana floor.
-    private void Decide(int value, string valueLabel)
+    private void Decide(int value, string valueLabel, string? shown = null)
     {
         if (_activeShort is not { } shortCode) return;   // defensive: no active cycle
         LastObservedValue = value;
+        LastObservedText = shown ?? value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string v = LastObservedText;
         ManaRegenRerollConfig cfg = _readConfig();
 
         // Threshold went null mid-cycle (settings edit) — accept and drop out.
         if (cfg.Threshold is not { } threshold)
         {
-            _log?.Info(LogCategory, $"reroll disabled mid-cycle — accepting spell={shortCode} {valueLabel}={value}");
+            _log?.Info(LogCategory, $"reroll disabled mid-cycle — accepting spell={shortCode} {valueLabel}={v}");
             Reset();
             return;
         }
@@ -263,7 +349,7 @@ public sealed class ManaRegenReroller : IDisposable
         if (value >= threshold)
         {
             _log?.Info(LogCategory,
-                $"accepted spell={shortCode} {valueLabel}={value} >= threshold={threshold} " +
+                $"accepted spell={shortCode} {valueLabel}={v} >= threshold={threshold} " +
                 $"after {_rerollsUsed} reroll(s)");
             Reset();
             return;
@@ -272,7 +358,7 @@ public sealed class ManaRegenReroller : IDisposable
         if (!cfg.Unlimited && _rerollsUsed >= cfg.Cap)
         {
             _log?.Info(LogCategory,
-                $"reroll cap reached spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
+                $"reroll cap reached spell={shortCode} {valueLabel}={v} < threshold={threshold} " +
                 $"cap={cfg.Cap} — accepting");
             Reset();
             return;
@@ -284,7 +370,7 @@ public sealed class ManaRegenReroller : IDisposable
             _awaitingTick = false;
             _waitingForCombat = true;
             _log?.Info(LogCategory,
-                $"reroll held for combat spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
+                $"reroll held for combat spell={shortCode} {valueLabel}={v} < threshold={threshold} " +
                 $"— a mid-fight recast would break combat; rerolling once the fight ends");
             return;
         }
@@ -299,14 +385,14 @@ public sealed class ManaRegenReroller : IDisposable
             _awaitingTick = false;
             _waitingForMana = true;
             _log?.Info(LogCategory,
-                $"reroll paused at mana floor spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
+                $"reroll paused at mana floor spell={shortCode} {valueLabel}={v} < threshold={threshold} " +
                 $"after {_rerollsUsed}/{CapLabel(cfg)} reroll(s) — waiting for mana to recover before the next attempt");
             return;
         }
 
         _rerollsUsed++;
         _log?.Info(LogCategory,
-            $"rerolling spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
+            $"rerolling spell={shortCode} {valueLabel}={v} < threshold={threshold} " +
             $"attempt {_rerollsUsed}/{CapLabel(cfg)}");
         _recast(shortCode);
     }

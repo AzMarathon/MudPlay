@@ -45,30 +45,19 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     private readonly Func<string?, bool> _isLightSpell;
     private readonly Func<string?, bool> _isRollSpell;
     private readonly bool _isStockRealm;
-    private readonly Func<string?, (int Worst, int Best)?>? _tickRange;
+    private readonly Func<string?, string?>? _tickSteps;
     private readonly Func<string?, (int Min, int Max)?>? _rollRange;
-
-    // Cached worst/best mana tick for the picked roll spell (Stock only), refreshed
-    // when the spell changes so the slider bounds follow the pick.
-    private (int Worst, int Best)? _range;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanAdd))]
     [NotifyPropertyChangedFor(nameof(IsLightSpell))]
     [NotifyPropertyChangedFor(nameof(IsRollSpell))]
-    [NotifyPropertyChangedFor(nameof(ShowRerollSlider))]
     [NotifyPropertyChangedFor(nameof(ShowRerollNumeric))]
-    [NotifyPropertyChangedFor(nameof(TickWorst))]
-    [NotifyPropertyChangedFor(nameof(TickBest))]
-    [NotifyPropertyChangedFor(nameof(RerollBoundsText))]
-    [NotifyPropertyChangedFor(nameof(RerollThresholdSlider))]
     [NotifyPropertyChangedFor(nameof(RerollNumericMinimum))]
     [NotifyPropertyChangedFor(nameof(RerollNumericMaximum))]
     [NotifyPropertyChangedFor(nameof(RerollRollRangeText))]
+    [NotifyPropertyChangedFor(nameof(RerollTickStepsText))]
     private string? _spell;
-
-    partial void OnSpellChanged(string? value)
-        => _range = _isStockRealm ? _tickRange?.Invoke(value) : null;
 
     // The dropdown's selected option ↔ the stored cast code. Picking one drives
     // Spell (which cascades the light / roll-spell detection); pre-set from
@@ -104,54 +93,25 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     public bool IsLightSpell => _isLightSpell(Spell);
     public bool IsRollSpell => _isRollSpell(Spell);
 
-    // Reroll wording adapts to the realm: Stock judges the roll from the observed
-    // passive mana TICK (an MP jump on the statline); Paradigm from the rolled
-    // percent read off `abil 145`.
-    public string RerollThresholdLabel => _isStockRealm ? "Reroll below tick" : "Reroll below abil 145";
+    // Both realms judge the rolled mana-regen percent: Paradigm reads it off
+    // `abil 145`, Stock reads it back off the natural mana tick it pays.
+    public string RerollThresholdLabel => _isStockRealm ? "Reroll below roll" : "Reroll below abil 145";
     public string RerollThresholdTip => _isStockRealm
-        ? "Reroll while the observed passive mana tick lands below this MP. Blank = don't reroll."
+        ? "Reroll while the spell's rolled mana-regen value lands below this. Stock has no `abil`, so the roll is read back off your next natural mana tick; the tick is whole MP, so the roll is known to within a band, and a band that reaches this counts as good. Blank = don't reroll."
         : "Reroll while the spell's rolled mana-regen value — its `abil 145` spells contribution, which can be negative — lands below this. Blank = don't reroll.";
 
-    // Stock reroll threshold slider: when the roll spell's live worst/best tick is
-    // known, show a slider between them so the threshold reads against min↔max;
-    // otherwise fall back to the plain numeric field.
-    public bool ShowRerollSlider => IsRollSpell && _range is not null;
-    public bool ShowRerollNumeric => IsRollSpell && !ShowRerollSlider;
-    public double TickWorst => _range?.Worst ?? 0;
-    // Keep Max strictly above Min so the Slider always has a usable range.
-    public double TickBest => _range is { } r && r.Best > r.Worst ? r.Best : TickWorst + 1;
-    public string RerollBoundsText =>
-        _range is { } r ? $"worst {r.Worst} … best {r.Best} MP per tick" : string.Empty;
-
-    // Bounds for the numeric threshold box. On Paradigm the threshold is the rolled
-    // `abil 145` value, so the box spans exactly what the spell can roll at the
-    // character's level — negatives included (a flux roll can land well below zero).
-    // On Stock the box is the fallback for a tick threshold (no live tick bounds), which
-    // is never negative. With the roll range unknown, Paradigm allows ±999.
-    private (int Min, int Max)? RollRange => _isStockRealm ? null : _rollRange?.Invoke(Spell);
-    public decimal RerollNumericMinimum => _isStockRealm ? 0 : RollRange?.Min ?? -999;
-    public decimal RerollNumericMaximum => _isStockRealm ? 999 : RollRange?.Max ?? 999;
+    // The threshold box spans exactly what the spell can roll at the character's level,
+    // negatives included (a flux roll can land well below zero); ±999 when unknown.
+    public bool ShowRerollNumeric => IsRollSpell;
+    private (int Min, int Max)? RollRange => _rollRange?.Invoke(Spell);
+    public decimal RerollNumericMinimum => RollRange?.Min ?? -999;
+    public decimal RerollNumericMaximum => RollRange?.Max ?? 999;
     public string RerollRollRangeText =>
         RollRange is { } r ? $"rolls {r.Min} … {r.Max} at your level" : string.Empty;
 
-    // The slider's value, mapped onto the stored threshold (defaults to the worst
-    // tick — i.e. accept anything — until the user drags it up).
-    //
-    // Writes only while the slider is the control on show. A hidden Slider keeps its
-    // TwoWay binding, and with no tick range its Maximum falls back to TickWorst + 1 =
-    // 1 — so on Paradigm (numeric field, slider hidden) every threshold typed into the
-    // numeric box was coerced to 1 by the invisible slider and pushed straight back
-    // (report paradigm-20260926-112808: "won't save anything above 1").
-    public double RerollThresholdSlider
-    {
-        get => RerollThreshold ?? (int)TickWorst;
-        set
-        {
-            if (ShowRerollSlider) RerollThreshold = (int)System.Math.Round(value);
-        }
-    }
-
-    partial void OnRerollThresholdChanged(int? value) => OnPropertyChanged(nameof(RerollThresholdSlider));
+    // Stock: the roll each natural-tick amount needs. The tick is truncated to whole MP,
+    // so only these step values change what you're paid — worth setting the threshold on.
+    public string RerollTickStepsText => _isStockRealm ? _tickSteps?.Invoke(Spell) ?? string.Empty : string.Empty;
 
     // Enabled once a selectable (not already-slotted) buff is picked, so you can't
     // add an empty slot or one that would duplicate an existing buff.
@@ -166,7 +126,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     public AddBuffDialogViewModel(
         IReadOnlyList<BuffPickOption> pickOptions,
         Func<string?, bool> isLightSpell, Func<string?, bool> isRollSpell,
-        bool isStockRealm = false, Func<string?, (int Worst, int Best)?>? tickRange = null,
+        bool isStockRealm = false, Func<string?, string?>? tickSteps = null,
         AddBuffResult? initial = null, Func<string?, (int Min, int Max)?>? rollRange = null)
     {
         ArgumentNullException.ThrowIfNull(pickOptions);
@@ -174,7 +134,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         _isLightSpell = isLightSpell;
         _isRollSpell = isRollSpell;
         _isStockRealm = isStockRealm;
-        _tickRange = tickRange;
+        _tickSteps = tickSteps;
         _rollRange = rollRange;
         IsEditing = initial is not null;
         if (initial is { } i)
@@ -190,7 +150,6 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             _rerollCount = i.RerollCount;
             _rerollThreshold = i.RerollThreshold;
             _rerollInfinite = i.RerollInfinite;
-            _range = _isStockRealm ? _tickRange?.Invoke(_spell) : null;
         }
     }
 

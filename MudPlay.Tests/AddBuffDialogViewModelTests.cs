@@ -3,43 +3,30 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// The Add/Edit buff dialog's mana-regen reroll threshold: the Paradigm number box spans
-// the roll spell's level-scaled range (negatives included), and the hidden Stock slider
-// can't overwrite what was typed into the box.
+// The Add/Edit buff dialog's mana-regen reroll threshold: both realms edit the rolled
+// value in a number box spanning the roll spell's level-scaled range (negatives
+// included); Stock adds the tick steps, since its roll is read back off the tick.
 public sealed class AddBuffDialogViewModelTests
 {
     private static readonly BuffPickOption[] Picks = { new("flux", "mana flux (Lvl 16)", true) };
 
-    private static AddBuffDialogViewModel Dialog(bool stock, (int Worst, int Best)? tick = null,
+    private static AddBuffDialogViewModel Dialog(bool stock, string? steps = null,
         (int Min, int Max)? roll = null) =>
         new(Picks, isLightSpell: _ => false, isRollSpell: s => s == "flux",
-            isStockRealm: stock, tickRange: _ => tick,
+            isStockRealm: stock, tickSteps: _ => steps,
             initial: new AddBuffResult("flux", 15, false, false, false, false, 3, null),
             rollRange: _ => roll);
 
     [Fact]
-    public void HiddenSlider_CannotClampTheTypedThreshold()
+    public void Stock_UsesTheRollBox_AndShowsTheTickSteps()
     {
-        // report paradigm-20260926-112808: with no tick range the hidden slider's
-        // Maximum is 1; its coerced value was written back over every typed threshold.
-        AddBuffDialogViewModel d = Dialog(stock: false, roll: (-64, 216));
-        Assert.False(d.ShowRerollSlider);
+        AddBuffDialogViewModel d = Dialog(stock: true, steps: "6 MP/tick at worst · 7 from 12", roll: (-64, 216));
 
+        Assert.True(d.ShowRerollNumeric);
+        Assert.Equal(-64m, d.RerollNumericMinimum);
+        Assert.Equal("6 MP/tick at worst · 7 from 12", d.RerollTickStepsText);
         d.RerollThreshold = 75;
-        d.RerollThresholdSlider = 1;          // what the hidden, coerced slider pushes back
-
         Assert.Equal(75, d.RerollThreshold);
-    }
-
-    [Fact]
-    public void VisibleSlider_StillDrivesTheThreshold()
-    {
-        AddBuffDialogViewModel d = Dialog(stock: true, tick: (4, 11));
-        Assert.True(d.ShowRerollSlider);
-
-        d.RerollThresholdSlider = 9;
-
-        Assert.Equal(9, d.RerollThreshold);
     }
 
     [Fact]
