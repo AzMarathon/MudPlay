@@ -19,8 +19,8 @@ namespace MudPlay.ViewModels.Navigation;
 // translation of it on the right, so the two are checked line for line. A step that
 // didn't translate is a blank line to fill in. "Verify loop in MudPlay" applies the
 // rooms typed in, re-translates from them, and checks our navigation can walk the
-// result all the way round as a loop. Accept saves it (and any stash rooms ticked);
-// Reject closes without saving.
+// result all the way round as a loop. Accept saves it — asking first whether to add
+// the loop's MegaMUD stash points as stash rooms; Reject closes without saving.
 public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogViewModel<Loop?>
 {
     private readonly string _path;
@@ -29,6 +29,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     private readonly RoomGraphManager _graph;
     private readonly LoopManager _loops;
     private readonly MovementFilter? _filter;
+    private readonly ConfirmService? _confirm;
     private readonly LogService? _log;
     private MegaMudRoomsFile? _roomsMd;
     private IReadOnlyList<MpTranslation> _candidates = Array.Empty<MpTranslation>();
@@ -43,8 +44,9 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     public MpImportReviewViewModel(
         string path, MpLoopFile file, MegaMudRoomsFile? roomsMd,
         MpFileImporter importer, RoomGraphManager graph, LoopManager loops,
-        MovementFilter? filter, LogService? log = null)
+        MovementFilter? filter, ConfirmService? confirm, LogService? log = null)
     {
+        _confirm = confirm;
         _path = path;
         _file = file;
         _roomsMd = roomsMd;
@@ -117,11 +119,6 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
 
     public ObservableCollection<MpTranslatedRowViewModel> Rows { get; } = new();
 
-    // Stash points the loop marks (MegaMUD's per-step "Stash point"); ticking one
-    // adds that room to your stash rooms when the loop is accepted.
-    public ObservableCollection<MpStashChoice> StashChoices { get; } = new();
-    public bool HasStashChoices => StashChoices.Count > 0;
-
     public bool CanAccept => _file.IsLoop;
 
     private bool _rebuilding;
@@ -169,7 +166,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     }
 
     [RelayCommand]
-    private void Accept()
+    private async Task AcceptAsync()
     {
         if (!CanAccept) return;
         string name = LoopName.Trim();
@@ -178,16 +175,43 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         if (!ApplyTypedRooms()) return;
         if (CheckWalkable() is not { } waypoints) return;
 
+        int stashed = await AskToAddStashRoomsAsync();
+
         Loop loop = new(name, waypoints) { Notes = Notes.Trim() };
         _loops.Save(loop);
-        foreach (MpStashChoice s in StashChoices.Where(s => s.Add))
-            _filter?.MarkStash(s.Room);
-        int blanks = Rows.Count(r => r.IsBlank);
+        int blanks = Rows.Count(r => r.IsBlank && r.EffectiveRoom is null);
         _log?.Info("MpImporter",
             $"accepted {FileName} as '{name}': {waypoints.Count} waypoint(s)"
             + (blanks > 0 ? $", {blanks} step(s) left blank" : "")
-            + $", {StashChoices.Count(s => s.Add)} stash room(s) added");
+            + $", {stashed} stash room(s) added");
         CloseRequested?.Invoke(loop);
+    }
+
+    // The MegaMUD loop marks some steps as stash points; stash rooms are a character
+    // setting, not part of a loop, so ask whether to add them (user, 2026-09-28).
+    // Returns how many were added.
+    private async Task<int> AskToAddStashRoomsAsync()
+    {
+        List<MpTranslatedRowViewModel> marked = Rows.Where(r => r.Step.Flags.HasFlag(MpStepFlags.Stash)).ToList();
+        if (marked.Count == 0 || _filter is null) return 0;
+        List<RoomKey> rooms = marked.Select(r => r.EffectiveRoom).OfType<RoomKey>().Distinct().ToList();
+        List<RoomKey> toAdd = rooms.Where(k => !_filter.IsStash(k)).ToList();
+        List<int> untranslated = marked.Where(r => r.EffectiveRoom is null).Select(r => r.Number).ToList();
+        string lostNote = untranslated.Count == 0 ? ""
+            : $"\n\nStep {string.Join(", ", untranslated)} is also a stash point but has no room — set one to include it.";
+        if (toAdd.Count == 0)
+        {
+            if (untranslated.Count > 0 && _confirm is not null)
+                await _confirm.ConfirmAsync("Stash points", "This loop's stash points are already your stash rooms." + lostNote, "OK");
+            return 0;
+        }
+        string list = string.Join("\n", toAdd.Select(k => "  • " + Describe(k)));
+        bool yes = _confirm is null || await _confirm.ConfirmAsync("Add stash rooms?",
+            $"The MegaMUD loop marks {(toAdd.Count == 1 ? "this room as a stash point" : "these rooms as stash points")}:\n\n{list}\n\n"
+            + "Add them to your stash rooms along with this loop?" + lostNote, "Add stash rooms");
+        if (!yes) return 0;
+        foreach (RoomKey k in toAdd) _filter.MarkStash(k);
+        return toAdd.Count;
     }
 
     [RelayCommand]
@@ -319,12 +343,6 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
             Rows.Add(vm);
         }
 
-        StashChoices.Clear();
-        foreach (RoomKey k in Rows.Where(r => r.Step.Flags.HasFlag(MpStepFlags.Stash) && r.Room is not null)
-                                  .Select(r => r.Room!.Value).Distinct())
-            StashChoices.Add(new MpStashChoice(k, Describe(k)));
-        OnPropertyChanged(nameof(HasStashChoices));
-
         TranslationSummary = t is null ? "Nothing translated yet." : $"Start {t.Anchor}: {t.Summary}.";
         SetStatus(string.Empty, good: false);
     }
@@ -393,12 +411,4 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
 public sealed record MpAnchorChoice(RoomKey Anchor, string Text)
 {
     public override string ToString() => Text;
-}
-
-public sealed partial class MpStashChoice : ObservableObject
-{
-    public MpStashChoice(RoomKey room, string text) { Room = room; Text = text; }
-    public RoomKey Room { get; }
-    public string Text { get; }
-    [ObservableProperty] private bool _add;
 }

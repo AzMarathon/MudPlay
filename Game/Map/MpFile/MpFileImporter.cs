@@ -329,7 +329,11 @@ public sealed partial class MpFileImporter
             if (result.Count > 0 && result[^1].Key.Equals(w.Key))
             {
                 LoopWaypoint prev = result[^1];
-                prev.Command ??= w.Command;
+                if (prev.Command is null && w.Command is not null)
+                {
+                    prev.Command = w.Command;
+                    prev.DelayMs = w.DelayMs;
+                }
                 prev.DoNotRest |= w.DoNotRest;
                 prev.DoNotAttack |= w.DoNotAttack;
                 prev.RestHereHp |= w.RestHereHp;

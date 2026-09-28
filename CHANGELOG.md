@@ -6,7 +6,7 @@
 - A step that won't translate leaves a blank line instead of failing the import; set a room on it, then Verify loop in MudPlay checks our navigation walks the whole loop before Accept
 - Start rooms found from the `-map room` hint (or the Rooms.md it asks for) when the start room's exits changed; Ctrl-Z-terminated and header-less files now read
 - New per-room loop options: Rest up here (HP) and (mana) — rest to rest-max there before moving on
-- Stash points in an imported loop can be added as stash rooms
+- Accepting an imported loop asks whether to add its MegaMUD stash points as stash rooms
 
 ## 3.116.41
 

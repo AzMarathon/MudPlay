@@ -77,6 +77,7 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
 
     [ObservableProperty] private string _roomText;
     [ObservableProperty] private string? _command;
+    [ObservableProperty] private int _delayMs;
     [ObservableProperty] private bool _doNotRest;
     [ObservableProperty] private bool _doNotAttack;
     [ObservableProperty] private bool _restHereHp;
@@ -87,6 +88,7 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
     public void CopyEditsFrom(MpTranslatedRowViewModel other)
     {
         Command = other.Command;
+        DelayMs = other.DelayMs;
         DoNotRest = other.DoNotRest;
         DoNotAttack = other.DoNotAttack;
         RestHereHp = other.RestHereHp;
@@ -98,7 +100,9 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
     {
         if (EffectiveRoom is not { } k) return null;
         string? cmd = string.IsNullOrWhiteSpace(Command) ? null : Command.Trim();
-        return new LoopWaypoint(k, cmd, 0, DoNotRest, DoNotAttack) { RestHereHp = RestHereHp, RestHereMana = RestHereMana };
+        // A delay only runs around a command, as in the loop editor.
+        int delay = cmd is null ? 0 : Math.Max(0, DelayMs);
+        return new LoopWaypoint(k, cmd, delay, DoNotRest, DoNotAttack) { RestHereHp = RestHereHp, RestHereMana = RestHereMana };
     }
 }
 
