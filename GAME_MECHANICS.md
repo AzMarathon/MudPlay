@@ -1629,17 +1629,29 @@ How one damage spell cast against a monster is worked out.
 - **No tag** — affects all monster types (e.g. `magic missile`).
 
 **Charm / enslave family** *([CONFIRMED] except where noted)*
-- **All charm-type control spells share the same base ability, `Enslave` (code 6); they differ only by
-  their targeting tag.** `enslave` (#55) is `Enslave` + `AffectsLivingOnly` (any living target);
-  `charm animal` (#92) is `Enslave` + `AffectsAnimalsOnly` (needs the Animal flag); `song of charming`
-  (#49, bard) is `Enslave` + `AffectsLivingOnly`.
+- **All charm-type control spells share the same base ability, `Enslave` (code 6); they differ by
+  their targeting tag.** Four player spells carry it, with the same tags on Stock and Paradigm *([OBSERVED] 2026-09-28, imported game data)*:
+
+  | Spell | School | Level | Can charm | Also | Dur |
+  |---|---|---|---|---|---|
+  | `song of charming` #49 | Bard | 4 | living only (108) | — | 100 |
+  | `charm animal` #92 | Druid | 5 | animals only (80) | — | 60 |
+  | `control undead` #88 | Priest | 16 | undead only (23) | EvilOnly (98): only an evil caster can cast it | 80 |
+  | `enslave` #55 | Mage | 18 | living only (108) | — | 60 |
+
+- **The engine checks a charm in this order; each target check answers `Your spell has no effect on <monster>.`** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p `_cast_monster_target`, `_user_can_use_spell`)*:
+  1. **Caster:** an EvilOnly spell (control undead) can't be cast unless your alignment counts as evil.
+  2. **Target type:** living-only fails on a NonLiving (109) monster, animals-only on a monster without Animal (78), and undead-only on a monster whose `Undead` is 0.
+  3. **Spell immunity:** a monster whose SpellImmu (139) is higher than the spell's level ignores it.
+  4. **Resist:** all four are `TypeOfResists` 2, so the full-resist roll applies (`You attempt to cast <spell> at <monster>, but the spell is resisted.`). For Enslave spells the engine rolls against a separate per-monster value (monster record `+0x1a0`) instead of Magic Resist, falling back to Magic Resist when that value is 0. *[NEEDS CONFIRMATION] what that value is — none of the imported Monsters columns matches it.*
+  5. **Level:** `CharmLVL`, below.
 - **A charm takes only when your level is at least the monster's `CharmLVL`** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p `_cast_monster_target`; Stock)*. `CharmLVL` is a Monsters-table column (monster record `+0x120`, checked against the raw `wccknms2.dat`), e.g. giant rat 1, lashworm 3, cave worm 12. Values of 999 / 9999 (most monsters) put a monster out of reach, and `0` means anyone can charm it. (An earlier note said no charm-level column existed and looked for one on the Spells row; superseded 2026-09-28.) *[NEEDS CONFIRMATION] what the game prints when your level is too low — the engine code reaches no message of its own there — and whether Paradigm uses the same rule.*
-  - The charm applies only through a spell aimed at one target: Targets `4` (Monster), `6` (Any) or `8` (Monster or User). All three charm spells are Targets `4`.
+  - The charm applies only through a spell aimed at one target: Targets `4` (Monster), `6` (Any) or `8` (Monster or User). All four charm spells are Targets `4`.
   - **Duration:** a spell `Dur` of `0` charms permanently; otherwise the charm is a timed spell on the monster, and when it ends the charm ends.
   - **What the charm does:** the monster is tied to the caster by name. It never attacks the caster and stops wandering; it moves with the caster instead of rolling its usual follow chance. Only the caster sees ` (Charmed)` after its name in the room.
   - **What ends it early:** the monster dying, or the caster attacking it.
   - **Summoned pets use the same state:** a no-target spell that creates a monster marks it charmed and owned by the caster.
-  - **Paradigm data difference** *([OBSERVED] 2026-09-28, imported game data)*: each Paradigm charm spell carries `RemovesSpell` (122) for the other two, so casting one replaces the others; Stock's don't.
+  - **Paradigm data difference** *([OBSERVED] 2026-09-28, imported game data)*: song of charming, charm animal and enslave each carry `RemovesSpell` (122) for the other two on Paradigm, so casting one replaces the others; control undead doesn't, and Stock's don't.
 
 - **Client use:**
   - Reactive backstop, off the `no effect` line: `OnSpellNoEffect` marks the species + spell immune
