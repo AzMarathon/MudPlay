@@ -216,6 +216,32 @@ public sealed partial class MpFileImporter
         return new MpTranslation(anchor, rows, closes, closure);
     }
 
+    // MegaMUD's recorded moves taken literally from start on our map, for the review
+    // window's map comparison: each compass step follows our exit, each command step
+    // lands where Follow puts it. There's no re-matching — a step we can't follow
+    // leaves us where we stand (that room goes in Stuck) and the next step carries on
+    // from there, so the line shows exactly where the recording and our map part ways.
+    public (IReadOnlyList<RoomKey> Path, IReadOnlyList<RoomKey> Stuck) DeadReckon(MpLoopFile file, RoomKey start)
+    {
+        List<RoomKey> path = new() { start };
+        List<RoomKey> stuck = new();
+        RoomKey cursor = start;
+        for (int i = 0; i < file.Steps.Count; i++)
+        {
+            string destHash = i == file.Steps.Count - 1 ? file.EndHashExits : file.Steps[i + 1].HashExits;
+            (RoomKey? dest, _, _) = Follow(cursor, file.Steps[i], destHash);
+            if (dest is not { } d)
+            {
+                stuck.Add(cursor);
+                continue;
+            }
+            if (d.Equals(cursor)) continue;
+            path.Add(d);
+            cursor = d;
+        }
+        return (path, stuck);
+    }
+
     // Where step (taken from room) leads, or why it can't be followed. ThroughPassage
     // is true when a command step moved us through one of our own exits — the walker
     // takes that passage by itself, so the command needn't be carried.

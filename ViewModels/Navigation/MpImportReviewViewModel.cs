@@ -43,8 +43,11 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     public MpImportReviewViewModel(
         string path, MpLoopFile file, MegaMudRoomsFile? roomsMd,
         MpFileImporter importer, RoomGraphManager graph, LoopManager loops,
-        MovementFilter? filter, LogService? log = null)
+        MovementFilter? filter, LogService? log = null,
+        MapComparisonOverlay? mapComparison = null, Action<RoomKey>? showOnMap = null)
     {
+        _mapComparison = mapComparison;
+        _showOnMap = showOnMap;
         _path = path;
         _file = file;
         _roomsMd = roomsMd;
@@ -117,6 +120,43 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
 
     public ObservableCollection<MpTranslatedRowViewModel> Rows { get; } = new();
 
+    // ----- map comparison ------------------------------------------
+
+    private readonly MapComparisonOverlay? _mapComparison;
+    private readonly Action<RoomKey>? _showOnMap;
+
+    // "Display on map": draw MegaMUD's recorded moves (followed literally from the
+    // start room) and our converted loop (walked as the loop runner would) on the
+    // Navigation map in two colours, so the steps where they part are visible.
+    [ObservableProperty] private bool _displayOnMap;
+    public bool CanDisplayOnMap => _mapComparison is not null;
+
+    partial void OnDisplayOnMapChanged(bool value)
+    {
+        if (value) RefreshMapComparison(recentre: true);
+        else _mapComparison?.Clear();
+    }
+
+    private void RefreshMapComparison(bool recentre = false)
+    {
+        if (!DisplayOnMap || _mapComparison is null) return;
+        RoomKey? start = _fixedRooms.TryGetValue(0, out RoomKey set) ? set : SelectedAnchor?.Anchor;
+        if (start is not { } s)
+        {
+            _mapComparison.Clear();
+            return;
+        }
+        (IReadOnlyList<RoomKey> recorded, IReadOnlyList<RoomKey> stuck) = _importer.DeadReckon(_file, s);
+        IReadOnlyList<RoomKey> converted = _loops.ResolveRouteRoomKeys(
+            MpFileImporter.Waypoints(Rows.Select(r => r.ToWaypoint())), _filter);
+        _mapComparison.Show(recorded, converted, stuck);
+        if (recentre) _showOnMap?.Invoke(s);
+        _log?.Info("MpImporter", $"{FileName}: map comparison — recorded {recorded.Count} rooms ({stuck.Count} stuck), converted {converted.Count} rooms");
+    }
+
+    // The window closed (Accept, Reject or the title-bar X): take the comparison off the map.
+    public void OnWindowClosed() => _mapComparison?.Clear();
+
     public bool CanAccept => _file.IsLoop;
 
     private bool _rebuilding;
@@ -161,6 +201,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     {
         if (!ApplyTypedRooms()) return;
         CheckWalkable();
+        RefreshMapComparison();
     }
 
     [RelayCommand]
@@ -328,6 +369,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
 
         TranslationSummary = t is null ? "Nothing translated yet." : $"Start {t.Anchor}: {t.Summary}.";
         SetStatus(string.Empty, good: false);
+        RefreshMapComparison();
     }
 
     private void SetStatus(string text, bool good)

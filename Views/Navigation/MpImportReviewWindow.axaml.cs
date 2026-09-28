@@ -8,5 +8,6 @@ public partial class MpImportReviewWindow : Window
     public MpImportReviewWindow()
     {
         InitializeComponent();
+        Closed += (_, _) => (DataContext as MudPlay.ViewModels.Navigation.MpImportReviewViewModel)?.OnWindowClosed();
     }
 }

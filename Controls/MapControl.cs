@@ -95,6 +95,45 @@ public sealed class MapControl : Control
     // LoopPath / WalkPath so an active automation always overlays the build
     // preview when both share a segment. Pen is dashed cyan to distinguish from
     // the solid red preview and the blue active-loop pens.
+    // The .mp import review's map comparison (Services.MapComparisonOverlay): the
+    // recording's moves followed literally on our map, and the loop as converted.
+    // Drawn over every other route in two fixed colours the review window's legend
+    // names, the recorded one wide and translucent underneath so the two show as one
+    // line where they agree and split apart where they don't.
+    public static readonly StyledProperty<IReadOnlyList<RoomKey>?> ComparisonRecordedPathProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(ComparisonRecordedPath));
+    public static readonly StyledProperty<IReadOnlyList<RoomKey>?> ComparisonConvertedPathProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(ComparisonConvertedPath));
+    // Rooms where a recorded step couldn't be followed on our map — marked with a cross.
+    public static readonly StyledProperty<IReadOnlyList<RoomKey>?> ComparisonStuckRoomsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(ComparisonStuckRooms));
+
+    public IReadOnlyList<RoomKey>? ComparisonRecordedPath
+    {
+        get => GetValue(ComparisonRecordedPathProperty);
+        set => SetValue(ComparisonRecordedPathProperty, value);
+    }
+
+    public IReadOnlyList<RoomKey>? ComparisonConvertedPath
+    {
+        get => GetValue(ComparisonConvertedPathProperty);
+        set => SetValue(ComparisonConvertedPathProperty, value);
+    }
+
+    public IReadOnlyList<RoomKey>? ComparisonStuckRooms
+    {
+        get => GetValue(ComparisonStuckRoomsProperty);
+        set => SetValue(ComparisonStuckRoomsProperty, value);
+    }
+
+    // Kept in step with the legend in MpImportReviewWindow.axaml.
+    private static readonly IPen ComparisonRecordedPen =
+        new Pen(new SolidColorBrush(Color.Parse("#B3FF9800")), 7.0) { LineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
+    private static readonly IPen ComparisonConvertedPen =
+        new Pen(new SolidColorBrush(Color.Parse("#00E5FF")), 2.5) { LineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
+    private static readonly IPen ComparisonStuckPen =
+        new Pen(new SolidColorBrush(Color.Parse("#FF3B3B")), 2.5) { LineCap = PenLineCap.Round };
+
     public static readonly StyledProperty<IReadOnlyList<RoomKey>?> LoopBuilderPathProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(LoopBuilderPath));
 
@@ -914,7 +953,8 @@ public sealed class MapControl : Control
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
             PreviewPathProperty, LeaderRoutePathProperty, TeleportRoomsProperty, DeathRoomsProperty,
             BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty,
-            WhereTargetRoomsProperty, NavLineStylesProperty);
+            WhereTargetRoomsProperty, NavLineStylesProperty,
+            ComparisonRecordedPathProperty, ComparisonConvertedPathProperty, ComparisonStuckRoomsProperty);
 
         // Auto-centre on the player's current room every time it
         // changes — but only when the
@@ -1432,6 +1472,21 @@ public sealed class MapControl : Control
         // when the route pen is as wide (or wider). Re-drawing the red on top makes the
         // trap read through the route unconditionally.
         DrawAllExitLines(context, tilePixels, cx, cy, viewport, trapOverlay: true);
+
+        // The import review's comparison sits over every other route.
+        DrawPathPolyline(context, ComparisonRecordedPath,  ComparisonRecordedPen,  tilePixels, cx, cy);
+        DrawPathPolyline(context, ComparisonConvertedPath, ComparisonConvertedPen, tilePixels, cx, cy);
+        if (ComparisonStuckRooms is { Count: > 0 } stuck && Layout is not null)
+        {
+            double arm = Math.Max(3, tilePixels * 0.3);
+            foreach (RoomKey k in stuck)
+            {
+                if (!Layout.Positions.TryGetValue(k, out (int X, int Y) c)) continue;
+                Point m = new(cx + c.X * tilePixels, cy + c.Y * tilePixels);
+                context.DrawLine(ComparisonStuckPen, new Point(m.X - arm, m.Y - arm), new Point(m.X + arm, m.Y + arm));
+                context.DrawLine(ComparisonStuckPen, new Point(m.X - arm, m.Y + arm), new Point(m.X + arm, m.Y - arm));
+            }
+        }
 
         // Lift the current + destination markers back on top of the routes so the walk-to
         // line ending at the destination doesn't cover its dot.

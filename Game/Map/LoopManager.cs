@@ -270,6 +270,11 @@ public sealed class LoopManager
         ExpandWaypoints(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
         => LoopExpander.Expand(waypoints, _bfs, filter);
 
+    // The rooms a loop with these waypoints walks through, leg by leg, gaps left
+    // where a leg doesn't route (LoopExpander.ResolveLegRoomKeys).
+    public IReadOnlyList<RoomKey> ResolveRouteRoomKeys(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
+        => LoopExpander.ResolveLegRoomKeys(waypoints, _bfs, _graph, filter);
+
     // ----- internals -------------------------------------------------
 
     // Current schema version persisted on save.
