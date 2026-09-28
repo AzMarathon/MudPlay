@@ -717,6 +717,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         dto.CastBeforeRestingForMana = r.CastBeforeRestingForMana;
         dto.RerollCount = r.RerollCount;
         dto.RerollThreshold = r.RerollThreshold;
+        dto.RerollThresholdIsRoll = true;   // the dialog edits the rolled value on both realms
         dto.RerollInfinite = r.RerollInfinite;
     }
 
@@ -733,7 +734,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     private async System.Threading.Tasks.Task AddBuff()
     {
         AddBuffDialogViewModel dlg = new(BuildPickOptions(SlottedSpells()), IsLightSpell, IsRollSpell,
-            IsStockRealm, AppServices.Current.ManaRegenTickRange,
+            IsStockRealm, AppServices.Current.ManaRegenTickSteps,
             rollRange: AppServices.Current.ManaRegenRollRange);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
@@ -847,12 +848,14 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         others.Remove((row.Spell ?? string.Empty).Trim());
         var options = BuildPickOptions(others);
         BuffSlot d = row.Dto;
+        // A Stock threshold saved as a mana tick shows as the roll it stands for.
+        AppServices.Current.ConvertLegacyStockRerollThreshold(d);
         AddBuffResult initial = new(
             d.Spell ?? string.Empty, d.RecastMarginSec, d.OnlyWhenHpFull, d.OnlyWhenMaFull,
             d.OnlyWhenDark, d.CastBeforeRestingForMana, d.RerollCount, d.RerollThreshold, d.RerollInfinite);
         AddBuffDialogViewModel dlg = new(
             options, IsLightSpell, IsRollSpell,
-            IsStockRealm, AppServices.Current.ManaRegenTickRange, initial,
+            IsStockRealm, AppServices.Current.ManaRegenTickSteps, initial,
             rollRange: AppServices.Current.ManaRegenRollRange);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);

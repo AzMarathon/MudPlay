@@ -736,13 +736,15 @@ public static class BugReportBuilder
         // cycle, not just the configured threshold in the buff plan above.
         Game.Spells.ManaRegenReroller reroll = svc.ManaRegen;
         string rerollSignal = svc.GameData.ActiveRealm == Game.RealmType.ParaMud
-            ? "abil 145 spells value" : "observed mana tick";
+            ? "abil 145 spells value" : "roll read back off the natural mana tick";
         sb.Append("**Mana-regen reroll**\n\n");
         sb.Append($"- Roll signal: {rerollSignal}\n");
         sb.Append($"- Cycle active: {reroll.CycleActive}; rerolls used this cycle: {reroll.RerollsUsed}\n");
         sb.Append($"- Waiting for mana to resume: {reroll.WaitingForMana}\n");
         sb.Append($"- Waiting for the fight to end: {reroll.WaitingForCombat}\n");
-        sb.Append($"- Last observed roll value: {(reroll.LastObservedValue is { } v ? v.ToString() : "(none judged yet)")}\n");
+        sb.Append($"- Last observed roll: {reroll.LastObservedText ?? "(none judged yet)"}\n");
+        if (svc.GameData.ActiveRealm != Game.RealmType.ParaMud)
+            sb.Append($"- Stock tick inputs: {svc.DescribeStockManaRollContext()}\n");
         sb.Append('\n');
 
         int shown = 0;

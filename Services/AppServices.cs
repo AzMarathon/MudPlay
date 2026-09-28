@@ -4362,6 +4362,7 @@ public sealed class AppServices
             readConfig: () =>
             {
                 Models.Profile.BuffSlot? slot = ManaRegenRerollSlot();
+                if (slot is not null) ConvertLegacyStockRerollThreshold(slot);
                 return new Game.Spells.ManaRegenRerollConfig(
                     slot?.RerollThreshold, slot?.RerollCount ?? 0, slot?.RerollInfinite ?? false);
             },
@@ -4369,24 +4370,23 @@ public sealed class AppServices
                 _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("abil 145\r")),
             recast: shortCode => CastDirector.RequestManaRegenReroll(shortCode),
             canAffordReroll: CanAffordManaRegenReroll,
-            // Stock has no `abil 145` — judge the roll from the observed passive mana
-            // tick instead (fed below from RegenTracker).
+            // Stock has no `abil 145` — read the roll back off the observed natural
+            // mana tick instead (fed below from RegenTracker).
             useTickMonitor: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             log: Log,
-            inCombat: () => PlayerState.InCombat);
+            inCombat: () => PlayerState.InCombat,
+            stockContext: StockManaRollContext);
         CastDirector.SetSelfBuffCastSink(OnSelfBuffCastForReroll);
         // Resume a reroll cycle suspended at the mana floor once meditation refills the
         // pool — the 1s heartbeat re-checks affordability and fires the next reroll,
         // so it spends the full cap instead of quitting when it ran out mid-cycle.
         Tick.HeartbeatElapsed += ManaRegen.OnRecoveryTick;
-        // Feed the reroller clean NATURAL mana ticks (Stock's roll-quality signal).
-        // Meditate ticks are unaffected by spell regen and can stack on a natural tick,
-        // so a tick observed while meditating is skipped; resting doesn't touch mana.
+        // Feed the reroller every mana uptick (Stock's roll signal). It separates a
+        // meditate tick (the unscaled base) from base + natural itself, and skips a
+        // tick that filled the pool (cut short).
         Regen.MaTickObserved += sample =>
-        {
-            if (sample.Position == Game.PlayerPosition.Meditating) return;
-            ManaRegen.OnManaTickObserved(sample.Delta);
-        };
+            ManaRegen.OnManaTickObserved(sample, PlayerState.MaxMa > 0 && PlayerState.Ma >= PlayerState.MaxMa);
+        Stats.ScreenParsed += _ => NoteStatScreenGear();
 
         // Opt the combat engine into the
         // per-round combat-spell economy (pre-attack debuff + multi/normal/
@@ -4730,6 +4730,8 @@ public sealed class AppServices
                 : null);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
         TooHeavyWait = new Game.TooHeavyWaitSignal(Router, Inventory, PartyRest, Log);
+        // The Stock mana-regen reroll skips a tick that lands mid gear-set swap.
+        Inventory.Changed += NoteWornChange;
 
         // Equipment-driven max HP/mana pool sync. A worn item can carry a flat
         // pool bonus (Items.Abil 88 = +Max HP, Abil 69 = +Max Mana — e.g. the
@@ -8681,34 +8683,113 @@ public sealed class AppServices
         ManaRegen.ReconsiderActiveRoll(shortCode);
     }
 
-    // Live worst/best passive mana-regen TICK for a mana-regen roll spell at the
-    // current character — feeds the Add-buff dialog's Stock reroll slider so the tick
-    // threshold shows min↔max. The spell's level-scaled roll range spans the slider;
-    // the tick math folds in the summed worn +ManaRgn% (the dominant term). Null when
-    // the spell isn't a resolvable roll spell or the class isn't a caster.
-    public (int Worst, int Best)? ManaRegenTickRange(string? spellCode)
+    // The Stock tick inputs for the configured mana-regen roll spell: level, stats,
+    // magery, worn +ManaRgn%, the spell's level-scaled roll range and the meditate tick
+    // (the unscaled base). Null before the first stat parse, for a non-caster, or when
+    // no roll spell is configured — the reroller then can't read a roll back.
+    private Game.Spells.StockManaRollContext? StockManaRollContext()
     {
-        if (string.IsNullOrWhiteSpace(spellCode)) return null;
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } code) return null;
+        return StockManaRollContextFor(code);
+    }
+
+    private Game.Spells.StockManaRollContext? StockManaRollContextFor(string spellCode)
+    {
+        if (!Stats.HasParsed) return null;
         if (Spellbook.FindByCastCode(spellCode.Trim()) is not { } spell) return null;
         if (!Game.Spells.ManaRegenReroller.IsRollSpell(spell.Formula)) return null;
-
         System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
         int mageryType = RowInt(classRow, "MageryType");
-        if (mageryType is not (1 or 2 or 3)) return null;   // non-caster class
-        int mageryLevel = RowInt(classRow, "MageryLVL");
-
+        if (mageryType == 0) return null;
         int level = System.Math.Max(1, PlayerStats.Level);
-        (long rmin, long rmax) = Game.Spells.SpellCalculator.AffectMagnitude(spell.Formula, level);
-        int gearRegen = Game.Calculators.CharacterCalculator
-            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.MpRegenPercent;
-
+        (long a, long b) = Game.Spells.SpellCalculator.AffectMagnitude(spell.Formula, level);
+        var worn = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals;
+        // The `stat` screen counted the gear worn when it was read; a gear-set swap
+        // since (a meditate / mana set) changes the stats the tick uses, so swap that
+        // gear's stat bonuses for what's worn now.
+        (int atInt, int atWil, int atCha) = _statScreenGearStats ?? (worn.PlusIntellect, worn.PlusWillpower, worn.PlusCharm);
         Game.Calculators.ManaRegenBreakpointCalculator.Inputs inputs = new(
-            Level: level, MageryType: mageryType, Intellect: PlayerStats.Intellect,
-            Willpower: PlayerStats.Willpower, MageryLevel: mageryLevel,
-            GearRegenPercent: gearRegen, Realm: GameData.ActiveRealm);
+            Level: level, MageryType: mageryType,
+            Intellect: PlayerStats.Intellect - atInt + worn.PlusIntellect,
+            Willpower: PlayerStats.Willpower - atWil + worn.PlusWillpower,
+            MageryLevel: RowInt(classRow, "MageryLVL"),
+            GearRegenPercent: worn.MpRegenPercent,
+            Realm: GameData.ActiveRealm, Charm: PlayerStats.Charm - atCha + worn.PlusCharm);
+        int meditate = Game.Calculators.CharacterCalculator.CalcManaRegen(
+            level, inputs.Intellect, inputs.Willpower, inputs.Charm, mageryType, inputs.MageryLevel,
+            0, isMeditating: true, inputs.Realm);
+        return new Game.Spells.StockManaRollContext(inputs, (int)System.Math.Min(a, b), (int)System.Math.Max(a, b),
+            meditate, PlayerState.MaxMa > 0 && PlayerState.Ma < PlayerState.MaxMa,
+            GearSettled: DateTimeOffset.Now - _wornChangedAt >= WornSettleTime);
+    }
+
+    // The worn gear's INT / WIL / CHA bonuses when `stat` was last read, and when the
+    // worn list last changed — the Stock reroll's defence against gear-set swaps.
+    private (int Int, int Wil, int Cha)? _statScreenGearStats;
+    private string _wornSignature = string.Empty;
+    private DateTimeOffset _wornChangedAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan WornSettleTime = TimeSpan.FromSeconds(3);
+
+    private void NoteStatScreenGear()
+    {
+        var worn = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals;
+        _statScreenGearStats = (worn.PlusIntellect, worn.PlusWillpower, worn.PlusCharm);
+    }
+
+    private void NoteWornChange()
+    {
+        string signature = string.Join('|', Inventory.Snapshot.EquippedItems.Select(e => e.Name));
+        if (signature == _wornSignature) return;
+        _wornSignature = signature;
+        _wornChangedAt = DateTimeOffset.Now;
+    }
+
+    // The Stock reroll's tick inputs, for the bug report.
+    public string DescribeStockManaRollContext() => StockManaRollContext() is { } c
+        ? $"level {c.Inputs.Level}, magery type {c.Inputs.MageryType} tier {c.Inputs.MageryLevel}, " +
+          $"INT {c.Inputs.Intellect} WIL {c.Inputs.Willpower} CHA {c.Inputs.Charm}, worn ManaRgn {c.Inputs.GearRegenPercent}%, " +
+          $"meditate (base) tick {c.MeditateTick}, roll range {c.RollMin}..{c.RollMax}, mana below max {c.ManaBelowMax}"
+        : "(unknown — no roll spell configured, or stats / class not known yet)";
+
+    // What each Stock natural-tick amount needs from the roll, for the Add-buff dialog:
+    // the tick is truncated, so only these step values change what you're paid. Null
+    // when the spell's context isn't known yet.
+    public string? ManaRegenTickSteps(string? spellCode)
+    {
+        if (string.IsNullOrWhiteSpace(spellCode)) return null;
+        if (StockManaRollContextFor(spellCode) is not { } ctx) return null;
         Game.Calculators.ManaRegenBreakpointCalculator.Result r =
-            Game.Calculators.ManaRegenBreakpointCalculator.Compute(inputs, (int)rmin, (int)rmax);
-        return (r.WorstTick, r.BestTick);
+            Game.Calculators.ManaRegenBreakpointCalculator.Compute(ctx.Inputs, ctx.RollMin, ctx.RollMax);
+        var parts = new List<string> { $"{r.WorstTick} MP/tick at worst" };
+        foreach (Game.Calculators.ManaRegenBreakpointCalculator.Breakpoint bp in r.Breakpoints)
+            parts.Add($"{bp.Tick} from {bp.RollValueNeeded}");
+        return string.Join(" · ", parts);
+    }
+
+    // Stock thresholds used to be a desired mana tick; they're now the rolled percent,
+    // the same unit as Paradigm. Convert a saved tick threshold once, to the smallest
+    // roll that pays that tick, as soon as the character's tick inputs are known.
+    public void ConvertLegacyStockRerollThreshold(Models.Profile.BuffSlot slot)
+    {
+        if (slot.RerollThresholdIsRoll || slot.RerollThreshold is not { } tick) return;
+        if (GameData.ActiveRealm == Game.RealmType.ParaMud)
+        {
+            slot.RerollThresholdIsRoll = true;   // Paradigm's was always the roll
+            return;
+        }
+        if (slot.Spell?.Trim() is not { Length: > 0 } code || StockManaRollContextFor(code) is not { } ctx) return;
+        Game.Calculators.ManaRegenBreakpointCalculator.Result r =
+            Game.Calculators.ManaRegenBreakpointCalculator.Compute(ctx.Inputs, ctx.RollMin, ctx.RollMax);
+        int roll = tick <= r.WorstTick ? ctx.RollMin
+            : r.Breakpoints.FirstOrDefault(bp => bp.Tick >= tick) is { Tick: > 0 } bp ? bp.RollValueNeeded
+            : ctx.RollMax;
+        slot.RerollThreshold = roll;
+        slot.RerollThresholdIsRoll = true;
+        Log.Info(Game.Spells.ManaRegenReroller.LogCategory,
+            $"converted the {code} reroll threshold from a {tick} MP tick to a roll of {roll}");
+        Profile.Save();
     }
 
     // The level-scaled range a mana-regen roll spell can roll at the character's current

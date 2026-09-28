@@ -106,10 +106,15 @@ public sealed class BuffSlot
     // spell just recasts on expiry).
     public int RerollCount { get; set; }
 
-    // Roll spells: reroll while the rolled mana-regen contribution lands BELOW this
-    // value (the min gate). null = rerolling off even if RerollCount > 0. On Paradigm
-    // this is read from `abil 145`; on Stock it's a 0-100% of the best-possible tick.
+    // Roll spells: reroll while the rolled mana-regen percent lands BELOW this value
+    // (the min gate). null = rerolling off even if RerollCount > 0. Paradigm reads the
+    // roll from `abil 145`; Stock reads it back off the natural mana tick.
     public int? RerollThreshold { get; set; }
+
+    // True once RerollThreshold is in the rolled-percent unit. Stock thresholds saved
+    // before that were a desired mana tick, converted once when the character's tick
+    // inputs are known.
+    public bool RerollThresholdIsRoll { get; set; }
 
     // Roll spells: reroll without a cap — keep re-casting until the roll clears the
     // threshold (or the mana floor suspends the cycle, resuming as mana recovers).

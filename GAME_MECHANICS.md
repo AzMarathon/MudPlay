@@ -919,7 +919,7 @@ How HP works from full health down through dropping and death, how monster healt
   - The client can't detect ShadowRest from the stream; it gates on the **class ability (code 1103) + the user setting** instead.
 
 ### Mana regeneration & the ManaRgn breakpoints
-*Status: CONFIRMED 2026-08-08 (against the engine's own reference formula) · Realm: both (stock and Paradigm / GreaterMUD forms below)*
+*Status: CONFIRMED 2026-08-08 (against the engine's own reference formula); Stock re-checked against `wccmmud.dll` 1.11p `_slow_update_character` / `_fast_update_character` 2026-09-28 · Realm: both (stock and Paradigm / GreaterMUD forms below)*
 
 - **Passive (non-resting, non-meditating) mana regen ticks every 30 s (6 rounds)** and adds a whole-MP amount computed by one integer formula:
 
@@ -930,14 +930,15 @@ tick = trunc( (ManaRgn% + 100) · base / 100 )        [stock]
 tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD — functionally equivalent for ManaRgn% ≥ 0; for a negative total they differ by 1, e.g. R=−31, b=5 → 3 on stock, 4 on Paradigm]
 ```
 
+- **All four magery types, Bard included, use the same formula; only the stat differs** *([OBSERVED] 2026-09-28, DLL jump table: type 1 INT, 2 WIL, 3 (INT+WIL)/2, 4 CHA; MMUD-Explorer has no realm split for any of them)*. The DLL reads the current stat values, the same ones `stat` shows.
 - **`mageryLevel` is the class's magery tier (`Classes.MageryLVL`), a constant per class — NOT the character level.** It also drives max mana: `MaxMana = (mageryLevel · level · 2) + 6`. (A stock ability code 145 = "ManaRgn".)
-- **`ManaRgn%` is the sum of every code-145 source.** That is gear/quest `addability 145 N` bonuses (`+N ManaRgn`) **plus** a cast mana-regen roll spell's rolled magnitude. It is a **percent modifier on the tick, not flat mana**.
+- **`ManaRgn%` is the sum of every code-145 source** *(Stock [OBSERVED] 2026-09-28: `_update_dynamic_with_ability` adds code 145 to the character's mana-regen percent, as code 123 feeds the HP-regen percent)*. That is gear/quest `addability 145 N` bonuses (`+N ManaRgn`) **plus** a cast mana-regen roll spell's rolled magnitude. It is a **percent modifier on the tick, not flat mana**.
 - **Breakpoints are emergent, not a table.** Because `tick` is truncated, it steps up by 1 MP only when `ManaRgn%` (or level / stat) crosses the integer threshold `(N·100/base − 100)`. Between thresholds, extra ManaRgn% does nothing.
 - **Roll spells (nature tap / mana flux) carry a code-145 slot with stored value 0.** The magnitude is rolled per cast from the level-scaled range `Min/Max = base + trunc(inc/incLVLs · level)` (the same `SpellCalculator.AffectMagnitude` scaling every affect uses). So the worst roll = Min, best = Max, and the rolled value adds straight into `ManaRgn%`. This is why a reroll only helps when the range can cross a truncation breakpoint at the current level — otherwise it just burns mana.
-- **Meditating** ticks every 15 s on Stock and every 10 s on Paradigm, and on Stock that tick leaves `ManaRgn%` out — see *Rest and meditate tick timing*. *(Previously a reverse-engineered 10 s model; settled 2026-09-27.)*
+- **Meditating** ticks every 15 s on Stock and every 10 s on Paradigm, and the meditate tick pays the unscaled `base`, leaving `ManaRgn%` out — see *Rest and meditate tick timing*. *(Previously a reverse-engineered 10 s model; settled 2026-09-27. Stock [OBSERVED] 2026-09-28: `_fast_update_character` pays the base every 15 fast ticks and never reads the regen percent; MMUD-Explorer skips `ManaRgn%` when meditating on both realms.)*
+- **While meditating on Stock, every other meditate tick lands together with the 30 s natural tick**, so the jump you see is `base + natural` *([CONFIRMED] 2026-09-28, user)*.
 - **Unverified / modelled (not from the engine reference, don't hard-depend):**
   - the roll's *distribution* across `[Min,Max]` is treated as linear for "where on the range" purposes but is not proven uniform;
-  - whether Paradigm's meditate tick also leaves `ManaRgn%` out;
   - whether the live engine caps summed ManaRgn% is unknown.
 - **Client use:**
   - `CharacterCalculator.CalcManaRegen` implements the formula; the Level Projection grid already relies on it.
@@ -960,14 +961,21 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   ```
 
   The **`spells:` value** is the rolled magnitude (e.g. a priest's `prfl` rolling 32). Reroll if `spells:` < the min gate.
-- **Reading the roll — Stock:** there is **no `abil 145`**. Instead, monitor the actual **mana tick**: passive regen lands one tick every ~30 s, so watch the MP jump to measure the realised per-tick amount. Because the tick formula is known, compute the possible tick range at the current level — worst = tick with the Min roll, best = tick with the Max roll (using worn `ManaRgn%`) — and surface both so the user sets a min-tick threshold on a **0–100 % scale** between worst and best. After a cast, wait for the next tick (~30 s), and if the observed tick is below threshold, recast (up to max); otherwise let it ride.
+- **Reading the roll — Stock:** there is **no `abil 145`**, so the roll is read back off the next natural mana tick, using the formula in *Mana regeneration & the ManaRgn breakpoints* *(design 2026-09-28, from the Stock DLL and MMUD-Explorer)*:
+  - The tick is truncated, so it pins the roll to a **band** (every roll that pays exactly that tick), e.g. base 12 and tick 18 → roll 50..58. Worn `ManaRgn%` is subtracted using the gear the client sees.
+  - **Meditating:** a jump equal to the base is the meditate tick alone; a bigger one is `base + natural` (they share a prompt every other meditate tick).
+  - **A tick that fills the pool** was cut short and is skipped.
+  - **Gear-set swaps:** the gear-dependent inputs (worn `ManaRgn%` and INT / WIL / CHA) are taken from the gear worn when the tick lands. The `stat` screen's stats are corrected by the stat bonuses of the gear worn when it was read, and a tick within 3 s of a worn-list change is skipped *(**Client policy**, user 2026-09-28: a mana-regen gear set should raise the tick)*.
+  - **A roll so bad the natural tick pays 0 shows no jump.** No natural tick within 40 s of the cast, with mana below max, reads as a 0 tick.
+  - **Decision** *(**Client policy**, user 2026-09-28)*: the threshold is the **rolled percent on both realms**. Stock rerolls only when the whole band is below it; a band straddling it counts as good.
+  - *(An earlier design judged Stock on a desired mana tick instead; superseded 2026-09-28. Saved Stock tick thresholds convert once to the smallest roll that pays that tick — **Client policy**, user 2026-09-28.)*
 - **Client use:**
   - **Config per roll-spell slot:** a **max rerolls per cycle** and a **minimum gate**. Cast → read the roll → if below the gate, re-queue and repeat until at/above the gate or max attempts hit; then stop and wait for the spell's normal recast-within window before trying the cycle again.
   - **Self-only matching:** the reroll engine must NOT gate on a "cast on self" flag (a user can leave a slot's default whole-party flag on; the spell still only lands on the caster). `ManaRegenRerollSlot` therefore matches any configured roll-spell slot regardless of its target flags.
   - **Trigger timing:** the reroll cycle keys off the **cast** (we know what we cast), not the applied-line confirm: after the cast reaches the wire, send `abil 145` and read the fresh roll. Keying it on the confirm meant it never fired at all.
   - **Running out of mana mid-cycle PAUSES, it does not surrender** *(2026-09-01, report `paradigm-20260901-114223`: the reroller quit at 3/20 when a recast would breach the mana floor, stranding the spell at a bad roll)*. Each recast costs mana, so if the next one would drop under the buff mana floor the cycle SUSPENDS with its reroll counter intact and resumes the next attempt once meditation lifts mana back over the floor — so it spends its full reroll budget across rest instead of abandoning a bad roll at the floor.
   - **Built — Paradigm:** `ManaRegenReroller` sends `abil 145`, parses the `spells:` slice, rerolls below the per-slot threshold up to its cap.
-  - **Built — Stock:** the Stock tick-monitor path in `ManaRegenReroller` judges the roll from the observed passive tick.
+  - **Built — Stock:** `ManaRegenReroller.OnManaTickObserved` / `JudgeNaturalTick` read the band via `ManaRegenBreakpointCalculator.RollsForTick`, from a `StockManaRollContext` that AppServices builds (level, stats, magery, worn ManaRgn%, the roll range, the meditate tick). `OnRecoveryTick` handles the 0-tick timeout. `AppServices.ConvertLegacyStockRerollThreshold` does the one-time conversion (`BuffSlot.RerollThresholdIsRoll`).
 
 ### Looking at a monster — coarse wound bands
 *Status: CONFIRMED*

@@ -1,5 +1,10 @@
 # Version history
 
+## 3.116.29
+
+- Stock mana-regen rerolls read the roll back off the natural mana tick, even while meditating, and take the same rolled-value threshold as Paradigm (old tick thresholds convert once)
+- The reroll accounts for gear-set swaps, and the Add-buff dialog lists the roll each Stock mana tick needs
+
 ## 3.116.28
 
 - While you're afraid, navigation waits for the fear to wear off and the map follows the fear's random moves
