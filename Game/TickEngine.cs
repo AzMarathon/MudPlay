@@ -58,9 +58,9 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     // Whether the CombatTickElapsed invocation in flight was driven by a server combat
     // line (RecordCombatTick) rather than the 5 s timer fallback. Set immediately before
     // each Invoke, so a synchronous subscriber reads the current tick's source. A
-    // damage-line-driven tick fires DURING the round's line burst — before the round's
-    // prompt refreshes HP — so a between-round decision on it runs on stale HP;
-    // CastingDirector reads this to hold its non-heal casts until a fresh-HP pass.
+    // damage-line-driven tick fires DURING the round's line burst, while HP is still
+    // falling hit by hit — so CastingDirector reads this to hold its between-round
+    // pick until HP settles.
     public bool LastCombatTickWasDamageDriven { get; private set; }
 
     [ObservableProperty]

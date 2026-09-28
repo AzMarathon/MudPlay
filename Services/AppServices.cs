@@ -4305,9 +4305,17 @@ public sealed class AppServices
         // is freed before this round's between-round evaluation runs.
         Tick.CombatTickElapsed += CastDirector.NotifyRoundComplete;
         // Tell CastDirector whether the tick it's handling was fired by a server combat
-        // line (HP not yet refreshed by the round's prompt) vs the 5s timer fallback, so
-        // it can hold its non-heal casts on a stale-HP tick (report paradigm-20260904-214056).
+        // line (the round's burst still landing) vs the 5s timer fallback, so it can wait
+        // for HP to settle before picking a between-round cast (reports
+        // paradigm-20260904-214056, paradigm-20260928-131549). The settled pass runs off
+        // a UI-thread one-shot, same shape as the combat settle schedulers.
         CastDirector.SetCombatTickSource(() => Tick.LastCombatTickWasDamageDriven);
+        CastDirector.SetSettledPassScheduler((delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+        });
         Tick.CombatTickElapsed += CastDirector.OnCombatTick;
         // Out of combat the combat tick doesn't free-run (it's only anchored once a
         // combat line lands), so drive the between-round loop off the 1 s heartbeat

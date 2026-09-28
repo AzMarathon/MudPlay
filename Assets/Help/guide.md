@@ -2748,6 +2748,7 @@ What stays special no matter where you rank it:
 
 - It fires in **any** state — mid-fight, resting, or walking between rooms — where Minor heal only casts during combat or a rest.
 - It **ignores the mana-floor gate** (Health → Heal if above MA) that holds Minor/Major back to conserve mana. It still won't attempt a spell you can't afford (nothing can), but it spends whatever's left rather than conserving, because there might not be a later.
+- It's the only cast that fires **while a round's hits are still landing**. Your HP drops hit by hit through a round, so MudPlay waits for it to settle (a fraction of a second) before picking Minor vs Major heal, a cure, or a buff — otherwise it could spend the round's one cast on a Major heal and leave you with no cast when the round ends much lower. Emergency heal goes out the moment HP crosses its trigger, unless you ranked a cast that's also due above it; then that cast fires once HP settles.
 
 If you leave Emergency heal blank, MudPlay falls back to Major heal, then Minor heal, at the Emergency threshold — so a low **Emergency heal** trigger with no spell set still gives your Major/Minor heal a true last-resort trigger point. Set the threshold below your Major heal (combat) trigger — Emergency is the "if all else has failed" band beneath it.
 
