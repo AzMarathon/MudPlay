@@ -2044,6 +2044,10 @@ public sealed class AppServices
     // back" and strand the tracker. Clears on "You get back on your feet.".
     public Game.Conditions.SelfHeldResponder SelfHeld { get; private set; } = null!;
 
+    // Self-fear bridge — holds our navigation (FearGate) while we're afraid, so our
+    // moves don't fight the fear's random running; RoomTracker follows its moves.
+    public Game.Conditions.SelfFearMovementGate SelfFear { get; private set; } = null!;
+
     // Self-ailment chip bridge — mirrors our own poison / blindness / disease onto
     // the self party-window chip. The say-driven mirror only lights OTHER members'
     // chips; our own state is owned by ConditionTracker, so without this our self
@@ -2457,7 +2461,7 @@ public sealed class AppServices
         // Character Workshop's displayed alignment stale until the next `who`
         // re-observes our own row. Long-lived so the line is caught even when
         // the Workshop is closed.
-        Alignment = new Game.AlignmentTracker(Router, PlayerStats, Players);
+        Alignment = new Game.AlignmentTracker(Router, PlayerStats, Players, Log);
         // First consumer; registers the party-essential
         // handler set against the engine.
         // readCurrentRoom / readRoomEntities defer to the live RoomTracker
@@ -2596,9 +2600,10 @@ public sealed class AppServices
         {
             int classNumber = snap is null ? 0 : SpellCatalog.ResolveClassNumber(snap.Class) ?? 0;
             int level = snap?.Level ?? 0;
-            Game.Calculators.AlignmentBucket? alignment = Game.Inventory.ItemEquipFilter.BucketForWord(
-                Alignment.SelfAlignment);
-            int charAlign = Game.Spells.KnownSpellCatalog.CharAlignFor(alignment);
+            Game.RealmType realm = GameData.ActiveRealm;
+            Game.Calculators.AlignmentBucket? alignment = Game.Inventory.ItemEquipFilter.GearBucketForWord(
+                Alignment.SelfAlignment, realm);
+            int charAlign = Game.Spells.KnownSpellCatalog.CharAlignFor(alignment, Alignment.SelfEvilPoints(realm));
             // reseed = the active game-data set changed under us: force a rebuild
             // even when the class number is unchanged, since the Spells table
             // itself was replaced. Refresh alone skips the rebuild on an
@@ -2678,6 +2683,9 @@ public sealed class AppServices
                 && string.Equals(self, givenName, StringComparison.OrdinalIgnoreCase))
                 SeedSpellbook(Profile.Current?.LastKnownStats);
         };
+        // A `pro` reading or a refused evil-only item moves our evil points, which
+        // decides evil-only spells.
+        Alignment.Refreshed += () => SeedSpellbook(Profile.Current?.LastKnownStats);
         // The compact `health` command (Reset States, or a manual `health`) re-anchors
         // the HP + power-pool ceilings without the full stat-screen scroll. Snap
         // PlayerState.MaxHp/MaxMa to them — through PromptParser, the sole max-field
@@ -4112,6 +4120,11 @@ public sealed class AppServices
         SelfHeld = new Game.Conditions.SelfHeldResponder(
             Conditions, Party, MovementCoordinator, log: Log);
 
+        // Self-fear bridge — the same local hold while afraid; the tracker reads the
+        // fear's echo-less moves through the obvious exits.
+        SelfFear = new Game.Conditions.SelfFearMovementGate(Conditions, MovementCoordinator, Log);
+        RoomTracker.SetFearProbe(() => Conditions.IsFeared);
+
         // Self-ailment chip bridge — the pure-chip sibling of the two responders
         // above for poison / blindness / disease (no movement gate). Lights the
         // self party-window chip off ConditionTracker so our own poison shows the
@@ -5273,13 +5286,13 @@ public sealed class AppServices
         _equipWearFailSub = Router.Subscribe(
             Services.Patterns.KnownPatterns.UserEquipFailed, _ =>
             {
-                Equipment.NoteWearRefused();
+                LearnFromEvilOnlyRefusal(Equipment.NoteWearRefused());
                 AlignmentCheck.RequestVerify();
             });
         _equipWieldFailSub = Router.Subscribe(
             Services.Patterns.KnownPatterns.UserWieldFailed, _ =>
             {
-                Equipment.NoteWeaponRefused();
+                LearnFromEvilOnlyRefusal(Equipment.NoteWeaponRefused());
                 AlignmentCheck.RequestVerify();
             });
 
@@ -7603,9 +7616,11 @@ public sealed class AppServices
             return false;
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
+        Game.RealmType realm = GameData.ActiveRealm;
         Game.Calculators.AlignmentBucket? bucket =
-            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, GameData.ActiveRealm);
-        return Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket, GameData.ActiveRealm);
+            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, realm);
+        return Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket, realm,
+            Alignment.SelfEvilPoints(realm));
     }
 
     // True when the item EXISTS in game data but the live character can't wear it
@@ -7641,15 +7656,38 @@ public sealed class AppServices
         return false;
     }
 
+    // The game refused to let us wear itemName. When it's an evil-only item with an
+    // evil-point value, we're already Outlaw or worse, and nothing else about us bars
+    // it, the value is what we're short of: our evil points are below it
+    // (GAME_MECHANICS "Item wear restrictions (ability-code flags)").
+    private void LearnFromEvilOnlyRefusal(string? itemName)
+    {
+        if (string.IsNullOrWhiteSpace(itemName)) return;
+        if (GameData.FindRowByName("Items", itemName) is not System.Text.Json.JsonElement row) return;
+        if (Game.Inventory.ItemEquipFilter.EvilOnlyValue(row) is not { } value || value <= 0) return;
+        Game.RealmType realm = GameData.ActiveRealm;
+        if (Alignment.SelfEvilPoints(realm) is not { } range
+            || range.Lo < Game.Calculators.EvilPointRange.OutlawFloor)
+            return;
+        Game.Inventory.ClassEquipProfile cls =
+            Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
+        Game.Calculators.AlignmentBucket? bucket =
+            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, realm);
+        if (!Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket, realm)) return;
+        Alignment.NoteEvilOnlyRefused(value, itemName.Trim());
+    }
+
     private bool IsEquipRestricted(string itemName)
     {
         if (GameData.FindRowByName("Items", itemName) is not System.Text.Json.JsonElement row)
             return false;
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
+        Game.RealmType realm = GameData.ActiveRealm;
         Game.Calculators.AlignmentBucket? bucket =
-            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, GameData.ActiveRealm);
-        return !Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket, GameData.ActiveRealm);
+            Game.Inventory.ItemEquipFilter.GearBucketForWord(Alignment.SelfAlignment, realm);
+        return !Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket, realm,
+            Alignment.SelfEvilPoints(realm));
     }
 
     // Read a single boolean off the active profile's

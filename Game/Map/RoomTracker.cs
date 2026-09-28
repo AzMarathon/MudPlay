@@ -93,6 +93,11 @@ public sealed class RoomTracker
     // runs. Wired by AppServices to EngineRecoveryGate.HasAttachedEngine.
     private Func<bool>? _isEngineAttached;
 
+    // Reports whether we're afraid. Fear runs us through the room's obvious exits
+    // with no command echo, so while it's on an unexpected display is read as a
+    // move to a neighbour (TryFearMove). Null in tests / before wiring → never.
+    private Func<bool>? _isFeared;
+
     // Profile the tracker is currently writing into. Set by Hydrate; cleared by
     // OnProfileClosed. When null, persistence operations are no-ops — the
     // tracker still runs in memory but doesn't touch any profile.
@@ -213,6 +218,13 @@ public sealed class RoomTracker
     {
         ArgumentNullException.ThrowIfNull(probe);
         _isEngineAttached = probe;
+    }
+
+    // Wired by AppServices to ConditionTracker.IsFeared.
+    public void SetFearProbe(Func<bool> probe)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        _isFeared = probe;
     }
 
     // Snapshot of the rolling confirmed-position history, newest-first. [0] is
@@ -1045,6 +1057,8 @@ public sealed class RoomTracker
         // and its ExitMask covers the observation → adopt the neighbour
         // and learn the observed name; (c) ambiguous / zero → escalate
         // to Suspect at the current room.
+        if (TryFearMove(current, observation, when)) return;
+
         IReadOnlyList<RoomKey> candidates = _graph.FindCandidates(observation.Name, observation.Exits);
         if (candidates.Count == 1
             && _graph.GetRoom(candidates[0]) is { } single)
@@ -1298,6 +1312,8 @@ public sealed class RoomTracker
             SetConfidence(RoomConfidence.Confirmed, when, "suspect resolved (current room re-confirmed)");
             return;
         }
+
+        if (TryFearMove(current, observation, when)) return;
 
         IReadOnlyList<RoomKey> candidates = _graph.FindCandidates(observation.Name, observation.Exits);
         if (candidates.Count == 1
@@ -1624,6 +1640,34 @@ public sealed class RoomTracker
     // Tolerates "Obvious exits:" hiding closed doors / searchable / conditional
     // exits the graph still knows about. Strict equality fired too often on real
     // game data.
+    // While afraid, the game runs us through the room's obvious exits — only those on
+    // the last `Obvious exits:` list we saw, never a hidden or text exit (GAME_MECHANICS
+    // "Fear"). So an unexpected display is most likely the room one of them leads to:
+    // when exactly one such neighbour matches it, follow there. An ambiguous or
+    // unmatched display falls through to the ordinary recovery.
+    private bool TryFearMove(Room? current, RoomObservation observation, DateTimeOffset when)
+    {
+        if (current is null || _isFeared?.Invoke() != true) return false;
+        IReadOnlySet<Direction>? seen = State.ObservedExitDirections;
+        Room? match = null;
+        Direction via = default;
+        foreach ((Direction dir, RoomExit exit) in current.Exits)
+        {
+            bool obvious = seen is { Count: > 0 }
+                ? seen.Contains(dir)
+                : exit.Hint is not (RoomExitHint.Text or RoomExitHint.Teleport
+                    or RoomExitHint.SearchableHidden or RoomExitHint.MultiActionHidden);
+            if (!obvious || _graph.GetRoom(exit.Target) is not { } next || !MatchesPredicted(next, observation))
+                continue;
+            if (match is not null && match.Key != next.Key) return false;   // two neighbours fit
+            (match, via) = (next, dir);
+        }
+        if (match is null) return false;
+        ClearPendingAndSteps();
+        SetRoom(match, RoomConfidence.Confirmed, when, $"fear-moved {via}");
+        return true;
+    }
+
     private static bool MatchesPredicted(Room target, RoomObservation observation)
     {
         if (!string.Equals(target.Name, observation.Name, StringComparison.OrdinalIgnoreCase))

@@ -1133,7 +1133,7 @@ public static class RoomTooltipBuilder
         if (spellCatalog is null) return groups;
 
         Dictionary<string, CastTeleportGroup> bySig = new();
-        foreach ((string keyword, IReadOnlyList<RoomKey> dests, bool random, int minLevel)
+        foreach ((string keyword, IReadOnlyList<RoomKey> dests, bool random, int minLevel, bool _)
                  in TBInfoCastTeleportResolver.EnumerateCastTeleports(
                         tbinfo, room.Cmd, room.Key.Map, spellCatalog))
         {

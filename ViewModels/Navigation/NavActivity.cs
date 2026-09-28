@@ -46,6 +46,8 @@ public static class NavActivity
             return ("Waiting — confused", NavActivityKind.Waiting);
         if (gates.Contains(MovementCoordinator.HeldGate))
             return ("Waiting — held", NavActivityKind.Waiting);
+        if (gates.Contains(MovementCoordinator.FearGate))
+            return ("Waiting — afraid", NavActivityKind.Waiting);
 
         // Recovery holds — resting / meditating below a rest floor.
         if (gates.Contains(MovementCoordinator.HealthRecoveryGate))

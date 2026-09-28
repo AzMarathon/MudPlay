@@ -501,14 +501,16 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         // Our own alignment (AlignmentTracker) — the same source the Equipment
         // Manager trusts. Null until a `who` has shown us; IsAlignmentEligible
         // treats that as "don't know, don't filter".
-        AlignmentBucket? alignment = ItemEquipFilter.BucketForWord(
-            AppServices.Current.Alignment.SelfAlignment);
+        Game.RealmType realm = AppServices.Current.GameData.ActiveRealm;
+        AlignmentBucket? alignment = ItemEquipFilter.GearBucketForWord(
+            AppServices.Current.Alignment.SelfAlignment, realm);
+        EvilPointRange? evilPoints = AppServices.Current.Alignment.SelfEvilPoints(realm);
 
         List<Game.Spells.SelfBlessCandidate> pool = _spellbook.Available
             .Where(s => BuffClassifier.IsAnyBuff(s)
                 && !BuffClassifier.IsWholeParty(s.Targets)
                 && _spellbook.IsObtained(s.Number)
-                && BuffClassifier.IsAlignmentEligible(s.Formula, alignment)
+                && BuffClassifier.IsAlignmentEligible(s.Formula, alignment, evilPoints)
                 && !slotted.Contains(s.Short.Trim()))
             .Select(s => new Game.Spells.SelfBlessCandidate(
                 s.Short.Trim(), s.Name, s.Number, s.ReqLevel, s.Formula.ManaCost,
@@ -525,7 +527,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             if (slotted.Contains(code)) continue;
             if (!CanUseCastItem(ci)) continue;   // level + owned-item gate
             if (_spellbook.GetFormulaByNumber(ci.SpellNumber) is not { } formula) continue;
-            if (!BuffClassifier.IsAlignmentEligible(formula, alignment)) continue;
+            if (!BuffClassifier.IsAlignmentEligible(formula, alignment, evilPoints)) continue;
             string name = string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})";
             pool.Add(new Game.Spells.SelfBlessCandidate(
                 code, name, ci.SpellNumber, ci.MinLevel, ci.ManaCost,
@@ -538,7 +540,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             .Where(s => BuffClassifier.IsAnyBuff(s)
                 && BuffClassifier.IsWholeParty(s.Targets)
                 && _spellbook.IsObtained(s.Number)
-                && BuffClassifier.IsAlignmentEligible(s.Formula, alignment)
+                && BuffClassifier.IsAlignmentEligible(s.Formula, alignment, evilPoints)
                 && !slotted.Contains(s.Short.Trim()))
             .Select(s => new Game.Spells.SelfBlessCandidate(
                 s.Short.Trim(), s.Name, s.Number, s.ReqLevel, s.Formula.ManaCost,
@@ -551,7 +553,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             if (slotted.Contains(code)) continue;
             if (!CanUseCastItem(ci)) continue;   // level + owned-item gate
             if (_spellbook.GetFormulaByNumber(ci.SpellNumber) is not { } formula) continue;
-            if (!BuffClassifier.IsAlignmentEligible(formula, alignment)) continue;
+            if (!BuffClassifier.IsAlignmentEligible(formula, alignment, evilPoints)) continue;
             string name = string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})";
             partyPool.Add(new Game.Spells.SelfBlessCandidate(
                 code, name, ci.SpellNumber, ci.MinLevel, ci.ManaCost,

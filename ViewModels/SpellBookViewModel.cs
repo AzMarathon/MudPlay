@@ -113,13 +113,26 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     }
 
     // Header hint that spells out how the Success % column is computed — the
-    // formula in variable form (the per-row tooltip fills in the actual numbers).
+    // formula in variable form (the per-row tooltip fills in the actual numbers),
+    // with the realm's cap (SpellCastChance.Cap: Stock 98, Kai 100; Paradigm 100).
     // The value it yields is the caster's chance to land the spell, so it reads
-    // "Success % = …", not "Difficulty = …".
+    // "Success % = …", not "Difficulty = …". When the caster has a spell-damage
+    // bonus it also says the Effect column's damage figures include it.
     public string SuccessFormulaText
-        => _book.Available.Count == 0
-            ? string.Empty
-            : "Success % = your Spellcasting + the spell's difficulty  (capped at 98%, 100% for Kai)";
+    {
+        get
+        {
+            if (_book.Available.Count == 0) return string.Empty;
+            bool paradigm = _isParadigmProvider?.Invoke() ?? false;
+            string text = "Success % = your Spellcasting + the spell's difficulty  "
+                + (paradigm ? "(capped at 100%)" : "(capped at 98%, 100% for Kai)");
+            int bonus = _spellDamageBonusProvider?.Invoke() ?? 0;
+            return bonus != 0
+                ? text + string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"  ·  damage includes your {bonus:+0;-0}% spell damage")
+                : text;
+        }
+    }
 
     // Footer summary: obtained-of-total + filtered count.
     public string StatusText

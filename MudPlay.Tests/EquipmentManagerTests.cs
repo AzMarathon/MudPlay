@@ -1507,7 +1507,7 @@ public sealed class EquipmentManagerTests
         mgr.ApplyBySetId("s1");
         Assert.Contains("wear evil cuirass", Wire(mgr));
 
-        mgr.NoteWearRefused();
+        Assert.Equal("evil cuirass", mgr.NoteWearRefused());
 
         Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
     }

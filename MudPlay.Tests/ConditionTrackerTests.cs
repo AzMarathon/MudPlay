@@ -116,25 +116,24 @@ public sealed class ConditionTrackerTests
     }
 
     // Fear is its own tracked condition (spell 430, terror beast): "You are
-    // afraid!" latches it, "The effects of fear wear off!" clears it. The seeded
-    // records also carry MovementPrevented (preserving the held-style halt), so a
-    // feared character reads as both — IsFeared distinguishes the cause.
+    // afraid!" latches it, "The effects of fear wear off!" clears it. It isn't a
+    // hold — fear has its own movement wait (SelfFearMovementGate) — so a feared
+    // character doesn't read as movement-prevented.
     [Fact]
     public void FearLine_SetsAndClearsIsFeared()
     {
         using Harness h = new();
         h.Messages.Messages.Add(MakeRecord("fear",
-            MessageFlags.Fear | MessageFlags.MovementPrevented,
+            MessageFlags.Fear,
             applied: "You are afraid",
             endsWith: "The effects of fear wear off"));
 
         h.Feed("You are afraid!");
         Assert.True(h.Tracker.IsFeared);
-        Assert.True(h.Tracker.IsMovementPrevented);
+        Assert.False(h.Tracker.IsMovementPrevented);
 
         h.Feed("The effects of fear wear off!");
         Assert.False(h.Tracker.IsFeared);
-        Assert.False(h.Tracker.IsMovementPrevented);
     }
 
     [Fact]

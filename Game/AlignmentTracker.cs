@@ -18,6 +18,7 @@ public sealed class AlignmentTracker : IDisposable
 {
     private readonly PlayerStats _stats;
     private readonly PlayerDatabase _players;
+    private readonly LogService? _log;
     private readonly IDisposable _darkCloudSub;
     private readonly IDisposable _evilPointsSub;
     private readonly IDisposable _minEvilPointsSub;
@@ -44,7 +45,15 @@ public sealed class AlignmentTracker : IDisposable
 
     private string? _proTitle;
 
-    // Our alignment reading changed (a `pro` EPs line) — gear gating re-evaluates.
+    // The lowest evil-only value the game refused us: our evil points are below it.
+    // Only an evil gain (a dark cloud) or an exact `pro` reading outdates it.
+    private int? _refusedEvilOnly;
+
+    // A dark cloud since the last `pro`: the exact number is now only a floor.
+    private bool _gainedSincePro;
+
+    // Our alignment reading changed (a `pro` EPs line, a refused evil-only item, or an
+    // evil gain that outdates either) — gear gating re-evaluates.
     public event Action? Refreshed;
 
     // A dark cloud landed while we were recorded Good: we're Neutral at best now, so
@@ -58,13 +67,14 @@ public sealed class AlignmentTracker : IDisposable
     // we can wear, and worth a `who` to learn exactly where we landed.
     public event Action? LeftGood;
 
-    public AlignmentTracker(MessageRouter router, PlayerStats stats, PlayerDatabase players)
+    public AlignmentTracker(MessageRouter router, PlayerStats stats, PlayerDatabase players, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(players);
         _stats = stats;
         _players = players;
+        _log = log;
 
         _darkCloudSub = router.Subscribe(
             Services.Patterns.KnownPatterns.AlignmentDarkCloud, _ => OnDarkCloud());
@@ -99,8 +109,34 @@ public sealed class AlignmentTracker : IDisposable
         if (m.Groups.Count == 0 || !TryParse(m.Groups[0], out double ep)) return;
         EvilPoints = ep;
         _proTitle = Calculators.AlignmentBands.TitleForEvilPoints(ep, RealmType.ParaMud);
+        _refusedEvilOnly = null;
+        _gainedSincePro = false;
         _leftGood = false;
         SetStale(false);
+        Refreshed?.Invoke();
+    }
+
+    // Where our evil points can be. The exact `pro` number while it's our newest
+    // reading, else the who title's band, narrowed by a refused evil-only item.
+    // Null while our alignment is unknown.
+    public Calculators.EvilPointRange? SelfEvilPoints(RealmType realm)
+    {
+        Calculators.EvilPointRange? range = _proTitle is not null && EvilPoints is { } ep
+            ? (_gainedSincePro ? new Calculators.EvilPointRange(ep, double.PositiveInfinity) : Calculators.EvilPointRange.Exact(ep))
+            : Calculators.EvilPointRange.ForTitle(SelfAlignment, realm);
+        if (range is { } r && _refusedEvilOnly is { } refused)
+            return r.Below(refused) ?? r;   // a contradicting refusal predates the title
+        return range;
+    }
+
+    // The game refused an evil-only item with this value while nothing else about us
+    // barred it: our evil points are below the value. Stock's `who` shows only the
+    // title, so this is how the client narrows a straddling band.
+    public void NoteEvilOnlyRefused(int value, string itemName)
+    {
+        if (value <= 0 || _refusedEvilOnly <= value) return;
+        _refusedEvilOnly = value;
+        _log?.Info("Alignment", $"refused {itemName} (evil only {value}) — our evil points are below {value}");
         Refreshed?.Invoke();
     }
 
@@ -114,6 +150,11 @@ public sealed class AlignmentTracker : IDisposable
     private void OnDarkCloud()
     {
         SetStale(true);
+        // We gained evil points, so a refused evil-only item may fit now.
+        bool widens = _refusedEvilOnly is not null || (_proTitle is not null && !_gainedSincePro);
+        _refusedEvilOnly = null;
+        _gainedSincePro = true;
+        if (widens) Refreshed?.Invoke();
         if (_leftGood
             || Inventory.ItemEquipFilter.BucketForWord(SelfAlignment) != Calculators.AlignmentBucket.Good)
             return;
@@ -126,6 +167,8 @@ public sealed class AlignmentTracker : IDisposable
     {
         _leftGood = false;
         _proTitle = null;
+        _refusedEvilOnly = null;
+        _gainedSincePro = false;
         EvilPoints = null;
         MinEvilPoints = null;
         SetStale(false);

@@ -1,12 +1,19 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.20**
-> - Your +Spell Damage % now counts in the Spell Book, Monster Intel and the Game Data spell calculator (Stock: damage spells; Paradigm: drain and heal too)
-> - Game Data spell calculator follows each realm's order and rounding, with a spell damage bonus input
-> - Paradigm: Spellcasting above 100 adds 1% spell damage per 50
-> - Monster Intel prices attack spells by their expected damage a round: the average, cut by the monster's magic resist and its chance to resist outright
-> - GAME_MECHANICS: spell damage compared for Stock and Paradigm, with sources
+> **Version 3.116.28**
+> - While you're afraid, navigation waits for the fear to wear off and the map follows the fear's random moves
+> - Fear no longer shows as held: the fear message seeds drop Movement prevented, so no Held chip or @held to the party
+> - Leading a party through a room teleport that's a whole-party spell (e.g. the duergar lord's) no longer relays it or re-invites — everyone moves together
+> - Spell Book's Success % legend shows the realm's cap (Paradigm 100%) and notes your spell damage bonus
+> - Evil-only gear and spells now need Outlaw or worse, and an evil-only item's number is checked against your evil points (exact on Paradigm; on Stock, learned from a refused equip)
+> - CP Allocation no longer lags or churns the disk while you add rows or change CP: the plan saves once you pause, and the Level Projection stops re-reading every room per edit
+> - GAME_MECHANICS: settled — `*Combat Off*` on both realms, Paradigm's reply to attacking a monster that's gone, Saint treated as Good, how fear traps or runs you, and which teleports split the party (from the Stock DLL)
+> - GAME_MECHANICS: Lawful Evil aggression on Paradigm, freedom fully clearing knockdown, no searching while engaged, =x at any HP
+> - Confusions that have no fumble message of their own (e.g. Stock mesmerize, blink, hypnotic hands; card-void, rainbow2) now recognize the engine's default `You look around stupidly and do nothing!` fumble in the message seeds
+> - GAME_MECHANICS: how the engine picks a confusion's fumble line, Paradigm's search-while-engaged refusal, searches always finding stashed coin, Stock statline options and item-charge countdown
+> - GAME_MECHANICS: settled — Stock max HP and regen (checked against the DLL), attack order, re-summoning trigger monsters, item charges, drop/drag wording and coins at death on both realms; which message lines Paradigm can change
+> - GAME_MECHANICS: charm rules from the Stock DLL (your level vs the monster's CharmLVL, duration, what a charmed monster does); Paradigm HP regen divisor; coins don't spread
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

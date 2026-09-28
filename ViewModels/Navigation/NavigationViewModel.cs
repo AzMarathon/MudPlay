@@ -2335,7 +2335,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 // landing rooms too. A fixed room contributes one destination; a
                 // random jump contributes every room in its range, which lands the
                 // user in the multi-destination per-room menu below.
-                foreach ((string _, IReadOnlyList<RoomKey> dests, bool _, int _) in
+                foreach ((string _, IReadOnlyList<RoomKey> dests, bool _, int _, bool _) in
                          TBInfoCastTeleportResolver.EnumerateCastTeleports(
                              _services.TBInfo, room.Cmd, room.Key.Map, _services.SpellCatalog))
                 {
@@ -3446,7 +3446,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 TBInfoTeleportResolver.EnumerateTeleportDestinations(_services.TBInfo, room.Cmd).GetEnumerator();
             if (literal.MoveNext()) { set.Add(room.Key); continue; }
 
-            using IEnumerator<(string, IReadOnlyList<RoomKey>, bool, int)> cast =
+            using IEnumerator<(string, IReadOnlyList<RoomKey>, bool, int, bool)> cast =
                 TBInfoCastTeleportResolver.EnumerateCastTeleports(
                     _services.TBInfo, room.Cmd, room.Key.Map, _services.SpellCatalog).GetEnumerator();
             if (cast.MoveNext()) set.Add(room.Key);

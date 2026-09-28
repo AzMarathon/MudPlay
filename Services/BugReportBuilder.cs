@@ -155,7 +155,9 @@ public static class BugReportBuilder
         Kv(sb, "Our alignment", $"{svc.Alignment.SelfAlignment ?? "(unknown)"}"
             + (svc.Alignment.EvilPoints is { } ep ? $" · EPs {ep:0.##}" : "")
             + (svc.Alignment.MinEvilPoints is { } floor ? $" · min EPs {floor:0.##}" : "")
-            + (svc.Alignment.IsStale ? " · stale (dark cloud since the last check)" : ""));
+            + (svc.Alignment.IsStale ? " · stale (dark cloud since the last check)" : "")
+            + (svc.Alignment.SelfEvilPoints(svc.GameData.ActiveRealm) is { } range
+                ? $" · evil points {range} (evil-only gear gate)" : ""));
         Kv(sb, "BBS realm", svc.ResolveActiveRealm() is { } bbsRealm
             ? $"{bbsRealm.Realm.Name} (game data {bbsRealm.Realm.ActiveGameDataSet ?? "global default"}; "
               + $"{bbsRealm.Bbs.Realms.Count} realm(s) on the BBS)"

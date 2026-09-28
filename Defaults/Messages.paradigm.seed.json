@@ -2016,8 +2016,8 @@
   {
     "Id": "7f7e0da5e5686114",
     "Name": "fear",
-    "Flags": "Fear, MovementPrevented",
-    "RawFlagsHex": 24,
+    "Flags": "Fear",
+    "RawFlagsHex": 8,
     "CasterMessage": "You cast {spellname} on {target}, healing {damage} damage!",
     "TargetMessage": "{source} casts {spellname} on you!",
     "WitnessMessage": "{source} casts {spellname} on {target}!",
@@ -17587,7 +17587,8 @@
         "Table": "Spells",
         "Number": 502
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You look around stupidly and do nothing!"
   },
   {
     "Id": "7616030cf06238c7",
@@ -18540,7 +18541,8 @@
         "Table": "Spells",
         "Number": 976
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You look around stupidly and do nothing!"
   },
   {
     "Id": "e6fb2aadd2babf69",
@@ -18864,7 +18866,8 @@
         "Table": "Spells",
         "Number": 1163
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You look around stupidly and do nothing!"
   },
   {
     "Id": "2fd44ef3c5b95af5",

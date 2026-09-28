@@ -172,11 +172,12 @@ public static class EquipmentSlotMap
     // Each candidate then passes through ItemEquipFilter, so a Mystic-barred
     // longsword or an evil-only blade never reaches the wrong character. A
     // non-positive level, an unknown class profile, or a null alignment bucket
-    // disables that dimension's filter. Returns empty when no Items table is
-    // loaded.
+    // disables that dimension's filter; evilPoints adds the evil-only value gate.
+    // Returns empty when no Items table is loaded.
     public static IReadOnlyList<string> GetItemsForSlot(
         GameDataCache cache, EquipmentSlot slot,
-        int level, ClassEquipProfile classProfile, AlignmentBucket? alignment)
+        int level, ClassEquipProfile classProfile, AlignmentBucket? alignment,
+        EvilPointRange? evilPoints = null)
     {
         ArgumentNullException.ThrowIfNull(cache);
         JsonDocument? doc = cache.GetRawTable("Items");
@@ -187,7 +188,7 @@ public static class EquipmentSlotMap
         {
             string? name = GetString(row, "Name");
             if (string.IsNullOrEmpty(name)) continue;
-            if (matches(row) && ItemEquipFilter.CanEquip(row, level, classProfile, alignment, cache.ActiveRealm))
+            if (matches(row) && ItemEquipFilter.CanEquip(row, level, classProfile, alignment, cache.ActiveRealm, evilPoints))
                 names.Add(name);
         }
         return names.ToList();

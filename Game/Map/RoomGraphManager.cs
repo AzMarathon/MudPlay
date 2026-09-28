@@ -905,7 +905,8 @@ public sealed class RoomGraphManager
             foreach ((Direction _, RoomExit ex) in room.Exits) existingTargets.Add(ex.Target);
 
             if (TryFirstRoutableTeleport(room, existingTargets,
-                    out RoomKey dest, out string keyword, out int minLevel, out bool isGateway))
+                    out RoomKey dest, out string keyword, out int minLevel, out bool isGateway,
+                    out bool wholeParty))
             {
                 RoomExit tele = new(
                     dest,
@@ -913,7 +914,8 @@ public sealed class RoomGraphManager
                     RawHint: "CMD teleport",
                     TextCommands: new[] { keyword },
                     MinLevel: minLevel,
-                    GatewayTeleport: isGateway);
+                    GatewayTeleport: isGateway,
+                    MovesWholeParty: wholeParty);
                 var rebuilt = new Dictionary<Direction, RoomExit>(room.Exits)
                 {
                     [Direction.Teleport] = tele
@@ -1075,12 +1077,13 @@ public sealed class RoomGraphManager
     // (which need the spell catalog). Returns false when the room has no routable
     // single-dest teleport to a new room.
     private bool TryFirstRoutableTeleport(Room room, HashSet<RoomKey> existingTargets,
-        out RoomKey dest, out string keyword, out int minLevel, out bool isGateway)
+        out RoomKey dest, out string keyword, out int minLevel, out bool isGateway, out bool wholeParty)
     {
         dest = default;
         keyword = string.Empty;
         minLevel = 0;
         isGateway = false;
+        wholeParty = false;
 
         foreach ((string kw, RoomKey d, int lvl) in
                  TBInfoTeleportResolver.EnumerateTeleports(_tbinfo!, room.Cmd))
@@ -1112,13 +1115,19 @@ public sealed class RoomGraphManager
             Dictionary<string, CastKeywordRoutability> byKeyword =
                 new(StringComparer.OrdinalIgnoreCase);
             List<string> keywordOrder = new();
-            foreach ((string kw, IReadOnlyList<RoomKey> dests, bool random, int lvl) in
+            foreach ((string kw, IReadOnlyList<RoomKey> dests, bool random, int lvl, bool party) in
                      TBInfoCastTeleportResolver.EnumerateCastTeleports(
                          _tbinfo!, room.Cmd, room.Key.Map, _spellCatalog))
             {
                 bool branchFixed = !random && dests.Count == 1;
-                if (!byKeyword.TryGetValue(kw, out CastKeywordRoutability acc))
+                bool seen = byKeyword.TryGetValue(kw, out CastKeywordRoutability acc);
+                if (!seen)
+                {
                     keywordOrder.Add(kw);
+                    acc.WholeParty = true;
+                }
+                // Party-safe only when every branch the keyword can fire moves the party.
+                acc.WholeParty &= party;
                 if (branchFixed)
                 {
                     if (acc.FixedDest is null) { acc.FixedDest = dests[0]; acc.MinLevel = lvl; }
@@ -1139,6 +1148,7 @@ public sealed class RoomGraphManager
                     if (gateway != wantGateway) continue;
                     if (existingTargets.Contains(d)) continue;
                     dest = d; keyword = kw; minLevel = ck.MinLevel; isGateway = gateway;
+                    wholeParty = ck.WholeParty;
                     return true;
                 }
             }
@@ -1156,6 +1166,7 @@ public sealed class RoomGraphManager
         public int MinLevel;
         public bool SawNonFixed;
         public bool SawDisagree;
+        public bool WholeParty;
     }
 
     // Index every sea-captain dock's `secure passage to <place>` sailings off its

@@ -170,6 +170,12 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     // predicate stays a cheap field compare rather than re-resolving each call.
     private ClassEquipProfile _activeClass = ClassEquipProfile.Unknown;
     private AlignmentBucket? _activeAlignment;
+    // The live character's alignment and evil points at open. The evil-only value
+    // gate only applies while the alignment filter still shows the live character;
+    // picking another alignment is a what-if with no evil-point reading.
+    private readonly AlignmentBucket? _liveAlignment;
+    private readonly EvilPointRange? _liveEvilPoints;
+    private EvilPointRange? _activeEvilPoints;
     private bool _activeCharFilter;
     private EquipmentSlot? _activeSlot;
     // True when the slot filter is the "(All slots)" catch-all — keep every
@@ -309,13 +315,15 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
 
     public ItemFinderViewModel(
         GameDataCache gameData, PlayerStats stats, InventoryManager inventory,
-        AlignmentBucket? alignment)
+        AlignmentBucket? alignment, EvilPointRange? evilPoints = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(inventory);
         _gameData = gameData;
         _inventory = inventory;
+        _liveAlignment = alignment;
+        _liveEvilPoints = evilPoints;
         _mdbBuilder = new ItemMdbViewBuilder(gameData, stats.Charm);
         // Snapshot the live character's swing inputs once at open — the finder is a
         // static browse aid, so the Swings column reflects the character as they are
@@ -565,6 +573,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
             "Evil" => AlignmentBucket.Evil,
             _ => null,
         };
+        _activeEvilPoints = _activeAlignment is not null && _activeAlignment == _liveAlignment ? _liveEvilPoints : null;
         _activeCharFilter = _activeClass.ClassNumber > 0 || UsableLevel > 0 || _activeAlignment is not null;
 
         _activeArmourOnly = SelectedSlot == AllSlots;
@@ -655,7 +664,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         if (BackstabOnly && !e.CanBackstab) return false;
 
         if (_activeCharFilter &&
-            !ItemEquipFilter.CanEquip(e.Row, UsableLevel, _activeClass, _activeAlignment, _gameData.ActiveRealm))
+            !ItemEquipFilter.CanEquip(e.Row, UsableLevel, _activeClass, _activeAlignment, _gameData.ActiveRealm, _activeEvilPoints))
             return false;
 
         if (MinHp > 0 && e.Hp < MinHp) return false;
@@ -872,10 +881,10 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
                     [filter.Score, e => e.BsSideMinScore, e => e.BsSideMaxScore, e => e.BsScoreAvg],
                     picks => model.BackstabOfPicks(PickedEntries(picks), HeldWeapon(filled, current)) is { } r ? end(r) : 0,
                     candidates, remaining, filled, current, UsableLevel, _activeClass, _activeAlignment,
-                    weightBudget: weightBudget, realm: _gameData.ActiveRealm)
+                    weightBudget: weightBudget, realm: _gameData.ActiveRealm, evilPoints: _activeEvilPoints)
                 : TrialGearFinder.FindBest(
                     candidates, remaining, filled, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
-                    weightBudget: weightBudget, realm: _gameData.ActiveRealm);
+                    weightBudget: weightBudget, realm: _gameData.ActiveRealm, evilPoints: _activeEvilPoints);
             foreach ((EquipmentSlot slot, string name) in best)
             {
                 TrialSlots.First(r => r.Slot == slot).SetItemQuiet(name);

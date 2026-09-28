@@ -138,7 +138,9 @@ internal static class SpecialExitDispatch
                 return SpecialExitSend.Failed;
             }
 
-            bool leaderRelay = isLeaderWithFollowers?.Invoke() == true;
+            // A spell that teleports the whole party moves the followers with us and
+            // keeps the party formed, so there's nothing to relay or reform.
+            bool leaderRelay = !exit.MovesWholeParty && isLeaderWithFollowers?.Invoke() == true;
             if (leaderRelay)
             {
                 writeAux(Encoding.Latin1.GetBytes($".@party {keyword}\r"), $"teleport party-relay '.@party {keyword}'");

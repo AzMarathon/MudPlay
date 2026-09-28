@@ -41,7 +41,9 @@ public static class BuffClassifier
     // pre-conversion JsonElement row, before a SpellFormulaInput exists to hand
     // it). Unknown alignment (no `who` observation of ourselves yet) never
     // excludes — the caller doesn't get to guess wrong, it just doesn't filter.
-    public static bool IsAlignmentEligible(in SpellFormulaInput formula, AlignmentBucket? alignment)
+    // evilPoints, when known, adds evil-only's value gate (Outlaw at least).
+    public static bool IsAlignmentEligible(in SpellFormulaInput formula, AlignmentBucket? alignment,
+        EvilPointRange? evilPoints = null)
     {
         if (alignment is not { } a) return true;
         foreach (SpellAbility ability in formula.Abilities)
@@ -49,7 +51,9 @@ public static class BuffClassifier
             switch (ability.Code)
             {
                 case 97: if (a != AlignmentBucket.Good) return false; break;
-                case 98: if (a != AlignmentBucket.Evil) return false; break;
+                case 98:
+                    if (a != AlignmentBucket.Evil || evilPoints?.MeetsEvilOnly(ability.Value) == false) return false;
+                    break;
                 case 112: if (a != AlignmentBucket.Neutral) return false; break;
                 case 110: if (a == AlignmentBucket.Good) return false; break;
                 case 111: if (a == AlignmentBucket.Evil) return false; break;

@@ -1241,21 +1241,23 @@ public sealed class EquipmentManager
 
     // The game refused an armor wear ("You may not wear that item!"). Attribute
     // it to the oldest unresolved armor attempt (weapon attempts excluded) and
-    // block that slot — server-confirmed, sticky until the user edits it.
-    public void NoteWearRefused() => BlockOldestPending(weapon: false);
+    // block that slot — server-confirmed, sticky until the user edits it. Returns
+    // the refused item's name, or null when no attempt of ours was pending.
+    public string? NoteWearRefused() => BlockOldestPending(weapon: false);
 
     // The game refused a weapon wield ("You may not use that weapon." — the
     // weapon EP-zap). Attribute it to the oldest unresolved weapon attempt.
-    public void NoteWeaponRefused() => BlockOldestPending(weapon: true);
+    public string? NoteWeaponRefused() => BlockOldestPending(weapon: true);
 
-    private void BlockOldestPending(bool weapon)
+    private string? BlockOldestPending(bool weapon)
     {
         ExpirePending();
         int idx = _pending.FindIndex(p => (p.Slot == EquipmentSlot.Weapon) == weapon);
-        if (idx < 0) return;
+        if (idx < 0) return null;
         PendingEquip p = _pending[idx];
         _pending.RemoveAt(idx);
         SetBlock((p.SetId, p.Slot), p.ItemName, serverConfirmed: true, announce: true);
+        return p.ItemName;
     }
 
     // ----- gear-set send -------------------------------------------------

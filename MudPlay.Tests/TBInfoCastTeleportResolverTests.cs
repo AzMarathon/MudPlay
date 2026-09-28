@@ -236,4 +236,27 @@ public sealed class TBInfoCastTeleportResolverTests : IDisposable
         };
         Assert.False(TBInfoCastTeleportResolver.IsRandomTeleport(spell));
     }
+
+    // A teleport spell aimed at the whole party (Targets 13, "Full Party Area") moves
+    // the party together — the duergar lord's "duergar teleport" — while any other
+    // teleport spell leaves the followers behind.
+    [Fact]
+    public void FullPartyAreaSpell_IsFlaggedWholeParty()
+    {
+        const string tbinfo = """
+            [ { "Number": 70, "LinkTo": 0, "Action": "transport:cast 582\nhop:cast 583\n", "Called From": "Room 3/1" } ]
+            """;
+        const string spells = """
+            [ { "Number": 582, "Name": "duergar teleport", "Short": "duerg", "Targets": 13,
+                "Abil-0": 141, "AbilVal-0": 6, "Abil-1": 140, "AbilVal-1": 1398 },
+              { "Number": 583, "Name": "solo hop", "Short": "hop", "Targets": 1,
+                "Abil-0": 141, "AbilVal-0": 6, "Abil-1": 140, "AbilVal-1": 1399 } ]
+            """;
+        (TBInfoStore store, KnownSpellCatalog catalog) = NewSet(tbinfo, spells);
+
+        var results = TBInfoCastTeleportResolver.EnumerateCastTeleports(store, 70, sourceMap: 3, catalog).ToList();
+
+        Assert.True(results.Single(r => r.Keyword == "transport").WholeParty);
+        Assert.False(results.Single(r => r.Keyword == "hop").WholeParty);
+    }
 }
