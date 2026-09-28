@@ -45,6 +45,18 @@ public sealed class EngineSendGate
     private byte[]? _lastClientCommand;
     private Action<byte[]>? _replaySender;
 
+    // Sneak keeping (Game.Stealth.SneakGuard): a command that can wait is taken for
+    // later while a sneak is being kept, and every sent command is reported so a
+    // sneak-breaking one marks the sneak broken. Null until AppServices wires them.
+    private Func<string, bool>? _takeForLater;
+    private Action<string>? _sent;
+
+    public void SetSneakHooks(Func<string, bool> takeForLater, Action<string> sent)
+    {
+        _takeForLater = takeForLater;
+        _sent = sent;
+    }
+
     // True while any hold is active — engine wire-sends drop on the floor.
     public bool IsLocked => _holds.Count > 0;
 
@@ -77,7 +89,12 @@ public sealed class EngineSendGate
         return bytes =>
         {
             if (IsLocked) return;
+            string? command = _takeForLater is null && _sent is null
+                ? null
+                : System.Text.Encoding.Latin1.GetString(bytes).TrimEnd('\r', '\n');
+            if (command is not null && _takeForLater?.Invoke(command) == true) return;
             rawSender(bytes);
+            if (command is not null) _sent?.Invoke(command);
             // Remember the just-sent client command so a confusion fumble can re-fire
             // it. The replay goes back through THIS sender (they all funnel to the same
             // SendUserInput), so re-firing lands on the wire exactly as the original did.

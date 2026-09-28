@@ -1,0 +1,74 @@
+using System;
+using System.Collections.Generic;
+
+namespace MudPlay.Game.Stealth;
+
+// Which of the client's own commands end a sneak, by verb (GAME_MECHANICS
+// "Sneaking — commands, equip order, and the sneak state machine" → "What ends a
+// sneak"). Attacks and spell casts are left to the combat engine and the cast path,
+// which already reset stealth; `sn` re-sneaks rather than ends it.
+public static class SneakBreakingCommands
+{
+    private static readonly HashSet<string> BreakingVerbs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "wear", "eq", "equip", "ready", "rem", "remove",
+        "sea", "search", "open", "close", "lock", "pick", "picklock", "bash", "disarm",
+        "give", "rob", "aid", "drag", "move", "follow",
+        "buy", "sell", "dep", "deposit", "with", "withdraw", "stock", "unstock", "markup",
+        "invite", "share", "say", "yell",
+        "rest", "med", "medi", "meditate", "quit",
+    };
+
+    private static readonly HashSet<string> RestVerbs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "rest", "med", "medi", "meditate",
+    };
+
+    // Say-channel relays that carry a walk step or a cry for help. They go out even
+    // while a sneak is being kept: a step relay belongs to a step that ends the sneak
+    // anyway (teleport / boat keyword, trap, token use), and @panic asks for a heal.
+    private static readonly string[] MustSendRelays = { ".@party ", ".@trap ", ".@panic" };
+
+    // True when sending this command ends a sneak. A ShadowRest character's rest
+    // keeps it (Paradigm; GAME_MECHANICS "ShadowRest").
+    public static bool EndsSneak(string command, bool shadowRest = false)
+    {
+        string c = command.Trim();
+        if (c.Length == 0) return false;
+        if (IsSayForm(c)) return true;
+        string verb = FirstWord(c);
+        if (shadowRest && RestVerbs.Contains(verb)) return false;
+        return BreakingVerbs.Contains(verb);
+    }
+
+    // True when the command can simply wait while a sneak is being kept, and go out
+    // unchanged later: party invites and say-channel chatter (level-up, ailment and
+    // hazard calls, @-command replies), but not the relays a walk step or a cry for
+    // help needs.
+    public static bool CanWait(string command)
+    {
+        string c = command.Trim();
+        if (c.Length == 0) return false;
+        if (IsSayForm(c))
+        {
+            foreach (string relay in MustSendRelays)
+                if (c.StartsWith(relay, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(c, relay.Trim(), StringComparison.OrdinalIgnoreCase))
+                    return false;
+            return true;
+        }
+        string verb = FirstWord(c);
+        return verb.Equals("invite", StringComparison.OrdinalIgnoreCase)
+            || verb.Equals("yell", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // `.msg` (room say), `>name msg` (directed say), `"msg` (yell), `say msg`.
+    private static bool IsSayForm(string c) =>
+        c[0] is '.' or '>' or '"' || c.StartsWith("say ", StringComparison.OrdinalIgnoreCase);
+
+    private static string FirstWord(string c)
+    {
+        int space = c.IndexOf(' ');
+        return space < 0 ? c : c[..space];
+    }
+}

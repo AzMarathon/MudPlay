@@ -1,0 +1,142 @@
+using System.Collections.Generic;
+using System.Linq;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Stealth;
+using MudPlay.Models.Profile;
+using Xunit;
+
+namespace MudPlay.Tests;
+
+// Sneak keeping (user, 2026-09-28): a room we fight in holds sneak-ending automation
+// until the backstab fires; sneaking past hostiles we won't fight holds it until a
+// room without them; our sneaked move in flight holds it until it lands. Plain
+// commands queue and go out once the hold lifts; gear swaps re-run.
+public sealed class SneakGuardTests
+{
+    private sealed class World
+    {
+        public bool AutoSneak = true, BackstabOwed, MoveInFlight, Hostile, Fighting, InCombat, Stealthed = true;
+        public readonly List<string> Sent = new();
+        public readonly SneakGuard Guard;
+
+        public World()
+        {
+            Guard = new SneakGuard(() => AutoSneak, () => BackstabOwed, () => MoveInFlight,
+                () => Hostile, () => Fighting, () => InCombat, () => Stealthed);
+            Guard.SetWireSender(Sent.Add);
+        }
+    }
+
+    [Fact]
+    public void BackstabOwed_HoldsUntilItFires()
+    {
+        World w = new() { BackstabOwed = true, Hostile = true, Fighting = true };
+        Assert.Equal(SneakHold.UntilBackstab, w.Guard.Current);
+        w.BackstabOwed = false;
+        Assert.Equal(SneakHold.None, w.Guard.Current);   // fighting now; nothing to keep
+    }
+
+    [Fact]
+    public void SneakingPastHostiles_HoldsUntilARoomWithoutThem()
+    {
+        World w = new() { Hostile = true };
+        Assert.Equal(SneakHold.UntilClearRoom, w.Guard.Current);
+        w.Hostile = false;
+        Assert.Equal(SneakHold.None, w.Guard.Current);
+    }
+
+    // A command sent while our sneaked move is in flight lands in the room we're
+    // entering (report paradigm-20260927-121050).
+    [Fact]
+    public void MoveInFlight_Holds()
+    {
+        World w = new() { MoveInFlight = true };
+        Assert.Equal(SneakHold.MoveInFlight, w.Guard.Current);
+    }
+
+    [Fact]
+    public void NothingHeld_WhenTheSneakIsAlreadyGone_OrWeAreFighting()
+    {
+        Assert.Equal(SneakHold.None, new World { Hostile = true, Stealthed = false }.Guard.Current);
+        Assert.Equal(SneakHold.None, new World { Hostile = true, InCombat = true }.Guard.Current);
+        Assert.Equal(SneakHold.None, new World { Hostile = true, AutoSneak = false }.Guard.Current);
+    }
+
+    [Fact]
+    public void QueuedCommands_GoOutWhenTheHoldLifts()
+    {
+        World w = new() { Hostile = true };
+        w.Guard.Poll();
+        Assert.True(w.Guard.TakeIfHeld("invite Raijin"));
+        Assert.Empty(w.Sent);
+
+        int released = 0;
+        w.Guard.Released += () => released++;
+        w.Hostile = false;
+        w.Guard.Poll();
+
+        Assert.Equal(new[] { "invite Raijin" }, w.Sent);
+        Assert.Equal(1, released);
+        Assert.False(w.Guard.TakeIfHeld("invite Suijin"));   // nothing held: send now
+    }
+
+    [Theory]
+    [InlineData("wear plate mail", true)]
+    [InlineData("rem torch", true)]
+    [InlineData("sea", true)]
+    [InlineData("open north", true)]
+    [InlineData(".@poisoned", true)]
+    [InlineData(">Raijin {ok}", true)]
+    [InlineData("rest", true)]
+    [InlineData("get sword", false)]
+    [InlineData("use torch", false)]
+    [InlineData("/Raijin {ok}", false)]
+    [InlineData("bg hello", false)]
+    [InlineData("n", false)]
+    public void EndsSneak_FollowsTheEngineList(string command, bool ends) =>
+        Assert.Equal(ends, SneakBreakingCommands.EndsSneak(command));
+
+    [Fact]
+    public void ShadowRest_KeepsTheSneakThroughARest()
+    {
+        Assert.False(SneakBreakingCommands.EndsSneak("rest", shadowRest: true));
+        Assert.True(SneakBreakingCommands.EndsSneak("wear plate mail", shadowRest: true));
+    }
+
+    [Theory]
+    [InlineData("invite Raijin", true)]
+    [InlineData(".@poisoned", true)]
+    [InlineData(".Level 20!", true)]
+    [InlineData(".@party vortex", false)]   // a teleport step's relay goes with the step
+    [InlineData(".@trap north", false)]
+    [InlineData(".@panic", false)]
+    [InlineData("wear plate mail", false)]  // gear re-derives; it isn't replayed
+    public void CanWait_OnlyPlainCommands(string command, bool canWait) =>
+        Assert.Equal(canWait, SneakBreakingCommands.CanWait(command));
+
+    [Fact]
+    public void Equipment_HeldSwap_ReRunsWhenReleased()
+    {
+        bool held = true;
+        var snapshot = InventorySnapshot.Empty with
+        {
+            CarriedItems = new[] { "silver dagger" },
+            LastUpdated = System.DateTimeOffset.UtcNow,
+        };
+        var mgr = new EquipmentManager(
+            readEquipment: () => new EquipmentSettings(),
+            getSnapshot: () => snapshot,
+            readCombat: () => new CombatSettings(),
+            writeCombat: _ => { });
+        mgr.SetGearHold(() => held);
+
+        mgr.SwapWeapon("silver dagger", null);
+        Assert.Empty(mgr.LastSentForTests);
+        Assert.Contains("weapon", mgr.HeldGearKinds);
+
+        held = false;
+        mgr.RunHeldGear();
+        Assert.Equal(new[] { "eq silver dagger" },
+            mgr.LastSentForTests.Select(b => System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')));
+    }
+}

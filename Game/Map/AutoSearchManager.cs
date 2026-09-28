@@ -66,6 +66,10 @@ public sealed class AutoSearchManager : IDisposable
     private readonly Func<bool> _isCombatEngaging;
     private readonly Func<bool> _hasGetEngineArmed;
     private readonly Func<bool> _hasQueuedMoves;
+    // SneakGuard.Holds — a search ends a sneak (GAME_MECHANICS "What ends a sneak").
+    private Func<bool>? _sneakKept;
+
+    public void SetSneakKeptProbe(Func<bool> sneakKept) => _sneakKept = sneakKept;
     private readonly MovementCoordinator? _coordinator;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
@@ -277,6 +281,18 @@ public sealed class AutoSearchManager : IDisposable
             _deferredForCombat = false;
             _log?.Debug(LogCategory, "owed search skipped — moves still queued (transit room)");
             ReleaseGate("moves queued — skip transit-room search");
+            return;
+        }
+
+        // Keeping a sneak here (sneaking past hostiles, or a backstab still owed): a
+        // search would end it, so this room goes unsearched; a room we fight in gets
+        // its post-combat search once it's cleared.
+        if (_sneakKept?.Invoke() == true)
+        {
+            _owedFor = null;
+            _deferredForCombat = false;
+            _log?.Debug(LogCategory, "room search skipped — it would end the sneak we're keeping");
+            ReleaseGate("keeping the sneak");
             return;
         }
 

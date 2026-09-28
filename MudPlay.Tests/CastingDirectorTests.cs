@@ -2350,11 +2350,12 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void Buff_SneakMaintenanceDefer_WhileResting_StillCasts()
+    public void Buff_SneakKeeping_HoldsEvenWhileResting()
     {
-        // The defer is skipped while resting: a stationary recovery has already
-        // stopped, so a due buff/cure there should fire rather than wait for a
-        // room that never comes (you're not walking).
+        // The director no longer skips the hold while resting: the gate (SneakGuard)
+        // only holds while a sneak is actually kept, which a normal rest has already
+        // ended — but a ShadowRest rest keeps it, beside hostiles, and a cast there
+        // would give the character away.
         using CureHarness h = new();
         h.DeferMaintenanceForStealth = true;
         h.Spells.BlessSlots[1] = "bless";
@@ -2366,16 +2367,15 @@ public sealed class CastingDirectorTests
 
         h.Director.Evaluate();
 
-        Assert.Equal(new[] { "bless" }, h.CastsSent);
+        Assert.Empty(h.CastsSent);
     }
 
     [Fact]
     public void Cure_SneakMaintenanceDefer_Held()
     {
         // Cures defer too (user chose max sneak preservation): a poison cure is
-        // held while sneak-walking an occupied room. The emergency survival tier
-        // (major heal / flee / hangup) is never in the deferred set, so a low-HP
-        // character still heals.
+        // held while sneak-walking an occupied room. Heals are held the same way
+        // (user, 2026-09-28); the guard stands down once we're in a fight.
         using CureHarness h = new();
         h.DeferMaintenanceForStealth = true;
         h.State.Position = PlayerPosition.Standing;

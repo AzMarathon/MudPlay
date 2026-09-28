@@ -340,6 +340,21 @@ public sealed class StealthManager : IDisposable
         }
     }
 
+    // The client sent a command that ends a sneak (GAME_MECHANICS "What ends a sneak"):
+    // a gear swap, a search, a door or trap step, a say. The server prints nothing we
+    // could latch, so without this the FSM reads stale-Sneaking and the next move goes
+    // out unsneaked. Drop to Idle; the next move's ready check re-sneaks. Not in place:
+    // a gear swap is a burst of commands, and an `sn` mid-burst would be broken again.
+    public void NoteSneakBroken(string what)
+    {
+        if (_stateValue is not (StealthState.Sneaking or StealthState.AttemptingSneak)) return;
+        _log?.Info(LogCategory, $"{what} ended the sneak — re-sneaking before the next move");
+        Transition(StealthState.Idle);
+        _state.IsSneaking = false;
+        _sneakConfirmedThisRoom = false;
+        _awaitingArrivalConfirm = false;
+    }
+
     // Called after an automated out-of-combat cast fires (CastFired). A cast breaks
     // both Sneak and Hide (GAME_MECHANICS) but the server emits no line we can latch,
     // so the FSM would otherwise read stale-Sneaking and the next auto-sneak attempt
@@ -391,6 +406,28 @@ public sealed class StealthManager : IDisposable
     // is already established or in flight, or we're in combat. The settled-state
     // guard prevents a double-send when the reactive room-change path and the
     // pre-move path both fire for the same move.
+    // A ShadowRest character (Paradigm) sneaks before it rests, so the rest keeps the
+    // stealth (user, 2026-09-28: "send sneak then rest"). True while that sneak is
+    // still settling — hold the rest a moment; false to rest now: already stealthed,
+    // in combat, an NPC here (a sneak won't take), or two tries already failed. Not
+    // tied to the auto-sneak toggle: the user opted into ShadowRest itself.
+    public bool SneakBeforeRest()
+    {
+        if (IsStealthed) { _restSneakTries = 0; return false; }
+        if (_stateValue == StealthState.AttemptingSneak) return true;
+        if (_state.InCombat || _isSneakBlockedByRoom?.Invoke() == true) return false;
+        if (_stateValue is not (StealthState.Idle or StealthState.Failed)) return false;
+        if (_restSneakTries >= 2) return false;
+        _restSneakTries++;
+        _log?.Info(LogCategory, "sneaking before the rest (ShadowRest)");
+        _sneakRetries = 0;
+        Transition(StealthState.AttemptingSneak);
+        Send("sn");
+        return true;
+    }
+
+    private int _restSneakTries;
+
     private bool TryBeginAutoSneak(string reason)
     {
         if (_isAutoSneakEnabled?.Invoke() != true) return false;

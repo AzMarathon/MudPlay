@@ -372,6 +372,7 @@ public sealed class AutoLightProvisioner
     {
         string? spell = _roomLightSpellName();
         if (string.IsNullOrWhiteSpace(spell)) return;
+        if (SneakKept($"room-light spell '{spell.Trim()}'")) return;
         _log?.Info(LogCategory, $"casting room-light spell '{spell.Trim()}' — {reason}");
         _castRoomLightSpell(spell.Trim());
     }
@@ -391,6 +392,7 @@ public sealed class AutoLightProvisioner
         if (!_isEnabled()) return;
         if (_autoReadiedName is not { } lit) return;
         if (LightModel.IlluGapToSee(_wornIllu(), room.Light) != 0) return;
+        if (SneakKept($"putting away {lit}")) return;
 
         _wire.Send($"rem {lit}");
         _autoReadiedName = null;
@@ -453,6 +455,19 @@ public sealed class AutoLightProvisioner
             _reorderRequestedFor = null;
     }
 
+    // SneakGuard.Holds — `rem` and a cast end a sneak (GAME_MECHANICS "What ends a
+    // sneak"); `use` doesn't. Held light changes simply re-evaluate on the next room.
+    private Func<bool>? _sneakKept;
+
+    public void SetSneakKeptProbe(Func<bool> sneakKept) => _sneakKept = sneakKept;
+
+    private bool SneakKept(string what)
+    {
+        if (_sneakKept?.Invoke() != true) return false;
+        _log?.Debug(LogCategory, $"{what} held — it would end the sneak we're keeping");
+        return true;
+    }
+
     private void ReadyLight(string name, string? readiedName, DateTimeOffset snapTime, string reason)
     {
         _readyJustSentUse = false;
@@ -467,7 +482,10 @@ public sealed class AutoLightProvisioner
         // one (MajorMUD readies with `use`, unreadies with `rem`).
         if (readiedName is not null
             && !string.Equals(readiedName, name, StringComparison.OrdinalIgnoreCase))
+        {
+            if (SneakKept($"swapping {readiedName} for {name}")) return;
             _wire.Send($"rem {readiedName}");
+        }
 
         _wire.Send($"use {name}");
         _readyJustSentUse = true;
