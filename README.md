@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.3**
+> **Version 3.116.4**
 > - The title bar shows the BBS and realm (BBS:realm) of the loaded character
 > - File → Recent profiles show each character's BBS and realm
 > - Your alignment comes from your row in the realm's player list again (a `who` updates it), so Good/Evil-only gear and spells gate without a `who` every session
+> - Gear sets that disagree with your recorded alignment get an automatic `who` to verify it, re-checked through the session as alignment moves
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

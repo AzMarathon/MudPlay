@@ -1120,6 +1120,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Combat-gated-entry handler sends `break` on refusal — needs the same
         // gate-wrapped wire path.
         _combatEntryRefusalHandler.SetWireSender(engineSend);
+        AppServices.Current.AlignmentCheck.SetWireSender(engineSend);
 
         // Auto-invite on reconnect needs a wire-sender to send
         // "invite <name>" when a disconnected member returns within the

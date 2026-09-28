@@ -1544,6 +1544,9 @@ public sealed class AppServices
     // (AutoEquip).
     public Game.Inventory.EquipmentManager Equipment { get; private set; } = null!;
 
+    // Sends `who` to verify our alignment when a gear set disagrees with it.
+    public Game.Inventory.AlignmentGearCheck AlignmentCheck { get; private set; } = null!;
+
     // Location-based auto-equip (Settings → Other). Wears a rule's item while
     // we're inside its matched map area (room number(s) and/or room-name
     // substring) and reverts on exit; driven off RoomTracker transitions so every
@@ -1561,6 +1564,7 @@ public sealed class AppServices
     // (wear-confirmed / armor-refused / weapon-refused). Held for the app lifetime
     // — AppServices is the singleton, so these live as long as the router.
     private IDisposable? _equipWearOkSub;
+    private IDisposable? _alignmentShiftSub;
     private IDisposable? _equipWearFailSub;
     private IDisposable? _equipWieldFailSub;
 
@@ -5229,6 +5233,22 @@ public sealed class AppServices
                 && string.Equals(self, givenName, StringComparison.OrdinalIgnoreCase))
                 Equipment.ReevaluateAllBlocks();
         };
+
+        // A gear set that disagrees with our recorded alignment gets a `who` to
+        // verify it — alignment moves during play, so this re-checks whenever the
+        // answer may have changed (Paradigm also on a timer, since it drifts toward
+        // good). Wire-sender bound by MainWindowVM.
+        AlignmentCheck = new Game.Inventory.AlignmentGearCheck(
+            GearAlignmentNeedsCheck,
+            driftsDuringPlay: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            Log);
+        Equipment.BlocksChanged += AlignmentCheck.RequestCheck;
+        Equipment.SetsEdited += AlignmentCheck.RequestCheck;
+        Equipment.CurrentSetChanged += AlignmentCheck.RequestRoutineCheck;
+        Profile.ProfileLoaded += _ => AlignmentCheck.RequestCheck();
+        _alignmentShiftSub = Router.Subscribe(Services.Patterns.KnownPatterns.AlignmentDarkCloud,
+            _ => AlignmentCheck.RequestCheck());
+        PromptScanner.PromptObserved += _ => AlignmentCheck.OnPrompt();
         _equipWearOkSub = Router.Subscribe(Services.Patterns.KnownPatterns.UserEquipped, m =>
         {
             if (m.Groups.Count > 0) Equipment.NoteEquipSucceeded(m.Groups[0]);
@@ -7568,6 +7588,33 @@ public sealed class AppServices
     // CanCharacterEquipItem, an UNKNOWN item resolves false here (not a block): a
     // name that isn't in the active set's Items table just isn't a wearability
     // problem to flag — it simply never queues. Only a real restriction blocks.
+    // A gear set disagrees with our recorded alignment: it holds an item blocked on
+    // alignment alone (wearable at our level and class), or alignment-gated gear
+    // while no alignment is known yet.
+    private bool GearAlignmentNeedsCheck()
+    {
+        if (Profile.Current?.Equipment?.Sets is not { Count: > 0 } sets) return false;
+        Game.Inventory.ClassEquipProfile cls =
+            Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
+        Game.Calculators.AlignmentBucket? bucket =
+            Game.Inventory.ItemEquipFilter.BucketForWord(Alignment.SelfAlignment);
+        foreach (Models.Profile.EquipmentSet set in sets)
+        foreach (Models.Profile.EquipmentSlotEntry slot in set.Slots)
+        {
+            if (string.IsNullOrWhiteSpace(slot.ItemName)) continue;
+            if (GameData.FindRowByName("Items", slot.ItemName.Trim()) is not System.Text.Json.JsonElement row) continue;
+            bool Fits(Game.Calculators.AlignmentBucket? b) =>
+                Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, b);
+            if (!Fits(null)) continue;   // unwearable for another reason
+            bool alignmentGated = bucket is { } known
+                ? !Fits(known)
+                : !(Fits(Game.Calculators.AlignmentBucket.Good) && Fits(Game.Calculators.AlignmentBucket.Neutral)
+                    && Fits(Game.Calculators.AlignmentBucket.Evil));
+            if (alignmentGated) return true;
+        }
+        return false;
+    }
+
     private bool IsEquipRestricted(string itemName)
     {
         if (GameData.FindRowByName("Items", itemName) is not System.Text.Json.JsonElement row)

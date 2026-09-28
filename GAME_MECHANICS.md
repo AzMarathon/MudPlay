@@ -669,6 +669,19 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Realm-verified:** accuracy (both realms, incl. the MMUD-Explorer Paradigm branch), dodge, stealth (MMUD-Explorer-verified — realms differ by a rounding step, not identical), and melee damage.
 - **Unverified on Paradigm:** **crit's AGL term, encumbrance, and magic resistance use the stock formula for Paradigm as well and are unverified there** — treat as close-but-unconfirmed until a Paradigm source or capture pins them.
 
+### How your alignment moves during play
+*Status: CONFIRMED 2026-09-27 (user) · Realm: differs*
+
+- **Alignment moves during a session, both ways.** Where you stand is only what your last `who` showed (alignment isn't on the `stat` screen); the ladder and its numbers are in *Combat → Monster `Align` values and your alignment-title ladder*.
+- **Attacking good-aligned monsters moves you toward evil.** *([CONFIRMED] both realms.)*
+- **Paradigm: you gain alignment toward good constantly while playing, unless you set the blocker for it.** *([CONFIRMED] user.)* `[NEEDS CONFIRMATION]` What is the blocker — a command or a setting, and what does it print?
+- **Stock: points toward good are only awarded at the cleanup cycle.** *([CONFIRMED] user.)* Evil moves during play, as on Paradigm.
+- **A shift toward evil prints `A dark cloud passes over you`.** *(Unrated — the client's pattern; the source wasn't recorded.)*
+
+**Client use:**
+- `AlignmentTracker` flags the recorded alignment stale on the dark-cloud line; our alignment is our row in the realm's players list, which each `who` that shows us rewrites.
+- `AlignmentGearCheck` sends `who` when a gear set disagrees with the recorded alignment (an item blocked on alignment alone, or alignment-gated gear with none recorded). It re-checks whenever the answer may have changed — a new block, edited sets, the dark-cloud line, a new session — and a confirmed mismatch on a slow cadence (a set re-applied; on Paradigm also on a timer, since it drifts toward good).
+
 ---
 
 ## Armour, defence & to-hit
