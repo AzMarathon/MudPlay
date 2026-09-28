@@ -3953,7 +3953,8 @@ There is no room to drop amethyst pendant here.
   - **`98` with value `0`**: you must be Outlaw through Fiend (Seedy doesn't count).
   - **`98` with a value `N`**: you need **at least `N` evil points**. Example: crimson blood robes, EvilOnly 200.
   - The data carries such values on both realms, e.g. hellblade 250 and laen longsword 210 (Stock and Paradigm), and up to 300 on Paradigm. All spells' `98` values are 0.
-  - *[CONFLICT — ask the user] Stock 1.11p's engine only tests whether `98` is present, on both the gear check (`_user_can_use`) and the spell check (`_user_can_use_spell`); it never reads the value. So on a stock 1.11p realm an EvilOnly 200 item may wear at any Outlaw-or-worse title. Does the Stock realm enforce the number?*
+  - **Both realms enforce the number** *([CONFIRMED] 2026-09-28, user)*. (The 1.11p DLL's gear and spell checks, `_user_can_use` / `_user_can_use_spell`, only test that `98` is present; superseded 2026-09-28 by the user.)
+  - **Reading your evil points:** Paradigm's `pro` shows the exact number. Stock doesn't, so the client knows only the title's range. **A refused equip of an EvilOnly `N` item while your title is Outlaw or worse means your evil points are below `N`** *([CONFIRMED] 2026-09-28, user)*. The refusal lines are in *Worn state: no forced unequip, persists across login (EP-zap exception)*.
 - **When your title changes, the game takes off gear the new title can't wear**, one line per item: `Your <item> has been removed.` *([OBSERVED] `wccmmud.dll` 1.11p: the check runs after an evil-point gain that changes the title, and after a `forgive`.)*
 
 **Client use:**
