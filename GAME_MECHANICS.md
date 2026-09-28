@@ -885,13 +885,18 @@ How HP works from full health down through dropping and death, how monster healt
 - `RealmRegenProfile` / `RegenConstants`: Stock 30 / 21 / 15 s, Paradigm 10 / 10 / 10 s for natural / rest / meditate. `RegenTracker` learns the per-tick amounts live.
 
 ### Poison prevents resting
-*Status: CONFIRMED 2026-08-17 (user; report `paradigm-20260817-092945`)*
+*Status: CONFIRMED 2026-08-17 (user; report `paradigm-20260817-092945`); meditate split by realm 2026-09-28 · Realm: differs*
 
-- **While poisoned you cannot rest.** A `rest` (or meditate) issued while poisoned does **not** put you into the `(Resting)` state — poison refuses / breaks it — so the position never becomes Resting and the resting recovery doesn't happen; you only get the slow standing regen.
+- **While poisoned you cannot rest.** A `rest` issued while poisoned does **not** put you into the `(Resting)` state — poison refuses / breaks it — so the position never becomes Resting and the resting recovery doesn't happen; you only get the slow standing regen.
+- **Meditating while poisoned differs by realm.**
+  - **Stock refuses it too** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p)*: both commands check the character's poison amount and refuse while it's above 0.
+  - **Paradigm lets you meditate while poisoned** *([CONFIRMED] 2026-09-28, user)*; only `rest` is refused.
+  - (An earlier note, 2026-09-27, said neither works on either realm; superseded 2026-09-28 for Paradigm's meditate.)
 - **The refusal lines are `You are too sick to rest!` and `You are too sick to meditate!`.** *(Wording [OBSERVED] `wccmmud.dll` 1.11p string table; meaning [CONFIRMED] 2026-09-27, user: "you can't rest or meditate while poisoned".)*
 - **Client use:**
   - An optimistic "resting" latch armed on the send (`HealthManager._restInFlight`) never confirms while poisoned, and the interruption latch can't clear it (it needs a confirmed Resting first). So the auto-rest engine must **re-attempt the rest once poison clears** (the poison falling edge drops the stale latch) — otherwise it sits standing below the rest floor forever, which is what report 092945 hit.
   - `HealthManager.NoteRestRefusedSick` reads the refusal lines: it drops the latch, holds the re-send while the poison is on record, and otherwise retries after 15 s, since the refusal can arrive before the poison shows up anywhere else.
+  - On Paradigm a poisoned character with mana to recover meditates instead (`HealthManager.MeditatesWhilePoisoned`), so the pre-rest mana set swaps in as usual.
 
 ### Meditating with mana already full
 *Status: CONFIRMED 2026-09-27 (user) · wording [OBSERVED] `wccmmud.dll` 1.11p string table*
@@ -2702,6 +2707,23 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - `StealthManager.TakeSneakBrokeOnEntry` → `CombatManager`: with *Run if backstab fails* on, a loud entry runs instead of opening with a plain swing.
 - `StealthManager` holds movement (`SneakCooldownGate`) on `You may not sneak right now!` while Auto-Sneak is on. It retries `sn` every 2 s and releases once sneaking, or after 15 s.
 - `StealthManager.IsStealthedHere` (the backstab gate) counts a sneak only once the new room has confirmed it. `ReadyToMoveSneaking` holds a planned step until a sneak settles (`SneakSettleGate`, retries up to 15 s).
+- **Sneak keeping** (`Game.Stealth.SneakGuard`; **Client policy**, user 2026-09-28). The client holds its own sneak-ending automation in three cases:
+  - **A backstab is owed or unresolved here:** hold until it fires.
+  - **Our sneaked move is in flight:** hold until it lands.
+  - **Sneaking past NPCs we won't fight** (auto-combat off, or the room suppressed): hold until a room with no NPCs, since a re-sneak won't take with one there. There the held actions go out and we re-sneak.
+  - **Held:**
+    - automatic gear swaps (`EquipmentManager.HoldGear`), re-run when the hold lifts;
+    - room search;
+    - auto-light `rem` and the room-light spell;
+    - in-between spells, heals included;
+    - optional rests (a rest the gates call for goes out anyway);
+    - invites and say-channel chatter, queued at the engine send gate.
+  - **Not held:** walk steps the route can't skip (doors, traps, room commands, winches, hidden-exit search) and their `.@party` / `.@trap` relays, plus `.@panic` (the leader's hang-up call; followers just hang up).
+  - **Health-gate flee:** while fleeing on the run-if-below HP / MA gates (`HealthManager.IsGateFleeing`; not a hit-and-run or failed-backstab run), the emergency heal isn't held, and the re-sneak waits until it has gone out (`StealthManager.SetSneakHoldForHeal`).
+  - **Marking the sneak broken:** any client command on the "What ends a sneak" list sets the sneak broken (`StealthManager.NoteSneakBroken`, via the send gate and the walker's room-command hook), so the next move re-sneaks.
+  - **Ordering:** pre-move gear now goes out before the `sn`.
+  - **Replies:** while stealthed, a reply to an @-command said aloud goes back by telepath.
+  - **ShadowRest (Paradigm):** a race or class with it sneaks before it rests, and its rest doesn't mark the sneak broken.
 
 ### Observing another player's failed sneak into your room
 *Status: CONFIRMED 2026-07-12 (user)*

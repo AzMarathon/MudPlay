@@ -359,23 +359,29 @@ public sealed class EquipmentManager
         // left unequipped." on every combat round. (Bypassed on force.)
         ISet<string>? held = HeldNames(snap);
 
+        var cmds = new List<string>();
         if (force
             || (!string.Equals(w, wornWeapon, StringComparison.OrdinalIgnoreCase) && IsHeld(held, w)))
         {
             if (twoHanded && !string.IsNullOrWhiteSpace(wornOffHand))
-                _wire.Send($"rem {wornOffHand!.Trim()}");
-            _log?.Info(LogCategory,
-                $"swap weapon={w} offhand={(twoHanded ? "<two-handed>" : offHand ?? "<none>")}{(force ? " (forced)" : "")}");
-            _wire.Send($"eq {w}");
+                cmds.Add($"rem {wornOffHand!.Trim()}");
+            cmds.Add($"eq {w}");
         }
 
-        if (twoHanded) return;   // a two-hander fills both hands — no off-hand equip
-
         string? oh = offHand?.Trim();
-        if (!string.IsNullOrEmpty(oh)
+        if (!twoHanded   // a two-hander fills both hands — no off-hand equip
+            && !string.IsNullOrEmpty(oh)
             && (force
                 || (!string.Equals(oh, wornOffHand, StringComparison.OrdinalIgnoreCase) && IsHeld(held, oh))))
-            _wire.Send($"eq {oh}");
+            cmds.Add($"eq {oh}");
+
+        if (cmds.Count == 0) return;
+        // A forced swap is combat recovery and always goes out.
+        if (!force && HoldGear("weapon", () => SwapWeapon(weapon, offHand), $"weapon swap to {w}")) return;
+        if (cmds.Contains($"eq {w}"))
+            _log?.Info(LogCategory,
+                $"swap weapon={w} offhand={(twoHanded ? "<two-handed>" : offHand ?? "<none>")}{(force ? " (forced)" : "")}");
+        foreach (string cmd in cmds) _wire.Send(cmd);
     }
 
     // ----- location-equip slot overrides (Settings → Other) ---------------
@@ -405,6 +411,8 @@ public sealed class EquipmentManager
         bool carried = held is not null && held.Contains(name);
         if (!worn && !carried) return false;   // not available — don't own the slot
 
+        if (!worn && HoldGear($"override:{slot}", () => SetSlotOverride(name), $"location-equip wear of '{name}'"))
+            return true;
         bool newlyOwned = _overriddenSlots.Add(slot);
         if (!worn)
         {
@@ -427,7 +435,10 @@ public sealed class EquipmentManager
         string name = itemName?.Trim() ?? "";
         if (name.Length == 0) return;
         if (_resolveItemSlot?.Invoke(name) is not { } slot) return;
-        if (!_overriddenSlots.Remove(slot)) return;
+        if (!_overriddenSlots.Contains(slot)) return;
+        // Checked before the slot is released, so the redo still finds it owned.
+        if (HoldGear($"override:{slot}", () => ClearSlotOverride(name), $"location-equip revert of '{name}'")) return;
+        _overriddenSlots.Remove(slot);
 
         string? setItem = CurrentSetItemFor(slot);
         if (!string.IsNullOrEmpty(setItem)
@@ -518,6 +529,7 @@ public sealed class EquipmentManager
         // Not tracked as set-apply attempts (this is a synchronous pre-sneak
         // burst); clear any set-apply pending so a refusal here can't misblock a
         // set slot.
+        if (HoldGear("backstab-armor", () => ApplyBackstabArmor(), "backstab armor")) return EquipResult.Busy;
         _pending.Clear();
         _log?.Info(LogCategory, $"backstab armor — {cmds.Count} piece(s)");
         foreach (string cmd in cmds) _wire.Send(cmd);
@@ -591,6 +603,10 @@ public sealed class EquipmentManager
         }
 
         if (IsThrashing(set))
+            return combatChanged;
+
+        // An automatic swap waits while a sneak is being kept; a user's gear-up doesn't.
+        if (!fillFromInventory && HoldGear("set", () => ApplySet(set, fillFromInventory), $"gear set '{set.Name}'"))
             return combatChanged;
 
         _log?.Info(LogCategory, $"applying gear set '{set.Name}' — {cmds.Count} command(s)");
@@ -1248,6 +1264,37 @@ public sealed class EquipmentManager
     // The game refused a weapon wield ("You may not use that weapon." — the
     // weapon EP-zap). Attribute it to the oldest unresolved weapon attempt.
     public string? NoteWeaponRefused() => BlockOldestPending(weapon: true);
+
+    // ----- sneak keeping ---------------------------------------------------
+    // Gear commands end a sneak (GAME_MECHANICS "What ends a sneak"). While
+    // SneakGuard keeps one, an automatic swap is held — the latest per kind — and
+    // re-run on RunHeldGear once the hold lifts, re-deriving from the worn state then.
+    private Func<bool>? _gearHeld;
+    private readonly Dictionary<string, Action> _heldGear = new(StringComparer.Ordinal);
+
+    public void SetGearHold(Func<bool> held) => _gearHeld = held;
+
+    private bool HoldGear(string kind, Action redo, string what)
+    {
+        if (_gearHeld?.Invoke() != true) return false;
+        if (!_heldGear.ContainsKey(kind))
+            _log?.Info(LogCategory, $"{what} held — keeping the sneak");
+        _heldGear[kind] = redo;
+        return true;
+    }
+
+    public void RunHeldGear()
+    {
+        if (_heldGear.Count == 0) return;
+        List<Action> redo = _heldGear.Values.ToList();
+        _heldGear.Clear();
+        _log?.Info(LogCategory, $"sneak hold lifted — re-running {redo.Count} held gear change(s)");
+        foreach (Action a in redo) a();
+    }
+
+    public void DropHeldGear() => _heldGear.Clear();
+
+    public IReadOnlyCollection<string> HeldGearKinds => _heldGear.Keys;
 
     private string? BlockOldestPending(bool weapon)
     {

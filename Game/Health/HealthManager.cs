@@ -121,7 +121,8 @@ public sealed class HealthManager : IDisposable
     private Func<bool>? _isLeaderWaited;        // WE lead + a member has @wait-held us
     private Func<bool>? _isSelfPoisoned;        // local character is currently poisoned
     private Action? _requestPartyHeal;          // follower flee-substitute: broadcast @heal
-    private Func<bool>? _shadowRestClass;       // class has the ShadowRest ability (code 1103)
+    private Func<bool>? _shadowRestClass;       // race or class has the ShadowRest ability (code 1103)
+    private Func<bool>? _sneakKept;             // SneakGuard.Holds — rest / meditate end a sneak
     private Func<bool>? _shadowRestStealthed;   // currently hidden or sneaking
     private Func<bool>? _shadowRestSolo;        // not in a party (ShadowRest is a solo behavior)
     private Action? _onShadowRestRecovered;     // recovery hit rest-max — resume combat
@@ -585,11 +586,48 @@ public sealed class HealthManager : IDisposable
     // has the ability, and we're solo and currently stealthed. This is the "can
     // rest safely with a monster in the room" condition — it relaxes the rest-out
     // hostiles guard.
+    // Rest and meditate end a sneak (GAME_MECHANICS "What ends a sneak"), so while
+    // SneakGuard keeps one they wait — unless the race or class has ShadowRest, whose
+    // rest keeps the stealth.
+    public void SetSneakKeptProbe(Func<bool> sneakKept) => _sneakKept = sneakKept;
+
+    // StealthManager.SneakBeforeRest — a ShadowRest character sneaks first so its
+    // rest stays stealthed.
+    private Func<bool>? _sneakBeforeRest;
+
+    public void SetSneakBeforeRestProbe(Func<bool> sneakBeforeRest) => _sneakBeforeRest = sneakBeforeRest;
+
+    private bool _loggedSneakingBeforeRest;
+
+    private bool SneakingBeforeShadowRest(HealthSettings s)
+    {
+        bool waiting = s.UtilizeShadowRest && _shadowRestClass?.Invoke() == true
+            && _sneakBeforeRest?.Invoke() == true;
+        if (waiting && !_loggedSneakingBeforeRest)
+            _log?.Combat(LogCategory, "rest held a moment — sneaking first so it's a ShadowRest");
+        _loggedSneakingBeforeRest = waiting;
+        return waiting;
+    }
+
     private bool ShadowRestActive() =>
         _readSettings().UtilizeShadowRest
         && _shadowRestClass?.Invoke() == true
         && _shadowRestStealthed?.Invoke() == true
         && _shadowRestSolo?.Invoke() == true;
+
+    private bool _loggedRestHeldForSneak;
+
+    // A rest the gates call for (rest-if-below) goes out even if it ends the sneak
+    // (user, 2026-09-28); only an optional rest — opportunistic, or using a party
+    // wait — holds for it.
+    private bool RestHeldForSneak(bool gateDriven)
+    {
+        bool held = !gateDriven && _sneakKept?.Invoke() == true && _shadowRestClass?.Invoke() != true;
+        if (held && !_loggedRestHeldForSneak)
+            _log?.Combat(LogCategory, "rest held — resting would end the sneak we're keeping");
+        _loggedRestHeldForSneak = held;
+        return held;
+    }
 
     // True while a ShadowRest recovery is in progress — ShadowRest is active AND a
     // rest gate is held (HP/MA below its floor, climbing toward rest-max). Combat
@@ -629,6 +667,13 @@ public sealed class HealthManager : IDisposable
     // of turning to fight the thing we're fleeing. Distinct from FledThisCombat,
     // which stays true for the rest of the combat even after the retreat ends.
     public bool IsFleeing => _fleeEngine is not null;
+
+    // A flee the run-if-below HP / MA gates started — not a hit-and-run or a failed
+    // backstab's run. Only this one lets the emergency heal cut ahead of the
+    // re-sneak (user, 2026-09-28).
+    public bool IsGateFleeing => _fleeEngine is not null && _fleeFromGates;
+    private bool _fleeFromGates;
+    private bool _deferredFleeFromGates;
 
     // The last confirmed room before the current one (RoomTracker history) — the
     // Backward flee's fallback when there's no trail to the engine's origin (we're
@@ -1014,7 +1059,8 @@ public sealed class HealthManager : IDisposable
             && IsMovePending?.Invoke() != true)
         {
             _deferredFleeReason = null;
-            _post(() => TryFlee(stuckReason));
+            bool stuckFromGates = _deferredFleeFromGates;
+            _post(() => TryFlee(stuckReason, stuckFromGates));
         }
 
         if (!_state.InCombat)
@@ -1303,8 +1349,10 @@ public sealed class HealthManager : IDisposable
                 $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
         }
         else if (shouldSendRestCommand && !_state.InCombat && !_restInFlight && !equipmentApplying
-            && !RestRefusedSickHolding(selfPoisoned)
-            && (!hostilesPresent || shadowRest || _restHostilesBypassArmed))
+            && (!RestRefusedSickHolding(selfPoisoned) || MeditatesWhilePoisoned(s, selfPoisoned))
+            && (!hostilesPresent || shadowRest || _restHostilesBypassArmed)
+            && !RestHeldForSneak(anyGate)
+            && !SneakingBeforeShadowRest(s))
         {
             // Pick rest vs meditate based on user settings + which
             // pool is the proximate trigger.
@@ -1319,8 +1367,8 @@ public sealed class HealthManager : IDisposable
             //   most classes.
             // The opportunistic path has no gate to read, so it picks on
             // live pool percentages instead (ChooseOpportunisticRestCommand).
-            string command = anyGateConfirmed
-                ? ChooseRestCommand(s)
+            string command = MeditatesWhilePoisoned(s, selfPoisoned) ? "meditate"
+                : anyGateConfirmed ? ChooseRestCommand(s)
                 : ChooseOpportunisticRestCommand(s);
 
             string restReason = anyGateConfirmed ? ""
@@ -1654,7 +1702,7 @@ public sealed class HealthManager : IDisposable
             }
             return;
         }
-        TryFlee(reason);
+        TryFlee(reason, fromGates: true);
     }
 
     // Public entry for CombatManager's backstab-failure flee (wired via
@@ -1717,7 +1765,7 @@ public sealed class HealthManager : IDisposable
     // engine, queues the full flee route, optionally sends `break`, and dispatches
     // the first step; the remaining steps advance one per NoteRoomChanged. Returns
     // whether a flee started (or is held for the move in flight to land).
-    private bool TryFlee(string reason)
+    private bool TryFlee(string reason, bool fromGates = false)
     {
         // One retreat at a time: a second one started mid-flight plans from a room we
         // haven't confirmed leaving and sends its own move on top.
@@ -1743,6 +1791,7 @@ public sealed class HealthManager : IDisposable
         if (_fleeEngine is null && IsMovePending?.Invoke() == true)
         {
             _deferredFleeReason = reason;
+            _deferredFleeFromGates = fromGates;
             _log?.Combat(LogCategory, $"flee waits for the move in flight to land — {reason}");
             return true;
         }
@@ -1765,6 +1814,7 @@ public sealed class HealthManager : IDisposable
         engine.PauseForFlee($"flee — {reason}");
 
         _fleeEngine = engine;
+        _fleeFromGates = fromGates;
         _fleeQueue.Clear();
         foreach (Map.Direction d in steps) _fleeQueue.Enqueue(d);
 
@@ -1890,6 +1940,19 @@ public sealed class HealthManager : IDisposable
         // matters more than HP catchup.
         return "rest";
     }
+
+    // Poison refuses `rest` on both realms, and `meditate` too on Stock; Paradigm
+    // still lets a poisoned character meditate (GAME_MECHANICS "Poison prevents
+    // resting"). So on Paradigm, poisoned with mana to recover, meditate instead of
+    // sitting out the refusal — the pre-rest mana set then swaps in as usual.
+    private Func<bool>? _meditateWhilePoisoned;
+
+    public void SetMeditateWhilePoisonedProbe(Func<bool> allowed) => _meditateWhilePoisoned = allowed;
+
+    private bool MeditatesWhilePoisoned(HealthSettings s, bool selfPoisoned) =>
+        selfPoisoned && _meditateWhilePoisoned?.Invoke() == true
+        && s.UseMeditateAbility && !MeditateRecentlyRefused()
+        && _state.MaxMa > 0 && _state.Ma < _state.MaxMa;
 
     private bool RestRefusedSickHolding(bool selfPoisoned) =>
         _restRefusedSickAt is { } at && (selfPoisoned || _now() - at < RestRefusedSickRetry);
@@ -2051,7 +2114,7 @@ public sealed class HealthManager : IDisposable
                 _log?.Combat(LogCategory, $"held flee dropped — no hostile where the move landed ({heldReason})");
             else
             {
-                TryFlee(heldReason);
+                TryFlee(heldReason, _deferredFleeFromGates);
                 startedHeldFlee = _fleeEngine is not null;
             }
         }

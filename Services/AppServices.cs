@@ -1491,6 +1491,9 @@ public sealed class AppServices
     // layer on top in a follow-up.
     public Game.Stealth.StealthManager Stealth { get; private set; } = null!;
 
+    // Holds automation that would end a sneak while keeping it matters (see its wiring).
+    public Game.Stealth.SneakGuard SneakGuard { get; private set; } = null!;
+
     // Auto-light need poster. On a "can't see"
     // room-light line it posts a NeedKind.LightSource
     // need to Needs; auto-get fulfils it.
@@ -2575,6 +2578,7 @@ public sealed class AppServices
         // a denial at the gang. Party.LocalCharacterName tracks PlayerStats.Name, falling
         // back to the profile name.
         RemoteCommands.SelfNameProvider = () => Party.LocalCharacterName;
+        RemoteCommands.StealthedProvider = () => Stealth?.IsStealthed == true;
 
         // Persist stat captures onto the loaded profile so the next
         // session starts hydrated with the last-observed values
@@ -4179,34 +4183,34 @@ public sealed class AppServices
         // negate magic wipes buffs); TokenTracker opens the window on an outbound token
         // use and closes it on the success line or a 30s timeout.
         CastDirector.SetTokenBuffPauseGate(() => Tokens.IsBuffPausedForToken);
-        // Sneak-maintenance defer — hold buffs / cures for the next empty room when
-        // a stealth runner is walking combat-off through an occupied room, so the
-        // cast (which breaks sneak) can be followed by a re-sneak instead of
-        // stripping sneak in a room it's only passing through. Conditioned entirely
-        // on auto-sneak: off ⇒ this never fires and casts go out immediately. NPC
-        // presence is the hard blocker: you can't re-sneak with a monster in the room.
-        //
-        // The auto-combat term matches the Combat gate's "effectively engaging here"
-        // (global AutoCombat AND not per-room-suppressed) — if combat WILL clear the
-        // room there's normally no sneak to preserve, so the defer lifts. The ONE
-        // exception is a still-owed backstab opener: `bs` must be the first combat
-        // command from stealth or the surprise round is lost, so a between-round buff
-        // firing first (which breaks sneak) would forfeit the opener AND leave us
-        // exposed mid-cast in a hostile room. While IsBackstabOpenerPending holds we
-        // keep deferring even in an engaging fight; the moment the opener fires
-        // (_backstabOpenerConsumed) or the room clears, maintenance casting resumes.
-        //
-        // Also held while our own move is in flight (RoomTracker Pending): the server
-        // runs commands in order, so a cast sent then lands in the room we're ENTERING,
-        // unseen — it broke sneak on arrival next to a carrion beast (report
-        // paradigm-20260927-121050). Once we land, the rule above decides.
-        CastDirector.SetStealthMaintenanceDeferGate(
-            () => Game.Spells.StealthCastHold.ShouldHold(
-                autoSneak: ReadAutoModeFlag(d => d.AutoSneak),
-                moveInFlight: RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending,
-                npcInRoom: CombatTracker.HasRoomNpc,
-                combatWillClearRoom: ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
-                backstabOpenerPending: Combat.IsBackstabOpenerPending()));
+        // Sneak keeping: one rule for every automation that would end a sneak
+        // (GAME_MECHANICS "What ends a sneak"). Fighting here with a backstab owed →
+        // hold until it fires; sneaking past NPCs we won't fight (auto-combat off, or
+        // the room suppressed) → hold until a room with none (a re-sneak won't take
+        // with any NPC here), where the action can go out and we re-sneak; our sneaked move in flight → hold until it lands
+        // (a command sent then lands in the room we're entering — report
+        // paradigm-20260927-121050). A backstab counts as owed only with someone here
+        // to open on: the combat engine reports it pending whenever we're sneaking.
+        bool FightingHere() => CombatTracker.HasEngageableHostiles && !CombatSuppressedInCurrentRoom();
+        SneakGuard = new Game.Stealth.SneakGuard(
+            autoSneak:    () => ReadAutoModeFlag(d => d.AutoSneak),
+            backstabOwed: () => Combat.IsBackstabRoundUnresolved || (Combat.IsBackstabOpenerPending() && FightingHere()),
+            moveInFlight: () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending,
+            npcHere:      () => CombatTracker.HasRoomNpc,
+            fightingHere: FightingHere,
+            inCombat:     () => PlayerState.InCombat,
+            stealthed:    () => Stealth?.IsStealthed == true,
+            log: Log);
+        SneakGuard.SetWireSender(cmd => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes(cmd + "\r")));
+        Tick.HeartbeatElapsed += SneakGuard.Poll;
+        RoomTracker.StateChanged += _ => SneakGuard.Poll();
+        Profile.ProfileLoaded += _ => SneakGuard.Reset();
+        // In-between spells (heals included, per the user) wait on the same rule;
+        // debuffs have their own backstab gate (CombatSpellChooser.WouldBackstab). A
+        // flee from the health gates is the exception: its emergency heal goes out,
+        // and before the re-sneak (user, 2026-09-28).
+        CastDirector.SetStealthMaintenanceDeferGate(() => SneakGuard.Holds);
+        CastDirector.SetEmergencyHealBypassProbe(() => Health.IsGateFleeing);
         // Suppress ALL auto-casts while the `train stats` full-screen menu has
         // character-mode input armed — otherwise a cast's letters get typed raw
         // into the character-creation form (the "bles" family-name corruption).
@@ -4469,6 +4473,17 @@ public sealed class AppServices
         // detects silent loss on room change, and sends `sneak` /
         // `hide` per AutoMode toggles.
         Stealth = new Game.Stealth.StealthManager(Router, PlayerState, Log);
+        Stealth.SetSneakHoldForHeal(() => Health.IsGateFleeing && CastDirector.IsEmergencyHealDue);
+        // Sneak keeping at the engine send gate: a command that can wait (an invite, a
+        // say) is held while SneakGuard keeps the sneak, and any sent command that ends
+        // a sneak marks it broken so the next move re-sneaks.
+        EngineGate.SetSneakHooks(
+            takeForLater: cmd => Game.Stealth.SneakBreakingCommands.CanWait(cmd) && SneakGuard.TakeIfHeld(cmd),
+            sent: cmd =>
+            {
+                if (Game.Stealth.SneakBreakingCommands.EndsSneak(cmd, shadowRest: CharacterHasShadowRest()))
+                    Stealth.NoteSneakBroken($"'{cmd}'");
+            });
         Stealth.SetAutoToggles(
             isAutoSneakEnabled: () => ReadAutoModeFlag(d => d.AutoSneak),
             isAutoHideEnabled:  () => ReadAutoModeFlag(d => d.AutoHide));
@@ -4525,22 +4540,21 @@ public sealed class AppServices
         Combat.SetMoveInFlightProbe(() => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending);
         RoomTracker.MoveBlocked += () => Combat.NoteMoveRefused();
 
-        // ShadowRest (Paradigm): classes carrying ability code 1103 can rest while
-        // hidden/sneaking in a room with monsters without being attacked. The rest
-        // engine relaxes its hostiles guard when solo + stealthed + class-capable +
-        // opted in; combat stands down (reads ShadowRestHolding) so the rest isn't
-        // broken, and HealthManager fires ResumeAfterShadowRest at rest-max to
-        // re-open with the held-back backstab. Inert on classes without 1103.
-        bool ClassHasShadowRest() =>
-            Stats.HasParsed
-            && GameData.FindRowByName("Classes", PlayerStats.Class) is { } classRow
-            && Game.GameData.AbilityNames.HasShadowRest(classRow);
+        // ShadowRest (Paradigm): a race or class carrying ability code 1103 can rest
+        // while hidden/sneaking in a room with monsters without being attacked, and
+        // the rest keeps the stealth. The rest engine relaxes its hostiles guard when
+        // solo + stealthed + capable + opted in; combat stands down (reads
+        // ShadowRestHolding) so the rest isn't broken, and HealthManager fires
+        // ResumeAfterShadowRest at rest-max to re-open with the held-back backstab.
         Health.SetShadowRest(
-            shadowRestClass: ClassHasShadowRest,
+            shadowRestClass: CharacterHasShadowRest,
             isStealthed:     () => Stealth.IsStealthed,
             isSolo:          () => !PartyState.IsInParty,
             onRecovered:     Combat.ResumeAfterShadowRest);
         Combat.SetShadowRestSuppression(() => Health.ShadowRestHolding);
+        Health.SetSneakKeptProbe(() => SneakGuard.Holds);
+        Health.SetMeditateWhilePoisonedProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
+        Health.SetSneakBeforeRestProbe(() => Stealth.SneakBeforeRest());
 
         // Passive-neutral recovery hold: engage a KillOnSight neutral only once we're
         // at/above the rest trigger, so we can rest between kills (a neutral won't
@@ -5145,6 +5159,10 @@ public sealed class AppServices
             canEquipItem: CanCharacterEquipItem,
             restrictsEquip: IsEquipRestricted,
             log: Log);
+        // Automatic gear swaps wait while a sneak is kept (SneakGuard) and re-run after.
+        Equipment.SetGearHold(() => SneakGuard.Holds);
+        SneakGuard.Released += Equipment.RunHeldGear;
+        Profile.ProfileLoaded += _ => Equipment.DropHeldGear();
         // Realm picks which physical slot a full paired-family eq/wear evicts —
         // Paradigm slot 1 (first-listed), Stock slot 2 — so the swap builder rems
         // the right odd-out (see EquipmentManager.ComposePairedSlotCommands).
@@ -5855,6 +5873,7 @@ public sealed class AppServices
         // Wired after AutoGetItems.OnRoomObserved (above) so the search's revealed
         // loot is collected after the fight's own drops; CombatStateTracker's
         // handler ran first, so the hostile flag is current.
+        AutoSearch.SetSneakKeptProbe(() => SneakGuard.Holds);
         RoomClassifier.EntitiesObserved += _ => AutoSearch.OnRoomObserved();
 
         // Empty-search seam: an empty room's `sea` prints "Your search revealed
@@ -6076,16 +6095,22 @@ public sealed class AppServices
         // must land before the sn (weapon → armor → sn → move). PrepBackstabForMove
         // no-ops unless backstab is enabled. Non-blocking; the settled-state
         // guard in StealthManager prevents a double sn when both paths fire.
-        Walker.SetMoveReadyCheck(Stealth.ReadyToMoveSneaking);
+        // The pre-move gear goes out from the ready check, ahead of its `sn` (equip
+        // ends a sneak, so gear then sneak then move); the pre-move hook only covers a
+        // move that skipped the ready check. Once per step either way.
+        Walker.SetMoveReadyCheck(() =>
+        {
+            PreMoveGearOnce(ref _walkerPreMoveGearFor, Walker.PeekNextPlannedDirection());
+            return Stealth.ReadyToMoveSneaking();
+        });
+        Walker.SetRoomActionHook(cmd => Stealth.NoteSneakBroken($"room command '{cmd}'"));
         Walker.SetPreMoveHook(() =>
         {
             // Swap gear BEFORE the step (queues ahead of the move on the serialized
             // wire, so we land already geared) when the next room is a boss room or a
-            // lair the movement set wants pre-swapped. Runs before backstab prep so a
-            // full set swap and a partial backstab swap don't interleave.
-            if (NextPlannedRoomForEquip(Walker.PeekNextPlannedDirection()) is { } next)
-                AutoEquip.OnAboutToEnterRoom(next);
-            Combat.PrepBackstabForMove();
+            // lair the movement set wants pre-swapped, then the backstab loadout.
+            PreMoveGearOnce(ref _walkerPreMoveGearFor, Walker.PeekNextPlannedDirection());
+            _walkerPreMoveGearFor = null;
             // Clear the per-room AoE-debuff / attack caps so the next room's crabs
             // aren't read as "already debuffed" from the room we're leaving (report
             // paradigm-20260827-082106).
@@ -6213,6 +6238,7 @@ public sealed class AppServices
             castRoomLightSpell: name => Cast.TryCast(name),
             settings:    () => ReadSection<Models.Profile.AutoLightSettings>(Profile.Current, "AutoLight"),
             log:         Log);
+        AutoLightProvisioner.SetSneakKeptProbe(() => SneakGuard.Holds);
         Walker.SetRouteAnnouncer(AutoLightProvisioner.OnRoutePlanned);
 
         // Keeps a checkspell hazard buff up as the walker crosses a hazard room.
@@ -6479,14 +6505,17 @@ public sealed class AppServices
         LoopRunner.SetConfusedCheck(() => Conditions.IsConfused);
         // Same proactive pre-move approach sequence for loop circuits — backstab
         // gear before the sneak (equipping breaks sneak), then the move.
-        LoopRunner.SetMoveReadyCheck(Stealth.ReadyToMoveSneaking);
+        LoopRunner.SetMoveReadyCheck(() =>
+        {
+            PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
+            return Stealth.ReadyToMoveSneaking();
+        });
         LoopRunner.SetPreMoveHook(() =>
         {
-            // Pre-step gear swap for a boss / lair room on a loop lap (see the walker
-            // hook above for the wire-ordering rationale).
-            if (NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()) is { } next)
-                AutoEquip.OnAboutToEnterRoom(next);
-            Combat.PrepBackstabForMove();
+            // Pre-step gear swap for a boss / lair room on a loop lap, then the
+            // backstab loadout (see the walker hook above for the wire ordering).
+            PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
+            _loopPreMoveGearFor = null;
             // Same per-room cap reset the walker does — a loop circuit that hunts the
             // same species room-to-room otherwise fires its AoE debuff only in the
             // first room (report paradigm-20260827-082106).
@@ -8745,6 +8774,31 @@ public sealed class AppServices
         _wornSignature = signature;
         _wornChangedAt = DateTimeOffset.Now;
     }
+
+    // The step (room + direction) whose pre-move gear already went out, per mover — the
+    // ready check runs again while a sneak settles, and a repeat would resend the
+    // swap before the first confirmed. Cleared as the move goes out.
+    private string? _walkerPreMoveGearFor;
+    private string? _loopPreMoveGearFor;
+
+    private void PreMoveGearOnce(ref string? doneFor, Game.Map.Direction? direction)
+    {
+        string key = $"{RoomTracker.State.CurrentRoom}:{direction}";
+        if (doneFor == key) return;
+        doneFor = key;
+        if (NextPlannedRoomForEquip(direction) is { } next)
+            AutoEquip.OnAboutToEnterRoom(next);
+        Combat.PrepBackstabForMove();
+    }
+
+    // True when the character's race or class carries ShadowRest (ability 1103, a
+    // Paradigm ability): resting keeps its stealth (GAME_MECHANICS "ShadowRest").
+    private bool CharacterHasShadowRest() =>
+        Stats.HasParsed
+        && ((GameData.FindRowByName("Classes", PlayerStats.Class) is { } classRow
+                && Game.GameData.AbilityNames.HasShadowRest(classRow))
+            || (GameData.FindRowByName("Races", PlayerStats.Race) is { } raceRow
+                && Game.GameData.AbilityNames.HasShadowRest(raceRow)));
 
     // The Stock reroll's tick inputs, for the bug report.
     public string DescribeStockManaRollContext() => StockManaRollContext() is { } c

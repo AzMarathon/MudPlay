@@ -511,6 +511,19 @@ public static class BugReportBuilder
         // engaging a monster in the room (combat stands down while true).
         Kv(sb, "ShadowRest holding", svc.Health.ShadowRestHolding.ToString());
         Kv(sb, "Sneak-cooldown hold", svc.Stealth.IsHoldingForSneakCooldown.ToString());
+        // Sneak keeping: what automation is waiting so as not to end a sneak.
+        Game.Stealth.SneakHold hold = svc.SneakGuard.Current;
+        Kv(sb, "Sneak keeping", hold == Game.Stealth.SneakHold.None
+            ? "nothing held"
+            : $"{hold} — {Game.Stealth.SneakGuard.Describe(hold)}");
+        if (svc.SneakGuard.Queued.Count > 0)
+            Kv(sb, "Sneak keeping — queued", string.Join(" · ", svc.SneakGuard.Queued.Select(q => $"'{q.Command}'")));
+        if (svc.Equipment.HeldGearKinds.Count > 0)
+            Kv(sb, "Sneak keeping — gear held", string.Join(", ", svc.Equipment.HeldGearKinds));
+        if (svc.Health.IsGateFleeing)
+            Kv(sb, "Sneak keeping — gate flee", svc.CastDirector.IsEmergencyHealDue
+                ? "emergency heal due; it goes out, the re-sneak waits for it"
+                : "no emergency heal due; re-sneak free");
         Kv(sb, "Hit and run", svc.Health.HitAndRunRuns > 0
             ? $"{svc.Health.HitAndRunRuns} of {Math.Max(1, svc.Resolver.Resolve<Models.Profile.CombatSettings>("Combat").HitAndRunMaxRuns)} run(s) since the last backstab"
             : "no runs since the last backstab");

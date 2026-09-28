@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.33**
-> - A pre-attack debuff now waits until after the backstab (a cast ends the sneak, so it ruined the surprise)
-> - An attack spell in a monster's debuff override is blocked with a log warning (it was overwritten by the attack behind it and never landed); use the attack-spell override
-> - After a backstab, the round's attack spell is announced once, not twice
+> **Version 3.116.37**
+> - Auto-Sneak keeps the sneak: gear swaps, searches, light changes, in-between spells, optional rests, invites and chat wait until a backstab fires, or until a room with no NPCs, then re-sneak
+> - Fleeing on the health gates, the emergency heal fires before the re-sneak
+> - Gear for the next room goes on before the sneak; a command that ends the sneak makes the next move re-sneak; replies go by telepath while stealthed
+> - ShadowRest (race or class) sneaks before resting; a poisoned Paradigm character meditates instead of waiting out the poison
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

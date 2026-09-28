@@ -1,5 +1,12 @@
 # Version history
 
+## 3.116.37
+
+- Auto-Sneak keeps the sneak: gear swaps, searches, light changes, in-between spells, optional rests, invites and chat wait until a backstab fires, or until a room with no NPCs, then re-sneak
+- Fleeing on the health gates, the emergency heal fires before the re-sneak
+- Gear for the next room goes on before the sneak; a command that ends the sneak makes the next move re-sneak; replies go by telepath while stealthed
+- ShadowRest (race or class) sneaks before resting; a poisoned Paradigm character meditates instead of waiting out the poison
+
 ## 3.116.33
 
 - A pre-attack debuff now waits until after the backstab (a cast ends the sneak, so it ruined the surprise)

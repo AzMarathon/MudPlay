@@ -1986,6 +1986,9 @@ public sealed partial class CombatManager : IDisposable
     public bool IsBackstabOpenerPending() =>
         _classifier.Current is { } obs && BackstabPending(_readSettings(), obs);
 
+    // True from a backstab's send until its round resolves (landed / failed).
+    public bool IsBackstabRoundUnresolved => _awaitingBackstabResolution;
+
     // Equip the normal/alternate weapon and send the weapon attack command
     // against targetRaw. Sets CurrentTarget; SendAttack clears the spell-mode
     // bridge so the server's auto-repeat owns subsequent rounds. Shared by the

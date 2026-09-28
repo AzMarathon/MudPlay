@@ -2192,13 +2192,22 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _awaitingWinch = true;
             _log?.Info("Walker", $"detour winch pull ('{step.Command}') — re-pulling until it turns.");
             _winchEnqueuer(Direction.N, step.Command, /*waitForGate:*/ false, "walker", OnWinchReply);
+            _roomActionSent?.Invoke(step.Command);
             return;
         }
 
         _awaitingPromptForCommand = true;
         byte[] bytes = Encoding.Latin1.GetBytes(step.Command + "\r");
         WriteBytes(bytes, $"command '{step.Command}'");
+        _roomActionSent?.Invoke(step.Command);
     }
+
+    // A room command step (lever, winch, remote action) went out. Room actions end a
+    // sneak (GAME_MECHANICS "What ends a sneak"); the walk sends them anyway, and this
+    // lets the stealth engine re-sneak before the next move.
+    private Action<string>? _roomActionSent;
+
+    public void SetRoomActionHook(Action<string> hook) => _roomActionSent = hook;
 
     // Put a sea-captain sailing on the wire. Like the chime teleport it splits
     // the party (leader `.@party <keyword>` relay, then every member types the

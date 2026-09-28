@@ -89,6 +89,11 @@ public sealed class RemoteCommandManager : IDisposable
     // cover say / telepath.
     public Func<string?>? SelfNameProvider { get; set; }
 
+    // True while we're sneaking or hidden. A reply to a command said aloud would be a
+    // directed say, and saying anything ends a sneak (GAME_MECHANICS "What ends a
+    // sneak"), so it goes back by telepath instead (user, 2026-09-28).
+    public Func<bool>? StealthedProvider { get; set; }
+
     // ----- Settings.Talk-driven knobs --------------------------------------
     // Pushed by TalkSectionViewModel.ApplyToServices on Apply / on profile
     // load. Defaults match the TalkSettings DTO defaults — anything not yet
@@ -886,6 +891,8 @@ public sealed class RemoteCommandManager : IDisposable
     private void SendReply(RemoteChannel channel, string recipient, string text)
     {
         if (string.IsNullOrEmpty(text)) return;
+        if (channel == RemoteChannel.Local && StealthedProvider?.Invoke() == true)
+            channel = RemoteChannel.Telepath;
         SendLine(channel, recipient, $"{{{text}}}");
     }
 
