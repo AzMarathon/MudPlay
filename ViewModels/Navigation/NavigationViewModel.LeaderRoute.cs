@@ -5,8 +5,8 @@ using MudPlay.Game.Remote;
 
 namespace MudPlay.ViewModels.Navigation;
 
-// Another player's route, rebuilt from their @path reply (PathReplyTracker →
-// LeaderRouteResolver) and shown on the surfaces our own walk / loop would use —
+// Another player's route, rebuilt from their @path reply or our party leader's
+// accepted-@goto reply (PathReplyTracker → LeaderRouteResolver) and shown on the surfaces our own walk / loop would use —
 // the map line, the CURRENT NAV rows, the top-bar status and Details… — but only
 // while our own engine is idle. Everything it shows is the follower cyan (the
 // FOLLOWING badge, the header, the current row, the map line) rather than our own
@@ -42,27 +42,18 @@ public sealed partial class NavigationViewModel
         // The reply is also a location — flash where they stand, like @where.
         ShowWhereHighlight(report.LeaderRoom);
 
-        _leaderSender = sender;
-        _leaderDestination = report.Destination;
-        _leaderRooms = null;
-        _leaderSteps = null;
-        _leaderLoopWaypoints = null;
-        _leaderStepIndex = 0;
+        BeginLeaderRoute(sender, report.Destination);
 
         string progress = $"their step {report.Step} of {report.TotalSteps}";
         if (report.Destination is { } dest)
         {
-            LeaderRoute? route = LeaderRouteResolver.Resolve(
-                _services.RoomGraph, _services.Bfs, _services.Movement,
-                report.LeaderRoom, dest, report.StepsRemaining, _services.Log);
+            LeaderRoute? route = PlanLeaderWalk(report.LeaderRoom, dest, report.StepsRemaining);
             if (route is null)
             {
                 _leaderStatus = $"Following {sender} to {FormatRoomRef(dest)} · no route we can plan from their room";
             }
             else
             {
-                _leaderRooms = route.Rooms;
-                _leaderSteps = route.Steps;
                 string how = route.Matches
                     ? (route.Variant == "our usual route" ? string.Empty : $" · route {route.Variant}")
                     : $" · closest route we can plan is {route.OurSteps} steps ({route.Variant}) vs their {route.TheirSteps}";
@@ -95,6 +86,49 @@ public sealed partial class NavigationViewModel
             _leaderStatus = $"{sender} · {progress} · no destination in their reply to draw";
         }
 
+        FinishLeaderRoute(sender);
+    }
+
+    // Our party leader accepted an @goto. The reply names only the destination, so the
+    // route is planned from our own room: we follow them, so we set out from where
+    // they do.
+    public void ShowLeaderGoto(string sender, RoomKey dest)
+    {
+        BeginLeaderRoute(sender, dest);
+        if (CurrentRoomKey is not { } here)
+            _leaderStatus = $"Following {sender} to {FormatRoomRef(dest)} · we don't know our room to plan from";
+        else if (PlanLeaderWalk(here, dest, stepsRemaining: null) is not { } route)
+            _leaderStatus = $"Following {sender} to {FormatRoomRef(dest)} · no route we can plan from here";
+        else
+            _leaderStatus = $"Following {sender} to {FormatRoomRef(dest)} · their @goto, {route.OurSteps} steps";
+        FinishLeaderRoute(sender);
+    }
+
+    private void BeginLeaderRoute(string sender, RoomKey? dest)
+    {
+        _leaderSender = sender;
+        _leaderDestination = dest;
+        _leaderRooms = null;
+        _leaderSteps = null;
+        _leaderLoopWaypoints = null;
+        _leaderStepIndex = 0;
+    }
+
+    private LeaderRoute? PlanLeaderWalk(RoomKey from, RoomKey dest, int? stepsRemaining)
+    {
+        LeaderRoute? route = LeaderRouteResolver.Resolve(
+            _services.RoomGraph, _services.Bfs, _services.Movement,
+            from, dest, stepsRemaining, _services.Log);
+        if (route is not null)
+        {
+            _leaderRooms = route.Rooms;
+            _leaderSteps = route.Steps;
+        }
+        return route;
+    }
+
+    private void FinishLeaderRoute(string sender)
+    {
         _services.Log.Info(PathReplyTracker.LogCategory, $"map shows {sender}'s route: {_leaderStatus}");
 
         _leaderProgressAt = DateTime.UtcNow;

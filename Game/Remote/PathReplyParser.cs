@@ -24,6 +24,22 @@ public static partial class PathReplyParser
     [GeneratedRegex(@"^(?:running loop|.+ on loop) '(?<name>[^']+)';", RegexOptions.IgnoreCase)]
     private static partial Regex LoopName();
 
+    // An accepted @goto's reply (MovePlayerHandler): "{walking to <name> (M/R)}", or
+    // "walking to GOTO '<label>' (M/R)" / "walking to boss <name>[, stopping just
+    // outside] (M/R)". It names only the destination — no room, no step count.
+    [GeneratedRegex(@"^walking to .+ \((?<map>\d+)/(?<room>\d+)\)$", RegexOptions.IgnoreCase)]
+    private static partial Regex GotoWalk();
+
+    public static bool TryParseGoto(string? message, out RoomKey destination)
+    {
+        destination = default;
+        if (string.IsNullOrEmpty(message)) return false;
+        Match wrapped = Wrapped().Match(message);
+        if (!wrapped.Success) return false;
+        Match walk = GotoWalk().Match(wrapped.Groups["body"].Value.Trim());
+        return walk.Success && TryKey(walk.Groups["map"].Value, walk.Groups["room"].Value, out destination);
+    }
+
     public static bool TryParse(string? message, out PathReport? report)
     {
         report = null;

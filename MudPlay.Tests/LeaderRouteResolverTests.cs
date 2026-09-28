@@ -62,6 +62,18 @@ public sealed class LeaderRouteResolverTests : IDisposable
         Assert.Equal(new RoomKey(1, 5), route.Rooms[1]);
     }
 
+    // An @goto reply carries no step count: our usual route stands.
+    [Fact]
+    public void NoReportedCount_KeepsOurUsualRoute()
+    {
+        (RoomGraphManager graph, BfsMapper bfs) = NewGraph();
+        LeaderRoute? route = LeaderRouteResolver.Resolve(
+            graph, bfs, new AvoidShortA(), new RoomKey(1, 1), new RoomKey(1, 4), stepsRemaining: null);
+        Assert.True(route!.Matches);
+        Assert.Equal("our usual route", route.Variant);
+        Assert.Equal(route.OurSteps, route.TheirSteps);
+    }
+
     [Fact]
     public void ShorterReportedCount_FindsTheRouteThroughAnAvoidedRoom()
     {

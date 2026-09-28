@@ -3,7 +3,8 @@ using MudPlay.Services;
 namespace MudPlay.Game.Map;
 
 // Rebuilds the route another player is walking from nothing but their @path reply:
-// where they stand, where they're going, and how many walker steps they have left. We
+// where they stand, where they're going, and how many walker steps they have left
+// (an @goto reply gives no count, and then our usual plan stands). We
 // plan from their room with our own planner, but our character isn't theirs — they may
 // carry a key we don't, stand above a level gate we're below, allow teleports, or have
 // no avoid list — so a single plan can easily be a different route. Instead we try the
@@ -23,7 +24,7 @@ public static class LeaderRouteResolver
         IRoomFilter filter,
         RoomKey from,
         RoomKey to,
-        int stepsRemaining,
+        int? stepsRemaining,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
@@ -65,16 +66,19 @@ public static class LeaderRouteResolver
             IReadOnlyList<RoomKey> rooms = RoomsAlong(graph, from, dirs);
             if (rooms.Count < 2 || expanded.Count == 0) continue;
             int steps = expanded.Count;
-            int diff = Math.Abs(steps - stepsRemaining);
+            // No count to match (an @goto reply): the likeliest plan is the answer.
+            if (stepsRemaining is not { } theirs)
+                return new LeaderRoute(rooms, expanded, steps, steps, Matches: true, label);
+            int diff = Math.Abs(steps - theirs);
             if (diff <= MatchTolerance)
             {
-                log?.Debug("PathReply", $"leader route {from}→{to}: '{label}' matches ({steps} vs {stepsRemaining} steps)");
-                return new LeaderRoute(rooms, expanded, steps, stepsRemaining, Matches: true, label);
+                log?.Debug("PathReply", $"leader route {from}→{to}: '{label}' matches ({steps} vs {theirs} steps)");
+                return new LeaderRoute(rooms, expanded, steps, theirs, Matches: true, label);
             }
             if (diff < closestDiff)
             {
                 closestDiff = diff;
-                closest = new LeaderRoute(rooms, expanded, steps, stepsRemaining, Matches: false, label);
+                closest = new LeaderRoute(rooms, expanded, steps, theirs, Matches: false, label);
             }
         }
 
