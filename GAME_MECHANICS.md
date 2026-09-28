@@ -1074,7 +1074,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **You do NOT recast it to include new arrivals** — the running channel already hits them next round.
 - **The game has no engine-side collision guard against recasting the same room attack.** If the client re-sends the same room spell while it is already channeling, the engine **breaks the current one and starts a fresh one** — visible as a `*Combat Off*` immediately followed by a `*Combat Engaged*`. That wastes the round and interrupts the AoE. (Contrast: re-sending a **between-round** spell — Energy 0 — shows only the `*Combat Off*` half.)
 - **When the channel ends:** you keep casting the room spell until a cast condition fails — the room's live enemy count drops **below `MinEnemies`** (→ switch to a single-target action), you hit **MaxCastsPerRoom**, or mana falls **below the AoE slot's per-cast floor**. At that point re-evaluate the rest of the spell/combat chain normally (single-target attack spell → weapon, etc.).
-- **A fresh room / multi-target attack spell cast into an empty room still fires and emits a "nothing to hit here" style message** — *([NEEDS CONFIRMATION] exact wording unknown — no test character yet)*.
+- **A fresh room / multi-target attack spell cast into an empty room answers `Your spell has no effect in this room!`** *(Stock [OBSERVED] `wccmmud.dll` 1.11p `_cast_no_target`, printed when `_count_valid_targets` finds none; Paradigm not recorded)*.
 
 **Client use:**
 - `CombatManager._roomChannelSpell` records the active room-attack spell for the engagement. It **survives a kill** (unlike `_castingSpellTarget`/`_announcedSpellCode`, which a kill clears to re-pick a target) and clears only on a genuine end-of-fight (`ClearAttackSpellCascadeState`), a physical move (`NotePreMove`), or a switch to a non-room action.
@@ -4037,8 +4037,9 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 - **Kill drops name the bare keyword:** `6 silver drop to the ground.`
 - **Pickup confirmation names the full coin and carries NO trailing period:**
   `You picked up 6 silver nobles` (singular `You picked up 1 silver noble`).
-  *([NEEDS CONFIRMATION] the singular form and the trailing period aren't pinned down, and may differ
-  between Paradigm and Stock — user, 2026-09-26. *Items, inventory & equipment → Pickup / drop confirmation
+  *(Stock [OBSERVED] `wccmmud.dll` 1.11p: the format is `You picked up %s %s` — count, then the coin name —
+  with no trailing period. `CashPickedUp` accepts singular or plural, with or without a period, so the
+  client doesn't depend on the exact form. Paradigm's wording isn't separately recorded — user, 2026-09-26. *Items, inventory & equipment → Pickup / drop confirmation
   lines and item vs coin disambiguation* and
   *Death & corpse recovery → Corpse recovery (`recover corpse`)* write `You picked up <N> <coin>.` with a period, and the code (`InventoryManager`) documents `You picked up a gold crown.`; the client's matcher accepts both forms, with or without a period.)*
 - **Drop / stash confirmations name the full coin with a trailing period:**
