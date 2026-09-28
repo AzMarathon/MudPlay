@@ -4,12 +4,23 @@ using MudPlay.Models.Settings;
 
 namespace MudPlay.Services;
 
-// Owns Data/BBS/{name}/ — one folder per BBS, containing the primary bbs.json
-// (connection info + BBS-tier settings deltas) plus any per-set override
-// side-files (monster_overrides.{set}.json, message_overrides.{set}.json, …)
-// and future per-BBS helper files (favorites, character roster, …).
+// Owns BBS/{name}/ — one folder per BBS, holding the primary bbs.json
+// (connection info + the realms it hosts), the character profiles under
+// profiles/, and one folder per realm under Realms/ with everything collected
+// while playing it (AppPaths.RealmFolder).
 public sealed class BbsProfileStore
 {
+    // The Global fallback game-data set — lets the realm migration find the boss
+    // timers of a BBS that never named its own set. null in tests.
+    private readonly Func<string?>? _defaultGameDataSet;
+    private readonly LogService? _log;
+
+    public BbsProfileStore(Func<string?>? defaultGameDataSet = null, LogService? log = null)
+    {
+        _defaultGameDataSet = defaultGameDataSet;
+        _log = log;
+    }
+
     // Load a single BBS profile by name. Returns null if no bbs.json exists for
     // that name. The folder may exist with only side-files (e.g. mid-migration)
     // — that still counts as "no BBS profile".
@@ -32,6 +43,19 @@ public sealed class BbsProfileStore
         if (profile is not null && !string.Equals(profile.Name, bbsName, StringComparison.Ordinal))
             profile.Name = bbsName;
 
+        // A BBS always has at least one realm. One saved before realms existed gets
+        // its first realm (and its collected data) here, once, and is re-saved.
+        if (profile is not null && profile.Realms.Count == 0)
+        {
+            string path = AppPaths.BbsProfileFile(bbsName);
+            string? raw = File.Exists(path) ? File.ReadAllText(path) : null;
+            RealmProfile realm = RealmMigration.CreateFirstRealm(bbsName, raw, _defaultGameDataSet?.Invoke());
+            profile.Realms.Add(realm);
+            JsonStore.Save(path, profile);
+            _log?.Info("BBS",
+                $"'{bbsName}' now has realms: its realm settings and collected data moved into realm '{realm.Name}'.");
+        }
+
         return profile;
     }
 
@@ -42,6 +66,7 @@ public sealed class BbsProfileStore
         if (profile is null) throw new ArgumentNullException(nameof(profile));
         if (string.IsNullOrWhiteSpace(profile.Name))
             throw new ArgumentException("BbsProfile.Name is required for save.", nameof(profile));
+        if (profile.Realms.Count == 0) profile.Realms.Add(new RealmProfile { Name = profile.Name });
 
         Directory.CreateDirectory(AppPaths.BbsFolder(profile.Name));
         JsonStore.Save(AppPaths.BbsProfileFile(profile.Name), profile);

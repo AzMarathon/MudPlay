@@ -29,7 +29,7 @@ public sealed class GhRoomLabelStoreTests : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         GhRoomLabelStore store = new(profile);
-        store.OnBbsPinApplied(_scratchBbs);
+        store.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         return store;
     }
 
@@ -139,7 +139,7 @@ public sealed class GhRoomLabelStoreTests : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         GhRoomLabelStore second = new(profile);
-        second.OnBbsPinApplied(_scratchBbs);
+        second.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         Assert.Equal(7, second.SearchesPerRoom);
         Assert.True(second.SearchForHidden);
@@ -155,7 +155,7 @@ public sealed class GhRoomLabelStoreTests : IDisposable
         profile.Current!.GhSearchForHidden = true;
 
         GhRoomLabelStore store = new(profile);
-        store.OnBbsPinApplied(_scratchBbs);
+        store.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         Assert.Single(store.Labels);
         Assert.Equal(9, store.SearchesPerRoom);
@@ -180,7 +180,7 @@ public sealed class GhRoomLabelStoreTests : IDisposable
         profile.Current!.GhRoomLabels = new List<GhRoomLabel> { new(9, 999) };
 
         GhRoomLabelStore store = new(profile);
-        store.OnBbsPinApplied(_scratchBbs);
+        store.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
         Assert.Single(store.Labels);
         Assert.True(store.TryGetLabel(new RoomKey(1, 1), out _));

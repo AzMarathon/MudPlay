@@ -7,20 +7,20 @@ using MudPlay.Models.Profile;
 
 namespace MudPlay.Services;
 
-// Per-BBS room-blacklist store. Loads Data/BBS/{bbs}/room_blacklist.json on
-// every BBS pin (the usual ProfileService event the rest of the BBS-tier
-// subsystems subscribe to) and exposes a read-only set of RoomKeys for the
+// Per-realm room-blacklist store. Loads the active realm's room_blacklist.json
+// whenever the realm changes (profile load / BBS pin / realm assignment) and
+// exposes a read-only set of RoomKeys for the
 // consumers — BfsMapper (skip placement, keep stub edge), NavigationViewModel
 // (filter from room search), and the right-click "Add to blacklist" command on
 // the map.
 public sealed class RoomBlacklistStore
 {
     private readonly LogService? _log;
-    private string? _activeBbs;
+    private string? _realmFolder;
     private readonly Dictionary<RoomKey, BlacklistedRoom> _entries = new();
 
     // Fires whenever the blacklist contents change — either a load against a new
-    // active BBS, or an in-session Add / Remove. Consumers refresh derived state
+    // active realm, or an in-session Add / Remove. Consumers refresh derived state
     // (BFS layout cache, search results, map render).
     public event Action? Changed;
 
@@ -93,26 +93,26 @@ public sealed class RoomBlacklistStore
         Changed?.Invoke();
     }
 
-    // Load the blacklist for the active BBS. Called by AppServices on
-    // ProfileService.ProfileLoaded / BbsPinApplied with the resolved active BBS
-    // name; resets the in-memory store when the pin clears (bbs is null / blank).
-    public void OnBbsPinApplied(string? bbs)
+    // Load the blacklist for the active realm. Called by AppServices on
+    // ProfileService.ProfileLoaded / BbsPinApplied with the active realm's folder;
+    // resets the in-memory store when there's none (null / blank).
+    public void OnRealmChanged(string? realmFolder)
     {
-        if (string.IsNullOrWhiteSpace(bbs))
+        if (string.IsNullOrWhiteSpace(realmFolder))
         {
-            if (_activeBbs is not null)
+            if (_realmFolder is not null)
             {
-                _activeBbs = null;
+                _realmFolder = null;
                 _entries.Clear();
                 Changed?.Invoke();
             }
             return;
         }
 
-        _activeBbs = bbs;
+        _realmFolder = realmFolder;
         _entries.Clear();
 
-        string path = AppPaths.BbsRoomBlacklistFile(bbs);
+        string path = AppPaths.RealmRoomBlacklistFile(realmFolder);
         if (!File.Exists(path))
         {
             _log?.Log(LogSeverity.Info, "RoomBlacklist",
@@ -146,8 +146,8 @@ public sealed class RoomBlacklistStore
 
     private void Persist()
     {
-        if (_activeBbs is null) return;
-        string path = AppPaths.BbsRoomBlacklistFile(_activeBbs);
+        if (_realmFolder is null) return;
+        string path = AppPaths.RealmRoomBlacklistFile(_realmFolder);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var opts = new JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(path, JsonSerializer.Serialize(_entries.Values.ToList(), opts));

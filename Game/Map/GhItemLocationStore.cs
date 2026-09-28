@@ -7,15 +7,15 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
 
-// Per-BBS "which rooms currently hold this item" log for Roomba Mode,
-// persisted to Data/BBS/{bbs}/roomba_items.json. Fed by GhSweepManager every
+// Per-realm "which rooms currently hold this item" log for Roomba Mode,
+// persisted to the realm's roomba_items.json. Fed by GhSweepManager every
 // time it merges a fresh floor survey into a labeled gang-house room (recon,
 // an Inventory-only lap, or the post-sort final recon pass); read by
-// RoombaQueryHandler to answer @roomba <item>. BBS-scoped for the same reason
-// GhRoomLabelStore is — one shared gang house per board, so a sighting
-// recorded by any character is visible to every other character on that BBS.
-// Mirrors RoomBlacklistStore's per-BBS load/persist shape (OnBbsPinApplied +
-// a Changed event).
+// RoombaQueryHandler to answer @roomba <item>. Realm-scoped for the same reason
+// GhRoomLabelStore is — one shared gang house per realm, so a sighting recorded
+// by any character is visible to every other character on that realm. Mirrors
+// RoomBlacklistStore's per-realm load/persist shape (OnRealmChanged + a Changed
+// event).
 //
 // Keyed two levels deep — canonical item name, then RoomKey — because a gang
 // house can legitimately stock the same item in several rooms at once (e.g.
@@ -26,11 +26,11 @@ public sealed class GhItemLocationStore
 {
     private readonly ItemNameStore _itemNames;
     private readonly LogService? _log;
-    private string? _activeBbs;
+    private string? _realmFolder;
     private readonly Dictionary<string, Dictionary<RoomKey, GhItemSighting>> _sightings =
         new(StringComparer.OrdinalIgnoreCase);
 
-    // Fires after every mutation, including a BBS-pin reload.
+    // Fires after every mutation, including a realm reload.
     public event Action? Changed;
 
     public GhItemLocationStore(ItemNameStore itemNames, LogService? log = null)
@@ -73,7 +73,7 @@ public sealed class GhItemLocationStore
     // (count-prefixed entries allowed; the count becomes Quantity).
     public void RecordRoom(RoomKey room, IReadOnlyList<string> items)
     {
-        if (_activeBbs is null) return;
+        if (_realmFolder is null) return;
 
         DateTimeOffset now = DateTimeOffset.Now;
         HashSet<string> freshNames = new(StringComparer.OrdinalIgnoreCase);
@@ -178,7 +178,7 @@ public sealed class GhItemLocationStore
     // a name from). Returns the count actually applied, for the program log.
     public int MergeSyncRecords(IReadOnlyList<GhItemSyncRecord> records)
     {
-        if (_activeBbs is null) return 0;
+        if (_realmFolder is null) return 0;
         int applied = 0;
         foreach (GhItemSyncRecord r in records)
         {
@@ -213,25 +213,25 @@ public sealed class GhItemLocationStore
         return applied;
     }
 
-    // Load the item-sighting log for the active BBS. Called by AppServices on
-    // ProfileService.ProfileLoaded / BbsPinApplied with the resolved active BBS
-    // name; resets the in-memory store when the pin clears (bbs is null / blank).
-    public void OnBbsPinApplied(string? bbs)
+    // Load the item-sighting log for the active realm. Called by AppServices on
+    // ProfileService.ProfileLoaded / BbsPinApplied with the active realm's folder;
+    // resets the in-memory store when there's none (null / blank).
+    public void OnRealmChanged(string? realmFolder)
     {
-        if (string.IsNullOrWhiteSpace(bbs))
+        if (string.IsNullOrWhiteSpace(realmFolder))
         {
-            if (_activeBbs is not null)
+            if (_realmFolder is not null)
             {
-                _activeBbs = null;
+                _realmFolder = null;
                 _sightings.Clear();
                 Changed?.Invoke();
             }
             return;
         }
 
-        _activeBbs = bbs;
+        _realmFolder = realmFolder;
         _sightings.Clear();
-        List<GhItemSighting>? loaded = JsonStore.Load<List<GhItemSighting>>(AppPaths.BbsRoombaItemsFile(bbs));
+        List<GhItemSighting>? loaded = JsonStore.Load<List<GhItemSighting>>(AppPaths.RealmRoombaItemsFile(realmFolder));
         if (loaded is not null)
         {
             foreach (GhItemSighting s in loaded)
@@ -249,8 +249,8 @@ public sealed class GhItemLocationStore
 
     private void Persist()
     {
-        if (_activeBbs is null) return;
+        if (_realmFolder is null) return;
         List<GhItemSighting> flat = _sightings.Values.SelectMany(byRoom => byRoom.Values).ToList();
-        JsonStore.Save(AppPaths.BbsRoombaItemsFile(_activeBbs), flat);
+        JsonStore.Save(AppPaths.RealmRoombaItemsFile(_realmFolder), flat);
     }
 }

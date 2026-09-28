@@ -55,7 +55,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         LogService log,
         Func<string, Task<bool>>? sendText = null,
         string? initialSectionId = null,
-        string? initialBbsName = null)
+        string? initialBbsName = null,
+        string? initialRealmName = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(log);
@@ -71,19 +72,20 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
               ?? Sections.FirstOrDefault()
             : Sections.FirstOrDefault();
 
-        if (initialBbsName is not null) SelectBbs(initialBbsName);
+        if (initialBbsName is not null) SelectBbs(initialBbsName, initialRealmName);
     }
 
-    // Deep-link target for "edit THIS BBS" — Profile Management's Edit button
-    // routes here so the window opens on the BBS tab with that record already
-    // selected, instead of whichever BBS the tab would have auto-picked. Pending
+    // Deep-link target for "edit THIS BBS" (and optionally one of its realms) —
+    // Profile Management's settings buttons route here so the window opens on the
+    // BBS tab with that record already selected, instead of whichever BBS the tab would have auto-picked. Pending
     // per-BBS field edits survive the switch (BbsSectionViewModel pushes them to
     // its cache on every keystroke), so re-pointing an already-open window is safe.
-    public void SelectBbs(string bbsName)
+    public void SelectBbs(string bbsName, string? realmName = null)
     {
         if (Sections.OfType<BbsSectionViewModel>().FirstOrDefault() is not { } bbs) return;
         SelectedSection = bbs;
         if (bbs.AvailableBbsNames.Contains(bbsName)) bbs.SelectedBbsName = bbsName;
+        if (realmName is not null && bbs.RealmNames.Contains(realmName)) bbs.SelectedRealmName = realmName;
     }
 
     // Tears down every section so the singletons they hooked (ProfileService,

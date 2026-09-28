@@ -30,13 +30,16 @@ public sealed class BbsProfileFieldsTests
         Assert.Equal(25, dto.TerminalRows);
         Assert.Equal(4_000, dto.ScrollbackLines);
 
+        Assert.Empty(dto.Realms);   // BbsProfileStore adds the first realm on load / save
+
         // Game-menu commands default to MajorMUD's standard picks:
         // E to enter the realm, =x to log off from the main menu.
-        Assert.Equal("E",  dto.GameEntryCommand);
-        Assert.Equal("=x", dto.GameExitCommand);
+        RealmProfile realm = new();
+        Assert.Equal("E",  realm.GameEntryCommand);
+        Assert.Equal("=x", realm.GameExitCommand);
 
         // Runic denomination defaults to the stock label until a realm renames it.
-        Assert.Equal("runic", dto.RunicCurrencyName);
+        Assert.Equal("runic", realm.RunicCurrencyName);
     }
 
     [Fact]
@@ -60,9 +63,11 @@ public sealed class BbsProfileFieldsTests
             TerminalCols = 132,
             TerminalRows = 50,
             ScrollbackLines = 50_000,
-            GameEntryCommand = "enter",
-            GameExitCommand = "bye",
-            RunicCurrencyName = "quatloos",
+            Realms =
+            {
+                new RealmProfile { Name = "PVE", GameEntryCommand = "enter", GameExitCommand = "bye", RunicCurrencyName = "quatloos" },
+                new RealmProfile { Name = "PVP", ActiveGameDataSet = "custom-mdb" },
+            },
         };
 
         string json = JsonSerializer.Serialize(original);
@@ -85,9 +90,11 @@ public sealed class BbsProfileFieldsTests
         Assert.Equal(original.TerminalCols,             round.TerminalCols);
         Assert.Equal(original.TerminalRows,             round.TerminalRows);
         Assert.Equal(original.ScrollbackLines,          round.ScrollbackLines);
-        Assert.Equal(original.GameEntryCommand,         round.GameEntryCommand);
-        Assert.Equal(original.GameExitCommand,          round.GameExitCommand);
-        Assert.Equal(original.RunicCurrencyName,        round.RunicCurrencyName);
+        Assert.Equal(2, round.Realms.Count);
+        Assert.Equal("enter",      round.Realms[0].GameEntryCommand);
+        Assert.Equal("bye",        round.Realms[0].GameExitCommand);
+        Assert.Equal("quatloos",   round.Realms[0].RunicCurrencyName);
+        Assert.Equal("custom-mdb", round.Realms[1].ActiveGameDataSet);
     }
 
     [Fact]

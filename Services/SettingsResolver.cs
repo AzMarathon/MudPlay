@@ -202,7 +202,7 @@ public sealed class SettingsResolver
         }
 
         Overlay(merged, ReadOverride(SettingsTier.Global,    null,                          table, set, recordId));
-        Overlay(merged, ReadOverride(SettingsTier.Bbs,       _activeBbs?.Name,              table, set, recordId));
+        Overlay(merged, ReadOverride(SettingsTier.Bbs,       ActiveRealmFolder(),           table, set, recordId));
         Overlay(merged, ReadOverride(SettingsTier.Character, _profile.CurrentProfileName,   table, set, recordId));
 
         return JsonSerializer.Deserialize<T>(merged.ToJsonString(), JsonStore.Options)
@@ -269,7 +269,7 @@ public sealed class SettingsResolver
 
         if (ReadOverride(SettingsTier.Character, _profile.CurrentProfileName, table, set, recordId) is not null)
             return SettingsTier.Character;
-        if (ReadOverride(SettingsTier.Bbs, _activeBbs?.Name, table, set, recordId) is not null)
+        if (ReadOverride(SettingsTier.Bbs, ActiveRealmFolder(), table, set, recordId) is not null)
             return SettingsTier.Bbs;
         if (ReadOverride(SettingsTier.Global, null, table, set, recordId) is not null)
             return SettingsTier.Global;
@@ -289,7 +289,7 @@ public sealed class SettingsResolver
 
         HashSet<string> ids = new(StringComparer.OrdinalIgnoreCase);
         CollectOverrideIds(ids, SettingsTier.Global,    string.Empty,                table, set);
-        CollectOverrideIds(ids, SettingsTier.Bbs,       _activeBbs?.Name,            table, set);
+        CollectOverrideIds(ids, SettingsTier.Bbs,       ActiveRealmFolder(),         table, set);
         CollectOverrideIds(ids, SettingsTier.Character, _profile.CurrentProfileName, table, set);
         return ids;
     }
@@ -319,6 +319,13 @@ public sealed class SettingsResolver
     }
 
     private void OnProfileClosed() => _activeBbs = null;
+
+    // The loaded character's realm folder on the active BBS — the scope of the
+    // BBS tier's game-data overrides ("only for this realm"). null with no BBS.
+    private string? ActiveRealmFolder() =>
+        _activeBbs is { } bbs && bbs.RealmFor(_profile.Current?.Realm) is { } realm
+            ? AppPaths.RealmFolder(bbs.Name, realm.Name)
+            : null;
 
     private BbsProfile RequireActiveBbs() => _activeBbs
         ?? throw new InvalidOperationException(
@@ -361,8 +368,8 @@ public sealed class SettingsResolver
     {
         SettingsTier.Defaults  => throw new InvalidOperationException("Defaults tier is read-only."),
         SettingsTier.Global    => string.Empty,
-        SettingsTier.Bbs       => _activeBbs?.Name ?? throw new InvalidOperationException(
-                                       "Cannot write to BBS tier: no active BBS."),
+        SettingsTier.Bbs       => ActiveRealmFolder() ?? throw new InvalidOperationException(
+                                       "Cannot write to the realm tier: no active BBS."),
         SettingsTier.Character => _profile.CurrentProfileName ?? throw new InvalidOperationException(
                                        "Cannot write to Character tier: no named profile loaded."),
         _ => throw new ArgumentOutOfRangeException(nameof(tier)),

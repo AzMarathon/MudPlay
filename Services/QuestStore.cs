@@ -1,14 +1,14 @@
 using MudPlay.Models.Profile;
-using MudPlay.Models.Settings;
 
 namespace MudPlay.Services;
 
 // Loads and resolves quest definitions. Two layers merge per (flag, step) in
 // priority order:
-//   1. the user's BBS-tier overlay Data/BBS/{bbs}/quests.json — display name,
+//   1. the user's overlay, the active realm's quests.json — display name,
 //      show/hide visibility, edited step markdown. A player's edits belong to the
-//      board they play, so the overlay follows the active BBS (BBS wins over the
-//      seed), reloading on ProfileService.BbsPinApplied / ProfileClosed;
+//      realm they play, so the overlay follows the active realm (it wins over the
+//      seed), reloading on ProfileService.ProfileLoaded / BbsPinApplied /
+//      ProfileClosed;
 //   2. the universal read-only seed QuestDefs.seed.json in Data/Global, built
 //      from the bundled Defaults seed, keyed by game-data flag numbers (custom
 //      realms reuse the numbers) so a curated default ports across every board;
@@ -27,51 +27,54 @@ public sealed class QuestStore
 {
     private readonly LogService? _log;
     private readonly string _seedPath;
-    private readonly Func<BbsProfile?>? _activeBbsProvider;
+    private readonly Func<string?>? _activeRealmFolder;
     private readonly Dictionary<(int Flag, int Step), QuestDefinition> _seed = new();
     private readonly Dictionary<(int Flag, int Step), QuestDefinition> _overlay = new();
 
-    // Active BBS whose overlay is loaded, or null when none.
-    public string? ActiveBbs { get; private set; }
+    // Folder of the realm whose overlay is loaded, or null when none.
+    public string? ActiveRealmFolder { get; private set; }
 
-    // Raised after the overlay reloads (BBS change / profile close) so consumers
+    // Raised after the overlay reloads (realm change / profile close) so consumers
     // re-resolve their displayed quest text.
     public event Action? Reloaded;
 
-    // Production ctor: seed from Data/Global; the overlay tracks the active BBS,
-    // reloading on ProfileService.BbsPinApplied / ProfileClosed. profile +
-    // activeBbsProvider are parameterized so tests can drive the store without a
-    // live ProfileService (pass a null provider and call OnActiveBbsChanged
-    // directly). seedPath defaults to AppPaths.DefaultQuestDefsSeedFile so a test
-    // can point at a scratch seed.
-    public QuestStore(ProfileService? profile = null, Func<BbsProfile?>? activeBbsProvider = null,
+    // Production ctor: seed from Data/Global; the overlay tracks the active realm,
+    // reloading on ProfileService.ProfileLoaded / BbsPinApplied / ProfileClosed.
+    // profile + activeRealmFolder are parameterized so tests can drive the store
+    // without a live ProfileService (pass a null provider and call
+    // OnActiveRealmChanged directly). seedPath defaults to
+    // AppPaths.DefaultQuestDefsSeedFile so a test can point at a scratch seed.
+    public QuestStore(ProfileService? profile = null, Func<string?>? activeRealmFolder = null,
                       LogService? log = null, string? seedPath = null)
     {
         _log = log;
-        _activeBbsProvider = activeBbsProvider;
+        _activeRealmFolder = activeRealmFolder;
         _seedPath = seedPath ?? AppPaths.DefaultQuestDefsSeedFile;
         LoadInto(_seed, _seedPath, "seed");
 
         if (profile is not null)
         {
-            profile.BbsPinApplied += _ => ReloadForActiveBbs();
-            profile.ProfileClosed += ReloadForActiveBbs;
+            // ProfileLoaded too: a profile swap otherwise kept the realm resolved
+            // mid-swap (while no profile was current), which could be another board's.
+            profile.ProfileLoaded += _ => ReloadForActiveRealm();
+            profile.BbsPinApplied += _ => ReloadForActiveRealm();
+            profile.ProfileClosed += ReloadForActiveRealm;
         }
-        ReloadForActiveBbs();
+        ReloadForActiveRealm();
     }
 
-    // Reload the overlay for whatever BBS the provider reports as active.
-    private void ReloadForActiveBbs() => OnActiveBbsChanged(_activeBbsProvider?.Invoke()?.Name);
+    // Reload the overlay for whatever realm the provider reports as active.
+    private void ReloadForActiveRealm() => OnActiveRealmChanged(_activeRealmFolder?.Invoke());
 
-    // Swap the loaded overlay to bbsName's Data/BBS/{bbs}/quests.json (empty when
-    // the BBS has no overlay yet, or bbsName is blank). Public so tests can drive
-    // it directly; production reloads via the BbsPinApplied hook.
-    public void OnActiveBbsChanged(string? bbsName)
+    // Swap the loaded overlay to the realm folder's quests.json (empty when the
+    // realm has no overlay yet, or the folder is blank). Public so tests can drive
+    // it directly; production reloads via the profile hooks.
+    public void OnActiveRealmChanged(string? realmFolder)
     {
         _overlay.Clear();
-        ActiveBbs = string.IsNullOrWhiteSpace(bbsName) ? null : bbsName;
-        if (ActiveBbs is not null)
-            LoadInto(_overlay, AppPaths.QuestsFileForBbs(ActiveBbs), "overlay");
+        ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
+        if (ActiveRealmFolder is not null)
+            LoadInto(_overlay, AppPaths.RealmQuestsFile(ActiveRealmFolder), "overlay");
         Reloaded?.Invoke();
     }
 
@@ -86,17 +89,17 @@ public sealed class QuestStore
         return new QuestDefinition(flag, step);
     }
 
-    // Persist the user's edited definitions to the active BBS overlay
-    // (Data/BBS/{bbs}/quests.json) and refresh the in-memory layer so later
+    // Persist the user's edited definitions to the active realm's overlay
+    // (its quests.json) and refresh the in-memory layer so later
     // Resolve calls see the edits immediately. The overlay stays a delta: a
     // definition that matches what Resolve would return with no overlay (the seed
     // entry, or a blank auto-draft) is dropped rather than frozen into the file,
     // so a later seed update still flows through for untouched quests. No-op when
-    // no BBS is active.
+    // no realm is active.
     public void Save(IEnumerable<QuestDefinition> defs)
     {
         ArgumentNullException.ThrowIfNull(defs);
-        if (ActiveBbs is null) return;
+        if (ActiveRealmFolder is null) return;
 
         _overlay.Clear();
         foreach (QuestDefinition raw in defs)
@@ -118,13 +121,13 @@ public sealed class QuestStore
             .ToList();
         try
         {
-            JsonStore.Save(AppPaths.QuestsFileForBbs(ActiveBbs), list);
+            JsonStore.Save(AppPaths.RealmQuestsFile(ActiveRealmFolder), list);
         }
         catch (Exception ex)
         {
             // A failed write (permissions, disk) shouldn't crash the editor — the
             // in-memory overlay still reflects the edits for this session.
-            _log?.Warn("Quests", $"Failed to save overlay for BBS '{ActiveBbs}': {ex.Message}");
+            _log?.Warn("Quests", $"Failed to save overlay to '{ActiveRealmFolder}': {ex.Message}");
         }
     }
 

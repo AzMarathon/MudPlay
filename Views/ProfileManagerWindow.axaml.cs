@@ -30,11 +30,20 @@ public partial class ProfileManagerWindow : Window
             vm.EditBbsCommand.Execute(null);
     }
 
+    // Load asks the window to close once the character is up.
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (DataContext is ViewModels.ProfileManagerViewModel vm) vm.CloseRequested += Close;
+    }
+
     // Dispose the VM so it detaches from ProfileService events — otherwise the
     // closed window's VM lingers, re-created fresh on every reopen (a slow leak).
     private void OnClosed(object? sender, EventArgs e)
     {
-        if (DataContext is ViewModels.ProfileManagerViewModel vm) vm.Dispose();
+        if (DataContext is not ViewModels.ProfileManagerViewModel vm) return;
+        vm.CloseRequested -= Close;
+        vm.Dispose();
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

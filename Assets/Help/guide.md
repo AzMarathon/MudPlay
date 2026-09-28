@@ -69,22 +69,23 @@ Settings live in four tiers — **Defaults → Global → BBS → Character** �
 
 ## Profile Management
 
-Open **Profile Management** from **File**, the **View** menu, or its toolbar button — it's the single home for your characters and your BBSes. If it's already open, re-selecting the menu item (or toolbar button) brings it back to the front (handy when it's hidden behind another window, or another running client). The window has three parts:
+Open **Profile Management** from **File**, the **View** menu, or its toolbar button — it's the single home for your characters, your BBSes and their realms. If it's already open, re-selecting the menu item (or toolbar button) brings it back to the front (handy when it's hidden behind another window, or another running client). Below the current-profile strip are three linked columns — pick a **BBS**, then one of its **realms**, and the right column lists the **characters** playing that realm:
 
 - **The current profile** (top strip) shows which character is loaded and gives you **New…**, **Save**, and **Save As…** — the same actions the File menu used to carry. **New…** starts a blank draft on the BBS selected on the left (so Connect and that board's settings apply to it), and **Save As…** names a draft under whichever BBS is selected. A quick **Save profile** stayed on the File menu as well (**Ctrl+S**, or the floppy-disk toolbar button), and **Ctrl+P** opens this window from anywhere.
-- **BBSes** (left) — every saved board. **Add** creates a new one and takes you straight to its settings, since a fresh board has no host yet; **Edit settings…** (or a double-click on the row) reopens those settings for whichever board is selected; **Rename** retitles it (carrying its characters and your saved logins with it); **Remove** deletes it. Removing a BBS deletes **every character saved under it**, so the confirm names how many will go.
-- **Characters** (right) — the characters saved under the selected BBS (multi-select). **Add** creates a new one, **Rename** retitles it, **Copy** duplicates the selected character under a new name on the same BBS (settings, macros, gear sets and its own game-data overrides all come along; the loaded character is saved first so the copy includes your latest changes), **Delete** removes it, **Assign to BBS** moves a character to a different board (pick the destination in the **Move to** dropdown; if that board already has a character by the same name you're asked for a new one), and **Load** brings the selection online. The character you currently have loaded is shown in **bold** and marked *loaded*.
+- **BBSes** (left) — every saved board. **Add** creates a new one and takes you straight to its settings, since a fresh board has no host yet; **BBS settings…** (or a double-click on the row) reopens those settings for whichever board is selected; **Rename** retitles it (carrying its characters and your saved logins with it); **Remove** deletes it. Removing a BBS deletes **every character saved under it**, so the confirm names how many will go.
+- **Realms** (middle) — the versions of the game the selected BBS hosts (see *Realms* under BBS + Display). **Add** makes a new one (default settings, no collected data), **Rename** retitles it (its data and characters come along), and **Remove** deletes it — **every character playing that realm is deleted with it**, along with its collected data, after a confirmation that names them (a BBS always keeps one realm). The **Game data** dropdown picks the realm's imported MDB and saves straight away; **Realm settings…** opens Settings → BBS on that realm for its game-menu commands, death floor, boss cleanup time and runic currency name.
+- **Characters** (right) — the characters playing the selected realm (multi-select). **Add** creates a new one on this BBS playing that realm, **Rename** retitles it, **Copy** duplicates the selected character under a new name on the same BBS (settings, macros, gear sets and its own game-data overrides all come along; the loaded character is saved first so the copy includes your latest changes), **Delete** removes it, and **Load** brings the selection online and closes the window. **Move to realm** puts the selected character on another realm of its BBS, and **Move to BBS** moves it to a different board (if that board already has a character by the same name you're asked for a new one; it starts on that board's first realm). The character you currently have loaded is shown in **bold** and marked *loaded*.
 - **Load** is selection-aware, so you can bring a whole stable up at once: tick several characters and hit Load and you end up with one running client per character. The **first** selected character loads into **this** client when it's idle (a straight swap); each of the **rest** opens in its own new client instance. If this client is **actively connected**, it's left alone entirely — *every* selected character opens in a new client, so you never get the jarring disconnect → swap → reconnect just to launch alts. (Launching new clients uses the same multi-instance mechanism as the `--profile` command line.)
 
-Because deleting, renaming, or moving the **loaded** character (or removing the BBS it lives on) would pull the rug out from under your live session, those actions ask you to **disconnect first**. Everything you do to *other* characters works while you're still connected.
+Because deleting, renaming, or moving the **loaded** character (to another realm or BBS), or removing the BBS or realm it plays on, would pull the rug out from under your live session, those actions ask you to **disconnect first**. Everything you do to *other* characters works while you're still connected.
 
-BBS **connection details** (host, port, redial, display, realm mechanics, credentials) are edited over in **Settings → BBS + Display**, and **Edit settings…** in Profile Management is the shortcut there — it opens that tab with the selected board already picked, so you don't have to find it in the Settings list.
+BBS **connection details** (host, port, redial, display, credentials) and each realm's settings are edited over in **Settings → BBS + Display**, and **BBS settings…** / **Realm settings…** in Profile Management are the shortcuts there — they open that tab with the selected board (and realm) already picked, so you don't have to find it in the Settings list.
 
-The division of labour: **Profile Management** is where BBSes are created, renamed, removed, and where characters are assigned to them; **Settings** is where a selected BBS's details are edited. Selecting a BBS in Settings **only** edits that board now — it never moves your character (use **Assign to BBS** for that).
+The division of labour: **Profile Management** is where BBSes and realms are created, renamed, removed, and where characters are put on them; **Settings** is where a selected BBS's and realm's details are edited (realms can be added and renamed there too). Selecting a BBS in Settings **only** edits that board — it never moves your character (use **Move to BBS** for that).
 
 ## Setting up a BBS
 
-First **add the board** in **Profile Management** (File → Profile Management → BBSes → Add) — that's where BBSes are created, renamed, and removed now. Add drops you straight into **Settings → BBS + Display** for the new board (you can get back there any time with **Edit settings…**, or by double-clicking the board in the list). Fill in:
+First **add the board** in **Profile Management** (File → Profile Management → BBSes → Add) — that's where BBSes are created, renamed, and removed now. Add drops you straight into **Settings → BBS + Display** for the new board (you can get back there any time with **BBS settings…**, or by double-clicking the board in the list). Fill in:
 
 - its **host** and **port**;
 - your **username / password**;
@@ -1443,7 +1444,7 @@ A monster's **Greet** row shows every keyword you can ask it as a collapsible tr
 
 Even *without* Kill on sight, if you hand-attack a passive neutral yourself (a manual swing or combat cast), the engine takes over and finishes it — hitting a neutral turns it hostile, so it's treated like an enemy until it dies and the walker holds in the room — so you don't have to keep swinging manually; the other un-engaged neutrals stay passive and rest-safe.
 
-**Where the override saves.** The **Use** dropdown chooses the tier — **Only for this character**, **Only for this BBS**, or **For all characters (global)** — then **OK** writes it and the row's Use column updates to match. Priority when the same record is set at more than one tier is character → BBS → global → installed defaults, so a character edit always wins over a global one for that character.
+**Where the override saves.** The **Use** dropdown chooses the tier — **Only for this character**, **Only for this realm** (the realm of the BBS your character plays), or **For all characters (global)** — then **OK** writes it and the row's Use column updates to match. Priority when the same record is set at more than one tier is character → realm → global → installed defaults, so a character edit always wins over a global one for that character.
 
 The dropdown also offers **Installed defaults**: picking it and saving **resets the record** — after a confirm it wipes your character, BBS, *and* global edits for that one record and restores the seeded value (the row returns to **Def**). This is the only way to clear a lower-priority edit that a higher tier is shadowing.
 
@@ -1824,7 +1825,7 @@ Two related editors live outside this window: the **keybind rebind dialog** (ope
 Every tab makes this visible: its controls sit under **banner-headed sections** naming the tier they save to (Global client settings / BBS settings / Character profile settings), so you can see at a glance where a change lands. A tab whose settings are all one tier shows a single banner; the mixed tabs (BBS + Display, General, Toolbar + Shortcuts, Other) split into a section per tier. The tiers:
 
 - **Character-tier** (the vast majority of settings — Combat, Spells, Health, Party, Cash, Talk, Auto-Light, Auto-Lair, Auto-Trainer, most of General, keybinds, macros) live inside that character's own profile file and only apply to that one character.
-- **BBS-tier** (connection info, reconnect behavior, terminal size, per-BBS realm quirks) live in that BBS's own file and are shared by every character who plays there.
+- **BBS-tier** (connection info, reconnect behavior, terminal size, and the board's realms with their own settings) live in that BBS's own file and are shared by every character who plays there; each **realm** also keeps its own collected data, shared by the characters playing it.
 - **Global-tier** (a handful of install-wide toggles — navigation-line colors, the Pyramid/Asylum puzzle solvers, confirmation prompts, the Help-menu website list, player-database cleanup) apply to every character on every BBS on this install.
 
 All of this is stored under a single MudPlay data folder (`~/.local/share/MudPlay/` on Linux, `%AppData%\MudPlay\` on Windows, `~/Library/Application Support/MudPlay/` on macOS) as JSON files that only record *deltas* from the tier below them — so an unmodified setting isn't written to disk at all.
@@ -2174,12 +2175,12 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 
 ## BBS + Display (Connection & Network)
 
-Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. **Adding, removing, and renaming BBSes now lives in Profile Management** (View → Profile Management, or the button on this tab's left rail); this tab's list is for **selecting** a saved BBS to edit its details, and selecting one here only edits it — it never moves your loaded character (that's Profile Management's *Assign to BBS*).
+Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. **Adding, removing, and renaming BBSes now lives in Profile Management** (View → Profile Management, or the button on this tab's left rail); this tab's list is for **selecting** a saved BBS to edit its details, and selecting one here only edits it — it never moves your loaded character (that's Profile Management's *Move to BBS*).
 
 To make each setting's persistence level obvious, the tab is split into three banner-headed sections:
 
-- **BBS settings** — stored with the board, shared by every character on it: connection, retry/reconnect, display size + scrollback, game-menu commands, realm mechanics, board disconnect line, runic-currency name.
-- **Character profile settings** — only for the loaded character: username/password, the read-only captured suicide password, SYSOP powers, the Sys Goto table, and the automated logon-menu steps.
+- **BBS settings** — stored with the board, shared by every character on it: connection, retry/reconnect, display size + scrollback, board disconnect line, and the board's **realms** (each with its own game data, game-menu commands, realm mechanics and runic-currency name — see *Realms* below).
+- **Character profile settings** — only for the loaded character: the realm it plays, username/password, the read-only captured suicide password, SYSOP powers, the Sys Goto table, and the automated logon-menu steps.
 - **Global client settings** — app-wide, regardless of BBS or character: the confirmation prompts, documented separately below.
 
 You can edit **several boards in one visit**: click between them freely and everything you changed — connection fields *and* credentials/logon steps alike — is written when you press **OK**. **Cancel** (or the title-bar X) still throws away every board's pending edits, not just the one on screen.
@@ -2302,22 +2303,34 @@ Once `sys st` has answered even once, it's trusted for the rest of the session a
 **What it does:** A sequence of "wait for this text, then send this reply" steps MudPlay walks through after your username/password to reach the actual game (skipping "press any key" prompts, picking door-game menu options, etc). The reply text can include placeholders like `{user}` and `{pass}` that get filled in with your saved credentials automatically.
 **When you might change it:** Set this up once per BBS so logging in is fully automatic. You can also import a working sequence from another saved character if several boards you play share the same login flow.
 
+### Realms
+
+**Default:** one realm, named after the BBS.
+**What it does:** A BBS can host several versions of the game, picked from its menu (a PVE and a PVP realm, say), and each usually differs — often with its own MDB export. Each realm has its own **game data** (the imported MDB it uses), **game-menu commands**, **realm mechanics** and **runic-currency name**, and keeps its own copy of everything MudPlay collects while you play it: the **players you've seen** (the `who` list), the **room blacklist**, the **leaderboard** history, **Roomba** room labels and item sightings, your **quest** edits, **boss timers**, and game-data edits saved **Only for this realm**. Characters assigned to the same realm share all of it, the way characters on a BBS used to.
+**How to use it:** pick a realm in the list to edit its settings below; **Add realm** makes a new one (default settings, no collected data), the **Realm name** box renames the selected one (its data and characters come along), and **Remove realm** deletes it when you press **OK** — **along with every character playing it and its collected data**; you confirm first, with the characters named, and the realm your loaded character plays can't be removed here. The selected realm's settings sit in a frame in **that realm's own colour**, labelled with its name, the way combat-profile groups are framed in their profile's colour — switch realms and the frame's colour switches with it. The frame also lists **which characters play the realm**. Put a character on a realm with **Plays on realm** in the character section of this tab (for the loaded character), or **Move to realm** in Profile Management (for any character); Profile Management can also add, rename and remove realms.
+**Important notes:** A BBS saved before realms existed became one realm named after it, holding its settings and everything collected on it, so nothing was lost. If two of your characters on one BBS actually play different realms, add the second realm and assign that character to it — it starts fresh.
+
+### Plays on realm
+
+**Default:** the BBS's first realm.
+**What it does:** Which realm of this BBS the loaded character plays (shown when the selected BBS is the character's own). It decides the game data and realm settings in use and where what you collect is kept. Saved when you press **OK**; the game data and the realm's stores switch straight away.
+
 ### Game entry command / Game exit command
 
 **Default:** `E` / `=x`
-**What it does:** The literal keys sent at the main menu to enter the game realm, and to log off cleanly.
+**What it does:** The literal keys sent at the main menu to enter the game, and to log off cleanly. Set per realm.
 **When you might change it:** Only if a particular board remaps its main-menu options away from the MajorMUD-standard letters.
 
 ### Player dies at (HP)
 
 **Default:** `-25`
-**What it does:** The negative HP value at which this board's realm actually kills a character (0 HP alone just "drops" you — bleeding out but revivable). Used by the emergency-hangup safety logic to know how far into negative HP it's safe to let things go.
+**What it does:** The negative HP value at which this realm actually kills a character (0 HP alone just "drops" you — bleeding out but revivable). Used by the emergency-hangup safety logic to know how far into negative HP it's safe to let things go.
 **Important notes:** With "Auto-refine the floor from slow deaths" (below) on, MudPlay learns the real number over time from observed deaths and updates this automatically.
 
 ### Boss cleanup time / Boss cleanup zone
 
 **Default:** `21:00`, your computer's local time zone.
-**What it does:** The BBS's daily maintenance time. Some boss monsters only respawn at this specific wall-clock time rather than on a countdown timer — MudPlay's boss tracker uses this to know when a "cleanup-only" boss should flip back to alive.
+**What it does:** The realm's daily maintenance time. Some boss monsters only respawn at this specific wall-clock time rather than on a countdown timer — MudPlay's boss tracker uses this to know when a "cleanup-only" boss should flip back to alive.
 
 ### Board disconnect line
 
@@ -2329,7 +2342,7 @@ Once `sys st` has answered even once, it's trusted for the rest of the session a
 ### Name of runic currency
 
 **Default:** `runic`
-**What it does:** Some boards rename MajorMUD's top currency denomination to a board-specific word. This field tells MudPlay what that word is on this particular BBS, so cash automation keeps parsing coin messages correctly.
+**What it does:** Some realms rename MajorMUD's top currency denomination to their own word. This field tells MudPlay what that word is on the selected realm, so cash automation keeps parsing coin messages correctly.
 
 ---
 
@@ -3508,7 +3521,7 @@ Double-click the row to open the same editor the Messages tab uses, pre-filled w
 
 Not a Settings-window tab (the **Roomba** tab in the Player Workshop). An automated gang-house (GH) item sorter, built on the same loop engine every saved Loop runs on rather than a separate navigation system.
 
-**Shared per BBS, not per character.** Room labels, the hidden-search settings, and the item-location log below are all saved against the BBS you're connected to, not your character — a BBS ties to one game-data set and every character on it shares the same gang house, so labeling rooms (or running a sweep) on any one character makes them available to every other character on that board.
+**Shared per realm, not per character.** Room labels, the hidden-search settings, and the item-location log below are all saved against the realm you play (see *Realms* under BBS + Display), not your character — every character on a realm shares the same gang house, so labeling rooms (or running a sweep) on any one character makes them available to every other character on that realm.
 
 **Setup:** mark your gang-house rooms one of two ways. On the Navigation map, right-click a room and choose **Toggle: Roomba Room** — the room gets a small **robot marker**; right-clicking it again removes it. Or, on the Roomba tab, type a room's **map/room number** into the box and click **Add Room**. Either way opens the rule picker (titled *Set 1/384 <room name> as Roomba Room*). A room's rules are OR'd together, so a single room can sort for several categories at once (e.g. a "Chain Scale" room admitting both Chainmail and Scalemail). Each rule is either:
 - an **item category** — Weapon, Armour, Food, etc. (the same categories the imported item data already carries), optionally narrowed to a specific weapon or armour subtype; or
@@ -3525,7 +3538,7 @@ Use **+ Add rule** to add another rule to the room, and the ✕ on a rule row to
 
 Both buttons grey out while a sweep is running, since the circuit it's walking was planned from these labels.
 
-**Only rooms with the "Actively Manage" checkbox ticked are visited.** This tick is **per character** — the room labels themselves are shared by every character on the BBS, but *which* of them a character sweeps is its own choice, so alts who belong to **different gang houses on the same BBS** each manage their own house without stepping on each other.
+**Only rooms with the "Actively Manage" checkbox ticked are visited.** This tick is **per character** — the room labels themselves are shared by every character on the realm, but *which* of them a character sweeps is its own choice, so alts who belong to **different gang houses on the same realm** each manage their own house without stepping on each other.
 
 - A room you add yourself (the Add Room box, or the map's right-click *Toggle: Roomba Room*) is checked for you by default.
 - A room adopted from someone else's **`@roomba sync`** arrives **unchecked** — because a shared label set can span *several* gang houses, and Roomba must never route from house to house or into one you lack the emblem for. Tick a synced room only once you're sure it belongs to the house *this* character sweeps.
@@ -3587,7 +3600,7 @@ Grant a gang member the **Query Roomba** remote-control permission (on the Playe
 - **The last-scanned stamp** tells a fresh sighting from a stale one — a room nobody's swept in weeks is a much weaker signal than one scanned this session.
 - **A loose query matching several distinct items** (names often share words — "severed head of goru-nezar" and "severed head of darksong" both match "head") gets a line for each, capped at 5 with its own overflow tail, rather than refusing to answer.
 
-That per-player permission is the only gate — there's no separate on/off checkbox; a member you haven't granted it to gets nothing. The log itself is shared BBS-wide (every character on the board sees the same sightings). The Roomba tab shows a **Roomba Data Timestamp** next to *Searches per room* — the time of the newest sighting anywhere in the log — so you can tell at a glance whether the gang-house data is current or stale (it reads "no data yet" before the first scan).
+That per-player permission is the only gate — there's no separate on/off checkbox; a member you haven't granted it to gets nothing. The log itself is shared realm-wide (every character on the realm sees the same sightings). The Roomba tab shows a **Roomba Data Timestamp** next to *Searches per room* — the time of the newest sighting anywhere in the log — so you can tell at a glance whether the gang-house data is current or stale (it reads "no data yet" before the first scan).
 
 **`@roomba sync`** — the no-hassle way to hand your item-location log to a gang member starting fresh on their own MudPlay install, no file/Discord/import-export needed.
 
@@ -3692,9 +3705,9 @@ This section is a compact, technical lookup table for every setting documented a
 | No-response (s) | `20` | 0–3600 | `NoResponseTimeoutSeconds` | Models/Settings/BbsProfile.cs |
 | Reconnect on failed connect / carrier lost / no response / after cleanup | `false` (all) | bool | `ReconnectOnFailedConnect` etc. | Models/Settings/BbsProfile.cs |
 | Game entry / exit command | `"E"` / `"=x"` | string | `GameEntryCommand` / `GameExitCommand` | Models/Settings/BbsProfile.cs |
-| Player dies at (HP) | `-25` | -999–0 | `PlayerDiesAtHp` | Models/Settings/BbsProfile.cs |
+| Player dies at (HP) | `-25` | -999–0 | `PlayerDiesAtHp` | Models/Settings/RealmProfile.cs |
 | Auto-refine death floor | `true` | bool | `AutoRefineDeathFloor` | Models/Settings/BbsProfile.cs |
-| Boss cleanup time / zone | `"21:00"` / local zone | `HH:mm` / IANA/Windows tz id | `CleanupTimeOfDay` / `CleanupTimeZoneId` | Models/Settings/BbsProfile.cs |
+| Boss cleanup time / zone | `"21:00"` / local zone | `HH:mm` / IANA/Windows tz id | `CleanupTimeOfDay` / `CleanupTimeZoneId` | Models/Settings/RealmProfile.cs |
 | Board disconnect line | `null` | pattern string | `DisconnectPattern` | Models/Settings/BbsProfile.cs |
 | Name of runic currency | `"runic"` | string | `RunicCurrencyName` | Models/Settings/BbsProfile.cs |
 | Columns / Rows (NAWS) | `80` / `25` | 40–200 / 20–100 | `TerminalCols` / `TerminalRows` | Models/Settings/BbsProfile.cs |

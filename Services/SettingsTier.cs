@@ -8,25 +8,26 @@ public enum SettingsTier
     // "installed defaults" — app-shipped fallback values + imported game-data tables.
     Defaults = 0,
 
-    // "for all characters" — Data/Global/global.json.
+    // "for all characters" — Global/global.json.
     Global = 1,
 
-    // "only for this BBS" — Data/BBS/{name}.json.
+    // "only for this realm" — the active realm of the BBS: BBS/{bbs}/bbs.json for
+    // tab settings, the realm's folder for game-data overrides.
     Bbs = 2,
 
-    // "only for this character" — Data/profiles/{name}.json.
+    // "only for this character" — BBS/{bbs}/profiles/{char}/profile.json.
     Character = 3,
 }
 
 // Short labels for the Game Data Browser "Use" column — MegaMUD parity
-// (Def / Glob / BBS / Char).
+// (Def / Glob / Realm / Char).
 public static class SettingsTierExtensions
 {
     public static string ToShortLabel(this SettingsTier tier) => tier switch
     {
         SettingsTier.Defaults  => "Def",
         SettingsTier.Global    => "Glob",
-        SettingsTier.Bbs       => "BBS",
+        SettingsTier.Bbs       => "Realm",
         SettingsTier.Character => "Char",
         _ => tier.ToString(),
     };
@@ -38,7 +39,7 @@ public static class SettingsTierExtensions
     {
         SettingsTier.Defaults  => "Installed defaults",
         SettingsTier.Global    => "For all characters (global)",
-        SettingsTier.Bbs       => "Only for this BBS",
+        SettingsTier.Bbs       => "Only for this realm",
         SettingsTier.Character => "Only for this character",
         _ => tier.ToString(),
     };

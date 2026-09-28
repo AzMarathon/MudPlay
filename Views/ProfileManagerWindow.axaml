@@ -4,12 +4,12 @@
         xmlns:vmp="using:MudPlay.ViewModels.Profile"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="460"
+        mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="480"
         x:Class="MudPlay.Views.ProfileManagerWindow"
         x:DataType="vm:ProfileManagerViewModel"
         Title="Profile Management"
-        Width="640" Height="460"
-        MinWidth="520" MinHeight="320"
+        Width="920" Height="480"
+        MinWidth="780" MinHeight="340"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
@@ -22,6 +22,12 @@
         <!-- Bold the currently-loaded character's row. -->
         <Style Selector="TextBlock.current">
             <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <!-- The pane action rows pack several buttons into a narrow column: tighter
+             side padding and centred labels keep "Rename" / "Remove" whole. -->
+        <Style Selector="Grid.PaneActions > Button">
+            <Setter Property="Padding" Value="4,5"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
         <!-- First-run tour: glow the button the current step points at. -->
         <Style Selector="Button.tutTarget">
@@ -49,13 +55,16 @@
             </Grid>
         </Border>
 
-        <Grid ColumnDefinitions="240,1,*" Margin="10">
+        <!-- Three linked columns: BBSes → the selected BBS's realms → the
+             characters on the selected realm. Each pane lists on top and keeps
+             its actions underneath. -->
+        <Grid ColumnDefinitions="230,1,230,1,*" Margin="10">
 
-            <!-- ===== BBS rail ===== -->
+            <!-- ===== BBSes ===== -->
             <DockPanel Grid.Column="0" Margin="0,0,10,0">
-                <StackPanel DockPanel.Dock="Top">
-                    <TextBlock Classes="PaneHeader" Text="BBSes"/>
-                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="4" Margin="0,0,0,4">
+                <TextBlock DockPanel.Dock="Top" Classes="PaneHeader" Text="BBSes"/>
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0" Spacing="4">
+                    <Grid Classes="PaneActions" ColumnDefinitions="*,*,*" ColumnSpacing="4">
                         <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
                                 Classes.tutTarget="{Binding HighlightAddBbs}"
                                 Command="{Binding AddBbsCommand}"/>
@@ -64,10 +73,10 @@
                         <Button Grid.Column="2" Content="Remove" HorizontalAlignment="Stretch"
                                 Command="{Binding RemoveBbsCommand}" IsEnabled="{Binding HasBbsSelection}"/>
                     </Grid>
-                    <Button Content="Edit settings…" HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center" Margin="0,0,0,6"
+                    <Button Content="BBS settings…" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
                             Command="{Binding EditBbsCommand}" IsEnabled="{Binding HasBbsSelection}"
-                            ToolTip.Tip="Open Settings → BBS for this BBS: host, port, terminal size, logon steps."/>
+                            ToolTip.Tip="Open Settings → BBS for this BBS: host, port, retry, terminal size, logon steps."/>
                 </StackPanel>
                 <ListBox ItemsSource="{Binding Bbses}"
                          SelectedItem="{Binding SelectedBbs, Mode=TwoWay}"
@@ -80,17 +89,53 @@
 
             <Border Grid.Column="1" Background="{StaticResource ChromeBorderBrush}"/>
 
-            <!-- ===== Characters pane ===== -->
-            <DockPanel Grid.Column="2" Margin="10,0,0,0">
-                <TextBlock DockPanel.Dock="Top" Classes="PaneHeader"
-                           Text="{Binding SelectedBbs, StringFormat='Characters on {0}'}"/>
+            <!-- ===== Realms of the selected BBS ===== -->
+            <DockPanel Grid.Column="2" Margin="10,0,10,0">
+                <TextBlock DockPanel.Dock="Top" Classes="PaneHeader" Text="{Binding RealmsHeader}"
+                           TextTrimming="CharacterEllipsis"/>
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0" Spacing="4">
+                    <Grid Classes="PaneActions" ColumnDefinitions="*,*,*" ColumnSpacing="4">
+                        <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
+                                Command="{Binding AddRealmCommand}" IsEnabled="{Binding HasBbsSelection}"
+                                ToolTip.Tip="Add a realm to this BBS. It starts with default settings and no collected data."/>
+                        <Button Grid.Column="1" Content="Rename" HorizontalAlignment="Stretch"
+                                Command="{Binding RenameRealmCommand}" IsEnabled="{Binding HasRealmSelection}"
+                                ToolTip.Tip="Rename the realm. Its data and its characters come along."/>
+                        <Button Grid.Column="2" Content="Remove" HorizontalAlignment="Stretch"
+                                Command="{Binding RemoveRealmCommand}" IsEnabled="{Binding CanRemoveRealm}"
+                                ToolTip.Tip="Remove the realm (a BBS keeps at least one). This DELETES every character on it and its collected data — you're asked to confirm first, with the characters named."/>
+                    </Grid>
+                    <TextBlock Text="Game data" Foreground="{StaticResource ChromeFgSecBrush}" Margin="0,2,0,0"/>
+                    <ComboBox HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding GameDataSetOptions}"
+                              SelectedItem="{Binding RealmGameDataSet, Mode=TwoWay}"
+                              IsEnabled="{Binding HasRealmSelection}"
+                              ToolTip.Tip="The imported game data (MDB) this realm uses. Saved right away."/>
+                    <Button Content="Realm settings…" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Command="{Binding EditRealmCommand}" IsEnabled="{Binding HasRealmSelection}"
+                            ToolTip.Tip="Open Settings → BBS on this realm: game-menu commands, death floor, boss cleanup time, runic currency name."/>
+                </StackPanel>
+                <ListBox ItemsSource="{Binding Realms}"
+                         SelectedItem="{Binding SelectedRealm, Mode=TwoWay}"
+                         Background="{StaticResource ChromeBgSunkenBrush}"
+                         BorderBrush="{StaticResource ChromeBorderBrush}"
+                         BorderThickness="1"
+                         ToolTip.Tip="The versions of the game this BBS hosts. Each keeps its own game data, settings and collected data (players, blacklist, leaderboard, roomba, quests, boss timers), shared by its characters."/>
+            </DockPanel>
 
-                <!-- Character actions -->
-                <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0" Spacing="6">
-                    <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="4">
+            <Border Grid.Column="3" Background="{StaticResource ChromeBorderBrush}"/>
+
+            <!-- ===== Characters on the selected realm ===== -->
+            <DockPanel Grid.Column="4" Margin="10,0,0,0">
+                <TextBlock DockPanel.Dock="Top" Classes="PaneHeader" Text="{Binding CharactersHeader}"
+                           TextTrimming="CharacterEllipsis"/>
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0" Spacing="4">
+                    <Grid Classes="PaneActions" ColumnDefinitions="*,*,*,*,*" ColumnSpacing="4">
                         <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
                                 Classes.tutTarget="{Binding HighlightAddCharacter}"
-                                Command="{Binding AddProfileCommand}" IsEnabled="{Binding HasBbsSelection}"/>
+                                Command="{Binding AddProfileCommand}" IsEnabled="{Binding HasBbsSelection}"
+                                ToolTip.Tip="Create a character on this BBS, playing the selected realm."/>
                         <Button Grid.Column="1" Content="Rename" HorizontalAlignment="Stretch"
                                 Command="{Binding RenameProfileCommand}" IsEnabled="{Binding HasProfileSelection}"/>
                         <Button Grid.Column="2" Content="Copy" HorizontalAlignment="Stretch"
@@ -102,15 +147,27 @@
                                 Command="{Binding LoadCommand}" IsEnabled="{Binding HasProfileSelection}"
                                 ToolTip.Tip="Load the selected character(s): the first fills this client (when it's idle), the rest each open in a new client."/>
                     </Grid>
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                        <TextBlock Grid.Column="0" Text="Move to:" VerticalAlignment="Center"
-                                   Foreground="{StaticResource ChromeFgSecBrush}" Margin="0,0,6,0"/>
+                    <Grid ColumnDefinitions="90,*,Auto" ColumnSpacing="6">
+                        <TextBlock Grid.Column="0" Text="Move to realm" VerticalAlignment="Center"
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding Realms}"
+                                  SelectedItem="{Binding AssignTargetRealm, Mode=TwoWay}"
+                                  PlaceholderText="another realm"/>
+                        <Button Grid.Column="2" Content="Move" MinWidth="64" HorizontalContentAlignment="Center"
+                                Command="{Binding AssignToRealmCommand}" IsEnabled="{Binding HasProfileSelection}"
+                                ToolTip.Tip="Put the selected character on the chosen realm: its game data, settings and collected data are that realm's. The loaded character must be disconnected first."/>
+                    </Grid>
+                    <Grid ColumnDefinitions="90,*,Auto" ColumnSpacing="6">
+                        <TextBlock Grid.Column="0" Text="Move to BBS" VerticalAlignment="Center"
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
                         <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
                                   ItemsSource="{Binding AssignableBbses}"
                                   SelectedItem="{Binding AssignTargetBbs, Mode=TwoWay}"
                                   PlaceholderText="another BBS"/>
-                        <Button Grid.Column="2" Content="Assign to BBS" Margin="6,0,0,0"
-                                Command="{Binding AssignToBbsCommand}" IsEnabled="{Binding HasProfileSelection}"/>
+                        <Button Grid.Column="2" Content="Move" MinWidth="64" HorizontalContentAlignment="Center"
+                                Command="{Binding AssignToBbsCommand}" IsEnabled="{Binding HasProfileSelection}"
+                                ToolTip.Tip="Move the selected character to another BBS. It starts on that BBS's first realm."/>
                     </Grid>
                 </StackPanel>
 
@@ -134,9 +191,9 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <!-- Empty-state so a BBS with no characters still shows the Add affordance. -->
+                    <!-- Empty-state so a realm with no characters still shows the Add affordance. -->
                     <TextBlock IsVisible="{Binding IsProfilesEmpty}"
-                               Text="No characters on this BBS yet — click Add to create one."
+                               Text="No characters on this realm yet — click Add to create one, or move one here."
                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                TextWrapping="Wrap" TextAlignment="Center"
                                HorizontalAlignment="Center" VerticalAlignment="Center"

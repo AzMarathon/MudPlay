@@ -925,6 +925,9 @@ public sealed class AppServices
     // Read by the Character Workshop's Character Info tab.
     public Game.AlignmentTracker Alignment { get; }
 
+    // Add / rename / remove a BBS's realms (Profile Management, Settings → BBS).
+    public RealmCatalog Realms { get; }
+
     // Drives the train stats screen to apply the saved CP plan. Wrapped
     // by TrainerWalk, which owns the walk-to-trainer + level-up.
     public Game.AutoTrainManager AutoTrain { get; }
@@ -1114,7 +1117,7 @@ public sealed class AppServices
     // Auto-greets newly-seen non-party players (Settings → Talk
     // "Greet players when first met"). Subscribes to
     // RoomClassifier's observations; once-per-local-day
-    // dedup on the per-BBS player record. Off by default.
+    // dedup on the realm's player record. Off by default.
     public Game.GreetManager Greet { get; private set; } = null!;
 
     // Reactive `look <player>` automation (Settings → Talk). Two independent
@@ -1576,9 +1579,9 @@ public sealed class AppServices
     // driven reroute is follow-up work.
     public Game.Cash.CashManager Cash { get; private set; } = null!;
 
-    // Runtime source-of-truth for the per-BBS runic-currency word. Read live by
-    // every cash parser / command builder (Cash, Stash, GroundItems) and
-    // refreshed on profile / BBS swap; defaults to stock "runic".
+    // Runtime source-of-truth for the active realm's runic-currency word. Read live
+    // by every cash parser / command builder (Cash, Stash, GroundItems) and
+    // refreshed on profile / realm swap; defaults to stock "runic".
     public Game.Cash.CurrencyNaming Currency { get; private set; } = null!;
 
     // Auto-get items engine. Parses the room
@@ -1978,14 +1981,14 @@ public sealed class AppServices
     // it into Bfs without further wiring.
     public MovementFilter Movement { get; private set; } = null!;
 
-    // Per-BBS gang-house room labels for Roomba Mode (right-click map labeling +
+    // Per-realm gang-house room labels for Roomba Mode (right-click map labeling +
     // the GH Management workshop tab read/write through this) — shared by every
-    // character on the BBS.
+    // character on the realm.
     public Game.Map.GhRoomLabelStore GhRoomLabels { get; private set; } = null!;
 
-    // Which of the shared per-BBS labels THIS character actively sweeps. Per-character
+    // Which of the shared per-realm labels THIS character actively sweeps. Per-character
     // (so alts in different gang houses on one BBS each manage their own house);
-    // labels stay per-BBS above. See GhManagedRoomStore.
+    // labels stay per-realm above. See GhManagedRoomStore.
     public Game.Map.GhManagedRoomStore GhManagedRooms { get; private set; } = null!;
 
     // What the last Roomba sweep still had to do when it stopped. Persisted per
@@ -1993,7 +1996,7 @@ public sealed class AppServices
     // in the player's pack, and so Resume can skip the scan even after a restart.
     public Game.Map.GhSuspendedSweepStore GhSuspendedSweep { get; private set; } = null!;
 
-    // Per-BBS "last seen this item in this room" log, fed by GhSweep and read by
+    // Per-realm "last seen this item in this room" log, fed by GhSweep and read by
     // RoombaQuery's @roomba handler.
     public Game.Map.GhItemLocationStore GhItemLocations { get; private set; } = null!;
 
@@ -2155,15 +2158,15 @@ public sealed class AppServices
     // default; flipped on via Settings → Other.
     public Game.HopTimingCalibrator HopCalibrator { get; private set; } = null!;
 
-    // Per-BBS room blacklist — hides target rooms from the
+    // Per-realm room blacklist — hides target rooms from the
     // Navigation map render and the search box. Consumed by
     // Game.Map.BfsMapper (skip placement, keep edge
     // for dangling stub) and the right-click "Add to blacklist"
     // + "Modify Blacklist…" flows.
     public RoomBlacklistStore RoomBlacklist { get; private set; } = null!;
 
-    // Per-BBS captured "top N" leaderboard history, read by the Calculators tab's
-    // XP/HR table. Grows communally — every character on the board feeds and reads
+    // Per-realm captured "top N" leaderboard history, read by the Calculators tab's
+    // XP/HR table. Grows communally — every character on the realm feeds and reads
     // the one shared list.
     public LeaderboardSnapshotStore Leaderboards { get; private set; } = null!;
 
@@ -2259,7 +2262,8 @@ public sealed class AppServices
         // Same late-bind pattern as GameData.Log above: the profile-lifecycle
         // audit (load / swap / close / re-home) rides the always-on Info stream.
         Profile.Log = bootstrapLog;
-        Bbs = new BbsProfileStore();
+        Bbs = new BbsProfileStore(() => Settings.Current.DefaultGameDataSet, bootstrapLog);
+        Realms = new RealmCatalog(Bbs, Profile, bootstrapLog);
 
         // Startup head start: parse the big MDB tables for whatever profile "Auto-load
         // last profile" is about to bring in, on a background thread, before Profile.Load
@@ -2275,7 +2279,9 @@ public sealed class AppServices
         // way, so this can't make startup any slower than it already is.
         if (Settings.Current.StartupProfile() is { } startupPrediction)
         {
-            string? predictedSet = Bbs.Get(startupPrediction.Bbs)?.ActiveGameDataSet
+            string? predictedRealm = JsonStore.Load<Models.Profile.CharacterProfile>(
+                AppPaths.CharacterProfileFile(startupPrediction.Bbs, startupPrediction.Name))?.Realm;
+            string? predictedSet = Bbs.Get(startupPrediction.Bbs)?.RealmFor(predictedRealm)?.ActiveGameDataSet
                 ?? Settings.Current.DefaultGameDataSet;
             if (!string.IsNullOrWhiteSpace(predictedSet))
                 _ = GameData.PrewarmAsync(predictedSet, StartupPrewarmTables);
@@ -2372,7 +2378,7 @@ public sealed class AppServices
         // active BBS + loaded character. Active-BBS delegate routes
         // through ResolveActiveBbs so Quick Connect and the BBS pin
         // resolution chain stay the single source of truth.
-        Players = new PlayerDatabase(Profile, ResolveActiveBbs);
+        Players = new PlayerDatabase(Profile, ActiveRealmFolder);
         // Board-specific disconnect line: PartyManager reads the active BBS's
         // custom DisconnectPattern live (empty on boards that use the standard
         // lines) and resolves a captured presence name — which on some boards is
@@ -2958,6 +2964,8 @@ public sealed class AppServices
         // load AND on every ProfileMutated tick (which fires from the BBS
         // section's Apply path after a save).
         Profile.ProfileLoaded += _ => ApplyDisplayFromActiveBbs();
+        // A realm assignment / realm edit re-pins: the game-menu commands are the realm's.
+        Profile.BbsPinApplied += _ => ApplyDisplayFromActiveBbs();
         Profile.ProfileClosed += ResetDisplayToDefaults;
         Profile.ProfileMutated += _ => ApplyDisplayFromActiveBbs();
 
@@ -3160,7 +3168,7 @@ public sealed class AppServices
         // (the store subscribes to Profile.BbsPinApplied / ProfileClosed via the
         // ResolveActiveBbs provider). The mechanical step + bonus data the Quest
         // Status tab shows is crawled from TBInfo at runtime, not stored here.
-        Quests = new QuestStore(Profile, ResolveActiveBbs, Log);
+        Quests = new QuestStore(Profile, ActiveRealmFolder, Log);
         Emotes = new EmoteStore(log: Log);
 
         // Boss catalog — realm-wide list (seed + per-set overlay); timer values are
@@ -3170,14 +3178,15 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null)
             Bosses.OnActiveSetChanged(GameData.ActiveSet);
 
-        // Persisted boss kill-times — realm-wide like the catalog. Kill detection is
-        // wired later (needs MonsterDeath + RoomTracker); here we just load the
-        // active set's saved timers so a restart resumes mid-countdown.
+        // Persisted boss kill-times, per realm. Kill detection is wired later (needs
+        // MonsterDeath + RoomTracker); here we just load the active realm's saved
+        // timers so a restart resumes mid-countdown.
         BossTimers = new BossTimerStore(Bosses, GameData, Log);
-        GameData.ActiveSetChanged += BossTimers.OnActiveSetChanged;
-        if (GameData.ActiveSet is not null)
-            BossTimers.OnActiveSetChanged(GameData.ActiveSet);
-        // Cleanup-boss DEAD/ALIVE state reads the active BBS's nightly-cleanup time.
+        Profile.ProfileLoaded += _ => BossTimers.OnRealmChanged(ActiveRealmFolder());
+        Profile.BbsPinApplied += _ => BossTimers.OnRealmChanged(ActiveRealmFolder());
+        Profile.ProfileClosed += () => BossTimers.OnRealmChanged(ActiveRealmFolder());
+        BossTimers.OnRealmChanged(ActiveRealmFolder());
+        // Cleanup-boss DEAD/ALIVE state reads the active realm's nightly-cleanup time.
         BossTimers.SetCleanupConfig(ResolveBossCleanupConfig);
 
         // ItemNameStore — int→name index for the active Items.json so
@@ -3382,15 +3391,15 @@ public sealed class AppServices
         Movement = new MovementFilter(Profile, Log);
         // GH room labels + the Roomba item-sighting log are BBS-tier (not
         // per-character) — every character on a BBS shares the same gang house.
-        // Loaded/reloaded via OnBbsPinApplied, same pattern as RoomBlacklist.
+        // Loaded/reloaded via OnRealmChanged, same pattern as RoomBlacklist.
         GhRoomLabels = new Game.Map.GhRoomLabelStore(Profile, Log);
         GhManagedRooms = new Game.Map.GhManagedRoomStore(Profile, Log);
         GhSuspendedSweep = new Game.Map.GhSuspendedSweepStore(Profile, Log);
         GhItemLocations = new Game.Map.GhItemLocationStore(ItemNames, Log);
-        Profile.ProfileLoaded += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
-        Profile.BbsPinApplied += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
-        Profile.ProfileLoaded += _ => GhItemLocations.OnBbsPinApplied(ResolveActiveBbs()?.Name);
-        Profile.BbsPinApplied += _ => GhItemLocations.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.ProfileLoaded += _ => GhRoomLabels.OnRealmChanged(ActiveRealmFolder());
+        Profile.BbsPinApplied += _ => GhRoomLabels.OnRealmChanged(ActiveRealmFolder());
+        Profile.ProfileLoaded += _ => GhItemLocations.OnRealmChanged(ActiveRealmFolder());
+        Profile.BbsPinApplied += _ => GhItemLocations.OnRealmChanged(ActiveRealmFolder());
         // Feed the player's level into Form-A exit level-gate evaluation.
         // null until a stat screen parses — IsExitBlocked never gates on
         // an unknown level, so an unparsed character walks unrestricted.
@@ -3541,7 +3550,7 @@ public sealed class AppServices
         // a guess. Reads / persists the realm profile through the same
         // ResolveActiveBbs / Bbs.Save path the settings UI uses.
         DeathFloorTracer = new Game.Health.DeathFloorTracer(
-            PlayerState, ResolveActiveBbs, Bbs.Save, Log);
+            PlayerState, ResolveActiveRealm, Bbs.Save, Log);
         DeathWatcher.PlayerDied += _ => DeathFloorTracer.RecordDeath();
 
         // Death-halt bridge. On our death, stops every movement engine (via
@@ -3826,7 +3835,7 @@ public sealed class AppServices
             // Per-realm negative-HP death floor: keeps the emergency
             // hangup firing through the bleeding-out window down to the
             // point the character actually dies.
-            readDeathFloor: () => ResolveActiveBbs()?.PlayerDiesAtHp ?? -25,
+            readDeathFloor: () => ResolveActiveRealm()?.Realm.PlayerDiesAtHp ?? -25,
             log: Log,
             // Emergency hangup drops the carrier on purpose — flag it so the
             // reactive-reconnect path doesn't immediately dial back in.
@@ -4872,11 +4881,11 @@ public sealed class AppServices
         ExperienceQuery = new Game.Remote.ExperienceQueryHandler(
             RemoteCommands, PlayerStats, SessionActivity, GameData);
 
-        // Per-BBS runic-currency naming. Reads the active BBS's RunicCurrencyName
-        // live (via ResolveActiveBbs) and re-reads on profile / BBS swap. Injected
+        // Per-realm runic-currency naming. Reads the active realm's RunicCurrencyName
+        // live (via ResolveActiveRealm) and re-reads on profile / realm swap. Injected
         // into every cash parser / command builder so a board-renamed runic word
         // is matched on the wire and sent back on outgoing get/drop/hide commands.
-        Currency = new Game.Cash.CurrencyNaming(() => ResolveActiveBbs()?.RunicCurrencyName);
+        Currency = new Game.Cash.CurrencyNaming(() => ResolveActiveRealm()?.Realm.RunicCurrencyName);
         Profile.ProfileLoaded += _ => Currency.Refresh();
         Profile.BbsPinApplied += _ => Currency.Refresh();
 
@@ -6370,16 +6379,16 @@ public sealed class AppServices
         // BFS picks it up via the Changed event before the first
         // layout build for the new BBS.
         RoomBlacklist = new RoomBlacklistStore(Log);
-        Profile.ProfileLoaded += _ => RoomBlacklist.OnBbsPinApplied(ResolveActiveBbs()?.Name);
-        Profile.BbsPinApplied += _ => RoomBlacklist.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.ProfileLoaded += _ => RoomBlacklist.OnRealmChanged(ActiveRealmFolder());
+        Profile.BbsPinApplied += _ => RoomBlacklist.OnRealmChanged(ActiveRealmFolder());
 
         // Per-BBS "top N" leaderboard history + its live capture tracker. The
         // store loads on BBS pin (same shape as the blacklist); the tracker binds
         // to the per-session LineExtractor in MainWindowViewModel.AttachLineExtractor
         // and passively snapshots the block whenever the player runs `top <N>`.
         Leaderboards = new LeaderboardSnapshotStore(Log);
-        Profile.ProfileLoaded += _ => Leaderboards.OnBbsPinApplied(ResolveActiveBbs()?.Name);
-        Profile.BbsPinApplied += _ => Leaderboards.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.ProfileLoaded += _ => Leaderboards.OnRealmChanged(ActiveRealmFolder());
+        Profile.BbsPinApplied += _ => Leaderboards.OnRealmChanged(ActiveRealmFolder());
         LeaderboardCapture = new Game.Leaderboard.LeaderboardCaptureTracker(Leaderboards, PromptScanner, Log);
         // BFS consults the blacklist to skip placement of hidden
         // rooms (edge still recorded → dangling stub). Cache flushes
@@ -10417,6 +10426,21 @@ public sealed class AppServices
         return first is null ? null : Bbs.Get(first);
     }
 
+    // The realm being played: the loaded character's (CharacterProfile.Realm) on the
+    // active BBS, else that BBS's first realm. Null only when no BBS resolves. Every
+    // realm setting (game data, menu commands, death floor, cleanup time, currency
+    // name) and every store of collected data keys on it.
+    public (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? ResolveActiveRealm()
+    {
+        if (ResolveActiveBbs() is not { } bbs) return null;
+        if (bbs.RealmFor(Profile.Current?.Realm) is not { } realm) return null;
+        return (bbs, realm);
+    }
+
+    // The active realm's data folder (AppPaths.RealmFolder), or null with no BBS.
+    public string? ActiveRealmFolder() =>
+        ResolveActiveRealm() is { } r ? AppPaths.RealmFolder(r.Bbs.Name, r.Realm.Name) : null;
+
     // Whether the loaded character has the "Sysop status" power on the active BBS
     // — the Settings → BBS credentials checkbox. Sysop powers are granted to an
     // account on a board, so the flag lives per character per BBS. Gates the
@@ -10533,29 +10557,28 @@ public sealed class AppServices
            && n.ValueKind == System.Text.Json.JsonValueKind.Number
             ? n.GetInt32() : 0;
 
-    // Parse the active BBS's nightly-cleanup time + zone into a config for the
+    // Parse the active realm's nightly-cleanup time + zone into a config for the
     // cleanup-boss DEAD/ALIVE state. Null when no BBS, a blank time, or an
     // unparseable time (a bad zone id falls back to the local zone).
     private BossCleanupConfig? ResolveBossCleanupConfig()
     {
-        if (ResolveActiveBbs() is not { } bbs) return null;
-        if (string.IsNullOrWhiteSpace(bbs.CleanupTimeOfDay)) return null;
-        if (!TimeSpan.TryParse(bbs.CleanupTimeOfDay.Trim(), out TimeSpan tod)
+        if (ResolveActiveRealm() is not { Realm: var realm }) return null;
+        if (string.IsNullOrWhiteSpace(realm.CleanupTimeOfDay)) return null;
+        if (!TimeSpan.TryParse(realm.CleanupTimeOfDay.Trim(), out TimeSpan tod)
             || tod < TimeSpan.Zero || tod >= TimeSpan.FromDays(1)) return null;
         TimeZoneInfo tz;
-        try { tz = TimeZoneInfo.FindSystemTimeZoneById(bbs.CleanupTimeZoneId); }
+        try { tz = TimeZoneInfo.FindSystemTimeZoneById(realm.CleanupTimeZoneId); }
         catch { tz = TimeZoneInfo.Local; }
         return new BossCleanupConfig(tod, tz);
     }
 
-    // Recompute the active game-data set from the BBS-pin chain and
-    // flip GameData if it differs. Idempotent — the
-    // cache short-circuits no-op switches so calling this on every
-    // profile / BBS / mutate signal is cheap.
+    // Recompute the active game-data set from the active realm (else the Global
+    // default) and flip GameData if it differs. Idempotent — the cache
+    // short-circuits no-op switches so calling this on every profile / BBS /
+    // mutate signal is cheap.
     private void ApplyActiveGameDataSet()
     {
-        Models.Settings.BbsProfile? bbs = ResolveActiveBbs();
-        string? resolved = bbs?.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
+        string? resolved = ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
         GameData.SwitchSet(resolved);
     }
 
@@ -10563,8 +10586,7 @@ public sealed class AppServices
     // later resolve doesn't point GameData at a folder
     // that's gone. Clears the global
     // Models.Settings.GlobalSettings.DefaultGameDataSet and
-    // every BBS profile's
-    // Models.Settings.BbsProfile.ActiveGameDataSet that
+    // every realm's Models.Settings.RealmProfile.ActiveGameDataSet that
     // named it. Wired into GameDataSetManager as its
     // delete callback.
     private void ClearGameDataSetReferences(string deletedSet)
@@ -10579,12 +10601,15 @@ public sealed class AppServices
 
         foreach (string name in Bbs.ListNames().ToArray())
         {
-            Models.Settings.BbsProfile? p = Bbs.Get(name);
-            if (p is not null && Matches(p.ActiveGameDataSet))
+            if (Bbs.Get(name) is not { } p) continue;
+            bool changed = false;
+            foreach (Models.Settings.RealmProfile realm in p.Realms)
             {
-                p.ActiveGameDataSet = null;
-                Bbs.Save(p);
+                if (!Matches(realm.ActiveGameDataSet)) continue;
+                realm.ActiveGameDataSet = null;
+                changed = true;
             }
+            if (changed) Bbs.Save(p);
         }
     }
 
@@ -10631,18 +10656,18 @@ public sealed class AppServices
         TerminalInput.Enabled = general.TypeToTerminalFromOtherWindows;
         InventoryTabCompleteEnabled = general.InventoryTabCompleteEnabled;
 
-        // Game-menu commands are BBS-tier too — HangupHandler consumes
-        // ExitCommand synchronously on @hangup; MainMenuEntryAutomation +
-        // the cleanup-logout flow consume both. Blank entries fall back to
-        // the DTO defaults (E / =x) so a misconfiguration can't leave the
-        // engine with empty wire-sends.
-        Models.Settings.BbsProfile defaults = new();
-        GameCommands.EntryCommand = string.IsNullOrWhiteSpace(values.GameEntryCommand)
+        // Game-menu commands are the realm's — HangupHandler consumes ExitCommand
+        // synchronously on @hangup; MainMenuEntryAutomation + the cleanup-logout
+        // flow consume both. Blank entries fall back to the DTO defaults (E / =x)
+        // so a misconfiguration can't leave the engine with empty wire-sends.
+        Models.Settings.RealmProfile defaults = new();
+        Models.Settings.RealmProfile realm = ResolveActiveRealm()?.Realm ?? defaults;
+        GameCommands.EntryCommand = string.IsNullOrWhiteSpace(realm.GameEntryCommand)
             ? defaults.GameEntryCommand
-            : values.GameEntryCommand;
-        GameCommands.ExitCommand = string.IsNullOrWhiteSpace(values.GameExitCommand)
+            : realm.GameEntryCommand;
+        GameCommands.ExitCommand = string.IsNullOrWhiteSpace(realm.GameExitCommand)
             ? defaults.GameExitCommand
-            : values.GameExitCommand;
+            : realm.GameExitCommand;
     }
 
     private void ResetDisplayToDefaults()
@@ -10664,8 +10689,9 @@ public sealed class AppServices
         Display.TerminalCols = defaults.TerminalCols;
         Display.TerminalRows = defaults.TerminalRows;
         Display.ScaleToWindow = false;
-        GameCommands.EntryCommand = defaults.GameEntryCommand;
-        GameCommands.ExitCommand = defaults.GameExitCommand;
+        Models.Settings.RealmProfile realmDefaults = new();
+        GameCommands.EntryCommand = realmDefaults.GameEntryCommand;
+        GameCommands.ExitCommand = realmDefaults.GameExitCommand;
     }
 
     private void ApplyStatlineRegex()

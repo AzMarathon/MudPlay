@@ -5,8 +5,9 @@ using MudPlay.Game.Leaderboard;
 
 namespace MudPlay.Services;
 
-// Per-BBS store of captured "top N" leaderboard snapshots. Mirrors
-// RoomBlacklistStore: loads Data/BBS/{bbs}/leaderboard.json on every BBS pin, and
+// Per-realm store of captured "top N" leaderboard snapshots. Mirrors
+// RoomBlacklistStore: loads the active realm's leaderboard.json on every realm
+// change, and
 // exposes a read-only, newest-first history the XP/HR calculator diffs across.
 //
 // History is bounded (MaxSnapshots): XP/HR only reaches back to a character's
@@ -21,10 +22,10 @@ public sealed class LeaderboardSnapshotStore
     private const int MaxSnapshots = 5;
 
     private readonly LogService? _log;
-    private string? _activeBbs;
+    private string? _realmFolder;
     private readonly List<LeaderboardSnapshot> _snapshots = new();
 
-    // Fires on load against a new BBS and on every capture / clear. The
+    // Fires on load against a new realm and on every capture / clear. The
     // Calculators tab rebuilds its table from this.
     public event Action? Changed;
 
@@ -33,7 +34,7 @@ public sealed class LeaderboardSnapshotStore
         _log = log;
     }
 
-    // Captured listings, newest first. Empty until the first capture on this BBS.
+    // Captured listings, newest first. Empty until the first capture on this realm.
     public IReadOnlyList<LeaderboardSnapshot> Snapshots => _snapshots;
 
     // Record a fresh capture at the front and trim the tail past MaxSnapshots.
@@ -129,7 +130,7 @@ public sealed class LeaderboardSnapshotStore
         return false;
     }
 
-    // Wipe the history for the active BBS (the tab's "Clear history" button).
+    // Wipe the history for the active realm (the tab's "Clear history" button).
     public void Clear()
     {
         if (_snapshots.Count == 0) return;
@@ -138,25 +139,26 @@ public sealed class LeaderboardSnapshotStore
         Changed?.Invoke();
     }
 
-    // Load the history for the active BBS. Wired to ProfileService.ProfileLoaded /
-    // BbsPinApplied through AppServices, same as RoomBlacklistStore.
-    public void OnBbsPinApplied(string? bbs)
+    // Load the history for the active realm's folder. Wired to
+    // ProfileService.ProfileLoaded / BbsPinApplied through AppServices, same as
+    // RoomBlacklistStore.
+    public void OnRealmChanged(string? realmFolder)
     {
-        if (string.IsNullOrWhiteSpace(bbs))
+        if (string.IsNullOrWhiteSpace(realmFolder))
         {
-            if (_activeBbs is not null)
+            if (_realmFolder is not null)
             {
-                _activeBbs = null;
+                _realmFolder = null;
                 _snapshots.Clear();
                 Changed?.Invoke();
             }
             return;
         }
 
-        _activeBbs = bbs;
+        _realmFolder = realmFolder;
         _snapshots.Clear();
 
-        string path = AppPaths.BbsLeaderboardFile(bbs);
+        string path = AppPaths.RealmLeaderboardFile(realmFolder);
         if (File.Exists(path))
         {
             try
@@ -181,8 +183,8 @@ public sealed class LeaderboardSnapshotStore
 
     private void Persist()
     {
-        if (_activeBbs is null) return;
-        string path = AppPaths.BbsLeaderboardFile(_activeBbs);
+        if (_realmFolder is null) return;
+        string path = AppPaths.RealmLeaderboardFile(_realmFolder);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var opts = new JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(path, JsonSerializer.Serialize(_snapshots, opts));

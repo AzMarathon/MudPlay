@@ -4231,12 +4231,12 @@ public partial class MainWindowViewModel : ObservableObject
         await Task.CompletedTask;
     }
 
-    // Profile Management's "Edit settings…" on a BBS row — open Settings on the
+    // Profile Management's "BBS settings…" / "Realm settings…" — open Settings on the
     // BBS tab with that record selected, so a freshly-added BBS has an obvious
     // path to the host / port it still needs.
-    private void OpenBbsSettingsFor(string bbsName) => OpenSettingsAt("bbs", bbsName);
+    private void OpenBbsSettingsFor(string bbsName, string? realmName) => OpenSettingsAt("bbs", bbsName, realmName);
 
-    private void OpenSettingsAt(string? sectionId, string? bbsName = null)
+    private void OpenSettingsAt(string? sectionId, string? bbsName = null, string? realmName = null)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
@@ -4252,7 +4252,7 @@ public partial class MainWindowViewModel : ObservableObject
                 SettingsSectionViewModel? section = vm.Sections
                     .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
                 if (section is not null) vm.SelectedSection = section;
-                if (bbsName is not null) vm.SelectBbs(bbsName);
+                if (bbsName is not null) vm.SelectBbs(bbsName, realmName);
             }
             RaiseExisting(existing);
             return;
@@ -4265,7 +4265,8 @@ public partial class MainWindowViewModel : ObservableObject
                 svc.Profile, svc.Log,
                 sendText: SendTextFromSettings,
                 initialSectionId: sectionId,
-                initialBbsName: bbsName),
+                initialBbsName: bbsName,
+                initialRealmName: realmName),
         };
         window.Closed += (_, _) =>
         {
@@ -4443,8 +4444,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Items bound to File → Game Data → Active set. Each entry has a
     // checkbox-style header (checked = currently active set) and a command
-    // that flips GameDataCache.ActiveSet + writes the resolved BBS's
-    // BbsProfile.ActiveGameDataSet field (falling back to
+    // that flips GameDataCache.ActiveSet + writes the active realm's
+    // RealmProfile.ActiveGameDataSet (falling back to
     // GlobalSettings.DefaultGameDataSet when no BBS is pinned).
     public ObservableCollection<GameDataSetMenuItem> GameDataSets { get; } = new();
 
@@ -4692,11 +4693,10 @@ public partial class MainWindowViewModel : ObservableObject
         else
             cache.SwitchSet(setName);
 
-        BbsProfile? bbs = ResolveActiveBbs();
-        if (bbs is not null)
+        if (AppServices.Current.ResolveActiveRealm() is { } active)
         {
-            bbs.ActiveGameDataSet = setName;
-            AppServices.Current.Bbs.Save(bbs);
+            active.Realm.ActiveGameDataSet = setName;
+            AppServices.Current.Bbs.Save(active.Bbs);
         }
         else
         {

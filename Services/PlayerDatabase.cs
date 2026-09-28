@@ -7,32 +7,32 @@ using MudPlay.Models.Settings;
 
 namespace MudPlay.Services;
 
-// Two-layer store of player records — the BBS-tier observation list (one row
-// per player ever seen on the active BBS) merged with the loaded character's
-// customization dictionary (per-player remote-command permissions, auto-party
-// toggles, etc.). Both layers persist to disk: observations to
-// Data/BBS/{name}/players.json; customizations to the loaded profile's
+// Two-layer store of player records — the realm's observation list (one row per
+// player ever seen on the active realm, shared by every character on it) merged
+// with the loaded character's customization dictionary (per-player remote-command
+// permissions, auto-party toggles, etc.). Both layers persist to disk:
+// observations to the realm's players.json; customizations to the loaded profile's
 // CharacterProfile.PlayerCustomizations dictionary, pruned at save time so
 // only non-default entries hit disk.
 //
 // Players is the merged view bound by the Game Data Browser → Players tab.
 // Observation writes (RecordObservation from the who-list + look-on-player
-// parsers) update the BBS layer and schedule a disk save; customization writes
+// parsers) update the realm layer and schedule a disk save; customization writes
 // (EditCustomization from the player edit dialog) update the Character layer
 // and schedule a profile save. Either path rebuilds Players.
 //
-// On BBS swap the observation layer reloads from disk; on profile swap the
+// On a realm swap the observation layer reloads from disk; on profile swap the
 // customization layer reloads. PurgeStale drops observations only —
 // customizations stay attached to the profile, harmless when no record exists
 // for them at the moment (a later observation re-binds them automatically).
 public sealed class PlayerDatabase
 {
     private readonly ProfileService? _profile;
-    private readonly Func<BbsProfile?>? _activeBbsProvider;
+    private readonly Func<string?>? _activeRealmFolder;
 
     // ----- Backing layers ------------------------------------------------
 
-    // BBS-tier observations, keyed by GIVEN name (case-insensitive). Given
+    // realm observations, keyed by GIVEN name (case-insensitive). Given
     // name is the stable identity across train-stats family-name changes —
     // keying on display name would split the same player into two rows the
     // moment they rename.
@@ -46,8 +46,9 @@ public sealed class PlayerDatabase
     private readonly Dictionary<string, PlayerCustomization> _customizations =
         new(StringComparer.OrdinalIgnoreCase);
 
-    // Active BBS the observation layer currently mirrors. Null when no BBS is pinned.
-    private string? _activeBbsName;
+    // Folder of the realm the observation layer currently mirrors. Null when no
+    // BBS resolves (in-memory only).
+    private string? _realmFolder;
 
     // Merged view — observable so views can react to updates.
     public ObservableCollection<PlayerRecord> Players { get; } = new();
@@ -64,13 +65,13 @@ public sealed class PlayerDatabase
 
     // Production ctor. Subscribes to ProfileService's ProfileLoaded /
     // ProfileClosed / ProfileSaving / BbsPinApplied so both layers stay in sync
-    // with whichever character + BBS the user is on.
-    public PlayerDatabase(ProfileService profile, Func<BbsProfile?> activeBbsProvider)
+    // with whichever character + realm the user is on.
+    public PlayerDatabase(ProfileService profile, Func<string?> activeRealmFolder)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        ArgumentNullException.ThrowIfNull(activeBbsProvider);
+        ArgumentNullException.ThrowIfNull(activeRealmFolder);
         _profile = profile;
-        _activeBbsProvider = activeBbsProvider;
+        _activeRealmFolder = activeRealmFolder;
 
         profile.ProfileLoaded  += _ => OnSwap();
         profile.ProfileClosed  +=      OnSwap;
@@ -78,7 +79,7 @@ public sealed class PlayerDatabase
         profile.ProfileSaving  += SnapshotCustomizationsForSave;
     }
 
-    // ----- Observation writes (BBS tier) --------------------------------
+    // ----- Observation writes (realm tier) --------------------------------
 
     // Apply one observed row (typically from who output). Wire names are split
     // on the first whitespace; the record is keyed on given name so a player
@@ -86,7 +87,7 @@ public sealed class PlayerDatabase
     // existing row instead of creating a duplicate. Existing records merge —
     // nulls don't overwrite — so a sparse observation only updates the fields
     // it has; the observed family name DOES overwrite, because seeing a new
-    // family name is itself an observation. Saves the BBS observation file
+    // family name is itself an observation. Saves the realm observation file
     // after the merge.
     public void RecordObservation(
         string name,
@@ -147,7 +148,7 @@ public sealed class PlayerDatabase
     // otherwise. Nulls for race / class don't overwrite (caller may have failed
     // to infer either); equipment, when supplied, REPLACES the previous loadout
     // (it's a fresh snapshot, not a delta — empty list means "they were
-    // equipped with Nothing"). Saves the BBS observation file after the merge.
+    // equipped with Nothing"). Saves the realm observation file after the merge.
     // `gang` comes from the LOOK header's " (<gang>)" suffix and is null when
     // the header carried none — so a look never erases a gang a WHO row taught
     // us, it only fills one in.
@@ -215,7 +216,7 @@ public sealed class PlayerDatabase
         return PlayerRecord.Merge(obs, c);
     }
 
-    // ----- Greet tracking (BBS tier) ------------------------------------
+    // ----- Greet tracking (realm tier) ------------------------------------
 
     // When GreetManager last auto-greeted this player (UTC), or null if never.
     // Keyed on given name like every other observation lookup. The manager
@@ -233,7 +234,7 @@ public sealed class PlayerDatabase
     // row when the player is unknown (we genuinely just saw them in the room),
     // otherwise updates the existing row's LastGreetedUtc in place — every
     // other field is left untouched (greeting isn't a who/look observation, so
-    // it must not overwrite class / race / LastSeen). Saves the BBS observation
+    // it must not overwrite class / race / LastSeen). Saves the realm observation
     // file. Called by GreetManager right after emitting greet / look.
     public void RecordGreeted(string name, DateTime whenUtc)
     {
@@ -320,7 +321,7 @@ public sealed class PlayerDatabase
     // real), otherwise updates the existing row's Level and bumps LastSeenUtc —
     // answering a telepath proves presence. Every other field is left
     // untouched, except a title the reported level contradicts (see below).
-    // Saves the BBS observation file.
+    // Saves the realm observation file.
     public void RecordLevel(string name, int level, DateTime nowUtc)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -368,7 +369,7 @@ public sealed class PlayerDatabase
     // (e.g. "MudPlay 2.37.0", "MegaMud 1.03u"). Mirrors RecordLevel: keyed on
     // given name, creates a minimal row when unknown (we only get a version reply
     // from someone we asked), otherwise updates Version/VersionAt and bumps
-    // LastSeenUtc (answering a telepath proves presence). Saves the BBS file.
+    // LastSeenUtc (answering a telepath proves presence). Saves the realm file.
     public void RecordVersion(string name, string version, DateTime nowUtc)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -440,7 +441,7 @@ public sealed class PlayerDatabase
         return replaced;
     }
 
-    // ----- Party-day tracking (BBS tier) --------------------------------
+    // ----- Party-day tracking (realm tier) --------------------------------
 
     // When we last started partying with this player (UTC), or null if never.
     // The party stats probe compares this against the local-calendar day to
@@ -457,7 +458,7 @@ public sealed class PlayerDatabase
     // creates a minimal row when unknown (we're partying with them, so they're
     // real), otherwise updates LastPartiedUtc in place — partying isn't a
     // who/look observation, so it must not overwrite class / race / LastSeen.
-    // Saves the BBS observation file.
+    // Saves the realm observation file.
     public void RecordPartied(string name, DateTime whenUtc)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -513,9 +514,9 @@ public sealed class PlayerDatabase
         return true;
     }
 
-    // Set (or clear) the BBS-tier account-name override for one player.
+    // Set (or clear) the realm-tier account-name override for one player.
     // Authored via the player edit dialog alongside the customization save.
-    // Stored on the observation (BBS tier) rather than the customization
+    // Stored on the observation (realm tier) rather than the customization
     // (Character tier) because an account belongs to the realm, not to which
     // of our alts is looking. A blank value — or one equal to the in-game
     // given name — clears the override to null, since no override is needed
@@ -636,7 +637,7 @@ public sealed class PlayerDatabase
         return removed;
     }
 
-    // Replace the BBS-tier observation layer wholesale. Used by load-from-disk
+    // Replace the realm observation layer wholesale. Used by load-from-disk
     // paths and by tests that want a deterministic baseline.
     public void ReplaceObservations(IEnumerable<PlayerObservation> rows)
     {
@@ -653,10 +654,9 @@ public sealed class PlayerDatabase
 
     private void OnSwap()
     {
-        BbsProfile? bbs = _activeBbsProvider?.Invoke();
-        _activeBbsName = bbs?.Name;
+        _realmFolder = _activeRealmFolder?.Invoke();
 
-        // BBS layer: load from disk if a BBS resolves, else clear.
+        // Realm layer: load from disk if a realm resolves, else clear.
         // Files may have been written under the pre-bugfix layout — one
         // dict entry per (Given, Family) pair, so the same player at
         // different family names appears twice. Collapse those on load
@@ -664,9 +664,9 @@ public sealed class PlayerDatabase
         // observation. The next save rewrites the file in the merged
         // form, so this migration is one-shot.
         _observations.Clear();
-        if (!string.IsNullOrEmpty(_activeBbsName))
+        if (!string.IsNullOrEmpty(_realmFolder))
         {
-            string path = AppPaths.BbsPlayersFile(_activeBbsName);
+            string path = AppPaths.RealmPlayersFile(_realmFolder);
             List<PlayerObservation>? loaded = JsonStore.Load<List<PlayerObservation>>(path);
             if (loaded is not null)
             {
@@ -775,8 +775,8 @@ public sealed class PlayerDatabase
 
     private void SaveObservations()
     {
-        if (string.IsNullOrEmpty(_activeBbsName)) return; // in-memory mode
-        string path = AppPaths.BbsPlayersFile(_activeBbsName);
+        if (string.IsNullOrEmpty(_realmFolder)) return; // in-memory mode
+        string path = AppPaths.RealmPlayersFile(_realmFolder);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         JsonStore.Save(path, _observations.Values
             .OrderBy(o => o.DisplayName, StringComparer.OrdinalIgnoreCase)

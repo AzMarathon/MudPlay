@@ -364,20 +364,6 @@ public static class AppPaths
     public static string TriggersFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "triggers.json");
 
-    // Per-set Quest definitions overlay scoped inside the game-data set's folder
-    // (sibling to TriggersFile). Holds the user-owned quest layer — display
-    // name, show/hide visibility, and edited step markdown, keyed by quest-flag
-    // number + step. QuestStore resolves it over the universal
-    // DefaultQuestDefsSeedFile underlay; the mechanical data (ordered steps +
-    // stat bonuses) is crawled from the set's TBInfo at runtime, not stored here.
-    // The user's quest-definition overlay, hosted at the BBS tier
-    // (BBS/{bbs}/quests.json). QuestStore resolves it ABOVE the universal
-    // DefaultQuestDefsSeedFile underlay, so a player's edits belong to the board
-    // they're playing, not the imported game-data set. The mechanical data
-    // (ordered steps + stat bonuses) is still crawled from the active set's TBInfo
-    // at runtime, not stored here.
-    public static string QuestsFileForBbs(string bbsName) =>
-        Path.Combine(BbsFolder(bbsName), "quests.json");
 
     // User-writable Messages seed JSON for the given realm flavor, hosted in the
     // XDG-resolved Global/ folder. Realm-flavored (stock / paradigm), each decoded
@@ -425,9 +411,9 @@ public static class AppPaths
     public static string BossesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "bosses.json");
 
-    // Per-set tracked boss kill-times ({name: killed-at UTC}). Persisted so a
-    // long respawn timer survives an app restart; realm-wide like BossesFile.
-    public static string BossTimersFile(string setName) =>
+    // Where boss kill-times used to live, per game-data set, before they moved to
+    // the realm (RealmBossTimersFile). Read once by RealmMigration.
+    public static string LegacySetBossTimersFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "boss-timers.json");
 
     // User-writable boss-catalog seed JSON in Global/ — the curated default
@@ -634,40 +620,55 @@ public static class AppPaths
     public static string LegacyBbsLairsFolder(string bbsName) =>
         Path.Combine(BbsFolder(bbsName), "Lairs");
 
-    // Per-BBS observed-players side-file. One PlayerObservation per player ever
-    // seen on this BBS; observations live at the BBS tier so the same display
-    // name on a different BBS counts as a different person.
-    public static string BbsPlayersFile(string bbsName) =>
-        Path.Combine(BbsFolder(bbsName), "players.json");
+    // ----- Realm folder: BBS/{bbs}/Realms/{realm}/ -----
+    // Everything collected while playing one realm of a BBS, shared by the
+    // characters assigned to it (RealmProfile). The file helpers below take the
+    // realm folder itself, which the stores are handed as their active scope.
 
-    // Per-BBS map-room blacklist file. Entries hide their target rooms from the
-    // navigation map render and the search box — typical use is hiding
-    // ganghouse / sysop-only rooms behind dead-end doors that clutter the layout.
-    public static string BbsRoomBlacklistFile(string bbsName) =>
-        Path.Combine(BbsFolder(bbsName), "room_blacklist.json");
+    // Folder for one realm of a BBS.
+    public static string RealmFolder(string bbsName, string realmName) =>
+        Path.Combine(BbsFolder(bbsName), "Realms", realmName);
 
-    // Per-BBS "top N" leaderboard capture history. Snapshots live at the BBS tier
-    // so every character connecting to the same board reads and grows one shared
-    // history — the whole point of the XP/HR calculator is a communal, player-fed
-    // record of the realm's heroes.
-    public static string BbsLeaderboardFile(string bbsName) =>
-        Path.Combine(BbsFolder(bbsName), "leaderboard.json");
+    // Observed players. One PlayerObservation per player ever seen on the realm,
+    // so the same name on another realm (or board) counts as a different person.
+    public static string RealmPlayersFile(string realmFolder) =>
+        Path.Combine(realmFolder, "players.json");
 
-    // Per-BBS Roomba Mode settings: labeled gang-house rooms, hidden-search
-    // config, and the @roomba remote-response toggle. Lives at the BBS tier (not
-    // per-character) because a BBS ties to one game-data set and every character
-    // on it shares the same gang house — labeling rooms once on any character
-    // makes them available (and sortable/queryable) to every other character on
-    // that board.
-    public static string BbsRoombaFile(string bbsName) =>
-        Path.Combine(BbsFolder(bbsName), "roomba.json");
+    // Map-room blacklist. Entries hide their target rooms from the navigation map
+    // render and the search box — typical use is hiding ganghouse / sysop-only
+    // rooms behind dead-end doors that clutter the layout.
+    public static string RealmRoomBlacklistFile(string realmFolder) =>
+        Path.Combine(realmFolder, "room_blacklist.json");
 
-    // Per-BBS Roomba item-sighting log: the last room each item was observed in
-    // during a sweep, backing @roomba's replies. Separate file from
-    // BbsRoombaFile — sightings update far more often (every room arrival during
-    // a sweep) than the room-label settings do.
-    public static string BbsRoombaItemsFile(string bbsName) =>
-        Path.Combine(BbsFolder(bbsName), "roomba_items.json");
+    // "Top N" leaderboard capture history, one shared history for every character
+    // on the realm — the XP/HR calculator is a communal, player-fed record of the
+    // realm's heroes.
+    public static string RealmLeaderboardFile(string realmFolder) =>
+        Path.Combine(realmFolder, "leaderboard.json");
+
+    // Roomba Mode settings: labeled gang-house rooms, hidden-search config, and the
+    // @roomba remote-response toggle. Every character on the realm shares the same
+    // gang house, so labeling rooms once on any of them serves all.
+    public static string RealmRoombaFile(string realmFolder) =>
+        Path.Combine(realmFolder, "roomba.json");
+
+    // Roomba item-sighting log: the last room each item was observed in during a
+    // sweep, backing @roomba's replies. Separate from RealmRoombaFile — sightings
+    // update far more often than the room labels do.
+    public static string RealmRoombaItemsFile(string realmFolder) =>
+        Path.Combine(realmFolder, "roomba_items.json");
+
+    // Tracked boss kill-times ({name: killed-at UTC}), persisted so a long respawn
+    // timer survives an app restart. Observed in play, so they belong to the realm.
+    public static string RealmBossTimersFile(string realmFolder) =>
+        Path.Combine(realmFolder, "boss-timers.json");
+
+    // The user's quest-definition overlay. QuestStore resolves it ABOVE the
+    // universal DefaultQuestDefsSeedFile underlay, so a player's edits belong to
+    // the realm they're playing, not the imported game-data set. The mechanical
+    // data (ordered steps + stat bonuses) is crawled from the active set's TBInfo.
+    public static string RealmQuestsFile(string realmFolder) =>
+        Path.Combine(realmFolder, "quests.json");
 
     // Per-BBS folder holding every character that connects to that BBS. Profiles
     // live UNDER the BBS folder because each MajorMUD server allows only one
@@ -701,21 +702,21 @@ public static class AppPaths
         Path.Combine(DeathLogsFolder(bbsName, characterName), fileName);
 
     // Per-set game-data override side-file at the given tier. Routes to the
-    // right folder: Global → DataRoot/Global, BBS → BbsFolder,
-    // Character → ProfileFolder. File name is
+    // right folder: Global → DataRoot/Global, BBS (the "only for this realm" tier)
+    // → the active realm's folder, Character → ProfileFolder. File name is
     // {table-lowercase}_overrides.{set}.json, e.g.
     // monster_overrides.data-v1.11p.json. The Defaults tier is read-only and
-    // throws. tierScopeName is the BBS or profile name for BBS / Character
-    // tiers (ignored for Global). characterBbs, for the Character tier only, is
-    // the BBS the profile lives under (profiles nest at
-    // BBS/{bbs}/profiles/{char}/); ignored for other tiers.
+    // throws. tierScopeName is the realm FOLDER for the BBS tier and the
+    // profile name for the Character tier (ignored for Global). characterBbs,
+    // for the Character tier only, is the BBS the profile lives under (profiles
+    // nest at BBS/{bbs}/profiles/{char}/); ignored for other tiers.
     public static string OverrideFile(SettingsTier tier, string? tierScopeName, string table, string setName, string? characterBbs = null)
     {
         string folder = tier switch
         {
             SettingsTier.Defaults  => throw new InvalidOperationException("Defaults tier is read-only — no override side-file."),
             SettingsTier.Global    => Path.Combine(DataRoot, "Global"),
-            SettingsTier.Bbs       => BbsFolder(RequireScope(tierScopeName, "BBS")),
+            SettingsTier.Bbs       => RequireScope(tierScopeName, "Realm folder"),
             SettingsTier.Character => ProfileFolder(RequireScope(characterBbs, "Character BBS"), RequireScope(tierScopeName, "Character")),
             _ => throw new ArgumentOutOfRangeException(nameof(tier)),
         };
