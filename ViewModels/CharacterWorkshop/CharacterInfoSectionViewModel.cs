@@ -482,9 +482,9 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             // never the damage magnitude). No stock ability grants a +MA-skill bonus,
             // so 1 is the value used.
             const int maPlusSkill = 1;
-            PunchDamage = MARange(MudAttackType.Punch, realm, level, maPlusSkill, str, t.PlusMaxDamage, t.PlusPunchDmg);
-            KickDamage = MARange(MudAttackType.Kick, realm, level, maPlusSkill, str, t.PlusMaxDamage, t.PlusKickDmg);
-            JumpKickDamage = MARange(MudAttackType.Jumpkick, realm, level, maPlusSkill, str, t.PlusMaxDamage, t.PlusJumpKickDmg);
+            PunchDamage = MARange(MudAttackType.Punch, realm, level, maPlusSkill, str, t.PlusMaxDamage, t.PlusPunchDmg, t.PlusMinDamage);
+            KickDamage = MARange(MudAttackType.Kick, realm, level, maPlusSkill, str, t.PlusMaxDamage, t.PlusKickDmg, t.PlusMinDamage);
+            JumpKickDamage = MARange(MudAttackType.Jumpkick, realm, level, maPlusSkill, str, t.PlusMaxDamage, t.PlusJumpKickDmg, t.PlusMinDamage);
 
             // Bare-handed strikes have a fixed attack speed (no weapon) and no
             // strength requirement, so their swing rate comes from MartialArtsSpeed.
@@ -524,10 +524,10 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     }
 
     private static string MARange(MudAttackType type, RealmType realm, int level, int maPlusSkill, int str,
-                                  int plusMaxDamage, int maPlusDamage)
+                                  int plusMaxDamage, int maPlusDamage, int plusMinDamage)
     {
         MeleeDamageResult d = CombatCalculator.CalcMartialArtsDamage(
-            type, realm, level, maPlusSkill, str, plusMaxDamage, maPlusDamage);
+            type, realm, level, maPlusSkill, str, plusMaxDamage, maPlusDamage, plusMinDamage);
         return string.Create(CultureInfo.InvariantCulture, $"{d.MinDamage}-{d.MaxDamage}");
     }
 

@@ -689,6 +689,11 @@ How a character earns and spends character points (CP), how exp needed per level
   - robbing: **1–3**;
   - **attacking or robbing a player who's already Seedy or worse is free** — no points, no cloud.
   - **From a good (negative) alignment, one cloud always lands you at exactly 10 (Neutral)**: the add is raised to reach 10 if it would stop short.
+- **How much an evil act adds, Paradigm** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27)*:
+  - attacking a **Good** monster: **10**; a **Lawful Good** monster: **30**; any other monster: nothing;
+  - attacking a **player** who hasn't recently attacked you: **20** if they're Good, **10** if Neutral, nothing if they're evil. A player who recently attacked you costs nothing;
+  - **robbing a player**: at most **10** for the first rob; each later rob of a Good or Neutral player **2**;
+  - **from a good (negative) alignment, a gain that would leave you still good lands you at exactly 0** (Neutral) instead, for monsters and players alike. (A source comment says −50 for PvP; the developer corrected it to 0.) Stock lands you at 10 instead.
 - **An evil act can be refused instead, Stock**, with no points added *([OBSERVED] `wccmmud.dll` 1.11p)*:
   - `To do this action, you must turn off your evil warnings.` — your evil warnings are on (toggled with `You will now be warned and stopped from doing most evil actions.` / `You will no longer be stopped from performing evil actions.`);
   - `You have progressed too far to the evil side to do this action.` — over 300;
@@ -762,6 +767,9 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 
 - **Blur AC is fundamentally different from flat worn AC (code 2).** Ability code **10** is the item field shown as "AC Blur". Its effective value is scaled down in play, and the scaling differs by realm.
 - **Paradigm: scaled by carried encumbrance.** Full value at 0% load, 0 at 100% (heavy), linear in between. A "AC Blur 12" item gives 12 AC when unburdened and nothing when maxed out.
+  - **Exact formula** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27)*: `bonus = (100 − load%)·Blur / 10`, in tenths of AC (AC is stored at 10×), truncated. With `load% = Encum·100 / MaxEnc`, also truncated.
+  - Blur 4 at 25% load → `75·4/10 = 30` → **3.0 AC**. At 76% → `24·4/10 = 9` → **0.9 AC**.
+  - It reaches 0 only at full load. (The developer's aside that "75%+ is 0" contradicts his own 76% example; the formula wins.)
 - **Stock: scaled by the heaviest armour you're wearing, not by load.** The summed blur is divided by a factor set by the worn items' armour type (`Items.ArmourType`):
 
   | Heaviest armour worn | Blur counts |
@@ -1114,6 +1122,37 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 **Client use:**
 - The Character Info combat panel gates each strike row on the class ability — not on `MartialArts > 0`.
 
+### Martial-arts strike damage
+*Status: Paradigm [OBSERVED] server source, shared by a Paradigm developer via the user, 2026-09-27; Stock from MMUD-Explorer (Unrated) · Realm: differs*
+
+- **Paradigm base damage is a level band, integer division throughout** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27)*. Levels under 20 use the first form; 20 and up use the second, floored:
+
+  | Strike | Min | Max |
+  |---|---|---|
+  | Punch | `lvl/8 + 2` · `max(5, lvl/6)` | `(lvl+3)/4 + 6` · `max(12, lvl/4)` |
+  | Kick | same as punch | `lvl/5 + 7` · `max(10, lvl/4)` |
+  | Jumpkick | same as punch | `lvl/6 + 7` · `max(10, lvl/4)` |
+
+  - Each strike then adds its own damage bonus (`PunchDamage` / `KickDamage` / `JumpkickDamage`) to both ends, the character's **+min damage** to the min and **+max damage** to the max.
+  - There's **no martial-arts skill term** in the damage.
+  - The source is labelled "base damage", so whether strength and the kick ×1.33 / jumpkick ×1.66 multipliers apply on top isn't shown. *[NEEDS CONFIRMATION]* The client still applies both, as on Stock.
+- **Stock** (MMUD-Explorer) scales the skill by level (capped at 20): min `skill·lvl/8 + 2`; max punch `skill·(lvl+3)/4 + 6`, kick `skill·lvl/6 + 7`, jumpkick `skill·lvl/6 + 8`; then strength, the strike's damage bonus, and the kick / jumpkick multipliers.
+
+**Client use:**
+- `CombatCalculator.CalcMartialArtsDamage`. Before 2026-09-27 the Paradigm branch followed MMUD-Explorer: it rounded the level terms, added a flat +1 skill, and left out +min damage.
+
+### Physical damage per round — Paradigm
+*Status: [OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; bash multipliers and the 3× crit match `CombatCalculator` · Realm: Paradigm*
+
+- **A normal attack's expected damage per round:**
+  ```
+  avg   = (min + max) / 2
+  dmg   = avg · (1 − crit%) + max · crit% · 3
+  round = floor(dmg · min(swings, MAX_SWINGS))
+  ```
+  So a crit averages **3× the max**. The pre-roll and damage multipliers are 1 for a normal attack.
+- **Bash** pre-rolls min and max ×1.1, then multiplies the min by **2.5** and the max by **3**: `round = (min·1.1·2.5 + max·1.1·3)/2 · min(swings, MAX_SWINGS)`. Bash has no crit term.
+
 ### Backstab
 *Status: mixed — per-fact tags inline*
 
@@ -1127,6 +1166,13 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **A `bs` while not sneaking or hidden quietly becomes a normal attack on Stock** *([OBSERVED] `wccmmud.dll` 1.11p `_cmd_backstab`; [CONFIRMED] 2026-09-27, user)*. No refusal line is printed.
 - **Only the opener needs to be `bs`, and follow-on attacks must stay quiet** *([OBSERVED, mechanism unconfirmed])*. In one live capture the opener `bs large wild dog` was followed by two client-sent `pu large wild dog` during the `*Combat Off*` / `*Combat Engaged*` interrupt bounce, and `You surprise punch ... for 36 damage!` still landed. **Do not read this as "the engine continues the backstab through follow-on attacks"** — the likelier explanation is timing: the `pu` commands simply hadn't registered server-side before the `bs` surprise round resolved. So a well-timed follow-on `pu` *could* have sabotaged the surprise. Practical rule: send `bs` as the opener, then stay quiet — don't spam follow-on attack commands that might register and clobber the surprise (let the server's auto-repeat carry the fight). Never send a second `bs`.
 - **Failure signals — the reliable single-line tell** *([CONFIRMED])*. The surprise round is a **single** swing, so the **first** of the player's own combat-result lines after the `bs` settles the outcome: it either **carries `surprise`** (landed) or **lacks it** (failed). A failure surfaces either as a **whiff** (`You swing at <target>!` — no "for N damage", renders dark-cyan) or as a **folded normal round** (`You punch <target> for N damage!` with no "surprise"). Detection is **text-only** — the `surprise` token, not the color.
+- **Paradigm backstab accuracy** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; matches `CombatCalculator.CalcBackstabAccuracy`)*:
+  ```
+  acc = Stealth/3 + ((AGL − 50) + Level)/2 + 15 + BSAccu + Accuracy (all three accuracy abilities)
+  acc −= 15 if the weapon is too heavy for you
+  ```
+  The +15 was added to help lower levels after a stealth change.
+- **Paradigm backstab defence (against a player)** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; matches `CombatCalculator`)*: `(AC + prev + Perception·0.8 + ward)/2 + shadow`.
 - **`You cannot backstab with this weapon.`** *([CONFIRMED])* — you tried to `bs` while sneaking with a weapon that isn't backstab-capable. No weapon-type flag in the game data exposes this ahead of time; it is only knowable reactively from this line.
 
 **Client use:**
@@ -1242,7 +1288,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **Hand-attacking a passive neutral.** If *you* hand-attack one (a manual swing or combat cast), it turns hostile per the mechanic above, so the client marks that instance user-engaged and the auto-combat engine **takes over finishing it** — treating it like an enemy until it dies (and holding the walker in the room) instead of stopping the moment you engaged it. It's keyed per-instance by name and pruned once the mob is gone, so it never leaks onto a freshly-arrived same-named passive neutral; the *other* un-engaged neutrals stay passive and rest-safe. `Enemy` monsters are unchanged.
 
 ### Monster target selection — who it swings at once fighting
-*Status: Stock CONFIRMED (stock DLL source, user-provided); Paradigm CONFIRMED (user writeup, Paradigm only); realm split CONFIRMED 2026-09-26 (user) · Realm: differs — see bullets*
+*Status: Stock CONFIRMED (stock DLL source, user-provided); Paradigm CONFIRMED (user writeup, Paradigm only; matches the Paradigm developer's write-up shared by the user 2026-09-27); realm split CONFIRMED 2026-09-26 (user) · Realm: differs — see bullets*
 
 - **Distinct from *whether* a monster opens on you:** once a monster is in a fight it picks **one target per beat**, and the two realms use different engines.
 - **Stock** *([CONFIRMED] — stock DLL source, user-provided)*. A stock monster attacks a single **locked target** at a time (not everyone it has aggroed). Each beat:
