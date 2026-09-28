@@ -8,7 +8,10 @@ namespace MudPlay.Game.Inventory;
 // One "Find best" ranking option for the Item Finder's trial gearset: a label and
 // the per-item score it maximizes. The starter set mirrors the equipment fields a
 // planner cares about; scores read straight off the pre-projected ItemFinderEntry.
-public sealed record TrialFindFilter(string Label, Func<ItemFinderEntry, double> Score);
+// BackstabRange marks the computed-backstab min / max criteria: which end of the
+// resolved range they maximize (see TrialGearFinder.FindBestOfPasses).
+public sealed record TrialFindFilter(
+    string Label, Func<ItemFinderEntry, double> Score, Func<BSDamageResult, double>? BackstabRange = null);
 
 // Picks the best equippable item per slot for a chosen filter — the engine behind
 // the trial-gearset "Find Best" button. Generalizes the single-stat per-slot argmax
@@ -49,8 +52,8 @@ public static class TrialGearFinder
         // Computed backstab damage for the live character (ItemDamageModel): a
         // weapon's own backstab range, other gear by what it adds to it, so stealth,
         // strength and +max damage count as well as the +BS min / max bonuses above.
-        new TrialFindFilter("Backstab Dmg (min)", e => e.BsScoreMin),
-        new TrialFindFilter("Backstab Dmg (max)", e => e.BsScoreMax),
+        new TrialFindFilter("Backstab Dmg (min)", e => e.BsScoreMin, r => r.MinDamage),
+        new TrialFindFilter("Backstab Dmg (max)", e => e.BsScoreMax, r => r.MaxDamage),
         new TrialFindFilter("Backstab Dmg (avg)", e => e.BsScoreAvg),
         // Damage per round for whichever attack type the finder is set to.
         new TrialFindFilter("Damage / Round (attack type)", e => e.DamagePerRoundScore),
@@ -164,5 +167,37 @@ public static class TrialGearFinder
             }
         }
         return result;
+    }
+
+    // Find Best for a criterion whose per-item scores don't add up across slots — the
+    // computed backstab min / max, where the side fed by +min damage and BS min can
+    // overtake the other and the realm then swaps (Paradigm) or clamps (Stock) the
+    // range. Each pass ranks items by one additive score (push the min side, push the
+    // max side, the average, the criterion's own score); every resulting set of picks
+    // is priced as a whole by evaluate, and the best-scoring set wins.
+    public static Dictionary<EquipmentSlot, string> FindBestOfPasses(
+        IReadOnlyList<Func<ItemFinderEntry, double>> passes,
+        Func<IReadOnlyDictionary<EquipmentSlot, string>, double> evaluate,
+        IReadOnlyList<ItemFinderEntry> catalog,
+        IReadOnlyList<EquipmentSlot> targetSlots,
+        ISet<EquipmentSlot> heldSlots,
+        IReadOnlyDictionary<EquipmentSlot, string?> current,
+        int level, ClassEquipProfile cls, AlignmentBucket? alignment,
+        Func<ItemFinderEntry, bool>? extraFilter = null,
+        int? weightBudget = null,
+        RealmType realm = RealmType.ParaMud)
+    {
+        ArgumentNullException.ThrowIfNull(passes);
+        ArgumentNullException.ThrowIfNull(evaluate);
+        Dictionary<EquipmentSlot, string> best = new();
+        double bestValue = double.MinValue;
+        foreach (Func<ItemFinderEntry, double> score in passes)
+        {
+            Dictionary<EquipmentSlot, string> picks = FindBest(catalog, targetSlots, heldSlots, current, score,
+                level, cls, alignment, extraFilter, weightBudget, realm);
+            double value = evaluate(picks);
+            if (value > bestValue) (best, bestValue) = (picks, value);
+        }
+        return best;
     }
 }

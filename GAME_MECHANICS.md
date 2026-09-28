@@ -1123,23 +1123,50 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - The Character Info combat panel gates each strike row on the class ability — not on `MartialArts > 0`.
 
 ### Martial-arts strike damage
-*Status: Paradigm [OBSERVED] server source, shared by a Paradigm developer via the user, 2026-09-27; Stock from MMUD-Explorer (Unrated) · Realm: differs*
+*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (`_move_player_to_fighter`, `_calculate_attack`); Paradigm [OBSERVED] server source shared by a Paradigm developer via the user, kick / jumpkick multipliers from MMUD-Explorer's GreaterMUD branch; both CONFIRMED to follow 2026-09-27 (user) · Realm: differs*
 
-- **Paradigm base damage is a level band, integer division throughout** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27)*. Levels under 20 use the first form; 20 and up use the second, floored:
+Punch, kick and jumpkick damage are worked out differently on each realm.
 
-  | Strike | Min | Max |
-  |---|---|---|
-  | Punch | `lvl/8 + 2` · `max(5, lvl/6)` | `(lvl+3)/4 + 6` · `max(12, lvl/4)` |
-  | Kick | same as punch | `lvl/5 + 7` · `max(10, lvl/4)` |
-  | Jumpkick | same as punch | `lvl/6 + 7` · `max(10, lvl/4)` |
+| Step | Stock | Paradigm |
+|---|---|---|
+| **Base min** | `skill·L/8 + 2` | `lvl/8 + 2` under level 20, else `max(5, lvl/6)` |
+| **Base max** | punch `skill·(L+3)/4 + 6` · kick `skill·L/6 + 7` · jumpkick `skill·L/6 + 8` | punch `(lvl+3)/4 + 6`, else `max(12, lvl/4)` · kick `lvl/5 + 7`, else `max(10, lvl/4)` · jumpkick `lvl/6 + 7`, else `max(10, lvl/4)` |
+| **What scales it** | the class's strike ability value (`skill`: Punch 29 / Kick 30 / Jumpkick 35) × level, with `L` = level capped at 20 | level alone; no skill term |
+| **Strength** | max `+ (STR − 50)/10`; min `+ 2·(STR − 100)/10` when positive | none |
+| **+max damage (ability 4)** | added to max | added to max |
+| **+min damage** | none | added to min |
+| **Strike damage bonus** (abilities 92 / 93 / 94) | added to min and max | added to min and max |
+| **Kick / jumpkick multiplier** | ×1.33 / ×1.66 (`(100 + 33)/100`, `(100 + 66)/100`) | ×1.33 / ×1.66 *([NEEDS CONFIRMATION] — MMUD-Explorer applies them; the developer's source doesn't show them. Settle against a Paradigm Mystic's `stat all`.)* |
 
-  - Each strike then adds its own damage bonus (`PunchDamage` / `KickDamage` / `JumpkickDamage`) to both ends, the character's **+min damage** to the min and **+max damage** to the max.
-  - There's **no martial-arts skill term** in the damage.
-  - The source is labelled "base damage", so whether strength and the kick ×1.33 / jumpkick ×1.66 multipliers apply on top isn't shown. *[NEEDS CONFIRMATION]* The client still applies both, as on Stock.
-- **Stock** (MMUD-Explorer) scales the skill by level (capped at 20): min `skill·lvl/8 + 2`; max punch `skill·(lvl+3)/4 + 6`, kick `skill·lvl/6 + 7`, jumpkick `skill·lvl/6 + 8`; then strength, the strike's damage bonus, and the kick / jumpkick multipliers.
+- **All division is integer (truncated)** on both realms.
+- **Strike accuracy** comes from abilities 89 / 90 / 91 (punch / kick / jumpkick) on Stock. On Paradigm, kick is −10 and jumpkick −15 accuracy (MMUD-Explorer's GreaterMUD branch).
 
 **Client use:**
-- `CombatCalculator.CalcMartialArtsDamage`. Before 2026-09-27 the Paradigm branch followed MMUD-Explorer: it rounded the level terms, added a flat +1 skill, and left out +min damage.
+- `CombatCalculator.CalcMartialArtsDamage` implements both columns.
+
+### Bash and smash damage vs DR
+*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (`_move_player_to_fighter`, `_calculate_attack`), matching MMUD-Explorer's Stock branch; Paradigm from the Paradigm developer's source (bash) and MMUD-Explorer's GreaterMUD branch; CONFIRMED to follow 2026-09-27 (user) · Realm: differs*
+
+How one weapon hit (normal, bash or smash) is built, by realm.
+
+| Step | Stock | Paradigm |
+|---|---|---|
+| **Base** | the weapon's min / max | the weapon's min / max |
+| **Strength** | max `+ (STR − 50)/10` (negative below 50); min `+ 2·(STR − 100)/10` when positive | max `+ (STR − 50)/10`, never negative; min `+ (STR − 100)/10` when positive *(MMUD-Explorer)* |
+| **+max damage (ability 4)** | added to max | added to max |
+| **+min damage (ability 1)** | not used — the Stock engine has no +min-damage stat, and no Stock item carries it | added to min |
+| **Before the roll** | bash ×1.1, smash ×1.2 | bash ×1.1, smash ×1.2 |
+| **Crit** | chance above 40 becomes `40 + (c − 40)/3`; a crit rolls 2×–4× max; bash and smash never crit | a crit averages 3× max; bash and smash never crit |
+| **Defender's DR** | taken off the rolled damage **first** | taken off **last** |
+| **After the roll** | bash ×3, smash ×5 — so DR counts **3× / 5×** against a bash / smash | bash ×2.5 min / ×3 max, smash ×5 — DR counts once |
+| **Accuracy** | bash −15, smash −25 | bash −15, smash −25 (smash accuracy ×1.5 first) |
+| **Energy** | bash costs 2× energy; smash takes the whole round; under the weapon's strength requirement, energy ×`(200 + 3·shortfall)/200` | bash 2×; smash the whole round |
+
+- All steps truncate to whole numbers.
+
+**Client use:**
+- `CombatCalculator.CalcMeleeDamage` builds the range.
+- `CombatCalculator.DrMultiplierFor` gives how many times the monster's DR counts. Monster Intel's rounds-to-kill and damage-per-hit use it. Before 2026-09-27 Stock bash / smash took DR off only once.
 
 ### Physical damage per round — Paradigm
 *Status: [OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; bash multipliers and the 3× crit match `CombatCalculator` · Realm: Paradigm*
@@ -1166,19 +1193,33 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **A `bs` while not sneaking or hidden quietly becomes a normal attack on Stock** *([OBSERVED] `wccmmud.dll` 1.11p `_cmd_backstab`; [CONFIRMED] 2026-09-27, user)*. No refusal line is printed.
 - **Only the opener needs to be `bs`, and follow-on attacks must stay quiet** *([OBSERVED, mechanism unconfirmed])*. In one live capture the opener `bs large wild dog` was followed by two client-sent `pu large wild dog` during the `*Combat Off*` / `*Combat Engaged*` interrupt bounce, and `You surprise punch ... for 36 damage!` still landed. **Do not read this as "the engine continues the backstab through follow-on attacks"** — the likelier explanation is timing: the `pu` commands simply hadn't registered server-side before the `bs` surprise round resolved. So a well-timed follow-on `pu` *could* have sabotaged the surprise. Practical rule: send `bs` as the opener, then stay quiet — don't spam follow-on attack commands that might register and clobber the surprise (let the server's auto-repeat carry the fight). Never send a second `bs`.
 - **Failure signals — the reliable single-line tell** *([CONFIRMED])*. The surprise round is a **single** swing, so the **first** of the player's own combat-result lines after the `bs` settles the outcome: it either **carries `surprise`** (landed) or **lacks it** (failed). A failure surfaces either as a **whiff** (`You swing at <target>!` — no "for N damage", renders dark-cyan) or as a **folded normal round** (`You punch <target> for N damage!` with no "surprise"). Detection is **text-only** — the `surprise` token, not the color.
-- **Paradigm backstab accuracy** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; matches `CombatCalculator.CalcBackstabAccuracy`)*:
-  ```
-  acc = Stealth/3 + ((AGL − 50) + Level)/2 + 15 + BSAccu + Accuracy (all three accuracy abilities)
-  acc −= 15 if the weapon is too heavy for you
-  ```
-  The +15 was added to help lower levels after a stealth change.
-- **Paradigm backstab defence (against a player)** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; matches `CombatCalculator`)*: `(AC + prev + Perception·0.8 + ward)/2 + shadow`.
+- **Backstab accuracy and damage formulas, by realm:** see *Backstab damage and accuracy*.
 - **`You cannot backstab with this weapon.`** *([CONFIRMED])* — you tried to `bs` while sneaking with a weapon that isn't backstab-capable. No weapon-type flag in the game data exposes this ahead of time; it is only knowable reactively from this line.
 
 **Client use:**
 - The client tracks the spent opener per room; it is re-armed on the next sneak-approach or a fresh in-place hide (see *Movement & navigation → Hiding — sneak vs hide, the hide state machine, and search reveals*).
 - The client enforces the quiet-follow-on rule by suppressing all Attack-Order re-fire while a `bs` is pending resolution.
 - The client keys off the first-line failure tell and, when *Run if BS fails* is on, flees on a detected failure (routed through the normal break-before-flee escape path).
+
+### Backstab damage and accuracy
+*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (`_move_player_to_fighter`, `_calculate_attack`), matching MMUD-Explorer's Stock branch; Paradigm accuracy / defence from the Paradigm developer's source, damage from MMUD-Explorer's GreaterMUD branch, the swap and +min damage CONFIRMED 2026-09-27 (user) · Realm: differs*
+
+| Step | Stock | Paradigm |
+|---|---|---|
+| **Accuracy** | `(Stealth + AGL)/2 + BSAccu/2`, **+5** with class stealth or **−15** with race-only stealth, + the accuracy-ability bonus (highest of abilities 22 / 105 / 106), **−10** if you fought last round | `Stealth/3 + ((AGL − 50) + Level)/2 + 15 + BSAccu` + all accuracy abilities, **−15** if the weapon is too heavy |
+| **Defence (vs a player)** | — | `(AC + prev + Perception·0.8 + ward)/2 + shadow` |
+| **Base range** | the weapon's min / max with strength and +max damage, as for a normal hit | the same, plus **+min damage on the min** |
+| **Backstab range** | min `= 2·min + 2·Level + Stealth/10 + BS min (117)`; max `= 2·max + 2·Level + Stealth/10 + BS max (118)` | same |
+| **Race-only stealth** | ×75%, then ×`(Level + 100)/100` | ×75%, **no** level scale |
+| **Class stealth** | ×`(Level + 100)/100` | ×`(Level + 100)/100` |
+| **Min above max** | the max is **raised to** the min | the two **swap**: the min side (fed by +min damage and BS min) becomes the max, the max side (fed by +max damage and BS max) the min |
+| **Crit** | never | never |
+
+- BSAccu is ability 116. All division truncates.
+
+**Client use:**
+- `CombatCalculator.CalcBackstabAccuracy` / `CalcBSDamage`. Before 2026-09-27 the client left Stock's accuracy-ability bonus and race-only level scale out, didn't count +min damage on Paradigm, and swapped min / max on both realms.
+- Item Finder's Find Best normally scores each item alone against the current gear, which the swap / clamp defeats: several +min pieces can flip the range together while none does alone. For the backstab min / max criteria `TrialGearFinder.FindBestOfPasses` runs a pass per side (`CalcBSSides` — each side is a plain sum of its bonuses) plus the average and the criterion's own score, prices each complete set with `ItemDamageModel.BackstabOfPicks`, and keeps the best. "Backstab Dmg (avg)" needs none of this: a swap doesn't change the average.
 
 ### Monster spell-attack damage — single cast, monster-owned energy
 *Status: CONFIRMED 2026-09-04 (user)*
@@ -4501,6 +4542,18 @@ How MajorMUD quests are structured in the game data (kill steps, NPC dialogue st
   - The login quest-completion sync (`QuestFlagSyncManager`, opt-in via `GeneralSettings.AutoSyncQuestFlagsOnLogin`) reads these values before the availability announce and marks `QuestProgress.Complete` for any quest whose flag has reached its effective complete value (the per-quest `QuestDefinition.CompleteValueOverride` if set, else the crawl's). Strictly one-way — never clears.
   - The `@quest <name|flag>` remote reply marks the same way from its live read (every crawled band on a read flag, not just level-eligible ones — the flag value proves it).
   - `@quest update` runs the sync's read-and-mark on demand (no daily gate, no opt-in).
+
+### Quest stat rewards — `giveability` vs `addability`
+*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (textblock `giveability` / `addability` / `removeability`), CONFIRMED to follow 2026-09-27 (user); Paradigm CONFIRMED 2026-09-27 (user) · Realm: differs*
+
+- **A character has 30 innate ability slots** (an ability code and a value each). Textblocks write quest flags and quest rewards into them.
+- **Stock: `giveability <code> <value>` keeps the higher value.** If the character already has that code, the slot takes the larger of the old and new values; otherwise it takes a free slot. So two quests that `giveability` the same code don't stack — only the highest applies.
+- **Stock: `addability <code> <value>` adds.** If the code is already there, the value is added to it; otherwise it takes a free slot. Quest stat rewards use this almost everywhere (e.g. the class-tier +mana / +backstab damage / +stealth rewards), so on Stock those **do stack**.
+- **Stock: `removeability <code>`** clears the slot.
+- **Paradigm: quest stat rewards all stack** *([CONFIRMED] 2026-09-27, user)*.
+
+**Client use:**
+- `QuestCrawler` counts each `addability` to a non-flag code as a stat reward, and `CompletedQuestBonuses` adds them all up — right for both realms. Every `giveability` target is read as a quest flag, never summed as a stat, which matches Stock's keep-the-highest rule.
 
 ### Quest kill steps & monster placement
 *Status: CONFIRMED 2026-07-16 (user)*

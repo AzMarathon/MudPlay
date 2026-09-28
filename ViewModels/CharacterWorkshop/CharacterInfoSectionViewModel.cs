@@ -419,7 +419,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         int stealth = _stats.Stealth;
         if (canBackstab && level > 0 && stealth > 0)
         {
-            int bsNormAccy = t.TotalWornAccy + effectiveAbil22;
+            int bsNormAccy = realm == RealmType.ParaMud ? t.TotalWornAccy + effectiveAbil22 : effectiveAbil22;
             int bsAccy = CombatCalculator.CalcBackstabAccuracy(
                 stealth, agi, level, str, t.WeaponStrReq,
                 t.PlusBSAccuracy, bsNormAccy, hasClassStealth, realm);

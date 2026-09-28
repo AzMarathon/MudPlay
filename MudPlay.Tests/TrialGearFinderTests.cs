@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text.Json;
+using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Inventory;
 using MudPlay.Models.Profile;
@@ -272,5 +273,56 @@ public sealed class TrialGearFinderTests
         var best = TrialGearFinder.FindBest(catalog, Slots, new HashSet<EquipmentSlot>(), NoCurrent(),
             Ac, 0, ClassEquipProfile.Unknown, null, weightBudget: null);
         Assert.Equal("heavy plate", best[EquipmentSlot.Torso]);
+    }
+
+    // Paradigm swaps a backstab whose min side outgrows its max side, so per-item
+    // "max" gains don't add up: two +8 BS-min pieces each add nothing to the max on
+    // their own (the min side stays under the max side), but together they flip the
+    // range to a higher max than the +2 BS-max pieces reach. Level 10, class stealth,
+    // a 5-10 weapon: sides 33 / 44. The two +max pieces → 33 / 48; the two +min
+    // pieces → 50 / 44, swapped to 44-50.
+    [Fact]
+    public void FindBestOfPasses_BackstabMax_FindsTheSwapThatPerItemScoringMisses()
+    {
+        var model = new ItemDamageModel(RealmType.ParaMud, Level: 10, CombatLevel: 3, Strength: 50, Agility: 50,
+            Stealth: 0, HasClassStealth: true, CurrentEncum: 0, MaxEncum: 1000, Rest: default,
+            CurrentWeapon: new ItemDamageModel.WeaponInputs(5, 10, 1000, 0, 0, 0, 0, 0, 0, CanBackstab: true));
+        ItemFinderEntry Gear(string name, EquipmentSlot slot, int bsMin, int bsMax)
+        {
+            var delta = new ItemDamageModel.GearDelta(0, 0, 0, 0, 0, 0, bsMin, bsMax, 0, 0, 0);
+            (double min, double max, double avg) = model.BackstabGain(delta);
+            (double sideMin, double sideMax) = model.BackstabSidesGain(delta);
+            return new ItemFinderEntry
+            {
+                Name = name, Slot = slot, SlotLabel = slot.ToString(), Row = EmptyRow, DamageGear = delta,
+                BsScoreMin = min, BsScoreMax = max, BsScoreAvg = avg, BsSideMinScore = sideMin, BsSideMaxScore = sideMax,
+            };
+        }
+        var catalog = new[]
+        {
+            Gear("min cap", EquipmentSlot.Head, bsMin: 8, bsMax: 0),
+            Gear("max cap", EquipmentSlot.Head, bsMin: 0, bsMax: 2),
+            Gear("min robe", EquipmentSlot.Torso, bsMin: 8, bsMax: 0),
+            Gear("max robe", EquipmentSlot.Torso, bsMin: 0, bsMax: 2),
+        };
+        var byName = new Dictionary<string, ItemFinderEntry>();
+        foreach (ItemFinderEntry e in catalog) byName[e.Name] = e;
+        double MaxOf(IReadOnlyDictionary<EquipmentSlot, string> picks)
+        {
+            var entries = new List<KeyValuePair<EquipmentSlot, ItemFinderEntry>>();
+            foreach ((EquipmentSlot slot, string name) in picks) entries.Add(new(slot, byName[name]));
+            return model.BackstabOfPicks(entries, heldWeapon: null)?.MaxDamage ?? 0;
+        }
+
+        var single = TrialGearFinder.FindBest(catalog, Slots, new HashSet<EquipmentSlot>(), NoCurrent(),
+            e => e.BsScoreMax, 0, ClassEquipProfile.Unknown, null);
+        var passes = TrialGearFinder.FindBestOfPasses(
+            [e => e.BsScoreMax, e => e.BsSideMinScore, e => e.BsSideMaxScore, e => e.BsScoreAvg], MaxOf,
+            catalog, Slots, new HashSet<EquipmentSlot>(), NoCurrent(), 0, ClassEquipProfile.Unknown, null);
+
+        Assert.Equal(48, MaxOf(single));
+        Assert.Equal(50, MaxOf(passes));
+        Assert.Equal("min cap", passes[EquipmentSlot.Head]);
+        Assert.Equal("min robe", passes[EquipmentSlot.Torso]);
     }
 }

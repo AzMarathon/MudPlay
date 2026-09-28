@@ -29,13 +29,14 @@ public static class MonsterMatchupCalculator
             defenderDodge: monster.Dodge,
             realmType: realm);
 
-        int playerDmgPerHit = System.Math.Max(0, player.AvgWeaponDamage - monster.DamageResist);
+        int monsterDr = monster.DamageResist * player.MonsterDrMultiplier;
+        int playerDmgPerHit = System.Math.Max(0, player.AvgWeaponDamage - monsterDr);
 
         // Fold critical hits into the per-swing average the same way MajorMUD's
         // round-damage does: a crit averages 3x the normal max (its own DR is
         // subtracted), blended by the crit chance. The displayed dmg/hit stays
         // the non-crit value (the "avg hit"); only DPS reflects crits.
-        int critPerHit = System.Math.Max(0, player.AvgCritDamage - monster.DamageResist);
+        int critPerHit = System.Math.Max(0, player.AvgCritDamage - monsterDr);
         double critPct = System.Math.Clamp(player.CritChancePercent, 0, 100) / 100.0;
         double effectivePerHit = ((1.0 - critPct) * playerDmgPerHit) + (critPct * critPerHit);
 
@@ -119,6 +120,9 @@ public static class MonsterMatchupCalculator
 //   CritChancePercent — normal-attack crit chance (0-100), gear/quest crit +
 //                       Quick-and-Deadly. Folds into DPS, not the per-hit display.
 //   AvgCritDamage     — avg crit damage before the monster's DR (3x the normal max).
+//   MonsterDrMultiplier — how many times the monster's DR counts against a hit: the
+//                       attack's post-roll multiplier when the realm takes DR off
+//                       before it (Stock bash ×3 / smash ×5), else 1.
 public readonly record struct PlayerMatchupProfile(
     RealmType Realm,
     int NormalAccuracy,
@@ -131,7 +135,8 @@ public readonly record struct PlayerMatchupProfile(
     int ProtGood,
     int DamageResist,
     int CritChancePercent = 0,
-    int AvgCritDamage = 0);
+    int AvgCritDamage = 0,
+    int MonsterDrMultiplier = 1);
 
 // Monster-side inputs to MonsterMatchupCalculator.Compute — defense
 // (AC / DR / HP) and the primary physical attack slot (accuracy + average

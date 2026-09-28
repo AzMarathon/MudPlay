@@ -246,20 +246,62 @@ public sealed class CombatCalculatorTests
     }
 
     [Fact]
-    public void CalcBSDamage_RacialOnlyHasNoLevelScaling()
+    public void CalcBSDamage_RacialOnly_StockScalesByLevel_ParadigmDoesNot()
     {
-        // Engine: racial-only stealth scales by a flat 75% with no (level+100)
-        // term, identically in both realms. Manual: minDamage 10, maxDamage
-        // 30 + (100-50)/10 = 35. min temp = 100+20+20 = 140 → 105;
-        // max temp = 100+20+70 = 190 → 142.
+        // Racial-only stealth takes 75%; Stock then applies (level+100)/100 as it
+        // does for class stealth, Paradigm doesn't. minDamage 10, maxDamage
+        // 30 + (100-50)/10 = 35. min 100+20+20 = 140 → 105; max 100+20+70 = 190 → 142.
+        // Stock ×150/100: 157 / 213.
         BSDamageResult stock = CombatCalculator.CalcBSDamage(
             level: 50, stealth: 200, strength: 100,
             weaponMin: 10, weaponMax: 30,
             bsMinBonus: 0, bsMaxBonus: 0, maxDmgBonus: 0,
             hasClassStealth: false, realmType: RealmType.Stock);
+        BSDamageResult para = CombatCalculator.CalcBSDamage(
+            level: 50, stealth: 200, strength: 100,
+            weaponMin: 10, weaponMax: 30,
+            bsMinBonus: 0, bsMaxBonus: 0, maxDmgBonus: 0,
+            hasClassStealth: false, realmType: RealmType.ParaMud);
 
-        Assert.Equal(105, stock.MinDamage);
-        Assert.Equal(142, stock.MaxDamage);
+        Assert.Equal(157, stock.MinDamage);
+        Assert.Equal(213, stock.MaxDamage);
+        Assert.Equal(105, para.MinDamage);
+        Assert.Equal(142, para.MaxDamage);
+    }
+
+    // The min side (+min damage, BS min) can outgrow the max side (+max damage, BS
+    // max). Paradigm swaps them; Stock raises the max to the min.
+    [Fact]
+    public void CalcBSDamage_MinAboveMax_ParadigmSwaps_StockRaisesMax()
+    {
+        // Level 10, stealth 0, STR 50, weapon 5-5, BS min +40, class stealth:
+        //   min (20 + 0 + 10 + 40) = 70 → ×110/100 = 77; max (20 + 10) = 30 → 33.
+        BSDamageResult para = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 5, bsMinBonus: 40, bsMaxBonus: 0, maxDmgBonus: 0,
+            hasClassStealth: true, realmType: RealmType.ParaMud);
+        BSDamageResult stock = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 5, bsMinBonus: 40, bsMaxBonus: 0, maxDmgBonus: 0,
+            hasClassStealth: true, realmType: RealmType.Stock);
+
+        Assert.Equal((33, 77), (para.MinDamage, para.MaxDamage));
+        Assert.Equal((77, 77), (stock.MinDamage, stock.MaxDamage));
+    }
+
+    // +min damage feeds the backstab minimum on Paradigm; Stock has no +min damage.
+    [Fact]
+    public void CalcBSDamage_MinDamageBonus_ParadigmOnly()
+    {
+        BSDamageResult para = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 20, 0, 0, 0, hasClassStealth: true, RealmType.ParaMud, minDmgBonus: 5);
+        BSDamageResult paraNone = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 20, 0, 0, 0, hasClassStealth: true, RealmType.ParaMud);
+        BSDamageResult stock = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 20, 0, 0, 0, hasClassStealth: true, RealmType.Stock, minDmgBonus: 5);
+        BSDamageResult stockNone = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 20, 0, 0, 0, hasClassStealth: true, RealmType.Stock);
+
+        Assert.True(para.MinDamage > paraNone.MinDamage);
+        Assert.Equal(stockNone, stock);
     }
 
     [Fact]
@@ -560,25 +602,25 @@ public sealed class CombatCalculatorTests
     }
 
     [Fact]
-    public void CalcMartialArtsDamage_Paradigm_FoldsPositiveStrengthOnly()
+    public void CalcMartialArtsDamage_Paradigm_IgnoresStrength()
     {
-        // Paradigm: max gets (STR-50)/10 (>0 only); min gets (STR-100)/10 (NOT
-        // doubled), floored 0. STR 150: max +10, min +5. L30 punch base 5/12.
+        // Paradigm's strike damage has no strength term (Stock's does). L30 punch
+        // at STR 150 stays at the 5 / 12 base.
         MeleeDamageResult r = CombatCalculator.CalcMartialArtsDamage(
             MudAttackType.Punch, RealmType.ParaMud, level: 30, maPlusSkill: 1,
             strength: 150, plusMaxDamage: 0, maPlusDamage: 0);
 
-        Assert.Equal(10, r.MinDamage);  // 5 + 5
-        Assert.Equal(22, r.MaxDamage);  // 12 + 10
+        Assert.Equal(5, r.MinDamage);
+        Assert.Equal(12, r.MaxDamage);
     }
 
     [Theory]
     // Level-1 Kang Mystic, STR 80, on the Paradigm server formula: band min
-    // 1/8+2 = 2; max (1+3)/4+6 = 7 punch, 1/5+7 = 7 kick, 1/6+7 = 7 jk. STR 80
-    // adds +3 to max only. Kick ×1.33 / jumpkick ×1.66 truncate afterward.
-    [InlineData(MudAttackType.Punch, 2, 10)]
-    [InlineData(MudAttackType.Kick, 2, 13)]
-    [InlineData(MudAttackType.Jumpkick, 3, 16)]
+    // 1/8+2 = 2; max (1+3)/4+6 = 7 punch, 1/5+7 = 7 kick, 1/6+7 = 7 jk. STR adds
+    // nothing on Paradigm. Kick ×1.33 / jumpkick ×1.66 truncate afterward.
+    [InlineData(MudAttackType.Punch, 2, 7)]
+    [InlineData(MudAttackType.Kick, 2, 9)]
+    [InlineData(MudAttackType.Jumpkick, 3, 11)]
     public void CalcMartialArtsDamage_Paradigm_Level1Mystic(
         MudAttackType attack, int expectedMin, int expectedMax)
     {

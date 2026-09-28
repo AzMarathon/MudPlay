@@ -216,6 +216,17 @@ public sealed record ItemFinderEntry
     public double BsScoreMin { get; init; }
     public double BsScoreMax { get; init; }
     public double BsScoreAvg { get; init; }
+
+    // The same, per backstab side before the realm picks which is the min (see
+    // CombatCalculator.CalcBSSides). Sides add up across slots where the resolved
+    // min / max don't, so Find Best pushes one side at a time.
+    public double BsSideMinScore { get; init; }
+    public double BsSideMaxScore { get; init; }
+
+    // This item's damage inputs, so Find Best can price a whole set of picks: the
+    // weapon's own inputs (null for non-weapons) and a non-weapon's gear delta.
+    public ItemDamageModel.WeaponInputs? DamageWeapon { get; init; }
+    public ItemDamageModel.GearDelta DamageGear { get; init; }
     public double DamagePerRoundScore { get; init; }
 
     // True for the bare-handed attack rows (Punch / Kick / Jumpkick) the catalog
@@ -451,6 +462,10 @@ public sealed record ItemFinderEntry
                 BsScoreMin = est.ScoreMin,
                 BsScoreMax = est.ScoreMax,
                 BsScoreAvg = est.ScoreAvg,
+                BsSideMinScore = est.SideMin,
+                BsSideMaxScore = est.SideMax,
+                DamageWeapon = est.Weapon,
+                DamageGear = est.Gear,
                 DamagePerRoundScore = est.PerRoundScore,
                 Negates = ScanNegates(row, cache),
                 Row = row,
@@ -473,7 +488,8 @@ public sealed record ItemFinderEntry
     }
 
     private readonly record struct DamageEstimate(
-        int BsMin, int BsMax, double PerRound, double ScoreMin, double ScoreMax, double ScoreAvg, double PerRoundScore);
+        int BsMin, int BsMax, double PerRound, double ScoreMin, double ScoreMax, double ScoreAvg, double PerRoundScore,
+        double SideMin, double SideMax, ItemDamageModel.WeaponInputs? Weapon, ItemDamageModel.GearDelta Gear);
 
     // A weapon is valued on its own (it replaces the one in hand); any other piece by
     // what it adds to the current loadout — the per-slot figure Find Best ranks on.
@@ -488,16 +504,20 @@ public sealed record ItemFinderEntry
                 t.PlusBSMin, t.PlusBSMax, canBackstab, t.PlusStrength, t.PlusAgility, t.PlusStealth);
             BSDamageResult? bs = model.Backstab(weapon);
             double perRound = model.DamagePerRound(weapon, attackType);
+            (double sideMin, double sideMax) = model.BackstabSides(weapon);
             return new DamageEstimate(
                 bs?.MinDamage ?? 0, bs?.MaxDamage ?? 0, perRound,
-                bs?.MinDamage ?? 0, bs?.MaxDamage ?? 0, bs?.AvgDamage ?? 0, perRound);
+                bs?.MinDamage ?? 0, bs?.MaxDamage ?? 0, bs?.AvgDamage ?? 0, perRound,
+                sideMin, sideMax, weapon, default);
         }
 
         var delta = new ItemDamageModel.GearDelta(
             t.PlusStrength, t.PlusAgility, t.PlusStealth, t.PlusMinDamage, t.PlusMaxDamage, t.PlusCrits,
             t.PlusBSMin, t.PlusBSMax, t.PlusPunchDmg, t.PlusKickDmg, t.PlusJumpKickDmg);
         (double min, double max, double avg) = model.BackstabGain(delta);
-        return new DamageEstimate(0, 0, 0, min, max, avg, model.DamagePerRoundGain(delta, attackType));
+        (double gainMin, double gainMax) = model.BackstabSidesGain(delta);
+        return new DamageEstimate(0, 0, 0, min, max, avg, model.DamagePerRoundGain(delta, attackType),
+            gainMin, gainMax, null, delta);
     }
 
     // Spell names the item negates — one per non-zero NegateSpell-0..9, resolved

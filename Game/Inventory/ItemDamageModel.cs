@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using MudPlay.Game.Calculators;
+using MudPlay.Models.Profile;
 
 namespace MudPlay.Game.Inventory;
 
@@ -36,7 +38,13 @@ public sealed record ItemDamageModel(
     // A non-weapon item's contribution to damage: the stat and bonus deltas it would add.
     public readonly record struct GearDelta(
         int Strength, int Agility, int Stealth, int PlusMin, int PlusMax, int Crits, int BsMin, int BsMax,
-        int PunchDmg, int KickDmg, int JumpKickDmg);
+        int PunchDmg, int KickDmg, int JumpKickDmg)
+    {
+        public GearDelta Plus(GearDelta o) => new(
+            Strength + o.Strength, Agility + o.Agility, Stealth + o.Stealth, PlusMin + o.PlusMin,
+            PlusMax + o.PlusMax, Crits + o.Crits, BsMin + o.BsMin, BsMax + o.BsMax,
+            PunchDmg + o.PunchDmg, KickDmg + o.KickDmg, JumpKickDmg + o.JumpKickDmg);
+    }
 
     // A backstab needs a real level; the swing model also needs a class combat level.
     public bool IsUsable => Level > 0 && CombatLevel > 0;
@@ -77,6 +85,50 @@ public sealed record ItemDamageModel(
                 with.AvgDamage - baseline.AvgDamage);
     }
 
+    // The two backstab sides (before the realm picks which is the min) with this
+    // weapon in hand — each a plain sum of its bonuses, unlike the resolved range.
+    public (double MinSide, double MaxSide) BackstabSides(WeaponInputs weapon)
+    {
+        if (!IsUsable || !weapon.CanBackstab) return (0, 0);
+        (int min, int max) = BackstabSidesWith(weapon, default);
+        return (min, max);
+    }
+
+    // How much a non-weapon item raises each backstab side over the current loadout.
+    public (double MinSide, double MaxSide) BackstabSidesGain(GearDelta item)
+    {
+        if (!IsUsable) return (0, 0);
+        WeaponInputs weapon = CurrentWeapon ?? default;
+        (int baseMin, int baseMax) = BackstabSidesWith(weapon, default);
+        (int min, int max) = BackstabSidesWith(weapon, item);
+        return (min - baseMin, max - baseMax);
+    }
+
+    // The backstab range a whole set of picks gives: the picked weapon (the one in
+    // hand when none was picked) plus the summed gear. Null when it can't backstab.
+    public BSDamageResult? BackstabLoadout(WeaponInputs? weapon, GearDelta gear)
+    {
+        if (!IsUsable) return null;
+        WeaponInputs w = weapon ?? CurrentWeapon ?? default;
+        if (weapon is { CanBackstab: false }) return null;
+        return BackstabWith(w, gear);
+    }
+
+    // Prices a set of Find Best picks as one backstab: the picked weapon (else the
+    // held one, else the one in hand) plus every picked non-weapon's gear.
+    public BSDamageResult? BackstabOfPicks(
+        IEnumerable<KeyValuePair<EquipmentSlot, ItemFinderEntry>> picks, ItemFinderEntry? heldWeapon)
+    {
+        WeaponInputs? weapon = heldWeapon?.DamageWeapon;
+        GearDelta gear = default;
+        foreach ((EquipmentSlot slot, ItemFinderEntry e) in picks)
+        {
+            if (e.DamageWeapon is { } w) { if (slot == EquipmentSlot.Weapon) weapon = w; }
+            else gear = gear.Plus(e.DamageGear);
+        }
+        return BackstabLoadout(weapon, gear);
+    }
+
     // How much a non-weapon item raises damage per round for this attack type,
     // over the current loadout.
     public double DamagePerRoundGain(GearDelta item, MudAttackType type)
@@ -103,11 +155,18 @@ public sealed record ItemDamageModel(
     private int StealthWith(WeaponInputs weapon, GearDelta item) =>
         Stealth - (CurrentWeapon?.Stealth ?? 0) + weapon.Stealth + item.Stealth;
 
-    private BSDamageResult BackstabWith(WeaponInputs weapon, GearDelta item) =>
-        CombatCalculator.CalcBSDamage(
+    private BSDamageResult BackstabWith(WeaponInputs weapon, GearDelta item)
+    {
+        (int min, int max) = BackstabSidesWith(weapon, item);
+        return CombatCalculator.ResolveBSRange(min, max, Realm);
+    }
+
+    private (int MinSide, int MaxSide) BackstabSidesWith(WeaponInputs weapon, GearDelta item) =>
+        CombatCalculator.CalcBSSides(
             Level, StealthWith(weapon, item), StrengthWith(weapon, item), weapon.Min, weapon.Max,
             Rest.BsMin + weapon.BsMin + item.BsMin, Rest.BsMax + weapon.BsMax + item.BsMax,
-            Rest.PlusMax + weapon.PlusMax + item.PlusMax, HasClassStealth, Realm);
+            Rest.PlusMax + weapon.PlusMax + item.PlusMax, HasClassStealth, Realm,
+            Rest.PlusMin + weapon.PlusMin + item.PlusMin);
 
     private double MeleeRound(WeaponInputs weapon, GearDelta item, MudAttackType type)
     {

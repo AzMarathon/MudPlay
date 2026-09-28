@@ -1,15 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.12**
-> - Failed hides on Stock are recognised (Stock puts a space before "You don't think you are hidden.")
-> - The walker waits out blindness before searching for a hidden exit, instead of stalling on "You are blind."
-> - Monster Aggro calculator: Stock lawful-evil monsters attack Seedy characters and spare Outlaw and worse
-> - Stock rest regen countdown uses the engine's 21 s tick
-> - Paradigm Mystic punch / kick / jumpkick damage follows the server's formula (no rounding, no flat +1, +min damage counts)
-> - A downed partymate is held for as long as their climb back to positive HP can take (from their HP, or the realm's death floor), then re-invited once they're up
-> - GAME_MECHANICS: Stock engine facts (10-affect cap refuses the 11th, Blur AC by armour worn, bleeding out and aid, room item slots and stacking, party rank modifiers, meditate timing)
-> - GAME_MECHANICS: Paradigm server formulas (evil points from attacking, backstab accuracy and defence, damage per round, exact Blur AC, Mystic strike damage)
+> **Version 3.116.16**
+> - Paradigm Mystic punch / kick / jumpkick damage no longer adds a strength bonus (Paradigm's strikes have none)
+> - Stock bash and smash take a monster's damage resist off before the ×3 / ×5, so Monster Intel counts armour 3× / 5× against them
+> - Backstab follows each realm's engine: Stock adds your accuracy-ability bonus and level-scales race-only stealth; Paradigm counts +min damage and swaps a backstab whose min outgrows its max (Stock raises the max instead)
+> - Workshop calculator's Paradigm martial-arts range counts +min damage
+> - Item Finder's Find Best for backstab min / max tries pushing each end of the range and keeps the better set, so it catches a min / max flip that no single piece shows
+> - GAME_MECHANICS: martial-arts and weapon / bash / smash damage compared side by side for Stock and Paradigm, with sources
+> - GAME_MECHANICS: how quest stat rewards combine on Stock (`giveability` keeps the highest, `addability` stacks) and Paradigm (all stack)
+> - GAME_MECHANICS: backstab accuracy and damage compared for Stock and Paradigm
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

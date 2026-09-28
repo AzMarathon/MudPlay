@@ -45,6 +45,28 @@ public sealed class MonsterMatchupCalculatorTests
         Assert.True(r.HasWeapon);
     }
 
+    // Stock takes the monster's DR off the rolled damage before the bash ×3 / smash
+    // ×5, so DR counts that many times against a hit; Paradigm takes it off after.
+    [Fact]
+    public void StockBashAndSmash_MultiplyTheMonstersDr_ParadigmDoesNot()
+    {
+        MonsterMatchupProfile m = Monster(dr: 2);
+        PlayerMatchupProfile bash = Player(avgDmg: 30) with
+        {
+            Realm = RealmType.Stock,
+            MonsterDrMultiplier = CombatCalculator.DrMultiplierFor(MudAttackType.Bash, RealmType.Stock),
+        };
+        PlayerMatchupProfile smash = bash with
+        {
+            MonsterDrMultiplier = CombatCalculator.DrMultiplierFor(MudAttackType.Smash, RealmType.Stock),
+        };
+
+        Assert.Equal(30 - 6, MonsterMatchupCalculator.Compute(bash, m).PlayerDamagePerHit);
+        Assert.Equal(30 - 10, MonsterMatchupCalculator.Compute(smash, m).PlayerDamagePerHit);
+        Assert.Equal(1, CombatCalculator.DrMultiplierFor(MudAttackType.Bash, RealmType.ParaMud));
+        Assert.Equal(1, CombatCalculator.DrMultiplierFor(MudAttackType.Normal, RealmType.Stock));
+    }
+
     [Fact]
     public void MonsterDodge_LowersPlayerHitChance()
     {

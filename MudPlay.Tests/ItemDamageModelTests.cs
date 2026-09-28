@@ -49,7 +49,7 @@ public sealed class ItemDamageModelTests : IDisposable
 
         BSDamageResult expected = CombatCalculator.CalcBSDamage(
             20, 80, 70, 4, 12, bsMinBonus: 2 + 5, bsMaxBonus: 4 + 6, maxDmgBonus: 3 + 1,
-            hasClassStealth: true, RealmType.ParaMud);
+            hasClassStealth: true, RealmType.ParaMud, minDmgBonus: 1);
         Assert.Equal(expected, bs);
     }
 
@@ -69,7 +69,7 @@ public sealed class ItemDamageModelTests : IDisposable
         BSDamageResult? bs = Model(wielded).Backstab(Stiletto);
 
         BSDamageResult expected = CombatCalculator.CalcBSDamage(
-            20, 70, 70, 4, 12, 7, 10, 4, hasClassStealth: true, RealmType.ParaMud);
+            20, 70, 70, 4, 12, 7, 10, 4, hasClassStealth: true, RealmType.ParaMud, minDmgBonus: 1);
         Assert.Equal(expected, bs);
     }
 

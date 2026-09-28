@@ -95,7 +95,8 @@ public static class LevelProjectionCalculator
                 : gear?.MaxSingleAbil22 ?? 0;
             bsAccuracy = CombatCalculator.CalcBackstabAccuracy(
                 stealth, agility, level, strength, gear?.WeaponStrReq ?? 0,
-                gear?.PlusBSAccuracy ?? 0, (gear?.TotalWornAccy ?? 0) + effectiveAbil22,
+                gear?.PlusBSAccuracy ?? 0,
+                realm == RealmType.ParaMud ? (gear?.TotalWornAccy ?? 0) + effectiveAbil22 : effectiveAbil22,
                 hasClassStealth, realm);
         }
 

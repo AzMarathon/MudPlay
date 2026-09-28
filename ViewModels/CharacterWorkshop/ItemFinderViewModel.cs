@@ -867,9 +867,15 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         {
             List<EquipmentSlot> remaining = targets.Where(t => !filled.Contains(t)).ToList();
             if (remaining.Count == 0) break;
-            Dictionary<EquipmentSlot, string> best = TrialGearFinder.FindBest(
-                candidates, remaining, filled, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
-                weightBudget: weightBudget, realm: _gameData.ActiveRealm);
+            Dictionary<EquipmentSlot, string> best = filter.BackstabRange is { } end && _damage is { IsUsable: true } model
+                ? TrialGearFinder.FindBestOfPasses(
+                    [filter.Score, e => e.BsSideMinScore, e => e.BsSideMaxScore, e => e.BsScoreAvg],
+                    picks => model.BackstabOfPicks(PickedEntries(picks), HeldWeapon(filled, current)) is { } r ? end(r) : 0,
+                    candidates, remaining, filled, current, UsableLevel, _activeClass, _activeAlignment,
+                    weightBudget: weightBudget, realm: _gameData.ActiveRealm)
+                : TrialGearFinder.FindBest(
+                    candidates, remaining, filled, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
+                    weightBudget: weightBudget, realm: _gameData.ActiveRealm);
             foreach ((EquipmentSlot slot, string name) in best)
             {
                 TrialSlots.First(r => r.Slot == slot).SetItemQuiet(name);
@@ -881,6 +887,19 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         }
         RecomputeTrial();
     }
+
+    private IEnumerable<KeyValuePair<EquipmentSlot, ItemFinderEntry>> PickedEntries(
+        IReadOnlyDictionary<EquipmentSlot, string> picks)
+    {
+        foreach ((EquipmentSlot slot, string name) in picks)
+            if (_entryByName.TryGetValue(name, out ItemFinderEntry? e))
+                yield return new KeyValuePair<EquipmentSlot, ItemFinderEntry>(slot, e);
+    }
+
+    private ItemFinderEntry? HeldWeapon(ISet<EquipmentSlot> held, IReadOnlyDictionary<EquipmentSlot, string?> current) =>
+        held.Contains(EquipmentSlot.Weapon) && current.TryGetValue(EquipmentSlot.Weapon, out string? name)
+            && name is not null && _entryByName.TryGetValue(name, out ItemFinderEntry? e)
+            ? e : null;
 
     // Translates the target-weight dropdown into an absolute weight budget for
     // FindBest's non-held slots: the chosen band's ceiling percentage of the live
