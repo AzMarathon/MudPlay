@@ -1300,7 +1300,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 
 | Your title | Guards | Extra actors |
 |---|---|---|
-| Lawful / Good / Neutral *([NEEDS CONFIRMATION] there is no Lawful title band — does this cover Saint too?)* | ignore | — |
+| Saint / Good / Neutral *(a Saint, where one exists, is treated like Good — [CONFIRMED] 2026-09-28, user)* | ignore | — |
 | Seedy | ignore | bad deeds done *to* you are ignored (you lose guard protection, but guards don't aggro) |
 | Outlaw | **attack on sight**, but spare your life | — |
 | Criminal | **slay on sight** | — |
@@ -1389,7 +1389,7 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
 - **The "exp + Combat Off within a window" fallback death is a *weak* heuristic** — only trust it for monsters whose specific death line isn't in the data (historical — per-monster death lines were retired in v3.16.0; the exp line followed by `*Combat Off*` is the kill signal). Because a specific death line always precedes its exp, an exp that lands right after a specific death belongs to that already-attributed kill and must not also arm the fallback. Otherwise, with identical-exp mobs dying every few seconds (a swarm), the prior kill's exp stays inside the window and the next fight's non-death `*Combat Off*` fires a phantom fallback death on it, a beat before the current mob actually dies.
 - **The exp line is the earliest reliable per-kill signal during combat** *([CONFIRMED] 2026-08-15, user)*. Every kill grants exp, and the exp line lands **before** the kill's `*Combat Off*`. So while engaged with a target we've attacked, a `You gain N experience.` line means that target just died — recognize the kill on the **exp line**, not the later `*Combat Off*`. Waiting for the Off let the round's **alternate** attack corpse-cast: `lbol` kills → `mmis <corpse>` → "You don't see X here!" (report `paradigm-20260814-230258`). This is generic — the exp line is identical for every monster.
 - **AoE clears the whole room as a burst of exp lines** *([CONFIRMED] 2026-08-15, user — "20 targets dead in 1 spell")*. One room spell prints a `<flavor>` + `You gain N experience.` **pair per monster it kills**, then a **single** `*Combat Off*` at the end. So exp-line count = kill count.
-- **"The fight is over" = `*Combat Off*` AND an empty hostile roster** *([CONFIRMED] 2026-09-08, user)*. On stock, `*Combat Off*` is the message that marks combat ending *([NEEDS CONFIRMATION] same on Paradigm?)* — but as above it also fires on every cast and once per strike for non-sustaining attacks, so on its own it says nothing about whether anything is still alive. The usable pair is that line **plus** a room re-display showing no engageable monster left.
+- **"The fight is over" = `*Combat Off*` AND an empty hostile roster** *([CONFIRMED] 2026-09-08, user)*. `*Combat Off*` is the message that marks us no longer engaged, **on Stock and Paradigm alike** *([CONFIRMED] 2026-09-28, user)*. It has three causes: the monster died (then a death line and an exp line come with it), we typed `break` (the monster is still alive), or a between-round spell interrupted our attack. As above it also fires on every cast and once per strike for non-sustaining attacks, so on its own it says nothing about whether anything is still alive. The usable pair is that line **plus** a room re-display showing no engageable monster left.
 - **Death messages are arbitrary per-monster flavor** — no shared keyword (a scan of 1035 seed death lines: `…a tortured squeak`, `…to the ground`, `…without a sound`, `…a thousand pieces`, `…an agonized bellow`, `…in a heap`, most with no death word) and no distinctive colour (they render default/white). So a monster death **cannot be recognized by wording or colour generically** — the exp line is the generic signal, and our own targeting (`CombatManager.CurrentTarget`) names the mob.
 
 **Client use:**
@@ -1409,9 +1409,10 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
 - This is what boss-timer kill detection uses.
 
 ### Attacking a monster that isn't in the room
-*Status: CONFIRMED 2026-09-24 (user; report `stock-20260924-013525`) · Realm: Stock (Paradigm NEEDS CONFIRMATION)*
+*Status: CONFIRMED 2026-09-24 (user; report `stock-20260924-013525`); Paradigm CONFIRMED 2026-09-28 (user) · Realm: differs*
 
-- **An attack at a monster that isn't in the room answers per the "talk slow" setting.**
+- **Paradigm answers `Your command had no effect.`** *([CONFIRMED] 2026-09-28, user)*.
+- **Stock answers per the "talk slow" setting.**
   - With talk slow **off**, the unrecognised command is spoken: `a kobold thief` → `You say "a kobold thief"`.
   - With talk slow **on** it's `Your command had no effect.` — whether or not anyone else is in the room.
 - **Both mean the target is gone** — typically a monster a party member killed, whose death gives us no exp line and so is never seen (report `stock-20260924-013525`).
@@ -1986,10 +1987,10 @@ How one damage spell cast against a monster is worked out.
   - A refused action prints **`You are too afraid!`**.
   - **Weapon attacks and attack spells are refused.**
   - **Between-round spells still go out:** buffs, cures, debuffs and heals.
-  - The user's wording on the forced moves: fear "will forcibly move us between rooms at random" unless you're in a "trapped area". `[NEEDS CONFIRMATION]` what counts as a trapped area: a room with no cardinal exit to be shoved through?
-- **While feared, the game shoves you between cardinal-CONNECTED adjacent rooms** (never across a
-  `go`/text-exit) and re-renders each new room — but those forced moves carry **no command echo and no
-  per-move line** (bare `[HP=..]:` prompts, just changing exits).
+- **While feared, the game runs you at random through the room's obvious exits** — only the exits on the `Obvious exits:` list, never a hidden one or a `go`/text exit — and re-renders each new room. Those forced moves carry **no command echo and no per-move line** (bare `[HP=..]:` prompts, just changing exits).
+  - **A room with no obvious exits traps you in place** *([CONFIRMED] 2026-09-28, user)*: fear can't move you. E.g. the beholder boss in the Ancient Ruins fears you in a room whose only way out is hidden.
+  - **Leaving such a room yourself starts the running**: send the move through the hidden exit (`w` there) and, once you're somewhere with obvious exits, fear runs you through them at random until it wears off — as terror beasts in the Black Wasteland do.
+  - *(An earlier note said fear moves you between cardinal-connected rooms and asked what a "trapped area" was; superseded 2026-09-28.)*
   - So the *direction* of each fear-move is unknown from the wire, but the *feared state itself is
     known* (onset → wear-off window).
 - **Fear is rare**, so this is an edge case, not the common path.
@@ -2803,7 +2804,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - The client crosses it like any other text exit (`RoomTracker` Confirmed → Pending on the sent command; the walker resolves the Text exit's deterministic target), so `borrow skiff` must be treated as a plain traversal command, never a purchase or a carried-item requirement.
 
 ### CMD-driven room teleports split the party
-*Status: CONFIRMED (arrival ordering: capture 2026-07-10); general CMD-vs-exit rule NEEDS CONFIRMATION*
+*Status: CONFIRMED (arrival ordering: capture 2026-07-10); general rule [OBSERVED] `wccmmud.dll` 1.11p textblock `teleport` + Stock data, matching the user's examples 2026-09-28 · Realm: Stock engine; Paradigm per the user's examples*
 
 - **A CMD-driven room teleport moves only the character who types it — every member must fire it themselves.** Some rooms carry a command-triggered teleport in the room's `CMD` → TBInfo action chain rather than as a directional exit — e.g. Slum Street (`1/1182`) has TBInfo `#4087`: `ring chime:message …:teleport 65 1:message …` / `use chime:…` (a `ring chime` / `use chime` verb that teleports the caster).
 - **This is not a `Text` ("go path") exit** where the leader traverses and followers are dragged along: a CMD teleport **breaks the party apart** (the teleport removes the mover from the group). So a leader taking a party through one must:
@@ -2814,7 +2815,16 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - A re-invite fired the instant the leader crosses races **ahead** of the members' arrival and the server answers **`You don't see %name% here!`** — the invite is silently lost and that member is left out of the reformed party.
   - The re-invite for each member must therefore wait until that member is observed in the room (their `appears in a blinding flash of light!` line, or an `Also here:` listing if they landed ahead of the leader).
   - A member whose invite lands after arrival rejoins cleanly (`You have invited %name% to follow you.` → `%name% started to follow you.`).
-- **Believed general rule** *([NEEDS CONFIRMATION] — user's inference, not yet verified across all cases)*: a teleport driven by a room **`CMD`** (TBInfo chain) splits the party and needs each member to execute it (→ `.@party` relay + re-invite/wait), whereas a teleport/traversal that is **exit-driven** (a `Text` exit like `go path`) needs **only the leader** to execute it and is party-safe (followers follow normally). Confirm before extending the split/re-invite behaviour to teleport shapes other than the `ring chime` CMD case above.
+- **The general rule is how the move is made, not where the command lives** *([OBSERVED] `wccmmud.dll` 1.11p; the user's examples 2026-09-28 agree)*:
+
+  | How you're moved | Party | Examples |
+  |---|---|---|
+  | A textblock **`teleport <room> <map>`** — from a room `CMD`, an NPC ask (greet), an item | **splits.** The engine calls `_stop_following(<mover>, −1)`: everyone following the moved character is dropped, each seeing `You are no longer following <name>.` | Slum Street chime (`teleport 65 1`); the Grey Lord (`teleport 155 1`); Darkwood `3/784`'s `go vortex` (TBInfo 702, `teleport 740 3`) |
+  | A real exit, including a **`Text`** exit (`go path`) | **stays together** — followers follow as through any exit | Black Wasteland `3/740`'s Down exit `go vortex` → `3/784` |
+  | A teleport **spell** (abilities 140 TeleportRoom / 141 TeleportMap) aimed at the whole party (target 13, "Full Party Area") | **stays together** — everyone moves | the duergar lord's transport (`cast 582`, "duergar teleport" → map 6 room 1398) |
+
+  - So the two sides of one link can differ: `3/740` → `3/784` is party-safe, `3/784` → `3/740` splits.
+  - The named random teleports (`teleport_silvermere`, `teleport_sewers`, … `teleport_obsidian`) pick a random room in their area and take the same path, so they split too.
 
 ### Greet teleports — an NPC transports a player who asks
 *Status: CONFIRMED (report 2026-08-13); class gate + skill roll from Paradigm map 1 data (issue #455); per-member fare CONFIRMED 2026-09-24 (user, greet-teleport fare gating)*

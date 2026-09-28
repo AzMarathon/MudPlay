@@ -1,5 +1,9 @@
 # Version history
 
+## 3.116.21
+
+- GAME_MECHANICS: settled — `*Combat Off*` on both realms, Paradigm's reply to attacking a monster that's gone, Saint treated as Good, how fear traps or runs you, and which teleports split the party (from the Stock DLL)
+
 ## 3.116.20
 
 - Your +Spell Damage % now counts in the Spell Book, Monster Intel and the Game Data spell calculator (Stock: damage spells; Paradigm: drain and heal too)
