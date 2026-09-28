@@ -6,19 +6,23 @@ using MudPlay.Game.Map.MpFile;
 
 namespace MudPlay.ViewModels.Navigation;
 
-// One translated row for the right pane, editable.
+// One line of the review table: a .mp step (Source) and our translation of it,
+// editable. The room shows as its name and map/room; the "set room" box is empty
+// unless the user has set one, and typing a map/room there overrides the
+// translation on the next verify.
 public sealed partial class MpTranslatedRowViewModel : ObservableObject
 {
     private readonly string _originalRoomText;
 
-    public MpTranslatedRowViewModel(MpTranslatedRow row, MpStep step, RoomGraphManager graph)
+    public MpTranslatedRowViewModel(MpTranslatedRow row, MpStep step, MpSourceRow source, RoomGraphManager graph)
     {
+        Source = source;
         Index = row.Index;
         Step = step;
         Room = row.Room;
-        _originalRoomText = row.Room?.ToString() ?? string.Empty;
+        _originalRoomText = row.Status == MpRowStatus.UserSet ? row.Room?.ToString() ?? string.Empty : string.Empty;
         _roomText = _originalRoomText;
-        RoomName = row.Room is { } k ? graph.GetRoom(k)?.Name ?? "(not in map data)" : "— untranslated —";
+        RoomName = row.Room is { } k ? $"{graph.GetRoom(k)?.Name ?? "(not in map data)"}  ·  {k}" : "— untranslated —";
         IsBlank = row.Status == MpRowStatus.Blank;
         StatusText = row.Status switch
         {
@@ -50,6 +54,8 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
         }
     }
 
+    // The step this row translates, shown on the same line of the review table.
+    public MpSourceRow Source { get; }
     public int Index { get; }
     public int Number => Index + 1;
     public MpStep Step { get; }
@@ -60,6 +66,14 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
     public string StatusTip { get; }
     public string Note { get; }
     public string Dropped { get; }
+    public bool HasDropped => Dropped.Length > 0;
+
+    // Verify found no route onward from this room.
+    [ObservableProperty] private bool _unreachable;
+
+    // The room this row puts in the loop: one typed into the box, else the translation's.
+    public RoomKey? EffectiveRoom =>
+        RoomKey.TryParseWire(RoomText.Trim(), out RoomKey typed) ? typed : Room;
 
     [ObservableProperty] private string _roomText;
     [ObservableProperty] private string? _command;
@@ -82,7 +96,7 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
     // Null for a row with no room — blanks are left out of the loop.
     public LoopWaypoint? ToWaypoint()
     {
-        if (!RoomKey.TryParseWire(RoomText.Trim(), out RoomKey k)) return null;
+        if (EffectiveRoom is not { } k) return null;
         string? cmd = string.IsNullOrWhiteSpace(Command) ? null : Command.Trim();
         return new LoopWaypoint(k, cmd, 0, DoNotRest, DoNotAttack) { RestHereHp = RestHereHp, RestHereMana = RestHereMana };
     }

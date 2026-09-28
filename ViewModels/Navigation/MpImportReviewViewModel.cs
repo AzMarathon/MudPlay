@@ -2,6 +2,10 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
@@ -10,24 +14,28 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.Navigation;
 
-// The MegaMUD .mp import review: the left pane is the file decoded (header, path
-// details, every step with its options and action), the right pane our translation,
-// one row per step so the two can be checked line for line. A step that didn't
-// translate is a blank row to fill in; typing a room into any row and pressing
-// Re-walk re-translates the rest of the file from there. Accept saves the loop (and
-// any stash rooms ticked); Reject closes without saving.
+// The MegaMUD .mp import review: the file decoded (header, path details) beside the
+// loop it becomes, over one table whose every line is a .mp step on the left and our
+// translation of it on the right, so the two are checked line for line. A step that
+// didn't translate is a blank line to fill in. "Verify loop in MudPlay" applies the
+// rooms typed in, re-translates from them, and checks our navigation can walk the
+// result all the way round as a loop. Accept saves it (and any stash rooms ticked);
+// Reject closes without saving.
 public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogViewModel<Loop?>
 {
+    private readonly string _path;
     private readonly MpLoopFile _file;
     private readonly MpFileImporter _importer;
     private readonly RoomGraphManager _graph;
     private readonly LoopManager _loops;
     private readonly MovementFilter? _filter;
     private readonly LogService? _log;
-    private IReadOnlyList<MpTranslation> _candidates;
+    private MegaMudRoomsFile? _roomsMd;
+    private IReadOnlyList<MpTranslation> _candidates = Array.Empty<MpTranslation>();
+    private List<MpSourceRow> _sourceRows = new();
 
-    // Rooms the user has set by hand, by step, held across every re-walk. Clearing a
-    // row's room releases it.
+    // Rooms the user has set by hand, by step, held across every verify. Clearing a
+    // row's box releases it.
     private readonly Dictionary<int, RoomKey> _fixedRooms = new();
 
     public event Action<Loop?>? CloseRequested;
@@ -37,7 +45,9 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         MpFileImporter importer, RoomGraphManager graph, LoopManager loops,
         MovementFilter? filter, LogService? log = null)
     {
+        _path = path;
         _file = file;
+        _roomsMd = roomsMd;
         _importer = importer;
         _graph = graph;
         _loops = loops;
@@ -47,81 +57,62 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         FileName = Path.GetFileName(path);
         Label = file.Label;
         Author = string.IsNullOrWhiteSpace(file.Author) ? "(none)" : file.Author;
-        StartRoomText = DescribeHeader(file.Start, roomsMd);
-        EndRoomText = file.End == file.Start ? "(same as start)" : DescribeHeader(file.End, roomsMd);
         PathDetails = new[]
         {
             $"Steps: {file.Steps.Count}" + (file.DeclaredStepCount >= 0 && file.DeclaredStepCount != file.Steps.Count
                 ? $" (the file says {file.DeclaredStepCount})" : ""),
-            $"Start room hash: {file.StartHashExits}" + (file.IsLoop ? "" : $" · end room hash: {file.EndHashExits}"),
+            $"Start hash: {file.StartHashExits}" + (file.IsLoop ? "" : $" · end hash: {file.EndHashExits}"),
             $"Gold needed: {file.Gold}",
             $"Item needed: {Or(file.RequiredItem)}",
-            $"If the path fails, run: {Or(file.FailPath)}",
+            $"If it fails, run: {Or(file.FailPath)}",
             $"When finished, run: {Or(file.SuccessPath)}",
-            $"Use field: {Or(file.Use)}",
+            $"Use: {Or(file.Use)}",
         };
         Problems = file.Problems;
-        RoomsMdNote = roomsMd is null
-            ? "No Rooms.md next to this file — rooms are shown by hash only."
-            : $"Rooms.md found beside the file ({roomsMd.Rooms.Count} named rooms).";
-
-        SourceRows = new ObservableCollection<MpSourceRow>(
-            file.Steps.Select((s, i) => new MpSourceRow(i + 1, s, NameFromRoomsMd(roomsMd, s.HashExits))));
 
         LoopName = MpFileImporter.StripMapRoomSuffix(file.Label) is { Length: > 0 } clean
             ? clean
             : Path.GetFileNameWithoutExtension(path);
         Notes = BuildNotes(file);
 
-        _candidates = file.IsLoop ? importer.TranslateCandidates(file) : Array.Empty<MpTranslation>();
-        AnchorChoices = new ObservableCollection<MpAnchorChoice>(
-            _candidates.Select(t => new MpAnchorChoice(t.Anchor, $"{t.Anchor} {graph.GetRoom(t.Anchor)?.Name} — {t.Summary}")));
-
-        if (!file.IsLoop)
-            Status = "This is a goto path, not a loop — it can be read here but not imported as a loop.";
-        else if (_candidates.Count == 0)
-            Status = $"No room in the active map data matches the start room (hash {file.StartHashExits}). "
-                   + "Type its map/room in the first row and press Re-walk.";
-        BuildRows(_candidates.Count > 0 ? _candidates[0] : null, preserveEdits: false);
-        _selectedAnchor = AnchorChoices.FirstOrDefault();
+        Retranslate(resetAnchor: true);
         _log?.Info("MpImporter", $"reviewing {FileName}: {TranslationSummary}");
     }
 
-    // ----- source pane ---------------------------------------------
+    // ----- the file ------------------------------------------------
 
     public string FileName { get; }
     public string Label { get; }
     public string Author { get; }
-    public string StartRoomText { get; }
-    public string EndRoomText { get; }
+    [ObservableProperty] private string _startRoomText = string.Empty;
+    [ObservableProperty] private string _endRoomText = string.Empty;
     public IReadOnlyList<string> PathDetails { get; }
     public IReadOnlyList<string> Problems { get; }
     public bool HasProblems => Problems.Count > 0;
-    public string RoomsMdNote { get; }
-    public ObservableCollection<MpSourceRow> SourceRows { get; }
+    [ObservableProperty] private string _roomsMdNote = string.Empty;
 
-    // ----- translation pane ----------------------------------------
+    // The file's name doesn't say where the loop starts and no Rooms.md has named it:
+    // the start is only a guess from its hash, so ask for the Rooms.md it was made with.
+    [ObservableProperty] private bool _needsRoomsMd;
+
+    // ----- our loop ------------------------------------------------
 
     [ObservableProperty] private string _loopName = string.Empty;
     [ObservableProperty] private string _notes = string.Empty;
     [ObservableProperty] private string _status = string.Empty;
+    [ObservableProperty] private bool _statusIsGood;
     [ObservableProperty] private string _translationSummary = string.Empty;
 
-    // Shared by both step lists so a row lines up with its source step.
-    [ObservableProperty] private int _selectedIndex = -1;
-
-    public ObservableCollection<MpAnchorChoice> AnchorChoices { get; }
-    public bool HasAnchorChoice => AnchorChoices.Count > 1;
-
+    public ObservableCollection<MpAnchorChoice> AnchorChoices { get; } = new();
+    [ObservableProperty] private bool _hasAnchorChoice;
     [ObservableProperty] private MpAnchorChoice? _selectedAnchor;
 
     partial void OnSelectedAnchorChanged(MpAnchorChoice? value)
     {
-        if (value is null) return;
-        MpTranslation? t = _fixedRooms.Count > 0
-            ? _importer.Translate(_file, value.Anchor, _fixedRooms)
-            : _candidates.FirstOrDefault(c => c.Anchor.Equals(value.Anchor));
-        if (t is not null) BuildRows(t, preserveEdits: true);
+        if (value is null || _rebuilding) return;
+        BuildRows(_fixedRooms.Count > 0 || _roomsMd is not null
+            ? _importer.Translate(_file, value.Anchor, _fixedRooms, _roomsMd)
+            : _candidates.FirstOrDefault(c => c.Anchor.Equals(value.Anchor)), preserveEdits: true);
     }
 
     public ObservableCollection<MpTranslatedRowViewModel> Rows { get; } = new();
@@ -133,35 +124,48 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
 
     public bool CanAccept => _file.IsLoop;
 
-    // Re-translate, holding every room typed into a row where it is.
+    private bool _rebuilding;
+
+    // Point at the Rooms.md the loop was made with, to name its rooms.
     [RelayCommand]
-    private void ReWalk()
+    private async Task LoadRoomsMdAsync()
     {
-        Dictionary<int, RoomKey> updated = new(_fixedRooms);
-        foreach (MpTranslatedRowViewModel row in Rows)
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+        IReadOnlyList<IStorageFile> picked = await main.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            if (!row.RoomEdited) continue;
-            string text = row.RoomText.Trim();
-            if (text.Length == 0) { updated.Remove(row.Index); continue; }
-            if (!RoomKey.TryParseWire(text, out RoomKey k) || _graph.GetRoom(k) is null)
+            Title = "Pick the MegaMUD Rooms.md this loop was made with",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
             {
-                Status = $"Row {row.Number}: '{row.RoomText}' isn't a room in the map data (use map/room, e.g. 1/2150).";
-                return;
-            }
-            updated[row.Index] = k;
-        }
-        RoomKey anchor = updated.TryGetValue(0, out RoomKey first) ? first
-            : SelectedAnchor?.Anchor ?? default;
-        if (anchor.Equals(default(RoomKey)))
+                new FilePickerFileType("MegaMUD Rooms.md") { Patterns = new[] { "*.md", "*.MD" } },
+                FilePickerFileTypes.All,
+            },
+        });
+        if (picked.Count == 0) return;
+        try
         {
-            Status = "Set the first row's room (map/room) to start the walk.";
+            _roomsMd = MegaMudRoomsFile.Parse(await File.ReadAllTextAsync(picked[0].Path.LocalPath));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SetStatus($"Can't read that file: {ex.Message}", good: false);
             return;
         }
-        _fixedRooms.Clear();
-        foreach ((int i, RoomKey k) in updated) _fixedRooms[i] = k;
-        BuildRows(_importer.Translate(_file, anchor, _fixedRooms), preserveEdits: true);
-        Status = _fixedRooms.Count == 0 ? "Re-walked." : $"Re-walked with {_fixedRooms.Count} room(s) you set held in place.";
-        _log?.Info("MpImporter", $"{FileName}: re-walked with {_fixedRooms.Count} room(s) set by hand — {TranslationSummary}");
+        Retranslate(resetAnchor: _fixedRooms.Count == 0);
+        SetStatus(NeedsRoomsMd
+            ? "That Rooms.md doesn't name this loop's start room either — pick it from the list or type it in the first row."
+            : "Rooms.md loaded — the start room is named now.", good: !NeedsRoomsMd);
+        _log?.Info("MpImporter", $"{FileName}: Rooms.md loaded ({_roomsMd.Rooms.Count} rooms) — {TranslationSummary}");
+    }
+
+    // Apply the rooms typed in, re-translate from them, and check our navigation can
+    // walk the result as a loop — every leg, round to the start.
+    [RelayCommand]
+    private void Verify()
+    {
+        if (!ApplyTypedRooms()) return;
+        CheckWalkable();
     }
 
     [RelayCommand]
@@ -169,11 +173,10 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     {
         if (!CanAccept) return;
         string name = LoopName.Trim();
-        if (name.Length == 0) { Status = "Give the loop a name first."; return; }
-        if (_loops.Get(name) is not null) { Status = $"A loop named '{name}' already exists — rename this one."; return; }
-
-        List<LoopWaypoint> waypoints = MpFileImporter.Waypoints(Rows.Select(r => r.ToWaypoint()));
-        if (waypoints.Count < 2) { Status = "The loop needs at least two rooms."; return; }
+        if (name.Length == 0) { SetStatus("Give the loop a name first.", good: false); return; }
+        if (_loops.Get(name) is not null) { SetStatus($"A loop named '{name}' already exists — rename this one.", good: false); return; }
+        if (!ApplyTypedRooms()) return;
+        if (CheckWalkable() is not { } waypoints) return;
 
         Loop loop = new(name, waypoints) { Notes = Notes.Trim() };
         _loops.Save(loop);
@@ -194,6 +197,113 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         CloseRequested?.Invoke(null);
     }
 
+    // Take the rooms typed into the rows (an empty box releases one set before) and
+    // re-translate from them. False when a typed room isn't in the map.
+    private bool ApplyTypedRooms()
+    {
+        Dictionary<int, RoomKey> updated = new(_fixedRooms);
+        foreach (MpTranslatedRowViewModel row in Rows)
+        {
+            if (!row.RoomEdited) continue;
+            string text = row.RoomText.Trim();
+            if (text.Length == 0) { updated.Remove(row.Index); continue; }
+            if (!RoomKey.TryParseWire(text, out RoomKey k) || _graph.GetRoom(k) is null)
+            {
+                SetStatus($"Step {row.Number}: '{row.RoomText}' isn't a room in the map data (use map/room, e.g. 1/2150).", good: false);
+                return false;
+            }
+            updated[row.Index] = k;
+        }
+        bool changed = updated.Count != _fixedRooms.Count || updated.Any(kv => !_fixedRooms.TryGetValue(kv.Key, out RoomKey v) || !v.Equals(kv.Value));
+        if (!changed) return true;
+
+        RoomKey anchor = updated.TryGetValue(0, out RoomKey first) ? first : SelectedAnchor?.Anchor ?? default;
+        if (anchor.Equals(default(RoomKey)))
+        {
+            SetStatus("Set the first step's room (map/room) to start from.", good: false);
+            return false;
+        }
+        _fixedRooms.Clear();
+        foreach ((int i, RoomKey k) in updated) _fixedRooms[i] = k;
+        BuildRows(_importer.Translate(_file, anchor, _fixedRooms, _roomsMd), preserveEdits: true);
+        _log?.Info("MpImporter", $"{FileName}: re-translated with {_fixedRooms.Count} room(s) set by hand — {TranslationSummary}");
+        return true;
+    }
+
+    // Expand the rows' rooms the way the loop runner does (every leg planned, then the
+    // closing leg back to the start) and report the result. The waypoints when every
+    // leg can be walked; null, with the legs that can't marked, otherwise.
+    private List<LoopWaypoint>? CheckWalkable()
+    {
+        foreach (MpTranslatedRowViewModel r in Rows) r.Unreachable = false;
+        List<LoopWaypoint> waypoints = MpFileImporter.Waypoints(Rows.Select(r => r.ToWaypoint()));
+        if (waypoints.Count < 2)
+        {
+            SetStatus("The loop needs at least two rooms — fill in the blank steps.", good: false);
+            return null;
+        }
+
+        (IReadOnlyList<LoopStep> steps, IReadOnlyList<(RoomKey From, RoomKey To)> unreachable) =
+            _loops.ExpandWaypoints(waypoints, _filter);
+        int blanks = Rows.Count(r => r.IsBlank && string.IsNullOrWhiteSpace(r.RoomText));
+        if (unreachable.Count == 0)
+        {
+            int moves = steps.Count(s => s is MoveLoopStep);
+            SetStatus($"✓ Verified: MudPlay walks this as a loop — {waypoints.Count} rooms, {moves} moves, back to the start."
+                + (blanks > 0 ? $" ({blanks} blank step(s) are skipped; the loop routes around them.)" : ""), good: true);
+            _log?.Info("MpImporter", $"{FileName}: verified — {waypoints.Count} waypoints, {moves} moves");
+            return waypoints;
+        }
+
+        foreach ((RoomKey from, _) in unreachable)
+            foreach (MpTranslatedRowViewModel r in Rows.Where(r => r.EffectiveRoom is { } k && k.Equals(from)))
+                r.Unreachable = true;
+        (RoomKey f, RoomKey t) = unreachable[0];
+        SetStatus($"✗ MudPlay can't walk this loop: no route from {Describe(f)} to {Describe(t)}"
+            + (unreachable.Count > 1 ? $" (and {unreachable.Count - 1} more leg(s), marked ⚠)" : " (marked ⚠)")
+            + ". Set a different room on those steps and verify again.", good: false);
+        _log?.Info("MpImporter", $"{FileName}: verify failed — {unreachable.Count} unreachable leg(s), first {f}→{t}");
+        return null;
+    }
+
+    // Recompute everything that depends on the Rooms.md and the start room.
+    private void Retranslate(bool resetAnchor)
+    {
+        _rebuilding = true;
+        try
+        {
+            _sourceRows = _file.Steps.Select((s, i) => new MpSourceRow(i + 1, s, NameFromRoomsMd(_roomsMd, s.HashExits))).ToList();
+            StartRoomText = DescribeHeader(_file.Start, _roomsMd);
+            EndRoomText = _file.End == _file.Start ? "(same as start)" : DescribeHeader(_file.End, _roomsMd);
+            RoomsMdNote = _roomsMd is null
+                ? "No Rooms.md loaded — rooms are shown by hash only."
+                : $"Rooms.md loaded ({_roomsMd.Rooms.Count} named rooms).";
+            NeedsRoomsMd = _file.IsLoop && _importer.StartHint(_file, _roomsMd) is null;
+
+            _candidates = _file.IsLoop ? _importer.TranslateCandidates(_file, _roomsMd) : Array.Empty<MpTranslation>();
+            MpAnchorChoice? keep = resetAnchor ? null : SelectedAnchor;
+            AnchorChoices.Clear();
+            foreach (MpTranslation t in _candidates)
+                AnchorChoices.Add(new MpAnchorChoice(t.Anchor, $"{Describe(t.Anchor)} — {t.Summary}"));
+            HasAnchorChoice = AnchorChoices.Count > 1;
+            SelectedAnchor = AnchorChoices.FirstOrDefault(a => keep is not null && a.Anchor.Equals(keep.Anchor))
+                             ?? AnchorChoices.FirstOrDefault();
+
+            MpTranslation? chosen = SelectedAnchor is { } sel
+                ? (_fixedRooms.Count > 0 ? _importer.Translate(_file, sel.Anchor, _fixedRooms, _roomsMd)
+                                         : _candidates.First(c => c.Anchor.Equals(sel.Anchor)))
+                : null;
+            BuildRows(chosen, preserveEdits: !resetAnchor);
+
+            if (!_file.IsLoop)
+                SetStatus("This is a goto path, not a loop — it can be read here but not imported as a loop.", good: false);
+            else if (_candidates.Count == 0)
+                SetStatus($"No room in the active map data matches the start room (hash {_file.StartHashExits}). "
+                        + "Type its map/room in the first step's box and press Verify.", good: false);
+        }
+        finally { _rebuilding = false; }
+    }
+
     // Rebuild the rows from a translation. preserveEdits keeps what the user typed or
     // ticked on a row (by step) when its room didn't change.
     private void BuildRows(MpTranslation? t, bool preserveEdits)
@@ -203,8 +313,8 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         for (int i = 0; i < _file.Steps.Count; i++)
         {
             MpTranslatedRow row = t?.Rows[i] ?? new MpTranslatedRow(i, null, MpRowStatus.Blank, "no start room yet", false);
-            MpTranslatedRowViewModel vm = new(row, _file.Steps[i], _graph);
-            if (old.TryGetValue(i, out MpTranslatedRowViewModel? prev) && prev.RoomText == vm.RoomText)
+            MpTranslatedRowViewModel vm = new(row, _file.Steps[i], _sourceRows[i], _graph);
+            if (old.TryGetValue(i, out MpTranslatedRowViewModel? prev) && Equals(prev.Room, vm.Room))
                 vm.CopyEditsFrom(prev);
             Rows.Add(vm);
         }
@@ -212,14 +322,24 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         StashChoices.Clear();
         foreach (RoomKey k in Rows.Where(r => r.Step.Flags.HasFlag(MpStepFlags.Stash) && r.Room is not null)
                                   .Select(r => r.Room!.Value).Distinct())
-            StashChoices.Add(new MpStashChoice(k, $"{k} {_graph.GetRoom(k)?.Name}"));
+            StashChoices.Add(new MpStashChoice(k, Describe(k)));
         OnPropertyChanged(nameof(HasStashChoices));
 
         TranslationSummary = t is null ? "Nothing translated yet." : $"Start {t.Anchor}: {t.Summary}.";
+        SetStatus(string.Empty, good: false);
     }
+
+    private void SetStatus(string text, bool good)
+    {
+        Status = text;
+        StatusIsGood = good;
+    }
+
+    private string Describe(RoomKey k) => _graph.GetRoom(k) is { } r ? $"{r.Name} ({k})" : k.ToString();
 
     private static string DescribeHeader(MpHeaderRoom h, MegaMudRoomsFile? roomsMd)
     {
+        if (h.Code.Length == 0) return "(not in the file)";
         string text = $"{h.Code} · {h.Group} · {h.Name}";
         if (roomsMd?.ByCode(h.Code) is not { } e) return text;
         List<string> bits = new();

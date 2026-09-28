@@ -22,6 +22,9 @@ namespace MudPlay.Game.Map.MpFile;
 //      last room it knew, and resumes when exactly one matches.
 //   4. Rooms the user sets by hand (fixedRooms) override the walk at their row and it
 //      carries on from there.
+// MegaMUD's Rooms.md, when given, pins rooms the hash alone can't: its room names
+// usually end in a "-map room" hint, for the start room and for any named room the
+// walk has lost track of.
 public sealed partial class MpFileImporter
 {
     // How far from the last known room to look for a step's room after a gap. Grows
@@ -46,16 +49,14 @@ public sealed partial class MpFileImporter
     // room a "-map room" hint in the label or header names (MegaMUD's naming habit).
     // When neither finds anything — the start room's exits changed since the file was
     // recorded — rooms matching on the name hash alone.
-    public IReadOnlyList<RoomKey> FindAnchorCandidates(MpLoopFile file)
+    public IReadOnlyList<RoomKey> FindAnchorCandidates(MpLoopFile file, MegaMudRoomsFile? roomsMd = null)
     {
         ArgumentNullException.ThrowIfNull(file);
         HashSet<RoomKey> found = new();
         foreach (Room room in _graph.Rooms)
             if (string.Equals(MegaMudHash.ComputeHashExits(room), file.StartHashExits, StringComparison.OrdinalIgnoreCase))
                 found.Add(room.Key);
-        foreach (string text in new[] { file.Label, file.Start.Name })
-            if (MapRoomHint(text) is { } hint && _graph.GetRoom(hint) is not null)
-                found.Add(hint);
+        if (StartHint(file, roomsMd) is { } hint) found.Add(hint);
 
         if (found.Count == 0 && MegaMudHash.Split(file.StartHashExits).NameHash is { } nameHash)
             foreach (Room room in _graph.Rooms)
@@ -68,6 +69,32 @@ public sealed partial class MpFileImporter
         List<RoomKey> sorted = found.ToList();
         sorted.Sort((a, b) => a.Map != b.Map ? a.Map.CompareTo(b.Map) : a.Room.CompareTo(b.Room));
         return sorted;
+    }
+
+    // The start room as the file names it: a "-map room" hint on the label or header
+    // room, or on the name Rooms.md gives the start room's code or hash. Null when
+    // nothing names it — the start can only be guessed from its hash.
+    public RoomKey? StartHint(MpLoopFile file, MegaMudRoomsFile? roomsMd)
+    {
+        IEnumerable<string> names = new[] { file.Label, file.Start.Name };
+        if (roomsMd is not null)
+        {
+            if (roomsMd.ByCode(file.Start.Code) is { } byCode) names = names.Append(byCode.Name);
+            names = names.Concat(roomsMd.ByHash(file.StartHashExits).Select(e => e.Name));
+        }
+        foreach (string name in names)
+            if (MapRoomHint(name) is { } k && _graph.GetRoom(k) is not null)
+                return k;
+        return null;
+    }
+
+    // The room Rooms.md names for a step's hash, when exactly one entry has that hash
+    // and its name carries a "-map room" hint that's in our map.
+    private RoomKey? RoomsMdHint(MegaMudRoomsFile? roomsMd, string hash)
+    {
+        if (roomsMd is null) return null;
+        List<MegaMudRoomEntry> hits = roomsMd.ByHash(hash).ToList();
+        return hits.Count == 1 && MapRoomHint(hits[0].Name) is { } k && _graph.GetRoom(k) is not null ? k : null;
     }
 
     // "Wererat loop-8 910" → 8/910.
@@ -86,9 +113,9 @@ public sealed partial class MpFileImporter
 
     // Walk every anchor candidate and return them ranked best first (fewest blanks,
     // then closing, then fewest hash drifts). Empty when no room matches the start.
-    public IReadOnlyList<MpTranslation> TranslateCandidates(MpLoopFile file)
+    public IReadOnlyList<MpTranslation> TranslateCandidates(MpLoopFile file, MegaMudRoomsFile? roomsMd = null)
     {
-        List<MpTranslation> all = FindAnchorCandidates(file).Select(a => Translate(file, a)).ToList();
+        List<MpTranslation> all = FindAnchorCandidates(file, roomsMd).Select(a => Translate(file, a, null, roomsMd)).ToList();
         all.Sort(CompareQuality);
         _log?.Info("MpImporter",
             $"'{file.Label}': {all.Count} anchor candidate(s)"
@@ -107,7 +134,8 @@ public sealed partial class MpFileImporter
         return a.Anchor.Map != b.Anchor.Map ? a.Anchor.Map.CompareTo(b.Anchor.Map) : a.Anchor.Room.CompareTo(b.Anchor.Room);
     }
 
-    public MpTranslation Translate(MpLoopFile file, RoomKey anchor, IReadOnlyDictionary<int, RoomKey>? fixedRooms = null)
+    public MpTranslation Translate(MpLoopFile file, RoomKey anchor, IReadOnlyDictionary<int, RoomKey>? fixedRooms = null,
+        MegaMudRoomsFile? roomsMd = null)
     {
         ArgumentNullException.ThrowIfNull(file);
         int n = file.Steps.Count;
@@ -159,6 +187,12 @@ public sealed partial class MpFileImporter
             {
                 rooms[next] = d;
                 status[next] = StatusFor(d, file.Steps[next]);
+            }
+            else if (RoomsMdHint(roomsMd, file.Steps[next].HashExits) is { } named)
+            {
+                rooms[next] = named;
+                status[next] = MpRowStatus.Resynced;
+                notes[next] = "named by Rooms.md";
             }
             else if (Resync(lastKnown, file.Steps[next].HashExits, Math.Min(ResyncRadius + gap, MaxResyncRadius)) is { } found)
             {

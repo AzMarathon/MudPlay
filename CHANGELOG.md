@@ -3,8 +3,8 @@
 ## 3.117.0
 
 - MegaMUD `.mp` import review: the file decoded (header, path details, every step's options and action) beside the MudPlay loop it becomes, one row per step
-- A step that won't translate leaves a blank row instead of failing the import; type a room and Re-walk to carry on from it, then Accept or Reject
-- Start rooms found from the `-map room` hint when the start room's exits changed; Ctrl-Z-terminated and header-less files now read
+- A step that won't translate leaves a blank line instead of failing the import; set a room on it, then Verify loop in MudPlay checks our navigation walks the whole loop before Accept
+- Start rooms found from the `-map room` hint (or the Rooms.md it asks for) when the start room's exits changed; Ctrl-Z-terminated and header-less files now read
 - New per-room loop options: Rest up here (HP) and (mana) — rest to rest-max there before moving on
 - Stash points in an imported loop can be added as stash rooms
 

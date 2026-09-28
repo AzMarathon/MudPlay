@@ -313,18 +313,20 @@ While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** r
 
 **Game Data → Import loops (MegaMUD .mp)…** (or **Import .mp** in Manage Loops) opens a `.mp` file in the **import review** window. Nothing is saved until you accept.
 
-- **Left pane — what the file says.**
+- **Left — what the file says.**
   - The loop's name and author.
   - Its start (and end) room, and the path details: steps, gold and item needed, the paths MegaMUD runs if it fails or when it's finished.
-  - Every step: the room's MegaMUD hash, its name from **Rooms.md** (read from the same folder, when it's there), the move, any extra commands in brackets (`s[search s]`, `e[use black star key e]`) and the step's options (dark, rest up here, don't rest, don't attack, stash point, disarm, pick lock…).
+  - **Rooms.md** (MegaMUD's named-rooms file) is read from the same folder when it's there; **Load Rooms.md…** points at it when it isn't. Its room names end in their map/room numbers, so it pins down rooms the hashes alone can't. When the loop's name doesn't say where it starts, a banner asks for it.
   - Anything wrong with the file (a goto path rather than a loop, a step count that disagrees, a broken row) is listed with a ⚠.
-- **Right pane — the MudPlay loop it becomes**, one row per step, lined up with the left pane. Selecting a row selects its step on both sides.
-  - ✓ matches the recording; ≈ we walked there but the room's name or exits differ; ↺ found by its hash after a gap; ✎ set by you; ✗ **untranslated** — the step couldn't be followed (a missing exit, a passage our map doesn't have), so its row is **left blank** rather than failing the whole import.
-  - Type a room (`map/room`) into any row and press **Re-walk**: the rest of the file is translated again from there, and every room you've set stays where you put it.
-  - Each row's **command** and **No rest / No atk / Rest HP / Rest MA** can be edited. *Don't rest*, *don't attack* and *rest up here* carry over from the file; dark rooms, traps, locked doors and searches are handled from the map data as you walk, so they don't; hover a row to see what wasn't carried over.
-  - When several rooms match the start, a **Start room** list picks which to walk from (best translation first). A start room whose exits have changed is still found from the `-map room` hint most MegaMUD loop names end with.
+- **Right — the MudPlay loop it becomes.**
+  - Loop name and notes. When several rooms match the start, a **Start room** list picks which to walk from, best translation first.
   - A step the file marks as a **stash point** shows as **Add … as a stash room**; tick it to add that room to your stash rooms when you accept.
-- **Accept** saves the loop (blank rows are left out, and the loop routes between the rooms either side of them); **Reject** closes without saving. The loop's notes record what couldn't carry over (gold, item, fail/finish paths).
+- **The step table** below lines up the two, one line per step: the MegaMUD step on the left (room hash, its Rooms.md name, the move, extra commands in brackets like `s[search s]`, and the step's options) and the MudPlay room on the right (its name and map/room).
+  - ✓ matches the recording; ≈ we walked there but the room's name or exits differ; ↺ found again after a gap; ✎ set by you; ✗ **untranslated** — the step couldn't be followed (a missing exit, a passage our map doesn't have), so its line is **left blank** rather than failing the whole import.
+  - Type a map/room into a step's **Set room** box to put a different room there (clear it to go back to the translation).
+  - Each step's **command** and **NR / NA / RH / RM** (no rest, no attack, rest up here HP / mana) can be edited. *Don't rest*, *don't attack* and *rest up here* carry over from the file; dark rooms, traps, locked doors and searches are handled from the map data as you walk, so they don't — ⓘ shows what wasn't carried over.
+- **Verify loop in MudPlay** puts in the rooms you typed, translates the steps after them again, and checks MudPlay's navigation can walk the result as a loop — every leg planned the way the loop runner would, back round to the start. A leg it can't route is marked ⚠ on the step it leaves from.
+- **Accept** verifies again and saves the loop (blank steps are left out, and the loop routes between the rooms either side of them); **Reject** closes without saving. The loop's notes record what couldn't carry over (gold, item, fail/finish paths).
 
 ### Entire Loop Settings
 

@@ -204,6 +204,21 @@ public sealed class MpFileImporterTests : IDisposable
         Assert.Equal(new[] { new RoomKey(1, 1) }, new MpFileImporter(g).FindAnchorCandidates(file));
     }
 
+    // The name gives no map/room and the start's hash drifted: the Rooms.md the loop
+    // was made with names the start room, and so pins it.
+    [Fact]
+    public void RoomsMd_PinsAStartTheFileNameDoesNot()
+    {
+        RoomGraphManager g = Graph();
+        MpLoopFile file = MpFileParser.Parse("[No hint][]\n[STRT:G:Start]\nFFF00000:FFF00000:2:-1:0:::\nFFF00000:0000:n\nFFF00000:0000:s");
+        MpFileImporter importer = new(g);
+        Assert.Null(importer.StartHint(file, null));
+
+        MegaMudRoomsFile roomsMd = MegaMudRoomsFile.Parse("FFF00000:00000000:0:0:0:STRT:G:Start-1 1\n");
+        Assert.Equal(new RoomKey(1, 1), importer.StartHint(file, roomsMd));
+        Assert.Contains(new RoomKey(1, 1), importer.FindAnchorCandidates(file, roomsMd));
+    }
+
     [Theory]
     [InlineData("Wererat loop-8 910", 8, 910)]
     [InlineData("Western Road Fork- 2 61", 2, 61)]
