@@ -1434,7 +1434,7 @@ The item's right-hand info pane is also interactive:
 
 **For a monster** you can set its **Landmass**, **Region** and **Area** (three type-ahead boxes over the labels already in use — pick one or type a new name; blank means *not set*), its **Relationship** and **Priority**, and pin its whole **single-target combat chain** for that species, rung-for-rung with the Settings → Combat spell grid. Like every other field, the location is saved to the tier you pick in **Use**; a box that still shows the shipped label saves nothing, so an updated shipped label still reaches every monster you haven't re-filed yourself (and clearing a box goes back to the shipped label rather than blanking it):
 
-- **Debuff (single target)**, **Normal attack spell**, and **Alternate attack spell** — each a spell **picker** (type-ahead over your castable spells, same as the Combat slots; commits the cast-code) with a per-room **Max** cast cap and a **Mana** floor.
+- **Debuff (single target)**, **Normal attack spell**, and **Alternate attack spell** — each a spell **picker** (type-ahead over your castable spells, same as the Combat slots; commits the cast-code) with a per-room **Max** cast cap and a **Mana** floor. The **Debuff** override follows the same rule as the Combat-tab debuff slots: it takes a 0-energy between-round spell only. An attack spell there is refused at cast time with a program-log note. To open on a monster with an attack spell (say `mmis` once, then your weapon), put it in **Normal attack spell** with a Max of 1.
 - **Physical attack** — a command box (the spell boxes are spell-only; a raw attack verb goes here).
 
 Each configured spell rung **substitutes** its spell for this monster and runs the *same* gated cascade the global slot does: its Max cap, its Mana floor (read as % or absolute per the Combat tab's mana mode — below it the rung holds and the flow moves on), **and** the effectiveness gates — a target immune to that spell, or whose level or element fully resists it, skips it down the cascade exactly as a configured spell would. So an override is no longer a blanket bypass; pick a spell that can actually land.
@@ -2387,6 +2387,8 @@ Found near the bottom of the "BBS + Display" tab, under a "Show confirmations" h
 ## Combat
 
 Settings → Combat. Two switches live *outside* this tab and gate everything here: **Auto-Combat** (Settings → General, or its toolbar toggle) must be on for any of this to matter at all; **Auto-Nuke** separately gates **both multi-attack** slots and the **AoE-debuff** slot (single-target attack spells aren't considered "nukes" and stay available regardless). The **single-target debuff** is part of the attack rotation, so it follows **Auto-Combat**, not Auto-Nuke.
+
+While a **backstab** is still owed (you're sneaking or hidden with Do BS attacks on), every pre-attack debuff waits until after the backstab round: any cast ends your sneak, so a debuff first would spend the surprise.
 
 A debuff slot only accepts a **0-energy** between-round spell — an attack spell (which costs energy) can't be a debuff — with **slot-appropriate targeting**: a single-enemy scope for the single-target slot, an area/room scope for the AoE slot. A mismatch (an attack spell, or a targeted spell in the AoE slot / an AoE in the single slot) is flagged right under the slot on this tab and refused at cast time with a program-log note.
 

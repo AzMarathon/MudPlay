@@ -1,5 +1,12 @@
 # Version history
 
+## 3.116.33
+
+- A pre-attack debuff now waits until after the backstab (a cast ends the sneak, so it ruined the surprise)
+- An attack spell in a monster's debuff override is blocked with a log warning (it was overwritten by the attack behind it and never landed); use the attack-spell override
+- After a backstab, the round's attack spell is announced once, not twice
+- bug reports addressed: paradigm-20260928-030642, paradigm-20260928-031828, paradigm-20260928-032724
+
 ## 3.116.30
 
 - Stock mana-regen rerolls read the roll back off the natural mana tick, even while meditating, and take the same rolled-value threshold as Paradigm (old tick thresholds convert once)

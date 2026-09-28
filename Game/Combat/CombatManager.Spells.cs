@@ -723,8 +723,12 @@ public sealed partial class CombatManager
         // target" mechanic — still yields the weapon here; only a fresh / non-latched
         // target re-climbs. Peeking Choose is side-effect-safe: the cast counters and
         // the cast-at flag are set in MarkCast (on send), not Choose.
+        // Not while a backstab round is unresolved: its resolution re-announces the
+        // round's attack itself, so re-climbing here too sent the spell twice (report
+        // paradigm-20260928-032724).
         if (settings.ActionOrder is CombatActionOrder.SpellsFirst or CombatActionOrder.PhysicalFirst
             && _castingSpellTarget is null
+            && !_awaitingBackstabResolution
             && _currentTarget is { } weaponTarget
             && _now() - _lastAlternationAdvanceAt >= AlternationAdvanceMinGap
             && _classifier.Current is { } climbObs
@@ -1093,8 +1097,17 @@ public sealed partial class CombatManager
         CombatSpellContext ctx = BuildContext(
             settings, obs, picked.RawName, CountEngageable(obs), picked.MonsterNumber);
         if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return false;
-        if (!DebuffDecisionAllowed(decision, ctx)) return false;
+        if (!DebuffDecisionAllowed(decision, ctx, picked.MonsterNumber)) return false;
         if (AreaDebuffPastFirstRound(settings, decision)) return false;
+        // A cast at the monster before the backstab spends the surprise (reports
+        // paradigm-20260928-030642 / -031828), so the debuff waits for the round after
+        // the backstab; the chooser then offers it again.
+        if (_spellChooser.WouldBackstab(settings, ctx))
+        {
+            _log?.Combat(LogCategory,
+                $"pre-attack debuff {decision.Spell} held — the backstab opener goes first");
+            return false;
+        }
 
         // A debuff is due. Let the director's in-between window fire a
         // higher-priority survival cast first (it can't fire the debuff itself
@@ -1247,11 +1260,13 @@ public sealed partial class CombatManager
             return null;
 
         CombatSettings settings = _readSettings();
+        int monsterNumber = ResolveMonsterNumber(obs, target);
         CombatSpellContext ctx = BuildContext(
-            settings, obs, target, CountEngageable(obs), ResolveMonsterNumber(obs, target));
+            settings, obs, target, CountEngageable(obs), monsterNumber);
         if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return null;
-        if (!DebuffDecisionAllowed(decision, ctx)) return null;
+        if (!DebuffDecisionAllowed(decision, ctx, monsterNumber)) return null;
         if (AreaDebuffPastFirstRound(settings, decision)) return null;
+        if (_spellChooser.WouldBackstab(settings, ctx)) return null;   // the backstab goes first
 
         // An area debuff (e.g. stinking cloud) blankets the room and MUST be cast
         // bare — `stnk`, never `stnk <mob>`. A single-target debuff keeps its mob.
@@ -1273,15 +1288,17 @@ public sealed partial class CombatManager
     // rather than letting the server reject a malformed cast and the engine churn.
     // Fails OPEN when the cast-code can't be resolved (unknown / no catalog yet) —
     // the guard is about a resolvable mismatch, not a resolution gap. The
-    // per-monster pre-attack OVERRIDE is exempt: it's the user's explicit per-mob
-    // choice and already bypasses the level gate.
-    private bool DebuffDecisionAllowed(CombatSpellDecision decision, in CombatSpellContext ctx)
+    // per-monster debuff OVERRIDE is held to the same rules: an attack spell there
+    // (e.g. mmis) was cast as a between-round debuff and then overwritten by the
+    // attack sent right behind it, so it never landed (reports
+    // paradigm-20260928-030642 / -031828). An opener attack spell belongs in the
+    // per-monster attack override, which has its own cast count.
+    private bool DebuffDecisionAllowed(CombatSpellDecision decision, in CombatSpellContext ctx, int monsterNumber)
     {
         if (decision.Spell is not { } code) return false;
-        if (ctx.OverridePreAttackSpell is { } ov
+        bool isOverride = ctx.OverridePreAttackSpell is { } ov
             && decision.Action == CombatSpellAction.SingleDebuff
-            && string.Equals(code, ov, StringComparison.OrdinalIgnoreCase))
-            return true;
+            && string.Equals(code, ov, StringComparison.OrdinalIgnoreCase);
         if (_resolveSpellByCode?.Invoke(code) is not { } spell) return true;
 
         int energy = spell.Formula.EnergyCost;
@@ -1294,7 +1311,7 @@ public sealed partial class CombatManager
                 DebuffTargeting.IsBetweenRound(energy) && DebuffTargeting.IsAreaEnemy(targets),
             _ => true,
         };
-        if (!ok) WarnInvalidDebuffSlot(code, decision.Action, energy, targets);
+        if (!ok) WarnInvalidDebuffSlot(code, decision.Action, energy, targets, isOverride ? monsterNumber : null);
         return ok;
     }
 
@@ -1313,15 +1330,19 @@ public sealed partial class CombatManager
         return true;
     }
 
-    private void WarnInvalidDebuffSlot(string code, CombatSpellAction action, int energy, int targets)
+    private void WarnInvalidDebuffSlot(string code, CombatSpellAction action, int energy, int targets,
+        int? overrideMonster = null)
     {
-        if (!_warnedInvalidDebuffSlots.Add(code)) return;   // one line per bad slot, not per round
+        // One line per bad slot / override, not per round.
+        if (!_warnedInvalidDebuffSlots.Add(overrideMonster is { } n ? $"{code}#{n}" : code)) return;
         string slot = action == CombatSpellAction.AreaDebuff ? "AoE" : "single-target";
         string why = !DebuffTargeting.IsBetweenRound(energy)
-            ? $"it costs {energy} energy — a debuff slot needs a 0-energy between-round spell (an attack spell can't be a debuff)"
+            ? $"it costs {energy} energy — a debuff needs a 0-energy between-round spell (an attack spell can't be a debuff)"
             : $"its targeting scope ({targets}) doesn't fit the {slot} slot";
-        _log?.Warn(LogCategory,
-            $"debuff slot misconfigured: '{code}' won't cast as the {slot} debuff — {why}. Fix it in Settings → Combat.");
+        _log?.Warn(LogCategory, overrideMonster is { } mob
+            ? $"debuff override misconfigured on monster #{mob}: '{code}' won't cast as its debuff — {why}. " +
+              "For an opener attack spell use the monster's attack-spell override (it has a cast count). Fix it in Game Data → Monsters."
+            : $"debuff slot misconfigured: '{code}' won't cast as the {slot} debuff — {why}. Fix it in Settings → Combat.");
     }
 
     // Confirm the in-between debuff the director just sent. Marks the stashed

@@ -1218,7 +1218,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 
 **Client use:**
 - The client tracks the spent opener per room; it is re-armed on the next sneak-approach or a fresh in-place hide (see *Movement & navigation → Hiding — sneak vs hide, the hide state machine, and search reveals*).
-- The client enforces the quiet-follow-on rule by suppressing all Attack-Order re-fire while a `bs` is pending resolution.
+- The client enforces the quiet-follow-on rule by suppressing all Attack-Order re-fire while a `bs` is pending resolution. The weapon→spell re-climb also stands down until then, since the backstab's resolution re-announces the round's attack itself (report `paradigm-20260928-032724`: the spell was announced twice).
 - The client keys off the first-line failure tell and, when *Run if BS fails* is on, flees on a detected failure (routed through the normal break-before-flee escape path).
 
 ### Backstab damage and accuracy
@@ -2216,7 +2216,7 @@ How one damage spell cast against a monster is worked out.
   - So a targeted spell can't be slotted as an AoE, nor an AoE as single-target (e.g. `stnk`, Targets 12, belongs in the AoE slot, not single-target).
 - **Gating:** the **single-target** debuff is gated by **Auto-Combat** (it's a pre-attack debuff, part of the attack rotation); the **AoE** debuff is gated by **Auto-Nuke**.
 - **Client use:**
-  - The client rejects a mis-slotted debuff before it casts and warns once in the program log.
+  - The client rejects a mis-slotted debuff before it casts and warns once in the program log. The **per-monster debuff override** is held to the same rules *(**Client policy**, user 2026-09-28)*: an attack spell there (e.g. `mmis`, 500 energy) was cast as a between-round debuff and then overwritten by the attack sent right behind it, so it never landed (reports `paradigm-20260928-030642`, `paradigm-20260928-031828`). An opener attack spell belongs in the monster's attack-spell override, which has its own cast count.
 
 ### Stat debuffs on a monster subtract and may go negative
 *Status: CONFIRMED 2026-09-02 (user)*
@@ -2735,14 +2735,16 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Auto-hide is suppressed while in a party** — a hidden member falls off the Also-here line and can't be single-target-healed/buffed until revealed.
 
 ### Casting breaks both Sneak and Hide
-*Status: CONFIRMED 2026-09-09 (user)*
+*Status: CONFIRMED 2026-09-09 (user); mechanism OBSERVED 2026-09-28 (Stock DLL) · Realm: both (user 2026-09-28)*
 
-- **Casting a spell — self buff/heal/cure, party buff, anything — breaks Sneak and Hide alike.**
+- **Casting a spell — self buff/heal/cure, party buff, anything — breaks Sneak and Hide alike.** The engine's cast command clears the sneaking and hidden flags as soon as the cast is accepted, before the spell resolves *([OBSERVED] `wccmmud.dll` 1.11p `_cmd_cast`)*. It also ends and restarts auto-combat, which is the `*Combat Off*` / `*Combat Engaged*` pair after a cast.
+- **So a backstab after any cast can't surprise**, a 0-energy debuff included *([CONFIRMED] 2026-09-28, user; reports `paradigm-20260928-030642`, `paradigm-20260928-031828`)*. `bs` then swings without surprise.
 - **This is an accepted cost, not a reason to withhold the cast.**
 
 **Client use:**
 - The buff-maintenance automation casts a due buff/heal/cure regardless of stealth state rather than silently sitting on it to preserve Sneak or Hide (`CastingDirector` does not gate casts on `StealthManager.IsStealthed`).
 - Only the backstab opener still reads combined stealth state, since either Sneaking or Hidden opens it.
+- A pre-attack debuff (Combat-tab slot or per-monster override) waits until after the backstab round while the opener is still owed (`CombatSpellChooser.WouldBackstab`, checked in `TryPreAttackInBetween` and `PickInBetweenDebuff`).
 
 ### Locked doors — picking, opening and bashing
 *Status: CONFIRMED (picklock wording: stock, capture 2026-07-30, report stock-20260730-182812; bash HP drain: user direction) · Realm: Stock (picklock wording)*
