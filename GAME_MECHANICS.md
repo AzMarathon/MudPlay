@@ -1633,11 +1633,13 @@ How one damage spell cast against a monster is worked out.
   their targeting tag.** `enslave` (#55) is `Enslave` + `AffectsLivingOnly` (any living target);
   `charm animal` (#92) is `Enslave` + `AffectsAnimalsOnly` (needs the Animal flag); `song of charming`
   (#49, bard) is `Enslave` + `AffectsLivingOnly`.
-- **[NEEDS CONFIRMATION] A "charm level" is believed to cap what these can affect** (possibly the
-  caster's minimum level for the spell to take). This could **not** be verified: the reference client
-  only *displays* these tags — it does not model charm success, and no "charm level" column exists on
-  the Spells row (only `ReqLevel` / `MageryLVL` / `Cap`, which are learn/scaling params). Ask before
-  building on a charm-level rule.
+- **A charm takes only when your level is at least the monster's `CharmLVL`** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p `_cast_monster_target`; Stock)*. `CharmLVL` is a Monsters-table column (monster record `+0x120`, checked against the raw `wccknms2.dat`), e.g. giant rat 1, lashworm 3, cave worm 12. Values of 999 / 9999 (most monsters) put a monster out of reach, and `0` means anyone can charm it. (An earlier note said no charm-level column existed and looked for one on the Spells row; superseded 2026-09-28.) *[NEEDS CONFIRMATION] what the game prints when your level is too low — the engine code reaches no message of its own there — and whether Paradigm uses the same rule.*
+  - The charm applies only through a spell aimed at one target: Targets `4` (Monster), `6` (Any) or `8` (Monster or User). All three charm spells are Targets `4`.
+  - **Duration:** a spell `Dur` of `0` charms permanently; otherwise the charm is a timed spell on the monster, and when it ends the charm ends.
+  - **What the charm does:** the monster is tied to the caster by name. It never attacks the caster and stops wandering; it moves with the caster instead of rolling its usual follow chance. Only the caster sees ` (Charmed)` after its name in the room.
+  - **What ends it early:** the monster dying, or the caster attacking it.
+  - **Summoned pets use the same state:** a no-target spell that creates a monster marks it charmed and owned by the caster.
+  - **Paradigm data difference** *([OBSERVED] 2026-09-28, imported game data)*: each Paradigm charm spell carries `RemovesSpell` (122) for the other two, so casting one replaces the others; Stock's don't.
 
 - **Client use:**
   - Reactive backstop, off the `no effect` line: `OnSpellNoEffect` marks the species + spell immune
@@ -4718,7 +4720,7 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
 *Status: CONFIRMED 2026-09-28 (user) · Realm: both, with the per-realm differences below*
 
 - **Coins on hand drop at death too, exactly as you carried them — never converted**, alongside the non-loyal items and recoverable like the rest (per *Deathpile — where the items go*).
-  - **Stock:** they land in the room as-is and follow the room item limits like other items. Coins are believed never to spread to other rooms *([NEEDS CONFIRMATION] user 2026-09-28: "I think coins don't spread at all")*.
+  - **Stock:** they land in the room as-is and follow the room item limits like other items. Coins don't spread to other rooms *(**Client policy**, user 2026-09-28: treat them as not spreading, per Stock's rules for items in a room)*.
   - **Paradigm:** they go into your corpse container, the same way you were holding them.
   - **Client policy:** the PvP realm's slightly different corpse rules aren't modelled.
 - **Five denominations** (largest first): `runic coin`, `platinum piece`, `gold crown`, `silver noble`, `copper farthing` — values per *Money, banks & shops → Currency denominations & value ladder*.
