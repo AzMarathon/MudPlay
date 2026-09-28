@@ -452,6 +452,20 @@ public sealed class CombatStateTracker : IDisposable
     public void OnCombatTick()
     {
         if (_disposed) return;
+
+        // A held gate in a room that now reads "don't attack here" holds the loop while
+        // the engine never attacks (not even in self-defense), so the character stands
+        // being hit. It happens when the room's loop suppression flips after the gate
+        // went up with nothing re-displaying the room: a reconnect judges the re-entry
+        // room with the loop still stopped, and the loop resumes a moment later (report
+        // paradigm-20260928-130856). Re-run the room so the gate lets go.
+        if (_gateAsserted && !_seeHiddenClearLatch && !_isAutoAttackEnabled() && _classifier.Current is { } room)
+        {
+            _log?.Info(LogCategory, "combat gate held but auto-attack is off in this room now (loop 'do not attack' / 'only lair rooms') — releasing");
+            OnEntitiesObserved(room);
+            return;
+        }
+
         if (_wireSender is null) return;
         // Nothing to rescue unless the gate is held OR InCombat is stuck true.
         // With auto-attack off InCombat can hang with the gate clear, so the
