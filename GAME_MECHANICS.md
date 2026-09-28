@@ -2556,12 +2556,13 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - This is why the heuristic reverse-walk / "Lost" dialog should essentially never be reached on Paradigm: at every give-up boundary (before the backtrack, and again before Lost) the gate spends a forced `rm` first, and only a `rm` that *answers* with a room the loaded map set doesn't contain — not a fumble-eaten one — is a real dead end (report paradigm-20260902-223159, `EngineRecoveryGate.HandleResyncFailure`).
 
 ### Nav-recovery authoritative locate (`rm` / `sys st`)
-*Status: Unrated · Realm: `rm` on Paradigm, `sys st` on stock with the sysop power*
+*Status: CONFIRMED 2026-09-28 (user) · Realm: `rm` Paradigm only; `sys st` on Stock with the sysop power*
 
 - **The sysop `sys st` position locate mirrors the Paradigm `rm` re-anchor at every point `rm` fires** —
   first mismatch, engine stall, the tier-3 give-up ladder, the terminal pre-Lost shot, the no-engine
   drift gap, `@where`, and a blocked loop/replan.
 - **On Paradigm `rm` wins each site (realm-gated); on a stock realm with the power `sys st` fills in.**
+- **`sys st` reports the room you're standing in as `Room N  Map: M`**, the same map and room number `rm` gives on Paradigm; see *Sysop commands → `SYSOP STATUS` — forms and arguments* for the full dump and its syntax.
 - **Maze-solve stays `rm`-only** — the solver drives its own relocalization.
 - **Client use:**
   - Both share the gate's `NoteAuthoritativePosition` / `OnAuthoritativeResyncFailed` consumers.
