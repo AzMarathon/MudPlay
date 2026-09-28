@@ -83,6 +83,43 @@ public static class LoopExpander
         return keys;
     }
 
+    // Every room the cycle passes through, leg by leg, for a map overlay. Unlike
+    // ResolveCycleRoomKeys it doesn't stop at an unreachable leg: that leg's end
+    // waypoint just follows unconnected (the map draws no line across a pair that
+    // shares no exit) and the walk carries on from there — so a half-fixed loop still
+    // shows every leg that does route.
+    public static IReadOnlyList<RoomKey> ResolveLegRoomKeys(
+        IReadOnlyList<LoopWaypoint> waypoints,
+        BfsMapper bfs,
+        RoomGraphManager graph,
+        IRoomFilter? filter = null)
+    {
+        ArgumentNullException.ThrowIfNull(waypoints);
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(graph);
+        if (waypoints.Count < 2) return Array.Empty<RoomKey>();
+
+        var keys = new List<RoomKey> { waypoints[0].Key };
+        for (int i = 0; i < waypoints.Count; i++)
+        {
+            RoomKey from = waypoints[i].Key;
+            RoomKey to = waypoints[(i + 1) % waypoints.Count].Key;
+            if (from.Equals(to)) continue;
+            RoomKey cursor = from;
+            if (bfs.FindPath(from, to, filter) is { Count: > 0 } path)
+            {
+                foreach (Direction d in path)
+                {
+                    if (graph.GetRoom(cursor) is not { } room || !room.Exits.TryGetValue(d, out RoomExit exit)) break;
+                    cursor = exit.Target;
+                    keys.Add(cursor);
+                }
+            }
+            if (!cursor.Equals(to)) keys.Add(to);
+        }
+        return keys;
+    }
+
     private static void AppendMoves(
         RoomKey from, RoomKey to,
         BfsMapper bfs, IRoomFilter? filter,

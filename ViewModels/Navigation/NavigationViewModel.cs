@@ -81,6 +81,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Walker.Event += OnWalkerEvent;
         _services.TokenRoute.RegroupFailed += OnTokenRegroupFailed;
         _services.TokenRoute.Changed += OnTokenRouteChanged;
+        _services.MapComparison.Changed += OnMapComparisonChanged;
+        OnMapComparisonChanged();
         _services.MovementCoordinator.PauseStateChanged += OnPauseChanged;
         _services.MovementCoordinator.GatesChanged += OnGatesChanged;
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
@@ -181,6 +183,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Walker.Event -= OnWalkerEvent;
         _services.TokenRoute.RegroupFailed -= OnTokenRegroupFailed;
         _services.TokenRoute.Changed -= OnTokenRouteChanged;
+        _services.MapComparison.Changed -= OnMapComparisonChanged;
         _services.MovementCoordinator.PauseStateChanged -= OnPauseChanged;
         _services.MovementCoordinator.GatesChanged -= OnGatesChanged;
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
@@ -3794,6 +3797,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // still a run the user can stop, though the walker is idle.
             return IsAnyExecuting || _services.TokenRoute.Active ? "Stop" : "Run";
         }
+    }
+
+    // The .mp import review's map comparison — bound to MapControl's Comparison* paths.
+    [ObservableProperty] private IReadOnlyList<RoomKey>? _comparisonRecordedPath;
+    [ObservableProperty] private IReadOnlyList<RoomKey>? _comparisonConvertedPath;
+    [ObservableProperty] private IReadOnlyList<RoomKey>? _comparisonStuckRooms;
+
+    private void OnMapComparisonChanged()
+    {
+        ComparisonRecordedPath = _services.MapComparison.RecordedPath;
+        ComparisonConvertedPath = _services.MapComparison.ConvertedPath;
+        ComparisonStuckRooms = _services.MapComparison.StuckRooms;
     }
 
     // A token route's phase moved — refresh the chip and the header line, which

@@ -107,6 +107,43 @@ public sealed class MpFileImporterTests : IDisposable
         Assert.True(t.Closes);
     }
 
+    // The map comparison's MegaMUD line: the recorded moves taken literally. North has
+    // no NE, so we stay at North (marked stuck) and the next recorded move carries on
+    // from there — no re-matching by hash, unlike the translation.
+    [Fact]
+    public void DeadReckon_FollowsMovesLiterally_AndStaysPutWhereAStepCantBeFollowed()
+    {
+        RoomGraphManager g = Graph();
+        MpLoopFile file = Mp((H(g, 1), "0000", "n"), (H(g, 2), "0000", "ne"), ("ABC00000", "0000", "s"), (H(g, 3), "0000", "w"));
+        (IReadOnlyList<RoomKey> path, IReadOnlyList<RoomKey> stuck) = new MpFileImporter(g).DeadReckon(file, new RoomKey(1, 1));
+
+        Assert.Equal(new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 1) }, path);   // n, (ne fails), s back to Start
+        Assert.Equal(new[] { new RoomKey(1, 2), new RoomKey(1, 1) }, stuck);                       // ne at North; w at Start
+    }
+
+    // The map comparison's MudPlay line: every leg routed, and a leg that can't be
+    // routed (to a room not on the map) leaves a gap instead of ending the line.
+    [Fact]
+    public void ResolveLegRoomKeys_RoutesEachLeg_AndCarriesOnPastAnUnroutableOne()
+    {
+        RoomGraphManager g = Graph();
+        BfsMapper bfs = new(g);
+        List<LoopWaypoint> waypoints = new()
+        {
+            new LoopWaypoint(new RoomKey(1, 1), null),
+            new LoopWaypoint(new RoomKey(1, 99), null),   // not on the map
+            new LoopWaypoint(new RoomKey(1, 4), null),
+        };
+
+        IReadOnlyList<RoomKey> path = LoopExpander.ResolveLegRoomKeys(waypoints, bfs, g);
+
+        Assert.Equal(new RoomKey(1, 1), path[0]);
+        Assert.Contains(new RoomKey(1, 99), path);                 // the gap's end waypoint
+        int corner = path.ToList().IndexOf(new RoomKey(1, 4));
+        Assert.True(corner > 0);                                  // 1/99 → 1/4 still drawn from there
+        Assert.Equal(new RoomKey(1, 1), path[^1]);                // the closing leg routes home
+    }
+
     [Fact]
     public void RoomSetByHand_HoldsAndTheWalkCarriesOnFromIt()
     {

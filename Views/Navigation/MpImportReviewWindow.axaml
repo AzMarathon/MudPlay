@@ -242,14 +242,29 @@
                            IsVisible="{Binding StatusIsGood}"/>
             </Panel>
 
-            <Grid Grid.Row="4" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+            <Grid Grid.Row="4" ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
                 <Button Grid.Column="0" Content="Verify loop in MudPlay" Command="{Binding VerifyCommand}"
                         ToolTip.Tip="Put in any rooms you typed, translate the steps after them again, and check MudPlay's navigation can walk the whole loop, every leg back round to the start, the way it would run it."/>
-                <TextBlock Grid.Column="1" Classes="Value" VerticalAlignment="Center"
+                <!-- Map comparison: the colours match MapControl's Comparison pens. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <CheckBox Content="Display on map" IsChecked="{Binding DisplayOnMap, Mode=TwoWay}" FontSize="11"
+                              ToolTip.Tip="Draw both versions of this loop on the Navigation map. Orange (wide): MegaMUD's recorded moves followed literally from the start room on our map — a red ✕ marks a room where a recorded step has no way on in our data, and the line carries on from there. Cyan (thin): the loop as converted here, walked the way MudPlay would run it. Where they agree the cyan runs inside the orange; where they part, you see two lines. Updates as you change rooms and Verify; clears when this window closes."/>
+                    <Border Width="18" Height="6" CornerRadius="3" Background="#B3FF9800" VerticalAlignment="Center"
+                            IsVisible="{Binding DisplayOnMap}"/>
+                    <TextBlock Classes="Value" Text="MegaMUD recording" FontSize="11" VerticalAlignment="Center"
+                               IsVisible="{Binding DisplayOnMap}"/>
+                    <Border Width="18" Height="3" CornerRadius="1" Background="#00E5FF" VerticalAlignment="Center"
+                            IsVisible="{Binding DisplayOnMap}"/>
+                    <TextBlock Classes="Value" Text="MudPlay conversion" FontSize="11" VerticalAlignment="Center"
+                               IsVisible="{Binding DisplayOnMap}"/>
+                    <TextBlock Classes="Value" Text="✕ recorded step can't be followed" FontSize="11" Foreground="#FF3B3B"
+                               VerticalAlignment="Center" IsVisible="{Binding DisplayOnMap}"/>
+                </StackPanel>
+                <TextBlock Grid.Column="2" Classes="Value" VerticalAlignment="Center"
                            Foreground="{StaticResource ChromeFgMutedBrush}"
                            Text="✓ matches · ≈ room differs from the recording · ↺ found again · ✎ set by you · ✗ untranslated (left out unless you set a room) · ⚠ no route onward · ⓘ what isn't carried over"/>
-                <Button Grid.Column="2" Content="Reject" Command="{Binding RejectCommand}" MinWidth="90" IsCancel="True"/>
-                <Button Grid.Column="3" Content="Accept" Command="{Binding AcceptCommand}" MinWidth="90"
+                <Button Grid.Column="3" Content="Reject" Command="{Binding RejectCommand}" MinWidth="90" IsCancel="True"/>
+                <Button Grid.Column="4" Content="Accept" Command="{Binding AcceptCommand}" MinWidth="90"
                         Classes="Accent" IsEnabled="{Binding CanAccept}"/>
             </Grid>
         </Grid>

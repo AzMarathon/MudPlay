@@ -1,5 +1,9 @@
 # Version history
 
+## 3.117.14
+
+- MegaMUD loop import review: **Display on map** draws the recording's moves and our conversion in two colours so you can see where they part
+
 ## 3.117.13
 
 - Walking somewhere new now calls off a party member backtrack, instead of each later walk heading back toward where the party split (e.g. a token)

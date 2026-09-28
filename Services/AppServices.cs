@@ -2116,6 +2116,9 @@ public sealed class AppServices
     // type.
     public NeedsRegistry Needs { get; private set; } = null!;
 
+    // The .mp import review's map comparison, drawn by the Navigation map.
+    public MapComparisonOverlay MapComparison { get; } = new();
+
     // Walk-to engine — sends one move at a time, waits for the room
     // tracker to confirm before advancing, and honours
     // MovementCoordinator pause gates.
