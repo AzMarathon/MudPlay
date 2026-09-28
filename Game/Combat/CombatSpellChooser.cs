@@ -157,6 +157,13 @@ public sealed class CombatSpellChooser
     // wire. The backstab opener fires first when eligible; otherwise
     // CombatSettings.ActionOrder decides between the attack-spell cascade and the
     // weapon swing (the swing is always available, so the method always resolves).
+    // True when this round opens with the backstab (see Choose). Anything cast at the
+    // monster first — a pre-attack debuff included — spends the surprise, so the
+    // debuff paths ask this and wait until the backstab round is over.
+    public bool WouldBackstab(CombatSettings settings, in CombatSpellContext ctx) =>
+        ctx.BackstabPending && !ctx.TargetDontBackstab
+        && !(settings.SkipBackstabIfMultiAttack && MultiAttackRoomQualifies(settings, ctx));
+
     public CombatSpellDecision Choose(CombatSettings settings, in CombatSpellContext ctx)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -175,8 +182,7 @@ public sealed class CombatSpellChooser
         // spending the surprise round on a backstab. The flag was wired to Settings and
         // carried into the round snapshot but never read here — report
         // paradigm-20260908-210406.
-        if (ctx.BackstabPending && !ctx.TargetDontBackstab
-            && !(settings.SkipBackstabIfMultiAttack && MultiAttackRoomQualifies(settings, ctx)))
+        if (WouldBackstab(settings, ctx))
             return CombatSpellDecision.Backstab;
 
         // SpellsFirst always reaches for the attack-spell cascade (multi 1 → multi 2

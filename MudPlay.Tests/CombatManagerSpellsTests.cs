@@ -42,6 +42,8 @@ public sealed class CombatManagerSpellsTests
         // Spell.Number → Short cast-code, feeding the per-monster override
         // resolver. An unmapped number resolves to null (unknown → fall back).
         public Dictionary<int, string> SpellShorts { get; } = new();
+        // Resolved spells by cast-code, for the debuff-slot guard (energy / targeting).
+        public Dictionary<string, KnownSpell> SpellsByCode { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public bool AutoCombatEnabled { get; set; } = true;
         public bool AutoNukeEnabled { get; set; } = true;
@@ -91,7 +93,8 @@ public sealed class CombatManagerSpellsTests
                 isEnabled: () => AutoCombatEnabled,
                 readOwnGivenName: () => "MudPlay",
                 post: a => { if (_deferPost) Posted.Add(a); else a(); },
-                log: Log);
+                log: Log,
+                resolveSpellByCode: c => SpellsByCode.TryGetValue(c, out KnownSpell s) ? s : null);
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.SetClock(() => _clock);
             // Production counts MaxCasts off RoundDamageTracker.RoundCount; mirror it.
@@ -1509,6 +1512,45 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Contains("curse giant rat", h.AllSent);
         Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    // An attack spell (energy > 0) in the per-monster DEBUFF override was cast as a
+    // between-round debuff and then overwritten by the attack sent right behind it, so
+    // it never landed (reports paradigm-20260928-030642 / -031828). It's held to the
+    // Combat-tab debuff rules now: blocked, and the engage goes straight to the attack.
+    [Fact]
+    public void PreAttackOverride_AttackSpell_IsBlocked()
+    {
+        using Harness h = new();
+        h.SpellShorts[1] = "mmis";
+        h.SpellsByCode["mmis"] = new KnownSpell(1, "mmis", "magic missile", 1, 1, 1, 8,
+            new SpellFormulaInput { EnergyCost = 500 });
+        h.Overlays[80] = new MonsterOverlay { OverridePreAttackSpellId = 1, OverridePreAttackCount = 1 };
+        h.AddMonster(80, "cave bear");
+
+        h.Feed("Also here: cave bear.");
+
+        Assert.DoesNotContain("mmis cave bear", h.AllSent);
+        Assert.Equal("a cave bear", h.LastSent);
+    }
+
+    // A cast ends the sneak (the engine's cast command clears the sneaking and hidden
+    // flags), so a pre-attack debuff before the backstab spends the surprise. It waits
+    // for the round after the backstab.
+    [Fact]
+    public void PreAttackDebuff_WaitsForTheBackstab()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.Sneaking = true;
+        h.SpellShorts[7] = "curse";
+        h.Overlays[1] = new MonsterOverlay { OverridePreAttackSpellId = 7, OverridePreAttackCount = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+
+        Assert.Equal("bs giant rat", h.LastSent);
+        Assert.DoesNotContain("curse giant rat", h.AllSent);
     }
 
     [Fact]
