@@ -1100,7 +1100,8 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         // No stock ability grants a +MA-skill bonus; the calc floors it to 1.
         const int maPlusSkill = 1;
         MeleeDamageResult dmg = CombatCalculator.CalcMartialArtsDamage(
-            type, _realm, _level, maPlusSkill, _str, _plusMaxDamage, maPlusDmg);
+            type, _realm, _level, maPlusSkill, _str, _plusMaxDamage, maPlusDmg,
+            plusMinDamage: _plusMinDamage);
         _avgWeaponDamage = (dmg.MinDamage + dmg.MaxDamage) / 2;
 
         int speed = CombatCalculator.MartialArtsSpeed(type, _realm);
@@ -1573,7 +1574,8 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         BackstabLevelText = _level.ToString(CultureInfo.InvariantCulture);
         BackstabStrengthText = _str.ToString(CultureInfo.InvariantCulture);
         BackstabStealthText = _stealth.ToString(CultureInfo.InvariantCulture);
-        BackstabClassStealthText = _hasClassStealth ? "Class (scales with level)" : "Racial only (×75%)";
+        BackstabClassStealthText = _hasClassStealth ? "Class (scales with level)"
+            : _realm == RealmType.Stock ? "Racial only (×75%, scales with level)" : "Racial only (×75%)";
         BackstabBonusText = string.Create(CultureInfo.InvariantCulture,
             $"+{_plusBsMin} min / +{_plusBsMax} max / +{_plusMaxDamage} dmg");
         BackstabRealmText = _realm == RealmType.Stock ? "Stock" : "ParaMUD / GreaterMUD";
@@ -1588,7 +1590,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         BackstabWeaponRangeText = string.Create(CultureInfo.InvariantCulture, $"{_bsWeaponMin}–{_bsWeaponMax}");
         BSDamageResult res = CombatCalculator.CalcBSDamage(
             _level, _stealth, _str, _bsWeaponMin, _bsWeaponMax,
-            _plusBsMin, _plusBsMax, _plusMaxDamage, _hasClassStealth, _realm);
+            _plusBsMin, _plusBsMax, _plusMaxDamage, _hasClassStealth, _realm, _plusMinDamage);
         BackstabMinText = res.MinDamage.ToString(CultureInfo.InvariantCulture);
         BackstabMaxText = res.MaxDamage.ToString(CultureInfo.InvariantCulture);
         BackstabAvgText = res.AvgDamage.ToString("0.0", CultureInfo.InvariantCulture);

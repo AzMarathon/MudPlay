@@ -1193,19 +1193,33 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 - **A `bs` while not sneaking or hidden quietly becomes a normal attack on Stock** *([OBSERVED] `wccmmud.dll` 1.11p `_cmd_backstab`; [CONFIRMED] 2026-09-27, user)*. No refusal line is printed.
 - **Only the opener needs to be `bs`, and follow-on attacks must stay quiet** *([OBSERVED, mechanism unconfirmed])*. In one live capture the opener `bs large wild dog` was followed by two client-sent `pu large wild dog` during the `*Combat Off*` / `*Combat Engaged*` interrupt bounce, and `You surprise punch ... for 36 damage!` still landed. **Do not read this as "the engine continues the backstab through follow-on attacks"** — the likelier explanation is timing: the `pu` commands simply hadn't registered server-side before the `bs` surprise round resolved. So a well-timed follow-on `pu` *could* have sabotaged the surprise. Practical rule: send `bs` as the opener, then stay quiet — don't spam follow-on attack commands that might register and clobber the surprise (let the server's auto-repeat carry the fight). Never send a second `bs`.
 - **Failure signals — the reliable single-line tell** *([CONFIRMED])*. The surprise round is a **single** swing, so the **first** of the player's own combat-result lines after the `bs` settles the outcome: it either **carries `surprise`** (landed) or **lacks it** (failed). A failure surfaces either as a **whiff** (`You swing at <target>!` — no "for N damage", renders dark-cyan) or as a **folded normal round** (`You punch <target> for N damage!` with no "surprise"). Detection is **text-only** — the `surprise` token, not the color.
-- **Paradigm backstab accuracy** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; matches `CombatCalculator.CalcBackstabAccuracy`)*:
-  ```
-  acc = Stealth/3 + ((AGL − 50) + Level)/2 + 15 + BSAccu + Accuracy (all three accuracy abilities)
-  acc −= 15 if the weapon is too heavy for you
-  ```
-  The +15 was added to help lower levels after a stealth change.
-- **Paradigm backstab defence (against a player)** *([OBSERVED] Paradigm server source, shared by a Paradigm developer via the user, 2026-09-27; matches `CombatCalculator`)*: `(AC + prev + Perception·0.8 + ward)/2 + shadow`.
+- **Backstab accuracy and damage formulas, by realm:** see *Backstab damage and accuracy*.
 - **`You cannot backstab with this weapon.`** *([CONFIRMED])* — you tried to `bs` while sneaking with a weapon that isn't backstab-capable. No weapon-type flag in the game data exposes this ahead of time; it is only knowable reactively from this line.
 
 **Client use:**
 - The client tracks the spent opener per room; it is re-armed on the next sneak-approach or a fresh in-place hide (see *Movement & navigation → Hiding — sneak vs hide, the hide state machine, and search reveals*).
 - The client enforces the quiet-follow-on rule by suppressing all Attack-Order re-fire while a `bs` is pending resolution.
 - The client keys off the first-line failure tell and, when *Run if BS fails* is on, flees on a detected failure (routed through the normal break-before-flee escape path).
+
+### Backstab damage and accuracy
+*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (`_move_player_to_fighter`, `_calculate_attack`), matching MMUD-Explorer's Stock branch; Paradigm accuracy / defence from the Paradigm developer's source, damage from MMUD-Explorer's GreaterMUD branch, the swap and +min damage CONFIRMED 2026-09-27 (user) · Realm: differs*
+
+| Step | Stock | Paradigm |
+|---|---|---|
+| **Accuracy** | `(Stealth + AGL)/2 + BSAccu/2`, **+5** with class stealth or **−15** with race-only stealth, + the accuracy-ability bonus (highest of abilities 22 / 105 / 106), **−10** if you fought last round | `Stealth/3 + ((AGL − 50) + Level)/2 + 15 + BSAccu` + all accuracy abilities, **−15** if the weapon is too heavy |
+| **Defence (vs a player)** | — | `(AC + prev + Perception·0.8 + ward)/2 + shadow` |
+| **Base range** | the weapon's min / max with strength and +max damage, as for a normal hit | the same, plus **+min damage on the min** |
+| **Backstab range** | min `= 2·min + 2·Level + Stealth/10 + BS min (117)`; max `= 2·max + 2·Level + Stealth/10 + BS max (118)` | same |
+| **Race-only stealth** | ×75%, then ×`(Level + 100)/100` | ×75%, **no** level scale |
+| **Class stealth** | ×`(Level + 100)/100` | ×`(Level + 100)/100` |
+| **Min above max** | the max is **raised to** the min | the two **swap**: the min side (fed by +min damage and BS min) becomes the max, the max side (fed by +max damage and BS max) the min |
+| **Crit** | never | never |
+
+- BSAccu is ability 116. All division truncates.
+
+**Client use:**
+- `CombatCalculator.CalcBackstabAccuracy` / `CalcBSDamage`. Before 2026-09-27 the client left Stock's accuracy-ability bonus and race-only level scale out, didn't count +min damage on Paradigm, and swapped min / max on both realms.
+- Item Finder's Find Best scores each item alone against the current gear, so on Paradigm the swap makes the backstab min / max criteria unreliable (several +min items can flip the range together). "Backstab Dmg (avg)" isn't affected, because a swap doesn't change the average.
 
 ### Monster spell-attack damage — single cast, monster-owned energy
 *Status: CONFIRMED 2026-09-04 (user)*

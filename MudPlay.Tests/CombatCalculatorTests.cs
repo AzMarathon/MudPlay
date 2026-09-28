@@ -246,20 +246,62 @@ public sealed class CombatCalculatorTests
     }
 
     [Fact]
-    public void CalcBSDamage_RacialOnlyHasNoLevelScaling()
+    public void CalcBSDamage_RacialOnly_StockScalesByLevel_ParadigmDoesNot()
     {
-        // Engine: racial-only stealth scales by a flat 75% with no (level+100)
-        // term, identically in both realms. Manual: minDamage 10, maxDamage
-        // 30 + (100-50)/10 = 35. min temp = 100+20+20 = 140 → 105;
-        // max temp = 100+20+70 = 190 → 142.
+        // Racial-only stealth takes 75%; Stock then applies (level+100)/100 as it
+        // does for class stealth, Paradigm doesn't. minDamage 10, maxDamage
+        // 30 + (100-50)/10 = 35. min 100+20+20 = 140 → 105; max 100+20+70 = 190 → 142.
+        // Stock ×150/100: 157 / 213.
         BSDamageResult stock = CombatCalculator.CalcBSDamage(
             level: 50, stealth: 200, strength: 100,
             weaponMin: 10, weaponMax: 30,
             bsMinBonus: 0, bsMaxBonus: 0, maxDmgBonus: 0,
             hasClassStealth: false, realmType: RealmType.Stock);
+        BSDamageResult para = CombatCalculator.CalcBSDamage(
+            level: 50, stealth: 200, strength: 100,
+            weaponMin: 10, weaponMax: 30,
+            bsMinBonus: 0, bsMaxBonus: 0, maxDmgBonus: 0,
+            hasClassStealth: false, realmType: RealmType.ParaMud);
 
-        Assert.Equal(105, stock.MinDamage);
-        Assert.Equal(142, stock.MaxDamage);
+        Assert.Equal(157, stock.MinDamage);
+        Assert.Equal(213, stock.MaxDamage);
+        Assert.Equal(105, para.MinDamage);
+        Assert.Equal(142, para.MaxDamage);
+    }
+
+    // The min side (+min damage, BS min) can outgrow the max side (+max damage, BS
+    // max). Paradigm swaps them; Stock raises the max to the min.
+    [Fact]
+    public void CalcBSDamage_MinAboveMax_ParadigmSwaps_StockRaisesMax()
+    {
+        // Level 10, stealth 0, STR 50, weapon 5-5, BS min +40, class stealth:
+        //   min (20 + 0 + 10 + 40) = 70 → ×110/100 = 77; max (20 + 10) = 30 → 33.
+        BSDamageResult para = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 5, bsMinBonus: 40, bsMaxBonus: 0, maxDmgBonus: 0,
+            hasClassStealth: true, realmType: RealmType.ParaMud);
+        BSDamageResult stock = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 5, bsMinBonus: 40, bsMaxBonus: 0, maxDmgBonus: 0,
+            hasClassStealth: true, realmType: RealmType.Stock);
+
+        Assert.Equal((33, 77), (para.MinDamage, para.MaxDamage));
+        Assert.Equal((77, 77), (stock.MinDamage, stock.MaxDamage));
+    }
+
+    // +min damage feeds the backstab minimum on Paradigm; Stock has no +min damage.
+    [Fact]
+    public void CalcBSDamage_MinDamageBonus_ParadigmOnly()
+    {
+        BSDamageResult para = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 20, 0, 0, 0, hasClassStealth: true, RealmType.ParaMud, minDmgBonus: 5);
+        BSDamageResult paraNone = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 20, 0, 0, 0, hasClassStealth: true, RealmType.ParaMud);
+        BSDamageResult stock = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 20, 0, 0, 0, hasClassStealth: true, RealmType.Stock, minDmgBonus: 5);
+        BSDamageResult stockNone = CombatCalculator.CalcBSDamage(
+            10, 0, 50, 5, 20, 0, 0, 0, hasClassStealth: true, RealmType.Stock);
+
+        Assert.True(para.MinDamage > paraNone.MinDamage);
+        Assert.Equal(stockNone, stock);
     }
 
     [Fact]

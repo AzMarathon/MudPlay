@@ -559,7 +559,7 @@ public static class CharacterCalculator
             case MudAttackType.Backstab:
             {
                 bool hasClassStealth = ClassCapabilities.ClassHasStealth(classRow);
-                int bsNormAccy = t.TotalWornAccy + effectiveAbil22;
+                int bsNormAccy = realm == RealmType.ParaMud ? t.TotalWornAccy + effectiveAbil22 : effectiveAbil22;
                 accuracy = CombatCalculator.CalcBackstabAccuracy(
                     stats.Stealth, stats.Agility, stats.Level, stats.Strength, t.WeaponStrReq,
                     t.PlusBSAccuracy, bsNormAccy, hasClassStealth, realm);
@@ -569,7 +569,7 @@ public static class CharacterCalculator
                 // gate HasWeapon on damage output rather than a weapon being worn.
                 BSDamageResult bsDmg = CombatCalculator.CalcBSDamage(
                     stats.Level, stats.Stealth, stats.Strength, t.WeaponMin, t.WeaponMax,
-                    t.PlusBSMin, t.PlusBSMax, t.PlusMaxDamage, hasClassStealth, realm);
+                    t.PlusBSMin, t.PlusBSMax, t.PlusMaxDamage, hasClassStealth, realm, t.PlusMinDamage);
                 avgDamage = (bsDmg.MinDamage + bsDmg.MaxDamage) / 2;
                 swingsPerRound = 1;   // a backstab is always a single strike
                 hasWeapon = avgDamage > 0;

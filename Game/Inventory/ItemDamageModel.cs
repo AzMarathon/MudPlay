@@ -107,7 +107,8 @@ public sealed record ItemDamageModel(
         CombatCalculator.CalcBSDamage(
             Level, StealthWith(weapon, item), StrengthWith(weapon, item), weapon.Min, weapon.Max,
             Rest.BsMin + weapon.BsMin + item.BsMin, Rest.BsMax + weapon.BsMax + item.BsMax,
-            Rest.PlusMax + weapon.PlusMax + item.PlusMax, HasClassStealth, Realm);
+            Rest.PlusMax + weapon.PlusMax + item.PlusMax, HasClassStealth, Realm,
+            Rest.PlusMin + weapon.PlusMin + item.PlusMin);
 
     private double MeleeRound(WeaponInputs weapon, GearDelta item, MudAttackType type)
     {

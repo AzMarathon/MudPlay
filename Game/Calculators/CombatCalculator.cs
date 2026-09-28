@@ -266,20 +266,19 @@ public static class CombatCalculator
 
     // ----- Backstab damage -------------------------------------------------
 
-    // Backstab damage range, matching the MajorMUD backstab formula.
-    // Core per bound: (level*2) + (stealth/10) + (damage*2) + bsDmgMod, then
-    // class-stealth scales by (level+100)/100 while racial-only stealth scales by
-    // 75% with no level term (no realm branch — the realm difference lives in the
-    // strength folding). weaponMin / weaponMax are the raw weapon bounds;
-    // strength folds in here — min gets (STR-100)/10 (doubled in Stock, floored
-    // at 0), max gets (STR-50)/10 (ParaMUD floors at 0). maxDmgBonus is the item
-    // +max-damage ability sum (Abil 4) only; the strength max bonus is computed
-    // internally, so callers pass the item-only value.
+    // Backstab damage range (GAME_MECHANICS "Backstab damage and accuracy").
+    // Core per bound: (level*2) + (stealth/10) + (damage*2) + bsDmgMod; racial-only
+    // stealth then takes 75%, and the (level+100)/100 scale applies on Stock always
+    // but on Paradigm only with class stealth. weaponMin / weaponMax are the raw
+    // weapon bounds; strength folds in here — min gets (STR-100)/10 (doubled in
+    // Stock, floored at 0), max gets (STR-50)/10 (ParaMUD floors at 0).
+    // maxDmgBonus is the item +max-damage ability sum (Abil 4) only; minDmgBonus
+    // (Abil 1) counts on Paradigm only — Stock has no +min damage.
     public static BSDamageResult CalcBSDamage(int level, int stealth, int strength,
                                                int weaponMin, int weaponMax,
                                                int bsMinBonus, int bsMaxBonus,
                                                int maxDmgBonus, bool hasClassStealth,
-                                               RealmType realmType)
+                                               RealmType realmType, int minDmgBonus = 0)
     {
         int minStrBonus = (strength - 100) / 10;
         if (realmType == RealmType.Stock)
@@ -290,31 +289,33 @@ public static class CombatCalculator
         if (realmType == RealmType.ParaMud && maxStrBonus < 0)
             maxStrBonus = 0;                  // GreaterMUD has no negative-strength penalty
 
-        int minDamage = weaponMin + minStrBonus;
+        int minDamage = weaponMin + minStrBonus
+            + (realmType == RealmType.ParaMud ? minDmgBonus : 0);
         int maxDamage = weaponMax + maxStrBonus + maxDmgBonus;
 
-        int minBS = CalcBSDamageSingle(level, stealth, minDamage, bsMinBonus, hasClassStealth);
-        int maxBS = CalcBSDamageSingle(level, stealth, maxDamage, bsMaxBonus, hasClassStealth);
+        int minBS = CalcBSDamageSingle(level, stealth, minDamage, bsMinBonus, hasClassStealth, realmType);
+        int maxBS = CalcBSDamageSingle(level, stealth, maxDamage, bsMaxBonus, hasClassStealth, realmType);
 
-        // bsMinBonus / bsMaxBonus come from independent ability IDs (117/118),
-        // so a high min bonus can push the computed min above max — swap so
-        // min ≤ max for display and downstream use.
-        if (maxBS < minBS)
-            (minBS, maxBS) = (maxBS, minBS);
+        // The min and max sides are fed by independent bonuses (+min damage and BS
+        // min vs +max damage and BS max), so the min side can come out higher.
+        // Paradigm then swaps them; Stock raises the max to the min.
+        if (minBS > maxBS)
+        {
+            if (realmType == RealmType.ParaMud) (minBS, maxBS) = (maxBS, minBS);
+            else maxBS = minBS;
+        }
 
         return new BSDamageResult(minBS, maxBS);
     }
 
     private static int CalcBSDamageSingle(int level, int stealth, int damage,
-                                           int bsDmgMod, bool hasClassStealth)
+                                           int bsDmgMod, bool hasClassStealth, RealmType realmType)
     {
         int result = (level * 2) + (stealth / 10) + (damage * 2) + bsDmgMod;
-
-        // Engine: class-stealth scales by (level+100)/100; racial-only stealth
-        // scales by a flat 75% with no level term.
-        return hasClassStealth
+        if (!hasClassStealth) result = result * 75 / 100;
+        return hasClassStealth || realmType == RealmType.Stock
             ? (level + 100) * result / 100
-            : result * 75 / 100;
+            : result;
     }
 
     // ----- Melee damage (Normal / Bash / Smash) ----------------------------
@@ -497,7 +498,10 @@ public static class CombatCalculator
     //   (Stealth/3) + ((AGI-50+LVL)/2) + 15 + PlusBSAccy + NormAccy, minus 15
     //   when STR is under the weapon requirement.
     // Stock:
-    //   (Stealth+AGI)/2 + PlusBSAccy/2, +5 with class stealth else -15.
+    //   (Stealth+AGI)/2 + PlusBSAccy/2, +5 with class stealth else -15, + NormAccy.
+    // NormAccy is the realm's normal-accuracy bonus: worn accuracy + abilities on
+    // Paradigm, only the accuracy-ability bonus (highest of 22/105/106) on Stock;
+    // the callers pick it.
     // Encumbrance is not applied here — the displayed Stealth stat already
     // incorporates it.
     public static int CalcBackstabAccuracy(int stealth, int agility, int level,
@@ -524,6 +528,7 @@ public static class CombatCalculator
                 accy += 5;
             else
                 accy -= 15;
+            accy += plusNormalAccuracy;
         }
 
         return accy;
