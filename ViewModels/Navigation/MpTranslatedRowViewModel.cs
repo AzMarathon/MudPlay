@@ -42,6 +42,7 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
         } + (row.Note is { } n ? $" — {n}" : "");
         Note = row.Note ?? string.Empty;
         Dropped = MpStepFlagText.Dropped(step, row.PassageKnown);
+        _markStash = step.Flags.HasFlag(MpStepFlags.Stash);
 
         if (row.Room is { } room)
         {
@@ -78,6 +79,10 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
     [ObservableProperty] private string _roomText;
     [ObservableProperty] private string? _command;
     [ObservableProperty] private int _delayMs;
+
+    // Add this room to the character's stash rooms on Accept. Ticked for a step
+    // MegaMUD marked as a stash point.
+    [ObservableProperty] private bool _markStash;
     [ObservableProperty] private bool _doNotRest;
     [ObservableProperty] private bool _doNotAttack;
     [ObservableProperty] private bool _restHereHp;
@@ -89,6 +94,7 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
     {
         Command = other.Command;
         DelayMs = other.DelayMs;
+        MarkStash = other.MarkStash;
         DoNotRest = other.DoNotRest;
         DoNotAttack = other.DoNotAttack;
         RestHereHp = other.RestHereHp;

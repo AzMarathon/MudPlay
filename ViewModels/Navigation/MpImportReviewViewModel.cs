@@ -19,8 +19,8 @@ namespace MudPlay.ViewModels.Navigation;
 // translation of it on the right, so the two are checked line for line. A step that
 // didn't translate is a blank line to fill in. "Verify loop in MudPlay" applies the
 // rooms typed in, re-translates from them, and checks our navigation can walk the
-// result all the way round as a loop. Accept saves it — asking first whether to add
-// the loop's MegaMUD stash points as stash rooms; Reject closes without saving.
+// result all the way round as a loop. Accept saves it, adding the rooms ticked
+// "Stash" to the character's stash rooms; Reject closes without saving.
 public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogViewModel<Loop?>
 {
     private readonly string _path;
@@ -29,7 +29,6 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     private readonly RoomGraphManager _graph;
     private readonly LoopManager _loops;
     private readonly MovementFilter? _filter;
-    private readonly ConfirmService? _confirm;
     private readonly LogService? _log;
     private MegaMudRoomsFile? _roomsMd;
     private IReadOnlyList<MpTranslation> _candidates = Array.Empty<MpTranslation>();
@@ -44,9 +43,8 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     public MpImportReviewViewModel(
         string path, MpLoopFile file, MegaMudRoomsFile? roomsMd,
         MpFileImporter importer, RoomGraphManager graph, LoopManager loops,
-        MovementFilter? filter, ConfirmService? confirm, LogService? log = null)
+        MovementFilter? filter, LogService? log = null)
     {
-        _confirm = confirm;
         _path = path;
         _file = file;
         _roomsMd = roomsMd;
@@ -166,7 +164,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     }
 
     [RelayCommand]
-    private async Task AcceptAsync()
+    private void Accept()
     {
         if (!CanAccept) return;
         string name = LoopName.Trim();
@@ -175,7 +173,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         if (!ApplyTypedRooms()) return;
         if (CheckWalkable() is not { } waypoints) return;
 
-        int stashed = await AskToAddStashRoomsAsync();
+        int stashed = AddStashRooms();
 
         Loop loop = new(name, waypoints) { Notes = Notes.Trim() };
         _loops.Save(loop);
@@ -187,29 +185,14 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         CloseRequested?.Invoke(loop);
     }
 
-    // The MegaMUD loop marks some steps as stash points; stash rooms are a character
-    // setting, not part of a loop, so ask whether to add them (user, 2026-09-28).
-    // Returns how many were added.
-    private async Task<int> AskToAddStashRoomsAsync()
+    // Stash rooms are a character setting, not part of a loop: the rows ticked
+    // "Stash" (pre-ticked where MegaMUD marked a stash point) are added on Accept.
+    // Returns how many were new.
+    private int AddStashRooms()
     {
-        List<MpTranslatedRowViewModel> marked = Rows.Where(r => r.Step.Flags.HasFlag(MpStepFlags.Stash)).ToList();
-        if (marked.Count == 0 || _filter is null) return 0;
-        List<RoomKey> rooms = marked.Select(r => r.EffectiveRoom).OfType<RoomKey>().Distinct().ToList();
-        List<RoomKey> toAdd = rooms.Where(k => !_filter.IsStash(k)).ToList();
-        List<int> untranslated = marked.Where(r => r.EffectiveRoom is null).Select(r => r.Number).ToList();
-        string lostNote = untranslated.Count == 0 ? ""
-            : $"\n\nStep {string.Join(", ", untranslated)} is also a stash point but has no room — set one to include it.";
-        if (toAdd.Count == 0)
-        {
-            if (untranslated.Count > 0 && _confirm is not null)
-                await _confirm.ConfirmAsync("Stash points", "This loop's stash points are already your stash rooms." + lostNote, "OK");
-            return 0;
-        }
-        string list = string.Join("\n", toAdd.Select(k => "  • " + Describe(k)));
-        bool yes = _confirm is null || await _confirm.ConfirmAsync("Add stash rooms?",
-            $"The MegaMUD loop marks {(toAdd.Count == 1 ? "this room as a stash point" : "these rooms as stash points")}:\n\n{list}\n\n"
-            + "Add them to your stash rooms along with this loop?" + lostNote, "Add stash rooms");
-        if (!yes) return 0;
+        if (_filter is null) return 0;
+        List<RoomKey> toAdd = Rows.Where(r => r.MarkStash).Select(r => r.EffectiveRoom).OfType<RoomKey>()
+            .Distinct().Where(k => !_filter.IsStash(k)).ToList();
         foreach (RoomKey k in toAdd) _filter.MarkStash(k);
         return toAdd.Count;
     }

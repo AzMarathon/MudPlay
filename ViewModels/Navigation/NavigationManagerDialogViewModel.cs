@@ -640,7 +640,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
             return;
         }
 
-        MpImportReviewViewModel review = new(path, file, roomsMd, _mpImporter, _graph, _loops, _movementFilter, _confirm, _log);
+        MpImportReviewViewModel review = new(path, file, roomsMd, _mpImporter, _graph, _loops, _movementFilter, _log);
         Loop? accepted = await _dialogs.OpenWindowAsync<MpImportReviewViewModel, Loop?>(review);
         ImportStatus = accepted is null
             ? $"Import of {Path.GetFileName(path)} cancelled."

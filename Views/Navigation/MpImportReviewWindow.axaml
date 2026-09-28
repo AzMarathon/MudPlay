@@ -10,8 +10,8 @@
     <!-- One table, one scrollbar: every line is a .mp step (left of the divider) and
          our translation of it (right). The header and row templates share these
          column widths, so change them together:
-         #, hash, Rooms.md, move, extra, options | divider | status, room (name and
-         map/room), set room, command, delay, NR, NA, RH, RM, notes marker. -->
+         #, hash, Rooms.md, move, extra, options | divider | status, set room, room
+         (name and map/room), stash, command, delay, NR, NA, RH, RM, notes marker. -->
     <Window.Styles>
         <Style Selector="TextBlock.Cell">
             <Setter Property="FontSize" Value="11"/>
@@ -152,7 +152,7 @@
 
             <!-- ============ Column headers ============ -->
             <Border Grid.Row="1" Padding="6,4" Background="#18FFFFFF" CornerRadius="3">
-                <Grid ColumnDefinitions="34,74,150,64,*,130,9,20,1.4*,84,130,64,26,26,26,26,22">
+                <Grid ColumnDefinitions="34,74,150,64,*,130,9,20,84,1.4*,44,130,64,26,26,26,26,22">
                     <TextBlock Grid.Column="0" Classes="Head" Text="#"/>
                     <TextBlock Grid.Column="1" Classes="Head" Text="Room hash"/>
                     <TextBlock Grid.Column="2" Classes="Head" Text="Rooms.md"/>
@@ -160,16 +160,18 @@
                     <TextBlock Grid.Column="4" Classes="Head" Text="Extra commands"/>
                     <TextBlock Grid.Column="5" Classes="Head" Text="Step options"/>
                     <Border Grid.Column="6" Classes="Divider"/>
-                    <TextBlock Grid.Column="8" Classes="Head" Text="MudPlay room"/>
-                    <TextBlock Grid.Column="9" Classes="Head" Text="Set room"
+                    <TextBlock Grid.Column="8" Classes="Head" Text="Set room"
                                ToolTip.Tip="Type a map/room here to put a different room on this step, then Verify."/>
-                    <TextBlock Grid.Column="10" Classes="Head" Text="Command"/>
-                    <TextBlock Grid.Column="11" Classes="Head" Text="Delay ms"
+                    <TextBlock Grid.Column="9" Classes="Head" Text="MudPlay room"/>
+                    <TextBlock Grid.Column="10" Classes="HeadCenter" Text="Stash"
+                               ToolTip.Tip="Add this room to your stash rooms when you accept the loop. Ticked where MegaMUD marked a stash point."/>
+                    <TextBlock Grid.Column="11" Classes="Head" Text="Command"/>
+                    <TextBlock Grid.Column="12" Classes="Head" Text="Delay ms"
                                ToolTip.Tip="Milliseconds to wait after the command before moving on. Ignored with no command."/>
-                    <TextBlock Grid.Column="12" Classes="HeadCenter" Text="NR" ToolTip.Tip="Do not rest in this room"/>
-                    <TextBlock Grid.Column="13" Classes="HeadCenter" Text="NA" ToolTip.Tip="Do not attack in this room"/>
-                    <TextBlock Grid.Column="14" Classes="HeadCenter" Text="RH" ToolTip.Tip="Rest up here — HP"/>
-                    <TextBlock Grid.Column="15" Classes="HeadCenter" Text="RM" ToolTip.Tip="Rest up here — mana"/>
+                    <TextBlock Grid.Column="13" Classes="HeadCenter" Text="NR" ToolTip.Tip="Do not rest in this room"/>
+                    <TextBlock Grid.Column="14" Classes="HeadCenter" Text="NA" ToolTip.Tip="Do not attack in this room"/>
+                    <TextBlock Grid.Column="15" Classes="HeadCenter" Text="RH" ToolTip.Tip="Rest up here — HP"/>
+                    <TextBlock Grid.Column="16" Classes="HeadCenter" Text="RM" ToolTip.Tip="Rest up here — mana"/>
                 </Grid>
             </Border>
 
@@ -177,7 +179,7 @@
             <ListBox Grid.Row="2" Classes="Steps" ItemsSource="{Binding Rows}">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:MpTranslatedRowViewModel">
-                        <Grid ColumnDefinitions="34,74,150,64,*,130,9,20,1.4*,84,130,64,26,26,26,26,22">
+                        <Grid ColumnDefinitions="34,74,150,64,*,130,9,20,84,1.4*,44,130,64,26,26,26,26,22">
                             <TextBlock Grid.Column="0" Classes="Cell" Text="{Binding Number}"/>
                             <TextBlock Grid.Column="1" Classes="Cell" Text="{Binding Source.Hash}" FontFamily="monospace"/>
                             <TextBlock Grid.Column="2" Classes="Cell" Text="{Binding Source.RoomsMdName}"
@@ -191,32 +193,35 @@
                             <Border Grid.Column="6" Classes="Divider"/>
                             <TextBlock Grid.Column="7" Classes="Cell" Text="{Binding StatusText}"
                                        ToolTip.Tip="{Binding StatusTip}"/>
-                            <TextBlock Grid.Column="8" Classes="Cell"
-                                       Text="{Binding RoomName}" ToolTip.Tip="{Binding StatusTip}"/>
-                            <TextBox Grid.Column="9" Classes="CellEdit"
+                            <TextBox Grid.Column="8" Classes="CellEdit"
                                      Text="{Binding RoomText, Mode=TwoWay}"
                                      PlaceholderText="map/room"
                                      ToolTip.Tip="Type a map/room to put a different room on this step (clear it to go back to the translation), then press Verify."/>
-                            <TextBox Grid.Column="10" Classes="CellEdit"
+                            <TextBlock Grid.Column="9" Classes="Cell"
+                                       Text="{Binding RoomName}" ToolTip.Tip="{Binding StatusTip}"/>
+                            <CheckBox Grid.Column="10" Classes="Cell" IsChecked="{Binding MarkStash, Mode=TwoWay}"
+                                      ToolTip.Tip="Add this room to your stash rooms when you accept the loop"/>
+                            <TextBox Grid.Column="11" Classes="CellEdit"
                                      Text="{Binding Command, Mode=TwoWay}"
                                      PlaceholderText="command"
                                      ToolTip.Tip="Sent when the loop reaches this room."/>
-                            <NumericUpDown Grid.Column="11"
+                            <NumericUpDown Grid.Column="12"
                                            Value="{Binding DelayMs, Mode=TwoWay}"
                                            Minimum="0" Maximum="600000" Increment="100"
                                            FormatString="0" ShowButtonSpinner="False"
-                                           FontSize="11" Height="22" MinHeight="22" Padding="4,1"
+                                           FontSize="11" Height="22" MinHeight="22" Padding="4,0"
                                            Margin="0,0,6,0" VerticalAlignment="Center"
+                                           VerticalContentAlignment="Center"
                                            ToolTip.Tip="Milliseconds to wait after the command before moving on. Ignored with no command."/>
-                            <CheckBox Grid.Column="12" Classes="Cell" IsChecked="{Binding DoNotRest, Mode=TwoWay}"
+                            <CheckBox Grid.Column="13" Classes="Cell" IsChecked="{Binding DoNotRest, Mode=TwoWay}"
                                       ToolTip.Tip="Do not rest in this room"/>
-                            <CheckBox Grid.Column="13" Classes="Cell" IsChecked="{Binding DoNotAttack, Mode=TwoWay}"
+                            <CheckBox Grid.Column="14" Classes="Cell" IsChecked="{Binding DoNotAttack, Mode=TwoWay}"
                                       ToolTip.Tip="Do not attack in this room"/>
-                            <CheckBox Grid.Column="14" Classes="Cell" IsChecked="{Binding RestHereHp, Mode=TwoWay}"
+                            <CheckBox Grid.Column="15" Classes="Cell" IsChecked="{Binding RestHereHp, Mode=TwoWay}"
                                       ToolTip.Tip="Rest up here — rest until HP is back to its rest-max"/>
-                            <CheckBox Grid.Column="15" Classes="Cell" IsChecked="{Binding RestHereMana, Mode=TwoWay}"
+                            <CheckBox Grid.Column="16" Classes="Cell" IsChecked="{Binding RestHereMana, Mode=TwoWay}"
                                       ToolTip.Tip="Rest up here — rest until mana is back to its rest-max"/>
-                            <Panel Grid.Column="16">
+                            <Panel Grid.Column="17">
                                 <TextBlock Classes="Cell" Text="⚠" Foreground="#E05050"
                                            IsVisible="{Binding Unreachable}"
                                            ToolTip.Tip="Verify found no route onward from this room — set a different room on this step or the next."/>
