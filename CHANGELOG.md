@@ -1,5 +1,9 @@
 # Version history
 
+## 3.117.9
+
+- Map right-click: **Center on Destination** jumps the view to where the current walk ends (walk-to target, loop start or next lair)
+
 ## 3.117.8
 
 - After opening a door the walk re-sneaks and handles a monster that just walked in before stepping through

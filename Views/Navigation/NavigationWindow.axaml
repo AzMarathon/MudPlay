@@ -804,6 +804,9 @@
                         <Separator/>
                         <MenuItem Header="Center on Player"
                                   Command="{Binding CenterOnPlayerCommand}"/>
+                        <MenuItem Header="Center on Destination"
+                                  Command="{Binding CenterOnDestinationCommand}"
+                                  IsVisible="{Binding CanCenterOnDestination}"/>
                         <MenuItem Header="Center on…"
                                   Command="{Binding CenterOnSpecificCommand}"/>
                         <Separator/>

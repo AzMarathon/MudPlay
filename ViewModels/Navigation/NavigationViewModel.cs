@@ -923,7 +923,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return;
         RefreshPreviewPath();
     }
-    [ObservableProperty] private RoomKey? _destinationRoomKey;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCenterOnDestination))]
+    private RoomKey? _destinationRoomKey;
 
     // Rooms @where replies just located — each flashed green on the map for ~15s,
     // dropping independently as its own window elapses. Bound to
@@ -2564,6 +2566,21 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void CenterOnPlayer() => CenterOnPlayerRequested?.Invoke();
 
+    // Right-click → "Center on Destination", shown only while a walk is under way.
+    // DestinationRoomKey is the walk's end room — a walk-to target, or the loop's
+    // start / the next lair when a loop or Auto-Lair walks there first — and on a
+    // path-item detour the final room rather than the shop / giver waypoint. Same
+    // re-root as "Center on…", so the view holds there, then rebounds to the player.
+    public bool CanCenterOnDestination => IsWalking && DestinationRoomKey is not null;
+
+    [RelayCommand]
+    private void CenterOnDestination()
+    {
+        if (DestinationRoomKey is not { } dest) return;
+        _services.Log?.Info("Navigation", $"map centred on the walk's destination {dest}");
+        OnFloorChangeRequested(dest);
+    }
+
     // Right-click → "Center on…". Opens the two-int (map / room) input
     // dialog; on commit, routes through OnFloorChangeRequested so the BFS
     // layout rebuilds from the chosen room and the map centres on it.
@@ -3051,7 +3068,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     // ----- Walker controls (mirrored on the top-right Run/Stop) -----
 
-    [ObservableProperty] private bool _isWalking;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCenterOnDestination))]
+    private bool _isWalking;
 
     [RelayCommand]
     private void StopWalk() => _services.Walker.Stop("user stop from Navigation");
