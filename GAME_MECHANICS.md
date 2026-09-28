@@ -4529,6 +4529,18 @@ How MajorMUD quests are structured in the game data (kill steps, NPC dialogue st
   - The `@quest <name|flag>` remote reply marks the same way from its live read (every crawled band on a read flag, not just level-eligible ones — the flag value proves it).
   - `@quest update` runs the sync's read-and-mark on demand (no daily gate, no opt-in).
 
+### Quest stat rewards — `giveability` vs `addability`
+*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (textblock `giveability` / `addability` / `removeability`), CONFIRMED to follow 2026-09-27 (user); Paradigm CONFIRMED 2026-09-27 (user) · Realm: differs*
+
+- **A character has 30 innate ability slots** (an ability code and a value each). Textblocks write quest flags and quest rewards into them.
+- **Stock: `giveability <code> <value>` keeps the higher value.** If the character already has that code, the slot takes the larger of the old and new values; otherwise it takes a free slot. So two quests that `giveability` the same code don't stack — only the highest applies.
+- **Stock: `addability <code> <value>` adds.** If the code is already there, the value is added to it; otherwise it takes a free slot. Quest stat rewards use this almost everywhere (e.g. the class-tier +mana / +backstab damage / +stealth rewards), so on Stock those **do stack**.
+- **Stock: `removeability <code>`** clears the slot.
+- **Paradigm: quest stat rewards all stack** *([CONFIRMED] 2026-09-27, user)*.
+
+**Client use:**
+- `QuestCrawler` counts each `addability` to a non-flag code as a stat reward, and `CompletedQuestBonuses` adds them all up — right for both realms. Every `giveability` target is read as a quest flag, never summed as a stat, which matches Stock's keep-the-highest rule.
+
 ### Quest kill steps & monster placement
 *Status: CONFIRMED 2026-07-16 (user)*
 
