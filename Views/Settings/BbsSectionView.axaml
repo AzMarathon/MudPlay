@@ -266,8 +266,8 @@
                             <TextBlock Classes="ProfileGroupHeader" HorizontalAlignment="Left" Margin="0,2,0,2"
                                        Foreground="{Binding RealmAccentBrush}"
                                        Text="{Binding SelectedRealmName, StringFormat='Realm: {0}'}"/>
-                            <TextBlock Classes="FieldLabel" TextWrapping="Wrap" Margin="0,2,0,0"
-                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                            <TextBlock Classes="FieldLabel" TextWrapping="Wrap" Margin="0,4,0,2"
+                                       Foreground="{StaticResource ChromeFgBrush}" FontWeight="SemiBold"
                                        Text="{Binding RealmCharactersText}"
                                        ToolTip.Tip="The characters playing this realm. Change a character's realm with Plays on realm below (the loaded one) or Move to realm in Profile Management."/>
                             <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
