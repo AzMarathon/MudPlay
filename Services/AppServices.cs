@@ -4185,9 +4185,9 @@ public sealed class AppServices
         CastDirector.SetTokenBuffPauseGate(() => Tokens.IsBuffPausedForToken);
         // Sneak keeping: one rule for every automation that would end a sneak
         // (GAME_MECHANICS "What ends a sneak"). Fighting here with a backstab owed →
-        // hold until it fires; sneaking past hostiles we won't fight (auto-combat off,
-        // or the room suppressed) → hold until a room without them, where the action
-        // can go out and we re-sneak; our sneaked move in flight → hold until it lands
+        // hold until it fires; sneaking past NPCs we won't fight (auto-combat off, or
+        // the room suppressed) → hold until a room with none (a re-sneak won't take
+        // with any NPC here), where the action can go out and we re-sneak; our sneaked move in flight → hold until it lands
         // (a command sent then lands in the room we're entering — report
         // paradigm-20260927-121050). A backstab counts as owed only with someone here
         // to open on: the combat engine reports it pending whenever we're sneaking.
@@ -4196,7 +4196,7 @@ public sealed class AppServices
             autoSneak:    () => ReadAutoModeFlag(d => d.AutoSneak),
             backstabOwed: () => Combat.IsBackstabRoundUnresolved || (Combat.IsBackstabOpenerPending() && FightingHere()),
             moveInFlight: () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending,
-            hostileHere:  () => CombatTracker.HasHostileMonster,
+            npcHere:      () => CombatTracker.HasRoomNpc,
             fightingHere: FightingHere,
             inCombat:     () => PlayerState.InCombat,
             stealthed:    () => Stealth?.IsStealthed == true,
@@ -4206,8 +4206,11 @@ public sealed class AppServices
         RoomTracker.StateChanged += _ => SneakGuard.Poll();
         Profile.ProfileLoaded += _ => SneakGuard.Reset();
         // In-between spells (heals included, per the user) wait on the same rule;
-        // debuffs have their own backstab gate (CombatSpellChooser.WouldBackstab).
+        // debuffs have their own backstab gate (CombatSpellChooser.WouldBackstab). A
+        // flee from the health gates is the exception: its emergency heal goes out,
+        // and before the re-sneak (user, 2026-09-28).
         CastDirector.SetStealthMaintenanceDeferGate(() => SneakGuard.Holds);
+        CastDirector.SetEmergencyHealBypassProbe(() => Health.IsGateFleeing);
         // Suppress ALL auto-casts while the `train stats` full-screen menu has
         // character-mode input armed — otherwise a cast's letters get typed raw
         // into the character-creation form (the "bles" family-name corruption).
@@ -4470,6 +4473,7 @@ public sealed class AppServices
         // detects silent loss on room change, and sends `sneak` /
         // `hide` per AutoMode toggles.
         Stealth = new Game.Stealth.StealthManager(Router, PlayerState, Log);
+        Stealth.SetSneakHoldForHeal(() => Health.IsGateFleeing && CastDirector.IsEmergencyHealDue);
         // Sneak keeping at the engine send gate: a command that can wait (an invite, a
         // say) is held while SneakGuard keeps the sneak, and any sent command that ends
         // a sneak marks it broken so the next move re-sneaks.

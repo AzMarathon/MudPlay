@@ -2710,7 +2710,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Sneak keeping** (`Game.Stealth.SneakGuard`; **Client policy**, user 2026-09-28). The client holds its own sneak-ending automation in three cases:
   - **A backstab is owed or unresolved here:** hold until it fires.
   - **Our sneaked move is in flight:** hold until it lands.
-  - **Sneaking past hostiles we won't fight** (auto-combat off, or the room suppressed): hold until a room without them.
+  - **Sneaking past NPCs we won't fight** (auto-combat off, or the room suppressed): hold until a room with no NPCs, since a re-sneak won't take with one there. There the held actions go out and we re-sneak.
   - **Held:**
     - automatic gear swaps (`EquipmentManager.HoldGear`), re-run when the hold lifts;
     - room search;
@@ -2718,7 +2718,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     - in-between spells, heals included;
     - optional rests (a rest the gates call for goes out anyway);
     - invites and say-channel chatter, queued at the engine send gate.
-  - **Not held:** walk steps the route can't skip (doors, traps, room commands, winches, hidden-exit search) and their `.@party` / `.@trap` relays, plus `.@panic`.
+  - **Not held:** walk steps the route can't skip (doors, traps, room commands, winches, hidden-exit search) and their `.@party` / `.@trap` relays, plus `.@panic` (the leader's hang-up call; followers just hang up).
+  - **Health-gate flee:** while fleeing on the run-if-below HP / MA gates (`HealthManager.IsGateFleeing`; not a hit-and-run or failed-backstab run), the emergency heal isn't held, and the re-sneak waits until it has gone out (`StealthManager.SetSneakHoldForHeal`).
   - **Marking the sneak broken:** any client command on the "What ends a sneak" list sets the sneak broken (`StealthManager.NoteSneakBroken`, via the send gate and the walker's room-command hook), so the next move re-sneaks.
   - **Ordering:** pre-move gear now goes out before the `sn`.
   - **Replies:** while stealthed, a reply to an @-command said aloud goes back by telepath.

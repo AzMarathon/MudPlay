@@ -2371,6 +2371,33 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void EmergencyHeal_SneakKeeping_GoesOutWhileFleeingOnTheGates()
+    {
+        // Fleeing on the run-if-below gates, the emergency heal isn't held for the
+        // sneak; the re-sneak waits for it instead (user, 2026-09-28).
+        using CureHarness h = new();
+        h.DeferMaintenanceForStealth = true;
+        bool gateFleeing = false;
+        h.Director.SetEmergencyHealBypassProbe(() => gateFleeing);
+        h.Spells.EmergencyHealSpell = "lastresort";
+        h.Health.EmergencyHealTrigger = 20;
+        h.State.MaxHp = 100;
+        h.State.Hp = 15;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+
+        Assert.True(h.Director.IsEmergencyHealDue);
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        gateFleeing = true;
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "lastresort" }, h.CastsSent);
+    }
+
+    [Fact]
     public void Cure_SneakMaintenanceDefer_Held()
     {
         // Cures defer too (user chose max sneak preservation): a poison cure is

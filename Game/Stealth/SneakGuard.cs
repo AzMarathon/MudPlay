@@ -15,8 +15,9 @@ public enum SneakHold
     // Our sneaked move is in flight: a command sent now lands in the room we're
     // entering, before its "Sneaking..." confirms us.
     MoveInFlight,
-    // Sneaking past hostiles we won't fight: hold until a room with none, where the
-    // action can go out and we re-sneak straight after.
+    // Sneaking past NPCs we won't fight: hold until a room with none, where the action
+    // can go out and we re-sneak straight after (a sneak won't take with any NPC in
+    // the room).
     UntilClearRoom,
 }
 
@@ -33,7 +34,7 @@ public sealed class SneakGuard
     private readonly Func<bool> _autoSneak;
     private readonly Func<bool> _backstabOwed;
     private readonly Func<bool> _moveInFlight;
-    private readonly Func<bool> _hostileHere;
+    private readonly Func<bool> _npcHere;
     private readonly Func<bool> _fightingHere;
     private readonly Func<bool> _inCombat;
     private readonly Func<bool> _stealthed;
@@ -44,13 +45,13 @@ public sealed class SneakGuard
 
     public SneakGuard(
         Func<bool> autoSneak, Func<bool> backstabOwed, Func<bool> moveInFlight,
-        Func<bool> hostileHere, Func<bool> fightingHere, Func<bool> inCombat, Func<bool> stealthed,
+        Func<bool> npcHere, Func<bool> fightingHere, Func<bool> inCombat, Func<bool> stealthed,
         LogService? log = null)
     {
         _autoSneak = autoSneak;
         _backstabOwed = backstabOwed;
         _moveInFlight = moveInFlight;
-        _hostileHere = hostileHere;
+        _npcHere = npcHere;
         _fightingHere = fightingHere;
         _inCombat = inCombat;
         _stealthed = stealthed;
@@ -73,7 +74,7 @@ public sealed class SneakGuard
             if (_moveInFlight()) return SneakHold.MoveInFlight;
             // Only while there's a sneak to keep: once a rest or a loud entry has ended
             // it, holding would protect nothing.
-            if (_hostileHere() && !_fightingHere() && _stealthed()) return SneakHold.UntilClearRoom;
+            if (_npcHere() && !_fightingHere() && _stealthed()) return SneakHold.UntilClearRoom;
             return SneakHold.None;
         }
     }
@@ -129,7 +130,7 @@ public sealed class SneakGuard
     {
         SneakHold.UntilBackstab => "until the backstab fires",
         SneakHold.MoveInFlight => "while our sneaked move lands",
-        SneakHold.UntilClearRoom => "sneaking past hostiles, until a room without them",
+        SneakHold.UntilClearRoom => "sneaking past NPCs, until a room without any",
         _ => "nothing held",
     };
 }

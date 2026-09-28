@@ -1224,7 +1224,7 @@ An engine only acts while it's on, and each has a matching Settings tab for its 
 When **Auto-Sneak is on** it times those around your stealth.
 
 - **About to backstab.** With Backstab on, in a room you're going to fight, everything that can wait holds until your `bs` has gone out: in-between spells (heals included), gear swaps, the room search and light changes. Anything first would break the sneak and spoil the surprise. Once the opener fires, the fight carries on as normal.
-- **Sneaking past.** With **Auto-Combat off** (or combat suppressed in a room), sneaking through a room with hostiles you won't fight, the same things hold until you reach a room without them. There they go out and you re-sneak straight after. This covers:
+- **Sneaking past.** With **Auto-Combat off** (or combat suppressed in a room), sneaking through a room with NPCs you won't fight, the same things hold until you reach a room with no NPCs (a sneak won't take with one there). There they go out and you re-sneak straight after. So in an empty room, a buff or heal your settings call for is cast and you re-sneak before moving on. This covers:
   - buffs, cures and heals;
   - automatic gear swaps (re-applied then);
   - the room search;
@@ -1234,12 +1234,13 @@ When **Auto-Sneak is on** it times those around your stealth.
   - chat such as level-up announcements or ailment calls, which are queued and sent then.
 - **Mid-step.** While a sneaked move is on its way, casts and the rest wait until the next room appears. The game carries out commands in order, so anything sent then would land in the room you're entering, unseen.
 - **Walk steps still happen.** A door, a trap, a lever or winch, or a hidden exit the route needs is done anyway, along with its party relay. MudPlay then re-sneaks before the next move.
+- **Emergency heal while fleeing.** When your *run if below* HP / mana settings have you fleeing (not a hit-and-run or a failed backstab's run), the *emergency heal* slot fires as soon as it's needed, and the re-sneak waits until it has gone out.
 - **Rests you need still happen.** A rest your *rest if below* settings call for goes out even if it ends the sneak. On Paradigm, a race or class with **ShadowRest** sneaks first and then rests, so the rest keeps you hidden.
 - **Replies stay quiet.** While you're sneaking or hidden, a reply to an @-command someone said aloud goes back by telepath instead of a say.
 - **Gear before the sneak.** A boss / lair gear set or backstab gear for the next room goes on before the sneak, never after it.
 - **See-hidden fights.** If a see-hidden monster forces a fight (with *Clear hostiles when sneak broken by see-hidden monster* on), the now-cleared room becomes the place the held actions fire, you re-sneak, and the walk continues.
 
-A flee or an emergency hangup is never held. Turn Auto-Sneak **off** and none of this applies: everything goes out on schedule, wherever you are.
+A flee or an emergency hangup is never held. With **Use @panic while leading** on, a leader's hangup says `@panic` first (telling the party to hang up too), even though it ends the sneak; a follower just hangs up. Turn Auto-Sneak **off** and none of this applies: everything goes out on schedule, wherever you are.
 
 ## Manual one-shots and Reset States
 

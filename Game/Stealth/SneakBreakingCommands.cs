@@ -24,9 +24,10 @@ public static class SneakBreakingCommands
         "rest", "med", "medi", "meditate",
     };
 
-    // Say-channel relays that carry a walk step or a cry for help. They go out even
-    // while a sneak is being kept: a step relay belongs to a step that ends the sneak
-    // anyway (teleport / boat keyword, trap, token use), and @panic asks for a heal.
+    // Say-channel relays that carry a walk step or a flight. They go out even while a
+    // sneak is being kept: a step relay belongs to a step that ends the sneak anyway
+    // (teleport / boat keyword, trap, token use), and @panic tells the party to hang
+    // up, which we do right after.
     private static readonly string[] MustSendRelays = { ".@party ", ".@trap ", ".@panic" };
 
     // True when sending this command ends a sneak. A ShadowRest character's rest
@@ -43,8 +44,8 @@ public static class SneakBreakingCommands
 
     // True when the command can simply wait while a sneak is being kept, and go out
     // unchanged later: party invites and say-channel chatter (level-up, ailment and
-    // hazard calls, @-command replies), but not the relays a walk step or a cry for
-    // help needs.
+    // hazard calls, @-command replies), but not the relays a walk step or a flight
+    // needs.
     public static bool CanWait(string command)
     {
         string c = command.Trim();

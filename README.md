@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.116.36**
-> - Auto-Sneak keeps the sneak: gear swaps, searches, light changes, in-between spells, optional rests, invites and chat wait until a backstab fires, or until a room without the hostiles you're sneaking past
+> **Version 3.116.37**
+> - Auto-Sneak keeps the sneak: gear swaps, searches, light changes, in-between spells, optional rests, invites and chat wait until a backstab fires, or until a room with no NPCs, then re-sneak
+> - Fleeing on the health gates, the emergency heal fires before the re-sneak
 > - Gear for the next room goes on before the sneak; a command that ends the sneak makes the next move re-sneak; replies go by telepath while stealthed
 > - ShadowRest (race or class) sneaks before resting; a poisoned Paradigm character meditates instead of waiting out the poison
 >

@@ -428,10 +428,26 @@ public sealed class StealthManager : IDisposable
 
     private int _restSneakTries;
 
+    // While true (fleeing with the emergency heal due), the auto re-sneak waits: the
+    // heal ends a sneak, so it goes first and the re-sneak follows it (CastFired →
+    // ReSneakAfterCast). It never holds a flee step — the step just goes unsneaked.
+    private Func<bool>? _holdSneakForHeal;
+    private bool _heldForHealLogged;
+
+    public void SetSneakHoldForHeal(Func<bool> hold) => _holdSneakForHeal = hold;
+
     private bool TryBeginAutoSneak(string reason)
     {
         if (_isAutoSneakEnabled?.Invoke() != true) return false;
         if (_state.InCombat) return false;
+        if (_holdSneakForHeal?.Invoke() == true)
+        {
+            if (!_heldForHealLogged)
+                _log?.Info(LogCategory, $"auto-sneak waits ({reason}): the emergency heal goes first");
+            _heldForHealLogged = true;
+            return false;
+        }
+        _heldForHealLogged = false;
         if (_stateValue != StealthState.Idle && _stateValue != StealthState.Failed) return false;
 
         // Any NPC in the room prevents sneak from taking — don't burn an

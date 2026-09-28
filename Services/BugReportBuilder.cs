@@ -520,6 +520,10 @@ public static class BugReportBuilder
             Kv(sb, "Sneak keeping — queued", string.Join(" · ", svc.SneakGuard.Queued.Select(q => $"'{q.Command}'")));
         if (svc.Equipment.HeldGearKinds.Count > 0)
             Kv(sb, "Sneak keeping — gear held", string.Join(", ", svc.Equipment.HeldGearKinds));
+        if (svc.Health.IsGateFleeing)
+            Kv(sb, "Sneak keeping — gate flee", svc.CastDirector.IsEmergencyHealDue
+                ? "emergency heal due; it goes out, the re-sneak waits for it"
+                : "no emergency heal due; re-sneak free");
         Kv(sb, "Hit and run", svc.Health.HitAndRunRuns > 0
             ? $"{svc.Health.HitAndRunRuns} of {Math.Max(1, svc.Resolver.Resolve<Models.Profile.CombatSettings>("Combat").HitAndRunMaxRuns)} run(s) since the last backstab"
             : "no runs since the last backstab");

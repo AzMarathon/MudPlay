@@ -668,6 +668,13 @@ public sealed class HealthManager : IDisposable
     // which stays true for the rest of the combat even after the retreat ends.
     public bool IsFleeing => _fleeEngine is not null;
 
+    // A flee the run-if-below HP / MA gates started — not a hit-and-run or a failed
+    // backstab's run. Only this one lets the emergency heal cut ahead of the
+    // re-sneak (user, 2026-09-28).
+    public bool IsGateFleeing => _fleeEngine is not null && _fleeFromGates;
+    private bool _fleeFromGates;
+    private bool _deferredFleeFromGates;
+
     // The last confirmed room before the current one (RoomTracker history) — the
     // Backward flee's fallback when there's no trail to the engine's origin (we're
     // standing on it). Null in tests / when unknown.
@@ -1052,7 +1059,8 @@ public sealed class HealthManager : IDisposable
             && IsMovePending?.Invoke() != true)
         {
             _deferredFleeReason = null;
-            _post(() => TryFlee(stuckReason));
+            bool stuckFromGates = _deferredFleeFromGates;
+            _post(() => TryFlee(stuckReason, stuckFromGates));
         }
 
         if (!_state.InCombat)
@@ -1694,7 +1702,7 @@ public sealed class HealthManager : IDisposable
             }
             return;
         }
-        TryFlee(reason);
+        TryFlee(reason, fromGates: true);
     }
 
     // Public entry for CombatManager's backstab-failure flee (wired via
@@ -1757,7 +1765,7 @@ public sealed class HealthManager : IDisposable
     // engine, queues the full flee route, optionally sends `break`, and dispatches
     // the first step; the remaining steps advance one per NoteRoomChanged. Returns
     // whether a flee started (or is held for the move in flight to land).
-    private bool TryFlee(string reason)
+    private bool TryFlee(string reason, bool fromGates = false)
     {
         // One retreat at a time: a second one started mid-flight plans from a room we
         // haven't confirmed leaving and sends its own move on top.
@@ -1783,6 +1791,7 @@ public sealed class HealthManager : IDisposable
         if (_fleeEngine is null && IsMovePending?.Invoke() == true)
         {
             _deferredFleeReason = reason;
+            _deferredFleeFromGates = fromGates;
             _log?.Combat(LogCategory, $"flee waits for the move in flight to land — {reason}");
             return true;
         }
@@ -1805,6 +1814,7 @@ public sealed class HealthManager : IDisposable
         engine.PauseForFlee($"flee — {reason}");
 
         _fleeEngine = engine;
+        _fleeFromGates = fromGates;
         _fleeQueue.Clear();
         foreach (Map.Direction d in steps) _fleeQueue.Enqueue(d);
 
@@ -2104,7 +2114,7 @@ public sealed class HealthManager : IDisposable
                 _log?.Combat(LogCategory, $"held flee dropped — no hostile where the move landed ({heldReason})");
             else
             {
-                TryFlee(heldReason);
+                TryFlee(heldReason, _deferredFleeFromGates);
                 startedHeldFlee = _fleeEngine is not null;
             }
         }

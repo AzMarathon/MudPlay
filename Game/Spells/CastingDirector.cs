@@ -579,6 +579,12 @@ public sealed class CastingDirector : IDisposable
         _deferMaintenanceWhileStealthed = shouldDefer;
     }
 
+    // While true (a flee from the health gates), the emergency self-heal isn't held
+    // for the sneak — it fires before we re-sneak.
+    private Func<bool>? _emergencyHealBypass;
+
+    public void SetEmergencyHealBypassProbe(Func<bool> bypass) => _emergencyHealBypass = bypass;
+
     // Wire the item-cast buff bridge. A Bless slot may hold an ItemCastToken
     // (#<item name>) instead of a cast-code; when picked, the buff is produced by
     // equipping + using an item rather than a direct cast. durationOf resolves a
@@ -1531,13 +1537,15 @@ public sealed class CastingDirector : IDisposable
 
         // Sneak keeping (Game.Stealth.SneakGuard): every in-between cast ends a sneak,
         // so while a backstab is still owed here, our sneaked move is landing, or we're
-        // sneaking past hostiles we won't fight, the in-between casts wait — heals
-        // included (user, 2026-09-28): until the backstab fires, or until a room without
-        // hostiles where the cast can go out and StealthManager.ReSneakAfterCast (on
-        // CastFired) re-sneaks. Debuffs keep their own backstab gate in the combat
-        // engine. It holds while resting too: a ShadowRest character rests stealthed
-        // beside hostiles, and a cast there would give it away.
+        // sneaking past NPCs we won't fight, the in-between casts wait — heals included
+        // (user, 2026-09-28): until the backstab fires, or until a room without NPCs
+        // where the cast can go out and StealthManager.ReSneakAfterCast (on CastFired)
+        // re-sneaks. Debuffs keep their own backstab gate in the combat engine. It holds
+        // while resting too: a ShadowRest character rests stealthed beside NPCs, and a
+        // cast there would give it away. A flee from the health gates lets the emergency
+        // heal through; StealthManager holds its re-sneak until the heal has gone out.
         bool deferSneakMaintenance = _deferMaintenanceWhileStealthed?.Invoke() == true;
+        bool emergencyHealBypass = _emergencyHealBypass?.Invoke() == true;
 
         foreach (SpellCategory category in PrioritisedCategories(spells))
         {
@@ -1568,7 +1576,8 @@ public sealed class CastingDirector : IDisposable
             // Sneak keeping: a cast came due while the sneak is being kept — hold it
             // (see deferSneakMaintenance above). Logged only here (where a
             // candidate was actually produced) so the hold isn't spammed every poll.
-            if (deferSneakMaintenance && category is not SpellCategory.Debuffing)
+            if (deferSneakMaintenance && category is not SpellCategory.Debuffing
+                && !(emergencyHealBypass && category == SpellCategory.EmergencyHeal))
             {
                 _log?.Combat(LogCategory,
                     $"sneak kept: {cand.Spell} ({category}) held — the backstab is still owed, our sneaked move is landing, or we're sneaking past hostiles.");
@@ -1814,6 +1823,10 @@ public sealed class CastingDirector : IDisposable
     }
 
     // ----- Self heal --------------------------------------------------
+
+    // True when the emergency self-heal's trigger is met (and heals are on).
+    public bool IsEmergencyHealDue =>
+        _isEnabled() && PickEmergencySelfHeal(_readSpells(), _readHealth()) is not null;
 
     // Last-resort self-save. Deliberately does NOT gate on ManaClearsHealFloor
     // (unlike Major/Minor below) — an emergency spends whatever mana is left

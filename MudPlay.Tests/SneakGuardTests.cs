@@ -8,21 +8,21 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // Sneak keeping (user, 2026-09-28): a room we fight in holds sneak-ending automation
-// until the backstab fires; sneaking past hostiles we won't fight holds it until a
-// room without them; our sneaked move in flight holds it until it lands. Plain
+// until the backstab fires; sneaking past NPCs we won't fight holds it until a room
+// with none; our sneaked move in flight holds it until it lands. Plain
 // commands queue and go out once the hold lifts; gear swaps re-run.
 public sealed class SneakGuardTests
 {
     private sealed class World
     {
-        public bool AutoSneak = true, BackstabOwed, MoveInFlight, Hostile, Fighting, InCombat, Stealthed = true;
+        public bool AutoSneak = true, BackstabOwed, MoveInFlight, Npc, Fighting, InCombat, Stealthed = true;
         public readonly List<string> Sent = new();
         public readonly SneakGuard Guard;
 
         public World()
         {
             Guard = new SneakGuard(() => AutoSneak, () => BackstabOwed, () => MoveInFlight,
-                () => Hostile, () => Fighting, () => InCombat, () => Stealthed);
+                () => Npc, () => Fighting, () => InCombat, () => Stealthed);
             Guard.SetWireSender(Sent.Add);
         }
     }
@@ -30,18 +30,18 @@ public sealed class SneakGuardTests
     [Fact]
     public void BackstabOwed_HoldsUntilItFires()
     {
-        World w = new() { BackstabOwed = true, Hostile = true, Fighting = true };
+        World w = new() { BackstabOwed = true, Npc = true, Fighting = true };
         Assert.Equal(SneakHold.UntilBackstab, w.Guard.Current);
         w.BackstabOwed = false;
         Assert.Equal(SneakHold.None, w.Guard.Current);   // fighting now; nothing to keep
     }
 
     [Fact]
-    public void SneakingPastHostiles_HoldsUntilARoomWithoutThem()
+    public void SneakingPastNpcs_HoldsUntilARoomWithNone()
     {
-        World w = new() { Hostile = true };
+        World w = new() { Npc = true };
         Assert.Equal(SneakHold.UntilClearRoom, w.Guard.Current);
-        w.Hostile = false;
+        w.Npc = false;
         Assert.Equal(SneakHold.None, w.Guard.Current);
     }
 
@@ -57,22 +57,22 @@ public sealed class SneakGuardTests
     [Fact]
     public void NothingHeld_WhenTheSneakIsAlreadyGone_OrWeAreFighting()
     {
-        Assert.Equal(SneakHold.None, new World { Hostile = true, Stealthed = false }.Guard.Current);
-        Assert.Equal(SneakHold.None, new World { Hostile = true, InCombat = true }.Guard.Current);
-        Assert.Equal(SneakHold.None, new World { Hostile = true, AutoSneak = false }.Guard.Current);
+        Assert.Equal(SneakHold.None, new World { Npc = true, Stealthed = false }.Guard.Current);
+        Assert.Equal(SneakHold.None, new World { Npc = true, InCombat = true }.Guard.Current);
+        Assert.Equal(SneakHold.None, new World { Npc = true, AutoSneak = false }.Guard.Current);
     }
 
     [Fact]
     public void QueuedCommands_GoOutWhenTheHoldLifts()
     {
-        World w = new() { Hostile = true };
+        World w = new() { Npc = true };
         w.Guard.Poll();
         Assert.True(w.Guard.TakeIfHeld("invite Raijin"));
         Assert.Empty(w.Sent);
 
         int released = 0;
         w.Guard.Released += () => released++;
-        w.Hostile = false;
+        w.Npc = false;
         w.Guard.Poll();
 
         Assert.Equal(new[] { "invite Raijin" }, w.Sent);
