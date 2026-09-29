@@ -45,10 +45,14 @@ public sealed class AutoSellManagerTests
         public void Map(string name, int number, bool sell, int keep = 0)
             => _map[name] = (number, sell, keep);
 
+        // Like the app's resolver, a stacked entry ("2 dagger") resolves to its item.
         private AutoSellManager.ResolvedSell? Resolve(string entry)
-            => _map.TryGetValue(entry.Trim(), out (int Number, bool Sell, int Keep) v)
-                ? new AutoSellManager.ResolvedSell(v.Number, entry.Trim(), v.Sell, v.Keep)
+        {
+            string name = CountedCommand.SplitLeadingCount(entry.Trim()).Name;
+            return _map.TryGetValue(name, out (int Number, bool Sell, int Keep) v)
+                ? new AutoSellManager.ResolvedSell(v.Number, name, v.Sell, v.Keep)
                 : null;
+        }
 
         public void Feed(string line) => Router.Dispatch(new LineExtractor.EmittedLine(
             line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
@@ -94,6 +98,19 @@ public sealed class AutoSellManagerTests
         h.Feed("You sold 3 dagger for 15 gold crowns.");
 
         Assert.Single(h.SentText);
+    }
+
+    // A stack is one carried entry carrying its count; every copy in it sells
+    // (report paradigm-20260929-015929).
+    [Fact]
+    public void StackedEntry_CountsEveryCopy()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.Map("crude stone club", 1, sell: true);
+        h.Carried.Add("2 crude stone club");
+
+        h.EnterShop();
+        Assert.Equal(new[] { "sell 2 crude stone club" }, h.SentText);
     }
 
     [Fact]

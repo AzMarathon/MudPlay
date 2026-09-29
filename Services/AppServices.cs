@@ -5430,8 +5430,11 @@ public sealed class AppServices
             level: () => PlayerStats.Level,
             defaultGearBonus: DefaultGearPoolBonus,
             defaultWorn: DefaultSetWorn,
+            // A stat already on its way (auto-train's after a level-up) answers the
+            // same question — don't send a second (report paradigm-20260928-231447).
             canCheckNow: () => PlayerState.HasPromptData && !PlayerState.InCombat
-                && !Equipment.IsApplyingSet && !TrainerMenu.MenuOwnsKeyboard,
+                && !Equipment.IsApplyingSet && !TrainerMenu.MenuOwnsKeyboard
+                && !Stats.ScreenExpected,
             sendStat: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("stat\r")),
             log: Log);
         Tick.HeartbeatElapsed += PoolBaseline.Poll;
@@ -10704,7 +10707,9 @@ public sealed class AppServices
         foreach (string entry in Inventory.Snapshot.CarriedItems)
         {
             if (ResolveAutoSellItem(entry) is not { Sell: true } item) continue;
-            carried[item.Number] = carried.TryGetValue(item.Number, out var g) ? (g.Item, g.Count + 1) : (item, 1);
+            // A stack is one entry carrying its count ("2 crude stone club").
+            int copies = Game.Inventory.CountedCommand.SplitLeadingCount(entry).Count;
+            carried[item.Number] = carried.TryGetValue(item.Number, out var g) ? (g.Item, g.Count + copies) : (item, copies);
         }
         var result = new System.Collections.Generic.List<Game.Inventory.SellDetourManager.Candidate>();
         foreach ((int number, (Game.Inventory.AutoSellManager.ResolvedSell item, int count)) in carried)

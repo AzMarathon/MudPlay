@@ -199,6 +199,24 @@ public sealed class StatParserTests
         Assert.Equal(0, stats.Strength);
     }
 
+    // A stat already on its way lets another caller wait for its screen instead of
+    // sending a second (report paradigm-20260928-231447).
+    [Fact]
+    public void ScreenExpected_FromOutboundStat_UntilTheWindowLapses()
+    {
+        PlayerStats stats = new();
+        DateTime t = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        StatParser parser = new(stats) { NowProvider = () => t };
+        parser.ExpectingScreenWindow = TimeSpan.FromSeconds(5);
+        Assert.False(parser.ScreenExpected);
+
+        parser.ObserveOutbound(Encoding.Latin1.GetBytes("stat\r"));
+        Assert.True(parser.ScreenExpected);
+
+        t = t.AddSeconds(6);
+        Assert.False(parser.ScreenExpected);
+    }
+
     [Fact]
     public void LivesRemainingLine_UpdatesLivesEvenWithoutStatGate()
     {

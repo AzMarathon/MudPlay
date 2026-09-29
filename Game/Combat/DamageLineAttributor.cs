@@ -117,6 +117,11 @@ public static partial class DamageLineAttributor
         }
 
         target = FindTarget(pre, rest, names);
+        // A named attacker with no victim named is the victim's own view of the hit —
+        // the room sees "... at <victim> for N damage!" instead ("The mad wizard throws a
+        // flask, which explodes for 5 damage!", report paradigm-20260928-231609; Stock
+        // message 2431 has the same pair).
+        if (source is not null && source != Self && target is null) target = Self;
         result = new DamageAttribution(source, target, amount);
         return true;
     }

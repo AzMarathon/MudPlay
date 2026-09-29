@@ -485,9 +485,9 @@ public sealed class RoundDamageTrackerTests
         h.Feed("You impale goblin for 12 damage!");
         Assert.NotNull(h.Settle);
 
-        // The timer armed on the first line fires 500 ms after it: only 400 ms of quiet,
+        // The timer armed on the first line fires 250 ms after it: only 150 ms of quiet,
         // so it waits out the rest.
-        h.Now = h.Now.AddMilliseconds(400);
+        h.Now = h.Now.AddMilliseconds(150);
         h.Settle!();
         Assert.Empty(h.Completed);
 
@@ -513,6 +513,23 @@ public sealed class RoundDamageTrackerTests
         RoundSummary r = Assert.Single(h.Completed);
         Assert.Equal(8, r.DamageDealt);
         Assert.Equal(3, r.DamageTaken);
+    }
+
+    // The room clearing ends the round there and then: the walker moves on in the same
+    // instant, so waiting for quiet printed the totals after our next move
+    // (report paradigm-20260928-232024).
+    [Fact]
+    public void RoomClearing_ClosesTheRoundAtOnce()
+    {
+        using Harness h = new(withScheduler: true);
+        h.State.InCombat = true;
+        h.Feed("You surprise skewer goblin for 61 damage!");
+        Assert.Empty(h.Completed);
+
+        h.State.InCombat = false;
+        RoundSummary r = Assert.Single(h.Completed);
+        Assert.Equal(61, r.DamageDealt);
+        Assert.Null(h.Settle);
     }
 
     // The next round's first line fires the combat tick after that line opened its

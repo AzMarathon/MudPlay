@@ -49,6 +49,11 @@ public sealed partial class StatParser : IDisposable
 
     private DateTime? _windowOpenedAt;
     private DateTime? _healthWindowOpenedAt;
+
+    // A `stat` / `exp` went out and its screen hasn't been captured yet, so anything
+    // wanting a fresh stat screen can wait for this one instead of sending another.
+    public bool ScreenExpected =>
+        _windowOpenedAt is { } opened && NowProvider() - opened <= ExpectingScreenWindow;
     // Per-arm flag — flipped true the first time a field commits within the
     // current scan window, reset when the gate closes. Lets us close the gate
     // as soon as the in-game prompt returns AFTER capture, instead of waiting

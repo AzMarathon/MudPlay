@@ -6,6 +6,9 @@
 > - Session Stats' per-round damage counts only your own damage, no longer party members' hits or monster spells
 > - The Wire Inspector's Classified pane shows who each damage line was credited to, and the bug report carries the last 10 rounds
 > - The client's own yellow notices are never read as a monster arriving (a notice naming a dead monster made combat re-attack it)
+> - Auto-sell and sell detours count a stacked entry ("2 crude stone club") as every copy in it, so "Detour to sell if above" is reached
+> - A sell detour that's due but doesn't go says why in the program log and bug report
+> - After a level-up, the Default-gear check waits for auto-train's `stat` instead of sending a second
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

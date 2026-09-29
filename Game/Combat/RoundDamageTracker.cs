@@ -10,8 +10,10 @@ namespace MudPlay.Game.Combat;
 //
 // A round's lines arrive as one burst and the next round's burst is ~5 s away, so a
 // round closes once its lines have gone quiet for SettleWindow — its totals print
-// right after its own lines. Local death closes it at once (MarkCombatEnded), as
-// does *Combat Off* when no scheduler is bound. TickEngine's CombatTickElapsed heartbeat (OnCombatTick) is the
+// right after its own lines, before the between-round cast that waits for HP to
+// settle. The room clearing of hostiles closes it at once: the walker moves on in
+// that same instant, and nothing is left to hit in the round. Local death closes it
+// at once too (MarkCombatEnded), as does *Combat Off* when no scheduler is bound. TickEngine's CombatTickElapsed heartbeat (OnCombatTick) is the
 // backstop when no scheduler is bound; it fires on the NEXT round's first combat
 // line as well as on a 5 s timer, so it only closes a round at least MinTickAge
 // old — never the one that line just opened.
@@ -49,8 +51,10 @@ public sealed class RoundDamageTracker : IDisposable
     // lands in, with slack for the line arriving just after the tick.
     private static readonly TimeSpan OwnCastWindow = TimeSpan.FromSeconds(6);
 
-    // Quiet after a round's last line that ends it (see the header).
-    private static readonly TimeSpan SettleWindow = TimeSpan.FromMilliseconds(500);
+    // Quiet after a round's last line that ends it (see the header): well past any gap
+    // inside a burst, and under CastingDirector's 400 ms HP settle, so the totals come
+    // before the between-round cast (report paradigm-20260928-232024).
+    private static readonly TimeSpan SettleWindow = TimeSpan.FromMilliseconds(250);
 
     // The youngest round the combat tick may close.
     private static readonly TimeSpan MinTickAge = TimeSpan.FromSeconds(1);
@@ -227,10 +231,13 @@ public sealed class RoundDamageTracker : IDisposable
     // *Combat Off* comes mid-burst — on a kill, the other monsters' swings of the same
     // round follow it (report paradigm-20260928-230456) — so with the settle timer
     // bound the round is left to close on its own quiet. Without one it closes here.
-    // The room is clear of hostiles: the next round is a new fight's first.
+    // The room is clear of hostiles: the round ends now, and the next is a new fight's
+    // first.
     private void OnStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PlayerState.InCombat) && !_state.InCombat) _fightOver = true;
+        if (e.PropertyName != nameof(PlayerState.InCombat) || _state.InCombat) return;
+        _fightOver = true;
+        if (_current is not null) CloseCurrent(_now());
     }
 
     private void OnCombatStatus(MatchResult match)

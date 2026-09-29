@@ -24,6 +24,9 @@ public sealed class DamageLineAttributorTests
     [InlineData("The orc claws you with its pincers for 12 damage!", "orc", "You")]
     [InlineData("The orc bites your ankle for 12 damage!", "orc", "You")]
     [InlineData("The orc casts acid bolt on you for 12 damage!", "orc", "You")]
+    // The victim's own view names only the attacker.
+    [InlineData("The orc throws a flask, which explodes for 12 damage!", "orc", "You")]
+    [InlineData("The orc releases a bolt of force from its palm for 12 damage!", "orc", "You")]
     // Damage to us that names no source.
     [InlineData("Acid sears you for 12 damage!", null, "You")]
     [InlineData("You are poisoned for 12 damage!", null, "You")]

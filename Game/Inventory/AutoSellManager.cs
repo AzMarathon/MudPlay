@@ -145,16 +145,18 @@ public sealed class AutoSellManager : IDisposable
     }
 
     // Carried AutoSell items, grouped by item Number so duplicate name strings count
-    // as copies of one item.
+    // as copies of one item. A stack is one entry carrying its count ("2 crude stone
+    // club"), so each entry adds its own count (report paradigm-20260929-015929).
     private IEnumerable<(ResolvedSell Item, int Count)> CarriedFlagged()
     {
         Dictionary<int, (ResolvedSell Item, int Count)> groups = new();
         foreach (string entry in _carried())
         {
             if (_resolve(entry) is not { Sell: true } item) continue;
+            int copies = CountedCommand.SplitLeadingCount(entry).Count;
             groups[item.Number] = groups.TryGetValue(item.Number, out (ResolvedSell Item, int Count) g)
-                ? (g.Item, g.Count + 1)
-                : (item, 1);
+                ? (g.Item, g.Count + copies)
+                : (item, copies);
         }
         return groups.Values;
     }

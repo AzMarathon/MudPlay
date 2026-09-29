@@ -2733,7 +2733,7 @@ At **0 mana** a mana-costing action can't land (the server silently ignores it),
 [Round 3 taken: large orc 75, You 12, unknown 20]
 ```
 
-The round number starts again at 1 once the room is clear of hostiles, so each fight counts its own rounds. **Everyone in the room is listed every round** — you, your party, other players and monsters — even at 0, biggest numbers first. **unknown** only appears when a line couldn't be pinned to anyone. A round prints half a second after its last line, so the totals sit right under that round's combat.
+The round number starts again at 1 once the room is clear of hostiles, so each fight counts its own rounds. **Everyone in the room is listed every round** — you, your party, other players and monsters — even at 0, biggest numbers first. **unknown** only appears when a line couldn't be pinned to anyone. A round prints as soon as its lines stop (a quarter of a second), or the moment the room is clear, so the totals sit right under that round's combat, ahead of your next action.
 
 **Important notes:**
 - **How damage is credited.** Each "… for N damage!" line is read against the room's occupants (from *Also here:*), your party and "you". "Bob slashes large orc for 30" credits Bob, and "The large orc claws you with its pincers for 12" is damage you took from the orc.
