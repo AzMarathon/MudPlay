@@ -1,12 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.118.5**
+> **Version 3.118.6**
 > - Typed commands that end a sneak (search, doors, gear, casts) now count, so buffs aren't held on a sneak you'd already broken
 > - A buff held while sneaking goes out in the next NPC-free room: the walk pauses, casts, re-sneaks and carries on
 > - A buff held for a backstab goes out as soon as the backstab round is over, before the re-attack
 > - Walking out of a boss's room (e.g. `go manhole`) no longer starts its respawn timer
 > - Attack last re-announces after every announce that lands after yours (once the burst goes quiet), so you really land last
+> - New Settings → Other option: only auto-invite players seen while navigation is running
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -3461,6 +3461,12 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **Default:** On
 **What it does:** If you're a follower who gets stranded behind a moving leader, MudPlay automatically sends the `@comeback` request on your behalf.
 
+### Only auto-invite while navigation is running
+
+**Default:** Off
+**What it does:** Players you've flagged **Invite to party if seen** (Game Data → Players) are auto-invited only while navigation is running: a walk, loop or Auto-Lair (running or paused), or an auto-deposit or train trip. Standing idle, seeing them does nothing. Off, they're invited whenever you see them.
+**Important notes:** Re-inviting your own party (after a disconnect, a split or a trainer trip) isn't affected. Saved for this character.
+
 ### Show monster HP lookup
 
 **Default:** On

@@ -71,6 +71,26 @@ public sealed class AutoPartyManagerTests
         Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
     }
 
+    // Settings → Other "Only auto-invite while navigation is running": seen while idle,
+    // no invite; seen while a walk / loop / lair / deposit / train runs, invited.
+    [Fact]
+    public void AlsoHere_OnlyWhileNavigating_InvitesOnlyWhileNavigationRuns()
+    {
+        var (engine, router, players, _) = Setup();
+        SeedPlayer(players, "Raijin", inviteOnSeen: true);
+        bool navigating = false;
+        engine.OnlyWhileNavigating = true;
+        engine.SetNavigationProbe(() => navigating);
+
+        Dispatch(router, "Also here: Raijin.");
+        Assert.Empty(engine.LastSentForTests);
+
+        navigating = true;
+        Dispatch(router, "Also here: Raijin.");
+        byte[] sent = Assert.Single(engine.LastSentForTests);
+        Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
+    }
+
     [Fact]
     public void AlsoHere_UnflaggedPlayer_NoInvite()
     {

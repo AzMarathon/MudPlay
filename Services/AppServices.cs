@@ -7104,6 +7104,10 @@ public sealed class AppServices
             // Party follower = in a party and not the leader; gates the opt-in
             // follower pass-through stash (Cash → "stash as follower").
             isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader);
+        // Settings → Other "Only auto-invite while navigation is running": a walk,
+        // loop or auto-lair (running or paused), or an auto-deposit / train trip.
+        AutoParty.SetNavigationProbe(() =>
+            MovementControl.IsActive || AutoDeposit.IsRerouting || TrainerWalk.IsBusy || TrainFunding.IsBusy);
         // Return-leg light provisioning: the reroute owns the walker end-to-end, so
         // the reactive shop router is suppressed (IsRerouting) — this manager runs
         // its own bank -> shop -> origin light detour and needs the `i` dump to
@@ -10703,6 +10707,7 @@ public sealed class AppServices
         ComebackRequest.Enabled = dto.AutoRequestComebackWhenLeftBehind;
         // Auto-discard offload verb: hide <item> vs drop <item>.
         AutoDiscard.HideMode = dto.HideWhenDiscarding;
+        AutoParty.OnlyWhileNavigating = dto.AutoInviteOnlyWhileNavigating;
     }
 
     private void ResetOtherToDefaults()
@@ -10713,6 +10718,7 @@ public sealed class AppServices
         PartyComeback.MaxBacktrackRooms = defaults.MaxComebackBacktrackRooms;
         ComebackRequest.Enabled = defaults.AutoRequestComebackWhenLeftBehind;
         AutoDiscard.HideMode = defaults.HideWhenDiscarding;
+        AutoParty.OnlyWhileNavigating = defaults.AutoInviteOnlyWhileNavigating;
     }
 
     // Push the loaded character's

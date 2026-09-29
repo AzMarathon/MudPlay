@@ -74,6 +74,8 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Wear item in area";
             yield return "Equip in room";
             yield return "Feathered mask";
+            yield return "Only auto-invite while navigation is running";
+            yield return "Auto-invite";
             foreach (StubGroup g in StubGroups)
             foreach (StubField f in g.Fields)
                 yield return f.Label;
@@ -150,6 +152,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // strand is detected but no request is sent. Pushed into the live
     // ComebackRequester on Apply + profile load.
     [ObservableProperty] private bool _autoRequestComebackWhenLeftBehind = true;
+
+    // Auto-invite only while a walk / loop / auto-lair / auto-deposit / train is
+    // running. Pushed into AutoPartyManager on Apply + profile load.
+    [ObservableProperty] private bool _autoInviteOnlyWhileNavigating;
 
     // Master gate for the monster-HP-lookup display (status-bar "TGT HP:" slot
     // + the yellow terminal line on a monster look). Default on.
@@ -286,6 +292,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             HideWhenDiscarding    = HideWhenDiscarding,
             MaxComebackBacktrackRooms = Math.Clamp(MaxComebackBacktrackRooms, 1, 50),
             AutoRequestComebackWhenLeftBehind = AutoRequestComebackWhenLeftBehind,
+            AutoInviteOnlyWhileNavigating = AutoInviteOnlyWhileNavigating,
             ShowMonsterHpLookup   = ShowMonsterHpLookup,
             // Not edited on this tab (Monster Intel owns them directly) —
             // carry the current Character-tier values through so Apply here
@@ -367,6 +374,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         HideWhenDiscarding    = dto.HideWhenDiscarding;
         MaxComebackBacktrackRooms = dto.MaxComebackBacktrackRooms;
         AutoRequestComebackWhenLeftBehind = dto.AutoRequestComebackWhenLeftBehind;
+        AutoInviteOnlyWhileNavigating = dto.AutoInviteOnlyWhileNavigating;
         ShowMonsterHpLookup = dto.ShowMonsterHpLookup;
         PlayerCleanupDays = _globalSettings?.Current.PlayerCleanupDays ?? 90;
         PyramidSolverEnabled = _globalSettings?.Current.PyramidSolverEnabled ?? true;
@@ -416,6 +424,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         // Auto-discard offload verb — live-mirror so the next discard uses
         // hide/drop per the edit without a profile reload.
         svcs.AutoDiscard.HideMode = dto.HideWhenDiscarding;
+        svcs.AutoParty.OnlyWhileNavigating = dto.AutoInviteOnlyWhileNavigating;
     }
 
     // ----- IsDirty plumbing -----
@@ -435,6 +444,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnHideWhenDiscardingChanged(bool value) => MarkDirty();
     partial void OnMaxComebackBacktrackRoomsChanged(int value) => MarkDirty();
     partial void OnAutoRequestComebackWhenLeftBehindChanged(bool value) => MarkDirty();
+    partial void OnAutoInviteOnlyWhileNavigatingChanged(bool value) => MarkDirty();
     partial void OnShowMonsterHpLookupChanged(bool value) => MarkDirty();
     partial void OnPyramidSolverEnabledChanged(bool value) => MarkDirty();
     partial void OnAsylumSolverEnabledChanged(bool value) => MarkDirty();
