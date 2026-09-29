@@ -4890,6 +4890,7 @@ public sealed class AppServices
         // (ProfileMutated), a game-data set swap, and a spellbook change.
         CombatSession = new Game.Combat.CombatSessionTracker(Router, RoundDamage, OwnSpellMatchers);
         RoundDamage.SetOwnSpellLineCheck(CombatSession.MatchesOwnSpell);
+        Combat.BackstabResolved += CombatSession.OnBackstabResolved;
         Profile.ProfileLoaded  += _ => { CombatSession.Reset(); CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
         Profile.ProfileMutated += _ => { CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
         GameData.ActiveSetChanged += _ => { _ownSpellMatcherCache.Clear(); CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };

@@ -649,7 +649,8 @@ public static class BugReportBuilder
     {
         Game.Combat.CombatSessionStats c = svc.CombatSession.Snapshot();
         StringBuilder sb = new();
-        Kv(sb, "Swings", $"{c.TotalSwings} (hit {c.Hits}, crit {c.Crits}, backstab {c.Backstabs}, miss {c.Misses}; hit {c.HitPercent:F0}%, crit {c.CritPercent:F0}%)");
+        Kv(sb, "Attacks", $"{c.TotalSwings} (hit {c.Hits}, crit {c.Crits}, miss {c.Misses}; hit {c.HitPercent:F0}%, crit {c.CritPercent:F0}%)");
+        Kv(sb, "Backstabs", $"{c.BackstabAttempts} (landed {c.Backstabs}, failed {c.BackstabFails}; {c.BackstabPercent:F0}%)");
         Kv(sb, "Swing damage", $"{c.PhysicalMinDamage}-{c.PhysicalMaxDamage}, avg {c.PhysicalAvgDamage:F0}");
         Kv(sb, "Procs", $"{c.ProcHits} ({c.ProcMinDamage}-{c.ProcMaxDamage}, total {c.ProcTotalDamage})");
         foreach (Game.Combat.SpellCombatStat sp in c.Spells)

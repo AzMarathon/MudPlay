@@ -1,5 +1,10 @@
 # Version history
 
+## 3.122.2
+
+- Session Stats: backstabs keep their own landed / failed rate; Hit / Miss / Crit rates cover regular attacks only
+- A backstab that misses or loses its sneak counts as a BS miss, not a regular miss
+
 ## 3.122.1
 
 - Session Stats reads the round-totals ledger: every proc of yours counts, and any spell your class knows gets its own row instead of counting as a swing

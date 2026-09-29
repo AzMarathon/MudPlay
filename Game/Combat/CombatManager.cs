@@ -72,6 +72,10 @@ public sealed partial class CombatManager : IDisposable
     // by DarkRoomMovementSettle instead, so this stays scoped to the lit-room case.
     public event Action? RoomAppearsEmptyDuringCombat;
 
+    // A `bs` we sent was answered: the line that answered it, and whether the stab
+    // landed. Session Stats keeps backstabs' own hit / miss rate off it.
+    public event Action<string, bool>? BackstabResolved;
+
     private readonly RoomEntityClassifier _classifier;
     private readonly MonsterMessageStore _monsters;
     private readonly Func<int, MonsterOverlay> _resolveOverlay;
@@ -3113,6 +3117,7 @@ public sealed partial class CombatManager : IDisposable
         ClearBackstabResolution();
 
         bool landed = text.IndexOf("surprise", StringComparison.OrdinalIgnoreCase) >= 0;
+        BackstabResolved?.Invoke(text, landed);
         if (landed)
         {
             _log?.Combat(LogCategory, $"backstab landed (surprise) vs '{species}'");

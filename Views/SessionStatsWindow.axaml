@@ -324,10 +324,10 @@
                 <StackPanel Spacing="1" Margin="4,2">
                     <!-- Column headers (shared widths align every data row).
                          "#" is the occurrence count; "rate" is a percentage
-                         and only shown where one is meaningful (hit / miss /
-                         crit accuracy, defensive avoidance) — swing-type and
-                         per-round rows leave it blank since a count, not a
-                         rate, is what describes them. -->
+                         and only shown where one is meaningful: hit / miss /
+                         crit over regular attacks, backstab / BS miss over
+                         backstabs, and defense. Per-round rows leave it blank
+                         since a count, not a rate, is what describes them. -->
                     <Grid ColumnDefinitions="*,30,52,28,44">
                         <TextBlock Grid.Column="0" Classes="sub" Text="Offense" Margin="0,0,0,0"/>
                         <TextBlock Grid.Column="1" Classes="colhdr" Text="#" HorizontalAlignment="Right"/>
@@ -360,6 +360,13 @@
                         <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Combat.Backstabs, StringFormat='{}×{0}'}"/>
                         <TextBlock Grid.Column="2" Classes="dimr" Text="{Binding BackstabRangeText}"/>
                         <TextBlock Grid.Column="3" Classes="dimr" Text="{Binding Combat.BackstabAvgDamage, StringFormat='{}{0:F0}'}"/>
+                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.BackstabPercent, StringFormat='{}{0:F0}%'}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,30,52,28,44">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="BS miss"
+                                   ToolTip.Tip="Backstabs that failed: a miss, or the sneak broke and the round swung as a normal attack."/>
+                        <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Combat.BackstabFails, StringFormat='{}×{0}'}"/>
+                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.BackstabFailPercent, StringFormat='{}{0:F0}%'}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,30,52,28,44">
                         <TextBlock Grid.Column="0" Classes="lbl" Text="Round"

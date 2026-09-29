@@ -1,6 +1,7 @@
 using MudPlay.Game.Spells;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 
 namespace MudPlay.Game.Combat;
 
@@ -18,6 +19,11 @@ namespace MudPlay.Game.Combat;
 // never counts as a swing, so it never moves the hit / miss / crit denominators or
 // the swing extents. Every damage line the ledger credits to someone hitting us is a
 // blow taken; misses and dodges come from the fixed patterns.
+//
+// Backstabs keep their own rate: CombatManager reports each `bs` it sees answered
+// (OnBackstabResolved). A stab answered without "surprise" failed; when the answer
+// was a whiff, that miss is the stab's, not a regular attack's, so it leaves the
+// normal miss count.
 //
 // Only the local player's own swings count toward the offensive figures, so
 // OnUserHits requires the first-person "You" source (the same convention
@@ -70,6 +76,12 @@ public sealed class CombatSessionTracker : IDisposable
     // miss) from a resisted spell cast (reattribute) at combat-off. Reset on Engaged.
     private bool _physicalHitThisCombat;
     private int _misses;
+    private int _backstabFails;
+    // Within one line's dispatch: the miss just counted, and a `bs` whiff reported
+    // before OnUserMisses saw it — CombatManager and this tracker hear the line in
+    // either order.
+    private string? _lastMissLine;
+    private string? _backstabWhiff;
     private int _mobMisses;
     private int _dodges;
     // True between "*Combat Engaged*" and "*Combat Off*" (re-asserted by any
@@ -81,6 +93,7 @@ public sealed class CombatSessionTracker : IDisposable
     // The line the ledger pass just claimed as one of our spells or procs, so the
     // UserHits pass that follows for the same line doesn't count it as a swing too.
     private string? _recognizedLine;
+    private readonly MessageRouter _router;
     private bool _disposed;
 
     // Raised after any observation updates the tallies, so the Session Stats VM
@@ -95,6 +108,7 @@ public sealed class CombatSessionTracker : IDisposable
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(rounds);
+        _router = router;
         _rounds = rounds;
         _resolveSpellMatchers = resolveSpellMatchers;
 
@@ -106,6 +120,7 @@ public sealed class CombatSessionTracker : IDisposable
         // The ledger reads a line on MessageRouter.LineDispatched, before the fixed
         // patterns, so a spell / proc line is claimed before OnUserHits sees it.
         _rounds.Attributed += OnAttributed;
+        router.LineDispatched += OnLineStart;
         _rounds.RoundComplete += OnRoundComplete;
 
         RefreshMatchers();
@@ -186,6 +201,7 @@ public sealed class CombatSessionTracker : IDisposable
             Crits:               _crit.Count,
             Backstabs:           _backstab.Count,
             Misses:              _misses,
+            BackstabFails:       _backstabFails,
             HitMinDamage:        _hit.Count == 0 ? 0 : _hit.Min,
             HitMaxDamage:        _hit.Max,
             HitTotalDamage:      _hit.Sum,
@@ -230,12 +246,40 @@ public sealed class CombatSessionTracker : IDisposable
         _spellOrder.Clear();
         _lastSpell = null;
         _misses = 0;
+        _backstabFails = 0;
+        _lastMissLine = null;
+        _backstabWhiff = null;
         _mobMisses = 0;
         _dodges = 0;
         _emoteMissCandidate = false;
         _physicalHitThisCombat = false;
         _recognizedLine = null;
         _engaged = false;
+        Changed?.Invoke();
+    }
+
+    private void OnLineStart(LineExtractor.EmittedLine _)
+    {
+        _lastMissLine = null;
+        _backstabWhiff = null;
+    }
+
+    // A `bs` we sent was answered by line. A landed stab is already counted by
+    // OnUserHits off its "surprise"; a failed one counts against the backstab rate.
+    public void OnBackstabResolved(string line, bool landed)
+    {
+        if (landed) return;
+        _backstabFails++;
+        if (string.Equals(line, _lastMissLine, StringComparison.Ordinal))
+        {
+            _misses--;
+            _emoteMissCandidate = false;
+            _lastMissLine = null;
+        }
+        else
+        {
+            _backstabWhiff = line;
+        }
         Changed?.Invoke();
     }
 
@@ -308,12 +352,15 @@ public sealed class CombatSessionTracker : IDisposable
         Changed?.Invoke();
     }
 
-    private void OnUserMisses(MatchResult _)
+    private void OnUserMisses(MatchResult match)
     {
+        // Already counted as the failed backstab it answered.
+        if (string.Equals(match.Text, _backstabWhiff, StringComparison.Ordinal)) return;
         // The miss skeleton also matches self-emotes ending in "!", so only a
         // line seen while combat is engaged is a real swing whiff.
         if (!_engaged) return;
         _misses++;
+        _lastMissLine = match.Text;
         // This miss might be a spell-cast emote, not a whiff — a spell landing right
         // after retracts it (OnAttributed); an un-retracted one is resolved at
         // combat-off (weapon whiff kept, resisted cast reattributed).
@@ -374,6 +421,7 @@ public sealed class CombatSessionTracker : IDisposable
         _mobMissesSub.Dispose();
         _combatStatusSub.Dispose();
         _rounds.Attributed -= OnAttributed;
+        _router.LineDispatched -= OnLineStart;
         _rounds.RoundComplete -= OnRoundComplete;
     }
 
