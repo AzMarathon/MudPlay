@@ -153,7 +153,6 @@ public sealed class AutoDepositManagerTests : IDisposable
         public HashSet<RoomKey> Banks { get; } = new();
         public List<byte[]> Deposited { get; } = new();
         public List<byte[]> Stashed { get; } = new();
-        public List<long> DepositedValues { get; } = new();
 
         // Every command on the deposit wire — the bank path now sends `i` (the
         // pre-deposit re-read) before its `dep`, so this carries both.
@@ -327,7 +326,6 @@ public sealed class AutoDepositManagerTests : IDisposable
             if (Encoding.Latin1.GetString(b).StartsWith("buy ")) h.Bought.Add(b);
             else h.Deposited.Add(b);
         });
-        autoDeposit.Deposited += v => h.DepositedValues.Add(v);
         stash.SetWireSender(b => h.Stashed.Add(b));
         return h;
     }
@@ -442,9 +440,6 @@ public sealed class AutoDepositManagerTests : IDisposable
 
         // Now a single `dep <wealth - keep>`; keep floors are 0 here.
         Assert.Equal("dep 5000", Assert.Single(h.DepositLines()));
-        // ...and the Deposited event carries the same copper value for the
-        // Session Stats stashed/deposited tally.
-        Assert.Equal(5000L, Assert.Single(h.DepositedValues));
 
         // Now walking back to the origin (1/1).
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);

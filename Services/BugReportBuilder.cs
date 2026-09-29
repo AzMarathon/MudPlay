@@ -675,9 +675,9 @@ public static class BugReportBuilder
         Kv(sb, "Experience", $"{a.ExperienceEarned} ({a.ExperiencePerHour:F0}/hr)");
         Kv(sb, "Exp needed", est.TargetLevel > 0 ? $"{est.ExpNeeded} for L{est.TargetLevel} (banked {est.BankableLevels})" : "(unresolved)");
         Kv(sb, "Will level in", remaining is { } eta ? eta.ToString() : "(rate unknown)");
-        Kv(sb, "Collected", $"{a.CurrencyCollected} copper, {a.ItemsCollected} items ({a.CurrencyPerHour:F0} copper/hr)");
+        Kv(sb, "Collected", $"{a.CurrencyCollected} copper in {a.CoinsCollected} coins, {a.ItemsCollected} items ({a.CurrencyPerHour:F0} copper/hr, {a.CoinsPerHour:F0} coins/hr)");
         Kv(sb, "Deposit/Sold", $"{a.CurrencyDeposited} copper, {a.ItemsSold} items sold");
-        Kv(sb, "Stashed", $"{a.CurrencyStashed} copper, {a.ItemsStashed} items");
+        Kv(sb, "Stashed", $"{a.CurrencyStashed} copper in {a.CoinsStashed} coins, {a.ItemsStashed} items");
         Kv(sb, "Sneak entries", $"{a.SneakHeld} held of {a.SneakEntries}");
         Kv(sb, "Walk steps", a.AverageStep is { } step ? $"{a.Steps} timed, avg {step.TotalSeconds:F2}s" : "(none timed)");
         return sb.ToString();

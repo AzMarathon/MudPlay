@@ -78,6 +78,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     private readonly DispatcherTimer _liveTick;
 
     private bool _refreshScheduled;
+    // The runner's lap count when Time Analysis was last reset (see LapCount).
+    private int _lapBase;
     private bool _disposed;
 
     [ObservableProperty]
@@ -526,6 +528,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _timeTracker.Reset();
         _activityTracker.Reset();
         _hpMaTracker.Reset();
+        _lapBase = _runner.CompletedLaps;
     }
 
     // Per-section resets, one per collapsible. Each wipes only its own section's
@@ -535,21 +538,24 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [RelayCommand]
     private void ResetPlayerStats() => _combatTracker.Reset();
 
-    // "Time Analysis" reset — the activity-time breakdown. Because the per-hour
-    // rates are measured over this same session time, restarting it also restarts
-    // every rate (kills/hr, exp/hr, currency/hr, and both sparklines) via
-    // ResetRates — while the Session Statistics totals stay put.
+    // "Time Analysis" reset — every line under that section: the time breakdown,
+    // Sneak and Walk, and the loop laps. The per-hour rates sit under Session
+    // Statistics and restart with its reset instead.
     [RelayCommand]
     private void ResetTimeAnalysis()
     {
         _timeTracker.Reset();
-        _activityTracker.ResetRates();
+        _activityTracker.ResetMovement();
+        _lapBase = _runner.CompletedLaps;
+        OnPropertyChanged(nameof(LapCount));
+        OnPropertyChanged(nameof(LastLapText));
+        OnPropertyChanged(nameof(AverageLapText));
     }
 
     // "Session Statistics" reset — the running totals and their rates (kills,
     // experience, currency collected / stashed, and the two rate sparklines).
     [RelayCommand]
-    private void ResetSessionStats() => _activityTracker.Reset();
+    private void ResetSessionStats() => _activityTracker.ResetTotals();
 
     // "Transaction history" button — opens the modeless ledger window (bank
     // deposits + stash-room hides recorded this session).
@@ -622,9 +628,27 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // circle-start room; the graph resolves that room's key to a display name.
     public bool IsLoopRunning => _runner.State != LoopState.Idle;
     public string LapLoopName => _runner.CurrentLoop?.Name ?? _runner.LastRunLoopName ?? "—";
-    public int LapCount => _runner.CompletedLaps;
-    public string LastLapText => _runner.LapHistory.Count > 0 ? Fmt(_runner.LapHistory[^1]) : "—";
-    public string AverageLapText => _runner.CompletedLaps > 0 ? Fmt(_runner.AverageLapTime) : "—";
+    //
+    // Time Analysis's Reset can't clear the runner's own count (the Roomba sweep
+    // reads it), so it records where the count stood and these show only the laps
+    // since. A new run restarts the runner's count below that mark, which drops it.
+    public int LapCount
+    {
+        get
+        {
+            if (_runner.CompletedLaps < _lapBase) _lapBase = 0;
+            return _runner.CompletedLaps - _lapBase;
+        }
+    }
+
+    // The laps since the reset still in the runner's recent history, newest last.
+    private IEnumerable<TimeSpan> RecentLaps
+        => _runner.LapHistory.TakeLast(Math.Min(LapCount, _runner.LapHistory.Count));
+
+    public string LastLapText => RecentLaps.Any() ? Fmt(RecentLaps.Last()) : "—";
+    public string AverageLapText => RecentLaps.Any()
+        ? Fmt(TimeSpan.FromTicks((long)RecentLaps.Average(t => t.Ticks)))
+        : "—";
     public string CurrentLapText => IsLoopRunning ? Fmt(_runner.CurrentLapTime) : "—";
     public string LapStartRoomText => _runner.CircleStartRoom is { } k
         ? (_graph.GetRoom(k) is { } r ? $"{r.DisplayName} · {k}" : k.ToString())

@@ -5002,8 +5002,8 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ => HpMaHistory.Reset();
 
         // TransactionHistory. A per-session ledger of cash/item
-        // offloads: bank `dep`osits (AutoDeposit.Deposited) and stash-room
-        // `hide`s (Stash.StashExecuted), wired to their events below. Feeds the
+        // offloads: bank deposits and stash-room hides, fed from the server's
+        // `You deposit …` / `You hid …` echoes wired below. Feeds the
         // Session Stats → Transaction history window; reset on the same session
         // boundary as the other session-stats trackers.
         TransactionHistory = new Game.Cash.TransactionHistoryTracker();
@@ -5589,7 +5589,7 @@ public sealed class AppServices
         // value so mixed currency streams fold into one figure.
         Cash.CoinCollected += (currency, count) =>
             SessionActivity.NoteCurrencyCollected(
-                Game.Inventory.CurrencyHoldings.ToCopper(Currency.Canonicalize(currency), count));
+                Game.Inventory.CurrencyHoldings.ToCopper(Currency.Canonicalize(currency), count), count);
         // The auto-deposit gates read the authoritative inventory snapshot
         // (wealth value + coin count), so re-evaluate whenever the parser
         // updates holdings — this is the only path that catches buy / sell
@@ -5618,30 +5618,22 @@ public sealed class AppServices
             log: Log,
             naming: Currency,
             isParadigm: onParadigm);
-        // Count stash-room hides toward the Session Stats stashed/deposited figure
-        // (copper value across the dispatched coins). The transaction-history
-        // ledger is NOT fed here — it sources from the server's own `You hid …` /
-        // `You deposit …` echoes below, so a hand-typed stash is recorded too.
-        Stash.StashExecuted += dispatch =>
-        {
-            long copper = 0;
-            foreach ((string currency, long amount) in dispatch.Currencies)
-                copper += Game.Inventory.CurrencyHoldings.ToCopper(Currency.Canonicalize(currency), amount);
-            SessionActivity.NoteCurrencyStashed(copper);
-            SessionActivity.NoteItemsStashed(dispatch.Items.Count);
-        };
-
-        // Transaction-history ledger sources — the server-confirmation echoes,
-        // which fire for a manual `dep` / `hide` and an automated reroute alike
-        // (so both are recorded), and arrive one per denomination / item:
+        // Transaction-history ledger and Session Stats (Stashed, Deposit/Sold) sources —
+        // the server-confirmation echoes, which fire for a manual `dep` / `hide` and an
+        // automated reroute alike (so both are counted), and arrive one per
+        // denomination / item:
         //   coin stash   -> CashManager.CoinHidden       ("You hid N <coin>.")
         //   item stash   -> InventoryManager.ItemHidden  ("You hid <item>.")
         //   bank deposit -> InventoryManager.BankDeposited ("You deposit …", wrap-merged there)
         // Each echo captures the room it fired in — the stash room for a hide,
         // the bank room for a deposit — so the ledger records where excess went.
         Cash.CoinHidden += (currency, count) =>
+        {
             TransactionHistory.NoteStash(
                 new[] { (currency, (long)count) }, Array.Empty<string>(), CurrentRoomLabel());
+            SessionActivity.NoteCurrencyStashed(
+                Game.Inventory.CurrencyHoldings.ToCopper(Currency.Canonicalize(currency), count), count);
+        };
 
         // Funding's structured tally of the same echoes. Separate from the ledger
         // above on purpose: that one is a rolling display log that formats amounts
@@ -5693,9 +5685,13 @@ public sealed class AppServices
             if (AutoDiscard.TryConsumeSuppressedHide(item)) return;
             TransactionHistory.NoteStash(
                 Array.Empty<(string, long)>(), new[] { item }, CurrentRoomLabel());
+            SessionActivity.NoteItemsStashed(1);
         };
         Inventory.BankDeposited += copper =>
+        {
             TransactionHistory.NoteBankDeposit(copper, CurrentRoomLabel());
+            SessionActivity.NoteCurrencyDeposited(copper);
+        };
 
         // AutoGetItemsManager. The resolve delegate
         // maps a loose "You notice ..." entry back to an item Number
@@ -7294,11 +7290,6 @@ public sealed class AppServices
         // moment the sweep ends.
         AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
         AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
-        // Bank deposits (already a copper value) join sale proceeds in the Session
-        // Stats Deposit/Sold figure. The transaction-history ledger is fed
-        // separately from the `You deposit …` echo (InventoryManager.BankDeposited,
-        // wired above) so a manual deposit is recorded too.
-        AutoDeposit.Deposited += copper => SessionActivity.NoteCurrencyDeposited(copper);
 
         // Shop-source routing (PR C). On a one-shot walk-to that needs an
         // uncarried Item/Ticket-gate item a shop sells, detour to the

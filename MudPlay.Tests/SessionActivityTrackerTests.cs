@@ -62,16 +62,18 @@ public sealed class SessionActivityTrackerTests
     public void NoteCurrency_SumsCollectedAndStashed_AndIgnoresNonPositive()
     {
         (SessionActivityTracker t, _) = Make();
-        t.NoteCurrencyCollected(1500);
-        t.NoteCurrencyCollected(500);
-        t.NoteCurrencyCollected(0);    // ignored
-        t.NoteCurrencyCollected(-10);  // ignored
-        t.NoteCurrencyStashed(1200);
-        t.NoteCurrencyStashed(0);      // ignored
+        t.NoteCurrencyCollected(1500, 15);
+        t.NoteCurrencyCollected(500, 50);
+        t.NoteCurrencyCollected(0, 3);    // ignored
+        t.NoteCurrencyCollected(-10, 1);  // ignored
+        t.NoteCurrencyStashed(1200, 12);
+        t.NoteCurrencyStashed(0, 4);      // ignored
 
         SessionActivityStats s = t.Snapshot();
         Assert.Equal(2000L, s.CurrencyCollected);
+        Assert.Equal(65L, s.CoinsCollected);
         Assert.Equal(1200L, s.CurrencyStashed);
+        Assert.Equal(12L, s.CoinsStashed);
     }
 
     // ----- derived rates -----------------------------------------------
@@ -102,10 +104,11 @@ public sealed class SessionActivityTrackerTests
     public void CurrencyPerHour_DerivesFromTimeOnline()
     {
         (SessionActivityTracker t, Clock c) = Make();
-        t.NoteCurrencyCollected(9000);
+        t.NoteCurrencyCollected(9000, 90);
         c.Advance(30);
 
         Assert.Equal(18_000d, t.Snapshot().CurrencyPerHour, 3); // 9,000 / 0.5 h
+        Assert.Equal(180d, t.Snapshot().CoinsPerHour, 3);       // 90 coins / 0.5 h
     }
 
     // ----- kills/hour series -------------------------------------------
@@ -232,9 +235,9 @@ public sealed class SessionActivityTrackerTests
     public void RateWindow_CapsCurrencyAtFourHours()
     {
         (SessionActivityTracker t, Clock c) = Make();
-        t.NoteCurrencyCollected(10_000); // t=0
+        t.NoteCurrencyCollected(10_000, 1); // t=0
         c.Advance(5 * 60);               // +5 h
-        t.NoteCurrencyCollected(2_000);  // t=5h; old pickup trimmed from the window
+        t.NoteCurrencyCollected(2_000, 1);  // t=5h; old pickup trimmed from the window
 
         SessionActivityStats s = t.Snapshot();
         Assert.Equal(12_000L, s.CurrencyCollected); // lifetime keeps both
@@ -378,8 +381,8 @@ public sealed class SessionActivityTrackerTests
         (SessionActivityTracker t, Clock c) = Make();
         for (int i = 0; i < 4; i++) t.NoteKill();
         t.NoteExperience(5000);
-        t.NoteCurrencyCollected(7000);
-        t.NoteCurrencyStashed(3000);
+        t.NoteCurrencyCollected(7000, 1);
+        t.NoteCurrencyStashed(3000, 1);
         c.Advance(20);
 
         t.Reset();
@@ -393,17 +396,43 @@ public sealed class SessionActivityTrackerTests
         Assert.Equal(TimeSpan.FromMinutes(10), s.TimeOnline); // clock restarted at Reset
     }
 
+    // Sneak and Walk show under Time Analysis, so each section's Reset clears only
+    // its own figures.
+    [Fact]
+    public void SectionResets_ClearOnlyTheirOwnFigures()
+    {
+        (SessionActivityTracker t, Clock c) = Make();
+        t.NoteKill();
+        t.NoteSneakEntry(true);
+        t.NoteStepSent();
+        c.Advance(1);
+        t.NoteStepArrived();
+
+        t.ResetTotals();
+        SessionActivityStats s = t.Snapshot();
+        Assert.Equal(0, s.MonstersKilled);
+        Assert.Equal(1, s.SneakEntries);
+        Assert.Equal(1, s.Steps);
+
+        t.NoteKill();
+        t.ResetMovement();
+        s = t.Snapshot();
+        Assert.Equal(1, s.MonstersKilled);
+        Assert.Equal(0, s.SneakEntries);
+        Assert.Equal(0, s.Steps);
+    }
+
     [Fact]
     public void ResetRates_KeepsLifetimeTotals_ButZeroesTheRates()
     {
         (SessionActivityTracker t, Clock c) = Make();
         for (int i = 0; i < 4; i++) t.NoteKill();
         t.NoteExperience(5000);
-        t.NoteCurrencyCollected(7000);
-        t.NoteCurrencyStashed(3000);
+        t.NoteCurrencyCollected(7000, 1);
+        t.NoteCurrencyStashed(3000, 1);
         c.Advance(30);
 
-        t.ResetRates();     // the Time Analysis reset restarts only the rate window
+        t.ResetRates();     // restarts only the rate window
         c.Advance(15);
 
         SessionActivityStats s = t.Snapshot();

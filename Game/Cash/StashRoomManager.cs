@@ -146,7 +146,7 @@ public sealed class StashRoomManager : IDisposable
             // ambiguously (MajorMUD hides a "silver" ring instead of silver
             // nobles), so WireNoun forces a currency match (and maps runic to
             // the per-BBS word). The dispatched record keeps the canonical
-            // denom key; the StashExecuted consumer canonicalizes for value math.
+            // denom key.
             Send($"hide {count} {_naming.WireNoun(denom)}");
             dispatched.Add((denom, count));
         }

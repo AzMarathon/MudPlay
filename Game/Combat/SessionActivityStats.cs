@@ -13,17 +13,20 @@ namespace MudPlay.Game.Combat;
 // capped at four hours: while the session is younger than that it spans the whole
 // session (windowed figures equal the totals, rates read as lifetime rates); once
 // it passes four hours the window trails, so the rates reflect the recent pace
-// rather than the whole night blended. Resetting Time Analysis re-anchors the
-// window: the totals stay put while the rates fall back to zero and climb again.
+// rather than the whole night blended. The Session Statistics reset restarts the
+// window along with the totals.
 public readonly record struct SessionActivityStats(
     TimeSpan TimeOnline,
     int MonstersKilled,
     long ExperienceEarned,
     long CurrencyCollected,
+    long CoinsCollected,
     long CurrencyStashed,
+    long CoinsStashed,
     int RateKills,
     long RateExperience,
     long RateCurrency,
+    long RateCoins,
     long CurrencyDeposited,
     int ItemsCollected,
     int ItemsSold,
@@ -51,6 +54,9 @@ public readonly record struct SessionActivityStats(
     // Currency picked up per hour, in copper value, across the current rate
     // window — 0 before any time has elapsed.
     public double CurrencyPerHour => Rate(RateCurrency);
+
+    // Coins picked up per hour, whatever their denomination, across the same window.
+    public double CoinsPerHour => Rate(RateCoins);
 
     private double Rate(double windowed) =>
         TimeOnline.TotalHours <= 0 ? 0 : windowed / TimeOnline.TotalHours;

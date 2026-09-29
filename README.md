@@ -1,11 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.122.10**
+> **Version 3.122.12**
 > - Session Stats shows Exp needed (with the target level) and Will level in, off the same countdown as the status bar TNL
-> - Session Stats Sneak %: share of rooms entered while sneaking where the sneak held
-> - Session Stats Walk: average seconds per walk / loop step, from the move going out to the new room
-> - Session Stats copper / items table: Collected, Deposit/Sold and Stashed, plus the Income rate; bank deposits now count under Deposit/Sold, not Stashed
+> - Time Analysis gains Sneak % (rooms entered sneaking where it held) and Walk (average seconds per step); loop laps move there too
+> - Session Statistics value / coins / items table: Collected, Deposit/Sold and Stashed, plus Income rate by value and by coin count
+> - Deposits and stashes you type by hand count too; bank deposits now count under Deposit/Sold, not Stashed
+> - Each section's Reset clears exactly the lines under it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
