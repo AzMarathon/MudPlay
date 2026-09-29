@@ -394,7 +394,10 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // ----- Display --------------------------------------------------
 
     [ObservableProperty] private bool _showCombatRoundTotals;
-    [ObservableProperty] private bool _showCombatRoundTotalsSelfOnly;
+    [ObservableProperty] private bool _showCombatRoundTotalsSelf;
+    [ObservableProperty] private bool _showCombatRoundTotalsParty;
+    [ObservableProperty] private bool _showCombatRoundTotalsPlayers;
+    [ObservableProperty] private bool _showCombatRoundTotalsMonsters;
 
     // ----- Combat profiles (staged quick-swap chip bar) -------------
 
@@ -724,7 +727,10 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             DrainsOverrideAoe = DrainsOverrideAoe,
 
             ShowCombatRoundTotals = ShowCombatRoundTotals,
-            ShowCombatRoundTotalsSelfOnly = ShowCombatRoundTotalsSelfOnly,
+            ShowCombatRoundTotalsSelf     = ShowCombatRoundTotalsSelf,
+            ShowCombatRoundTotalsParty    = ShowCombatRoundTotalsParty,
+            ShowCombatRoundTotalsPlayers  = ShowCombatRoundTotalsPlayers,
+            ShowCombatRoundTotalsMonsters = ShowCombatRoundTotalsMonsters,
     };
 
     // Commit the staged edits through the shared session, which folds BOTH tabs'
@@ -861,7 +867,10 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         DrainsOverrideAoe         = dto.DrainsOverrideAoe;
 
         ShowCombatRoundTotals = dto.ShowCombatRoundTotals;
-        ShowCombatRoundTotalsSelfOnly = dto.ShowCombatRoundTotalsSelfOnly;
+        ShowCombatRoundTotalsSelf     = dto.ShowCombatRoundTotalsSelf;
+        ShowCombatRoundTotalsParty    = dto.ShowCombatRoundTotalsParty;
+        ShowCombatRoundTotalsPlayers  = dto.ShowCombatRoundTotalsPlayers;
+        ShowCombatRoundTotalsMonsters = dto.ShowCombatRoundTotalsMonsters;
     }
 
     private CombatSettings ReadOrDefault()
@@ -1014,7 +1023,10 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     // Display
     partial void OnShowCombatRoundTotalsChanged(bool value)      => MarkDirty();
-    partial void OnShowCombatRoundTotalsSelfOnlyChanged(bool value) => MarkDirty();
+    partial void OnShowCombatRoundTotalsSelfChanged(bool value)     => MarkDirty();
+    partial void OnShowCombatRoundTotalsPartyChanged(bool value)    => MarkDirty();
+    partial void OnShowCombatRoundTotalsPlayersChanged(bool value)  => MarkDirty();
+    partial void OnShowCombatRoundTotalsMonstersChanged(bool value) => MarkDirty();
 
     // One Target Priority dropdown row — pairs the enum value with its friendly label.
     public sealed record TargetPriorityOption(TargetPriority Value, string Label);

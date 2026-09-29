@@ -250,9 +250,12 @@ public sealed class CombatSettings
     // round. Default false.
     public bool ShowCombatRoundTotals { get; set; }
 
-    // With ShowCombatRoundTotals: print only our own row, not every combatant's.
-    // Default false.
-    public bool ShowCombatRoundTotalsSelfOnly { get; set; }
+    // With ShowCombatRoundTotals, which rows the table prints: ours, our party's, other
+    // players', the monsters'. All default false; with none ticked no table prints.
+    public bool ShowCombatRoundTotalsSelf { get; set; }
+    public bool ShowCombatRoundTotalsParty { get; set; }
+    public bool ShowCombatRoundTotalsPlayers { get; set; }
+    public bool ShowCombatRoundTotalsMonsters { get; set; }
 }
 
 // One spell-row entry in the Combat tab's Spell-combat section (multi-attack 1 and

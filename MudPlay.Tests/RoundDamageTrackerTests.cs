@@ -575,8 +575,8 @@ public sealed class RoundDamageTrackerTests
             "[ large giant rat     12     75 ]",
             "[ goblin               0      0 ]",
             "[ unknown              8      8 ]",
-        }, RoundTotalsFormatter.Table(r));
-        Assert.All(RoundTotalsFormatter.Table(r), line => Assert.True(ClientNotice.IsNotice(line)));
+        }, RoundTotalsFormatter.Table(r, Everyone));
+        Assert.All(RoundTotalsFormatter.Table(r, Everyone), line => Assert.True(ClientNotice.IsNotice(line)));
     }
 
     // Us first, then the party, then monsters — whoever dealt more within each.
@@ -591,12 +591,13 @@ public sealed class RoundDamageTrackerTests
         RoundSummary r = h.CloseRound();
 
         Assert.Equal(new[] { "You", "Bob", "large giant rat", "goblin" },
-            RoundTotalsFormatter.Table(r).Skip(2).Select(line => line[2..].Split("  ")[0].Trim()));
+            RoundTotalsFormatter.Table(r, Everyone).Skip(2).Select(line => line[2..].Split("  ")[0].Trim()));
     }
 
-    // "Only my totals": just our own row, no one else's and no unknown.
-    [Fact]
-    public void Table_SelfOnly_ShowsJustOurRow()
+    private static readonly CombatantKind[] Everyone =
+        { CombatantKind.Self, CombatantKind.Party, CombatantKind.Player, CombatantKind.Monster };
+
+    private static RoundSummary MixedRound()
     {
         using Harness h = new();
         h.State.InCombat = true;
@@ -604,15 +605,33 @@ public sealed class RoundDamageTrackerTests
         h.Feed("Bob slashes large giant rat for 30 damage!");
         h.Feed("The large giant rat bites you for 12 damage!");
         h.Feed("An earthquake rocks the room for 8 damage!");
-        RoundSummary r = h.CloseRound();
+        return h.CloseRound();
+    }
 
-        IReadOnlyList<string> table = RoundTotalsFormatter.Table(r, selfOnly: true);
-        Assert.Equal(3, table.Count);
+    private static string[] RowNames(IReadOnlyList<string> table)
+        => table.Skip(2).Select(line => line[2..].Split("  ")[0].Trim()).ToArray();
+
+    // Settings → Combat's Me / Party / Other players / Monsters boxes pick the rows;
+    // the unknown row prints whenever the table does.
+    [Fact]
+    public void Table_JustMe_KeepsOurRowAndUnknown()
+    {
+        IReadOnlyList<string> table = RoundTotalsFormatter.Table(MixedRound(), new[] { CombatantKind.Self });
         Assert.StartsWith("[Round 1 ", table[0]);
         Assert.Contains("Combatant", table[1]);
         Assert.Matches(@"^\[ You\s+45\s+12 \]$", table[2]);
+        Assert.Equal(new[] { "You", "unknown" }, RowNames(table));
         Assert.All(table, line => Assert.True(ClientNotice.IsNotice(line)));
     }
+
+    [Fact]
+    public void Table_PartyAndMonsters_LeaveUsOut()
+        => Assert.Equal(new[] { "Bob", "large giant rat", "goblin", "unknown" },
+            RowNames(RoundTotalsFormatter.Table(MixedRound(), new[] { CombatantKind.Party, CombatantKind.Monster })));
+
+    [Fact]
+    public void Table_NothingTicked_PrintsNothing()
+        => Assert.Empty(RoundTotalsFormatter.Table(MixedRound(), Array.Empty<CombatantKind>()));
 
     [Fact]
     public void Formatter_NoCombatants_SaysNone()

@@ -2789,7 +2789,7 @@ At **0 mana** a mana-costing action can't land (the server silently ignores it),
 The round number starts again at 1 once the room is clear of hostiles, so each fight counts its own rounds. **Everyone in the room is listed every round** — you, your party, other players and monsters — even at 0. **You** always come first, then your party, then other players and monsters; within each group the biggest dealer is on top. A room spell (yours or a party member's) is credited to its caster and counts against every monster in the room. **unknown** only appears when a line couldn't be pinned to anyone. The program log and bug report keep the same numbers as two compact lines per round. A round prints as soon as its lines stop (a quarter of a second), or the moment the room is clear, so the totals sit right under that round's combat, ahead of your next action.
 
 
-**Only my totals** (a sub-option, Off by default, enabled while round totals are on) trims the table to your own row: what **you** dealt and took that round, with no one else and no *unknown*.
+Four boxes under it (enabled while round totals are on, all **Off** by default) pick which rows print: **Me**, **Party**, **Other players** (players in the room who aren't in your party) and **Monsters**. Tick all four for the full table, or just the groups you care about. The **unknown** row prints whenever the table does. With **none ticked, no table prints**, so tick at least one after turning round totals on.
 
 **Important notes:**
 - **How damage is credited.** Each "… for N damage!" line is read against the room's occupants (from *Also here:*), your party and "you". "Bob slashes large orc for 30" credits Bob, and "The large orc claws you with its pincers for 12" is damage you took from the orc.
@@ -3941,6 +3941,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Multi-attack 2 (enable + slot) | off, unset | bool + spell code + MaxCastsPerRoom(null/0-100) + MinManaPerCast (MinEnemies shared with slot 1) | `MultiAttack2Enabled`, `MultiAttack2Spell` | Models/Profile/CombatSettings.cs |
 | Drain (life-steal) spell + HP trigger + Drains override AOE | unset / 50% / off | spell code + MaxCastsPerRoom + MinManaPerCast; DrainHpTrigger(0-100); DrainsOverrideAoe(bool) | `DrainSpell`, `DrainHpTrigger`, `DrainsOverrideAoe` | Models/Profile/CombatSettings.cs |
 | Show combat round totals | `false` | bool | `ShowCombatRoundTotals` | Models/Profile/CombatSettings.cs |
+| Round totals rows: Me / Party / Other players / Monsters | `false` each | bool | `ShowCombatRoundTotalsSelf` / `…Party` / `…Players` / `…Monsters` | Models/Profile/CombatSettings.cs |
 
 ### Spells / Health
 

@@ -3619,15 +3619,20 @@ public sealed class AppServices
         GameData.ActiveSetChanged += _ => PartyHp.Invalidate();
         Messages.Messages.CollectionChanged += (_, _) => PartyHp.Invalidate();
         // Settings → Combat "Show combat round totals": print each round's ledger
-        // as a table (read per round, so the checkboxes apply at once) — everyone's,
-        // or with "Only my totals" just our own row. One notice for all its lines, so
-        // no blank line falls between them.
+        // as a table (read per round, so the checkboxes apply at once), with the rows
+        // its Me / Party / Other players / Monsters boxes pick. One notice for all its
+        // lines, so no blank line falls between them.
         RoundDamage.RoundComplete += round =>
         {
             Models.Profile.CombatSettings combat = ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
             if (!combat.ShowCombatRoundTotals) return;
-            WriteTerminalNotice(string.Join("\r\n",
-                Game.Combat.RoundTotalsFormatter.Table(round, combat.ShowCombatRoundTotalsSelfOnly)));
+            List<Game.Combat.CombatantKind> shown = new(4);
+            if (combat.ShowCombatRoundTotalsSelf) shown.Add(Game.Combat.CombatantKind.Self);
+            if (combat.ShowCombatRoundTotalsParty) shown.Add(Game.Combat.CombatantKind.Party);
+            if (combat.ShowCombatRoundTotalsPlayers) shown.Add(Game.Combat.CombatantKind.Player);
+            if (combat.ShowCombatRoundTotalsMonsters) shown.Add(Game.Combat.CombatantKind.Monster);
+            IReadOnlyList<string> table = Game.Combat.RoundTotalsFormatter.Table(round, shown);
+            if (table.Count > 0) WriteTerminalNotice(string.Join("\r\n", table));
         };
         // Reset round counter + ring on BBS connect to match
         // CombatSessionTracker's session-boundary convention — the
