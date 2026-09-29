@@ -209,11 +209,11 @@ public sealed class MonsterLookParserTests
     [Theory]
     [InlineData("unwounded", "Full")]
     [InlineData("slightly wounded", "Slight")]
-    [InlineData("moderately wounded", "mod")]
+    [InlineData("moderately wounded", "Mod")]
     [InlineData("heavily wounded", "Hvy")]
     [InlineData("severely wounded", "Sev")]
-    [InlineData("critically wounded", "crit")]
-    [InlineData("very critically wounded", "v.crit")]
+    [InlineData("critically wounded", "Crit")]
+    [InlineData("very critically wounded", "V.Crit")]
     public void WoundShorthand_EveryBand(string wound, string shorthand)
         => Assert.Equal(shorthand, MonsterLookParser.WoundShorthand(wound));
 }

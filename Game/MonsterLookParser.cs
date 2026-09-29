@@ -168,12 +168,12 @@ public sealed partial class MonsterLookParser : IDisposable
     {
         "unwounded"               => "Full",
         "slightly wounded"        => "Slight",
-        "moderately wounded"      => "mod",
+        "moderately wounded"      => "Mod",
         "heavily wounded"         => "Hvy",
         "severely wounded"        => "Sev",
-        "critically wounded"      => "crit",
-        "very critically wounded" => "v.crit",
-        "mortally wounded"        => "mortal",
+        "critically wounded"      => "Crit",
+        "very critically wounded" => "V.Crit",
+        "mortally wounded"        => "Mortal",
         _                         => woundPhrase,
     };
 
