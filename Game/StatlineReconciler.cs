@@ -2,8 +2,8 @@ using MudPlay.Services;
 
 namespace MudPlay.Game;
 
-// Keeps the in-game statline aligned with the Settings → Statline editor on
-// every (re)connect. The editor command is the single source of truth: it's
+// Keeps the in-game statline aligned with the Settings → Statline editor for
+// the whole session. The editor command is the single source of truth: it's
 // what we send to the BBS via set statline and what
 // StatlinePromptRegexBuilder compiles the prompt parser from. When the live
 // prompt doesn't match the editor's shape — the scanner fires
@@ -18,9 +18,9 @@ namespace MudPlay.Game;
 //
 // Default-statline users reconcile too (the resend is `set statline full`):
 // a server whose class default isn't one of the stock shapes — or a statline
-// the player set by hand in-game — leaves the Default parser reading nothing,
-// so HP sits at 0 and every HP-gated engine stalls (report
-// `stock-20260929-111956`).
+// the player set by hand in-game, even plain text with no numbers — leaves the
+// Default parser reading nothing, so HP sits at 0 and every HP-gated engine
+// stalls (report `stock-20260929-111956`).
 //
 // Mismatches only count once we're in the game (a room display has been seen
 // since Arm) so BBS menus before login can never trigger a send, and only a
@@ -31,8 +31,8 @@ namespace MudPlay.Game;
 // paced by RetryDelay so the burst of in-flight prompts arriving between our
 // send and the server applying it doesn't trigger duplicate sends. Bounded by
 // MaxRetries so a statline the server won't take stops resending rather than
-// hammering the wire. The first matching prompt latches IsSynced and ends
-// reconciliation until the next connect re-arms.
+// hammering the wire. A matching prompt latches IsSynced and ends the run; a
+// later run (the statline changed in-game mid-session) gets its own resends.
 //
 // When the resends run out and the prompt still doesn't match, the mismatch is
 // flagged (FlagChanged) so the user is told — HP can't be read, and nothing
@@ -179,12 +179,16 @@ public sealed class StatlineReconciler : IDisposable
         }
 
         // A live prompt matched the active (editor-built) pattern → the game is
-        // on the editor's statline. Latch synced; nothing (more) to send.
+        // on the editor's statline, and any mismatch run is over. A later one (the
+        // statline changed in-game mid-session) starts afresh with its own resends.
         if (!_armed || _synced) return;
         _synced = true;
         if (_retries > 0)
             _log?.Log(LogSeverity.Info, "Statline",
                 $"Statline reset worked - the game's prompt now matches Settings -> Statline (after {_retries} resend(s)).");
+        _retries = 0;
+        _gaveUp = false;
+        _mismatchLogged = false;
     }
 
     private void OnPromptShapeUnmatched(string prompt)
@@ -192,7 +196,8 @@ public sealed class StatlineReconciler : IDisposable
         LastPromptMatched = false;
         LastUnmatchedPrompt = prompt;
 
-        if (!_armed || _synced || _gaveUp || !_inGame) return;
+        if (!_armed || _gaveUp || !_inGame) return;
+        _synced = false;
 
         _consecutiveMismatches++;
         if (_consecutiveMismatches < MismatchThreshold) return;

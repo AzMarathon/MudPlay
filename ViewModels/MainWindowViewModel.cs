@@ -3412,7 +3412,16 @@ public partial class MainWindowViewModel : ObservableObject
     private void WriteToWire(byte[] data)
     {
         TelnetClient? t = _telnet;
-        if (t is not null) _ = FireSendAsync(t, data);
+        if (t is null) return;
+        // A command going out is when the prompt is certain to be on the cursor's row:
+        // the scanner checks it against Settings -> Statline (its input runs on the UI
+        // thread, the pacer may not).
+        if (data.Length > 0 && data[^1] is (byte)'\r' or (byte)'\n')
+        {
+            if (Dispatcher.UIThread.CheckAccess()) AppServices.Current.PromptScanner.NoteCommandSent();
+            else Dispatcher.UIThread.Post(AppServices.Current.PromptScanner.NoteCommandSent);
+        }
+        _ = FireSendAsync(t, data);
     }
 
     // Fire-and-forget a send on the live socket without letting a mid-send

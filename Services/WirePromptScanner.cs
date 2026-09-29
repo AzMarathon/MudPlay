@@ -65,6 +65,16 @@ public sealed partial class WirePromptScanner
     // pattern completes on the next read), so this keeps it from re-firing.
     private int _unmatchedScanFrom;
 
+    // Whether the active pattern matched a prompt since the last command we sent, and
+    // the buffer offset of the last cursor-line tail NoteCommandSent reported (-1 = none),
+    // so one prompt is reported once however many commands go out before the next.
+    private bool _matchedSinceSend;
+    private int _tailReportedFrom = -1;
+
+    // Longest prompt text quoted in a report — enough to recognise it, short enough
+    // for a one-line notice.
+    private const int MaxReportedPrompt = 80;
+
     // Swap in the status-line pattern for the active profile's statline — built
     // by StatlinePromptRegexBuilder from the editor command string. Installed on
     // profile load / mutation so the scanner reads exactly the shape the BBS was
@@ -169,6 +179,8 @@ public sealed partial class WirePromptScanner
             previousAcceptedEnd = lastEnd;
         }
 
+        if (activeMatched) _matchedSinceSend = true;
+
         // Mismatch detection: the active pattern matched nothing here, yet
         // statline-shaped text sits where the prompt goes — the start of a
         // wire row, which is where the server parks the prompt before our
@@ -256,6 +268,7 @@ public sealed partial class WirePromptScanner
         if (count <= 0) return;
         _buffer.Remove(0, count);
         _unmatchedScanFrom = Math.Max(0, _unmatchedScanFrom - count);
+        _tailReportedFrom = _tailReportedFrom >= count ? _tailReportedFrom - count : -1;
 
         int write = 0;
         for (int read = 0; read < _promptBoundaries.Count; read++)
@@ -273,6 +286,29 @@ public sealed partial class WirePromptScanner
             _promptBoundaries.Insert(0, 0);
     }
 
+    // A command just went out. Whatever the server left on the cursor's row is its
+    // prompt — the one place a prompt is certain to be, whatever it looks like (a
+    // statline set to plain text has no brackets or numbers for the shape check to
+    // find). If no prompt has matched the active pattern since the last command and
+    // that row holds text, report it as unmatched. Must run on the thread that feeds
+    // Append.
+    public void NoteCommandSent()
+    {
+        if (_matchedSinceSend)
+        {
+            _matchedSinceSend = false;
+            return;
+        }
+        int start = _promptBoundaries.Count > 0 ? _promptBoundaries[^1] : 0;
+        if (start > _buffer.Length || start == _tailReportedFrom) return;
+        // The shape check already reported this row's prompt when it arrived.
+        if (_unmatchedScanFrom > start) return;
+        string tail = _buffer.ToString(start, _buffer.Length - start).Trim();
+        if (tail.Length == 0) return;
+        _tailReportedFrom = start;
+        PromptShapeUnmatched?.Invoke(tail.Length > MaxReportedPrompt ? tail[..MaxReportedPrompt] : tail);
+    }
+
     // Reset the scanner — drops carryover and any in-flight CSI escape.
     public void Reset()
     {
@@ -280,6 +316,8 @@ public sealed partial class WirePromptScanner
         _promptBoundaries.Clear();
         _promptBoundaries.Add(0);
         _unmatchedScanFrom = 0;
+        _matchedSinceSend = false;
+        _tailReportedFrom = -1;
         _state = StripState.Normal;
     }
 

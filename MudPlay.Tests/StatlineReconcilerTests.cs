@@ -87,7 +87,7 @@ public sealed class StatlineReconcilerTests
     }
 
     [Fact]
-    public void DefaultEditor_ResetTakes_FirstMatchingPromptSyncsAndStops()
+    public void DefaultEditor_ResetTakes_ThenALaterMismatchRunResetsAgain()
     {
         var h = new Harness(desired: "full");
         h.EnterGame();
@@ -98,10 +98,14 @@ public sealed class StatlineReconcilerTests
         // pattern reads.
         h.Prompt("[HP=145/MA=46]:");
         Assert.True(h.Reconciler.IsSynced);
+        h.Prompts("[HP=145/MA=46]:", 5);
+        Assert.Single(h.Sent);              // matching prompts send nothing
 
+        // The statline is changed in-game mid-session: a new run, its own reset.
         h.Advance(10);
-        h.Prompts(OtherShapePrompt, 6);
-        Assert.Single(h.Sent);
+        h.Prompts(OtherShapePrompt, 3);
+        Assert.Equal(2, h.Sent.Count);
+        Assert.False(h.Reconciler.IsSynced);
         Assert.False(h.Reconciler.IsFlagged);
     }
 

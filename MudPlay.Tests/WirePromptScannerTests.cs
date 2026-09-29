@@ -345,4 +345,56 @@ public sealed class WirePromptScannerTests
         Assert.Equal(0, unmatched);
         Assert.Single(observed);
     }
+
+    // ----- the cursor's row when a command goes out -----
+
+    // A statline set to plain text has no brackets or digits for the shape check,
+    // but it's still what sits on the cursor's row when a command goes out.
+    [Fact]
+    public void CommandSent_ReportsAPlainTextPrompt()
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+
+        s.Append(B("Slimy Sewer Tunnel\r\nObvious exits: south, east, west\r\npenis"));
+        Assert.Empty(unmatched);            // nothing statline-shaped arrived
+
+        s.NoteCommandSent();
+        Assert.Equal(new[] { "penis" }, unmatched);
+
+        s.NoteCommandSent();                // a second command before the next prompt
+        Assert.Single(unmatched);           // the same prompt isn't counted twice
+
+        s.Append(B("\r\nSlimy Sewer Tunnel\r\npenis"));
+        s.NoteCommandSent();
+        Assert.Equal(2, unmatched.Count);   // the next prompt is
+    }
+
+    [Fact]
+    public void CommandSent_AfterAMatchingPrompt_ReportsNothing()
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+
+        s.Append(B("Obvious exits: south\r\n[HP=91/MA=7]:"));
+        s.NoteCommandSent();
+        s.NoteCommandSent();                // an engine burst before the next prompt
+
+        Assert.Empty(unmatched);
+    }
+
+    [Fact]
+    public void CommandSent_WithNothingOnTheCursorRow_ReportsNothing()
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+
+        s.Append(B("Obvious exits: south\r\n"));
+        s.NoteCommandSent();
+
+        Assert.Empty(unmatched);
+    }
 }

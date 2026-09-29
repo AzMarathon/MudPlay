@@ -44,7 +44,7 @@ public static class StatlinePromptRegexBuilder
     // reading freezes at its last positive value — the drop gate never fires and
     // the emergency hangup never sees the bleeding-out window.
     public static Regex Default { get; } = new(
-        @"\[HP=(?<hp>-?\d{1,4})(?:\/(?<type>MA|KAI)=(?<mana>\d{1,3}))?(?:\s\((?<statea>Resting|Meditating)\)\s)?\]:(?:\s\((?<stateb>Resting|Meditating)\))?",
+        @"\[HP=(?<hp>-?\d{1,4})(?:\/(?<type>MA|KAI)=(?<mana>\d{1,4}))?(?:\s\((?<statea>Resting|Meditating)\)\s)?\]:(?:\s\((?<stateb>Resting|Meditating)\))?",
         RegexOptions.Compiled);
 
     // Compile the scanner regex for command. Default / blank / full returns
@@ -75,7 +75,7 @@ public static class StatlinePromptRegexBuilder
                         // Peel a trailing MA / KAI label out of the pending
                         // literal so it captures as the type group.
                         FlushLiteralBeforeMana(pattern, literal);
-                        pattern.Append(@"(?<mana>\d{1,3})");
+                        pattern.Append(@"(?<mana>\d{1,4})");
                         break;
                     case 'n':
                         // Newline: the scanner drops CR / LF, so %n contributes
