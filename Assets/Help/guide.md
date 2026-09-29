@@ -3489,6 +3489,8 @@ Settings → Statline, modeled on MegaMUD's Statline dialog. Statline is **serve
 **How the options work:** Pick tokens from the **Customize** dropdown (current/max HP, current/max mana, resting flag, wealth, experience, color codes, and more) and click **Add** to build a custom string. **Default** resets back to `full`.
 **Important notes:** When you change this and click OK/Apply while connected, MudPlay sends the updated `set statline` command to the game immediately. On each connect it also checks that the game's live prompt matches your saved statline and re-sends the command if it doesn't (self-correcting, up to 3 retries) — so a server reset that lost your custom statline fixes itself without you having to do anything.
 
+**What a custom statline needs.** MudPlay's automation reads three things off the prompt: your **current HP** (`%h`), your **current mana** (`%m`, right after an `MA=` or `KAI=` label, which is how it tells mana from kai; skip it only if your class has no mana), and the **resting flag** (`%r`). Leave one out and the Statline tab says so in red, and pressing OK or Apply asks "Save anyway?" first; **Go back** returns to the tab with nothing saved. Max HP and max mana (`%H`, `%M`) are optional: MudPlay takes those from your `stat` screen.
+
 ### When the game's prompt doesn't match
 
 MudPlay reads your HP and mana from the prompt. If the game's prompt doesn't match Settings → Statline, MudPlay can't read them, and every HP-based automation (resting, healing, door bashing, running) acts as if you were at 0 HP. This applies to **Default** as well as a custom statline — some servers, or a statline set by hand in the game, print a shape Default doesn't cover (for example `[HP=145/145][MA=46/46]:`).

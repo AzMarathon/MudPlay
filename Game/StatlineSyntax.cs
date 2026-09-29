@@ -52,6 +52,32 @@ public static partial class StatlineSyntax
             : command;
     }
 
+    // What a custom statline leaves out that the engines read off the prompt: current
+    // HP (%h), current mana (%m behind its MA= / KAI= label — the label is how the
+    // parser tells mana from kai), and the resting flag (%r). hasMana: true / false
+    // when the character's pool is known, null when it isn't yet (mana is then
+    // asked for, with a note). Empty for the class default, which carries them all.
+    public static IReadOnlyList<string> MissingEngineFields(string? command, bool? hasMana)
+    {
+        if (IsDefault(command)) return [];
+        string template = StripFormatting(ExtractTemplate(command!));
+        List<string> missing = [];
+        if (!template.Contains("%h", StringComparison.Ordinal)) missing.Add("current HP (%h)");
+        if (hasMana != false)
+        {
+            string note = hasMana is null ? " - only if your class has mana or kai" : "";
+            int at = template.IndexOf("%m", StringComparison.Ordinal);
+            if (at < 0) missing.Add($"current mana (MA=%m or KAI=%m){note}");
+            else if (!ManaLabelBefore().IsMatch(template[..at]))
+                missing.Add($"an MA= or KAI= label right before %m, so the mana can be read{note}");
+        }
+        if (!template.Contains("%r", StringComparison.Ordinal)) missing.Add("the resting flag (%r)");
+        return missing;
+    }
+
+    [GeneratedRegex(@"(?:MA|KAI)\s*=?\s*$")]
+    private static partial Regex ManaLabelBefore();
+
     // Strip colour / formatting wildcards — they never reach plain prompt text.
     public static string StripFormatting(string template)
         => FormattingCodesRegex().Replace(template, string.Empty);

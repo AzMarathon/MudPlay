@@ -116,6 +116,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         // paradigm-20260922-113233). A clean window just closes.
         if (AnyDirty)
         {
+            if (!await ConfirmSaveWarningsAsync()) return;
             if (!await Services.AppServices.Current.Confirm.ConfirmSaveAsync()) return;
             ApplyAll();
         }
@@ -156,8 +157,21 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         // Apply button — same confirm-save semantics as OK, minus the close. Nothing
         // dirty ⇒ nothing to save, so don't prompt.
         if (!AnyDirty) return;
+        if (!await ConfirmSaveWarningsAsync()) return;
         if (!await Services.AppServices.Current.Confirm.ConfirmSaveAsync()) return;
         ApplyAll();
+    }
+
+    // A dirty section that flags a problem (SaveWarning) is asked about before
+    // anything is written. Going back lands on that section, nothing saved.
+    private async Task<bool> ConfirmSaveWarningsAsync()
+    {
+        List<SettingsSectionViewModel> flagged = Sections.Where(s => s.IsDirty && s.SaveWarning is not null).ToList();
+        if (flagged.Count == 0) return true;
+        string body = string.Join("\n\n", flagged.Select(s => $"{s.Title}: {s.SaveWarning}")) + "\n\nSave anyway?";
+        if (await Services.AppServices.Current.Confirm.ConfirmAsync("Before saving", body, "Save anyway")) return true;
+        SelectedSection = flagged[0];
+        return false;
     }
 
     private void ApplyAll()

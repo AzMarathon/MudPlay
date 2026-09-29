@@ -43,6 +43,10 @@ public abstract partial class SettingsSectionViewModel : ObservableObject, IDisp
     // Persist this section's pending edits. Default no-op for placeholders.
     public virtual void Apply() { }
 
+    // Something the user should hear before these edits are saved (null when all is
+    // well) — the Settings window asks "Save anyway?" when a dirty section has one.
+    public virtual string? SaveWarning => null;
+
     // Drop pending edits and re-read from the underlying store.
     public virtual void Discard() { }
 

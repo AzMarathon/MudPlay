@@ -80,6 +80,12 @@
                            TextWrapping="Wrap"
                            Margin="0,4,0,0"
                            Text="Sent verbatim after `set statline ` when you click OK or Apply, if the command changed. Default is `full` (class-default format). For a hand-rolled prompt, type `full custom &lt;wildcards&gt;` or a raw wildcard string."/>
+                <TextBlock Foreground="{StaticResource AccentRedBrush}"
+                           FontSize="{StaticResource FontSizeSm}"
+                           TextWrapping="Wrap"
+                           Margin="0,4,0,0"
+                           IsVisible="{Binding HasSaveWarning}"
+                           Text="{Binding SaveWarning}"/>
 
                 <!-- ===== Customize ===== -->
                 <TextBlock Classes="SectionHeader" Text="Customize"/>
