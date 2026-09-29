@@ -16,7 +16,10 @@ namespace MudPlay.Game;
 //     the returning member rejoined, so drop their hold immediately.
 //   • The grace window elapses — a member who never came back can't strand the
 //     party forever, so time them out and resume.
-// The gate clears once the last pending member resolves either way.
+//   • A pickup walk is going to fetch them, or we declined them (Release) — the
+//     hold would park that very walk, so the leader never moves (the member waits
+//     on us, we wait on their re-follow).
+// The gate clears once the last pending member resolves.
 //
 // Read-only on party state (mirrors PartyWaitMovementGate / PartyVitalsWatcher):
 // it only listens to PartyManager events and rides the shared
@@ -35,6 +38,9 @@ public sealed class PartyDisconnectMovementGate : IDisposable
     private readonly Dictionary<string, DateTime> _pending
         = new(StringComparer.OrdinalIgnoreCase);
     private bool _gateAsserted;
+
+    // For the bug report: the dropped members we're still holding for.
+    public IReadOnlyCollection<string> PendingMembers => _pending.Keys;
 
     // Overridable clock so tests drive the timeout deterministically.
     public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;
@@ -84,8 +90,15 @@ public sealed class PartyDisconnectMovementGate : IDisposable
         UpdateGate();
     }
 
-    // Assert while any member is pending, clear when none remain. Idempotent —
-    // only touches the coordinator on the held-state flip.
+    // PartyComebackManager is walking to pick them up, or has declined them.
+    public void Release(string name, string reason)
+    {
+        string given = GivenNameOf(name);
+        if (!_pending.Remove(given)) return;
+        _log?.Info("Party", $"Reconnect hold for {given} released — {reason}.");
+        UpdateGate();
+    }
+
     // Reset States: stop waiting out the reconnect grace for dropped members.
     public void Clear()
     {
@@ -93,6 +106,8 @@ public sealed class PartyDisconnectMovementGate : IDisposable
         UpdateGate();
     }
 
+    // Assert while any member is pending, clear when none remain. Idempotent —
+    // only touches the coordinator on the held-state flip.
     private void UpdateGate()
     {
         bool shouldHold = _pending.Count > 0;

@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.125.5**
+> **Version 3.125.6**
 > - Settings → Combat: new "Only my totals" option under Show combat round totals prints just your own row each round
 > - Round totals list you first, then your party, then monsters, biggest dealer first in each
 > - A party member's room spell is credited to them on every monster, not to unknown
+> - A leader holding for a dropped member now walks to pick them up when they ask, instead of staying put
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

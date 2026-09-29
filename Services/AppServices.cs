@@ -7014,6 +7014,13 @@ public sealed class AppServices
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
+        // A dropped member's reconnect hold (or their @wait) would park the walk to
+        // pick them up — the leader never moves while they wait on it.
+        PartyComeback.ReleaseHolds = (given, reason) =>
+        {
+            PartyDisconnectMovement.Release(given, reason);
+            PartyEssentials.ReleaseWait(given);
+        };
         // Their pending @wait would park the walk back to them behind the party-wait gate.
         Party.MemberLeftBehind += PartyEssentials.ReleaseWait;
 

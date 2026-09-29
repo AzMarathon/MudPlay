@@ -837,6 +837,7 @@ If a member drops, the party can auto-re-invite and reform on reconnect, and a m
 - **A follower who reconnects** within the *If leading, accept @comeback for* time (default 2 minutes) telepaths `@comeback <map/room>` to their leader, so the leader walks straight to them. After a longer drop the party has moved on, and no `@comeback` goes out. MudPlay waits up to 5 seconds after re-entering for your room to be confirmed, since the game can put you back somewhere other than where you dropped. Only if it can't confirm your room does a bare `@comeback` go out, and the leader backtracks along their own path instead.
 - **A leader** takes that `@comeback` for up to *If leading, accept @comeback for* minutes after the member dropped, even once they've re-entered the realm.
 - **If the leader is already backtracking** for that member and their `@comeback` names a room, the leader heads for that room instead.
+- **When a member drops, the leader holds in place** for their reconnect. That hold ends once the leader sets off to pick them up (or turns them down), so a leader waiting on a returning member still walks to them.
 - **If the leader gave up looking** and went idle, a `@comeback` from that member within the same number of minutes still recovers them, and the leader then resumes the walk, loop or Auto-Lair the search interrupted.
 
 ---
