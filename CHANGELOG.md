@@ -1,5 +1,10 @@
 # Version history
 
+## 3.125.2
+
+- A loop resumed from the toolbar or a hotkey after a Navigation pause no longer stays drawn as the red builder line
+- bug reports addressed: paradigm-20260929-125946
+
 ## 3.125.1
 
 - Leading through a party-splitting teleport (Darkwood's vortex) no longer sends you back for the followers it drops; they're re-invited where you land
