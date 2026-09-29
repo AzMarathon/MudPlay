@@ -25,16 +25,22 @@ public sealed class CombatSessionTrackerTests
         public CombatSessionTracker Tracker { get; }
         public int ChangedCount { get; private set; }
 
-        public Harness(
-            IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>? spellMatchers = null,
-            CasterMessageMatcher? procMatcher = null)
+        public Harness(IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>? spellMatchers = null)
         {
             DefaultPatterns.Seed(Router);
             Rounds = new RoundDamageTracker(Router, State);
             Tracker = new CombatSessionTracker(
                 Router, Rounds,
-                resolveSpellMatchers: spellMatchers is null ? null : () => spellMatchers,
-                resolveProcMatcher: procMatcher is null ? null : () => procMatcher);
+                resolveSpellMatchers: spellMatchers is null ? null : () => spellMatchers);
+            Rounds.SetOwnSpellLineCheck(Tracker.MatchesOwnSpell);
+            Rounds.NoteRoomEntities(new RoomEntitiesObservation(
+                "Also here: kobold, giant rat.",
+                new[]
+                {
+                    new RoomEntity("kobold", "kobold", EntityKind.Monster, 1),
+                    new RoomEntity("giant rat", "giant rat", EntityKind.Monster, 2),
+                },
+                DateTimeOffset.UtcNow));
             Tracker.Changed += () => ChangedCount++;
         }
 
@@ -224,6 +230,30 @@ public sealed class CombatSessionTrackerTests
     }
 
     [Fact]
+    public void HitsTaken_TrackDamageExtent_WhateverTheWording()
+    {
+        using Harness h = new();
+        h.Feed("The giant rat bites you for 3 damage!");
+        h.Feed("The kobold claws you with its pincers for 9 damage!");
+        h.Feed("Acid sears you for 6 damage!");
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(3, s.MobHits);
+        Assert.Equal(3, s.HitTakenMinDamage);
+        Assert.Equal(9, s.HitTakenMaxDamage);
+        Assert.Equal(18, s.HitTakenTotalDamage);
+        Assert.Equal(6d, s.HitTakenAvgDamage);
+    }
+
+    [Fact]
+    public void DamageNobodyDealt_IsNotAHitTaken()
+    {
+        using Harness h = new();
+        h.Feed("You are poisoned for 3 damage!");
+        Assert.Equal(0, h.Stats.MobHits);
+    }
+
+    [Fact]
     public void MobMiss_Counts_AsPlainMiss()
     {
         using Harness h = new();
@@ -340,7 +370,7 @@ public sealed class CombatSessionTrackerTests
         Assert.True(h.ChangedCount >= 1);
     }
 
-    // ----- game-data recognition: configured attack spell + weapon proc -----
+    // ----- our spells and procs, as the round ledger credits them -----
 
     private static CasterMessageMatcher Matcher(string template) =>
         CasterMessageMatcher.TryCreate(template)
@@ -370,13 +400,12 @@ public sealed class CombatSessionTrackerTests
     }
 
     [Fact]
-    public void WeaponProc_AfterLandedSwing_TalliesProcRow_NotASwing()
+    public void WeaponProc_TalliesProcRow_NotASwing()
     {
-        using Harness h = new(
-            procMatcher: Matcher("Your weapon sears {target} for {damage} damage!"));
+        using Harness h = new();
 
-        h.Feed("You slash the kobold for 8 damage!");        // a landed swing arms the proc
-        h.Feed("Your weapon sears the kobold for 4 damage!"); // proc fires off that swing
+        h.Feed("You slash the kobold for 8 damage!");
+        h.Feed("Your weapon sears the kobold for 4 damage!");
 
         CombatSessionStats s = h.Stats;
         Assert.Equal(1, s.Hits);          // the slash, still the only swing
@@ -390,41 +419,46 @@ public sealed class CombatSessionTrackerTests
     }
 
     [Fact]
-    public void WeaponProc_WithoutPrecedingSwing_IsNotCounted()
+    public void VictimOnlyProc_RightAfterOurHit_IsOurs()
     {
-        // A proc fires only after a basic attack connects; an unarmed proc line
-        // (no landed swing before it) must not register.
-        using Harness h = new(
-            procMatcher: Matcher("Your weapon sears {target} for {damage} damage!"));
+        // A proc naming only its victim goes to whoever just hit that monster.
+        using Harness h = new();
 
-        h.Feed("Your weapon sears the kobold for 4 damage!");
+        h.Feed("You slash the kobold for 8 damage!");
+        h.Feed("The kobold takes 3 damage from the cold!");
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(1, s.Hits);
+        Assert.Equal(1, s.ProcHits);
+        Assert.Equal(3, s.ProcTotalDamage);
+    }
+
+    [Fact]
+    public void VictimOnlyProc_WithoutOurHit_IsNotOurs()
+    {
+        using Harness h = new();
+
+        h.Feed("The kobold takes 3 damage from the cold!");
 
         Assert.Equal(0, h.Stats.ProcHits);
     }
 
     [Fact]
-    public void WeaponProc_AfterMiss_IsNotCounted()
+    public void VictimOnlyProc_AfterSomeoneElsesHit_IsNotOurs()
     {
-        // A whiff clears the armed flag — a proc line right after a miss can't
-        // be attributed to a connected swing.
-        using Harness h = new(
-            procMatcher: Matcher("Your weapon sears {target} for {damage} damage!"));
+        using Harness h = new();
 
-        h.Feed("*Combat Engaged*");
-        h.Feed("You swing at the kobold, but miss!");
-        h.Feed("Your weapon sears the kobold for 4 damage!");
+        h.Feed("The giant rat bites the kobold for 5 damage!");
+        h.Feed("The kobold takes 3 damage from the cold!");
 
-        CombatSessionStats s = h.Stats;
-        Assert.Equal(1, s.Misses);
-        Assert.Equal(0, s.ProcHits);
+        Assert.Equal(0, h.Stats.ProcHits);
     }
 
     [Fact]
     public void ProcAndSpellDamage_CountTowardRoundTotal_NotAsSwings()
     {
         using Harness h = new(
-            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) },
-            procMatcher: Matcher("Your weapon sears {target} for {damage} damage!"));
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
 
         h.Feed("You slash the kobold for 8 damage!");          // swing  → round +8
         h.Feed("Your weapon sears the kobold for 4 damage!");   // proc   → round +4
@@ -448,8 +482,7 @@ public sealed class CombatSessionTrackerTests
     public void Reset_ZeroesProcAndSpellRows()
     {
         using Harness h = new(
-            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) },
-            procMatcher: Matcher("Your weapon sears {target} for {damage} damage!"));
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
 
         h.Feed("You slash the kobold for 8 damage!");
         h.Feed("Your weapon sears the kobold for 4 damage!");
@@ -499,6 +532,7 @@ public sealed class CombatSessionTrackerTests
         using Harness h = new(
             spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
         h.Feed("*Combat Engaged*");
+        h.Rounds.NoteOwnCast();
         h.Feed("You scatter some ashes in a sweeping motion!");   // cast emote, resisted
         h.Feed("*Combat Off*");
 
@@ -525,5 +559,40 @@ public sealed class CombatSessionTrackerTests
         CombatSessionStats s = h.Stats;
         Assert.Equal(1, s.Misses);          // kept as a physical miss
         Assert.Empty(s.Spells);
+    }
+
+    [Fact]
+    public void WhiffOnlyCombat_WithoutACast_StaysPhysical()
+    {
+        // Knowing spells doesn't make a melee whiff a resisted cast — we never cast.
+        using Harness h = new(
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
+        h.Feed("*Combat Engaged*");
+        h.Feed("You swing at the kobold, but miss!");
+        h.Feed("*Combat Off*");
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(1, s.Misses);
+        Assert.Empty(s.Spells);
+    }
+
+    [Fact]
+    public void CastersEyeSpell_OursOnlyAfterWeCast()
+    {
+        // "Dark flame sears the kobold" is what everyone in the room sees, so it's our
+        // spell only when we cast lately.
+        using Harness h = new(
+            spellMatchers: new[] { ("dark flame", Matcher("Dark flame sears {target} for {damage} damage!")) });
+
+        h.Feed("Dark flame sears the kobold for 10 damage!");
+        Assert.Equal(0, h.Stats.SpellHits);
+
+        h.Rounds.NoteOwnCast();
+        h.Feed("Dark flame sears the kobold for 12 damage!");
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(1, s.SpellHits);
+        Assert.Equal(12, s.SpellTotalDamage);
+        Assert.Equal(0, s.ProcHits);
+        Assert.Equal("dark flame", Assert.Single(s.Spells).Name);
     }
 }

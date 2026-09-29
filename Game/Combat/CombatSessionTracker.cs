@@ -1,30 +1,23 @@
 using MudPlay.Game.Spells;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
-using MudPlay.Terminal;
 
 namespace MudPlay.Game.Combat;
 
-// Aggregates the session's combat lines into the CombatSessionStats the Session
-// Stats panel displays: the player's swing accuracy (hit / miss / crit),
-// physical and backstab damage extents, incoming-attack defence (mob hits /
-// misses / dodges), the per-round damage spread, and two game-data-driven rows
-// the fixed regex patterns can't see — the configured attack spell cast and the
-// equipped weapon's proc. Pure downstream subscriber — it never sends to the
-// wire, only observes MessageRouter lines and RoundDamageTracker.RoundComplete.
+// Aggregates our own combat into the CombatSessionStats the Session Stats panel
+// displays: our swing accuracy (hit / miss / crit), the damage of our swings, procs
+// and spells, the blows that hit us and how hard, what we avoided, and the per-round
+// damage spread. Pure downstream subscriber — it never sends to the wire.
 //
-// Spell / proc recognition is keyed off the game-data caster message
-// (CasterMessageMatcher), resolved from the configured attack-spell slots and
-// the worn weapon and refreshed on the data boundaries via RefreshMatchers.
-// Both are observed on MessageRouter.LineDispatched (which runs before the fixed
-// patterns) so a recognised line vetoes the physical-swing classifier in
-// OnUserHits — a spell / proc is never double-counted as a melee swing, and
-// never moves the hit / miss / crit denominators or the physical extent. Its
-// damage still reaches the per-round total through RoundDamageTracker's ledger,
-// which asks MatchesOwnSpellOrProc whether a line names no caster because it's
-// ours. A weapon proc only counts when the previous offensive line was
-// a landed swing, matching the MajorMUD rule that a proc fires after a basic
-// attack connects.
+// Damage comes off the same round ledger that prints the combat round totals
+// (RoundDamageTracker.Attributed), so the two always agree on whose damage a line
+// was. Of the lines the ledger credits to us, one matching the caster message of a
+// spell we know is that spell's (CasterMessageMatcher, refreshed via
+// RefreshMatchers); one the ledger read as a weapon proc, or phrased "Your …", is a
+// proc; the rest are our swings, which OnUserHits classifies. A spell or proc line
+// never counts as a swing, so it never moves the hit / miss / crit denominators or
+// the swing extents. Every damage line the ledger credits to someone hitting us is a
+// blow taken; misses and dodges come from the fixed patterns.
 //
 // Only the local player's own swings count toward the offensive figures, so
 // OnUserHits requires the first-person "You" source (the same convention
@@ -34,36 +27,31 @@ namespace MudPlay.Game.Combat;
 // / smash / backstab / spells never crit), otherwise a plain hit.
 //
 // Threading: every mutation runs on the router's marshalled (UI) dispatch
-// thread, as does RoundDamageTracker.RoundComplete; the window VM reads Snapshot
-// on the same thread. The counters are therefore lock-free, matching
-// RoundDamageTracker.
+// thread, as do RoundDamageTracker's events; the window VM reads Snapshot on the
+// same thread. The counters are therefore lock-free, matching RoundDamageTracker.
 public sealed class CombatSessionTracker : IDisposable
 {
-    private readonly MessageRouter _router;
     private readonly IDisposable _userHitsSub;
     private readonly IDisposable _userMissesSub;
     private readonly IDisposable _userDodgesSub;
-    private readonly IDisposable _mobHitsSub;
     private readonly IDisposable _mobMissesSub;
     private readonly IDisposable _combatStatusSub;
     private readonly RoundDamageTracker _rounds;
 
-    // Game-data-driven recognisers, resolved from live config + inventory and
-    // refreshed on the data boundaries (see RefreshMatchers). Null delegates =>
-    // no recognition (the proc / spell rows stay zero), so the tracker still
-    // works standalone with only the fixed-pattern offensive figures.
+    // Our known spells' caster-message matchers, configured attack slots first,
+    // refreshed on the data boundaries (see RefreshMatchers). A null resolver means no
+    // spell recognition — our spell lines then count as procs or swings.
     private readonly Func<IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>>? _resolveSpellMatchers;
-    private readonly Func<CasterMessageMatcher?>? _resolveProcMatcher;
     private IReadOnlyList<(string Name, CasterMessageMatcher Matcher)> _spellMatchers =
         Array.Empty<(string, CasterMessageMatcher)>();
-    private CasterMessageMatcher? _procMatcher;
 
-    // Per-attack-spell landed damage + resisted-cast count, keyed by the configured
-    // spell name. Landed = a recognised damage line; Misses = a resisted cast (see
-    // ResolvePendingSpellMiss). Ordered by first appearance for a stable display.
+    // Per-spell landed damage + resisted-cast count, keyed by spell name. Landed = a
+    // recognised damage line; Misses = a resisted cast (see ResolvePendingSpellMiss).
+    // Ordered by first appearance for a stable display.
     private sealed class SpellAccum { public DamageTally Dmg; public int Misses; }
     private readonly Dictionary<string, SpellAccum> _perSpell = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _spellOrder = new();
+    private string? _lastSpell;
 
     private DamageTally _hit;
     private DamageTally _crit;
@@ -71,32 +59,28 @@ public sealed class CombatSessionTracker : IDisposable
     private DamageTally _round;
     private DamageTally _proc;
     private DamageTally _spell;
+    private DamageTally _hitTaken;
     // The last counted miss may actually be a spell-cast EMOTE ("You scatter some
     // ashes in a sweeping motion!") — a self-emote ending in "!" the miss skeleton
     // can't tell from a real whiff. Set when a miss is counted; a spell that lands
-    // right after retracts it (OnLineDispatched), and a physical hit / combat-off
+    // right after retracts it (OnAttributed), and a physical hit / combat-off
     // resolves it (weapon whiff or resisted cast).
     private bool _emoteMissCandidate;
     // Any physical swing landed this combat — distinguishes a weapon whiff (keep the
     // miss) from a resisted spell cast (reattribute) at combat-off. Reset on Engaged.
     private bool _physicalHitThisCombat;
     private int _misses;
-    private int _mobHits;
     private int _mobMisses;
     private int _dodges;
-    // A proc fires only after a basic swing connects; set when one lands, and
-    // consumed (cleared) by the proc it precedes or cleared by a whiff.
-    private bool _lastWasLandedSwing;
     // True between "*Combat Engaged*" and "*Combat Off*" (re-asserted by any
     // hit / mob line). The UserMisses skeleton also matches self-emotes ending
     // in "!", so a miss is only counted while this is set — outside combat a
     // "You feel much better!" can't be a swing whiff. Any real swing-miss is
     // bracketed by combat, so this never suppresses a genuine miss.
     private bool _engaged;
-    // Set on the LineDispatched pass when the current line is claimed as a
-    // configured spell-cast or a weapon proc, so the later OnUserHits doesn't
-    // double-count it as a physical swing. Reset at the start of each line.
-    private bool _currentLineRecognized;
+    // The line the ledger pass just claimed as one of our spells or procs, so the
+    // UserHits pass that follows for the same line doesn't count it as a swing too.
+    private string? _recognizedLine;
     private bool _disposed;
 
     // Raised after any observation updates the tallies, so the Session Stats VM
@@ -107,49 +91,45 @@ public sealed class CombatSessionTracker : IDisposable
     public CombatSessionTracker(
         MessageRouter router,
         RoundDamageTracker rounds,
-        Func<IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>>? resolveSpellMatchers = null,
-        Func<CasterMessageMatcher?>? resolveProcMatcher = null)
+        Func<IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>>? resolveSpellMatchers = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(rounds);
-        _router = router;
         _rounds = rounds;
         _resolveSpellMatchers = resolveSpellMatchers;
-        _resolveProcMatcher = resolveProcMatcher;
 
         _userHitsSub     = router.Subscribe(KnownPatterns.UserHits,     OnUserHits);
         _userMissesSub   = router.Subscribe(KnownPatterns.UserMisses,   OnUserMisses);
         _userDodgesSub   = router.Subscribe(KnownPatterns.UserDodges,   OnUserDodges);
-        _mobHitsSub      = router.Subscribe(KnownPatterns.MobHits,      OnMobHits);
         _mobMissesSub    = router.Subscribe(KnownPatterns.MobMisses,    OnMobMisses);
         _combatStatusSub = router.Subscribe(KnownPatterns.CombatStatus, OnCombatStatus);
-        // LineDispatched fires once per line BEFORE the fixed patterns, so the
-        // game-data recogniser claims a spell-cast / proc line and vetoes the
-        // physical-swing classifier that runs a moment later in OnUserHits.
-        router.LineDispatched += OnLineDispatched;
+        // The ledger reads a line on MessageRouter.LineDispatched, before the fixed
+        // patterns, so a spell / proc line is claimed before OnUserHits sees it.
+        _rounds.Attributed += OnAttributed;
         _rounds.RoundComplete += OnRoundComplete;
 
         RefreshMatchers();
     }
 
-    // Re-resolve the configured attack-spell and equipped-weapon-proc matchers
-    // from live game data. Called on the boundaries that move them: connect /
-    // character switch, a Combat-tab edit, a game-data set swap, and a weapon
-    // swap. Cheap and idempotent — safe to call on a hot event.
+    // Re-resolve our spells' matchers from live game data. Called on the boundaries
+    // that move them: connect / character switch, a Combat-tab edit, a game-data set
+    // swap, and a spellbook change.
     public void RefreshMatchers()
-    {
-        _spellMatchers = _resolveSpellMatchers?.Invoke() ?? Array.Empty<(string, CasterMessageMatcher)>();
-        _procMatcher = _resolveProcMatcher?.Invoke();
-    }
+        => _spellMatchers = _resolveSpellMatchers?.Invoke() ?? Array.Empty<(string, CasterMessageMatcher)>();
 
-    // True when line is the caster's-eye damage line of one of our configured attack
-    // spells or our weapon's proc. RoundDamageTracker uses it to own a spell line that
-    // names no caster.
-    public bool MatchesOwnSpellOrProc(string line)
+    // The spells whose damage lines we recognise, configured attack slots first.
+    public IReadOnlyList<string> RecognisedSpells => _spellMatchers.Select(m => m.Name).ToList();
+
+    // True when line is the caster's-eye damage line of one of our spells.
+    // RoundDamageTracker uses it to own a spell line that names no caster.
+    public bool MatchesOwnSpell(string line) => SpellOf(line, out _) is not null;
+
+    private string? SpellOf(string line, out int damage)
     {
-        foreach ((string _, CasterMessageMatcher m) in _spellMatchers)
-            if (m.TryMatchDamage(line, out _)) return true;
-        return _procMatcher is { } proc && proc.TryMatchDamage(line, out _);
+        foreach ((string name, CasterMessageMatcher m) in _spellMatchers)
+            if (m.TryMatchDamage(line, out damage)) return name;
+        damage = 0;
+        return null;
     }
 
     // Per-spell accumulator, created on first sight of a spell so the display keeps
@@ -165,16 +145,18 @@ public sealed class CombatSessionTracker : IDisposable
         return a;
     }
 
-    // A miss left un-retracted (no spell landed after it) during a spell-combat run
-    // with no physical swing this combat was a RESISTED cast, not a whiff — move it
-    // from the physical-miss bucket to the primary attack spell's resist count.
+    // A miss left un-retracted (no spell landed after it) in a combat with no
+    // physical swing, right after we cast, was a RESISTED cast, not a whiff — move it
+    // from the physical-miss bucket to the resist count of the spell we last landed,
+    // else our first configured attack spell.
     private void ResolvePendingSpellMiss()
     {
-        if (_emoteMissCandidate && !_physicalHitThisCombat
-            && _spellMatchers.Count > 0 && _misses > 0)
+        if (_emoteMissCandidate && !_physicalHitThisCombat && _rounds.CastLately
+            && (_lastSpell ?? (_spellMatchers.Count > 0 ? _spellMatchers[0].Name : null)) is { } spell
+            && _misses > 0)
         {
             _misses--;
-            Spell(_spellMatchers[0].Name).Misses++;
+            Spell(spell).Misses++;
             Changed?.Invoke();
         }
         _emoteMissCandidate = false;
@@ -213,9 +195,12 @@ public sealed class CombatSessionTracker : IDisposable
             BackstabMinDamage:   _backstab.Count == 0 ? 0 : _backstab.Min,
             BackstabMaxDamage:   _backstab.Max,
             BackstabTotalDamage: _backstab.Sum,
-            MobHits:             _mobHits,
+            MobHits:             _hitTaken.Count,
             MobMisses:           _mobMisses,
             Dodges:              _dodges,
+            HitTakenMinDamage:   _hitTaken.Count == 0 ? 0 : _hitTaken.Min,
+            HitTakenMaxDamage:   _hitTaken.Max,
+            HitTakenTotalDamage: _hitTaken.Sum,
             RoundsWithDamage:    _round.Count,
             RoundMinDamage:      _round.Count == 0 ? 0 : _round.Min,
             RoundMaxDamage:      _round.Max,
@@ -240,70 +225,66 @@ public sealed class CombatSessionTracker : IDisposable
         _round = default;
         _proc = default;
         _spell = default;
+        _hitTaken = default;
         _perSpell.Clear();
         _spellOrder.Clear();
+        _lastSpell = null;
         _misses = 0;
-        _mobHits = 0;
         _mobMisses = 0;
         _dodges = 0;
-        _lastWasLandedSwing = false;
         _emoteMissCandidate = false;
         _physicalHitThisCombat = false;
-        _currentLineRecognized = false;
+        _recognizedLine = null;
         _engaged = false;
         Changed?.Invoke();
     }
 
-    private void OnLineDispatched(LineExtractor.EmittedLine line)
+    private void OnAttributed(AttributedLine line)
     {
-        // Reset per line — the flag only ever describes the line currently
-        // being dispatched (this runs first, before the fixed patterns).
-        _currentLineRecognized = false;
-        if (_spellMatchers.Count == 0 && _procMatcher is null) return;
+        _recognizedLine = null;
+        DamageAttribution sides = line.Sides;
+        if (sides.NoDealer) return;
 
-        string text = line.Text;
-
-        // Configured attack spell takes precedence over the physical-swing
-        // classifier: a cast like "You cast {s} at {target} for {damage}
-        // damage!" carries the first-person "You" source UserHits also matches,
-        // so without claiming it here it would be miscounted as a melee hit.
-        foreach ((string name, CasterMessageMatcher m) in _spellMatchers)
+        if (sides.Target == DamageLineAttributor.Self)
         {
-            if (m.TryMatchDamage(text, out int sdmg))
-            {
-                _spell.Add(sdmg);
-                Spell(name).Dmg.Add(sdmg);
-                // The cast's emote was just counted as a physical miss; a landed spell
-                // means that "miss" was the emote — retract it so spell combat doesn't
-                // inflate the miss count.
-                if (_emoteMissCandidate && _misses > 0) _misses--;
-                _emoteMissCandidate = false;
-                _currentLineRecognized = true;
-                Changed?.Invoke();
-                return;
-            }
+            _engaged = true; // an incoming blow means we're mid-combat
+            _hitTaken.Add(sides.Amount);
+            Changed?.Invoke();
+            return;
+        }
+        if (sides.Source != DamageLineAttributor.Self) return;
+
+        // One of our spells. Its cast line ("You cast … for N damage!") has the
+        // first-person "You" source UserHits also matches, so it's claimed here.
+        if (SpellOf(line.Text, out int dmg) is { } spell)
+        {
+            _spell.Add(dmg);
+            Spell(spell).Dmg.Add(dmg);
+            _lastSpell = spell;
+            // The cast's emote was just counted as a physical miss; a landed spell
+            // means that "miss" was the emote — retract it so spell combat doesn't
+            // inflate the miss count.
+            if (_emoteMissCandidate && _misses > 0) _misses--;
+            _emoteMissCandidate = false;
+            _recognizedLine = line.Text;
+            Changed?.Invoke();
+            return;
         }
 
-        // A weapon proc fires only AFTER a basic swing connects, so it's only
-        // counted when the previous offensive line was a landed hit. Folding it
-        // into its own row (not _hit) keeps it out of the swing accuracy +
-        // physical extent; its damage still rolls into the per-round total via
-        // RoundDamageTracker's ledger.
-        if (_lastWasLandedSwing && _procMatcher is { } proc && proc.TryMatchDamage(text, out int pdmg))
+        // Our swings all read "You …"; anything else of ours — a weapon's "Your weapon
+        // sears …", or a proc naming only its victim — is a proc.
+        if (line.Proc || line.Text.StartsWith("Your ", StringComparison.Ordinal))
         {
-            _proc.Add(pdmg);
-            _lastWasLandedSwing = false; // one proc per connected swing
-            _currentLineRecognized = true;
+            _proc.Add(sides.Amount);
+            _recognizedLine = line.Text;
             Changed?.Invoke();
         }
     }
 
     private void OnUserHits(MatchResult match)
     {
-        // A line already claimed as a configured spell-cast or weapon proc
-        // (recognised on the LineDispatched pass, which runs first) must not
-        // also count as a physical swing.
-        if (_currentLineRecognized) return;
+        // A line the ledger pass already claimed as our spell or proc isn't a swing.
+        if (string.Equals(match.Text, _recognizedLine, StringComparison.Ordinal)) return;
 
         // KnownPatterns.UserHits also fires on "The {mob} {verb} you for N
         // damage!" and on another player's swing. Only OUR own first-person
@@ -322,7 +303,6 @@ public sealed class CombatSessionTracker : IDisposable
             _crit.Add(dmg);
         else
             _hit.Add(dmg);
-        _lastWasLandedSwing = true; // a weapon proc may follow this connected swing
         _emoteMissCandidate = false; // a real physical swing landed — not a spell round
         _physicalHitThisCombat = true;
         Changed?.Invoke();
@@ -335,10 +315,9 @@ public sealed class CombatSessionTracker : IDisposable
         if (!_engaged) return;
         _misses++;
         // This miss might be a spell-cast emote, not a whiff — a spell landing right
-        // after retracts it (OnLineDispatched); an un-retracted one is resolved at
+        // after retracts it (OnAttributed); an un-retracted one is resolved at
         // combat-off (weapon whiff kept, resisted cast reattributed).
         _emoteMissCandidate = true;
-        _lastWasLandedSwing = false; // a whiff can't precede a proc
         Changed?.Invoke();
     }
 
@@ -346,13 +325,6 @@ public sealed class CombatSessionTracker : IDisposable
     {
         _engaged = true; // an incoming attack means we're mid-combat
         _dodges++;
-        Changed?.Invoke();
-    }
-
-    private void OnMobHits(MatchResult _)
-    {
-        _engaged = true; // an incoming attack means we're mid-combat
-        _mobHits++;
         Changed?.Invoke();
     }
 
@@ -399,10 +371,9 @@ public sealed class CombatSessionTracker : IDisposable
         _userHitsSub.Dispose();
         _userMissesSub.Dispose();
         _userDodgesSub.Dispose();
-        _mobHitsSub.Dispose();
         _mobMissesSub.Dispose();
         _combatStatusSub.Dispose();
-        _router.LineDispatched -= OnLineDispatched;
+        _rounds.Attributed -= OnAttributed;
         _rounds.RoundComplete -= OnRoundComplete;
     }
 

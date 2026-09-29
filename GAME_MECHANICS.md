@@ -1473,8 +1473,8 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
 - **The engine also has** `%s's just glanced off of %s's armour.` · `%s just dodged an attack from %s.` · `%s just missed an attack against %s.` *([OBSERVED] 2026-09-29, `wccmmud.dll` strings; where they print isn't recorded)*.
 
 **Client use:**
-- `DamageLineAttributor` names each side by matching the room roster, the party and "you" inside the line, not by grammar, across all the wordings above; damage nobody dealt (a condition, a fall, the heavens' bolt) counts only as taken. `CombatLineClassifier` labels those lines `Damage (you)` and the smash penalty `Smashed (you)` / `Smashed (other)`. `RoundDamageTracker` keeps the per-round ledger; a caster's-eye spell line counts as ours only when it matches our configured attack spell or weapon proc and we cast within the last few seconds.
-- The ledger feeds Settings → Combat "Show combat round totals" (issue #245), Session Stats' per-round damage, the Wire Inspector's Classified `[Ledger: …]` tags and the bug report.
+- `DamageLineAttributor` names each side by matching the room roster, the party and "you" inside the line, not by grammar, across all the wordings above; damage nobody dealt (a condition, a fall, the heavens' bolt) counts only as taken. `CombatLineClassifier` labels those lines `Damage (you)` and the smash penalty `Smashed (you)` / `Smashed (other)`. `RoundDamageTracker` keeps the per-round ledger; a caster's-eye spell line counts as ours only when it matches one of our class's spells and we cast within the last few seconds; a victim-only proc right after a hit goes to that hitter.
+- The ledger feeds Settings → Combat "Show combat round totals" (issue #245), Session Stats (`CombatSessionTracker.OnAttributed`: our procs, spells, per-round damage and blows taken), the Wire Inspector's Classified `[Ledger: …]` tags and the bug report.
 
 ### Kill detection and monster-kill message order
 *Status: CONFIRMED 2026-07-23 (bug-report captures); exp-line and AoE rules CONFIRMED 2026-08-15 (user); fight-over rule CONFIRMED 2026-09-08 (user)*

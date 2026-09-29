@@ -9,10 +9,10 @@ namespace MudPlay.Game.Combat;
 // Each landed-swing category — plain Hits, Crits, and Backstabs — carries its
 // own damage extent so the panel shows them on separate rows. "Physical" is the
 // derived roll-up across all three (the player's min/max damage seen for
-// physical swings). Configured attack-spell casts and weapon procs get their
-// own rows: they're not swings, so they never move the physical extent or the
-// hit / miss / crit denominators, though their damage still counts toward the
-// per-round total (recognised via the game-data caster-message matcher).
+// physical swings). Our spells and procs get their own rows: they're not swings,
+// so they never move the physical extent or the hit / miss / crit denominators,
+// though their damage still counts toward the per-round total. Every figure comes
+// off the same round ledger the combat round totals print.
 public readonly record struct CombatSessionStats(
     // ----- Offensive: the player's own swings (per-category extents) -----
     int Hits,
@@ -32,12 +32,15 @@ public readonly record struct CombatSessionStats(
     int MobHits,
     int MobMisses,
     int Dodges,
+    int HitTakenMinDamage,
+    int HitTakenMaxDamage,
+    long HitTakenTotalDamage,
     // ----- Per-round damage dealt -----
     int RoundsWithDamage,
     int RoundMinDamage,
     int RoundMaxDamage,
     long RoundTotalDamage,
-    // ----- Weapon procs & configured attack spells (own rows; not swings) -----
+    // ----- Our procs & spells (own rows; not swings) -----
     int ProcHits,
     int ProcMinDamage,
     int ProcMaxDamage,
@@ -46,8 +49,8 @@ public readonly record struct CombatSessionStats(
     int SpellMinDamage,
     int SpellMaxDamage,
     long SpellTotalDamage,
-    // Per-attack-spell breakdown (name · damage extent · landed / resisted casts).
-    // Empty when no attack spell is configured or none has been cast yet.
+    // Per-spell breakdown (name, damage extent, landed / resisted casts). Empty until
+    // one of our spells lands or is resisted.
     System.Collections.Generic.IReadOnlyList<SpellCombatStat> Spells)
 {
     // Every swing that connected (hit + crit + backstab).
@@ -110,6 +113,12 @@ public readonly record struct CombatSessionStats(
     // readout, since both mean the blow never landed.
     public int AvoidedAttacks => MobMisses + Dodges;
 
+    // Fraction of incoming attacks that hit us, 0–100.
+    public double HitTakenPercent => Pct(MobHits, IncomingAttacks);
+
+    // Mean damage per blow that hit us.
+    public double HitTakenAvgDamage => Avg(HitTakenTotalDamage, MobHits);
+
     // Fraction of incoming attacks we avoided (mob missed or we dodged), 0–100 —
     // the combined dodge-and-miss defensive rate.
     public double AvoidPercent => Pct(AvoidedAttacks, IncomingAttacks);
@@ -117,21 +126,21 @@ public readonly record struct CombatSessionStats(
     // Mean damage we dealt per round that did damage.
     public double RoundAvgDamage => Avg(RoundTotalDamage, RoundsWithDamage);
 
-    // Mean damage per weapon proc that fired.
+    // Mean damage per proc that fired.
     public double ProcAvgDamage => Avg(ProcTotalDamage, ProcHits);
 
     // Procs per landed basic swing, 0–100 — how often the weapon procs when it
     // connects.
     public double ProcRate => Pct(ProcHits, LandedSwings);
 
-    // Mean damage per configured attack-spell cast that landed.
+    // Mean damage per spell of ours that landed.
     public double SpellAvgDamage => Avg(SpellTotalDamage, SpellHits);
 
     private static double Pct(int part, int whole) => whole == 0 ? 0 : 100.0 * part / whole;
     private static double Avg(long total, int count) => count == 0 ? 0 : (double)total / count;
 }
 
-// One configured attack spell's session performance. Landed = casts whose damage
+// One of our spells' session performance. Landed = casts whose damage
 // line was seen; Misses = casts that resisted / had no effect (rare on Paradigm —
 // most combat spells don't fail to land). Damage extent is across landed casts.
 public readonly record struct SpellCombatStat(

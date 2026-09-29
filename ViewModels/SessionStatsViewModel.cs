@@ -83,7 +83,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HitRangeText), nameof(CritRangeText), nameof(BackstabRangeText),
         nameof(RoundRangeText), nameof(ProcRangeText), nameof(SpellRangeText),
-        nameof(HasProcs), nameof(HasSpells))]
+        nameof(HitTakenRangeText), nameof(HasProcs), nameof(HasSpells))]
     private CombatSessionStats _combat;
 
     [ObservableProperty]
@@ -322,12 +322,13 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     public string RoundRangeText    => Range(Combat.RoundMinDamage, Combat.RoundMaxDamage);
     public string ProcRangeText     => Range(Combat.ProcMinDamage, Combat.ProcMaxDamage);
     public string SpellRangeText    => Range(Combat.SpellMinDamage, Combat.SpellMaxDamage);
+    public string HitTakenRangeText => Range(Combat.HitTakenMinDamage, Combat.HitTakenMaxDamage);
 
-    // Drives the proc row's visibility — hidden until a weapon procs.
+    // Drives the proc row's visibility — hidden until one of our procs fires.
     public bool HasProcs => Combat.ProcHits > 0;
 
-    // Drives the spell row's visibility — hidden until a configured attack
-    // spell lands.
+    // Drives the spell rows' visibility — hidden until one of our spells lands or
+    // is resisted.
     public bool HasSpells => Combat.Spells.Count > 0;
 
     // ----- Session Statistics (currency) -------------------------------

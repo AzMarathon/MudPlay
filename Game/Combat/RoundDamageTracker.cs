@@ -21,8 +21,8 @@ namespace MudPlay.Game.Combat;
 // Every "... for N damage!" line is read by DamageLineAttributor against the room
 // roster (NoteRoomEntities) and the party. A caster's-eye spell line names no caster
 // ("Acid sears the orc for 12 damage!" is also what everyone else sees), so it counts
-// as ours only when it matches one of our own attack spells or our weapon proc AND we
-// sent a cast lately (NoteOwnCast). A weapon proc names only its victim too, but it
+// as ours only when it matches one of our own spells AND we sent a cast lately
+// (NoteOwnCast). A weapon proc names only its victim too, but it
 // lands right after the swing that set it off, so it goes to whoever just hit that same
 // monster. Otherwise the dealer is unknown.
 //
@@ -31,8 +31,9 @@ namespace MudPlay.Game.Combat;
 // a poison tick, a room hazard — joins an open round but doesn't start one between
 // fights.
 //
-// Subscribers: CombatSessionTracker (our own per-round damage) and AppServices, which
-// prints the ledger when Settings → Combat "Show combat round totals" is on.
+// Subscribers: CombatSessionTracker (our own statistics, per line and per round),
+// MonsterHpTracker, and AppServices, which prints the ledger when Settings → Combat
+// "Show combat round totals" is on.
 // The opt-in combat trace file is written here when shouldWriteTrace returns true
 // on round close; it's queried per round so a mid-session toggle applies at once.
 public sealed class RoundDamageTracker : IDisposable
@@ -105,10 +106,10 @@ public sealed class RoundDamageTracker : IDisposable
     // RoundTotalsFormatter.LedgerTag) — the Wire Inspector's Classified view.
     public event Action<string, string>? LineAttributed;
 
-    // Fired for each damage line with its two sides as the ledger names them (room
-    // display names, DamageLineAttributor.Self for us), whether or not it fell in a
-    // round — MonsterHpTracker's running estimates.
-    public event Action<DamageAttribution>? Attributed;
+    // Fired for each damage line as the ledger credited it, whether or not it fell in
+    // a round — MonsterHpTracker's running estimates and CombatSessionTracker's own
+    // statistics.
+    public event Action<AttributedLine>? Attributed;
 
     // Snapshot of the ring buffer, oldest first.
     public IReadOnlyList<RoundSummary> Recent
@@ -145,7 +146,7 @@ public sealed class RoundDamageTracker : IDisposable
 
     // Late-bound sources for naming combatants: the party's names, the local
     // character's own name (so the party list's copy of it isn't read as someone
-    // else), and whether a line is one of our own attack spells / weapon proc.
+    // else), and whether a line is one of our own spells.
     public void SetNameSources(Func<IEnumerable<string>> partyNames, Func<string?> selfName)
     {
         _partyNames = partyNames;
@@ -173,6 +174,9 @@ public sealed class RoundDamageTracker : IDisposable
     // seconds may be ours.
     public void NoteOwnCast() => _lastOwnCastAt = _now();
 
+    // We sent a cast recently enough that it may still be landing.
+    public bool CastLately => _now() - _lastOwnCastAt <= OwnCastWindow;
+
     private void OnLine(LineExtractor.EmittedLine line)
     {
         // This runs for every line the server sends, on the UI thread, so everything
@@ -189,23 +193,31 @@ public sealed class RoundDamageTracker : IDisposable
         string? source = a.Source is null ? null : Display(a.Source, display);
         string? target = a.Target is null ? null : Display(a.Target, display);
         DateTimeOffset now = _now();
+        bool ownSpell = false, proc = false;
         if (source is null && !a.NoDealer && target != DamageLineAttributor.Self
             && now - _lastOwnCastAt <= OwnCastWindow
             && _isOwnSpellLine?.Invoke(text) == true)
+        {
             source = DamageLineAttributor.Self;
+            ownSpell = true;
+        }
         // A weapon proc names only its victim ("Flames burn the orc", "The orc takes 3
         // damage from the cold!") and fires right after the swing that connected, so it
         // belongs to whoever just hit that same monster (report paradigm-20260929-043055).
         if (source is null && !a.NoDealer && target is not null && target != DamageLineAttributor.Self
             && _lastHit is { } hit && hit.Target.Equals(target, StringComparison.OrdinalIgnoreCase)
             && now - hit.At <= ProcWindow)
+        {
             source = hit.Source;
+            proc = true;
+        }
         if (source is not null && target is not null && !a.NoDealer) _lastHit = (source, target, now);
 
         bool opens = _state.InCombat
             || source == DamageLineAttributor.Self
             || (source is not null && target is not null);
-        Attributed?.Invoke(new DamageAttribution(a.NoDealer ? null : source, target, a.Amount, a.NoDealer));
+        Attributed?.Invoke(new AttributedLine(text,
+            new DamageAttribution(a.NoDealer ? null : source, target, a.Amount, a.NoDealer), ownSpell, proc));
         bool counted = _current is not null || opens;
         if (LineAttributed is { } attributed)
             attributed(text, RoundTotalsFormatter.LedgerTag(a.NoDealer ? null : source, target, a.Amount, counted, a.NoDealer));
