@@ -1811,6 +1811,14 @@ public sealed class AppServices
     // a stash room), walks back, and restarts the captured engine.
     public Game.Cash.AutoDepositManager AutoDeposit { get; private set; } = null!;
 
+    // The Default-gear max HP / pool the rest engine resolves against (recorded from a
+    // `stat` screen with the Default set on).
+    public Game.Health.DefaultPoolBaselineKeeper PoolBaseline { get; private set; } = null!;
+
+    // Sell detours — an item flagged "Make detours to sell this item" turns a walk,
+    // loop or Auto-Lair aside to a shop that trades it (see SellDetourManager).
+    public Game.Inventory.SellDetourManager SellDetour { get; private set; } = null!;
+
     // Active set's MonsterOverlay seed — Defaults-tier baseline for
     // per-monster automation behavior (relationship / priority /
     // DontBackstab). Realm flavor is auto-picked from
@@ -2689,8 +2697,16 @@ public sealed class AppServices
             // learns the maxima as a high-water mark that reads low until the
             // character is seen at full. The stat screen reports the true
             // ceilings — snap PlayerState.MaxHp/MaxMa to them (routed through
-            // PromptParser to keep it the sole writer of the max fields).
-            Player.ApplyStatScreenMax(snapshot.MaxHits, snapshot.MaxMana);
+            // PromptParser to keep it the sole writer of the max fields) — but only the
+            // ones this screen actually showed: an `exp` screen's snapshot still carries
+            // the last `stat`'s maxima, read under whatever gear was worn then.
+            Player.ApplyStatScreenMax(
+                Stats.LastCaptureReadHits ? snapshot.MaxHits : 0,
+                Stats.LastCaptureReadPool ? snapshot.MaxMana : 0);
+            // A full `stat` with the Default set on records the rest engine's basis.
+            if (Stats.LastCaptureReadHits && Stats.LastCaptureReadPool)
+                PoolBaseline.OnStatScreen(snapshot.MaxHits,
+                    snapshot.MaxMana > 0 ? snapshot.MaxMana : snapshot.MaxKai);
             SeedSpellbook(snapshot);
         };
         // Alignment doesn't come from `stat` (see SeedSpellbook above) — it's only
@@ -5380,14 +5396,42 @@ public sealed class AppServices
         // user tuned against their normal loadout), capped by the current gear's real
         // stat-screen max (so a rest set that LOWERS the pool can never strand the rest
         // out of reach — report paradigm-20260902-052036).
+        // The basis is the recorded Default-gear baseline (PoolBaseline) once one exists.
+        PoolBaseline = new Game.Health.DefaultPoolBaselineKeeper(
+            read: () => Profile.Current?.DefaultPoolBaseline,
+            write: b => { if (Profile.Current is { } p) { p.DefaultPoolBaseline = b; Profile.Save(); } },
+            level: () => PlayerStats.Level,
+            defaultGearBonus: DefaultGearPoolBonus,
+            defaultWorn: DefaultSetWorn,
+            canCheckNow: () => PlayerState.HasPromptData && !PlayerState.InCombat
+                && !Equipment.IsApplyingSet && !TrainerMenu.MenuOwnsKeyboard,
+            sendStat: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("stat\r")),
+            log: Log);
+        Tick.HeartbeatElapsed += PoolBaseline.Poll;
+        // A rested follower's @ok waits until the Pre-rest set is off again; once the
+        // swap back to Default lands, a CR re-reads the pools (after the max-pool settle
+        // window) and the re-evaluation sends it.
+        Health.SetPartyOkHold(() => CurrentEquippedIsPreRestSet() || Equipment.IsApplyingSet);
+        Equipment.ApplyingChanged += applying =>
+        {
+            if (applying || !Health.IsPartyOkHeldForGear) return;
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("\r"));
+                Health.Evaluate();
+            };
+            timer.Start();
+        };
         Health.SetRestPoolMaxProviders(
-            () => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp),
-            () => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa),
+            () => DefaultBasisMaxHp(),
+            () => DefaultBasisMaxMa(),
             () => PlayerStats.MaxHits,
             () => PlayerStats.MaxMana);
         // Self-heal HP triggers anchor to the Default set too (same basis as rest).
         CastDirector.SetRestPoolMaxHp(
-            () => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerStats.MaxHits),
+            () => DefaultBasisMaxHp(),
             () => PlayerStats.MaxHits);
 
         // Hold every movement engine while a paced gear-set apply streams, so the
@@ -5709,6 +5753,7 @@ public sealed class AppServices
         AutoSell = new Game.Inventory.AutoSellManager(Router,
             carriedItems: () => Inventory.Snapshot.CarriedItems,
             resolve: ResolveAutoSellItem,
+            shopTradesItem: (shop, item) => ShopStock.ShopsSelling(item).Contains(shop),
             isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
             log: Log,
             isParadigm: onParadigm);
@@ -5971,6 +6016,9 @@ public sealed class AppServices
             // handler — so its `hide` reaches the wire before the loop's next move
             // (else the coins hide in the NEXT room; report paradigm-20260819-054200).
             AutoDeposit?.OnRoomEntered(t);
+            // Auto-sell in a shop room that trades a flagged item — here, ahead of the
+            // movement engines, so its Selling gate is up before the next step.
+            AutoSell.OnRoomEntered(t.NewRoom.Shop);
         };
 
         Walker = new Game.Map.AutoWalkManager(RoomGraph, Bfs, RoomTracker,
@@ -6354,7 +6402,7 @@ public sealed class AppServices
             isEnabled: () => ReadAutoModeFlag(d => d.AutoLight),
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
-                || AutoDeposit.IsRerouting,
+                || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
             walkTo: key => Walker.WalkTo(key),
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
@@ -6650,6 +6698,15 @@ public sealed class AppServices
         // is constructed earlier, before the movement layer).
         AutoParty.SetMovementGate(MovementCoordinator,
             () => LoopRunner.State != Game.Map.LoopState.Idle);
+        // Auto-sell holds movement while it sells, with a result timeout off a
+        // UI-thread one-shot.
+        AutoSell.SetMovementGate(MovementCoordinator);
+        AutoSell.SetScheduler((delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+        });
 
         // Deterministic Auto-Lair scheduler — picks the next marked
         // lair to enter based on respawn timers + travel cost, parks
@@ -7115,7 +7172,30 @@ public sealed class AppServices
         // Settings → Other "Only auto-invite while navigation is running": a walk,
         // loop or auto-lair (running or paused), or an auto-deposit / train trip.
         AutoParty.SetNavigationProbe(() =>
-            MovementControl.IsActive || AutoDeposit.IsRerouting || TrainerWalk.IsBusy || TrainFunding.IsBusy);
+            MovementControl.IsActive || AutoDeposit.IsRerouting || SellDetour.IsDetouring
+            || TrainerWalk.IsBusy || TrainFunding.IsBusy);
+        // Sell detours: walk / loop / lair → the chosen shop → Auto-sell → carry on.
+        // Blocked while anything else owns movement or holds it (combat, rest, a user
+        // pause, following a leader, the other errand engines).
+        SellDetour = new Game.Inventory.SellDetourManager(
+            candidates: SellDetourCandidates,
+            distance: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            tracker: RoomTracker, walker: Walker, loops: LoopRunner, lair: AutoLair,
+            sell: AutoSell, coordinator: MovementCoordinator,
+            isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
+            blocked: () => PlayerState.InCombat
+                || (PartyState.IsInParty && !PartyState.SelfIsLeader)
+                || MovementCoordinator.AssertedGates.Any(g => g != Game.Map.MovementCoordinator.SellDetourGate)
+                || AutoSell.IsSelling
+                || AutoDeposit.IsRerouting || TrainerWalk.IsBusy || TrainFunding.IsBusy
+                || TokenRoute.Active || PartyComeback.RecoveringMember is not null
+                || PathItemShopRouter.DetourActive || PathItemGiveRouter.DetourActive
+                || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive
+                || AutoLightShopRouter.DetourActive
+                || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive,
+            log: Log);
+        Tick.HeartbeatElapsed += SellDetour.Evaluate;
+        Inventory.Changed += SellDetour.Evaluate;
         // Return-leg light provisioning: the reroute owns the walker end-to-end, so
         // the reactive shop router is suppressed (IsRerouting) — this manager runs
         // its own bank -> shop -> origin light detour and needs the `i` dump to
@@ -7182,7 +7262,7 @@ public sealed class AppServices
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
-                || AutoDeposit.IsRerouting,
+                || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
@@ -7204,7 +7284,7 @@ public sealed class AppServices
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
-                || AutoDeposit.IsRerouting,
+                || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
             // The shared detour walk supersedes silently — without that, arriving at
             // the shop fired a Stopped into this router and abandoned the detour on
             // arrival (the "sat idle at the shop, never bought" bug).
@@ -7239,7 +7319,7 @@ public sealed class AppServices
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
-                || AutoDeposit.IsRerouting,
+                || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
@@ -7274,7 +7354,7 @@ public sealed class AppServices
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
-                || AutoDeposit.IsRerouting,
+                || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
             confirm: (title, body) => Confirm.ConfirmAsync(title, body, "Reroute"),
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
@@ -8042,9 +8122,49 @@ public sealed class AppServices
     // live pool max before a stat screen / when none of the Default set's items is
     // owned; FromDefaultSet says which basis it is, for the "(def)" / "(live)" marker.
     public (int Max, bool FromDefaultSet) RestPreviewMaxHp()
-        => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp) is int v and > 0 ? (v, true) : (PlayerState.MaxHp, false);
+        => DefaultBasisMaxHp() is int v and > 0 ? (v, true) : (PlayerState.MaxHp, false);
     public (int Max, bool FromDefaultSet) RestPreviewMaxMa()
-        => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa) is int v and > 0 ? (v, true) : (PlayerState.MaxMa, false);
+        => DefaultBasisMaxMa() is int v and > 0 ? (v, true) : (PlayerState.MaxMa, false);
+
+    // The Default-gear max the rest engine resolves against: the recorded baseline
+    // (a `stat` read with the Default set on — see DefaultPoolBaselineKeeper), kept
+    // even while stale until a fresh one lands; before the first one, estimated from
+    // the live max and the gear bonuses (DefaultSetMaxPool).
+    private int DefaultBasisMaxHp()
+        => PoolBaseline.Current is { MaxHp: > 0 } b ? b.MaxHp
+            : DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp);
+    private int DefaultBasisMaxMa()
+        => PoolBaseline.Current is { MaxMa: > 0 } b ? b.MaxMa
+            : DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa);
+
+    // The Default set's summed +MaxHP / +MaxMana item bonus (owned items only, like
+    // DefaultSetMaxPool), or null when no Default set is configured.
+    private (int Hp, int Ma)? DefaultGearPoolBonus()
+    {
+        IReadOnlyList<Game.Inventory.EquippedItem> items = DefaultSetEquippedItems();
+        if (items.Count == 0) return null;
+        Game.Calculators.EquipmentStatSummary t = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(items, GameData).Totals;
+        return (t.PlusMaxHp, t.PlusMaxMana);
+    }
+
+    // The Default set is on: every Default item we own is worn, and the worn gear's
+    // max-pool bonus matches the Default set's (so nothing else worn shifts the maxima).
+    private bool DefaultSetWorn()
+    {
+        IReadOnlyList<Game.Inventory.EquippedItem> items = DefaultSetEquippedItems();
+        if (items.Count == 0) return false;
+        List<string> worn = Inventory.Snapshot.EquippedItems.Select(w => w.Name.Trim()).ToList();
+        foreach (Game.Inventory.EquippedItem item in items)
+        {
+            int i = worn.FindIndex(n => string.Equals(n, item.Name, StringComparison.OrdinalIgnoreCase));
+            if (i < 0) return false;
+            worn.RemoveAt(i);
+        }
+        Game.Calculators.EquipmentStatSummary w = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals;
+        return DefaultGearPoolBonus() is { } d && d.Hp == w.PlusMaxHp && d.Ma == w.PlusMaxMana;
+    }
 
     // The max HP or mana the DEFAULT gear set would give (selector picks the pool
     // from an equipment-stat summary). Re-bases the LIVE gear-aware pool max off the
@@ -10086,7 +10206,7 @@ public sealed class AppServices
             && !(overlay.LoyalItem ?? false)
             && Lights.FindByName(name) is null;
         return new Game.Inventory.AutoSellManager.ResolvedSell(
-            number, name, sell, KeepFloor(overlay));
+            number, name, sell, SellFloor(overlay));
     }
 
     // MDB ItemType for a container — the only kind auto-open acts on.
@@ -10465,6 +10585,8 @@ public sealed class AppServices
         AutoLightShopRouter.Cancel();
         TokenRoute.Cancel();
         AutoDeposit.Cancel();
+        SellDetour.Cancel();
+        AutoSell.Cancel();
         TrainerWalk.Cancel(reason);
         TrainFunding.Cancel(reason);
         TrainerMenu.ForceExit(reason);
@@ -10545,7 +10667,44 @@ public sealed class AppServices
         return Math.Max(1, Math.Max(target, floor));
     }
 
-    // Keep floor for the discard / sell engines: MinToKeep when the user set
+    // Carried items that can take a sell detour: flagged Make detours + Auto-sell (and
+    // sellable — not loyal, not a light), with their counts, keep floor, detour count
+    // and the shop rooms they may use — the ticked "Sell here" shops that trade the
+    // item, or every shop that trades it when none are ticked.
+    private System.Collections.Generic.IReadOnlyList<Game.Inventory.SellDetourManager.Candidate> SellDetourCandidates()
+    {
+        System.Collections.Generic.Dictionary<int, (Game.Inventory.AutoSellManager.ResolvedSell Item, int Count)> carried = new();
+        foreach (string entry in Inventory.Snapshot.CarriedItems)
+        {
+            if (ResolveAutoSellItem(entry) is not { Sell: true } item) continue;
+            carried[item.Number] = carried.TryGetValue(item.Number, out var g) ? (g.Item, g.Count + 1) : (item, 1);
+        }
+        var result = new System.Collections.Generic.List<Game.Inventory.SellDetourManager.Candidate>();
+        foreach ((int number, (Game.Inventory.AutoSellManager.ResolvedSell item, int count)) in carried)
+        {
+            Models.GameData.ItemOverlay overlay = ResolveItemOverlay(number);
+            if (overlay.SellDetour != true) continue;
+            int above = ParseCount(overlay.SellDetourAbove, 0);
+            System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> trading = ShopRoomsSellingItem(number);
+            var picks = new System.Collections.Generic.HashSet<Game.Map.RoomKey>();
+            foreach (string wire in (overlay.SellShops ?? string.Empty).Split(',',
+                         System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries))
+                if (Game.Map.RoomKey.TryParseWire(wire, out Game.Map.RoomKey k)) picks.Add(k);
+            System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = picks.Count == 0
+                ? trading
+                : trading.Where(picks.Contains).ToList();
+            result.Add(new Game.Inventory.SellDetourManager.Candidate(number, item.Name, count, item.KeepCount, above, shops));
+        }
+        return result;
+    }
+
+    // What selling leaves carried — auto-sell in passing and a sell detour alike:
+    // Min. to keep when it's above 0, else everything goes (user, 2026-09-28). Unlike
+    // KeepFloor it doesn't wait on Must have minimum.
+    private static int SellFloor(Models.GameData.ItemOverlay overlay) =>
+        ParseCount(overlay.MinToKeep, 0);
+
+    // Keep floor for the discard engine: MinToKeep when the user set
     // MustHaveMinimum, else zero (unbanded → drain to nothing). "None", blank, and
     // non-numeric strings resolve to zero.
     private static int KeepFloor(Models.GameData.ItemOverlay overlay) =>

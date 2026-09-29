@@ -66,7 +66,17 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     [ObservableProperty] private bool _autoDiscard;
     [ObservableProperty] private bool _autoOpen;
     [ObservableProperty] private bool _autoBuy;
-    [ObservableProperty] private bool _autoSell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSellDetour))]
+    private bool _autoSell;
+
+    // Detour to a shop to sell this item (needs Auto-sell — the detour only walks
+    // there; Auto-sell does the selling). The shops it may use are the Bought /
+    // sold rows ticked "Sell here" (none ticked = any of them).
+    [ObservableProperty] private bool _sellDetour;
+    [ObservableProperty] private string _sellDetourAbove = string.Empty;
+    public bool CanSellDetour => CanBuySell && AutoSell;
+    private readonly HashSet<string> _sellShops = new(StringComparer.Ordinal);
     [ObservableProperty] private bool _autoStash;
     [ObservableProperty] private bool _cannotBeTaken;
     [ObservableProperty] private bool _mustHaveMinimum;
@@ -183,9 +193,35 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     partial void OnCharmChanged(int value)
     {
         if (_shopSalesForCharm is null) return;
-        ShopSales.Clear();
-        foreach (ShopSaleRow row in _shopSalesForCharm(value)) ShopSales.Add(row);
+        SetShopRows(_shopSalesForCharm(value));
     }
+
+    // Fill the Bought / sold rows, carrying the "Sell here" picks across a rebuild.
+    private void SetShopRows(IReadOnlyList<ShopSaleRow> rows)
+    {
+        foreach (ShopSaleRow old in ShopSales) old.PropertyChanged -= OnShopRowChanged;
+        ShopSales.Clear();
+        foreach (ShopSaleRow row in rows)
+        {
+            row.SellHere = row.CanOpen && _sellShops.Contains(row.RoomKeyWire);
+            row.PropertyChanged += OnShopRowChanged;
+            ShopSales.Add(row);
+        }
+    }
+
+    private void OnShopRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ShopSaleRow.SellHere) || sender is not ShopSaleRow row) return;
+        if (row.SellHere) _sellShops.Add(row.RoomKeyWire);
+        else _sellShops.Remove(row.RoomKeyWire);
+    }
+
+    // The ticked shops as the overlay stores them — sorted "map/room" keys, blank for none.
+    private string SellShopsWire() => string.Join(",", _sellShops.OrderBy(k => k, StringComparer.Ordinal));
+
+    private static HashSet<string> ParseSellShops(string? wire) => new(
+        (wire ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+        StringComparer.Ordinal);
 
     public ItemEditDialogViewModel(
         string wccNoStr,
@@ -221,7 +257,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         UseTier      = writable.Contains(currentTier) ? currentTier : writable[0];
         MdbInfo      = mdbInfo;
         _shopSalesForCharm = shopSalesForCharm;
-        foreach (ShopSaleRow row in shops) ShopSales.Add(row);
+        _sellShops.UnionWith(ParseSellShops(existing?.SellShops));
+        SetShopRows(shops);
         DroppedBy    = droppedBy ?? Array.Empty<DroppedByRow>();
         PlacedIn     = placedIn  ?? Array.Empty<PlacedInRow>();
         CastsSpells  = castsSpells ?? Array.Empty<CastsSpellRow>();
@@ -241,6 +278,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         AutoOpen        = isContainer && (existing?.AutoOpen ?? false);
         AutoBuy         = existing?.AutoBuy         ?? false;
         AutoSell        = existing?.AutoSell        ?? false;
+        SellDetour      = existing?.SellDetour      ?? false;
+        SellDetourAbove = existing?.SellDetourAbove ?? string.Empty;
         AutoStash       = existing?.AutoStash       ?? false;
         CannotBeTaken   = existing?.CannotBeTaken   ?? false;
         MustHaveMinimum = existing?.MustHaveMinimum ?? false;
@@ -263,6 +302,9 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
             isContainer && (installedDefaults?.AutoOpen ?? false),
             installedDefaults?.AutoBuy ?? false,
             installedDefaults?.AutoSell ?? false,
+            installedDefaults?.SellDetour ?? false,
+            installedDefaults?.SellDetourAbove ?? string.Empty,
+            string.Join(",", ParseSellShops(installedDefaults?.SellShops).OrderBy(k => k, StringComparer.Ordinal)),
             installedDefaults?.AutoStash ?? false,
             installedDefaults?.CannotBeTaken ?? false,
             installedDefaults?.MustHaveMinimum ?? false,
@@ -348,7 +390,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     private void Save()
     {
         ItemOverlay overlay = Compose(
-            Name, AutoCollect, AutoDiscard, AutoOpen, AutoBuy, AutoSell, AutoStash,
+            Name, AutoCollect, AutoDiscard, AutoOpen, AutoBuy, AutoSell,
+            SellDetour, SellDetourAbove, SellShopsWire(), AutoStash,
             CannotBeTaken, MustHaveMinimum, LoyalItem, AutoObtainForPath, MinToKeep, MaxToGet);
 
         // Record value-equality against the defaults baseline: true means the edit
@@ -361,7 +404,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     // defaults-baseline capture, so the two compare apples-to-apples.
     private static ItemOverlay Compose(
         string name, bool autoCollect, bool autoDiscard, bool autoOpen, bool autoBuy,
-        bool autoSell, bool autoStash, bool cannotBeTaken, bool mustHaveMinimum,
+        bool autoSell, bool sellDetour, string sellDetourAbove, string sellShops,
+        bool autoStash, bool cannotBeTaken, bool mustHaveMinimum,
         bool loyalItem, bool autoObtainForPath, string minToKeep, string maxToGet)
         => new()
         {
@@ -371,6 +415,9 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
             AutoOpen          = autoOpen        ? true : null,
             AutoBuy           = autoBuy         ? true : null,
             AutoSell          = autoSell        ? true : null,
+            SellDetour        = sellDetour      ? true : null,
+            SellDetourAbove   = string.IsNullOrWhiteSpace(sellDetourAbove) ? null : sellDetourAbove.Trim(),
+            SellShops         = string.IsNullOrWhiteSpace(sellShops) ? null : sellShops,
             AutoStash         = autoStash       ? true : null,
             CannotBeTaken     = cannotBeTaken   ? true : null,
             MustHaveMinimum   = mustHaveMinimum ? true : null,

@@ -54,6 +54,20 @@ public sealed record ItemOverlay
     // Auto-sell this item at the configured shop.
     public bool? AutoSell { get; init; }
 
+    // Detour to a shop to sell this item (MudPlay). With Auto-sell on, a walk-to,
+    // loop or auto-lair turns aside to a shop that trades it once more than
+    // SellDetourAbove are carried, sells, then carries on (SellDetourManager).
+    public bool? SellDetour { get; init; }
+
+    // Carried count above which a sell detour goes. Raw string like MinToKeep;
+    // blank = any copy above the keep floor.
+    public string? SellDetourAbove { get; init; }
+
+    // The shops a sell detour may use, as comma-separated "map/room" keys of the
+    // shop rooms (sorted). Blank = any shop that trades the item. A string, not a
+    // list, so the overlay record keeps value equality.
+    public string? SellShops { get; init; }
+
     // Auto-stash this item at the configured stash room.
     public bool? AutoStash { get; init; }
 

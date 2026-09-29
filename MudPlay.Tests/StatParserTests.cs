@@ -857,4 +857,30 @@ public sealed class StatParserTests
     [InlineData("")]
     public void IsStatScreenLine_RejectsNonStatLines(string line) =>
         Assert.False(StatParser.IsStatScreenLine(line));
+
+    // Report paradigm-20260928-223148: an `exp` screen shows no Hits / Mana, so its
+    // capture mustn't count as reading the maxima (the snapshot still holds an older
+    // `stat`'s, read under other gear).
+    [Fact]
+    public void ExpScreen_DoesNotCountAsReadingTheMaxima()
+    {
+        var (p, _) = Setup();
+        p.FeedTestLine("Exp: 12345  Level: 3  Exp needed for next level: 10 (20) [50%]");
+        p.FeedTestLine("[HP=10/MA=5]:", isPromptLine: true);
+
+        Assert.False(p.LastCaptureReadHits);
+        Assert.False(p.LastCaptureReadPool);
+    }
+
+    [Fact]
+    public void StatScreen_CountsAsReadingTheMaxima()
+    {
+        var (p, _) = Setup();
+        p.FeedTestLine("Hits:    86/86    Armour Class:  30/3  Thievery:       62");
+        p.FeedTestLine("Mana:    38/38    Spellcasting: 74     Traps:          65");
+        p.FeedTestLine("[HP=86/MA=38]:", isPromptLine: true);
+
+        Assert.True(p.LastCaptureReadHits);
+        Assert.True(p.LastCaptureReadPool);
+    }
 }

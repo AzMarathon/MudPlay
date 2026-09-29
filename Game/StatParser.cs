@@ -59,6 +59,16 @@ public sealed partial class StatParser : IDisposable
     // summary log line.
     private int _fieldsCapturedThisArm;
 
+    // Whether this capture actually read the Hits / power-pool (Mana or Kai) lines. Only then are the
+    // maxima fresh: an `exp` screen carries neither, and its snapshot still holds the
+    // last `stat`'s maxima — read under whatever gear was worn then (report
+    // paradigm-20260928-223148: an `exp` re-snapped Default gear's max mana from 398
+    // to a Pre-rest-set 423, and the next Pre-rest swap stacked +25 on top of it).
+    private bool _hitsReadThisArm;
+    private bool _poolReadThisArm;
+    public bool LastCaptureReadHits { get; private set; }
+    public bool LastCaptureReadPool { get; private set; }
+
     // Idle self-close. The reactive gate-close in OnLine only fires when a *further*
     // line arrives after capture (a terminating prompt, or any line past the window
     // expiry). But a stat screen the player is parked in front of — e.g. sitting at a
@@ -320,6 +330,7 @@ public sealed partial class StatParser : IDisposable
         _windowOpenedAt = NowProvider();
         _capturedThisArm = false;
         _fieldsCapturedThisArm = 0;
+        _hitsReadThisArm = _poolReadThisArm = false;
         _home = SynchronizationContext.Current;   // (re)capture the pipeline thread for the settle-close
         _settleSession++;                          // invalidate any prior window's pending settle timer
         _log?.Log(LogSeverity.Info, "StatParser",
@@ -343,6 +354,7 @@ public sealed partial class StatParser : IDisposable
         _windowOpenedAt = NowProvider();
         _capturedThisArm = false;
         _fieldsCapturedThisArm = 0;
+        _hitsReadThisArm = _poolReadThisArm = false;
         _home = SynchronizationContext.Current;
         _settleSession++;
         _log?.Log(LogSeverity.Info, "StatParser",
@@ -497,9 +509,9 @@ public sealed partial class StatParser : IDisposable
 
         // Paired N/M fields.
         TryPair(text, LivesCpRx(),     "Lives/CP",     (a, b) => { Stats.Lives = a; Stats.Cp = b; });
-        TryPair(text, HitsRx(),        "Hits",         (a, b) => { Stats.Hits = a; Stats.MaxHits = b; });
-        TryPair(text, KaiRx(),         "Kai",          (a, b) => { Stats.Kai  = a; Stats.MaxKai  = b; });
-        TryPair(text, ManaRx(),        "Mana",         (a, b) => { Stats.Mana = a; Stats.MaxMana = b; });
+        TryPair(text, HitsRx(),        "Hits",         (a, b) => { Stats.Hits = a; Stats.MaxHits = b; _hitsReadThisArm = true; });
+        TryPair(text, KaiRx(),         "Kai",          (a, b) => { Stats.Kai  = a; Stats.MaxKai  = b; _poolReadThisArm = true; });
+        TryPair(text, ManaRx(),        "Mana",         (a, b) => { Stats.Mana = a; Stats.MaxMana = b; _poolReadThisArm = true; });
         TryPair(text, ArmourClassRx(), "Armour Class", (a, b) => { Stats.ArmourClass = a; Stats.MaxArmourClass = b; });
 
         // Plain N fields. The `\*?` in every numeric regex tolerates
@@ -798,6 +810,9 @@ public sealed partial class StatParser : IDisposable
         _windowOpenedAt = null;
         _capturedThisArm = false;
         _fieldsCapturedThisArm = 0;
+        LastCaptureReadHits = _hitsReadThisArm;
+        LastCaptureReadPool = _poolReadThisArm;
+        _hitsReadThisArm = _poolReadThisArm = false;
         _settleSession++;   // cancel any settle timer still pending for this window
         // Fire ScreenParsed only when something actually changed —
         // there's no value in churning the profile snapshot for an

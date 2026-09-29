@@ -163,6 +163,10 @@ public sealed class CharacterProfile
     // user's last-known values instead of zeros. null until the first capture.
     public LastKnownStats? LastKnownStats { get; set; }
 
+    // Max HP / power pool read off a `stat` screen with the Default gear set worn —
+    // the rest engine's basis. null until the first such screen.
+    public DefaultPoolBaseline? DefaultPoolBaseline { get; set; }
+
     // Snapshot of the most recent carry-weight reading. Written by
     // Game.Inventory.InventoryManager on ProfileSaving and rehydrated on
     // ProfileService.ProfileLoaded so the travel-cost models / hop-timing

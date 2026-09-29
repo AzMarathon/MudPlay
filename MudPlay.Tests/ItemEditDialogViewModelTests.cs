@@ -69,4 +69,33 @@ public sealed class ItemEditDialogViewModelTests
         vm.AutoStash = false;                                 // dragged back to the seed
         Assert.True(Save(vm).EqualsInstalledDefaults);
     }
+
+    // Sell detours: the flag, the detour count and the ticked "Sell here" shops round-
+    // trip, and a charm re-price keeps the ticks.
+    [Fact]
+    public void SellDetour_RoundTripsFlagCountAndShopPicks()
+    {
+        IReadOnlyList<ShopSaleRow> Rows() => new[]
+        {
+            new ShopSaleRow("Shop A - 1/10", "", 1, 10),
+            new ShopSaleRow("Shop B - 2/20", "", 2, 20),
+        };
+        ItemEditDialogViewModel vm = new(
+            wccNoStr: "1", mdbName: "dagger",
+            existing: new ItemOverlay { AutoSell = true, SellDetour = true, SellDetourAbove = "5", SellShops = "2/20" },
+            currentTier: SettingsTier.Character, mdbInfo: NoInfo, shops: Rows(),
+            shopSalesForCharm: _ => Rows());
+
+        Assert.False(vm.ShopSales[0].SellHere);
+        Assert.True(vm.ShopSales[1].SellHere);
+
+        vm.ShopSales[0].SellHere = true;
+        vm.Charm = 80;                               // rebuilds the rows
+        Assert.True(vm.ShopSales[0].SellHere);
+
+        ItemOverlay saved = Save(vm).Overlay;
+        Assert.True(saved.SellDetour);
+        Assert.Equal("5", saved.SellDetourAbove);
+        Assert.Equal("1/10,2/20", saved.SellShops);
+    }
 }
