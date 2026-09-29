@@ -1038,6 +1038,9 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   - Resolves your action at the **end** of the round's order — the **mana/energy save**. In a party that *usually but not always* one-rounds a mob, a spellcaster set to attack last casts last, so if the mob is already dead its spell has no target and **never fires — energy/mana saved**; it only spends when the mob survives to the caster's slot.
   - **Raises** your monster-targeting odds (a positive modifier) (Paradigm: score modifier; Stock: lock re-point — see *Monster target selection — who it swings at once fighting*) — useful for a tank drawing aggro, a cost for a squishy caster.
 
+**Client use:**
+- **Attack-last re-fire waits for the announces to go quiet** (`CombatManager.ScheduleAttackOrderRefire`, `RefireSettle` 500 ms; **Client policy**). Party announces arrive on separate lines, and a member reacting to someone else's announce (an attack-after, another attack-last) lands a few hundred ms later, so the re-fire goes out once, after the last of them. An announce still landing after our re-fire gets one more; the cap is two per round, so two attack-last clients can't answer each other all round. It used to fire on the next dispatch turn with a cap of one, which left an attack-after member swinging behind an attack-last one (user report, 2026-09-28).
+
 ### Spell attacks auto-repeat; re-announcing a single-target spell is harmless
 *Status: CONFIRMED 2026-08-05 (user); stop conditions and re-announce rule CONFIRMED 2026-09-21 (user) · Realm: both*
 
@@ -2443,6 +2446,9 @@ A monster's `Summoned By` field lists the rooms it appears in, each token tagged
 - **A boss's `RegenTime` is in HOURS** (the Game-Data browser renders it "15 hour") — the same unit as every monster's `RegenTime` (see *Lair respawn timers*); a lair's `AvgDelay` is a separate field.
 - **Exp/hr estimation of a boss:** pull it OUT of its lair's per-mob average and add its amortised contribution **`boss exp ÷ regen-hours`, counted once** for the whole loop (a single time no matter how many rooms it can appear in) — `1,200,000 ÷ 15 = 80,000/hr`, not `1.2M` per lap in every room. The regular (non-boss) lair mobs still fire per-room on the room delay.
 
+**Client use:**
+- **Roster fallback for an unseen kill** (`BossTimerStore`): a boss that was in its room's `Also here:` list and is gone from a re-display of that room starts its timer. A room shows `Also here:` before `Obvious exits:`, so when the list is read the tracker still holds the room we were in, even if a move just took us out. The vanish is only counted once that display's name matches the boss's room, with no move in flight (report `paradigm-20260928-163621`: `go manhole` out of Town Square read the tunnel's roster as Town Square without Mayor Godfrey and started his timer).
+
 ### Monster exp multiplier
 
 *Status: CONFIRMED 2026-08-03 (user + reports `paradigm-20260803-035136`, `-094657`)*
@@ -2790,7 +2796,9 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     - invites and say-channel chatter, queued at the engine send gate.
   - **Not held:** walk steps the route can't skip (doors, traps, room commands, winches, hidden-exit search) and their `.@party` / `.@trap` relays, plus `.@panic` (the leader's hang-up call; followers just hang up).
   - **Health-gate flee:** while fleeing on the run-if-below HP / MA gates (`HealthManager.IsGateFleeing`; not a hit-and-run or failed-backstab run), the emergency heal isn't held, and the re-sneak waits until it has gone out (`StealthManager.SetSneakHoldForHeal`).
-  - **Marking the sneak broken:** any client command on the "What ends a sneak" list sets the sneak broken (`StealthManager.NoteSneakBroken`, via the send gate and the walker's room-command hook), so the next move re-sneaks.
+  - **Marking the sneak broken:** any command on the "What ends a sneak" list sets the sneak broken (`StealthManager.NoteSneakBroken`), so the next move re-sneaks. That covers the client's own sends (the send gate, the walker's room-command hook) and lines the player types (`AppServices.NoteSentForSneak` from `SendUserInput`; report `paradigm-20260928-163051`: a typed `sea` left the client believing it still sneaked, so every buff stayed held). A hand-typed cast re-sneaks like an engine one (`StealthManager.ReSneakAfterCast`).
+  - **Stopping to cast** (report `paradigm-20260928-165844`): a sneaked walk is always mid-step, so a held buff / heal / cure never finds a gap. When one is due (and affordable), the step in the next NPC-free room waits on `SneakCastGate` (`StealthManager.ReadyToMoveSneaking`, from `CastingDirector.HasSneakHeldCast`); the arrival `sn` waits too, the cast goes out, and the re-sneak after it sends us on. Capped at 7 s per room.
+  - **After the backstab** (report `paradigm-20260928-165954`): when the backstab round settles with the target still up, a cast held for the opener goes out before the re-announce, and its `*Combat Off*` resume re-attacks (`CombatManager.SettleBackstab`).
   - **Ordering:** pre-move gear now goes out before the `sn`.
   - **Replies:** while stealthed, a reply to an @-command said aloud goes back by telepath.
   - **ShadowRest (Paradigm):** a race or class with it sneaks before it rests, and its rest doesn't mark the sneak broken.

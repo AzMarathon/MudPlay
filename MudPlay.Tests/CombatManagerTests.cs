@@ -1192,14 +1192,16 @@ public sealed class CombatManagerTests
         Assert.Equal(3, h.Sent.Count);
     }
 
+    // Production shape (report paradigm-20260922-130230): the party's announces arrive
+    // on SEPARATE dispatcher turns. The re-fire waits for them to go quiet and goes out
+    // once, after the last — not once per announce (the triple attack), and not after
+    // the first only, which left a later member swinging behind us.
     [Fact]
-    public void AttackTimingLastParty_SeparateDispatcherTurns_ReFiresOncePerRound()
+    public void AttackTimingLastParty_SeparateDispatcherTurns_ReFiresOnceAfterTheLast()
     {
-        // Production shape (report paradigm-20260922-130230): the party's announces
-        // arrive on SEPARATE dispatcher turns, so the posted coalescing flush runs before
-        // the next announce and every member's announce would fire its own re-fire — the
-        // triple attack. The once-per-round guard caps it at a single re-fire per round.
         using Harness h = new();   // DeferUi off — each Feed flushes on its own turn
+        List<Action> settle = new();
+        h.Combat.SetRefireSettleScheduler((_, a) => settle.Add(a));
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Nineteen" });
         h.Party.Members.Add(new PartyMember { Name = "Thresh" });
@@ -1210,9 +1212,39 @@ public sealed class CombatManagerTests
 
         h.Feed("Nineteen moves to attack obsidian demon.");
         h.Feed("Thresh moves to attack obsidian demon.");
+        Assert.Single(h.Sent);                  // still waiting for the announces to settle
 
-        Assert.Equal(2, h.Sent.Count);          // one re-fire this round, not two
+        foreach (Action a in settle) a();       // only the newest window fires
+        Assert.Equal(2, h.Sent.Count);
         Assert.Equal("a obsidian demon", h.LastSent);
+    }
+
+    // A 3-member party: the attack-after member re-fires on the leader's announce and
+    // lands after our re-fire. Attack-last answers it once more; a further announce
+    // that round is past the cap.
+    [Fact]
+    public void AttackTimingLastParty_AnnounceAfterOurRefire_RefiresOnceMore()
+    {
+        using Harness h = new();
+        List<Action> settle = new();
+        h.Combat.SetRefireSettleScheduler((_, a) => settle.Add(a));
+        h.Settings.AttackTiming = AttackTiming.AttackLastParty;
+        h.Party.Members.Add(new PartyMember { Name = "Nineteen" });
+        h.Party.Members.Add(new PartyMember { Name = "Cidir" });
+        h.AddMonster(1, "fat greater wyvern", killable: true);
+
+        h.Feed("Also here: fat greater wyvern.");
+        h.Feed("Nineteen moves to attack fat greater wyvern.");
+        settle[^1]();
+        Assert.Equal(2, h.Sent.Count);
+
+        h.Feed("Cidir moves to attack fat greater wyvern.");
+        settle[^1]();
+        Assert.Equal(3, h.Sent.Count);           // back behind Cidir
+
+        h.Feed("Nineteen moves to attack fat greater wyvern.");
+        Assert.Equal(2, settle.Count);            // capped — no third re-fire scheduled
+        Assert.Equal(3, h.Sent.Count);
     }
 
     [Fact]
@@ -2550,6 +2582,41 @@ public sealed class CombatManagerTests
         // The surprise line proves the opener landed — no flee.
         h.Feed("You surprise punch orc rogue for 30 damage!");
         Assert.False(fled);
+    }
+
+    // Report paradigm-20260928-165954: a buff the sneak held until the stab goes out as
+    // soon as the backstab round settles; its resume re-attacks, so no `a` here.
+    [Fact]
+    public void BackstabSettle_HeldCastGoesFirst_NoReannounce()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.AddMonster(1, "big azure slime", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+        int casts = 0;
+        h.Combat.SetCastBeforeBackstabReannounce(() => { casts++; return true; });
+
+        h.Feed("Also here: big azure slime.");
+        Assert.Equal("bs big azure slime", h.LastSent);
+        h.Feed("You surprise slash big azure slime for 53 damage!");
+
+        Assert.Equal(1, casts);
+        Assert.Equal("bs big azure slime", h.LastSent);
+    }
+
+    [Fact]
+    public void BackstabSettle_NothingToCast_Reannounces()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.AddMonster(1, "big azure slime", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+        h.Combat.SetCastBeforeBackstabReannounce(() => false);
+
+        h.Feed("Also here: big azure slime.");
+        h.Feed("You surprise slash big azure slime for 53 damage!");
+
+        Assert.Equal("a big azure slime", h.LastSent);
     }
 
     // Hit and Run tactics — never fight without a backstab (reports

@@ -46,6 +46,14 @@ public sealed class BossTimerStore
     private readonly HashSet<string> _bossesPresent = new(StringComparer.OrdinalIgnoreCase);
     private RoomKey? _presentRoom;
 
+    // "Also here:" comes before "Obvious exits:", so when the roster is parsed the
+    // tracker still holds the room we were in, whether the display is a re-show of it
+    // or the room a move just took us into. A boss missing from it is only a kill once
+    // that display's name proves it's the same room (report paradigm-20260928-163621:
+    // `go manhole` out of Town Square read the tunnel's roster as Town Square without
+    // Mayor Godfrey and started his timer).
+    private (RoomKey Room, string RoomName, List<string> Names)? _pendingVanish;
+
     // A fallback vanish this close behind a primary-path (engaged-then-exp) mark
     // is the SAME kill seen twice — skip it so the timer isn't re-stamped and
     // Grab-All isn't double-fired.
@@ -220,8 +228,12 @@ public sealed class BossTimerStore
     // exp-inferred MonsterDied path can't name. Only an AlsoHere re-parse marks a
     // kill — a Departure / RoomChange updates the present-set without marking, so
     // a mob that walked away is never mistaken for a kill.
-    public void OnRoomEntitiesObserved(RoomEntitiesObservation obs, RoomKey? here)
+    // roomName is the tracker's name for here; movePending says a move is in flight,
+    // so the roster may already be the next room's.
+    public void OnRoomEntitiesObserved(
+        RoomEntitiesObservation obs, RoomKey? here, string? roomName = null, bool movePending = false)
     {
+        _pendingVanish = null;
         if (here is not { } room)
         {
             _bossesPresent.Clear();
@@ -240,22 +252,10 @@ public sealed class BossTimerStore
             return;
         }
 
-        if (obs.Source == RoomObservationSource.AlsoHere)
+        if (obs.Source == RoomObservationSource.AlsoHere && !movePending && !string.IsNullOrEmpty(roomName))
         {
-            foreach (string name in _bossesPresent)
-            {
-                if (presentNow.Contains(name)) continue;
-                // Vanished from a same-room re-parse with no departure to explain
-                // it — a kill. Dedupe against a just-landed primary-path mark.
-                if (KilledAt(name) is { } at
-                    && DateTimeOffset.UtcNow - at.ToUniversalTime() < FallbackDedupeWindow)
-                    continue;
-                _log?.Info("Bosses",
-                    $"boss '{name}' vanished from a re-parse of {room} — marking killed (roster fallback)");
-                MarkKilled(name);
-                foreach (BossDef def in _bosses.Resolve())
-                    if (NameMatches(def.Name, name)) { BossKilled?.Invoke(def); break; }
-            }
+            List<string> vanished = _bossesPresent.Where(n => !presentNow.Contains(n)).ToList();
+            if (vanished.Count > 0) _pendingVanish = (room, roomName, vanished);
         }
 
         // Death / Departure / Arrival / RoomChange all just re-baseline the set:
@@ -263,6 +263,34 @@ public sealed class BossTimerStore
         // kill, and an Arrival adds. AlsoHere re-baselines after marking above.
         _bossesPresent.Clear();
         _bossesPresent.UnionWith(presentNow);
+    }
+
+    // The room display that the last "Also here:" belonged to. A boss missing from that
+    // roster is a kill only when this is the same room — a vanish with no departure to
+    // explain it. Any other room means the roster was the next room's.
+    public void OnRoomDisplayed(string roomName)
+    {
+        if (_pendingVanish is not { } pending) return;
+        _pendingVanish = null;
+        if (!string.Equals(roomName.Trim(), pending.RoomName.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            _log?.Info("Bosses",
+                $"'{string.Join("', '", pending.Names)}' not in the roster shown in '{roomName}' — "
+                + $"that's another room than {pending.Room}, not a kill");
+            return;
+        }
+        foreach (string name in pending.Names)
+        {
+            // Dedupe against a just-landed primary-path mark.
+            if (KilledAt(name) is { } at
+                && DateTimeOffset.UtcNow - at.ToUniversalTime() < FallbackDedupeWindow)
+                continue;
+            _log?.Info("Bosses",
+                $"boss '{name}' vanished from a re-parse of {pending.Room} — marking killed (roster fallback)");
+            MarkKilled(name);
+            foreach (BossDef def in _bosses.Resolve())
+                if (NameMatches(def.Name, name)) { BossKilled?.Invoke(def); break; }
+        }
     }
 
     // The tracked-boss names present in this observation's roster whose rooms

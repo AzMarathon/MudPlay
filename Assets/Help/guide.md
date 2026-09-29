@@ -1146,7 +1146,7 @@ A live flag read — that login check, `@quest update`, or `@quest <name|flag>` 
 
 ### Bosses
 
-A respawn-timer tracker. **Mark** or **Now** stamps a boss's kill time and the **100%** column counts down to its respawn; on Paradigm the **-5% / -10% / -20%** columns count down to each early-spawn window, and on Stock a single **87.5%** column does the same. A **Last Killed** column shows when each boss's timer was last set; a **Clear** button in the Timer column wipes a running timer, and a **Notes** column holds your own per-boss annotations.
+A respawn-timer tracker. Timers also start on their own: when you kill a boss, or when a boss you saw in its room is gone from a re-display of that same room (someone else killed it). Walking out of the boss's room, even by a room command like `go manhole`, never starts one. **Mark** or **Now** stamps a boss's kill time and the **100%** column counts down to its respawn; on Paradigm the **-5% / -10% / -20%** columns count down to each early-spawn window, and on Stock a single **87.5%** column does the same. A **Last Killed** column shows when each boss's timer was last set; a **Clear** button in the Timer column wipes a running timer, and a **Notes** column holds your own per-boss annotations.
 
 The tab **opens sorted by the 100% timer with running timers on top**, so a fresh open surfaces what's active — and it **re-sorts live whenever a timer starts or clears** (a marked or auto-captured kill), so a boss that just went active floats up into the running group without reopening the tab. Sorting by any timer column — or by **Boss**, **Respawn**, or **Last Killed** — groups cleanup spawns first, then bosses with a running timer, then idle ones. **Manage Bosses…** edits the list, and you can **Import / Export** a shared table. Tick **Stop before** to halt automation ahead of a boss.
 
@@ -1253,9 +1253,9 @@ An engine only acts while it's on, and each has a matching Settings tab for its 
 - inviting;
 - saying anything aloud.
 
-When **Auto-Sneak is on** it times those around your stealth.
+When **Auto-Sneak is on** it times those around your stealth. Commands you type count too: type `sea`, a door command, a gear change or a cast, and MudPlay knows your sneak has ended, so your next move re-sneaks (and a hand cast re-sneaks straight after, like its own casts).
 
-- **About to backstab.** With Backstab on, in a room you're going to fight, everything that can wait holds until your `bs` has gone out: in-between spells (heals included), gear swaps, the room search and light changes. Anything first would break the sneak and spoil the surprise. Once the opener fires, the fight carries on as normal.
+- **About to backstab.** With Backstab on, in a room you're going to fight, everything that can wait holds until your `bs` has gone out: in-between spells (heals included), gear swaps, the room search and light changes. Anything first would break the sneak and spoil the surprise. Once the backstab round is over, a buff or heal that waited for it goes out right away, and you re-attack straight after it.
 - **Sneaking past.** With **Auto-Combat off** (or combat suppressed in a room), sneaking through a room with NPCs you won't fight, the same things hold until you reach a room with no NPCs (a sneak won't take with one there). There they go out and you re-sneak straight after. So in an empty room, a buff or heal your settings call for is cast and you re-sneak before moving on. This covers:
   - buffs, cures and heals;
   - automatic gear swaps (re-applied then);
@@ -1265,6 +1265,7 @@ When **Auto-Sneak is on** it times those around your stealth.
   - party invites;
   - chat such as level-up announcements or ailment calls, which are queued and sent then.
 - **Mid-step.** While a sneaked move is on its way, casts and the rest wait until the next room appears. The game carries out commands in order, so anything sent then would land in the room you're entering, unseen.
+- **Stopping to cast.** A sneaked walk is always mid-step, so on its own a buff would never find a gap. When a buff, cure or heal is due (and you have the mana), your walk or loop pauses in the next room with no NPCs — including a room where your sneak already broke — casts it, re-sneaks and carries on. The status bar reads *Waiting — casting before re-sneaking*; if the cast doesn't go out within 7 seconds, the route moves on.
 - **Walk steps still happen.** A door, a trap, a lever or winch, or a hidden exit the route needs is done anyway, along with its party relay. MudPlay then re-sneaks before the next move.
 - **Emergency heal while fleeing.** When your *run if below* HP / mana settings have you fleeing (not a hit-and-run or a failed backstab's run), the *emergency heal* slot fires as soon as it's needed, and the re-sneak waits until it has gone out.
 - **Rests you need still happen.** A rest your *rest if below* settings call for goes out even if it ends the sneak. On Paradigm, a race or class with **ShadowRest** sneaks first and then rests, so the rest keeps you hidden.
@@ -2515,6 +2516,7 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 **What it does:** Pure timing — controls *when* you re-announce your own current action relative to other people's attacks, for coordinating who "goes" in what order. It re-issues whatever you're actually doing this round — a weapon swing, a single-target attack spell, or a bare room spell — so a caster lands last just like a fighter (re-announcing a combat spell costs no mana; mana is spent once when the round fires). It never changes *what* you're targeting — that's Target Priority's job. A party member's **room attack** counts as their commit too: when someone rooms (you see *"… moves to attack everyone in the room"*, or on Paradigm *"… is poised to assault the room"*), your own room spell re-announces after theirs so you room last.
 - **AttackLastParty / AttackLastRoom** — re-announce after *every* qualifying commit, so you stay last (party members only, or anyone in the room).
 - **AttackAfter** — re-announce only after the named player commits (set the name in **Attack-after player name**).
+- **How the re-announce is timed** (these modes): party announces trickle in a line at a time, and someone reacting to another member's announce lands a moment later. So MudPlay waits until the announces stop for half a second and re-announces once, after the last. If someone still announces after you, it re-announces once more that round, and no more, so two attack-last players can't keep answering each other.
 - **AttackNotLast** — the inverse: *hold* your pick on room entry, commit **once** right after the **first** party member announces, and never re-fire — so you slot in behind the first mover instead of chasing the last slot. Only functional in a **party of 3+**; in a party of 2 or fewer it behaves exactly like `Default`.
 **When you might change it:** A tank who wants to always commit their attack last, after everyone else in the party has already gone — or a roomer who wants their AoE to land after the party's. Pick **AttackNotLast** when you'd rather go early, right behind whoever opens.
 

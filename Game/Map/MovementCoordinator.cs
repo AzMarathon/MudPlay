@@ -109,6 +109,12 @@ public sealed class MovementCoordinator
     // of the answer and walk on unsneaked. Capped at a few seconds. Engine-wait tier.
     public const string SneakSettleGate = "SneakSettle";
 
+    // Asserted by StealthManager while auto-sneak is on and a buff / heal / cure that
+    // sneak keeping held on the way comes due in an NPC-free room: the step waits for
+    // the cast, then the re-sneak, since that's the one place both can go out. Capped
+    // so a cast that never fires can't strand the route. Engine-wait tier.
+    public const string SneakCastGate = "SneakCast";
+
     // Asserted by the in-room acquisition engine while the loot step runs
     // after a fight clears; clears when all flagged ground items + coins are
     // resolved. This is the get-clear contributor to the in-room loop's

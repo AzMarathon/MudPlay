@@ -979,6 +979,9 @@ public partial class MainWindowViewModel : ObservableObject
         // the expected landing, SysopGoto commits the position (a from-anywhere
         // teleport has no graph edge for the tracker to follow otherwise).
         _roomDisplayParser.RoomParsed += obs => AppServices.Current.SysopGoto.OnRoomDisplayed(obs.Name);
+        // And settles a boss's roster vanish: the "Also here:" it went missing from is a
+        // kill only if this display is the same room.
+        _roomDisplayParser.RoomParsed += obs => AppServices.Current.BossTimers.OnRoomDisplayed(obs.Name);
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine);
@@ -3268,6 +3271,11 @@ public partial class MainWindowViewModel : ObservableObject
         // Attack observer — a manually-typed physical attack verb (a/aa/bash/smash/bs/…)
         // is a user override: the engine holds its own swing until the next round.
         AppServices.Current.OutboundAttack.ObserveOutbound(data);
+        // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
+        // broken, the same as an engine send through the gate. Short lines only: a
+        // command, not a paste.
+        if (data.Length is > 0 and <= 128)
+            AppServices.Current.NoteSentForSneak(System.Text.Encoding.Latin1.GetString(data).TrimEnd('\r', '\n', '\0'));
         // Chat router — capture engine-sent telepath "/<recipient> <message>"
         // bursts (party @-command broadcasts / nags) so the outgoing
         // conversation entry is attributed. Typed telepaths render on-screen

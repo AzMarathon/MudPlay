@@ -769,14 +769,20 @@ public sealed partial class CombatManager : IDisposable
     private string? _refireTarget;
     private string? _refireAnnouncer;
 
-    // At-most-one attack-order re-fire per round. The single-flush coalescing above
-    // collapses a BATCH of announces (processed in one dispatcher turn) into one send,
-    // but each server announce line often arrives on its OWN turn, so the posted flush
-    // runs before the next announce and every member's announce fires its own re-fire —
-    // the triple-attack when AttackLastParty is set (report paradigm-20260922-130230).
-    // This latch, reset at the round tick, caps the re-fire at one per round regardless
-    // of how the announce burst is packeted.
-    private bool _attackOrderRefiredThisRound;
+    // Each server announce line often arrives on its OWN dispatcher turn, and a party
+    // member reacting to someone else's announce (an attack-after, another attack-last)
+    // lands a few hundred ms behind it. So the re-fire waits until qualifying announces
+    // have gone quiet for RefireSettle and goes out once, after the last of them — a
+    // next-turn flush fired between them, leaving a later member behind us (the
+    // triple-attack of report paradigm-20260922-130230, then a 3-member party where the
+    // attack-last member swung before the attack-after one). A qualifying announce that
+    // still lands after our re-fire gets one more; the per-round cap, reset at the
+    // round tick, stops two attack-last clients answering each other all round.
+    private static readonly TimeSpan RefireSettle = TimeSpan.FromMilliseconds(500);
+    private const int MaxAttackOrderRefiresPerRound = 2;
+    private int _attackOrderRefiresThisRound;
+    private int _refireGeneration;
+    private Action<TimeSpan, Action>? _scheduleRefireSettle;
 
     public CombatManager(
         MessageRouter router,
@@ -1317,6 +1323,17 @@ public sealed partial class CombatManager : IDisposable
     // controllable seam.
     public void SetSwitchDispatchScheduler(Action<TimeSpan, Action> schedule)
         => _scheduleSwitchDispatch = schedule;
+
+    // The one-shot delay scheduler for the attack-order re-fire's quiet window
+    // (RefireSettle). Wired in AppServices to a DispatcherTimer; left null in tests
+    // that keep the next-turn flush.
+    public void SetRefireSettleScheduler(Action<TimeSpan, Action> schedule)
+        => _scheduleRefireSettle = schedule;
+
+    // Fires a due between-round cast (CastingDirector) when a backstab round settles;
+    // true when one went out, so the settle leaves the re-attack to the cast's resume.
+    private Func<bool>? _castBeforeReannounce;
+    public void SetCastBeforeBackstabReannounce(Func<bool> tryCast) => _castBeforeReannounce = tryCast;
 
     // The arrival-settle window elapsed with no authoritative room re-display having
     // superseded it. Re-run the engage decision against whatever the room now holds —
@@ -2789,17 +2806,19 @@ public sealed partial class CombatManager : IDisposable
             _                            => false,
         };
         if (!fire) return;
-        // At most one re-fire per round — a flush that already fired this round (announces
-        // arriving on separate dispatcher turns) must not be re-scheduled by a later
-        // member's announce.
-        if (_attackOrderRefiredThisRound) return;
+        if (_attackOrderRefiresThisRound >= MaxAttackOrderRefiresPerRound) return;
 
-        // Coalesce the round's burst: record this as the pending re-fire and
-        // flush once on the next dispatcher turn (after the whole announce
-        // batch), so several party announces collapse into a single attack
-        // command that lands after the last of them.
+        // Coalesce the round's burst: record this as the pending re-fire and flush once
+        // the announces go quiet (see RefireSettle), so several party announces collapse
+        // into a single attack command that lands after the last of them.
         _refireTarget = target;
         _refireAnnouncer = announcer;
+        if (_scheduleRefireSettle is { } later)
+        {
+            int generation = ++_refireGeneration;
+            later(RefireSettle, () => { if (generation == _refireGeneration) FlushAttackOrderRefire(); });
+            return;
+        }
         if (_refireFlushScheduled) return;
         _refireFlushScheduled = true;
         _post(FlushAttackOrderRefire);
@@ -2824,9 +2843,8 @@ public sealed partial class CombatManager : IDisposable
         if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase))
             return;
 
-        // Committing to the re-fire — latch it so no further announce this round fires a
-        // second one (the triple-attack guard).
-        _attackOrderRefiredThisRound = true;
+        // Committing to the re-fire — count it against the round's cap.
+        _attackOrderRefiresThisRound++;
 
         CombatSettings settings = _readSettings();
 
@@ -3186,6 +3204,14 @@ public sealed partial class CombatManager : IDisposable
         // The attack-order timings re-fire on other players' announces to stay last;
         // a settle re-announce of our own would break that ordering.
         if (settings.AttackTiming != AttackTiming.Default) return;
+        // A buff / heal the sneak held until the stab goes first: its *Combat Off*
+        // resume re-attacks, so the target still sees our attack this round (report
+        // paradigm-20260928-165954: shad waited out a whole extra round behind `a`).
+        if (targetAlive && _castBeforeReannounce?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory, $"backstab round over ({(landed ? "landed" : "failed")}) — a held between-round cast goes first; its resume re-attacks {bsTarget}");
+            return;
+        }
         if (targetAlive && _classifier.Current is { } live)
         {
             _log?.Combat(LogCategory, $"backstab round over ({(landed ? "landed" : "failed")}) — re-announcing the round's attack on {bsTarget}");
