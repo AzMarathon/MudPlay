@@ -315,10 +315,9 @@ public static class AppPaths
         Path.Combine(DataRoot, "_bundled");
 
     // User-writable MonsterMessages seed JSON, hosted in the XDG-resolved
-    // Global/ folder. Acts as the fallback when the per-set
-    // MonsterMessagesFile doesn't exist yet for a set. Bootstrapped from
-    // BundledMonsterMessagesSeedFile on first app launch if missing; the user
-    // can hand-edit it (or delete it to re-bootstrap from the bundled copy).
+    // Global/ folder. MonsterMessageStore builds the catalogue from this, layering
+    // the per-set MonsterMessagesFile's delta on top. Byte-synced from
+    // BundledMonsterMessagesSeedFile on every launch.
     public static string DefaultMonsterMessagesSeedFile =>
         Path.Combine(DataRoot, "Global", "MonsterMessages.seed.json");
 
@@ -369,7 +368,8 @@ public static class AppPaths
     // XDG-resolved Global/ folder. Realm-flavored (stock / paradigm), each decoded
     // from that realm's MegaMUD messages.md — the active set's Info.json[0].Legit
     // picks which to apply (0/1 = stock, 2 = paradigm) via GameDataRealm.Resolve.
-    // MessageStore falls back to this when the per-set MessagesFile doesn't exist.
+    // MessageStore builds the catalogue from this, layering the per-set MessagesFile's
+    // delta on top.
     // Bootstrapped from the matching BundledMessagesSeedFile on first launch (or
     // delete the Global copy to re-bootstrap from the bundled source).
     public static string MessagesSeedFile(string realm) =>

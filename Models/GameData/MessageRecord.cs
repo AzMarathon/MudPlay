@@ -18,7 +18,8 @@ namespace MudPlay.Models.GameData;
 // from the bundled Defaults/ copy on first launch, realm picked from the set's
 // Info.json Legit). Each seed is decoded offline from that realm's MegaMUD
 // messages.md by tools/decode_messages_md.py — a record's name attributes it to
-// its spell/item by name. User edits write back to the per-set file.
+// its spell/item by name. User edits are kept in the per-set file as a delta over
+// the seed (MessageStore / SeedDelta), so seed fixes still reach unedited records.
 //
 // Identity rule: Id is SHA1(Name | CasterMessage | TargetMessage |
 // WitnessMessage | AppliedMessage | AppliedEndsWith) truncated to 16

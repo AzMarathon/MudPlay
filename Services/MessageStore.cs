@@ -4,20 +4,40 @@ using MudPlay.Models.GameData;
 namespace MudPlay.Services;
 
 // In-memory cache of the Messages/Responses catalogue for the active set.
-// Records are paired with the active game-data set on disk at
-// Data/game data/{set}/messages.json, falling back to the realm-flavored seed at
-// Data/Global/Messages.{stock|paradigm}.seed.json (the realm is picked from the
-// set's Info.json Legit; each seed is decoded offline from that realm's MegaMUD
-// messages.md and bootstrapped from the bundled Defaults/ copy on first launch).
+// The catalogue is the realm-flavored seed at Global/Messages.{stock|paradigm}.seed.json
+// (the realm is picked from the set's Info.json Legit; re-synced from the seed embedded
+// in the exe on every launch) with the user's edits layered on top from
+// game data/{set}/messages.json. That per-set file holds only the DELTA against the
+// seed (see SeedDelta), so a shipped seed fix still reaches every record the user
+// hasn't changed.
 //
 // Wiring: AppServices subscribes the store to
-// GameDataCache.ActiveSetChanged — on every set switch the file at
-// AppPaths.MessagesFile is reloaded (missing file ⇒ falls through to the
-// seed). The Game Data Browser → Messages tab binds the live Messages
-// collection.
+// GameDataCache.ActiveSetChanged — on every set switch the catalogue is rebuilt
+// from the seed plus AppPaths.MessagesFile. The Game Data Browser → Messages tab
+// binds the live Messages collection.
 public sealed class MessageStore
 {
     private readonly LogService? _log;
+
+    // Text (Name + the five lines) is the record's identity and always comes from the
+    // seed; Flags, Links, the confuse-fumble line and the cast response are what a user
+    // can change on a seed record without re-Id-ing it.
+    internal static readonly SeedDelta<MessageRecord> Delta = new(
+        id:            r => r.Id,
+        name:          r => r.Name,
+        links:         r => r.Links,
+        withoutLinks:  r => r with { Links = null },
+        applyOverride: (seed, user) => seed with
+        {
+            Flags             = user.Flags,
+            RawFlagsHex       = user.RawFlagsHex,
+            Links             = user.Links,
+            ConfuseFumbleLine = user.ConfuseFumbleLine,
+            CastResponse      = user.CastResponse,
+        });
+
+    // The seed the live catalogue was built over — Save diffs against it.
+    private List<MessageRecord> _seed = [];
 
     // Live mirror of the active set's message records. Bound by the Messages tab.
     // BulkObservableCollection so a full (re)load raises one Reset instead of
@@ -40,59 +60,52 @@ public sealed class MessageStore
         _log = log;
     }
 
-    // Switch the catalogue to setName's on-disk file. Pass null to clear (no
-    // set active). Load priority:
-    //   1. Per-set file AppPaths.MessagesFile
-    //      (Data/game data/{set}/messages.json) — the canonical persisted
-    //      state once a user has edited.
-    //   2. Realm-flavored seed AppPaths.MessagesSeedFile(realm)
-    //      (Data/Global/Messages.{stock|paradigm}.seed.json) — the realm is
-    //      resolved from the set's Info.json Legit (GameDataRealm.Resolve), since
-    //      a paradigm realm carries message records a stock realm doesn't, and
-    //      vice-versa. Bootstrapped from the bundled Defaults/ copies on first
-    //      launch via AppPaths.EnsureGlobalSeedsBootstrapped.
-    //   3. Bundled seed AppPaths.BundledMessagesSeedFile(realm) shipped beside the
-    //      app — the read-only floor. Reached only when the Global copy is missing
-    //      (never bootstrapped, or deleted), so the catalogue is never empty for a
-    //      realm we ship. Consulted last, it never overrides a user's per-set edits.
-    // Neither seed is ever written.
+    // Switch the catalogue to setName's data. Pass null to clear (no set active).
+    // The seed comes first-readable-wins from:
+    //   1. the realm seed AppPaths.MessagesSeedFile(realm) in Global/ — the realm is
+    //      resolved from the set's Info.json Legit (GameDataRealm.Resolve), since a
+    //      paradigm realm carries message records a stock realm doesn't, and vice-versa;
+    //   2. the bundled seed AppPaths.BundledMessagesSeedFile(realm) — the read-only floor,
+    //      reached only when the Global copy is missing, so the catalogue is never empty
+    //      for a realm we ship.
+    // The user's delta file AppPaths.MessagesFile is then layered over it. Neither seed
+    // is ever written.
     public void Load(string? setName)
     {
         ActiveSet = setName;
         if (string.IsNullOrWhiteSpace(setName))
         {
+            _seed = [];
             Messages.ReplaceAll([]);
             _log?.Log(LogSeverity.Info, "Messages", "no active game-data set — message catalogue cleared.");
             return;
         }
 
         string realm = GameDataRealm.Resolve(setName);
-        (List<MessageRecord> loaded, string source) = LoadFrom(setName, realm);
+        (List<MessageRecord> seed, string seedSource) = LoadSeed(realm);
+        _seed = seed;
+        List<MessageRecord>? withEdits = Delta.Load(AppPaths.MessagesFile(setName), seed, _log, "Messages");
+        List<MessageRecord> loaded = withEdits ?? seed;
+        string source = withEdits is null ? seedSource : $"the {seedSource} plus the per-set edits file";
         Messages.ReplaceAll(loaded);
 
         if (loaded.Count == 0)
             _log?.Log(LogSeverity.Warn, "Messages",
-                $"set '{setName}' (realm '{realm}'): 0 message records — no per-set file, Global seed, or bundled " +
-                "seed was found or parsed, so the Messages tab will be empty and no lines are recognized.");
+                $"set '{setName}' (realm '{realm}'): 0 message records — no Global seed, bundled seed, or per-set " +
+                "file was found or parsed, so the Messages tab will be empty and no lines are recognized.");
         else
             _log?.Log(LogSeverity.Info, "Messages",
                 $"set '{setName}' (realm '{realm}'): loaded {loaded.Count} message records from {source}.");
     }
 
-    // First readable source wins: the per-set file (persisted user edits) → the Global
-    // realm seed (bootstrapped on first launch) → the bundled realm seed shipped beside the
-    // app. The bundled copy is the floor — a genuinely-missing Global seed (never
-    // bootstrapped, or deleted) still yields the shipped catalogue instead of an empty one,
-    // and because it is consulted last it can never override a user's per-set edits.
-    private (List<MessageRecord> Records, string Source) LoadFrom(string setName, string realm)
+    // Global realm seed (re-synced from the embedded copy every launch) → bundled floor.
+    private (List<MessageRecord> Records, string Source) LoadSeed(string realm)
     {
-        if (TryLoad(AppPaths.MessagesFile(setName)) is { } perSet)
-            return (perSet, "per-set file");
         if (TryLoad(AppPaths.MessagesSeedFile(realm)) is { } globalSeed)
             return (globalSeed, "Global seed");
         if (TryLoad(AppPaths.BundledMessagesSeedFile(realm)) is { } bundled)
             return (bundled, "bundled seed");
-        return ([], "none");
+        return ([], "no seed");
     }
 
     // Read a JSON list from path. Returns the parsed list (possibly empty) iff
@@ -118,11 +131,12 @@ public sealed class MessageStore
         }
     }
 
-    // Persist Messages to ActiveSet's file.
+    // Persist the user's edits (the catalogue's delta against the seed it was loaded
+    // over) to ActiveSet's file.
     public void Save()
     {
         if (string.IsNullOrWhiteSpace(ActiveSet)) return;
-        JsonStore.Save(AppPaths.MessagesFile(ActiveSet), Messages);
+        Delta.Save(AppPaths.MessagesFile(ActiveSet), Messages, _seed, _log, "Messages");
     }
 
     // Replace the catalogue with records and persist.

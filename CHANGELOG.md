@@ -1,5 +1,12 @@
 # Version history
 
+## 3.123.1
+
+- Your message edits are kept on top of the shipped messages, so seed fixes still reach every message you haven't changed
+- Added monster names are kept on top of the shipped monster list the same way
+- Older per-set message files convert automatically on first load (old file kept as messages.json.pre-delta)
+- Changing only a message's flags or links no longer detaches its text from the seed
+
 ## 3.123.0
 
 - Party members' HP moves between `par` polls: damage seen on them comes off, heals seen landing on them go on
