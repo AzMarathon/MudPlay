@@ -384,10 +384,11 @@ public sealed class PartyComebackManager : IDisposable
     // a manual move leaves the pickup to the player — so an idle leader stays silent
     // rather than telling the member "I'm idle". Recovery backtracks along the path
     // just taken, since that's where they were left.
-    // Our own token use (TokenTracker.TokenUsed). A teleport drops everyone
-    // following us — they weren't held, the token split us — so for a short while
-    // afterwards a "no longer following you" isn't a left-behind member to go back
-    // for. A route-card token sends the party across first; a hand-used one leaves
+    // Our own teleport: a token used (TokenTracker.TokenUsed), or a party-splitting
+    // exit crossed while leading (Darkwood's `go vortex`, a chime). A teleport drops
+    // everyone following us — they weren't held, the teleport split us — so for a
+    // short while afterwards a "no longer following you" isn't a left-behind member
+    // to go back for; the re-invite on landing regroups the party. A route-card token sends the party across first; a hand-used one leaves
     // the regroup to the player.
     public void NoteOwnTeleport() => _ownTeleportAt = NowProvider();
     private DateTimeOffset? _ownTeleportAt;
@@ -398,7 +399,7 @@ public sealed class PartyComebackManager : IDisposable
         if (string.IsNullOrEmpty(given) || _busy) return;
         if (_ownTeleportAt is { } at && NowProvider() - at <= OwnTeleportWindow)
         {
-            _log?.Info(LogCategory, $"{given} was dropped by our own token teleport — not going back for them.");
+            _log?.Info(LogCategory, $"{given} was dropped by our own teleport — not going back for them.");
             return;
         }
         if (SnapshotRunningEngine().Kind == ResumeKind.None)

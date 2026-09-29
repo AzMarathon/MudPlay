@@ -1,5 +1,9 @@
 # Version history
 
+## 3.125.1
+
+- Leading through a party-splitting teleport (Darkwood's vortex) no longer sends you back for the followers it drops; they're re-invited where you land
+
 ## 3.125.0
 
 - The client now spots a game prompt that doesn't match Settings → Statline — Default included, any prompt text, all session — and resets it (`set statline full` on Default)

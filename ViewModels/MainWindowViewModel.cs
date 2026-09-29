@@ -1437,15 +1437,22 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Walker.SetPartyLeaderCheck(isLeaderWithFollowers);
         AppServices.Current.LoopRunner.SetTeleportResolver(teleportResolver);
         AppServices.Current.LoopRunner.SetPartyLeaderCheck(isLeaderWithFollowers);
-        // A party-splitting CMD teleport (chime-style) dissolves the follow
-        // chain even though the `.@party <kw>` relay sent everyone through, so
-        // the party must be re-invited on landing. Both movement engines route
-        // that reform through AutoPartyManager, which holds the movement gate
-        // until the group re-forms.
-        AppServices.Current.Walker.SetPartySplitHandler(
-            AppServices.Current.AutoParty.NotePartySplitTeleport);
-        AppServices.Current.LoopRunner.SetPartySplitHandler(
-            AppServices.Current.AutoParty.NotePartySplitTeleport);
+        // A party-splitting CMD teleport (chime-style, Darkwood's `go vortex`)
+        // dissolves the follow chain even though the `.@party <kw>` relay sent
+        // everyone through, so the party must be re-invited on landing. Both
+        // movement engines route that reform through AutoPartyManager, which holds
+        // the movement gate until the group re-forms. The "X is no longer following
+        // you." lines the split prints are that expected drop, not members left
+        // behind — without the note the leader walked back through the teleport to
+        // fetch them.
+        AppServices.Current.Walker.SetPartySplitHandler(OnLeaderPartySplitTeleport);
+        AppServices.Current.LoopRunner.SetPartySplitHandler(OnLeaderPartySplitTeleport);
+
+        static void OnLeaderPartySplitTeleport()
+        {
+            AppServices.Current.PartyComeback.NoteOwnTeleport();
+            AppServices.Current.AutoParty.NotePartySplitTeleport();
+        }
         // Stopping the walk mid-reform drops the re-invite hold so the user
         // isn't pinned by the PartyInvite gate until the group rejoins.
         AppServices.Current.Walker.SetPartySplitAbortHandler(

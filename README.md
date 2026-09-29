@@ -1,13 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.125.0**
-> - The client now spots a game prompt that doesn't match Settings → Statline — Default included, any prompt text, all session — and resets it (`set statline full` on Default)
-> - A mismatch the reset can't fix shows a terminal notice and a status-bar warning; HP can't be read until it's fixed
-> - Bug reports carry a Statline section (editor command, live prompt, reset progress)
-> - The prompt parser reads mana up to four digits, like HP
-> - Settings → Statline warns (and asks before saving) when a custom statline leaves out current HP, current mana or the resting flag, or runs numbers together
-> - Custom statlines read mana under any label or none (mana vs kai comes from the stat screen), with forgiving spacing
+> **Version 3.125.1**
+> - Leading through a party-splitting teleport (Darkwood's vortex) no longer sends you back for the followers it drops; they're re-invited where you land
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
