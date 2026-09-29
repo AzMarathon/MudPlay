@@ -24,7 +24,8 @@ public sealed class PartyHpEstimatorTests
         public RoundDamageTracker Damage { get; }
         public PartyHpEstimator Estimator { get; }
 
-        public Harness(IReadOnlyList<HealSpell>? heals = null, IEnumerable<MessageRecord>? records = null)
+        public Harness(IReadOnlyList<HealSpell>? heals = null, IEnumerable<MessageRecord>? records = null,
+            IEnumerable<int>? drains = null)
         {
             DefaultPatterns.Seed(Router);
             Party = new PartyManager(Router, new PartyState()) { LocalCharacterName = "Fujin" };
@@ -42,6 +43,7 @@ public sealed class PartyHpEstimatorTests
                 DateTimeOffset.UnixEpoch));
             Estimator = new PartyHpEstimator(Router, Damage, Party,
                 buildReader: () => new HealLineReader(heals ?? Array.Empty<HealSpell>(), records ?? Array.Empty<MessageRecord>()),
+                buildDrains: () => new DrainLineSet(drains ?? Array.Empty<int>(), records ?? Array.Empty<MessageRecord>()),
                 ownLevel: () => 20);
         }
 
@@ -201,6 +203,43 @@ public sealed class PartyHpEstimatorTests
 
         h.Feed("You cast greater healing rain on your party, healing 40 damage!");
         Assert.Equal(840, h.Party.HpEstimateOf(raijin).EstimateHp);
+    }
+
+    // A drain heals whoever lands it by what it dealt: here Raijin's necromantic bolt,
+    // whose chained drain line names only the victim and so goes to the last hitter.
+    [Fact]
+    public void MembersDrain_HealsThem()
+    {
+        using Harness h = new(
+            records: new[] { Record("nebo secondary", 1246,
+                caster: "{target}'s life is drained for {damage} damage!", target: "", witness: "") },
+            drains: new[] { 1246 });
+        PartyMember raijin = h.JoinRaijin();
+
+        h.Feed("Raijin fires a necromantic bolt at goblin for 50 damage!");
+        h.Feed("goblin's life is drained for 20 damage!");
+
+        Assert.Equal(820, h.Party.HpEstimateOf(raijin).EstimateHp);
+    }
+
+    [Fact]
+    public void CloseWounds_IsAHeal_NotDamage()
+    {
+        using Harness h = new(
+            new[] { new HealSpell(1043, "close wounds", 2, new SpellFormulaInput
+            {
+                Number = 1043, MinBase = 20, MaxBase = 50, ReqLevel = 1, Cap = 65,
+                Abilities = new[] { new SpellAbility(18, 0) },
+            }) },
+            new[] { Record("close wounds", 1043,
+                caster: "You cast {spellname} on {target} closing their wounds for {damage} damage!",
+                target: "{source} casts {spellname} on you, closing your wounds!",
+                witness: "{source} casts {spellname} on {target}, closing their wounds!") });
+        PartyMember raijin = h.JoinRaijin();
+
+        h.Feed("You cast close wounds on Raijin closing their wounds for 30 damage!");
+
+        Assert.Equal(830, h.Party.HpEstimateOf(raijin).EstimateHp);
     }
 
     private static HealSpell MinorHealing() => new(13, "minor healing", 2, new SpellFormulaInput

@@ -6,6 +6,8 @@
 - Heals without a printed amount count the spell's average at the caster's level (lowest level when unknown)
 - `par` and @health replies reset the estimate; party heals react within the round
 - Bug report shows each member's HP estimate against the last `par`
+- A member's drain heals them by the damage it did
+- Close wounds is no longer counted as damage dealt to the member it heals
 
 ## 3.122.12
 

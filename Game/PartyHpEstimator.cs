@@ -6,7 +6,8 @@ using MudPlay.Terminal;
 namespace MudPlay.Game;
 
 // Keeps party members' HP moving between `par` polls: damage the round ledger credits
-// to a member comes off, heals seen landing on them go on (HealLineReader). `par` and
+// to a member comes off, heals seen landing on them go on (HealLineReader), and a drain
+// a member lands heals them by what it dealt (DrainLineSet). `par` and
 // a member's @health reply stay the truth — PartyManager, which owns the HP fields,
 // drops the estimate whenever either states the real value. The point is the party
 // heal: CastingDirector reads PartyMember.HpPercent, so it can react to a member's
@@ -27,28 +28,34 @@ public sealed class PartyHpEstimator : IDisposable
     private readonly RoundDamageTracker _damage;
     private readonly PartyManager _party;
     private readonly Func<HealLineReader> _buildReader;
+    private readonly Func<DrainLineSet> _buildDrains;
     private readonly Func<int> _ownLevel;
     private readonly LogService? _log;
     private readonly Func<string?, bool, int> _casterLevel;
     private HealLineReader? _reader;
+    private DrainLineSet? _drains;
     private bool _disposed;
 
-    // buildReader makes the heal reader from the active game data; it's called
-    // lazily, the first time a line needs it after Invalidate. ownLevel is our level
-    // (0 when unknown), for averaging our own unnumbered heals.
+    // buildReader / buildDrains make the heal reader and the drain lines from the
+    // active game data; they're called lazily, the first time a line needs them after
+    // Invalidate. ownLevel is our level (0 when unknown), for averaging our own
+    // unnumbered heals.
     public PartyHpEstimator(
         MessageRouter router, RoundDamageTracker damage, PartyManager party,
-        Func<HealLineReader> buildReader, Func<int> ownLevel, LogService? log = null)
+        Func<HealLineReader> buildReader, Func<DrainLineSet> buildDrains, Func<int> ownLevel,
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(damage);
         ArgumentNullException.ThrowIfNull(party);
         ArgumentNullException.ThrowIfNull(buildReader);
+        ArgumentNullException.ThrowIfNull(buildDrains);
         ArgumentNullException.ThrowIfNull(ownLevel);
         _router = router;
         _damage = damage;
         _party = party;
         _buildReader = buildReader;
+        _buildDrains = buildDrains;
         _ownLevel = ownLevel;
         _log = log;
         _casterLevel = CasterLevel;
@@ -60,7 +67,11 @@ public sealed class PartyHpEstimator : IDisposable
 
     // The heal spells or their messages changed (a game-data set switch, a message
     // edit): rebuild the reader on next use.
-    public void Invalidate() => _reader = null;
+    public void Invalidate()
+    {
+        _reader = null;
+        _drains = null;
+    }
 
     // "N heal lines from M spells" once the reader is built, for the bug report.
     public string ReaderSummary => _reader is { } r
@@ -77,15 +88,18 @@ public sealed class PartyHpEstimator : IDisposable
 
     private void OnAttributed(AttributedLine line)
     {
-        string? target = line.Sides.Target;
-        if (target is null || target == DamageLineAttributor.Self || line.Sides.Amount <= 0) return;
-        if (!_party.HasHpEstimableMember()) return;
-        // A few heals word their amount "for N damage" (close wounds), which the ledger
-        // reads as a hit; the heal side counts that line instead.
-        if (Reader().TryRead(line.Text, _casterLevel, out _)) return;
-        if (_party.AdjustMemberHp(target, -line.Sides.Amount) is { } hp)
-            LogAdjust(hp, -line.Sides.Amount, "damage");
+        int amount = line.Sides.Amount;
+        if (amount <= 0 || !_party.HasHpEstimableMember()) return;
+        if (line.Sides.Target is { } target && target != DamageLineAttributor.Self
+            && _party.AdjustMemberHp(target, -amount) is { } hurt)
+            LogAdjust(hurt, -amount, "damage");
+        if (line.Sides.Source is { } dealer && dealer != DamageLineAttributor.Self
+            && FindMember(dealer) is not null && Drains().IsDrain(line.Text)
+            && _party.AdjustMemberHp(dealer, amount) is { } drained)
+            LogAdjust(drained, amount, "drain");
     }
+
+    private DrainLineSet Drains() => _drains ??= _buildDrains();
 
     private void OnLine(LineExtractor.EmittedLine line)
     {

@@ -3601,11 +3601,16 @@ public sealed class AppServices
         RoundDamage.SetNameSources(
             partyNames: () => PartyState.Members.Select(m => m.Name),
             selfName: () => Party.LocalCharacterName ?? Profile.Current?.Name);
-        // Party HP between polls: the ledger's damage on members plus the heals seen
-        // landing on them. The heal reader comes from the Spells table + message
+        // Party HP between polls: the ledger's damage on members, the heals seen landing
+        // on them, and the drains they land. The heal reader comes from the Spells table + message
         // catalogue, so a set switch or a message edit rebuilds it on next use.
         PartyHp = new Game.PartyHpEstimator(Router, RoundDamage, Party,
             buildReader: BuildHealLineReader,
+            buildDrains: () => new Game.Spells.DrainLineSet(
+                GameData.GetRawTable("Spells") is { } doc
+                    ? Game.Spells.DrainLineSet.DrainSpells(doc.RootElement)
+                    : Array.Empty<int>(),
+                Messages.Messages),
             ownLevel: () => Stats.HasParsed ? PlayerStats.Level : 0,
             log: Log);
         GameData.ActiveSetChanged += _ => PartyHp.Invalidate();
