@@ -127,10 +127,6 @@ public sealed class AutoDepositManager : IDisposable
     // means a fresh copy landed (BuyingLight resumes the walk home).
     private int _lightBaseCount;
 
-    // Fires when a bank `dep` is dispatched on arrival, carrying the deposited
-    // copper value. Lets the Session Stats tracker count bank-deposited wealth
-    // alongside stash-room hides.
-    public event Action<long>? Deposited;
     private DepositPhase _phase = DepositPhase.Idle;
     private DetourResume _resume;
     private RoomKey _destination;
@@ -616,7 +612,6 @@ public sealed class AutoDepositManager : IDisposable
         // route commit through a toll we just banked past (bug: return leg
         // routed on the stale pre-deposit purse and stranded at the toll).
         _noteAutoDeposit(depositValue);
-        Deposited?.Invoke(depositValue);
     }
 
     private bool IsStashRoom(RoomKey room)

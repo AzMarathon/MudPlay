@@ -1743,9 +1743,29 @@ Backscroll is a **snapshot taken when you open it**, not a live tail — to pick
 
 ## Session Stats
 
-Open **Session Stats** from the **View** menu or its toolbar button (it has no default hotkey — you can assign one on Settings → Shortcuts). It tracks this session's performance in a stack of panels: **Kills/hour** and **Exp/hour** graphs, an **HP/MA per loop step** chart, and **Player Statistics**, **Time Analysis**, and **Session Statistics** tables (kills, experience, currency, and time spent moving, resting, and fighting). While a loop is running, the **Session Statistics** panel also shows a **Loop laps** readout — one lap is a full completion of the circuit — with the laps completed, last and average lap time, the live current-lap timer, and the room each lap starts at.
+Open **Session Stats** from the **View** menu or its toolbar button (it has no default hotkey — you can assign one on Settings → Shortcuts). It tracks this session's performance in a stack of panels: **Kills/hour** and **Exp/hour** graphs, an **HP/MA per loop step** chart, and **Player Statistics**, **Time Analysis**, and **Session Statistics** tables (kills, experience, currency, and time spent moving, resting, and fighting). While a loop is running, the **Time Analysis** panel also shows a **Loop laps** readout — one lap is a full completion of the circuit — with the laps completed, last and average lap time, the live current-lap timer, and the room each lap starts at.
 
 The **Player Statistics** panel is your own combat, read off the same round ledger that prints *Show combat round totals*, so the two always agree on whose damage a line was. **Offense** shows your regular attacks (attack, martial arts, bash, smash) as **Hit / Miss / Crit** with their rates and damage. **Backstab** and **BS miss** keep their own rate over the stabs you attempted: a stab fails when it misses, or when the sneak broke and the round swung as a normal attack (that whiff is the stab's, so it isn't a regular miss). Then come your per-round damage, your **procs** (every proc the ledger credits to you — a weapon's "Your weapon sears…" or a proc that names only its victim right after your hit), and **one row per spell** you've landed, showing its damage range, cast count and accuracy. Any spell your class can learn gets its row, not just the ones in your Combat-tab attack slots, so hand-cast spells no longer count as swings. Spells and procs never count as swings: a cast's flavor line ("You scatter some ashes…!") isn't a swing miss, so a caster's miss rate reflects real resists rather than one phantom miss per cast. A spell that chains to a second one counts both lines as one cast: necromantic bolt's drain adds to the bolt it followed. **Per-round damage** is only what *you* dealt. **Defense** shows **Hit by** — every blow that landed on you, whatever its wording, with its damage range, average, and the share of incoming attacks that hit — and **Dodge/Miss**, the share you avoided. Damage nobody dealt (poison ticks, falls) isn't a blow.
+
+The **Time Analysis** panel splits the session's time into moving, attacking, resting and waiting, with the time spent under each ailment. Below that:
+
+- **Sneak** — the share of rooms you entered while sneaking where the sneak held (the room showed `Sneaking...`). A loud entry, or a room that showed without `Sneaking...`, counts as a lost sneak. Hover it for the counts.
+- **Walk** — the average time per walk or loop step, from the move going out to the new room showing. Time stopped between steps (a fight, a rest, a door, a gate) doesn't count, and a step that didn't land isn't timed.
+- **Loop laps** — while a loop runs: laps completed, the last and average lap time, the live current lap and the room each lap starts at.
+
+Each panel's **Reset** clears everything under it and nothing else: Time Analysis's clears the time breakdown, Sneak, Walk and the loop laps (a running loop's current lap keeps ticking); Session Statistics' clears its totals and restarts its per-hour rates.
+
+The **Session Statistics** panel, modelled on MegaMUD's statistics screen:
+
+- **Kills** and **Experience** — this session's totals and their per-hour rates.
+- **Exp needed** — the experience still to earn for the level the countdown is heading for, with that level in brackets. It counts banked levels, so it's the first level your exp hasn't reached, not merely the next one to train. **Will level in** is the time to get there at this session's exp rate — the same countdown as the status bar's TNL and your Party-window row.
+- A **value | coins | items** table:
+  - **Collected** — coin you picked up (its value, and how many coins) and items (any `get`, yours or the automation's).
+  - **Deposit/Sold** — coin you banked, by hand or by auto-deposit, plus coin from items sold, and how many items you sold.
+  - **Stashed** — coin and items you hid, by hand or by the stash automation. Both are counted from the game's own `You deposit …` / `You hid …` replies, the same ones the **Transaction history** records.
+  - **Income rate** — coin picked up per hour, by value and by number of coins.
+  Coin shows as denominations; hover a figure for the exact amount.
+All of these reset with the rest of the session (connect, character switch, **Reset session**, the panel's own **Reset**, an `@reset` from the party, and a loop start when *Reset statistics on loop start* is on).
 
 - **Right-click** the panel area to show or hide individual panels, and **drag a panel by its title** to reorder them — your layout is saved per character.
 - **Reset session** zeroes every counter and restarts the clocks; individual panels have their own **Reset** too. (These don't ask for confirmation.)

@@ -175,6 +175,38 @@ public sealed class StealthManagerTests
         Assert.Equal(0, h.SilentLossCount);
     }
 
+    // ----- sneak entries (Session Stats sneak %) ----------------------
+
+    [Fact]
+    public void SneakEntry_HeldOnConfirm_LostOnLoudOrSilentEntry()
+    {
+        using Harness h = new();
+        List<bool> entries = new();
+        h.Stealth.SneakEntry += entries.Add;
+
+        h.Feed("Sneaking...");                               // room 1 held
+        h.Stealth.NoteRoomChanged();
+        h.Stealth.NoteRoomChanged();                         // room 2: no confirm → silent loss
+        h.Feed("Attempting to sneak...");
+        h.Feed("You make a sound as you enter the room!");   // room 3: loud loss
+        h.Stealth.NoteRoomChanged();                         // already Idle: not a second loss
+
+        Assert.Equal(new[] { true, false, false }, entries);
+    }
+
+    [Fact]
+    public void SneakEntry_NotRaised_WhenNotSneaking()
+    {
+        using Harness h = new();
+        List<bool> entries = new();
+        h.Stealth.SneakEntry += entries.Add;
+
+        h.Stealth.NoteRoomChanged();
+        h.Feed("You make a sound as you enter the room!");   // FSM wasn't sneaking
+
+        Assert.Empty(entries);
+    }
+
     // ----- hide -------------------------------------------------------
 
     [Fact]

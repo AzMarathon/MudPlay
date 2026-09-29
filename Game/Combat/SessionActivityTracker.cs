@@ -1,16 +1,18 @@
 namespace MudPlay.Game.Combat;
 
-// Counts the session's monster kills, experience earned, and currency picked up
-// vs. stashed/deposited for the Session Stats panel's "Session Statistics"
-// section, and keeps a history of kill / experience / currency events so the
-// panel can draw kills/hour and exp/hour sparklines and report every per-hour
-// rate. Produces a SessionActivityStats snapshot plus bucketed series via
-// KillsPerHourSeries and ExperiencePerHourSeries.
+// Counts the session's monster kills, experience earned, and the copper and
+// items collected / deposited-or-sold / stashed for the Session Stats panel's
+// "Session Statistics" section, plus how often a sneak held on entering a room
+// and how long a walk step takes. Keeps a history of kill / experience /
+// currency events so the panel can draw kills/hour and exp/hour sparklines and
+// report every per-hour rate. Produces a SessionActivityStats snapshot plus
+// bucketed series via KillsPerHourSeries and ExperiencePerHourSeries.
 //
 // Owns no source subscriptions — kills arrive from
-// MonsterDeathWatcher.MonsterDied and experience from a MessageRouter pattern —
-// so inputs are pushed in via the Note* forwarders and AppServices wires the
-// sources. This mirrors TimeAnalysisTracker and keeps the tracker
+// MonsterDeathWatcher.MonsterDied, experience from a MessageRouter pattern,
+// items from InventoryManager, sneak entries from StealthManager and steps from
+// RoomTracker — so inputs are pushed in via the Note* forwarders and AppServices
+// wires the sources. This mirrors TimeAnalysisTracker and keeps the tracker
 // dependency-free behind an injectable clock for unit tests. Every Note* call
 // and Snapshot runs on the marshalled dispatch thread (the sources all fire
 // there), so the counters are lock-free.
@@ -34,10 +36,9 @@ namespace MudPlay.Game.Combat;
 //
 // Lifetime totals and the rate window are decoupled. The totals accrue for the
 // whole session; the rate window (its anchor and the kill / exp / currency
-// histories) can be restarted on its own via ResetRates, which the Session Stats
-// window binds to the Time Analysis section's reset. So resetting Time Analysis
-// restarts every per-hour rate from now while the running totals the Session
-// Statistics section shows stay put.
+// histories) is bounded by MaxRateWindow, so a long session's rates follow its
+// recent pace while the totals keep the whole session; the Session Statistics
+// section's reset (ResetTotals) restarts both.
 public sealed class SessionActivityTracker
 {
     // Per-hour rates never average over more than this much history — a night-long
@@ -50,7 +51,22 @@ public sealed class SessionActivityTracker
     private int _monstersKilled;
     private long _experienceEarned;
     private long _currencyCollected;
+    private long _coinsCollected;
+    private long _coinsStashed;
     private long _currencyStashed;
+    private long _currencyDeposited;
+    private int _itemsCollected;
+    private int _itemsSold;
+    private int _itemsStashed;
+    private int _sneakEntries;
+    private int _sneakHeld;
+    private int _steps;
+    private TimeSpan _stepTime;
+
+    // When the walk step now in flight went out; null between steps. Only the
+    // send-to-arrival span counts, so time stopped between steps (a fight, a rest,
+    // a gate) never lands in the average.
+    private DateTimeOffset? _stepSentAt;
 
     // Rate-window anchor: the session/reset start. The window spans
     // [EffectiveStart(now), now] where EffectiveStart caps the look-back at
@@ -71,7 +87,7 @@ public sealed class SessionActivityTracker
     // Currency (copper) collected within the rate window, oldest first. A history
     // like the two above so currency/hour is measured over the same 4-hour window
     // rather than a running counter that could never be trimmed.
-    private readonly List<(DateTimeOffset At, long Copper)> _currencyGains = new();
+    private readonly List<(DateTimeOffset At, long Copper, long Coins)> _currencyGains = new();
 
     // Raised after any input updates the counters, so the Session Stats VM can
     // refresh. Fires on the dispatch thread.
@@ -105,26 +121,98 @@ public sealed class SessionActivityTracker
         Changed?.Invoke();
     }
 
-    // Add currency picked up, as a copper value (auto-collected or manually
-    // get'd). Non-positive amounts are ignored. Feeds both the lifetime total and
-    // the rate window's currency history.
-    public void NoteCurrencyCollected(long copper)
+    // Add currency picked up (auto-collected or manually get'd): its copper value
+    // and how many coins it was. Non-positive amounts are ignored. Feeds both the
+    // lifetime totals and the rate window's currency history.
+    public void NoteCurrencyCollected(long copper, long coins)
     {
         if (copper <= 0) return;
         _currencyCollected += copper;
+        _coinsCollected += Math.Max(0, coins);
         DateTimeOffset now = _clock();
         TrimToWindow(now);
-        _currencyGains.Add((now, copper));
+        _currencyGains.Add((now, copper, Math.Max(0, coins)));
         Changed?.Invoke();
     }
 
-    // Add currency removed from the player this session — stash-room hides and
-    // bank deposits alike — as a copper value. Non-positive amounts are ignored.
-    public void NoteCurrencyStashed(long copper)
+    // Add currency hidden in a stash room this session, as a copper value.
+    // Non-positive amounts are ignored.
+    public void NoteCurrencyStashed(long copper, long coins)
     {
         if (copper <= 0) return;
         _currencyStashed += copper;
+        _coinsStashed += Math.Max(0, coins);
         Changed?.Invoke();
+    }
+
+    // Add currency banked this session, as a copper value. Non-positive amounts
+    // are ignored. Shares the Deposit/Sold total with sale proceeds.
+    public void NoteCurrencyDeposited(long copper)
+    {
+        if (copper <= 0) return;
+        _currencyDeposited += copper;
+        Changed?.Invoke();
+    }
+
+    // A confirmed shop sale: count items sold for copper. The proceeds join bank
+    // deposits in the Deposit/Sold copper total.
+    public void NoteSale(int count, long copper)
+    {
+        if (count <= 0 && copper <= 0) return;
+        if (count > 0) _itemsSold += count;
+        if (copper > 0) _currencyDeposited += copper;
+        Changed?.Invoke();
+    }
+
+    // Add items picked up off the floor. Non-positive counts are ignored.
+    public void NoteItemsCollected(int count)
+    {
+        if (count <= 0) return;
+        _itemsCollected += count;
+        Changed?.Invoke();
+    }
+
+    // Add items hidden in a stash room. Non-positive counts are ignored.
+    public void NoteItemsStashed(int count)
+    {
+        if (count <= 0) return;
+        _itemsStashed += count;
+        Changed?.Invoke();
+    }
+
+    // One room entered while sneaking: held = the room confirmed the sneak, false
+    // = it broke on the way in (loud or silent).
+    public void NoteSneakEntry(bool held)
+    {
+        _sneakEntries++;
+        if (held) _sneakHeld++;
+        Changed?.Invoke();
+    }
+
+    // A walk step's move just went out — starts its timer. A second send before
+    // the first arrives restarts it from the later send.
+    public void NoteStepSent() => _stepSentAt = _clock();
+
+    // The step in flight reached its new room — adds its send-to-arrival time to
+    // the walk average. No-op when no step is being timed.
+    public void NoteStepArrived()
+    {
+        if (_stepSentAt is not { } sent) return;
+        _stepSentAt = null;
+        TimeSpan took = _clock() - sent;
+        if (took < TimeSpan.Zero) return;
+        _steps++;
+        _stepTime += took;
+        Changed?.Invoke();
+    }
+
+    // The step in flight didn't land (refused, re-looked, lost the room) — drop
+    // its timer without counting it. True when a timed step was dropped.
+    public bool NoteStepAbandoned()
+    {
+        if (_stepSentAt is null) return false;
+        _stepSentAt = null;
+        return true;
     }
 
     // Point-in-time copy of the session's activity counters: lifetime totals for
@@ -139,17 +227,32 @@ public sealed class SessionActivityTracker
 
         long windowExperience = 0;
         foreach ((_, long amount) in _expGains) windowExperience += amount;
-        long windowCurrency = 0;
-        foreach ((_, long copper) in _currencyGains) windowCurrency += copper;
+        long windowCurrency = 0, windowCoins = 0;
+        foreach ((_, long copper, long coins) in _currencyGains)
+        {
+            windowCurrency += copper;
+            windowCoins += coins;
+        }
 
         return new(TimeOnline:        now - EffectiveStart(now),
             MonstersKilled:    _monstersKilled,
             ExperienceEarned:  _experienceEarned,
             CurrencyCollected: _currencyCollected,
+            CoinsCollected:    _coinsCollected,
             CurrencyStashed:   _currencyStashed,
+            CoinsStashed:      _coinsStashed,
             RateKills:         _killTimes.Count,
             RateExperience:    windowExperience,
-            RateCurrency:      windowCurrency);
+            RateCurrency:      windowCurrency,
+            RateCoins:         windowCoins,
+            CurrencyDeposited: _currencyDeposited,
+            ItemsCollected:    _itemsCollected,
+            ItemsSold:         _itemsSold,
+            ItemsStashed:      _itemsStashed,
+            SneakEntries:      _sneakEntries,
+            SneakHeld:         _sneakHeld,
+            Steps:             _steps,
+            StepTime:          _stepTime);
     }
 
     // Kills/hour as a buckets-point running-average curve across the current rate
@@ -240,25 +343,46 @@ public sealed class SessionActivityTracker
         if (drop > 0) events.RemoveRange(0, drop);
     }
 
-    // Zero every counter — lifetime totals and the rate window alike — and
-    // restart the clock. Called on the connect / character-switch boundary and by
-    // the Session Statistics section's reset, matching the other session trackers.
+    // Zero every counter — lifetime totals, sneak and walk figures, and the rate
+    // window alike — and restart the clock. Called on the connect /
+    // character-switch boundary, matching the other session trackers.
     public void Reset()
+    {
+        ResetTotals();
+        ResetMovement();
+    }
+
+    // The Session Statistics section's reset: its running totals and their rates.
+    public void ResetTotals()
     {
         _monstersKilled = 0;
         _experienceEarned = 0;
         _currencyCollected = 0;
+        _coinsCollected = 0;
+        _coinsStashed = 0;
         _currencyStashed = 0;
+        _currencyDeposited = 0;
+        _itemsCollected = 0;
+        _itemsSold = 0;
+        _itemsStashed = 0;
         ResetRates();
+    }
+
+    // The sneak and walk figures, shown under Time Analysis and reset with it.
+    public void ResetMovement()
+    {
+        _sneakEntries = 0;
+        _sneakHeld = 0;
+        _steps = 0;
+        _stepTime = TimeSpan.Zero;
+        _stepSentAt = null;
+        Changed?.Invoke();
     }
 
     // Restart only the per-hour rate window: re-anchor the rate clock and clear
     // the kill / experience / currency histories feeding the rates and sparklines
     // — leaving the lifetime totals (kills, experience, currency collected /
-    // stashed) intact. Bound to the Time Analysis section's reset: the per-hour
-    // figures are measured over the session time that panel represents, so
-    // restarting that time restarts every rate from now without discarding the
-    // running tallies the Session Statistics section shows.
+    // stashed) intact. Part of ResetTotals.
     public void ResetRates()
     {
         _windowAnchor = _clock();

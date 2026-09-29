@@ -78,6 +78,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     private readonly DispatcherTimer _liveTick;
 
     private bool _refreshScheduled;
+    // The runner's lap count when Time Analysis was last reset (see LapCount).
+    private int _lapBase;
     private bool _disposed;
 
     [ObservableProperty]
@@ -96,8 +98,14 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrencyCollectedText), nameof(CurrencyCollectedTip),
         nameof(CurrencyPerHourText), nameof(CurrencyStashedText), nameof(CurrencyStashedTip),
-        nameof(KillsRateText), nameof(ExpRateText), nameof(TimeToLevelText))]
+        nameof(CurrencyDepositedText), nameof(CurrencyDepositedTip),
+        nameof(SneakText), nameof(SneakTip), nameof(WalkText), nameof(WalkTip),
+        nameof(KillsRateText), nameof(ExpRateText))]
     private SessionActivityStats _activity;
+
+    // The shared TNL clock, read once per refresh so the countdown under the exp
+    // graph and the Exp needed / Will level in rows all show the same reading.
+    private (TimeToLevelEstimator.Result Estimate, TimeSpan? Remaining) _tnl;
 
     // Kills/hour series feeding the kills sparkline; reassigned each refresh.
     [ObservableProperty]
@@ -342,6 +350,15 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     public string CurrencyPerHourText   => CurrencyFormat.Denominate(Activity.CurrencyPerHour, _naming.RunicName);
     public string CurrencyStashedText   => CurrencyFormat.Denominate(Activity.CurrencyStashed, _naming.RunicName);
     public string CurrencyStashedTip    => CurrencyFormat.Full(Activity.CurrencyStashed, _naming.RunicName);
+    public string CurrencyDepositedText => CurrencyFormat.Denominate(Activity.CurrencyDeposited, _naming.RunicName);
+    public string CurrencyDepositedTip  => CurrencyFormat.Full(Activity.CurrencyDeposited, _naming.RunicName);
+
+    // ----- Session Statistics (sneak + walk) ---------------------------
+
+    public string SneakText => Activity.SneakPercent is { } p ? $"{p:F0}%" : "—";
+    public string SneakTip  => $"{Activity.SneakHeld:N0} of {Activity.SneakEntries:N0} rooms entered while sneaking kept the sneak.";
+    public string WalkText  => Activity.AverageStep is { } step ? $"{step.TotalSeconds:F2}s" : "—";
+    public string WalkTip   => $"Average from a move going out to the new room showing, over {Activity.Steps:N0} walk / loop steps.";
 
     // ----- Rate-graph scales -------------------------------------------
     // The sparklines normalise each series to its own min–max, so the plot is
@@ -454,7 +471,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
             // The shared TNL clock (AppServices.SelfTimeToLevel) — the status bar and the
             // Party window's self row read the same countdown, so all three agree.
-            (TimeToLevelEstimator.Result r, TimeSpan? remaining) = _selfTimeToLevel();
+            (TimeToLevelEstimator.Result r, TimeSpan? remaining) = _tnl;
             if (r.TargetLevel <= 0) return "exp chart unavailable — import game data";
 
             string bankedPart = $"{r.BankableLevels} level{(r.BankableLevels == 1 ? "" : "s")} gained";
@@ -464,6 +481,28 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
                     : $"{Fmt(eta)} until level {r.TargetLevel}";
 
             return $"{bankedPart} · {etaPart}";
+        }
+    }
+
+    // Exp still to earn for the level the countdown targets, with that level —
+    // MegaMUD's "Exp. needed". Banked-aware like the countdown, so it's the first
+    // level the running exp hasn't reached, not merely the next one to train.
+    public string ExpNeededText => _stats.Level > 0 && _tnl.Estimate.TargetLevel > 0
+        ? $"{_tnl.Estimate.ExpNeeded:N0} (L{_tnl.Estimate.TargetLevel})"
+        : "—";
+
+    // The same countdown as TimeToLevelText, on its own row.
+    public string WillLevelInText
+    {
+        get
+        {
+            if (_stats.Level <= 0 || _tnl.Estimate.TargetLevel <= 0) return "—";
+            return _tnl.Remaining switch
+            {
+                null => "rate unknown",
+                { } eta when eta <= TimeSpan.Zero => "ready to level",
+                { } eta => Fmt(eta),
+            };
         }
     }
 
@@ -489,6 +528,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _timeTracker.Reset();
         _activityTracker.Reset();
         _hpMaTracker.Reset();
+        _lapBase = _runner.CompletedLaps;
     }
 
     // Per-section resets, one per collapsible. Each wipes only its own section's
@@ -498,21 +538,24 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [RelayCommand]
     private void ResetPlayerStats() => _combatTracker.Reset();
 
-    // "Time Analysis" reset — the activity-time breakdown. Because the per-hour
-    // rates are measured over this same session time, restarting it also restarts
-    // every rate (kills/hr, exp/hr, currency/hr, and both sparklines) via
-    // ResetRates — while the Session Statistics totals stay put.
+    // "Time Analysis" reset — every line under that section: the time breakdown,
+    // Sneak and Walk, and the loop laps. The per-hour rates sit under Session
+    // Statistics and restart with its reset instead.
     [RelayCommand]
     private void ResetTimeAnalysis()
     {
         _timeTracker.Reset();
-        _activityTracker.ResetRates();
+        _activityTracker.ResetMovement();
+        _lapBase = _runner.CompletedLaps;
+        OnPropertyChanged(nameof(LapCount));
+        OnPropertyChanged(nameof(LastLapText));
+        OnPropertyChanged(nameof(AverageLapText));
     }
 
     // "Session Statistics" reset — the running totals and their rates (kills,
     // experience, currency collected / stashed, and the two rate sparklines).
     [RelayCommand]
-    private void ResetSessionStats() => _activityTracker.Reset();
+    private void ResetSessionStats() => _activityTracker.ResetTotals();
 
     // "Transaction history" button — opens the modeless ledger window (bank
     // deposits + stash-room hides recorded this session).
@@ -561,7 +604,10 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
         // The countdown reads live PlayerStats + the wall clock, so it must
         // re-fire every tick even when the Activity snapshot compares equal.
+        _tnl = _selfTimeToLevel();
         OnPropertyChanged(nameof(TimeToLevelText));
+        OnPropertyChanged(nameof(ExpNeededText));
+        OnPropertyChanged(nameof(WillLevelInText));
 
         // Lap readouts read the runner live (current lap ticks up each second);
         // re-fire them every tick, same as the countdown above.
@@ -582,9 +628,27 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // circle-start room; the graph resolves that room's key to a display name.
     public bool IsLoopRunning => _runner.State != LoopState.Idle;
     public string LapLoopName => _runner.CurrentLoop?.Name ?? _runner.LastRunLoopName ?? "—";
-    public int LapCount => _runner.CompletedLaps;
-    public string LastLapText => _runner.LapHistory.Count > 0 ? Fmt(_runner.LapHistory[^1]) : "—";
-    public string AverageLapText => _runner.CompletedLaps > 0 ? Fmt(_runner.AverageLapTime) : "—";
+    //
+    // Time Analysis's Reset can't clear the runner's own count (the Roomba sweep
+    // reads it), so it records where the count stood and these show only the laps
+    // since. A new run restarts the runner's count below that mark, which drops it.
+    public int LapCount
+    {
+        get
+        {
+            if (_runner.CompletedLaps < _lapBase) _lapBase = 0;
+            return _runner.CompletedLaps - _lapBase;
+        }
+    }
+
+    // The laps since the reset still in the runner's recent history, newest last.
+    private IEnumerable<TimeSpan> RecentLaps
+        => _runner.LapHistory.TakeLast(Math.Min(LapCount, _runner.LapHistory.Count));
+
+    public string LastLapText => RecentLaps.Any() ? Fmt(RecentLaps.Last()) : "—";
+    public string AverageLapText => RecentLaps.Any()
+        ? Fmt(TimeSpan.FromTicks((long)RecentLaps.Average(t => t.Ticks)))
+        : "—";
     public string CurrentLapText => IsLoopRunning ? Fmt(_runner.CurrentLapTime) : "—";
     public string LapStartRoomText => _runner.CircleStartRoom is { } k
         ? (_graph.GetRoom(k) is { } r ? $"{r.DisplayName} · {k}" : k.ToString())

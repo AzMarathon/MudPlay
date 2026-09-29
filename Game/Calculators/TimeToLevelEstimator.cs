@@ -19,26 +19,27 @@ public static class TimeToLevelEstimator
     // trained; BankableLevelsFractional = the same as a fraction (whole + progress
     // toward the next level), the "(+N.NN)" the status-bar TNL shows; TargetLevel =
     // the first not-yet-reached level (0 when the exp chart can't be resolved); Eta =
-    // time to reach it at the rate (null when unresolvable, Zero when already there).
-    public readonly record struct Result(int BankableLevels, double BankableLevelsFractional, int TargetLevel, TimeSpan? Eta);
+    // time to reach it at the rate (null when unresolvable, Zero when already there);
+    // ExpNeeded = the exp still to earn to reach TargetLevel (0 when unresolvable).
+    public readonly record struct Result(int BankableLevels, double BankableLevelsFractional, int TargetLevel, TimeSpan? Eta, long ExpNeeded);
 
     public static Result Estimate(PlayerStats stats, GameDataCache gameData, double ratePerHour)
     {
-        if (stats is null || gameData is null || stats.Level <= 0) return new(0, 0, 0, null);
+        if (stats is null || gameData is null || stats.Level <= 0) return new(0, 0, 0, null, 0);
 
         int chart = ExperienceTableCalculator.CalcExpChart(
             GetInt(gameData.FindRowByName("Classes", stats.Class), "ExpTable"),
             GetInt(gameData.FindRowByName("Races", stats.Race), "ExpTable"));
-        if (chart <= 0) return new(0, 0, 0, null);
+        if (chart <= 0) return new(0, 0, 0, null, 0);
 
         RealmType realm = gameData.ActiveRealm;
         long exp = stats.Exp;
         int banked = TrainBudgetCalculator.BankableLevels(exp, stats.Level, chart, realm, MaxLevelScan);
         double bankedFrac = TrainBudgetCalculator.BankableLevelsFractional(exp, stats.Level, chart, realm, MaxLevelScan);
         int target = stats.Level + banked + 1;
-        TimeSpan? eta = ExperienceTableCalculator.CalcTimeToLevel(
-            ExperienceTableCalculator.CalcExpNeeded(target, chart, realm), exp, (long)ratePerHour);
-        return new(banked, bankedFrac, target, eta);
+        long targetExp = ExperienceTableCalculator.CalcExpNeeded(target, chart, realm);
+        TimeSpan? eta = ExperienceTableCalculator.CalcTimeToLevel(targetExp, exp, (long)ratePerHour);
+        return new(banked, bankedFrac, target, eta, Math.Max(0, targetExp - exp));
     }
 
     private static int GetInt(JsonElement? rowOpt, string property)

@@ -68,6 +68,7 @@ public static class BugReportBuilder
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
             new("Combat rounds (last 10)", SafeSection(() => BuildCombatRounds(svc))),
             new("Session combat stats", SafeSection(() => BuildSessionCombat(svc))),
+            new("Session activity", SafeSection(() => BuildSessionActivity(svc))),
             new("Monster HP estimates", SafeSection(() => BuildMonsterHpEstimates(svc))),
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
             new("Combat profiles", SafeSection(() => BuildCombatProfiles(svc))),
@@ -659,6 +660,26 @@ public static class BugReportBuilder
         Kv(sb, "Rounds with damage", $"{c.RoundsWithDamage} ({c.RoundMinDamage}-{c.RoundMaxDamage}, avg {c.RoundAvgDamage:F0})");
         IReadOnlyList<string> spells = svc.CombatSession.RecognisedSpells;
         Kv(sb, "Recognised spells", spells.Count == 0 ? "(none)" : string.Join(", ", spells));
+        return sb.ToString();
+    }
+
+    // Session Stats' Session Statistics as the window shows them, in raw units — the
+    // basis for a "Walk / Sneak / Exp needed / copper-items figure looks wrong" report.
+    private static string BuildSessionActivity(AppServices svc)
+    {
+        Game.Combat.SessionActivityStats a = svc.SessionActivity.Snapshot();
+        (Game.Calculators.TimeToLevelEstimator.Result est, TimeSpan? remaining) = svc.SelfTimeToLevel();
+        StringBuilder sb = new();
+        Kv(sb, "Rate window", $"{a.TimeOnline.TotalHours:F2} h");
+        Kv(sb, "Kills", $"{a.MonstersKilled} ({a.KillsPerHour:F1}/hr)");
+        Kv(sb, "Experience", $"{a.ExperienceEarned} ({a.ExperiencePerHour:F0}/hr)");
+        Kv(sb, "Exp needed", est.TargetLevel > 0 ? $"{est.ExpNeeded} for L{est.TargetLevel} (banked {est.BankableLevels})" : "(unresolved)");
+        Kv(sb, "Will level in", remaining is { } eta ? eta.ToString() : "(rate unknown)");
+        Kv(sb, "Collected", $"{a.CurrencyCollected} copper in {a.CoinsCollected} coins, {a.ItemsCollected} items ({a.CurrencyPerHour:F0} copper/hr, {a.CoinsPerHour:F0} coins/hr)");
+        Kv(sb, "Deposit/Sold", $"{a.CurrencyDeposited} copper, {a.ItemsSold} items sold");
+        Kv(sb, "Stashed", $"{a.CurrencyStashed} copper in {a.CoinsStashed} coins, {a.ItemsStashed} items");
+        Kv(sb, "Sneak entries", $"{a.SneakHeld} held of {a.SneakEntries}");
+        Kv(sb, "Walk steps", a.AverageStep is { } step ? $"{a.Steps} timed, avg {step.TotalSeconds:F2}s" : "(none timed)");
         return sb.ToString();
     }
 

@@ -1177,10 +1177,10 @@ public sealed class AppServices
     // RoomTracker; reset on the session boundary.
     public Game.Combat.TimeAnalysisTracker TimeAnalysis { get; private set; } = null!;
 
-    // Counts the session's monster kills and experience earned and
-    // keeps a rolling kill-timestamp history for the Session Stats panel's
-    // kills/hour sparkline. Fed by MonsterDeath and the
-    // experience-gain line; reset on the session boundary.
+    // Counts the session's kills, experience, copper / items, sneak entries and
+    // walk steps for the Session Stats panel's Session Statistics section, and
+    // keeps the rolling histories behind its per-hour rates and sparklines.
+    // Reset on the session boundary.
     public Game.Combat.SessionActivityTracker SessionActivity { get; private set; } = null!;
 
     // Our own time to next level: the banked-aware estimate at the session exp/hour,
@@ -4980,6 +4980,17 @@ public sealed class AppServices
                 SessionActivity.NoteExperience(exp);
         });
         Profile.ProfileLoaded += _ => SessionActivity.Reset();
+        // The rest of the Session Statistics inputs: rooms entered while sneaking
+        // (held or broke), items picked up, and shop sales (items + proceeds). Walk
+        // steps are wired with the loop runner below; stash hides and bank deposits
+        // with their engines.
+        Stealth.SneakEntry += held => SessionActivity.NoteSneakEntry(held);
+        Inventory.ItemTaken += (_, count) => SessionActivity.NoteItemsCollected(count);
+        Inventory.ItemSold += (name, count, copper) =>
+        {
+            SessionActivity.NoteSale(count, copper);
+            Log.Debug("SessionStats", $"sale counted: {count} x {name} for {copper} copper");
+        };
 
         // HpMaHistoryTracker. Accumulates per-loop-step min/max HP + mana for the
         // Session Stats "HP/MA History" band graph. Its inputs need LoopRunner
@@ -4991,8 +5002,8 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ => HpMaHistory.Reset();
 
         // TransactionHistory. A per-session ledger of cash/item
-        // offloads: bank `dep`osits (AutoDeposit.Deposited) and stash-room
-        // `hide`s (Stash.StashExecuted), wired to their events below. Feeds the
+        // offloads: bank deposits and stash-room hides, fed from the server's
+        // `You deposit …` / `You hid …` echoes wired below. Feeds the
         // Session Stats → Transaction history window; reset on the same session
         // boundary as the other session-stats trackers.
         TransactionHistory = new Game.Cash.TransactionHistoryTracker();
@@ -5578,7 +5589,7 @@ public sealed class AppServices
         // value so mixed currency streams fold into one figure.
         Cash.CoinCollected += (currency, count) =>
             SessionActivity.NoteCurrencyCollected(
-                Game.Inventory.CurrencyHoldings.ToCopper(Currency.Canonicalize(currency), count));
+                Game.Inventory.CurrencyHoldings.ToCopper(Currency.Canonicalize(currency), count), count);
         // The auto-deposit gates read the authoritative inventory snapshot
         // (wealth value + coin count), so re-evaluate whenever the parser
         // updates holdings — this is the only path that catches buy / sell
@@ -5607,29 +5618,22 @@ public sealed class AppServices
             log: Log,
             naming: Currency,
             isParadigm: onParadigm);
-        // Count stash-room hides toward the Session Stats stashed/deposited figure
-        // (copper value across the dispatched coins). The transaction-history
-        // ledger is NOT fed here — it sources from the server's own `You hid …` /
-        // `You deposit …` echoes below, so a hand-typed stash is recorded too.
-        Stash.StashExecuted += dispatch =>
-        {
-            long copper = 0;
-            foreach ((string currency, long amount) in dispatch.Currencies)
-                copper += Game.Inventory.CurrencyHoldings.ToCopper(Currency.Canonicalize(currency), amount);
-            SessionActivity.NoteCurrencyStashed(copper);
-        };
-
-        // Transaction-history ledger sources — the server-confirmation echoes,
-        // which fire for a manual `dep` / `hide` and an automated reroute alike
-        // (so both are recorded), and arrive one per denomination / item:
+        // Transaction-history ledger and Session Stats (Stashed, Deposit/Sold) sources —
+        // the server-confirmation echoes, which fire for a manual `dep` / `hide` and an
+        // automated reroute alike (so both are counted), and arrive one per
+        // denomination / item:
         //   coin stash   -> CashManager.CoinHidden       ("You hid N <coin>.")
         //   item stash   -> InventoryManager.ItemHidden  ("You hid <item>.")
         //   bank deposit -> InventoryManager.BankDeposited ("You deposit …", wrap-merged there)
         // Each echo captures the room it fired in — the stash room for a hide,
         // the bank room for a deposit — so the ledger records where excess went.
         Cash.CoinHidden += (currency, count) =>
+        {
             TransactionHistory.NoteStash(
                 new[] { (currency, (long)count) }, Array.Empty<string>(), CurrentRoomLabel());
+            SessionActivity.NoteCurrencyStashed(
+                Game.Inventory.CurrencyHoldings.ToCopper(Currency.Canonicalize(currency), count), count);
+        };
 
         // Funding's structured tally of the same echoes. Separate from the ledger
         // above on purpose: that one is a rolling display log that formats amounts
@@ -5681,9 +5685,13 @@ public sealed class AppServices
             if (AutoDiscard.TryConsumeSuppressedHide(item)) return;
             TransactionHistory.NoteStash(
                 Array.Empty<(string, long)>(), new[] { item }, CurrentRoomLabel());
+            SessionActivity.NoteItemsStashed(1);
         };
         Inventory.BankDeposited += copper =>
+        {
             TransactionHistory.NoteBankDeposit(copper, CurrentRoomLabel());
+            SessionActivity.NoteCurrencyDeposited(copper);
+        };
 
         // AutoGetItemsManager. The resolve delegate
         // maps a loose "You notice ..." entry back to an item Number
@@ -6705,6 +6713,30 @@ public sealed class AppServices
             PartyBroadcaster.BroadcastExpReset();
         };
 
+        // Session Stats walk pace: time each walk / loop step from its move going
+        // out (the tracker drops Confirmed -> Pending) to the new room landing. Only
+        // that span counts, so fights, rests and gates between steps stay out of
+        // the average. A transition that leaves the room unconfirmed or unchanged
+        // (a refused move, a re-look, Suspect / Lost) drops the step uncounted.
+        RoomTracker.StateChanged += t =>
+        {
+            bool moved = t.PreviousRoom is { } from && t.NewRoom is { } to && !from.Key.Equals(to.Key);
+            if (moved && t.NewConfidence is Game.Map.RoomConfidence.Confirmed or Game.Map.RoomConfidence.Pending)
+            {
+                SessionActivity.NoteStepArrived();
+                return;
+            }
+            if (!moved && t.NewConfidence == Game.Map.RoomConfidence.Pending)
+            {
+                if (t.PreviousConfidence == Game.Map.RoomConfidence.Confirmed
+                    && (Walker.State == Game.Map.WalkState.Walking || LoopRunner.State == Game.Map.LoopState.Running))
+                    SessionActivity.NoteStepSent();
+                return;
+            }
+            if (SessionActivity.NoteStepAbandoned())
+                Log.Debug("SessionStats", $"walk step not timed: {t.PreviousConfidence} -> {t.NewConfidence} without a new room");
+        };
+
         // HP/MA-history sampling. Every statline (finest-grained vitals feed —
         // catches mid-combat dips PlayerState.PropertyChanged would coalesce away)
         // folds the current HP/mana percent into the loop step being traversed,
@@ -7258,11 +7290,6 @@ public sealed class AppServices
         // moment the sweep ends.
         AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
         AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
-        // Bank deposits (already a copper value) join stash hides in the Session
-        // Stats stashed/deposited figure. The transaction-history ledger is fed
-        // separately from the `You deposit …` echo (InventoryManager.BankDeposited,
-        // wired above) so a manual deposit is recorded too.
-        AutoDeposit.Deposited += copper => SessionActivity.NoteCurrencyStashed(copper);
 
         // Shop-source routing (PR C). On a one-shot walk-to that needs an
         // uncarried Item/Ticket-gate item a shop sells, detour to the

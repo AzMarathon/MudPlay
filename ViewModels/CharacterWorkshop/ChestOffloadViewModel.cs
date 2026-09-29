@@ -168,7 +168,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
     // The game confirmed a sale of `count` of `name` (the player's own "You sold …").
     // Reduce that row and drop it at zero, leaving every other row's edits intact.
-    private void OnItemSold(string name, int count)
+    private void OnItemSold(string name, int count, long _)
         => Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, sold: true));
 
     // The game confirmed a drop of `count` of `name` (the player's own "You dropped …").
