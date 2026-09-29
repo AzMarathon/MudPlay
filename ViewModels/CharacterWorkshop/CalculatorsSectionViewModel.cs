@@ -1619,13 +1619,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
     // The trimmed weapon name on the profile's Backstab equipment set, or null
     // when there's no profile / set / weapon slot filled.
-    private string? BackstabSetWeaponName()
-    {
-        EquipmentSettings? eq = _profile.Current?.Equipment;
-        EquipmentSet? set = eq?.Sets.FirstOrDefault(s => s.Trigger == EquipTriggerType.Backstab);
-        string? name = set?.Slots.FirstOrDefault(e => e.Slot == EquipmentSlot.Weapon)?.ItemName?.Trim();
-        return string.IsNullOrEmpty(name) ? null : name;
-    }
+    private string? BackstabSetWeaponName() => _profile.Current?.Equipment?.BackstabSetWeapon();
 
     private static int GetInt(JsonElement? row, string property)
     {

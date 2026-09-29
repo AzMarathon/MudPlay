@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels"
-        xmlns:calc="using:MudPlay.Game.Calculators"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
@@ -36,6 +35,22 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <!-- Your Matchup attack rows. The attack picked to drive Est. Rounds to
+             Kill gets a cyan wash + left bar so it stands out from the rest. -->
+        <Style Selector="Border.AttackRow">
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="BorderThickness" Value="3,0,0,0"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="Border.AttackRow.basis">
+            <Setter Property="Background" Value="{StaticResource AccentCyanSoftBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentCyanBrush}"/>
+        </Style>
+        <Style Selector="Border.AttackRow.basis TextBlock.DetailLine">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
         </Style>
     </Window.Styles>
 
@@ -167,7 +182,7 @@
                             <Flyout Placement="Bottom">
                                 <StackPanel MinWidth="300" Spacing="6">
                                     <TextBlock Classes="FieldLabel" TextWrapping="Wrap" MaxWidth="320"
-                                               Text="Checkbox: show the attack in Your Matchup.   Radio: use it for Est. Rounds to Kill — or pick 'Fastest of all my attacks' to use whichever of your attacks (melee or spell) kills each monster soonest."/>
+                                               Text="Checkbox: show the attack in Your Matchup.   Radio: use it for Est. Rounds to Kill — or pick 'Fastest of all my attacks' to use whichever of your attacks (melee or spell) kills each monster soonest. Backstab reads 1 for a sure one-stab kill, — otherwise."/>
                                     <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
                                         <ItemsControl ItemsSource="{Binding AttackOptions}">
                                             <ItemsControl.ItemTemplate>
@@ -211,11 +226,44 @@
                                     <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
                                         <ItemsControl ItemsSource="{Binding DebuffOptions}">
                                             <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:DebuffPickRow">
+                                                <DataTemplate x:DataType="vm:SpellPickRow">
                                                     <Grid ColumnDefinitions="Auto,*" Margin="0,2">
                                                         <CheckBox Grid.Column="0" VerticalAlignment="Center"
                                                                   IsChecked="{Binding Applied, Mode=TwoWay}"
                                                                   ToolTip.Tip="Apply this debuff to the selected monster"/>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
+                                                            <TextBlock Classes="DetailLine" Text="{Binding Label}"/>
+                                                            <TextBlock Classes="FieldLabel"
+                                                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                                       Text="{Binding Effect}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    <!-- Apply Buffs: fold your own offense buffs (Stealth / accuracy /
+                         backstab / damage, e.g. shadowform) into every attack as if up. -->
+                    <Button Content="Apply Buffs…" HorizontalAlignment="Stretch"
+                            IsVisible="{Binding HasKnownBuffs}"
+                            ToolTip.Tip="Fold your own offense buffs (Stealth / accuracy / backstab / damage — e.g. shadowform) into your attacks, as if they're up.">
+                        <Button.Flyout>
+                            <Flyout Placement="Bottom">
+                                <StackPanel MinWidth="320" Spacing="6">
+                                    <TextBlock Classes="FieldLabel" TextWrapping="Wrap" MaxWidth="340"
+                                               Text="Check a buff to count it in Your Matchup and Est. Rounds to Kill as if it's up. A buff that's already on you is in your stat Stealth, so only its other bonuses are added."/>
+                                    <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl ItemsSource="{Binding BuffOptions}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:SpellPickRow">
+                                                    <Grid ColumnDefinitions="Auto,*" Margin="0,2">
+                                                        <CheckBox Grid.Column="0" VerticalAlignment="Center"
+                                                                  IsChecked="{Binding Applied, Mode=TwoWay}"
+                                                                  ToolTip.Tip="Count this buff as up"/>
                                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
                                                             <TextBlock Classes="DetailLine" Text="{Binding Label}"/>
                                                             <TextBlock Classes="FieldLabel"
@@ -333,6 +381,12 @@
                                 <TextBlock Classes="DetailLine" TextWrapping="Wrap"
                                            Text="{Binding DebuffSummary, StringFormat='Debuffs applied: {0}'}"/>
                             </Border>
+                            <Border IsVisible="{Binding HasAppliedBuffs}"
+                                    Background="{StaticResource AccentCyanSoftBrush}"
+                                    CornerRadius="3" Padding="6,3">
+                                <TextBlock Classes="DetailLine" TextWrapping="Wrap"
+                                           Text="{Binding BuffSummary, StringFormat='Buffs counted as up: {0}'}"/>
+                            </Border>
 
                             <ItemsControl ItemsSource="{Binding MatchupLines}">
                                 <ItemsControl.ItemTemplate>
@@ -358,8 +412,15 @@
                                 <TextBlock Classes="FieldLabel" Text="Physical attacks" Margin="0,4,0,2"/>
                                 <ItemsControl ItemsSource="{Binding MatchupMeleeLines}">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="x:String">
-                                            <TextBlock Classes="DetailLine" TextWrapping="Wrap" Text="{Binding}"/>
+                                        <DataTemplate x:DataType="vm:MatchupAttackLine">
+                                            <Border Classes="AttackRow" Classes.basis="{Binding IsRoundsBasis}">
+                                                <StackPanel>
+                                                    <TextBlock Classes="DetailLine" TextWrapping="Wrap" Text="{Binding Text}"/>
+                                                    <TextBlock Classes="DetailLine" TextWrapping="Wrap" Margin="10,0,0,0"
+                                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                               Text="{Binding Detail}" IsVisible="{Binding HasDetail}"/>
+                                                </StackPanel>
+                                            </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -369,30 +430,32 @@
                                  row template (defined here so both sub-lists reach it). -->
                             <StackPanel IsVisible="{Binding HasAnyAttackSpells}">
                                 <StackPanel.Resources>
-                                    <DataTemplate x:Key="SpellRowTemplate" x:DataType="calc:SpellEffectivenessResult">
-                                        <StackPanel Margin="0,0,0,4">
-                                            <TextBlock Classes="DetailLine" FontWeight="SemiBold">
-                                                <TextBlock.Text>
-                                                    <MultiBinding StringFormat="{}{0} ({1})">
-                                                        <Binding Path="Name"/>
-                                                        <Binding Path="Element"/>
-                                                    </MultiBinding>
-                                                </TextBlock.Text>
-                                            </TextBlock>
-                                            <TextBlock Classes="DetailLine" Margin="10,0,0,0" IsVisible="{Binding Eligible}"
-                                                       Foreground="{StaticResource AccentAmberBrush}">
-                                                <TextBlock.Text>
-                                                    <MultiBinding StringFormat="{}{0:0.0} dmg per mana · {1} rounds to kill · {2} mana to kill · {3} dmg/round">
-                                                        <Binding Path="DamagePerMana"/>
-                                                        <Binding Path="RoundsToKill"/>
-                                                        <Binding Path="ManaToKill"/>
-                                                        <Binding Path="EffectiveDamage"/>
-                                                    </MultiBinding>
-                                                </TextBlock.Text>
-                                            </TextBlock>
-                                            <TextBlock Classes="DetailLine" Margin="10,0,0,0" Text="{Binding BlockedReason}"
-                                                       IsVisible="{Binding !Eligible}"/>
-                                        </StackPanel>
+                                    <DataTemplate x:Key="SpellRowTemplate" x:DataType="vm:MatchupSpellRow">
+                                        <Border Classes="AttackRow" Classes.basis="{Binding IsRoundsBasis}" Margin="0,0,0,4">
+                                            <StackPanel>
+                                                <TextBlock Classes="DetailLine" FontWeight="SemiBold">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0} ({1})">
+                                                            <Binding Path="Spell.Name"/>
+                                                            <Binding Path="Spell.Element"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                <TextBlock Classes="DetailLine" Margin="10,0,0,0" IsVisible="{Binding Spell.Eligible}"
+                                                           Foreground="{StaticResource AccentAmberBrush}">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0:0.0} dmg per mana · {1} rounds to kill · {2} mana to kill · {3} dmg/round">
+                                                            <Binding Path="Spell.DamagePerMana"/>
+                                                            <Binding Path="Spell.RoundsToKill"/>
+                                                            <Binding Path="Spell.ManaToKill"/>
+                                                            <Binding Path="Spell.EffectiveDamage"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                <TextBlock Classes="DetailLine" Margin="10,0,0,0" Text="{Binding Spell.BlockedReason}"
+                                                           IsVisible="{Binding !Spell.Eligible}"/>
+                                            </StackPanel>
+                                        </Border>
                                     </DataTemplate>
                                 </StackPanel.Resources>
                                 <TextBlock Classes="FieldLabel" Text="Spell attacks, ranked by mana efficiency" Margin="0,4,0,2"/>

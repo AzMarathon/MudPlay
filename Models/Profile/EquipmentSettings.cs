@@ -37,4 +37,22 @@ public sealed class EquipmentSettings
     // Seconds without a typed move before a hand-moving While Moving set reverts to
     // Default. Clamped to 1+ where it's read.
     public int WhileMovingManualIdleSeconds { get; set; } = 10;
+
+    // The trimmed weapon on the Backstab set, or null when it has none — what the
+    // equipment manager wields for the opener, so backstab projections use it.
+    public string? BackstabSetWeapon()
+    {
+        foreach (EquipmentSet set in Sets)
+        {
+            if (set.Trigger != EquipTriggerType.Backstab) continue;
+            foreach (EquipmentSlotEntry entry in set.Slots)
+            {
+                if (entry.Slot != EquipmentSlot.Weapon) continue;
+                string? name = entry.ItemName?.Trim();
+                return string.IsNullOrEmpty(name) ? null : name;
+            }
+            return null;
+        }
+        return null;
+    }
 }

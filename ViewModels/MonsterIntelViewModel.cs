@@ -118,10 +118,23 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly HashSet<string> _appliedDebuffKeys = new(System.StringComparer.OrdinalIgnoreCase);
     private bool _buildingDebuffOptions;
     private Game.Spells.MonsterDebuffEffect _monsterDebuff;
-    public ObservableCollection<DebuffPickRow> DebuffOptions { get; } = new();
+    public ObservableCollection<SpellPickRow> DebuffOptions { get; } = new();
     [ObservableProperty] private bool _hasAppliedDebuffs;
     [ObservableProperty] private string _debuffSummary = "";
     public bool HasKnownDebuffs => DebuffOptions.Count > 0;
+
+    // "Apply Buffs" picker state — the offense mirror of Apply Debuffs: the
+    // character's own buffs that raise Stealth / accuracy / backstab / damage
+    // (e.g. shadowform), folded into every attack as if up. _isBuffUp reports a
+    // buff that's on right now, whose Stealth the live stats already carry.
+    private readonly List<KnownSpell> _ownedOffenseBuffs = new();
+    private readonly HashSet<string> _appliedBuffKeys = new(System.StringComparer.OrdinalIgnoreCase);
+    private readonly System.Func<string, bool>? _isBuffUp;
+    private bool _buildingBuffOptions;
+    public ObservableCollection<SpellPickRow> BuffOptions { get; } = new();
+    [ObservableProperty] private bool _hasAppliedBuffs;
+    [ObservableProperty] private string _buffSummary = "";
+    public bool HasKnownBuffs => BuffOptions.Count > 0;
 
     public DataGridCollectionView RowsView { get; }
 
@@ -164,7 +177,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null,
         MonsterObservationTracker? observations = null, PlayerState? playerState = null,
         System.Func<Models.Profile.BuffSettings?>? buffProvider = null,
-        ProfileService? profile = null)
+        ProfileService? profile = null, System.Func<string, bool>? isBuffUp = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -180,6 +193,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _observations = observations;
         _buffProvider = buffProvider;
         _profile = profile;
+        _isBuffUp = isBuffUp;
         _hasCharacterContext = _stats is not null && _inventory is not null
             && _spellbook is not null && _itemMagic is not null;
 
@@ -209,6 +223,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             if (!string.IsNullOrEmpty(saved.MonsterIntelRoundsAttack))
                 _roundsAttackKey = saved.MonsterIntelRoundsAttack!;
             foreach (string k in saved.MonsterIntelAppliedDebuffs) _appliedDebuffKeys.Add(k);
+            foreach (string k in saved.MonsterIntelAppliedBuffs) _appliedBuffKeys.Add(k);
 
             // RowsView was just constructed with Filter = PassesFilter, which
             // reads IncomingHitPercent — still every entry's default -1 until
@@ -440,6 +455,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         RebuildDebuffOptions();
         RecomputeDebuff();
 
+        // The character's own offense buffs — feeds the "Apply Buffs" picker.
+        _ownedOffenseBuffs.Clear();
+        foreach (KnownSpell known in _spellbook.Available)
+            if (_spellbook.IsObtained(known.Number) && BuffOffenseCalculator.AffectsOffense(known))
+                _ownedOffenseBuffs.Add(known);
+        RebuildBuffOptions();
+        RecomputeBuffSummary();
+
         // The player-side defence the Hits-You-% column reads against — worn-gear
         // aggregate + permanent race/class innate + completed-quest folds + the
         // character's configured (assumed-up) AC buffs — assembled by the shared
@@ -513,18 +536,32 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // No single pick (the default, or a saved pick that's gone stale) → fastest of all.
         bool fastest = roundsMelee is null && roundsSpell is null;
 
+        BuffOffense buff = CurrentSelfBuff();
+
+        // Backstab is a single opener, not something you sustain round after round:
+        // as the basis it reads 1 for a sure one-stab kill and "—" for anything else.
+        if (roundsMelee == MudAttackType.Backstab)
+        {
+            PlayerMatchupProfile bs = BackstabProfile(worn, encum, buff);
+            foreach (MonsterIntelEntry entry in _all)
+            {
+                if (entry.Hp <= 0) { entry.EstimatedRoundsToKill = -1; continue; }
+                entry.EstimatedRoundsToKill = EvaluateBackstab(bs, entry.Source).IsOneStabKill ? 1 : 0;
+            }
+            return;
+        }
+
         List<PlayerMatchupProfile> meleeProfiles = new();
         if (fastest)
         {
-            // Backstab is a one-time opener, not something you sustain round after
-            // round, so it never counts as "how fast can I kill this".
+            // The opener never counts as "how fast can I kill this" (see above).
             foreach (MudAttackType t in _usableMelee)
                 if (t != MudAttackType.Backstab)
-                    meleeProfiles.Add(CharacterCalculator.BuildMeleeAttackProfile(t, _stats!, worn, encum, _gameData));
+                    meleeProfiles.Add(CharacterCalculator.BuildMeleeAttackProfile(t, _stats!, worn, encum, _gameData, buff));
         }
         else if (roundsMelee is { } mt)
         {
-            meleeProfiles.Add(CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData));
+            meleeProfiles.Add(CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData, buff));
         }
 
         foreach (MonsterIntelEntry entry in _all)
@@ -770,11 +807,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private void RebuildDebuffOptions()
     {
         _buildingDebuffOptions = true;
-        foreach (DebuffPickRow r in DebuffOptions) r.PropertyChanged -= OnDebuffOptionChanged;
+        foreach (SpellPickRow r in DebuffOptions) r.PropertyChanged -= OnDebuffOptionChanged;
         DebuffOptions.Clear();
         foreach (KnownSpell s in _ownedDebuffSpells)
         {
-            var row = new DebuffPickRow(s.Short, s.Name,
+            var row = new SpellPickRow(s.Short, s.Name,
                 DebuffEffectSummary(s), applied: _appliedDebuffKeys.Contains(s.Short));
             row.PropertyChanged += OnDebuffOptionChanged;
             DebuffOptions.Add(row);
@@ -785,8 +822,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     private void OnDebuffOptionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (_buildingDebuffOptions || sender is not DebuffPickRow row) return;
-        if (e.PropertyName != nameof(DebuffPickRow.Applied)) return;
+        if (_buildingDebuffOptions || sender is not SpellPickRow row) return;
+        if (e.PropertyName != nameof(SpellPickRow.Applied)) return;
         if (row.Applied) _appliedDebuffKeys.Add(row.Key);
         else _appliedDebuffKeys.Remove(row.Key);
         SaveDebuffSettings();
@@ -829,6 +866,126 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (e.AccDelta != 0) parts.Add($"-{e.AccDelta} Accuracy");
         if (e.Slowed) parts.Add("slowed");
         return parts.Count == 0 ? "no stat effect" : string.Join(" · ", parts);
+    }
+
+    // ----- Apply Buffs picker -----
+
+    private void RebuildBuffOptions()
+    {
+        _buildingBuffOptions = true;
+        foreach (SpellPickRow r in BuffOptions) r.PropertyChanged -= OnBuffOptionChanged;
+        BuffOptions.Clear();
+        foreach (KnownSpell s in _ownedOffenseBuffs)
+        {
+            var row = new SpellPickRow(s.Short, s.Name,
+                FormatBuffSummary(BuffOffenseCalculator.Fold(new[] { s }, _stats?.Level ?? 1)),
+                applied: _appliedBuffKeys.Contains(s.Short));
+            row.PropertyChanged += OnBuffOptionChanged;
+            BuffOptions.Add(row);
+        }
+        _buildingBuffOptions = false;
+        OnPropertyChanged(nameof(HasKnownBuffs));
+    }
+
+    private void OnBuffOptionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_buildingBuffOptions || sender is not SpellPickRow row) return;
+        if (e.PropertyName != nameof(SpellPickRow.Applied)) return;
+        if (row.Applied) _appliedBuffKeys.Add(row.Key);
+        else _appliedBuffKeys.Remove(row.Key);
+        SaveBuffSettings();
+        RecomputeBuffSummary();
+        RecomputeRoundsColumn();   // buffs move every attack, so the column too
+    }
+
+    private List<KnownSpell> AppliedBuffs()
+        => _ownedOffenseBuffs.Where(s => _appliedBuffKeys.Contains(s.Short)).ToList();
+
+    // Folded fresh on each use rather than cached: whether a buff is up right now
+    // (so its Stealth is already in the live stats) changes as it's cast and fades.
+    private BuffOffense CurrentSelfBuff()
+        => BuffOffenseCalculator.Fold(AppliedBuffs(), _stats?.Level ?? 1, _isBuffUp);
+
+    private void RecomputeBuffSummary()
+    {
+        List<KnownSpell> applied = AppliedBuffs();
+        HasAppliedBuffs = applied.Count > 0;
+        BuffSummary = HasAppliedBuffs ? string.Join(", ", applied.Select(s => s.Name)) : "";
+    }
+
+    private void SaveBuffSettings()
+    {
+        if (!_hasCharacterContext) return;
+        OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
+        dto.MonsterIntelAppliedBuffs =
+            _appliedBuffKeys.OrderBy(k => k, System.StringComparer.OrdinalIgnoreCase).ToList();
+        _resolver.WriteAt(SettingsTier.Character, "Other", dto);
+    }
+
+    private static string FormatBuffSummary(BuffOffense b)
+    {
+        List<string> parts = new();
+        if (b.Stealth != 0) parts.Add($"+{b.Stealth} Stealth");
+        if (b.Accuracy != 0) parts.Add($"+{b.Accuracy} Accuracy");
+        if (b.BsAccuracy != 0) parts.Add($"+{b.BsAccuracy} BS accuracy");
+        if (b.BsMin != 0 || b.BsMax != 0) parts.Add($"+{b.BsMin}/+{b.BsMax} BS min/max");
+        if (b.MaxDamage != 0) parts.Add($"+{b.MaxDamage} max dmg");
+        if (b.Crits != 0) parts.Add($"+{b.Crits} crits");
+        return parts.Count == 0 ? "no offense effect" : string.Join(" · ", parts);
+    }
+
+    // ----- Backstab opener -----
+
+    // The worn set as it stands for the opener: the Backstab set's weapon swapped
+    // into the weapon hand when one is set (the equipment manager wields it for
+    // the stab), so its damage and any bonuses it carries count. setWeapon names
+    // that weapon when it differs from the one in hand.
+    private IReadOnlyList<EquippedItem> BackstabWorn(IReadOnlyList<EquippedItem> worn, out string? setWeapon)
+    {
+        setWeapon = _profile?.Current?.Equipment?.BackstabSetWeapon();
+        string? inHand = worn.FirstOrDefault(w => w.Slot == "Weapon Hand").Name;
+        if (setWeapon is null || string.Equals(setWeapon, inHand, System.StringComparison.OrdinalIgnoreCase))
+        {
+            setWeapon = null;
+            return worn;
+        }
+        List<EquippedItem> swapped = worn.Where(w => w.Slot != "Weapon Hand").ToList();
+        swapped.Add(new EquippedItem(setWeapon, "Weapon Hand"));
+        return swapped;
+    }
+
+    private PlayerMatchupProfile BackstabProfile(IReadOnlyList<EquippedItem> worn, EncumbranceReading encum, BuffOffense buff)
+        => CharacterCalculator.BuildMeleeAttackProfile(
+            MudAttackType.Backstab, _stats!, BackstabWorn(worn, out _), encum, _gameData, buff);
+
+    private BackstabMatchup EvaluateBackstab(
+        PlayerMatchupProfile bs, MonsterCatalogEntry m, MonsterMatchupProfile? target = null)
+        => BackstabMatchupCalculator.Evaluate(
+            bs, target ?? MonsterProfileFor(m), m.BsDefense, m.SeesHidden);
+
+    // The backstab's Your Matchup line: a one-stab verdict judged on the min stab
+    // after DR, with the working (range, DR, to-hit vs backstab defence) beneath.
+    private MatchupAttackLine BackstabLine(
+        PlayerMatchupProfile bs, MonsterCatalogEntry m, MonsterMatchupProfile target, bool basis)
+    {
+        BackstabMatchup r = EvaluateBackstab(bs, m, target);
+        int hp = target.Hp;
+        string text = r.Verdict switch
+        {
+            BackstabVerdict.SeesHidden => "Backstab: it sees hidden — your sneak won't surprise it",
+            BackstabVerdict.NoDamage => $"Backstab: its {r.DamageResist} DR stops the whole stab",
+            BackstabVerdict.CantKill => $"Backstab: can't kill it in one stab — max {r.MaxDamage} vs {hp} HP",
+            BackstabVerdict.HighRollOnly => $"Backstab: kills only on a high roll — min {r.MinDamage} vs {hp} HP",
+            BackstabVerdict.KillIfItLands => $"Backstab: one-stab kill if it lands — {r.HitPercent}% to land, not the {r.HitCap}% ceiling",
+            _ => $"Backstab: sure one-stab kill — min {r.MinDamage} ≥ {hp} HP · {r.HitPercent}% to land",
+        };
+        if (r.Verdict == BackstabVerdict.SeesHidden) return new MatchupAttackLine(text, null, basis);
+
+        BackstabWorn(_inventory!.Snapshot.EquippedItems, out string? setWeapon);
+        string detail = $"{r.MinDamage}–{r.MaxDamage} dmg after {r.DamageResist} DR ({bs.BackstabMin}–{bs.BackstabMax} before) · "
+            + $"{r.HitPercent}% to land vs backstab defence {m.BsDefense} (a sure kill needs the {r.HitCap}% ceiling)"
+            + (setWeapon is null ? "" : $" · with {setWeapon}");
+        return new MatchupAttackLine(text, detail, basis);
     }
 
     // "12 rounds", or "999+ rounds" past the display cap (same ceiling the column uses).
@@ -975,12 +1132,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // Per-shown melee attack vs the selected monster (rounds to kill / hit% /
     // dmg-per-hit) — the physical counterpart to the attack-spell lists below,
     // both gated by the Edit Attacks picker's show/hide checkboxes.
-    public ObservableCollection<string> MatchupMeleeLines { get; } = new();
+    public ObservableCollection<MatchupAttackLine> MatchupMeleeLines { get; } = new();
     // Your attack spells vs the selected monster, split by target scope for the
     // panel's grouping: single-target (enemy scopes 4/8) and AOE (9/12). Both are
     // ranked by effective damage; hidden picks are filtered out.
-    public ObservableCollection<SpellEffectivenessResult> AttackSpellsSingleTarget { get; } = new();
-    public ObservableCollection<SpellEffectivenessResult> AttackSpellsAoe { get; } = new();
+    public ObservableCollection<MatchupSpellRow> AttackSpellsSingleTarget { get; } = new();
+    public ObservableCollection<MatchupSpellRow> AttackSpellsAoe { get; } = new();
     public bool HasSingleTargetSpells => AttackSpellsSingleTarget.Count > 0;
     public bool HasAoeSpells => AttackSpellsAoe.Count > 0;
     public bool HasAnyAttackSpells => HasSingleTargetSpells || HasAoeSpells;
@@ -1186,15 +1343,22 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // Melee attacks the picker keeps shown — each projected against THIS
         // monster (rounds to kill, hit%, dmg/hit), folding in any applied debuff
         // so the numbers reflect the softened target.
+        BuffOffense buff = CurrentSelfBuff();
         foreach (MudAttackType mt in _usableMelee)
         {
             if (_hiddenAttackKeys.Contains(MeleeKey(mt))) continue;
+            bool basis = MeleeKey(mt) == _roundsAttackKey;
+            if (mt == MudAttackType.Backstab)
+            {
+                MatchupMeleeLines.Add(BackstabLine(BackstabProfile(worn, encum, buff), m, debuffed, basis));
+                continue;
+            }
             MonsterMatchupResult res = MonsterMatchupCalculator.Compute(
-                CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData),
+                CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData, buff),
                 debuffed);
-            MatchupMeleeLines.Add(res.HasWeapon && res.RoundsToKill > 0
+            MatchupMeleeLines.Add(new MatchupAttackLine(res.HasWeapon && res.RoundsToKill > 0
                 ? $"{MeleeLabel(mt)}: {FormatRounds(res.RoundsToKill)} to kill · ~{res.PlayerDps:0}/round · {res.PlayerHitPercent}% hit · {res.PlayerDamagePerHit} dmg/hit · {res.PlayerSwingsPerRound:0.0} swings"
-                : $"{MeleeLabel(mt)}: can't out-damage it");
+                : $"{MeleeLabel(mt)}: can't out-damage it", null, basis));
         }
 
         // Attack spells, ranked by mana efficiency (damage per mana), split
@@ -1206,8 +1370,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             m.SpellMagicResist, m.AntiMagic, _gameData!.ActiveRealm))
         {
             if (_hiddenAttackKeys.Contains(SpellKey(r.Short))) continue;
-            if (r.IsAoe) AttackSpellsAoe.Add(r);
-            else AttackSpellsSingleTarget.Add(r);
+            MatchupSpellRow row = new(r, SpellKey(r.Short) == _roundsAttackKey);
+            if (r.IsAoe) AttackSpellsAoe.Add(row);
+            else AttackSpellsSingleTarget.Add(row);
         }
         OnPropertyChanged(nameof(HasSingleTargetSpells));
         OnPropertyChanged(nameof(HasAoeSpells));

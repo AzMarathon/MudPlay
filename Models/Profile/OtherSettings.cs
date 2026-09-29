@@ -129,6 +129,10 @@ public sealed class OtherSettings
     // the matchup what-if. Empty = no debuffs applied.
     public List<string> MonsterIntelAppliedDebuffs { get; set; } = new();
 
+    // Monster Intel "Apply Buffs" picker state, Char-tier: cast codes of the
+    // character's own offense buffs (e.g. shadowform) folded into the matchup as if up.
+    public List<string> MonsterIntelAppliedBuffs { get; set; } = new();
+
     // Note: the former per-character verbose toggles (VerboseCombat /
     // VerboseRoomClassifier / VerboseCasting / VerboseCash / VerboseStealth) +
     // WriteCombatRoundTrace lived here briefly. They moved to the Log pane menu

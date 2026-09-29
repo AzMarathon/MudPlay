@@ -123,6 +123,8 @@ public static class MonsterMatchupCalculator
 //   MonsterDrMultiplier — how many times the monster's DR counts against a hit: the
 //                       attack's post-roll multiplier when the realm takes DR off
 //                       before it (Stock bash ×3 / smash ×5), else 1.
+//   BackstabMin/Max   — the backstab range before the monster's DR (0 for any
+//                       other attack) — the one-stab verdict reads the min.
 public readonly record struct PlayerMatchupProfile(
     RealmType Realm,
     int NormalAccuracy,
@@ -136,7 +138,9 @@ public readonly record struct PlayerMatchupProfile(
     int DamageResist,
     int CritChancePercent = 0,
     int AvgCritDamage = 0,
-    int MonsterDrMultiplier = 1);
+    int MonsterDrMultiplier = 1,
+    int BackstabMin = 0,
+    int BackstabMax = 0);
 
 // Monster-side inputs to MonsterMatchupCalculator.Compute — defense
 // (AC / DR / HP) and the primary physical attack slot (accuracy + average
