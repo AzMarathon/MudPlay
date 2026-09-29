@@ -19,6 +19,9 @@ public readonly record struct CombatSessionStats(
     int Crits,
     int Backstabs,
     int Misses,
+    // Stabs answered without "surprise" — a whiff, or the sneak broke and the round
+    // swung as a normal attack.
+    int BackstabFails,
     int HitMinDamage,
     int HitMaxDamage,
     long HitTotalDamage,
@@ -56,17 +59,27 @@ public readonly record struct CombatSessionStats(
     // Every swing that connected (hit + crit + backstab).
     public int LandedSwings => Hits + Crits + Backstabs;
 
-    // Total offensive swings observed (landed + missed).
-    public int TotalSwings => LandedSwings + Misses;
+    // Regular attacks observed — attack, martial arts, bash, smash — landed or
+    // missed. Backstabs keep their own rate (BackstabPercent).
+    public int TotalSwings => Hits + Crits + Misses;
 
-    // Fraction of swings that connected, 0–100.
-    public double HitPercent => Pct(LandedSwings, TotalSwings);
+    // Fraction of regular attacks that connected, 0–100.
+    public double HitPercent => Pct(Hits + Crits, TotalSwings);
 
-    // Fraction of swings that missed, 0–100.
+    // Fraction of regular attacks that missed, 0–100.
     public double MissPercent => Pct(Misses, TotalSwings);
 
-    // Crit rate among landed swings, 0–100 (a miss can't crit).
-    public double CritPercent => Pct(Crits, LandedSwings);
+    // Crit rate among regular attacks that landed, 0–100 (a miss can't crit).
+    public double CritPercent => Pct(Crits, Hits + Crits);
+
+    // Backstabs attempted: landed or failed.
+    public int BackstabAttempts => Backstabs + BackstabFails;
+
+    // Fraction of backstabs that landed, 0–100.
+    public double BackstabPercent => Pct(Backstabs, BackstabAttempts);
+
+    // Fraction of backstabs that failed, 0–100.
+    public double BackstabFailPercent => Pct(BackstabFails, BackstabAttempts);
 
     // Mean damage per plain (non-crit, non-backstab) hit.
     public double HitAvgDamage => Avg(HitTotalDamage, Hits);

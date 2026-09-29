@@ -595,4 +595,83 @@ public sealed class CombatSessionTrackerTests
         Assert.Equal(0, s.ProcHits);
         Assert.Equal("dark flame", Assert.Single(s.Spells).Name);
     }
+
+    // ----- backstabs keep their own rate --------------------------------
+
+    [Fact]
+    public void Backstab_StaysOutOfTheRegularHitRate()
+    {
+        using Harness h = new();
+        h.Feed("*Combat Engaged*");
+        h.Feed("You surprise slash the kobold for 60 damage!");
+        h.Feed("You slash the kobold for 8 damage!");
+        h.Feed("You swing at the kobold, but miss!");
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(2, s.TotalSwings);       // the slash and the miss
+        Assert.Equal(50d, s.HitPercent);
+        Assert.Equal(1, s.Backstabs);
+        Assert.Equal(100d, s.BackstabPercent);
+    }
+
+    [Fact]
+    public void BackstabWhiff_IsTheStabsMiss_NotARegularOne()
+    {
+        // CombatManager reports the whiff after this tracker counted it.
+        using Harness h = new();
+        h.Feed("*Combat Engaged*");
+        h.Feed("You swing at the kobold, but miss!");
+        h.Tracker.OnBackstabResolved("You swing at the kobold, but miss!", landed: false);
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(0, s.Misses);
+        Assert.Equal(1, s.BackstabFails);
+        Assert.Equal(0d, s.BackstabPercent);
+        Assert.Equal(100d, s.BackstabFailPercent);
+    }
+
+    [Fact]
+    public void BackstabWhiff_ReportedBeforeTheMissPattern_IsNotCountedTwice()
+    {
+        using Harness h = new();
+        h.Router.LineDispatched += line =>
+        {
+            if (line.Text.Contains("miss")) h.Tracker.OnBackstabResolved(line.Text, landed: false);
+        };
+        h.Feed("*Combat Engaged*");
+        h.Feed("You swing at the kobold, but miss!");
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(0, s.Misses);
+        Assert.Equal(1, s.BackstabFails);
+    }
+
+    [Fact]
+    public void BackstabAnsweredByARegularHit_FailedButTheHitCounts()
+    {
+        // The sneak broke: the round swung as a normal attack.
+        using Harness h = new();
+        h.Feed("*Combat Engaged*");
+        h.Feed("You slash the kobold for 8 damage!");
+        h.Tracker.OnBackstabResolved("You slash the kobold for 8 damage!", landed: false);
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(1, s.Hits);
+        Assert.Equal(1, s.BackstabFails);
+        Assert.Equal(0, s.Misses);
+    }
+
+    [Fact]
+    public void LaterIdenticalMiss_AfterAStabWhiff_IsARegularMiss()
+    {
+        using Harness h = new();
+        h.Feed("*Combat Engaged*");
+        h.Feed("You swing at the kobold, but miss!");
+        h.Tracker.OnBackstabResolved("You swing at the kobold, but miss!", landed: false);
+        h.Feed("You swing at the kobold, but miss!");
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(1, s.Misses);
+        Assert.Equal(1, s.BackstabFails);
+    }
 }
