@@ -257,6 +257,155 @@ public sealed class SeedDeltaTests : IDisposable
         Assert.Empty(monsterDelta.Removed);
     }
 
+    // ----- Compare with seed / revert ---------
+
+    [Fact]
+    public void Compare_ListsEachKindOfDifference()
+    {
+        MessageRecord a = Rec("alpha", "You cast alpha.", 1);
+        MessageRecord b = Rec("bravo", "You cast bravo.", 2);
+        MessageRecord c = Rec("charlie", "You cast charlie.", 3);
+        MessageRecord d = Rec("delta", "You cast delta.", 4);
+        MessageRecord e = Rec("echo", "You cast echo.", 5);
+        MessageRecord[] seed = { a, b, c, d, e };
+
+        MessageRecord bEdited = EditText(b, "my bravo line");
+        MessageRecord cFlagged = c with { Flags = MessageFlags.Blinded, RawFlagsHex = 1 };
+        MessageRecord mine = Rec("zulu", "You cast zulu.", 26);
+        // Name and text both edited: only the shared Links tie it to echo.
+        MessageRecord eRenamed = Rec("echo two", "You cast echo two.", 5);
+        MessageRecord[] current = { a, bEdited, cFlagged, mine, eRenamed };   // d deleted
+
+        List<SeedDelta<MessageRecord>.Difference> diffs = Delta.Compare(current, seed);
+
+        Assert.Equal(5, diffs.Count);
+        Assert.Equal(new SeedDelta<MessageRecord>.Difference(SeedDifferenceKind.Edited, b, bEdited), diffs[0]);
+        Assert.Equal(new SeedDelta<MessageRecord>.Difference(SeedDifferenceKind.Override, c, cFlagged), diffs[1]);
+        Assert.Equal(new SeedDelta<MessageRecord>.Difference(SeedDifferenceKind.Added, null, mine), diffs[2]);
+        Assert.Equal(new SeedDelta<MessageRecord>.Difference(SeedDifferenceKind.Edited, e, eRenamed), diffs[3]);
+        Assert.Equal(new SeedDelta<MessageRecord>.Difference(SeedDifferenceKind.Removed, d, null), diffs[4]);
+    }
+
+    [Fact]
+    public void Compare_UneditedCatalogue_HasNoDifferences()
+    {
+        MessageRecord a = Rec("alpha", "You cast alpha.", 1);
+        MessageRecord b = Rec("bravo", "You cast bravo.", 2);
+        Assert.Empty(Delta.Compare(new[] { a, b }, new[] { a, b }));
+    }
+
+    [Fact]
+    public void Compare_SharedSeedId_TellsTheCopiesApartByLinks()
+    {
+        MessageRecord priest = Rec("barkskin", "You feel strange.", 34);
+        MessageRecord druid = priest with { Links = new[] { new GameDataLink("Spells", 422) } };
+        MessageRecord[] seed = { priest, druid };
+
+        // The druid copy's flags edited; the priest copy deleted.
+        MessageRecord druidFlagged = druid with { Flags = MessageFlags.Diseased, RawFlagsHex = 0x40 };
+        List<SeedDelta<MessageRecord>.Difference> diffs = Delta.Compare(new[] { druidFlagged }, seed);
+
+        Assert.Equal(2, diffs.Count);
+        Assert.Equal(new SeedDelta<MessageRecord>.Difference(SeedDifferenceKind.Override, druid, druidFlagged), diffs[0]);
+        Assert.Equal(new SeedDelta<MessageRecord>.Difference(SeedDifferenceKind.Removed, priest, null), diffs[1]);
+    }
+
+    [Fact]
+    public void Compare_LinksAlone_DontPairWhenAmbiguous()
+    {
+        MessageRecord a = Rec("alpha", "You cast alpha.", 7);
+        MessageRecord b = Rec("bravo", "You cast bravo.", 7);
+        MessageRecord mine = Rec("xray", "You cast xray.", 7);
+
+        List<SeedDelta<MessageRecord>.Difference> diffs = Delta.Compare(new[] { mine }, new[] { a, b });
+
+        Assert.Equal(new[] { SeedDifferenceKind.Added, SeedDifferenceKind.Removed, SeedDifferenceKind.Removed },
+            diffs.Select(d => d.Kind));
+    }
+
+    [Fact]
+    public void Revert_UseSeed_PutsEachMessageBackAndShrinksTheDelta()
+    {
+        MessageRecord a = Rec("alpha", "You cast alpha.", 1);
+        MessageRecord b = Rec("bravo", "You cast bravo.", 2);
+        MessageRecord c = Rec("charlie", "You cast charlie.", 3);
+        MessageRecord d = Rec("delta", "You cast delta.", 4);
+        MessageRecord[] seed = { a, b, c, d };
+        MessageRecord mine = Rec("zulu", "You cast zulu.", 26);
+        MessageRecord[] current = { a, EditText(b, "my bravo line"), c with { CastResponse = "^M" }, mine };
+
+        List<SeedDelta<MessageRecord>.Difference> diffs = Delta.Compare(current, seed);
+        Assert.Equal(4, diffs.Count);
+
+        SeedDelta<MessageRecord>.RevertResult all = Delta.Revert(current, seed, diffs);
+        Assert.Equal(4, all.Reverted);
+        Assert.Equal(new[] { "alpha", "bravo", "charlie", "delta" }, all.Records.Select(r => r.Name));
+        Assert.Equal(seed.OrderBy(r => r.Name), all.Records.OrderBy(r => r.Name));
+        Assert.Empty(Delta.Compare(all.Records, seed));
+        SeedDelta<MessageRecord>.DeltaFile empty = Delta.Diff(all.Records, seed);
+        Assert.Empty(empty.Records);
+        Assert.Empty(empty.Overrides);
+        Assert.Empty(empty.Removed);
+
+        // Reverting only the edited copy: bravo follows the seed again; the rest stay the user's.
+        SeedDelta<MessageRecord>.RevertResult one = Delta.Revert(current, seed, new[] { diffs[0] });
+        Assert.Equal(1, one.Reverted);
+        Assert.Same(b, one.Records[1]);
+        SeedDelta<MessageRecord>.DeltaFile delta = Delta.Diff(one.Records, seed);
+        Assert.DoesNotContain(delta.Records, r => r.Name == "bravo");
+        Assert.DoesNotContain($"{b.Id}|spells#2", delta.Removed);
+        Assert.Equal(mine, Assert.Single(delta.Records));
+        Assert.Equal("^M", Assert.Single(delta.Overrides).CastResponse);
+        Assert.Equal($"{d.Id}|spells#4", Assert.Single(delta.Removed));
+    }
+
+    [Fact]
+    public void Revert_RestoresASharedIdSeedCopy_ByLinks()
+    {
+        MessageRecord priest = Rec("barkskin", "You feel strange.", 34);
+        MessageRecord druid = priest with { Links = new[] { new GameDataLink("Spells", 422) } };
+        MessageRecord[] seed = { priest, druid };
+        MessageRecord[] current = { druid };
+
+        SeedDelta<MessageRecord>.Difference removed = Assert.Single(Delta.Compare(current, seed));
+        SeedDelta<MessageRecord>.RevertResult result = Delta.Revert(current, seed, new[] { removed });
+
+        Assert.Equal(1, result.Reverted);
+        Assert.Empty(Delta.Diff(result.Records, seed).Removed);
+        Assert.Equal(2, Delta.Merge(seed, Delta.Diff(result.Records, seed)).Records.Count);
+    }
+
+    [Fact]
+    public void Revert_SkipsAnEntryTheCatalogueHasMovedOnFrom()
+    {
+        MessageRecord a = Rec("alpha", "You cast alpha.", 1);
+        MessageRecord[] seed = { a };
+        MessageRecord edited = EditText(a, "my alpha line");
+        SeedDelta<MessageRecord>.Difference diff = Assert.Single(Delta.Compare(new[] { edited }, seed));
+
+        // Edited again after the comparison was taken: the listed copy is gone.
+        MessageRecord[] now = { EditText(a, "my newer alpha line") };
+        SeedDelta<MessageRecord>.RevertResult stale = Delta.Revert(now, seed, new[] { diff });
+        Assert.Equal(0, stale.Reverted);
+        Assert.Equal(now, stale.Records);
+
+        // The set switched: the seed record isn't in this seed.
+        MessageRecord[] otherSeed = { Rec("alpha", "You cast alpha.", 1) };
+        Assert.Equal(0, Delta.Revert(new[] { edited }, otherSeed, new[] { diff }).Reverted);
+    }
+
+    [Fact]
+    public void MonsterNames_CompareListsAPlaceholder()
+    {
+        SeedDelta<MonsterMessageRecord> monsters = MonsterMessageStore.Delta;
+        MonsterMessageRecord rat = new("r1", "giant rat", new[] { new GameDataLink("Monsters", 1) });
+        MonsterMessageRecord placeholder = new("p1", "odd thing", null);
+
+        SeedDelta<MonsterMessageRecord>.Difference only = Assert.Single(monsters.Compare(new[] { rat, placeholder }, new[] { rat }));
+        Assert.Equal(SeedDifferenceKind.Added, only.Kind);
+        Assert.Same(placeholder, only.Current);
+    }
+
     [Fact]
     public void EditDialog_FlagOnlyEdit_KeepsAStaleSeedId_TextEditReIds()
     {

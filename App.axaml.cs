@@ -67,6 +67,10 @@ public partial class App : Application
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.GameData.Edit.MessageEditDialogViewModel,
                 MudPlay.Views.GameData.Edit.MessageEditDialog>();
+            // Messages tab "Compare with seed…" — put edited messages back to the seed.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.GameData.Edit.MessageSeedCompareDialogViewModel,
+                MudPlay.Views.GameData.Edit.MessageSeedCompareDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.GameData.Edit.MonsterEditDialogViewModel,
                 MudPlay.Views.GameData.Edit.MonsterEditDialog>();

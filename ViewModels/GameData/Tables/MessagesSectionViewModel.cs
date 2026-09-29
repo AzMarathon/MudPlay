@@ -35,12 +35,17 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         "record) the fumble line — is listed with the gaps in the Missing column; fill them " +
         "in from the game, or type {null} / {void} / {empty} in a line the spell simply " +
         "doesn't have. A record tied to no spell or item shows as an orphan awaiting a link. " +
-        "Spells with no message record at all are listed separately in the Spell coverage report.";
+        "Spells with no message record at all are listed separately in the Spell coverage report. " +
+        "The Seed column marks records that differ from the shipped seed: tick Differs from seed " +
+        "in the filter panel to list every one, and Compare with seed… to put any back.";
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Spell #", "Name", "Missing", "Lines", "Preview",
+        "Spell #", "Name", "Missing", "Lines", "Preview", SeedColumn,
     };
+
+    // How the record differs from the shipped seed; blank for a plain seed record.
+    private const string SeedColumn = "Seed";
 
     public override string SearchKeyColumn => "Name";
 
@@ -49,6 +54,7 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         Title, "messages", "incomplete", "unfiltered", "missing", "worklist", "orphan",
         "spell", "number", "condition", "pattern", "caster", "target", "witness", "applied",
         "wears-off", "fumble", "blinded", "poisoned", "paralyzed", "confused", "diseased",
+        "seed", "differs", "compare", "revert", "restore",
     };
 
     // Open the per-record edit dialog for the row currently double-clicked.
@@ -60,13 +66,32 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
     // Markdown file on the Desktop, so a curated line can be folded back into the seed.
     public IRelayCommand UploadEditsCommand { get; }
 
+    // "Compare with seed…": the selected rows' differences from the seed, or every
+    // difference (removed seed records included) when nothing is selected.
+    public IAsyncRelayCommand CompareWithSeedCommand { get; }
+
     ICommand IEditableTableSectionViewModel.OpenEditCommand => OpenEditAsyncCommand;
     ICommand? IEditableTableSectionViewModel.AddCommand     => AddAsyncCommand;
     ICommand? IEditableTableSectionViewModel.RemoveCommand  => RemoveSelectedCommand;
     ICommand? IEditableTableSectionViewModel.ExportCommand  => UploadEditsCommand;
+    ICommand? IEditableTableSectionViewModel.SeedCompareCommand => CompareWithSeedCommand;
     string?   IEditableTableSectionViewModel.ExportLabel    => "Upload edits";
 
     private readonly NotifyCollectionChangedEventHandler _handler;
+
+    // Filter panel: "Differs from seed". Applying it also lists the differing records the
+    // worklist hides (complete, item-claimed or disabled ones), so every edit is findable.
+    private readonly BoolFilter _differsFromSeed = new(
+        "Differs from seed", SeedColumn, v => !string.IsNullOrEmpty(v),
+        "Only records that aren't plain seed records: your edited copies, flag / link " +
+        "changes, and records you added. Seed records you deleted are listed by Compare with seed.");
+
+    // Whether the rows were built with _differsFromSeed applied, so a toggle rebuilds them.
+    private bool _rowsListAllDiffering;
+
+    // The catalogue's differences from the seed as of the last row build; gates the
+    // Compare button.
+    private List<SeedDelta<MessageRecord>.Difference> _differences = [];
 
     public MessagesSectionViewModel(
         MessageStore store,
@@ -85,6 +110,8 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         AddAsyncCommand       = new AsyncRelayCommand(AddAsync);
         RemoveSelectedCommand = new AsyncRelayCommand(RemoveSelectedAsync, () => SelectedRow is not null);
         UploadEditsCommand    = new RelayCommand(UploadEdits);
+        CompareWithSeedCommand = new AsyncRelayCommand(CompareWithSeedAsync, () => _differences.Count > 0);
+        FilterGroups.Add(new FilterGroup("Seed", bools: new[] { _differsFromSeed }));
 
         PropertyChanged += (_, e) =>
         {
@@ -106,45 +133,20 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         HashSet<int> spellNumbers = _cache?.RowNumbers("Spells") ?? new HashSet<int>();
         HashSet<int> itemNumbers = _cache?.RowNumbers("Items") ?? new HashSet<int>();
 
+        _differences = _store.SeedDifferences();
+        _rowsListAllDiffering = _differsFromSeed.IsActive;
+        Dictionary<MessageRecord, SeedDifferenceKind> kindOf = new(ReferenceEqualityComparer.Instance);
+        foreach (SeedDelta<MessageRecord>.Difference d in _differences)
+            if (d.Current is { } current) kindOf[current] = d.Kind;
+
         foreach (MessageRecord m in _store.Messages)
         {
-            // A disabled record is switched off wholesale — it recognizes nothing and is
-            // parked deliberately, so it's neither a worklist item nor an orphan to chase.
-            if (m.Flags.HasFlag(MessageFlags.Disabled)) continue;
-
-            // Slots holding real text too short to safely Contains-match (a corrupt "n"/"E"
-            // from an old import) read as "filled", so MissingSlots ignores them — but they
-            // spam the condition tracker, so surface them here (flagged distinctly) for repair.
-            IReadOnlyList<string> malformed = MalformedSlots(m);
-
-            string missing;
-            if (IsClaimedByExistingSpell(m, spellNumbers))
+            string? seed = kindOf.TryGetValue(m, out SeedDifferenceKind kind) ? SeedLabel(kind) : null;
+            string? missing = WorklistReason(m, spellNumbers, itemNumbers);
+            if (missing is null)
             {
-                // A spell's message is edited from the Spells section, so a COMPLETE one is
-                // hidden here (listing the same record under both tabs is confusing). An
-                // INCOMPLETE one — a required perspective/applied slot still blank — surfaces
-                // as a worklist item: the "fill these in from in-game" list. A malformed
-                // (too-short) pattern surfaces the same way even when nothing is blank.
-                List<string> gaps = new(MissingSlots(m));
-                gaps.AddRange(malformed);
-                if (gaps.Count == 0) continue;
-                missing = string.Join(", ", gaps);
-            }
-            else if (IsClaimedByExistingItem(m, itemNumbers))
-            {
-                // An item-claimed message (its "use <item>" buff line or weapon-proc line) is
-                // edited from the item dialog's Message section, so a healthy one never surfaces
-                // here — but a malformed pattern still does, so a corrupt record is findable.
-                if (malformed.Count == 0) continue;
-                missing = string.Join(", ", malformed);
-            }
-            else
-            {
-                // Tied to no spell/item in this set — an orphan awaiting a link (renamed-away
-                // spells, standalone detectors, records whose only link is orphaned).
-                missing = malformed.Count == 0
-                    ? "not linked to a spell/item"
-                    : "not linked to a spell/item, " + string.Join(", ", malformed);
+                if (!_rowsListAllDiffering || seed is null) continue;
+                missing = string.Empty;
             }
 
             // Lines column = compact tag string showing which perspective slots ARE populated,
@@ -158,6 +160,7 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
                 ["Missing"] = missing,
                 ["Lines"]   = BuildLineTags(m),
                 ["Preview"] = FirstNonEmptyLine(m),
+                [SeedColumn] = seed,
             };
             GameDataRow row = GameDataRow.FromDictionary(dict, Columns);
             row.Tag = m;
@@ -165,6 +168,57 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
                 row.SourceTier = _resolver.GetGameDataSourceTier("Messages", m.Id);
             rows.Add(row);
         }
+    }
+
+    // Why the record is on the worklist (its Missing column), or null when it isn't.
+    private static string? WorklistReason(MessageRecord m, HashSet<int> spellNumbers, HashSet<int> itemNumbers)
+    {
+        // A disabled record is switched off wholesale — it recognizes nothing and is
+        // parked deliberately, so it's neither a worklist item nor an orphan to chase.
+        if (m.Flags.HasFlag(MessageFlags.Disabled)) return null;
+
+        // Slots holding real text too short to safely Contains-match (a corrupt "n"/"E"
+        // from an old import) read as "filled", so MissingSlots ignores them — but they
+        // spam the condition tracker, so surface them here (flagged distinctly) for repair.
+        IReadOnlyList<string> malformed = MalformedSlots(m);
+
+        if (IsClaimedByExistingSpell(m, spellNumbers))
+        {
+            // A spell's message is edited from the Spells section, so a COMPLETE one is
+            // hidden here (listing the same record under both tabs is confusing). An
+            // INCOMPLETE one — a required perspective/applied slot still blank — surfaces
+            // as a worklist item: the "fill these in from in-game" list. A malformed
+            // (too-short) pattern surfaces the same way even when nothing is blank.
+            List<string> gaps = new(MissingSlots(m));
+            gaps.AddRange(malformed);
+            return gaps.Count == 0 ? null : string.Join(", ", gaps);
+        }
+        if (IsClaimedByExistingItem(m, itemNumbers))
+        {
+            // An item-claimed message (its "use <item>" buff line or weapon-proc line) is
+            // edited from the item dialog's Message section, so a healthy one never surfaces
+            // here — but a malformed pattern still does, so a corrupt record is findable.
+            return malformed.Count == 0 ? null : string.Join(", ", malformed);
+        }
+        // Tied to no spell/item in this set — an orphan awaiting a link (renamed-away
+        // spells, standalone detectors, records whose only link is orphaned).
+        return malformed.Count == 0
+            ? "not linked to a spell/item"
+            : "not linked to a spell/item, " + string.Join(", ", malformed);
+    }
+
+    private static string SeedLabel(SeedDifferenceKind kind) => kind switch
+    {
+        SeedDifferenceKind.Edited   => "text edited",
+        SeedDifferenceKind.Override => "fields edited",
+        _                           => "yours only",
+    };
+
+    protected override void OnRowsLoaded() => CompareWithSeedCommand.NotifyCanExecuteChanged();
+
+    protected override void OnPanelFiltersCommitted()
+    {
+        if (_differsFromSeed.IsActive != _rowsListAllDiffering) Reload();
     }
 
     // The linked Spell record number(s) for the leading "Spell #" column — the Number of
@@ -381,6 +435,41 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         if (targets.Count == 0) return;
         foreach (MessageRecord t in targets) _store.Messages.Remove(t);
         _store.Save();
+    }
+
+    private async Task CompareWithSeedAsync()
+    {
+        if (_dialogs is null) return;
+        IReadOnlyList<GameDataRow> selection = SelectedRows.Count > 0
+            ? SelectedRows.ToList()
+            : (SelectedRow is null ? Array.Empty<GameDataRow>() : new[] { SelectedRow });
+
+        List<SeedDelta<MessageRecord>.Difference> differences = _store.SeedDifferences();
+        if (selection.Count > 0)
+        {
+            HashSet<MessageRecord> picked = new(
+                selection.Select(r => r.Tag).OfType<MessageRecord>(), ReferenceEqualityComparer.Instance);
+            differences = differences.Where(d => d.Current is { } c && picked.Contains(c)).ToList();
+            if (differences.Count == 0)
+            {
+                _dialogs.ShowInfo("Compare with seed",
+                    "The selected messages are plain seed records — nothing to compare. " +
+                    "Clear the selection to compare every message that differs from the seed.");
+                return;
+            }
+        }
+        if (differences.Count == 0) return;
+
+        MessageSeedCompareDialogViewModel vm = new(differences, _store.ActiveSet);
+        MessageSeedCompareResult? result =
+            await _dialogs.OpenWindowAsync<MessageSeedCompareDialogViewModel, MessageSeedCompareResult>(vm);
+        if (result is null) return;
+
+        int reverted = result.UseSeed.Count == 0 ? 0 : _store.RevertToSeed(result.UseSeed);
+        int stale = result.UseSeed.Count - reverted;
+        AppServices.Current.Log.Info("Messages",
+            $"Compare with seed: reverted {reverted} message(s) to the seed, kept {result.Kept} of yours" +
+            (stale > 0 ? $"; {stale} changed since the comparison opened and were left as they are." : "."));
     }
 
     // Diff the active set's live catalogue against the bundled (shipped) seed for its realm

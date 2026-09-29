@@ -56,4 +56,9 @@ public interface IEditableTableSectionViewModel
     // button stays hidden. WildcardsLabel supplies the button text.
     ICommand? WildcardsCommand => null;
     string? WildcardsLabel => null;
+
+    // Optional "Compare with seed…" button next to Add / Remove. Only the Incomplete
+    // Messages tab uses it; the command's CanExecute greys the button out while nothing
+    // differs from the shipped seed.
+    ICommand? SeedCompareCommand => null;
 }

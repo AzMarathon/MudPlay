@@ -44,6 +44,12 @@ public sealed class SeedDelta<T> where T : class
 
     public sealed record MigrationResult(DeltaFile Delta, int Kept, int FollowingSeed, int Removed, int NewInSeed);
 
+    // One message that differs from the seed: the seed record and the catalogue record
+    // standing in for it. Seed is null for an Added record, Current for a Removed one.
+    public sealed record Difference(SeedDifferenceKind Kind, T? Seed, T? Current);
+
+    public sealed record RevertResult(List<T> Records, int Reverted);
+
     private static readonly JsonDocumentOptions DocOptions = new()
     {
         AllowTrailingCommas = true,
@@ -79,18 +85,8 @@ public sealed class SeedDelta<T> where T : class
     {
         ArgumentNullException.ThrowIfNull(current);
         ArgumentNullException.ThrowIfNull(seed);
-        SeedIndex index = new(this, seed);
         List<T> items = current.ToList();
-        int[] slotOf = new int[items.Count];
-        Array.Fill(slotOf, -1);
-        bool[] claimed = new bool[seed.Count];
-
-        // Exact matches claim first, so an Id-only fallback never takes a seed record a
-        // later catalogue record matches exactly.
-        for (int i = 0; i < items.Count; i++)
-            Claim(i, index.Exact(_id(items[i]), LinkKey(_links(items[i]))));
-        for (int i = 0; i < items.Count; i++)
-            if (slotOf[i] < 0) Claim(i, index.ById(_id(items[i])));
+        int[] slotOf = MatchSeed(items, seed, out bool[] claimed);
 
         DeltaFile delta = new();
         for (int i = 0; i < items.Count; i++)
@@ -103,13 +99,122 @@ public sealed class SeedDelta<T> where T : class
         for (int s = 0; s < seed.Count; s++)
             if (!claimed[s]) delta.Removed.Add(KeyOf(seed[s]));
         return delta;
+    }
 
-        void Claim(int item, int slot)
+    // Every way current departs from seed, one entry per message, in catalogue order
+    // with the removed seed records last. An own record is paired with the removed seed
+    // record it was edited from — same Name and Links (the pairing Migrate uses), else
+    // the only own record and only removed seed record sharing those Links (the text
+    // and Name were both edited) — so the pair reads as one Edited message rather than
+    // an unrelated Added + Removed.
+    public List<Difference> Compare(IEnumerable<T> current, IReadOnlyList<T> seed)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(seed);
+        List<T> items = current.ToList();
+        int[] slotOf = MatchSeed(items, seed, out bool[] claimed);
+
+        int[] editedFrom = new int[items.Count];
+        Array.Fill(editedFrom, -1);
+        bool[] paired = new bool[seed.Count];
+        PairOwnRecords(NameLinkKey);
+        PairOwnRecords(r => LinkKey(_links(r)), uniqueOnly: true);
+
+        List<Difference> differences = [];
+        for (int i = 0; i < items.Count; i++)
         {
-            if (slot < 0 || claimed[slot]) return;
-            claimed[slot] = true;
-            slotOf[item] = slot;
+            if (slotOf[i] >= 0)
+            {
+                T baseline = seed[slotOf[i]];
+                if (!SameContent(_applyOverride(baseline, items[i]), baseline))
+                    differences.Add(new Difference(SeedDifferenceKind.Override, baseline, items[i]));
+            }
+            else if (editedFrom[i] >= 0)
+                differences.Add(new Difference(SeedDifferenceKind.Edited, seed[editedFrom[i]], items[i]));
+            else
+                differences.Add(new Difference(SeedDifferenceKind.Added, null, items[i]));
         }
+        for (int s = 0; s < seed.Count; s++)
+            if (!claimed[s] && !paired[s])
+                differences.Add(new Difference(SeedDifferenceKind.Removed, seed[s], null));
+        return differences;
+
+        void PairOwnRecords(Func<T, string> key, bool uniqueOnly = false)
+        {
+            Dictionary<string, List<int>> unpairedSeed = new(StringComparer.Ordinal);
+            for (int s = 0; s < seed.Count; s++)
+            {
+                if (claimed[s] || paired[s]) continue;
+                string k = key(seed[s]);
+                if (!unpairedSeed.TryGetValue(k, out List<int>? slots)) unpairedSeed[k] = slots = [];
+                slots.Add(s);
+            }
+            Dictionary<string, int> ownPerKey = new(StringComparer.Ordinal);
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (slotOf[i] >= 0 || editedFrom[i] >= 0) continue;
+                string k = key(items[i]);
+                ownPerKey[k] = ownPerKey.GetValueOrDefault(k) + 1;
+            }
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (slotOf[i] >= 0 || editedFrom[i] >= 0) continue;
+                string k = key(items[i]);
+                // Links alone only tie a pair when nothing else could claim either side,
+                // and never on an empty key (every unlinked record would share it).
+                if (uniqueOnly && (k.Length == 0 || ownPerKey[k] != 1)) continue;
+                if (!unpairedSeed.TryGetValue(k, out List<int>? slots) || slots.Count == 0) continue;
+                if (uniqueOnly && slots.Count != 1) continue;
+                editedFrom[i] = slots[0];
+                paired[slots[0]] = true;
+                slots.RemoveAt(0);
+            }
+        }
+    }
+
+    // current with each of the chosen differences put back to the seed: an edited copy
+    // or an override is replaced in place by its seed record, an added record is dropped,
+    // and a removed seed record is restored (appended — the next load rebuilds seed
+    // order). Records are matched by reference, so an entry that no longer applies — its
+    // catalogue record was edited or deleted since the comparison, or its seed record
+    // isn't in this seed (the set switched) — is skipped rather than guessed at.
+    public RevertResult Revert(IReadOnlyList<T> current, IReadOnlyList<T> seed, IEnumerable<Difference> useSeed)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(seed);
+        ArgumentNullException.ThrowIfNull(useSeed);
+        List<T> records = current.ToList();
+        HashSet<T> inSeed = new(seed, ReferenceEqualityComparer.Instance);
+        HashSet<T> present = new(records, ReferenceEqualityComparer.Instance);
+        int reverted = 0;
+
+        foreach (Difference d in useSeed)
+        {
+            if (d.Seed is { } s && (!inSeed.Contains(s) || present.Contains(s))) continue;
+            if (d.Current is { } c && !present.Contains(c)) continue;
+            switch (d.Kind)
+            {
+                case SeedDifferenceKind.Removed when d.Seed is { } restored:
+                    records.Add(restored);
+                    present.Add(restored);
+                    break;
+                case SeedDifferenceKind.Added when d.Current is { } added:
+                    records.RemoveAt(records.FindIndex(r => ReferenceEquals(r, added)));
+                    present.Remove(added);
+                    break;
+                case SeedDifferenceKind.Edited or SeedDifferenceKind.Override
+                    when d.Seed is { } original && d.Current is { } mine:
+                    records[records.FindIndex(r => ReferenceEquals(r, mine))] = original;
+                    present.Remove(mine);
+                    present.Add(original);
+                    break;
+                default:
+                    continue;
+            }
+            reverted++;
+        }
+        return new RevertResult(records, reverted);
     }
 
     // Seed order (minus Removed, Overrides applied), then the user's own records.
@@ -271,6 +376,32 @@ public sealed class SeedDelta<T> where T : class
     }
 
     // ----- Keys ---------
+
+    // Each catalogue record's seed slot (-1 = none), claimed[s] set for every taken slot.
+    // Exact matches (Id + Links) claim first, so an Id-only fallback never takes a seed
+    // record a later catalogue record matches exactly.
+    private int[] MatchSeed(List<T> items, IReadOnlyList<T> seed, out bool[] claimed)
+    {
+        SeedIndex index = new(this, seed);
+        int[] slotOf = new int[items.Count];
+        Array.Fill(slotOf, -1);
+        bool[] taken = new bool[seed.Count];
+
+        for (int i = 0; i < items.Count; i++)
+            Claim(i, index.Exact(_id(items[i]), LinkKey(_links(items[i]))));
+        for (int i = 0; i < items.Count; i++)
+            if (slotOf[i] < 0) Claim(i, index.ById(_id(items[i])));
+
+        claimed = taken;
+        return slotOf;
+
+        void Claim(int item, int slot)
+        {
+            if (slot < 0 || taken[slot]) return;
+            taken[slot] = true;
+            slotOf[item] = slot;
+        }
+    }
 
     private bool SameContent(T a, T b)
         => EqualityComparer<T>.Default.Equals(_withoutLinks(a), _withoutLinks(b))

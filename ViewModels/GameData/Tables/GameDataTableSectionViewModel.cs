@@ -549,6 +549,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     private void ApplyFilters()
     {
         CommitPanelFilters();
+        OnPanelFiltersCommitted();
         ApplyFilter();
         OnPropertyChanged(nameof(StatusText));
     }
@@ -559,6 +560,11 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         foreach (BoolFilter b in AllBoolFilters) b.Commit();
         foreach (CategoryFilter c in AllCategoryFilters) c.Commit();
     }
+
+    // Runs after Apply / Reset commit the panel, before the re-filter. A section whose
+    // panel changes which rows are BUILT, not just which are shown (Incomplete Messages'
+    // "Differs from seed" lists records the worklist otherwise leaves out), reloads here.
+    protected virtual void OnPanelFiltersCommitted() { }
 
     // Drives ApplyFilter's "run even with an empty text box" path (see ApplyFilter).
     protected bool HasExtraFilter
@@ -581,6 +587,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         foreach (CategoryFilter c in AllCategoryFilters) c.Clear();
         SearchText = string.Empty;   // OnSearchTextChanged re-applies (no-op if already empty)
         CommitPanelFilters();        // make the cleared boxes take effect
+        OnPanelFiltersCommitted();
         ApplyFilter();
         OnPropertyChanged(nameof(StatusText));
     }

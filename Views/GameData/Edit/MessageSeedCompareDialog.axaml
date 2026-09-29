@@ -1,0 +1,163 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.GameData.Edit"
+        xmlns:imp="using:MudPlay.ViewModels.Import"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="580"
+        x:Class="MudPlay.Views.GameData.Edit.MessageSeedCompareDialog"
+        x:DataType="vm:MessageSeedCompareDialogViewModel"
+        Title="{Binding Title}"
+        Width="920" Height="580"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.Header">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeLg}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.Subtitle">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+        </Style>
+        <Style Selector="TextBlock.GroupHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.Value">
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+        </Style>
+        <!-- A field that differs gets an amber underline and a raised fill; an unchanged
+             one (only listed when "Show unchanged fields" is ticked) is dimmed. -->
+        <Style Selector="Border.DiffChanged">
+            <Setter Property="Background" Value="{StaticResource ChromeBgElevBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        </Style>
+        <Style Selector="Border.DiffUnchanged TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Padding="22" Background="{StaticResource ChromeBgBrush}">
+        <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10">
+
+            <!-- ===== Title + summary ===== -->
+            <StackPanel Grid.Row="0" Spacing="2">
+                <TextBlock Classes="Header" Text="{Binding Title}"/>
+                <TextBlock Classes="Subtitle" Text="{Binding Summary}" TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- ===== Bulk picks + the unchanged-fields toggle ===== -->
+            <DockPanel Grid.Row="1" LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="For all:" VerticalAlignment="Center"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                    <Button Content="Use seed for all" Command="{Binding UseSeedForAllCommand}"
+                            ToolTip.Tip="Put every listed message back to the shipped seed"/>
+                    <Button Content="Keep mine for all" Command="{Binding KeepMineForAllCommand}"
+                            ToolTip.Tip="Leave every listed message as it is"/>
+                </StackPanel>
+                <CheckBox DockPanel.Dock="Right" Content="Show unchanged fields"
+                          IsChecked="{Binding ShowUnchanged, Mode=TwoWay}"/>
+            </DockPanel>
+
+            <!-- ===== Two-pane: messages with their pick, then the selected one's fields ===== -->
+            <Grid Grid.Row="2" ColumnDefinitions="280,*" ColumnSpacing="10">
+
+                <Border Grid.Column="0"
+                        BorderBrush="{StaticResource ChromeBorderBrush}"
+                        BorderThickness="1"
+                        Background="{StaticResource ChromeBgSunkenBrush}">
+                    <ListBox ItemsSource="{Binding Entries}"
+                             SelectedItem="{Binding SelectedEntry, Mode=TwoWay}"
+                             Background="Transparent"
+                             BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MessageSeedCompareEntry">
+                                <StackPanel Margin="4,4" Spacing="2">
+                                    <TextBlock Text="{Binding Name}"
+                                               Foreground="{StaticResource ChromeFgBrush}"
+                                               FontSize="{StaticResource FontSizeMd}"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding KindLabel}"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                               FontSize="{StaticResource FontSizeSm}"
+                                               TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,2,0,0">
+                                        <RadioButton Content="{Binding KeepLabel}"
+                                                     IsChecked="{Binding KeepMine, Mode=TwoWay}"/>
+                                        <RadioButton Content="{Binding UseSeedLabel}"
+                                                     IsChecked="{Binding UseSeed, Mode=TwoWay}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <Border Grid.Column="1"
+                        BorderBrush="{StaticResource ChromeBorderBrush}"
+                        BorderThickness="1"
+                        Background="{StaticResource ChromeBgSunkenBrush}">
+                    <Grid RowDefinitions="Auto,Auto,*">
+                        <StackPanel Grid.Row="0" Margin="8,6" Spacing="2">
+                            <TextBlock Text="{Binding SelectedEntry.Name}"
+                                       Foreground="{StaticResource ChromeFgBrush}"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding SelectedEntry.KindLabel}"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       FontSize="{StaticResource FontSizeSm}"/>
+                        </StackPanel>
+                        <Grid Grid.Row="1" ColumnDefinitions="110,*,*" ColumnSpacing="8" Margin="8,0,8,4"
+                              Background="{StaticResource ChromeBgElevBrush}">
+                            <TextBlock Grid.Column="0" Classes="GroupHeader" Text="Field"/>
+                            <TextBlock Grid.Column="1" Classes="GroupHeader" Text="Seed"/>
+                            <TextBlock Grid.Column="2" Classes="GroupHeader" Text="Yours"/>
+                        </Grid>
+                        <ScrollViewer Grid.Row="2" Padding="8,0">
+                            <ItemsControl ItemsSource="{Binding SelectedFields}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="imp:FieldDiff">
+                                        <Border Classes.DiffChanged="{Binding Changed}"
+                                                Classes.DiffUnchanged="{Binding !Changed}"
+                                                Padding="0,3">
+                                            <Grid ColumnDefinitions="110,*,*" ColumnSpacing="8">
+                                                <TextBlock Grid.Column="0" Text="{Binding FieldName}"
+                                                           Foreground="{StaticResource ChromeFgSecBrush}"
+                                                           VerticalAlignment="Top"/>
+                                                <TextBlock Grid.Column="1" Classes="Value"
+                                                           Text="{Binding ExistingValue}"/>
+                                                <TextBlock Grid.Column="2" Classes="Value"
+                                                           Text="{Binding IncomingValue}"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- ===== Apply / Cancel ===== -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Right">
+                <Button Content="Apply" MinWidth="80"
+                        Command="{Binding ApplyCommand}"
+                        IsDefault="True"
+                        ToolTip.Tip="Put the messages marked for the seed back to it; keep the rest"/>
+                <Button Content="Cancel" MinWidth="80"
+                        Command="{Binding CancelCommand}"
+                        IsCancel="True"/>
+            </StackPanel>
+
+        </Grid>
+    </Border>
+</Window>
