@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.121.0**
-> - `look <monster>` prints its max HP, its wound band and HP range, and a best guess from the damage it's taken and its regen: `[large orc: 100 HP, Sev: 30-49, ~41]`
-> - The status bar's TGT HP shows the look's range with the best guess in brackets, following the damage after the look
+> **Version 3.122.0**
+> - Your profile saves which windows are open and reopens them where they were when you load it; loading another profile matches its windows
+> - The Game Data Browser remembers its position
+> - Weapon procs in the round totals go to whoever just hit that monster, not unknown
+> - Fixed a crash when a boss kill was logged while a Bosses grid cell was being edited
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

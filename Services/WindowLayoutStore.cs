@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using MudPlay.Models.Profile;
 
 namespace MudPlay.Services;
@@ -20,6 +21,14 @@ namespace MudPlay.Services;
 // Loading a profile also re-applies its layout to windows already open — their
 // Opened handler ran against the previous profile, and Opened won't fire again
 // on an open window, so a profile switch has to move them explicitly.
+//
+// Which windows are open is saved with the profile too (OpenWindows): loading it
+// opens the ones it had open and closes the ones it didn't, so each profile comes
+// back to exactly its own layout. Only windows that registered an opener
+// (RegisterOpener) take part. The save that matters runs from the main window's own
+// Closing handler, before any child window closes, so the open set is still whole
+// then. At startup the profile can load before the main window is up; the reopen
+// waits for it.
 //
 // Restore is screen-aware: a saved position still visible on a connected monitor
 // is honoured as-is (a window intentionally parked on a second screen reopens
@@ -50,6 +59,22 @@ public sealed class WindowLayoutStore
     private readonly Dictionary<string, Window> _open =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // How to open each window a profile can reopen, keyed by id.
+    private readonly Dictionary<string, Action> _openers =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // Windows never recorded as open: the main window is always open, and Profile
+    // Management is where profiles are switched from, so it's open at every switch's
+    // save and would otherwise follow every profile.
+    private static readonly HashSet<string> NotRecorded =
+        new(StringComparer.OrdinalIgnoreCase) { MainWindowId, "profilemgr" };
+
+    public const string MainWindowId = "main";
+
+    // A loaded profile's open-window list waiting for the main window to open.
+    private IReadOnlyList<string>? _pendingOpen;
+    private bool _suspendCapture;
+
     // Ids whose height is content-driven (SizeToContent="Height"). Their saved
     // width + position restore, but a saved height is never re-applied — pinning it
     // would freeze SizeToContent, so the window couldn't shrink/grow as its panels
@@ -66,9 +91,78 @@ public sealed class WindowLayoutStore
     {
         ArgumentNullException.ThrowIfNull(profile);
         _snap = snap;
-        profile.ProfileLoaded += p => ApplyFromProfile(p.WindowBounds);
+        profile.ProfileLoaded += p =>
+        {
+            ApplyFromProfile(p.WindowBounds);
+            RestoreOpenWindows(p.OpenWindows);
+        };
         profile.ProfileClosed += () => _bounds.Clear();
-        profile.ProfileSaving += p => p.WindowBounds = Snapshot();
+        profile.ProfileSaving += p =>
+        {
+            p.WindowBounds = Snapshot();
+            p.OpenWindows = OpenWindowIds();
+        };
+    }
+
+    // How to open the window with this id when a profile had it open.
+    public void RegisterOpener(string id, Action open)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentNullException.ThrowIfNull(open);
+        _openers[id] = open;
+    }
+
+    // The ids of the open windows a profile records, sorted.
+    public List<string> OpenWindowIds()
+        => _open.Keys.Where(id => !NotRecorded.Contains(id))
+            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase).ToList();
+
+    // Open the windows a loaded profile had open and close the ones it didn't —
+    // once the main window is up, since the others open on top of it, and after the
+    // rest of the profile load has run (posted), so a reopened window reads the new
+    // profile.
+    public void RestoreOpenWindows(IReadOnlyList<string>? saved)
+    {
+        if (saved is null) return;
+        if (!_open.ContainsKey(MainWindowId))
+        {
+            _pendingOpen = saved;
+            return;
+        }
+        Dispatcher.UIThread.Post(() => MatchOpenWindows(saved));
+    }
+
+    private void MatchOpenWindows(IReadOnlyList<string> saved)
+    {
+        (List<string> toOpen, List<string> toClose) = PlanOpenWindows(saved, _open.Keys, _openers.Keys);
+        // The loaded profile's layout is already in place; a window closing because it
+        // didn't have it open mustn't write the previous profile's position into it.
+        _suspendCapture = true;
+        try
+        {
+            foreach (string id in toClose)
+                if (_open.TryGetValue(id, out Window? w)) w.Close();
+        }
+        finally { _suspendCapture = false; }
+        foreach (string id in toOpen)
+            _openers[id]();
+    }
+
+    // Which windows to open and which to close so the open set matches the profile's
+    // saved list. Only windows with an opener take part; the main window never does.
+    public static (List<string> ToOpen, List<string> ToClose) PlanOpenWindows(
+        IEnumerable<string> saved, IEnumerable<string> open, IEnumerable<string> managed)
+    {
+        HashSet<string> want = new(saved, StringComparer.OrdinalIgnoreCase);
+        HashSet<string> have = new(open, StringComparer.OrdinalIgnoreCase);
+        List<string> toOpen = new(), toClose = new();
+        foreach (string id in managed.OrderBy(i => i, StringComparer.OrdinalIgnoreCase))
+        {
+            if (NotRecorded.Contains(id)) continue;
+            if (want.Contains(id) && !have.Contains(id)) toOpen.Add(id);
+            else if (!want.Contains(id) && have.Contains(id)) toClose.Add(id);
+        }
+        return (toOpen, toClose);
     }
 
     // Wire window's Opened / Closing / Closed handlers to the per-profile bounds
@@ -86,8 +180,14 @@ public sealed class WindowLayoutStore
         {
             _open[id] = window;
             RestoreOnto(window, id);
+            // A profile loaded before the main window was up: reopen its windows now.
+            if (id.Equals(MainWindowId, StringComparison.OrdinalIgnoreCase) && _pendingOpen is { } pending)
+            {
+                _pendingOpen = null;
+                Dispatcher.UIThread.Post(() => MatchOpenWindows(pending));
+            }
         };
-        window.Closing += (_, _) => CaptureFrom(window, id);
+        window.Closing += (_, _) => { if (!_suspendCapture) CaptureFrom(window, id); };
         window.Closed += (_, _) =>
         {
             if (_open.TryGetValue(id, out Window? tracked) && ReferenceEquals(tracked, window))

@@ -22,7 +22,9 @@ namespace MudPlay.Game.Combat;
 // roster (NoteRoomEntities) and the party. A caster's-eye spell line names no caster
 // ("Acid sears the orc for 12 damage!" is also what everyone else sees), so it counts
 // as ours only when it matches one of our own attack spells or our weapon proc AND we
-// sent a cast lately (NoteOwnCast); otherwise its dealer is unknown.
+// sent a cast lately (NoteOwnCast). A weapon proc names only its victim too, but it
+// lands right after the swing that set it off, so it goes to whoever just hit that same
+// monster. Otherwise the dealer is unknown.
 //
 // A damage line opens a round when we're in combat, when it's ours, or when it names
 // both sides (someone else's fight in the room). Damage to us with no named source —
@@ -50,6 +52,9 @@ public sealed class RoundDamageTracker : IDisposable
     // How long a cast we sent can still own a caster's-eye spell line: the round it
     // lands in, with slack for the line arriving just after the tick.
     private static readonly TimeSpan OwnCastWindow = TimeSpan.FromSeconds(6);
+
+    // How long after a hit its weapon proc can still land: the same burst.
+    private static readonly TimeSpan ProcWindow = TimeSpan.FromSeconds(1);
 
     // Quiet after a round's last line that ends it (see the header): well past any gap
     // inside a burst, and under CastingDirector's 400 ms HP settle, so the totals come
@@ -81,6 +86,8 @@ public sealed class RoundDamageTracker : IDisposable
     private Func<string?>? _selfName;
     private Func<string, bool>? _isOwnSpellLine;
     private DateTimeOffset _lastOwnCastAt = DateTimeOffset.MinValue;
+    // The last hit that named both sides — a proc right after it is the hitter's.
+    private (string Source, string Target, DateTimeOffset At)? _lastHit;
 
     private DebugLogWriter? _trace;
     private RoundAccumulator? _current;
@@ -186,6 +193,14 @@ public sealed class RoundDamageTracker : IDisposable
             && now - _lastOwnCastAt <= OwnCastWindow
             && _isOwnSpellLine?.Invoke(text) == true)
             source = DamageLineAttributor.Self;
+        // A weapon proc names only its victim ("Flames burn the orc", "The orc takes 3
+        // damage from the cold!") and fires right after the swing that connected, so it
+        // belongs to whoever just hit that same monster (report paradigm-20260929-043055).
+        if (source is null && !a.NoDealer && target is not null && target != DamageLineAttributor.Self
+            && _lastHit is { } hit && hit.Target.Equals(target, StringComparison.OrdinalIgnoreCase)
+            && now - hit.At <= ProcWindow)
+            source = hit.Source;
+        if (source is not null && target is not null && !a.NoDealer) _lastHit = (source, target, now);
 
         bool opens = _state.InCombat
             || source == DamageLineAttributor.Self

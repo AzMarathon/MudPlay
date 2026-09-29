@@ -944,6 +944,24 @@ public partial class MainWindowViewModel : ObservableObject
                     ?? AppServices.Current.RoomClassifier.ResolveLookedMonsterNumber(name),
             AppServices.Current.MonsterHp.MaxHp,
             AppServices.Current.Log);
+        // Windows a profile reopens when it loads (see WindowLayoutStore), by the id
+        // each window attaches under.
+        Services.WindowLayoutStore layouts = AppServices.Current.WindowLayouts;
+        layouts.RegisterOpener("backscroll", OpenBackscroll);
+        layouts.RegisterOpener("buffwatchdog", OpenBuffWatchdog);
+        layouts.RegisterOpener("conversation", OpenConversation);
+        layouts.RegisterOpener("gamedata", OpenGameDataBrowser);
+        layouts.RegisterOpener("logpane", OpenLogPane);
+        layouts.RegisterOpener("monster-intel", OpenMonsterIntel);
+        layouts.RegisterOpener("navigation", OpenNavigation);
+        layouts.RegisterOpener("party", OpenParty);
+        layouts.RegisterOpener("playersseen", OpenPlayersSeen);
+        layouts.RegisterOpener("session-stats", OpenSessionStats);
+        layouts.RegisterOpener("settings", OpenSettings);
+        layouts.RegisterOpener("spellbook", OpenSpellBook);
+        layouts.RegisterOpener("transactions", OpenTransactionHistory);
+        layouts.RegisterOpener("wireinspector", OpenWireInspector);
+        layouts.RegisterOpener("workshop", OpenWorkshop);
         _monsterLookParser.TargetObserved += OnMonsterLookTarget;
         AppServices.Current.MonsterHpEstimates.EstimateChanged += OnMonsterEstimateChanged;
         // A kill in the room retires whatever target we last looked at.

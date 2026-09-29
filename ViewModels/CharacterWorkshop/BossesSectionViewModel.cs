@@ -44,6 +44,9 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
     // backing collection so a live filter never hides a row from either.
     public DataGridCollectionView Rows { get; }
 
+    // A timer change arrived while a cell was being edited; the re-sort waits for it.
+    private bool _resortPending;
+
     [ObservableProperty] private BossRowViewModel? _selectedRow;
     [ObservableProperty] private bool _isParadigmRealm;
     [ObservableProperty] private bool _hasBosses;
@@ -82,7 +85,11 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
         else Dispatcher.UIThread.Post(RefreshAndResort);
     }
 
-    private void OnHeartbeat() => RefreshStatuses();
+    private void OnHeartbeat()
+    {
+        RefreshStatuses();
+        if (_resortPending) Resort();
+    }
 
     // A logged / changed timer flips a row's active-vs-idle status and its sort key.
     // The grid's sort is applied when the tab opens (BossesSectionView.ApplyDefaultSort)
@@ -94,6 +101,20 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
     private void RefreshAndResort()
     {
         RefreshStatuses();
+        Resort();
+    }
+
+    // Re-sort now, or — while a grid cell is being edited, when Avalonia refuses a
+    // Refresh (the crash in report Crash-20260929-045332, a room display stamping a
+    // boss kill mid-edit) — on the first heartbeat after the edit ends.
+    private void Resort()
+    {
+        if (Rows.IsEditingItem || Rows.IsAddingNew)
+        {
+            _resortPending = true;
+            return;
+        }
+        _resortPending = false;
         Rows.Refresh();
     }
 

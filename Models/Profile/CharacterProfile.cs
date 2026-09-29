@@ -118,6 +118,11 @@ public sealed class CharacterProfile
     // with a saved position once they've actually moved / resized a window.
     public Dictionary<string, WindowBounds>? WindowBounds { get; set; }
 
+    // Ids of the windows open when the profile was last saved (the main window
+    // aside), so loading it reopens them where WindowBounds puts them. null = never
+    // recorded (a profile from before this was kept) — loading leaves windows alone.
+    public List<string>? OpenWindows { get; set; }
+
     // The Navigation window's map-collapse toggle (the ◀/▶ side-panel button).
     // true = the user last left the side chrome collapsed so the map fills the
     // window. Read by NavigationViewModel when the window opens so it reopens in
