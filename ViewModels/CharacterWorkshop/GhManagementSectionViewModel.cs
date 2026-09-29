@@ -356,7 +356,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     [RelayCommand]
     private void OpenRoombaLog()
     {
-        if (_logWindow is { } open) { open.Activate(); return; }
+        if (_logWindow is { } open) { DialogService.RaiseOrClose(open); return; }
         _logWindow = new RoombaLogWindow { DataContext = new RoombaLogViewModel(_sweep) };
         _logWindow.Closed += (_, _) => _logWindow = null;
         _logWindow.Show();
@@ -367,7 +367,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     [RelayCommand]
     private void OpenMasterList()
     {
-        if (_masterListWindow is { } open) { open.Activate(); return; }
+        if (_masterListWindow is { } open) { DialogService.RaiseOrClose(open); return; }
         AppServices svc = AppServices.Current;
         RoombaMasterListViewModel vm = new(svc.GhItemLocations, _labels, svc.ItemNames, svc.GameData, _roomGraph);
         _masterListWindow = new RoombaMasterListWindow { DataContext = vm };

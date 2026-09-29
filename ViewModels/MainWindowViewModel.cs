@@ -3715,40 +3715,26 @@ public partial class MainWindowViewModel : ObservableObject
     // duplicates. Cleared by each window's Closed handler.
     private readonly Dictionary<string, PlaceholderShellWindow> _placeholders = new();
 
-    // Re-selecting an already-open window's menu / hotkey / toolbar entry brings it
-    // to the FRONT rather than toggling it closed: un-minimize first (a minimized
-    // window can't take focus) then activate. The old convention closed it, which
-    // stranded users who couldn't tell the window was already open when it sat behind
-    // another window — or another running client — and re-selecting then shut the very
-    // thing they were hunting for (reported on a fresh install with two clients open:
-    // Profile Management opened behind another window and looked like nothing happened).
-    // Closing is done through the window's own X / Cancel / Save controls.
+    // Bring an open window forward without ever closing it — for a deep link that just
+    // switched it to the section / record asked for.
     private static void RaiseExisting(Avalonia.Controls.Window window) => DialogService.RaiseExisting(window);
 
-    // Re-press behavior for READ-ONLY windows (no pending Save/Cancel state — Conversation,
-    // LogPane, Backscroll, the reference/stat windows, help dialogs). If the window is
-    // already the active/foreground window, a re-press CLOSES it (the user reached for the
-    // same menu/hotkey to dismiss what's in front of them — report paradigm-20260922-091714);
-    // if it's open but buried behind another window (or another client), the re-press RAISES
-    // it instead of the old convention's confusing close. Edit windows keep RaiseExisting
-    // (raise-only) so a re-press can never discard pending edits (the Save/Cancel contract).
-    private static void RaiseOrClose(Avalonia.Controls.Window window)
-    {
-        if (window.IsActive)
-            window.Close();
-        else
-            RaiseExisting(window);
-    }
+    // Every window's menu / hotkey / toolbar entry works the same way: not open → open it;
+    // open but buried → bring it to the front; already in front → close it. Closing only
+    // when it's in front keeps a re-press from shutting a window the user was hunting for
+    // behind another one (or another client). close is the window's own exit — Settings
+    // saves first, like its OK button.
+    private static void RaiseOrClose(Avalonia.Controls.Window window, Action? close = null)
+        => DialogService.RaiseOrClose(window, close);
 
     private void OpenPlaceholder(string id, string panelName, string phaseTag, string headline, string description)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Re-select raises the existing window — see RaiseExisting.
         if (_placeholders.TryGetValue(id, out PlaceholderShellWindow? existing))
         {
-            RaiseExisting(existing);
+            RaiseOrClose(existing);
             return;
         }
 
@@ -3873,7 +3859,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live PartyWindow — re-press raises it to front.
+    // Singleton handle for the live PartyWindow (see RaiseOrClose).
     private PartyWindow? _partyWindow;
 
     [RelayCommand]
@@ -3895,7 +3881,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live Buff Watchdog window — re-press raises it to front.
+    // Singleton handle for the live Buff Watchdog window (see RaiseOrClose).
     private BuffWatchdogWindow? _buffWatchdog;
 
     [RelayCommand]
@@ -3915,8 +3901,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live Profile Management window — re-press raises it
-    // to front. The VM borrows the current-profile lifecycle (New / Save / Save As
+    // Singleton handle for the live Profile Management window (see RaiseOrClose). The VM borrows the current-profile lifecycle (New / Save / Save As
     // / swap) from this VM so the collapsed File menu loses no capability.
     private ProfileManagerWindow? _profileManager;
 
@@ -3930,7 +3915,7 @@ public partial class MainWindowViewModel : ObservableObject
         // it fires however the window was opened (menu, Ctrl+P, or toolbar).
         Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
 
-        if (_profileManager is { } existing) { RaiseExisting(existing); return; }
+        if (_profileManager is { } existing) { RaiseOrClose(existing); return; }
 
         ProfileManagerWindow window = new()
         {
@@ -4211,8 +4196,8 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void OpenEvents() => OpenSettingsAt("events");
 
-    // Singleton handle to the Player Workshop window. Re-press raises it to front
-    // (a deep-link also switches to the requested section first).
+    // Singleton handle to the Player Workshop window (see RaiseOrClose; a deep link
+    // switches to the requested section first).
     private Views.CharacterWorkshop.CharacterWorkshopWindow? _workshop;
 
     [RelayCommand]
@@ -4246,19 +4231,22 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_workshop is { } existing)
         {
-            // Re-select raises the window (see RaiseExisting); a deep-link also
-            // switches to the requested section/calculator first. The Workshop shell
+            // Already on the section asked for: an ordinary re-press (RaiseOrClose). A
+            // deep link elsewhere switches first and only raises. The Workshop shell
             // holds no window-level pending state (each editable section owns its own
-            // Save / Apply / Cancel), so there's no save-on-toggle path to run here.
-            if (existing.DataContext is ViewModels.CharacterWorkshop.CharacterWorkshopViewModel vm
-                && sectionId is not null)
+            // Save / Apply / Cancel), so closing needs no save.
+            if (existing.DataContext is not ViewModels.CharacterWorkshop.CharacterWorkshopViewModel vm
+                || calculatorId is null && (sectionId is null
+                    || string.Equals(vm.SelectedSection?.Id, sectionId, StringComparison.OrdinalIgnoreCase)))
             {
-                ViewModels.CharacterWorkshop.WorkshopSectionViewModel? section = vm.Sections
-                    .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
-                if (section is not null) vm.SelectedSection = section;
-                if (calculatorId is not null && section is ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calc)
-                    calc.NavigateToCalculator(calculatorId);
+                RaiseOrClose(existing);
+                return;
             }
+            ViewModels.CharacterWorkshop.WorkshopSectionViewModel? section = vm.Sections
+                .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
+            if (section is not null) vm.SelectedSection = section;
+            if (calculatorId is not null && section is ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calc)
+                calc.NavigateToCalculator(calculatorId);
             RaiseExisting(existing);
             return;
         }
@@ -4300,8 +4288,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Singleton-ish handle to the Quick Connect window so re-press of the
-    // menu / hotkey raises it to front.
+    // Singleton-ish handle to the Quick Connect window (see RaiseOrClose).
     private QuickConnectWindow? _quickConnect;
 
     // File → Quick Connect. Modeless dialog; on commit the host/port becomes the connect target.
@@ -4311,7 +4298,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        if (_quickConnect is { } existing) { RaiseExisting(existing); return; }
+        if (_quickConnect is { } existing) { RaiseOrClose(existing); return; }
 
         QuickConnectViewModel vm = new();
         QuickConnectWindow window = new() { DataContext = vm };
@@ -4351,12 +4338,19 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Re-select raises the window (see RaiseExisting); a deep-link (BBS list
-        // etc.) also jumps to the requested section first. Re-pressing no longer
-        // saves-and-closes — the Save / OK button (and title-bar X / Cancel to
-        // discard) are the explicit commit / dismiss paths.
+        // Already on the section asked for: an ordinary re-press (RaiseOrClose), whose
+        // close saves like OK — the title-bar X would throw the edits away. A deep link
+        // elsewhere (BBS list etc.) jumps there first and only raises.
         if (_settings is { } existing)
         {
+            if (existing.DataContext is SettingsWindowViewModel current
+                && bbsName is null
+                && (sectionId is null
+                    || string.Equals(current.SelectedSection?.Id, sectionId, StringComparison.OrdinalIgnoreCase)))
+            {
+                RaiseOrClose(existing, current.ApplyAndClose);
+                return;
+            }
             if (existing.DataContext is SettingsWindowViewModel vm && sectionId is not null)
             {
                 SettingsSectionViewModel? section = vm.Sections
@@ -4387,8 +4381,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton-ish handle to the Game Data Browser. Re-press of the
-    // command / hotkey toggles it closed.
+    // Singleton-ish handle to the Game Data Browser (see RaiseOrClose).
     private MudPlay.Views.GameData.GameDataBrowserWindow? _gameDataBrowser;
 
     [RelayCommand]
@@ -4495,11 +4488,16 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_gameDataBrowser is { } existing)
         {
-            // Re-select raises the window (see RaiseExisting); a deep-link also
-            // navigates to the requested record, or switches to the requested
-            // section, first. Re-pressing no longer toggles it closed.
+            // Already on the section asked for: an ordinary re-press (RaiseOrClose). A
+            // record link, or a section elsewhere, navigates first and only raises.
             MudPlay.ViewModels.GameData.GameDataBrowserViewModel? existingVm =
                 existing.DataContext as MudPlay.ViewModels.GameData.GameDataBrowserViewModel;
+            if (rowSelector is null && (initialSectionId is null
+                    || string.Equals(existingVm?.SelectedSection?.Id, initialSectionId, StringComparison.OrdinalIgnoreCase)))
+            {
+                RaiseOrClose(existing);
+                return;
+            }
 
             if (rowSelector is not null && initialSectionId is not null)
             {
@@ -4947,13 +4945,13 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Singleton handle for the live NavigationWindow — re-press toggles closed.
+    // Singleton handle for the live NavigationWindow (see RaiseOrClose).
     private Views.Navigation.NavigationWindow? _navigationWindow;
 
     [RelayCommand]
     private void OpenNavigation()
     {
-        if (_navigationWindow is { } existing) { RaiseExisting(existing); return; }
+        if (_navigationWindow is { } existing) { RaiseOrClose(existing); return; }
         EnsureNavigationWindow();
     }
 
@@ -5076,9 +5074,9 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void MovementStop() => AppServices.Current.MovementControl.Stop();
 
-    // Singleton handle for the one Navigation Management dialog — re-press from
-    // either entry point (toolbar Start fallback, map window button) focuses it
-    // instead of stacking a second identical window.
+    // Singleton handle for the one Navigation Management dialog — either entry point
+    // (toolbar Start fallback, map window button) reuses it rather than stacking a
+    // second identical window.
     private Views.Navigation.NavigationManagerDialog? _manageWindow;
 
     // The single owner of the Navigation Management dialog. Browses / loads /
@@ -5093,9 +5091,15 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         if (_manageWindow is { } existing)
         {
+            // Already on the tab asked for: an ordinary re-press (RaiseOrClose); the
+            // other entry point switches tabs and only raises.
             if (existing.DataContext is ViewModels.Navigation.NavigationManagerDialogViewModel evm)
+            {
+                int tab = evm.SelectedTabIndex;
                 evm.SelectTab(startOnGotoTab);
-            RaiseExisting(existing);
+                if (evm.SelectedTabIndex != tab) { RaiseExisting(existing); return; }
+            }
+            RaiseOrClose(existing);
             return;
         }
 
@@ -5147,7 +5151,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live SpellBookWindow — re-press toggles closed.
+    // Singleton handle for the live SpellBookWindow (see RaiseOrClose).
     private SpellBookWindow? _spellBook;
 
     [RelayCommand]
@@ -5175,7 +5179,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live MonsterIntelWindow — re-press toggles closed.
+    // Singleton handle for the live MonsterIntelWindow (see RaiseOrClose).
     private MonsterIntelWindow? _monsterIntel;
 
     [RelayCommand]
@@ -5202,7 +5206,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live SessionStatsWindow — re-press toggles closed.
+    // Singleton handle for the live SessionStatsWindow (see RaiseOrClose).
     private SessionStatsWindow? _sessionStats;
 
     [RelayCommand]
@@ -5235,7 +5239,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live TransactionHistoryWindow — re-press toggles closed.
+    // Singleton handle for the live TransactionHistoryWindow (see RaiseOrClose).
     private TransactionHistoryWindow? _transactionHistory;
 
     [RelayCommand]
@@ -5255,7 +5259,7 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
-    // Singleton handle for the live PlayersSeenWindow — re-press toggles closed.
+    // Singleton handle for the live PlayersSeenWindow (see RaiseOrClose).
     private PlayersSeenWindow? _playersSeen;
 
     [RelayCommand]
@@ -5436,7 +5440,7 @@ public partial class MainWindowViewModel : ObservableObject
     // Help / Tools → Update the Client. A modeless window that reads the update service's
     // cached verdict (or checks fresh), and — on the user's request — downloads,
     // verifies, swaps the new build in, and relaunches. Pressing the command while
-    // it's open raises it to front (see RaiseExisting).
+    // it's open behaves as RaiseOrClose.
     [RelayCommand]
     private void OpenUpdate()
     {
@@ -5445,7 +5449,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_updateWindow is { } existing)
         {
-            RaiseExisting(existing);
+            RaiseOrClose(existing);
             return;
         }
 
@@ -5464,7 +5468,7 @@ public partial class MainWindowViewModel : ObservableObject
     // Help → Help topics. A modeless, read-only compendium: a searchable table of
     // contents (left) that drives a rendered content pane (right), covering how
     // features work, how to use the client, and what each setting means. Pressing
-    // the command while it's open raises it to front (see RaiseExisting).
+    // the command while it's open behaves as RaiseOrClose.
     [RelayCommand]
     private void OpenHelpWindow()
     {
@@ -6113,7 +6117,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Open InfoDialogs are tracked per title so menu / hotkey re-press raises the existing one.
+    // Open InfoDialogs are tracked per title so a menu / hotkey re-press reuses the existing one.
     private readonly Dictionary<string, InfoDialog> _infoDialogs = new(StringComparer.Ordinal);
 
     private void ShowInfoDialog(string title, string body)
@@ -6121,11 +6125,10 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Re-select raises the existing dialog — see RaiseExisting. About /
-        // License / Keyboard shortcuts each get their own tracker by title.
+        // About / License / Keyboard shortcuts each get their own tracker by title.
         if (_infoDialogs.TryGetValue(title, out InfoDialog? existing))
         {
-            RaiseExisting(existing);
+            RaiseOrClose(existing);
             return;
         }
 
