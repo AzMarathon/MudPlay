@@ -1,5 +1,12 @@
 # Version history
 
+## 3.119.0
+
+- Auto-sell sells as soon as you walk into a shop that trades the item (no `list`), keeping Min. to keep when it's above 0 (0 = sell all)
+- New item option **Make detours to sell this item**: a walk, loop or Auto-Lair turns aside to sell once you carry more than **Detour to sell if above**, at the shops you tick **Sell here**
+- A follower whose meditate gets "Meditation will not help at this time" now counts its mana as full and sends @ok
+- bug reports addressed: paradigm-20260928-223148
+
 ## 3.118.7
 
 - Heals wait for a round's hits to finish landing before picking Minor vs Major, so the round's one cast isn't spent on the wrong tier

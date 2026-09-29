@@ -132,7 +132,7 @@ public sealed class AutoDepositManager : IDisposable
     // alongside stash-room hides.
     public event Action<long>? Deposited;
     private DepositPhase _phase = DepositPhase.Idle;
-    private ResumeTarget _resume;
+    private DetourResume _resume;
     private RoomKey _destination;
     private RoomKey _origin;
     private bool _destinationIsStash;
@@ -241,8 +241,8 @@ public sealed class AutoDepositManager : IDisposable
         // run-state, so the resume target must be captured first. Only a
         // Loop or Auto-Lair qualifies; a one-shot walk-to (or an idle
         // stack) has nothing to detour-and-resume.
-        ResumeTarget resume = SnapshotRunningEngine();
-        if (resume.Kind == ResumeKind.None)
+        DetourResume resume = SnapshotRunningEngine();
+        if (resume.Kind == DetourResumeKind.None)
         {
             _log?.Debug(LogCategory, "gate fired but no loop / auto-lair running — ignoring");
             _cash.NotifyAutoDepositAborted();
@@ -312,7 +312,7 @@ public sealed class AutoDepositManager : IDisposable
         // halting an Approaching loop stops the walker, whose Stopped event must
         // not read as a user abort of the reroute we're mid-launch of.
         _drivingWalker = true;
-        try { StopRunningEngine("auto-deposit reroute"); }
+        try { _resume.Stop(_walker, _loopRunner, _autoLair, "auto-deposit reroute"); }
         finally { _drivingWalker = false; }
 
         _phase = DepositPhase.WalkingToDestination;
@@ -356,7 +356,7 @@ public sealed class AutoDepositManager : IDisposable
         if (t.NewRoom is not { } room) return;
         if (t.PreviousRoom is { } prev && prev.Key.Equals(room.Key)) return;
         if (!IsStashRoom(room.Key)) return;
-        if (SnapshotRunningEngine().Kind == ResumeKind.None)
+        if (SnapshotRunningEngine().Kind == DetourResumeKind.None)
         {
             // No local engine drives us. A party follower dragged through their own
             // stash room by the leader still stashes when opted in — their loop /
@@ -634,20 +634,20 @@ public sealed class AutoDepositManager : IDisposable
     public bool IsPassingThroughStashRoom()
         => _tracker.State.CurrentRoom is { } room
            && IsStashRoom(room.Key)
-           && SnapshotRunningEngine().Kind != ResumeKind.None;
+           && SnapshotRunningEngine().Kind != DetourResumeKind.None;
 
     // Whether room is one the running engine will reach on its own — a resolved
     // loop-circuit room, or a marked Auto-Lair room. Such a room needs no detour:
     // the pass-through handler stashes it when the engine walks through.
-    private bool IsOnActiveRoute(RoomKey room, ResumeTarget resume, RoomKey current)
+    private bool IsOnActiveRoute(RoomKey room, DetourResume resume, RoomKey current)
     {
         switch (resume.Kind)
         {
-            case ResumeKind.Lair:
+            case DetourResumeKind.Lair:
                 // The lair engine roams among its marked rooms, so a marked
                 // stash room is guaranteed to be revisited.
                 return _autoLair.IsMarked(room);
-            case ResumeKind.Loop:
+            case DetourResumeKind.Loop:
                 // The loop re-walks its resolved circuit each lap; membership
                 // means a guaranteed per-lap pass.
                 foreach (RoomKey k in _loopRunner.ResolveLoopRoomKeys(current))
@@ -660,24 +660,10 @@ public sealed class AutoDepositManager : IDisposable
 
     // ----- engine snapshot / stop / resume ---------------------------
 
-    private ResumeTarget SnapshotRunningEngine()
-    {
-        // Priority Lair -> Loop: Auto-Lair drives the walker, so the
-        // topmost active engine is the real activity. A bare walk-to is
-        // intentionally NOT a resume target (auto-deposit only reroutes
-        // looping / auto-lairing, per the Settings → Cash contract).
-        if (_autoLair.IsActive)
-            return new ResumeTarget(ResumeKind.Lair, null);
-        if (_loopRunner.State is not LoopState.Idle && _loopRunner.CurrentLoop is { } loop)
-            return new ResumeTarget(ResumeKind.Loop, loop);
-        return new ResumeTarget(ResumeKind.None, null);
-    }
-
-    private void StopRunningEngine(string reason)
-    {
-        if (_autoLair.IsActive) _autoLair.Stop(reason);
-        if (_loopRunner.State is not LoopState.Idle) _loopRunner.Stop(reason);
-    }
+    // A bare walk-to is intentionally NOT a resume target: auto-deposit only
+    // reroutes looping / auto-lairing, per the Settings → Cash contract.
+    private DetourResume SnapshotRunningEngine() =>
+        DetourResume.Snapshot(_walker, _loopRunner, _autoLair, includeWalk: false);
 
     private void Resume()
     {
@@ -694,23 +680,9 @@ public sealed class AutoDepositManager : IDisposable
         // retry cooldown this sets, so the extra call is harmless there.
         _cash.NotifyAutoDepositAborted();
 
-        ResumeTarget r = _resume;
+        DetourResume r = _resume;
         GoIdle();
-        switch (r.Kind)
-        {
-            case ResumeKind.Lair:
-                _autoLair.Start();
-                break;
-            case ResumeKind.Loop:
-                // ResumeAfterDetour, not Start: the loop's first-waypoint reset
-                // (session stats + party @reset) already fired at the user's
-                // original Start. This bank detour is a continuation, so it must
-                // not re-fire that reset. throughGates: if the walk back to origin
-                // above couldn't land us inside the grind area, the loop re-approach
-                // still plans through the acquirable gates to re-enter it.
-                if (r.Loop is { } loop) _loopRunner.ResumeAfterDetour(loop, throughGates: true);
-                break;
-        }
+        r.Resume(_walker, _loopRunner, _autoLair);
     }
 
     // Reset States: stand down without resuming the walk it was part of.
@@ -754,13 +726,4 @@ public sealed class AutoDepositManager : IDisposable
         BuyingLight,
         WalkingBackToOrigin,
     }
-
-    private enum ResumeKind
-    {
-        None,
-        Loop,
-        Lair,
-    }
-
-    private readonly record struct ResumeTarget(ResumeKind Kind, Loop? Loop);
 }

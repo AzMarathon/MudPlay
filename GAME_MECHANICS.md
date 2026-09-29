@@ -903,7 +903,8 @@ How HP works from full health down through dropping and death, how monster healt
 *Status: CONFIRMED 2026-09-27 (user) · wording [OBSERVED] `wccmmud.dll` 1.11p string table*
 
 - **`meditate` with mana already full is refused with `Meditation will not help at this time.`** You don't start meditating.
-- **Client use:** `HealthManager.NoteMeditateNotNeeded` drops the unanswered meditate and rests instead for 30 s, in case the prompt's mana reading was stale.
+- **The refusal can come below the max the client works out** *([OBSERVED] report `paradigm-20260928-223148`)*: right after a Pre-rest Mana gear swap the client read 423/448, but the game refused at 423 and `par` showed `[M:100%]`. *[NEEDS CONFIRMATION] — does worn +max-mana gear raise the game's max straight away, or only later?*
+- **Client use:** `HealthManager.NoteMeditateNotNeeded` drops the unanswered meditate and records the current mana as the game's full mark while the client's max stays the same (the mark rises with any higher reading). Reaching it counts as rested: the mana gate clears, the party `@ok` goes out and top-off stops. Before 2026-09-28 it rested on toward the client's own max, which the game never reached, so a follower's `@ok` never went out.
 
 ### Casting a spell interrupts resting / meditating
 *Status: CONFIRMED 2026-08-20 (user)*
@@ -4480,10 +4481,22 @@ glass jug               5               2 gold crowns
 | Sell — worthless | `You sold <item> for 0 copper farthings.` |
 | Sell — shop refuses | `You cannot sell <item> here.` |
 
+### Selling to a shop — what it buys, and no `list` needed
+*Status: CONFIRMED 2026-09-28 (user) · Realm: both*
+
+- **A shop buys back an item that's in its inventory listing.** Standing in that shop's room, `sell <item>` sells it.
+- **`sell` needs no `list` first.** Reading the shop's stock is a wasted command when all you're doing is selling.
+
+**Client use:**
+- `AutoSellManager` sells on arriving in a shop room whose shop lists the item (`ShopStockIndex.ShopsSelling` against `Room.Shop`), holding movement on `SellingGate` until the results land. It used to wait for a `list` readout. Auto-buy still reads the `list`.
+- `SellDetourManager` walks a walk-to / loop / Auto-Lair to such a shop for an item flagged *Make detours to sell this item*, then carries on (see *Auto-buy / auto-discard band semantics* for the counts).
+
 ### Auto-buy / auto-discard band semantics
-*Status: **Client policy** — CONFIRMED 2026-07-10 (user design)*
+*Status: **Client policy** — CONFIRMED 2026-07-10 (user design); sell floor and detour count 2026-09-28 (user)*
 
 - **Auto-discard with no Min/Max band set → discard *all*** of that item (drop every copy).
+- **Auto-sell (in passing or on a detour) keeps Min. to keep when it's above 0, else sells every copy** — whether or not *Must have minimum* is ticked.
+- **A sell detour goes once more than *Detour to sell if above* are carried** (blank = as soon as there's one to sell).
 - **Auto-buy with no band → buy as many as affordable.**
 - **Ticking Auto-buy on in the item-edit dialog defaults `MaxToGet` to 10** (the user changes it from
   there). So a freshly-flagged auto-buy item is bounded at 10 by default, never unbounded-by-accident.

@@ -115,6 +115,18 @@ public sealed class MovementCoordinator
     // so a cast that never fires can't strand the route. Engine-wait tier.
     public const string SneakCastGate = "SneakCast";
 
+    // Asserted by AutoSellManager while it sells in a shop room, so a walk or loop
+    // doesn't step out mid-sale and land the rest of the sells in the next room.
+    // Released when the selling ends or a result doesn't come back in time.
+    // Engine-wait tier.
+    public const string SellingGate = "Selling";
+
+    // Asserted by SellDetourManager when a sell detour comes due mid-step: the walk /
+    // loop holds at the room it's entering, where the detour takes over (a walk sends
+    // its next step the moment a room confirms, so there's no other gap). Engine-wait
+    // tier.
+    public const string SellDetourGate = "SellDetour";
+
     // Asserted by the in-room acquisition engine while the loot step runs
     // after a fight clears; clears when all flagged ground items + coins are
     // resolved. This is the get-clear contributor to the in-room loop's

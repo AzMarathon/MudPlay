@@ -112,9 +112,15 @@
                                         <CheckBox Content="Auto-buy"             IsChecked="{Binding AutoBuy,         Mode=TwoWay}"
                                                   IsEnabled="{Binding CanBuySell}"
                                                   ToolTip.Tip="{Binding BuySellTooltip}"/>
-                                        <CheckBox Content="Auto-sell"            IsChecked="{Binding AutoSell,        Mode=TwoWay}"
-                                                  IsEnabled="{Binding CanBuySell}"
-                                                  ToolTip.Tip="{Binding BuySellTooltip}"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                            <CheckBox Content="Auto-sell"            IsChecked="{Binding AutoSell,        Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanBuySell}"
+                                                      ToolTip.Tip="{Binding BuySellTooltip}"/>
+                                            <CheckBox Content="Make detours to sell this item"
+                                                      IsChecked="{Binding SellDetour, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanSellDetour}"
+                                                      ToolTip.Tip="With Auto-sell on: once you carry more than 'Detour to sell if above', a walk, loop or Auto-Lair turns aside to a shop that trades this item, sells it, then carries on. Tick 'Sell here' on the shops in Bought / sold to choose which ones (none ticked = any of them)."/>
+                                        </StackPanel>
                                         <CheckBox Content="Auto-stash"           IsChecked="{Binding AutoStash,       Mode=TwoWay}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="2" Spacing="2">
@@ -131,8 +137,8 @@
                                  Constrained to HorizontalAlignment=Left + fixed column
                                  widths so the controls don't stretch toward the splitter. -->
                             <TextBlock Classes="SectionHeader" Text="Details" Margin="0,10,0,4"/>
-                            <Grid ColumnDefinitions="110,80"
-                                  RowDefinitions="Auto,Auto"
+                            <Grid ColumnDefinitions="140,80"
+                                  RowDefinitions="Auto,Auto,Auto"
                                   ColumnSpacing="8" RowSpacing="6"
                                   HorizontalAlignment="Left">
 
@@ -142,10 +148,18 @@
                                 <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding MinToKeep, Mode=TwoWay}"
                                            PlaceholderText="None"/>
 
-                                <!-- Row 1: Max to get -->
-                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Max to get"
+                                <!-- Row 1: Detour to sell if above -->
+                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Detour to sell if above"
+                                           IsEnabled="{Binding SellDetour}"
+                                           ToolTip.Tip="With 'Make detours to sell this item' on: a detour goes once you carry more than this many. Leave blank to go as soon as you carry one you'd sell."/>
+                                <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding SellDetourAbove, Mode=TwoWay}"
+                                           IsEnabled="{Binding SellDetour}"
+                                           PlaceholderText="Any"/>
+
+                                <!-- Row 2: Max to get -->
+                                <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Max to get"
                                            ToolTip.Tip="Stop auto-acquiring at this count. Leave blank for 'All'."/>
-                                <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding MaxToGet, Mode=TwoWay}"
+                                <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding MaxToGet, Mode=TwoWay}"
                                            PlaceholderText="All"/>
                             </Grid>
 
@@ -316,6 +330,11 @@
                                                             IsEnabled="{Binding CanOpen}"
                                                             HorizontalAlignment="Left"
                                                             ToolTip.Tip="Open this room in the Game Data browser"/>
+                                                    <CheckBox Content="Sell here"
+                                                              IsChecked="{Binding SellHere, Mode=TwoWay}"
+                                                              IsEnabled="{Binding CanOpen}"
+                                                              IsVisible="{Binding $parent[Window].((vm:ItemEditDialogViewModel)DataContext).SellDetour}"
+                                                              ToolTip.Tip="A sell detour may use this shop. With none ticked, it uses whichever shop that trades the item adds the fewest steps."/>
                                                     <Button Classes="MdbLink"
                                                             Content="Queue Walking here →"
                                                             Command="{Binding QueueWalk}"

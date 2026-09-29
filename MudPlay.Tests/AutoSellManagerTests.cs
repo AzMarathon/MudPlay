@@ -9,9 +9,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// AutoSellManager: on a shop `list` header it sells each carried item flagged
-// AutoSell down to its keep floor — one `sell` per copy, advancing off the live
-// "You sold ..." / "You cannot sell ... here." result.
+// AutoSellManager: arriving in a shop room whose shop trades a carried AutoSell item
+// sells it down to its keep floor — no `list` — one `sell` per copy on Stock,
+// advancing off the live "You sold ..." / "You cannot sell ... here." result.
 public sealed class AutoSellManagerTests
 {
     private sealed class Harness : IDisposable
@@ -23,6 +23,7 @@ public sealed class AutoSellManagerTests
         public List<string> Carried { get; } = new();
         public bool Enabled { get; set; } = true;
         public bool Paradigm { get; set; }
+        public int TradingShop { get; set; } = 7;
 
         // name -> (Number, Sell, KeepCount)
         private readonly Dictionary<string, (int Number, bool Sell, int Keep)> _map =
@@ -34,6 +35,7 @@ public sealed class AutoSellManagerTests
             Sell = new AutoSellManager(Router,
                 carriedItems: () => Carried,
                 resolve: Resolve,
+                shopTradesItem: (shop, item) => shop == TradingShop,
                 isEnabled: () => Enabled,
                 log: Log,
                 isParadigm: () => Paradigm);
@@ -51,7 +53,7 @@ public sealed class AutoSellManagerTests
         public void Feed(string line) => Router.Dispatch(new LineExtractor.EmittedLine(
             line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
 
-        public void ShopHeader() => Feed("The following items are for sale here:");
+        public void EnterShop(int shop = 7) => Sell.OnRoomEntered(shop);
 
         public List<string> SentText => Sent
             .Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
@@ -66,7 +68,7 @@ public sealed class AutoSellManagerTests
         h.Map("dagger", 1, sell: true);
         h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
 
-        h.ShopHeader();
+        h.EnterShop();
         Assert.Equal(new[] { "sell dagger" }, h.SentText);   // one at a time
 
         h.Feed("You sold dagger for 5 gold crowns.");
@@ -84,7 +86,7 @@ public sealed class AutoSellManagerTests
         h.Map("dagger", 1, sell: true);
         h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
 
-        h.ShopHeader();
+        h.EnterShop();
         Assert.Equal(new[] { "sell 3 dagger" }, h.SentText);   // one batched command
 
         // The counted confirmation drains all three; the pump finishes without a
@@ -101,7 +103,7 @@ public sealed class AutoSellManagerTests
         h.Map("dagger", 1, sell: true, keep: 1);
         h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
 
-        h.ShopHeader();
+        h.EnterShop();
         h.Feed("You sold dagger for 5 gold crowns.");
         h.Feed("You sold dagger for 5 gold crowns.");
         // Would-be third result never comes because only two were queued.
@@ -116,7 +118,7 @@ public sealed class AutoSellManagerTests
         h.Map("dagger", 1, sell: false);
         h.Carried.Add("dagger");
 
-        h.ShopHeader();
+        h.EnterShop();
 
         Assert.Empty(h.Sent);
     }
@@ -128,7 +130,7 @@ public sealed class AutoSellManagerTests
         h.Map("dagger", 1, sell: true);
         h.Carried.AddRange(new[] { "dagger", "dagger" });
 
-        h.ShopHeader();
+        h.EnterShop();
         Assert.Single(h.Sent);                       // first sell attempt
 
         h.Feed("You cannot sell dagger here.");       // this shop won't buy it
@@ -143,23 +145,60 @@ public sealed class AutoSellManagerTests
         h.Map("dagger", 1, sell: true);
         h.Carried.Add("dagger");
 
-        h.ShopHeader();
+        h.EnterShop();
 
         Assert.Empty(h.Sent);
     }
 
+    // Walking into a shop that doesn't have the item in its listing sells nothing.
     [Fact]
-    public void FreshList_ResetsPump()
+    public void ShopThatDoesntTradeIt_NoSell()
     {
         using Harness h = new();
         h.Map("dagger", 1, sell: true);
+        h.Carried.Add("dagger");
+
+        h.EnterShop(shop: 9);
+        h.Sell.OnRoomEntered(0);
+
+        Assert.Empty(h.Sent);
+    }
+
+    // The walk waits on the Selling gate until the last result lands.
+    [Fact]
+    public void HoldsMovementUntilSold()
+    {
+        using Harness h = new();
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Sell.SetMovementGate(coord);
+        h.Map("dagger", 1, sell: true);
         h.Carried.AddRange(new[] { "dagger", "dagger" });
 
-        h.ShopHeader();                               // sends sell #1
-        h.ShopHeader();                               // fresh list supersedes
+        h.EnterShop();
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SellingGate));
+        h.Feed("You sold dagger for 5 gold crowns.");
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SellingGate));
+        h.Feed("You sold dagger for 5 gold crowns.");
 
-        // Both headers each start a pump from the current carried pack; the
-        // second replaces the first rather than stacking a second queue.
-        Assert.Equal(new[] { "sell dagger", "sell dagger" }, h.SentText);
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SellingGate));
+        Assert.False(h.Sell.IsSelling);
+    }
+
+    // A result that never comes back lets the walk go.
+    [Fact]
+    public void NoResult_TimesOutAndReleases()
+    {
+        using Harness h = new();
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        List<Action> later = new();
+        h.Sell.SetMovementGate(coord);
+        h.Sell.SetScheduler((_, a) => later.Add(a));
+        h.Map("dagger", 1, sell: true);
+        h.Carried.Add("dagger");
+
+        h.EnterShop();
+        later[^1]();
+
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SellingGate));
     }
 }

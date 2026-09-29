@@ -92,6 +92,10 @@ public static class NavActivity
             return ("Waiting — sneaking", NavActivityKind.Waiting);
         if (gates.Contains(MovementCoordinator.SneakCastGate))
             return ("Waiting — casting before re-sneaking", NavActivityKind.Waiting);
+        if (gates.Contains(MovementCoordinator.SellingGate))
+            return ("Waiting — selling", NavActivityKind.Waiting);
+        if (gates.Contains(MovementCoordinator.SellDetourGate))
+            return ("Waiting — stopping to go sell", NavActivityKind.Waiting);
 
         // Brief per-room settle beats while a room reveals a late-arriving hostile.
         // They're a moment in the middle of moving, not a real stop, so they read as

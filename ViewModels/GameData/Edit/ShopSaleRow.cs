@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Services;
@@ -10,8 +11,15 @@ namespace MudPlay.ViewModels.GameData.Edit;
 // priced buy/sell line beneath it. The location is a clickable link that jumps
 // the Game Data browser to that room's Rooms-tab record — the item pane doubles
 // as a jump-off to where the item is traded (mirrors ItemLink / ShopStockRow).
-public sealed class ShopSaleRow
+// SellHere marks the shop as one a sell detour may use (the item dialog owns the
+// selection and re-applies it when the rows are rebuilt for a new charm).
+public sealed partial class ShopSaleRow : ObservableObject
 {
+    [ObservableProperty] private bool _sellHere;
+
+    // "map/room" of the host room — the key a sell-detour shop pick is stored under.
+    public string RoomKeyWire => new RoomKey(Map, Room).ToString();
+
     public string Location { get; }
     public string Price { get; }
     public bool HasPrice => Price.Length > 0;

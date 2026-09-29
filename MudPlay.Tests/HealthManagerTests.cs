@@ -785,10 +785,10 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
-    public void MeditateNotNeeded_RestsInstead()
+    public void MeditateNotNeeded_ManaCountsAsFull()
     {
-        // "Meditation will not help at this time.": mana's already full whatever
-        // the prompt said — rest instead of re-sending the meditate.
+        // "Meditation will not help at this time.": the game only says it with mana
+        // full, so that's rested whatever our max says — no rest, no re-sent meditate.
         using Harness h = new();
         h.Settings.UseMeditateAbility = true;
         h.SetPrompt(hp: 200, maxHp: 200, ma: 5, maxMa: 100);
@@ -797,7 +797,23 @@ public sealed class HealthManagerTests
         h.Health.NoteMeditateNotNeeded();
         h.State.Ma = 6;
 
-        Assert.Equal("rest", h.LastSent);
+        Assert.False(h.ManaGateHeld);
+        Assert.Equal("meditate", h.LastSent);
+    }
+
+    // A later, higher reading raises the game's full mark, so dropping back below it
+    // is a real deficit again.
+    [Fact]
+    public void MeditateNotNeeded_HigherReadingRaisesTheFullMark()
+    {
+        using Harness h = new();
+        h.Settings.UseMeditateAbility = true;
+        h.SetPrompt(hp: 200, maxHp: 200, ma: 5, maxMa: 100);
+        h.Health.NoteMeditateNotNeeded();
+        h.State.Ma = 100;
+        h.State.Ma = 20;
+
+        Assert.True(h.ManaGateHeld);
     }
 
     [Fact]
@@ -1740,6 +1756,34 @@ public sealed class HealthManagerTests
         h.State.Ma = 95;                  // full rest-max ceiling reached
         Assert.Equal(1, oks);             // @ok fires exactly once, now that we're rested
         Assert.Equal(1, waits);           // and @wait never re-fired mid-recovery
+    }
+
+    // Report paradigm-20260928-223148: a Pre-rest Mana set put our believed max at 448,
+    // but the game refused the meditate at 423 ("Meditation will not help at this
+    // time.") — full by its count. That's rested: the mana gate clears and @ok goes out.
+    [Fact]
+    public void Follower_MeditateNotNeeded_BelowBelievedMax_SendsOk()
+    {
+        using Harness h = new();          // percentage mode: MA trigger 30 %, rest-max 95 %
+        int oks = 0;
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => { },
+            requestPartyOk: () => oks++);
+
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);
+        h.State.Ma = 20;                  // drop below the floor → @wait
+        h.State.MaxMa = 200;              // gear swap: believed max jumps
+        h.Clock += TimeSpan.FromSeconds(30);   // past the gear-swap max settle
+        h.State.Ma = 100;                 // the game's real full
+        Assert.Equal(0, oks);
+
+        h.Health.NoteMeditateNotNeeded();
+        h.State.Hp = 99;                  // any prompt re-evaluates
+        h.State.Hp = 100;
+
+        Assert.False(h.ManaGateHeld);
+        Assert.Equal(1, oks);
     }
 
     // ----- Multi-step flee + auto-resume (Cluster 5b foundation) ----

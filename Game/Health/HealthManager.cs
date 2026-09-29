@@ -174,6 +174,14 @@ public sealed class HealthManager : IDisposable
     // keeps turning down.
     private DateTimeOffset? _meditateNotNeededAt;
     private static readonly TimeSpan MeditateNotNeededWindow = TimeSpan.FromSeconds(30);
+
+    // The mana the game called full on that refusal, and the max we believed then.
+    // While the believed max is unchanged, reaching that mana counts as rested: our
+    // max can overshoot the game's (report paradigm-20260928-223148 — a Pre-rest Mana
+    // set put us at 423/448 when the game said 423 was full, so recovery chased 448
+    // forever and the party @ok never went out).
+    private int? _manaGameFullAt;
+    private int _manaGameFullMax;
     // The idle-stall watchdog force-clears combat OPTIMISTICALLY and sends a resync
     // CR; the re-display that re-confirms a still-present monster lands a beat later.
     // Resting the instant InCombat flips false fires in that gap — a blinded / slow
@@ -905,6 +913,14 @@ public sealed class HealthManager : IDisposable
         else if (_state.MaxMa > 0 && _state.MaxMa != _lastSeenMaxMa) { _lastSeenMaxMa = _state.MaxMa; _maxMaChangedAt = _now(); }
         bool hpMaxUnsettled = _maxHpChangedAt != default && _now() - _maxHpChangedAt < MaxPoolSettleWindow;
         bool maMaxUnsettled = _maxMaChangedAt != default && _now() - _maxMaChangedAt < MaxPoolSettleWindow;
+        // The game's full mark holds only for the max we believed at the refusal, and
+        // a higher reading since means its max is at least that (so a stale-low prompt
+        // at the refusal can't make every later reading count as full).
+        if (_manaGameFullAt is { } gameFull)
+        {
+            if (_state.MaxMa != _manaGameFullMax) _manaGameFullAt = null;
+            else if (_state.Ma > gameFull) _manaGameFullAt = _state.Ma;
+        }
 
         // ----- HP gate transitions ---------------------------------
         (int hpRestTrigger, int hpRestMax) = ResolveRestThresholds(
@@ -992,7 +1008,7 @@ public sealed class HealthManager : IDisposable
             // rest send — see ConfirmMaGate for why.
             _post(ConfirmMaGate);
         }
-        else if (_maGateAsserted && (skipRest || (!maMaxUnsettled && _state.Ma >= maClearFloor)))
+        else if (_maGateAsserted && (skipRest || (!maMaxUnsettled && (_state.Ma >= maClearFloor || ManaAtGameFull()))))
         {
             _maGateAsserted = false;
             _maGateConfirmed = false;
@@ -1000,6 +1016,8 @@ public sealed class HealthManager : IDisposable
                 AsserterName,
                 skipRest
                     ? "do-not-rest room — advancing instead of resting"
+                    : ManaAtGameFull() && _state.Ma < maClearFloor
+                        ? $"MA {_state.Ma}/{_state.MaxMa} — the game says mana is full"
                     : _restInFlight || wasActivelyResting
                         ? $"MA {_state.Ma}/{_state.MaxMa} >= clear-floor={maClearFloor} (rest-target={maRestTarget}{(maBoost > 0 ? $" + pre-rest boost {maBoost}" : "")})"
                         : $"MA {_state.Ma}/{_state.MaxMa} recovered above rest-trigger={maRestTrigger} before rest started");
@@ -1056,7 +1074,7 @@ public sealed class HealthManager : IDisposable
         else if (_partyWaitSignaled && !droppedBelowFloor && !hpMaxUnsettled && !maMaxUnsettled)
         {
             bool hpRested = _state.MaxHp <= 0 || _state.Hp >= hpRestMax;
-            bool maRested = _state.MaxMa <= 0 || _state.Ma >= maRestMax;
+            bool maRested = _state.MaxMa <= 0 || _state.Ma >= maRestMax || ManaAtGameFull();
             if (hpRested && maRested)
             {
                 _partyWaitSignaled = false;
@@ -1985,6 +2003,10 @@ public sealed class HealthManager : IDisposable
     private bool MeditateRecentlyRefused() =>
         _meditateNotNeededAt is { } at && _now() - at < MeditateNotNeededWindow;
 
+    // True while mana is at the level the game last called full (see _manaGameFullAt).
+    private bool ManaAtGameFull() =>
+        _manaGameFullAt is { } full && _state.MaxMa == _manaGameFullMax && _state.Ma >= full;
+
     // The game refused our rest / meditate because we're poisoned. Only reacts to a
     // rest we sent that hasn't taken yet.
     public void NoteRestRefusedSick()
@@ -2002,6 +2024,8 @@ public sealed class HealthManager : IDisposable
     public void NoteMeditateNotNeeded()
     {
         _meditateNotNeededAt = _now();
+        _manaGameFullAt = _state.Ma;
+        _manaGameFullMax = _state.MaxMa;
         if (_restInFlight && !_restConfirmedByPrompt) _restInFlight = false;
         _log?.Combat(LogCategory,
             $"meditate refused — mana already full; resting instead for {MeditateNotNeededWindow.TotalSeconds:0}s "
@@ -2020,7 +2044,7 @@ public sealed class HealthManager : IDisposable
         int maTarget = ResolveRestThresholds(s.MaThresholdMode, s.RestMaxMa, s.RestMaxMa,
             _defaultSetMaxMa, _realMaxMa, _state.MaxMa).Max;
         bool needHp = _state.MaxHp > 0 && _state.Hp < hpTarget;
-        bool needMa = _state.MaxMa > 0 && _state.Ma < maTarget;
+        bool needMa = _state.MaxMa > 0 && _state.Ma < maTarget && !ManaAtGameFull();
         return needHp || needMa;
     }
 

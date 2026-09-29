@@ -1394,7 +1394,7 @@ Click a section to open it. Each table has its own **Filter…** box (this one f
 
 The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
 
-The **Items** and **Players** tables carry a **Toggles** column that lists, per row, the flags *you've* turned on for it — an item's **Collect / Discard / Open / Buy / Sell / Stash** (plus **No-take / Keep-min / Loyal / Path-get**), or a player's **Invite-if-seen / Join-if-invited / Don't-delete** followed by each **remote-control permission** you've granted them (a full grant collapses to *All @-permissions*). It reads blank when you've set none; a crowded cell trims with an ellipsis — hover it for the full list, or drag the column wider. (The Players tab's separate **@'s** column keeps the quick None / Some / All summary of those permissions.) The **Monsters** table surfaces the same kind of per-record settings, but as their own columns — see its column list below.
+The **Items** and **Players** tables carry a **Toggles** column that lists, per row, the flags *you've* turned on for it — an item's **Collect / Discard / Open / Buy / Sell / Sell-detour / Stash** (plus **No-take / Keep-min / Loyal / Path-get**), or a player's **Invite-if-seen / Join-if-invited / Don't-delete** followed by each **remote-control permission** you've granted them (a full grant collapses to *All @-permissions*). It reads blank when you've set none; a crowded cell trims with an ellipsis — hover it for the full list, or drag the column wider. (The Players tab's separate **@'s** column keeps the quick None / Some / All summary of those permissions.) The **Monsters** table surfaces the same kind of per-record settings, but as their own columns — see its column list below.
 
 The **Monsters** table lists only the monsters that can actually be met in the game. The ones the game data marks *out of play* — sysop-only NPCs, unused or test monsters (about 70 in the Paradigm set, such as the extra copies of *dark cleric* or *guardsman* that no room ever spawns) — are not here; they are in the **Unobtainable** table instead, so a name that appears twice in Monsters is two real spawns.
 
@@ -1435,7 +1435,7 @@ Some tabs understand **special filter words** beyond that plain-text match:
 
 | Tab | Type… | …to show |
 |---|---|---|
-| **Items** | `get` or `collect` · `drop` or `discard` · `open` · `buy` · `sell` · `stash` · `keep` · `loyal` · `notake` · `path` | only the items you've set that **auto-toggle** on (the flags in the Toggles column). Exact-word match, so `get` filters by the flag, not by names containing "get". |
+| **Items** | `get` or `collect` · `drop` or `discard` · `open` · `buy` · `sell` · `detour` · `stash` · `keep` · `loyal` · `notake` · `path` | only the items you've set that **auto-toggle** on (the flags in the Toggles column). Exact-word match, so `get` filters by the flag, not by names containing "get". |
 | **Items** | `weapon`, `feet`, `plate`, … | items of that item type / worn slot / weapon or armour type (any of the formatted labels works) |
 | **Spells** | `poison` · `confuse` · `blind` · `hold` | every spell that **applies** that ailment — read from the spell's ability codes (following the EndCast chain), not just spells with the word in their name |
 | **Rooms** | `1,1` (also `1/1` or `1 1`) | the single room at that **map,room** coordinate |
@@ -1469,6 +1469,14 @@ Select several rows (click-drag, or Ctrl / Shift-click) on the **Monsters**, **I
 Items and Monsters open an editable pane on the left with the read-only **Other Info (from MDB)** on the right.
 
 **For an item** you can flip its automation flags (**Auto-collect, Auto-discard, Auto-buy, Auto-sell, Auto-stash**, and more), set **Min. to keep / Max to get**, and toggle **Auto-obtain for path**.
+
+**Selling.** With **Auto-sell** on (and Auto-Get Items running), walking into a shop room whose shop has the item in its inventory listing sells it straight away — no `list` needed. Selling keeps your **Min. to keep** count when it's above 0, and sells every copy when it's 0 or blank. Your walk or loop waits while it sells (*Waiting — selling*).
+
+**Sell detours.** Tick **Make detours to sell this item** (beside Auto-sell) and a walk-to, loop or Auto-Lair will turn aside to sell it once you carry more than **Detour to sell if above** (blank = as soon as you carry one you'd sell):
+
+- **Which shop:** tick **Sell here** on the shops in the **Bought / sold** list to choose. With none ticked, any shop that trades the item can be used. Among the allowed shops, it picks the one that adds the fewest steps.
+- **The trip:** the route stops at the next room, walks to the shop, sells, then carries on. A walk-to heads on to its destination; a loop or Auto-Lair walks back to where it stopped and picks up again.
+- **When it doesn't detour:** if your walk ends at one of those shops, or your loop or Auto-Lair passes through one, it just sells on the way. It also waits while you're fighting, resting, paused, following a party leader, or another errand (a bank trip, a train trip, a token route) has the route.
 
 A **Message** section shows the item's on-use / proc message — but where that message lives depends on what the item does:
 

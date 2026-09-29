@@ -929,6 +929,9 @@ public static class BugReportBuilder
             Flag(parts, "autoOpen", o.AutoOpen);
             Flag(parts, "autoBuy", o.AutoBuy);
             Flag(parts, "autoSell", o.AutoSell);
+            Flag(parts, "sellDetour", o.SellDetour);
+            if (!string.IsNullOrWhiteSpace(o.SellDetourAbove)) parts.Add($"sellDetourAbove {o.SellDetourAbove}");
+            if (!string.IsNullOrWhiteSpace(o.SellShops)) parts.Add($"sellShops {o.SellShops}");
             Flag(parts, "autoStash", o.AutoStash);
             Flag(parts, "cannotBeTaken", o.CannotBeTaken);
             Flag(parts, "mustHaveMinimum", o.MustHaveMinimum);
@@ -1138,6 +1141,8 @@ public static class BugReportBuilder
         Kv(sb, "Travel per-hop estimate",
             $"{svc.AutoLair.TravelCostModel.EstimateTravel(1).TotalSeconds:0.00} s");
         Kv(sb, "Auto-deposit reroute", svc.AutoDeposit.RerouteStatus);
+        Kv(sb, "Sell detour", svc.SellDetour.Status);
+        Kv(sb, "Auto-sell", svc.AutoSell.IsSelling ? "selling here" : "idle");
         // Roomba Mode (GhSweepManager) — a "sweep won't start / got stuck"
         // report needs the phase, lap count, and how much of the sort queue
         // is still outstanding.
