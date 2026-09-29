@@ -176,6 +176,16 @@ public static partial class DamageLineAttributor
             }
         }
 
+        // Only the caster sees a room spell's damage aimed at "your foes" / "your
+        // enemies" — the room sees "... scorch the room!" with no amount — so the line
+        // is ours, and its victims are the whole room rather than us ("A hellish storm
+        // of fire and brimstone scorches your foes for 603 damage!", report
+        // paradigm-20260929-063213).
+        if ((source is null || source == Self)
+            && (pre.Contains("your foes", StringComparison.OrdinalIgnoreCase)
+                || pre.Contains("your enemies", StringComparison.OrdinalIgnoreCase)))
+            return new DamageAttribution(Self, null, amount);
+
         string? target = FindTarget(pre, rest, names);
         // A named attacker with no victim named is the victim's own view of the hit —
         // the room sees "... at <victim> for N damage!" instead ("The mad wizard throws a

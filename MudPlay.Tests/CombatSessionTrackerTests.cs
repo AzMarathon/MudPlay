@@ -25,13 +25,17 @@ public sealed class CombatSessionTrackerTests
         public CombatSessionTracker Tracker { get; }
         public int ChangedCount { get; private set; }
 
-        public Harness(IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>? spellMatchers = null)
+        public Harness(
+            IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>? spellMatchers = null,
+            IReadOnlyList<SpellLineMatcher>? followUps = null)
         {
             DefaultPatterns.Seed(Router);
             Rounds = new RoundDamageTracker(Router, State);
+            IReadOnlyList<SpellLineMatcher>? lines = spellMatchers?
+                .Select(m => new SpellLineMatcher(m.Name, m.Matcher)).Concat(followUps ?? []).ToList();
             Tracker = new CombatSessionTracker(
                 Router, Rounds,
-                resolveSpellMatchers: spellMatchers is null ? null : () => spellMatchers);
+                resolveSpellMatchers: lines is null ? null : () => lines);
             Rounds.SetOwnSpellLineCheck(Tracker.MatchesOwnSpell);
             Rounds.NoteRoomEntities(new RoomEntitiesObservation(
                 "Also here: kobold, giant rat.",
@@ -673,5 +677,27 @@ public sealed class CombatSessionTrackerTests
         CombatSessionStats s = h.Stats;
         Assert.Equal(1, s.Misses);
         Assert.Equal(1, s.BackstabFails);
+    }
+
+    // A chained spell's line (necromantic bolt's drain) adds to the cast it follows,
+    // not a proc or a cast of its own (report paradigm-20260929-063213).
+    [Fact]
+    public void FollowUpLine_AddsToTheCastItFollows()
+    {
+        using Harness h = new(
+            spellMatchers: new[] { ("necromantic bolt", Matcher("You fire a necromantic bolt at {target} for {damage} damage!")) },
+            followUps: new[] { new SpellLineMatcher("necromantic bolt", Matcher("{target}'s life is drained for {damage} damage!"), FollowUp: true) });
+
+        h.Feed("You fire a necromantic bolt at kobold for 350 damage!");
+        h.Feed("kobold's life is drained for 95 damage!");
+        h.Feed("You fire a necromantic bolt at kobold for 300 damage!");
+
+        CombatSessionStats s = h.Stats;
+        SpellCombatStat bolt = Assert.Single(s.Spells);
+        Assert.Equal(2, bolt.Landed);
+        Assert.Equal(300, bolt.MinDamage);
+        Assert.Equal(445, bolt.MaxDamage);
+        Assert.Equal(745, bolt.TotalDamage);
+        Assert.Equal(0, s.ProcHits);
     }
 }

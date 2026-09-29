@@ -59,6 +59,8 @@ public sealed class SellDetourManagerTests : IDisposable
         public List<string> Carried { get; } = new();
         public int DetourAbove { get; set; }
         public bool Blocked { get; set; }
+        public bool ShopTrades { get; set; } = true;
+        public DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
         public void Arrive(RoomKey room)
         {
@@ -109,7 +111,7 @@ public sealed class SellDetourManagerTests : IDisposable
         AutoSellManager sell = new(router,
             carriedItems: () => h.Carried,
             resolve: e => e.Trim() == "dagger" ? new AutoSellManager.ResolvedSell(1, "dagger", true, 0) : null,
-            shopTradesItem: (shop, item) => shop == ShopNumber && item == 1,
+            shopTradesItem: (shop, item) => h.ShopTrades && shop == ShopNumber && item == 1,
             isEnabled: () => true);
         sell.SetWireSender(_ => { });
         SellDetourManager detour = new(
@@ -120,7 +122,8 @@ public sealed class SellDetourManagerTests : IDisposable
             distance: (a, b) => bfs.DistanceBetween(a, b),
             tracker: tracker, walker: walker, loops: loop, lair: lair, sell: sell, coordinator: coord,
             isEnabled: () => true,
-            blocked: () => h.Blocked);
+            blocked: () => h.Blocked,
+            clock: () => h.Now);
         h = new Harness
         {
             Graph = graph, Tracker = tracker, Walker = walker, Loop = loop, Lair = lair,
@@ -224,5 +227,64 @@ public sealed class SellDetourManagerTests : IDisposable
         h.Detour.Evaluate();
 
         Assert.False(h.Detour.IsDetouring);
+    }
+
+    // Walk to 1/3, detour to the shop and arrive there.
+    private static void DetourAndArrive(Harness h)
+    {
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Detour.Evaluate();                          // mid-step: hold at the next room
+        h.Arrive(new RoomKey(1, 2));
+        h.Detour.Evaluate();
+        Assert.True(h.Detour.IsDetouring);
+        h.Arrive(new RoomKey(1, 1));
+        h.Arrive(Shop);
+    }
+
+    // A shop that just didn't sell the item isn't written off for the session: it's
+    // tried again once the retry wait is over (report paradigm-20260929-060520).
+    [Fact]
+    public void ShopThatSoldNothing_IsRetriedLater_NotWrittenOff()
+    {
+        using Harness h = NewHarness();
+        h.Carried.Add("dagger");
+        h.ShopTrades = false;                        // Auto-sell has nothing to queue
+        DetourAndArrive(h);
+        Assert.False(h.Sell.IsSelling);
+        Assert.False(h.Detour.IsDetouring);          // carried on
+
+        h.ShopTrades = true;
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);   // the walk resumed
+        h.Arrive(new RoomKey(1, 1));
+        h.Detour.Evaluate();
+        Assert.False(h.Detour.IsDetouring);          // still waiting
+        Assert.Contains("sold none lately", h.Detour.Status);
+
+        h.Now = h.Now.AddMinutes(11);
+        h.Detour.Evaluate();                          // due again: hold at the next room
+        h.Arrive(new RoomKey(1, 2));
+        h.Detour.Evaluate();
+        Assert.True(h.Detour.IsDetouring);
+    }
+
+    [Fact]
+    public void ShopThatRefusesTheItem_IsNotTriedAgain()
+    {
+        using Harness h = NewHarness();
+        h.Carried.Add("dagger");
+        DetourAndArrive(h);
+        Assert.True(h.Sell.IsSelling);
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "You cannot sell dagger here.", Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        Assert.False(h.Detour.IsDetouring);
+
+        h.Now = h.Now.AddHours(1);
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Detour.Evaluate();
+        h.Arrive(new RoomKey(1, 2));
+        h.Detour.Evaluate();
+        Assert.False(h.Detour.IsDetouring);
+        Assert.Contains("refused it or can't be reached", h.Detour.Status);
     }
 }

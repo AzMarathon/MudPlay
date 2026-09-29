@@ -26,6 +26,11 @@ namespace MudPlay.Game.Combat;
 // lands right after the swing that set it off, so it goes to whoever just hit that same
 // monster. Otherwise the dealer is unknown.
 //
+// Our room spell names no victim, only the room ("A hellish storm of fire and brimstone
+// scorches your foes for 603 damage!"): every monster in the room at the time takes about that much,
+// each adjusted by its own magic resistance, which no line shows (user, 2026-09-29) —
+// so each is credited the full amount.
+//
 // A damage line opens a round when we're in combat, when it's ours, or when it names
 // both sides (someone else's fight in the room). Damage to us with no named source —
 // a poison tick, a room hazard — joins an open round but doesn't start one between
@@ -83,6 +88,9 @@ public sealed class RoundDamageTracker : IDisposable
     // Room roster: every name a line may use for an occupant (RawName with its flavor
     // word, and the ResolvedName base form) mapped to the name the ledger shows.
     private Dictionary<string, string> _rosterNames = new(StringComparer.OrdinalIgnoreCase);
+    // The room's monsters, one entry per monster, as the ledger shows them — whom our
+    // room spell hits.
+    private List<string> _foes = new();
     private Func<IEnumerable<string>>? _partyNames;
     private Func<string?>? _selfName;
     private Func<string, bool>? _isOwnSpellLine;
@@ -159,13 +167,16 @@ public sealed class RoundDamageTracker : IDisposable
     public void NoteRoomEntities(RoomEntitiesObservation obs)
     {
         Dictionary<string, string> names = new(StringComparer.OrdinalIgnoreCase);
+        List<string> foes = new();
         foreach (RoomEntity e in obs.Entities)
         {
             if (string.IsNullOrWhiteSpace(e.RawName)) continue;
             names[e.RawName] = e.RawName;
+            if (e.Kind == EntityKind.Monster) foes.Add(e.RawName);
             if (!string.IsNullOrWhiteSpace(e.ResolvedName)) names.TryAdd(e.ResolvedName, e.RawName);
         }
         _rosterNames = names;
+        _foes = foes;
         // Someone arriving mid-round is in the room for the rest of it.
         _current?.Seed(Names().Values);
     }
@@ -213,14 +224,18 @@ public sealed class RoundDamageTracker : IDisposable
         }
         if (source is not null && target is not null && !a.NoDealer) _lastHit = (source, target, now);
 
+        bool roomSpell = source == DamageLineAttributor.Self && target is null && !a.NoDealer
+            && _foes.Count > 0 && HitsTheRoom(text);
+        IReadOnlyList<string> foesHit = roomSpell ? _foes : Array.Empty<string>();
+
         bool opens = _state.InCombat
             || source == DamageLineAttributor.Self
             || (source is not null && target is not null);
         Attributed?.Invoke(new AttributedLine(text,
-            new DamageAttribution(a.NoDealer ? null : source, target, a.Amount, a.NoDealer), ownSpell, proc));
+            new DamageAttribution(a.NoDealer ? null : source, target, a.Amount, a.NoDealer), ownSpell, proc, foesHit.Count));
         bool counted = _current is not null || opens;
         if (LineAttributed is { } attributed)
-            attributed(text, RoundTotalsFormatter.LedgerTag(a.NoDealer ? null : source, target, a.Amount, counted, a.NoDealer));
+            attributed(text, RoundTotalsFormatter.LedgerTag(a.NoDealer ? null : source, target, a.Amount, counted, a.NoDealer, foesHit.Count));
         if (!counted) return;
 
         RoundAccumulator round = Current(now);
@@ -229,11 +244,21 @@ public sealed class RoundDamageTracker : IDisposable
         if (!a.NoDealer)
         {
             if (source is null) round.UnknownDealt += a.Amount;
-            else round.For(source).Dealt += a.Amount;
+            else round.For(source).Dealt += a.Amount * Math.Max(1, foesHit.Count);
         }
-        if (target is null) round.UnknownTaken += a.Amount;
+        if (foesHit.Count > 0)
+            foreach (string foe in foesHit) round.For(foe).Taken += a.Amount;
+        else if (target is null) round.UnknownTaken += a.Amount;
         else round.For(target).Taken += a.Amount;
     }
+
+    // A room spell's line names the whole room, not a victim: "scorches your foes",
+    // "drains your enemies", "You cast swarm on the room". A swing at someone missing
+    // from the roster names no victim we know either, so the wording decides.
+    private static bool HitsTheRoom(string text)
+        => text.Contains("your foes", StringComparison.OrdinalIgnoreCase)
+           || text.Contains("your enemies", StringComparison.OrdinalIgnoreCase)
+           || text.Contains("the room", StringComparison.OrdinalIgnoreCase);
 
     // Everyone a line may name: the room roster plus the party, minus ourselves.
     private Dictionary<string, string> Names()

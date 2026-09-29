@@ -214,7 +214,7 @@
     "Name": "arcane assault",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Potent energies streak through {target}, ravaging them for {damage} damage!",
+    "CasterMessage": "Pure energy rips through {target}, ravaging them for {damage} damage!",
     "TargetMessage": "",
     "WitnessMessage": "",
     "AppliedMessage": "{null}",

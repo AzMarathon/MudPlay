@@ -16,7 +16,11 @@ namespace MudPlay.Game.Inventory;
 // a shop on its own — the walk ends there, the loop passes through it, or it's a
 // marked lair room — since Auto-sell sells in passing. After one shop, a still-due
 // item whose shops weren't tried yet sends the detour on to the next before heading
-// back. A shop that sold nothing for an item isn't tried for it again this session.
+// back. A shop that refuses an item, or can't be reached, isn't tried for it again
+// this session. One that just didn't sell it — Auto-sell had nothing to queue there,
+// or no sale reply came — waits UnsoldRetry before it's tried again: that's no proof
+// the shop won't buy it (report paradigm-20260929-060520 wrote a shop off for the
+// session and ignored every later pickup).
 //
 // Single controller: it only starts when nothing else owns movement (the caller's
 // blocked probe covers combat, party following and the other errand engines) and
@@ -39,6 +43,8 @@ public sealed class SellDetourManager : IDisposable
 
     private enum Phase { Idle, WalkingToShop, Selling, WalkingBack }
 
+    private static readonly TimeSpan UnsoldRetry = TimeSpan.FromMinutes(10);
+
     private readonly Func<IReadOnlyList<Candidate>> _candidates;
     private readonly Func<RoomKey, RoomKey, int?> _distance;
     private readonly RoomTracker _tracker;
@@ -50,6 +56,7 @@ public sealed class SellDetourManager : IDisposable
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _blocked;
     private readonly LogService? _log;
+    private readonly Func<DateTimeOffset> _now;
 
     private Phase _phase = Phase.Idle;
     private DetourResume _resume;
@@ -57,8 +64,10 @@ public sealed class SellDetourManager : IDisposable
     private RoomKey _shop;
     private bool _drivingWalker;
     private readonly HashSet<RoomKey> _visited = new();
-    // (item, shop) pairs that sold nothing — not tried again this session.
+    // (item, shop) pairs the shop refused or we couldn't reach — not tried again this
+    // session — and pairs that sold nothing, with when they may be tried again.
     private readonly HashSet<(int Item, RoomKey Shop)> _refused = new();
+    private readonly Dictionary<(int Item, RoomKey Shop), DateTimeOffset> _retryAfter = new();
     private Dictionary<int, int> _carriedAtShop = new();
     private bool _gateHeld;
     private bool _disposed;
@@ -77,7 +86,8 @@ public sealed class SellDetourManager : IDisposable
         MovementCoordinator coordinator,
         Func<bool> isEnabled,
         Func<bool> blocked,
-        LogService? log = null)
+        LogService? log = null,
+        Func<DateTimeOffset>? clock = null)
     {
         _coordinator = coordinator;
         _candidates = candidates;
@@ -90,8 +100,10 @@ public sealed class SellDetourManager : IDisposable
         _isEnabled = isEnabled;
         _blocked = blocked;
         _log = log;
+        _now = clock ?? (static () => DateTimeOffset.Now);
         _walker.Event += OnWalkEvent;
         _sell.Finished += OnSellFinished;
+        _sell.ItemRefused += OnItemRefused;
     }
 
     public bool IsDetouring => _phase != Phase.Idle;
@@ -109,7 +121,11 @@ public sealed class SellDetourManager : IDisposable
             };
             string refused = _refused.Count == 0 ? "none"
                 : string.Join(", ", _refused.Select(r => $"item #{r.Item} at {r.Shop}"));
-            return $"{phase}; last decline: {_lastDecline ?? "(none)"}; shops that sold nothing: {refused}";
+            DateTimeOffset now = _now();
+            List<string> waiting = _retryAfter.Where(r => r.Value > now)
+                .Select(r => $"item #{r.Key.Item} at {r.Key.Shop} until {r.Value:HH:mm:ss}").ToList();
+            return $"{phase}; last decline: {_lastDecline ?? "(none)"}; shops that refused or can't be reached: {refused}; "
+                + $"sold nothing lately: {(waiting.Count == 0 ? "none" : string.Join(", ", waiting))}";
         }
     }
 
@@ -131,8 +147,8 @@ public sealed class SellDetourManager : IDisposable
         {
             if (!c.Due) continue;
             if (c.Shops.Count == 0) { skipped.Add($"{c.Name}: no shop that trades it among your picks"); continue; }
-            List<RoomKey> usable = c.Shops.Where(s => !_refused.Contains((c.Number, s))).ToList();
-            if (usable.Count == 0) { skipped.Add($"{c.Name}: its shops sold nothing earlier this session"); continue; }
+            List<RoomKey> usable = c.Shops.Where(s => Usable(c.Number, s)).ToList();
+            if (usable.Count == 0) { skipped.Add($"{c.Name}: {WhyNoShop(c)}"); continue; }
             // The engine reaches one of its shops anyway: Auto-sell sells in passing.
             RoomKey? passing = usable.Cast<RoomKey?>()
                 .FirstOrDefault(s => s!.Value.Equals(cur) || ReachedAnyway(s.Value, resume, cur));
@@ -178,6 +194,21 @@ public sealed class SellDetourManager : IDisposable
         finally { _drivingWalker = false; }
         ReleaseStop("detour started");
         GoToShop(shop);
+    }
+
+    private bool Usable(int item, RoomKey shop)
+        => !_refused.Contains((item, shop))
+           && !(_retryAfter.TryGetValue((item, shop), out DateTimeOffset after) && after > _now());
+
+    private string WhyNoShop(Candidate c)
+    {
+        List<DateTimeOffset> waits = c.Shops
+            .Where(s => !_refused.Contains((c.Number, s)))
+            .Select(s => _retryAfter[(c.Number, s)])
+            .ToList();
+        return waits.Count == 0
+            ? "its shops refused it or can't be reached"
+            : $"its shops sold none lately; next try after {waits.Min():HH:mm:ss}";
     }
 
     private void Decline(string why)
@@ -266,24 +297,36 @@ public sealed class SellDetourManager : IDisposable
             _log?.Info(LogCategory, $"selling at {_shop}");
             return;
         }
-        NoteUnsold();
+        NoteUnsold("Auto-sell had nothing to sell here");
         Next();
     }
 
     private void OnSellFinished()
     {
         if (_phase != Phase.Selling) return;
-        NoteUnsold();
+        NoteUnsold("the sale didn't go through");
         Next();
     }
 
-    // An item still carried at its arrival count sold nothing here — don't come back
-    // to this shop for it.
-    private void NoteUnsold()
+    private void OnItemRefused(int item)
+    {
+        if (_phase != Phase.Selling) return;
+        _refused.Add((item, _shop));
+        _log?.Info(LogCategory, $"{_shop} refuses item #{item} — not trying it there again this session");
+    }
+
+    // An item still carried at its arrival count sold nothing here: wait a while before
+    // coming back to this shop for it.
+    private void NoteUnsold(string why)
     {
         foreach (Candidate c in _candidates())
-            if (c.Shops.Contains(_shop) && _carriedAtShop.TryGetValue(c.Number, out int before) && c.Carried >= before)
-                _refused.Add((c.Number, _shop));
+        {
+            if (!c.Shops.Contains(_shop) || _refused.Contains((c.Number, _shop))) continue;
+            if (!_carriedAtShop.TryGetValue(c.Number, out int before) || c.Carried < before) continue;
+            DateTimeOffset after = _now() + UnsoldRetry;
+            _retryAfter[(c.Number, _shop)] = after;
+            _log?.Info(LogCategory, $"{_shop} sold no {c.Name} (carried {before} on arrival, {c.Carried} now; {why}) — next try there after {after:HH:mm:ss}");
+        }
     }
 
     // Another shop for a still-due item, or head back.
@@ -294,7 +337,7 @@ public sealed class SellDetourManager : IDisposable
             RoomKey back = _resume.WalkDestination ?? _origin;
             List<RoomKey> shops = _candidates()
                 .Where(c => c.Due)
-                .SelectMany(c => c.Shops.Where(s => !_visited.Contains(s) && !_refused.Contains((c.Number, s))))
+                .SelectMany(c => c.Shops.Where(s => !_visited.Contains(s) && Usable(c.Number, s)))
                 .Distinct().ToList();
             if (shops.Count > 0
                 && PathItemShopRouter.TrySelectShop(shops, here.Key, back, _distance, out RoomKey next))
@@ -339,6 +382,7 @@ public sealed class SellDetourManager : IDisposable
         _disposed = true;
         _walker.Event -= OnWalkEvent;
         _sell.Finished -= OnSellFinished;
+        _sell.ItemRefused -= OnItemRefused;
         ReleaseStop("disposed");
     }
 }

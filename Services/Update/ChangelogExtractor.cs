@@ -1,48 +1,69 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 
 namespace MudPlay.Services.Update;
 
-// Pulls a single version's entry out of CHANGELOG.md so the update window can show
+// Pulls the entries an update brings out of CHANGELOG.md so the update window can show
 // the actual "what's new" bullets instead of the hand-authored GitHub release body
 // (which is publish boilerplate — the asset table + checksum instructions). Pure
 // string work so it's unit-testable without a network fetch.
 public static class ChangelogExtractor
 {
-    // The entry body for `version` (or the top-most entry when no version matches):
-    // every line under the `## <version>` heading up to the next `## ` heading, with
-    // the heading line itself and the internal `- bug reports addressed:` bookkeeping
-    // tail dropped. Returns null when the text has no entry to show.
-    public static string? TopEntry(string? changelogMarkdown, string? version = null)
+    // The entries someone going from `current` to `release` gains: every `## <version>`
+    // entry newer than current, up to and including release, newest first. Entries
+    // newer than release — merged after it shipped — are left out, so a late updater
+    // never reads about changes the download doesn't have. Each entry is headed by its
+    // version when there's more than one; the `- bug reports addressed:` bookkeeping
+    // tail is dropped. Falls back to the release's own entry (or the top one) when
+    // `current` can't be compared. Null when there's nothing to show.
+    public static string? EntriesSince(string? changelogMarkdown, string? current, string? release)
     {
         if (string.IsNullOrWhiteSpace(changelogMarkdown)) return null;
-        string[] lines = changelogMarkdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        List<(string Version, string Body)> entries = Parse(changelogMarkdown);
+        if (entries.Count == 0) return null;
 
-        int start = -1;
-        if (!string.IsNullOrWhiteSpace(version))
-            start = FindHeading(lines, h => HeadingMatchesVersion(h, version!));
-        if (start < 0)
-            start = FindHeading(lines, _ => true);   // fall back to the first entry
-        if (start < 0) return null;
+        List<(string Version, string Body)> gained = entries.FindAll(e =>
+            ReleaseParser.IsNewer(current, e.Version)
+            && (string.IsNullOrWhiteSpace(release) || !ReleaseParser.IsNewer(release, e.Version)));
+        if (gained.Count == 0)
+        {
+            int own = string.IsNullOrWhiteSpace(release) ? -1 : entries.FindIndex(e => SameVersion(e.Version, release!));
+            gained = [entries[own >= 0 ? own : 0]];
+        }
+        gained.RemoveAll(e => e.Body.Length == 0);
+        if (gained.Count == 0) return null;
+        if (gained.Count == 1) return gained[0].Body;
 
         var sb = new StringBuilder();
-        for (int i = start + 1; i < lines.Length; i++)
+        foreach ((string version, string body) in gained)
         {
-            string line = lines[i];
-            if (IsEntryHeading(line)) break;                 // next version's entry
-            if (IsBugReportsLine(line)) continue;            // internal bookkeeping tail
-            sb.Append(line).Append('\n');
+            if (sb.Length > 0) sb.Append("\n\n");
+            sb.Append("Version ").Append(version).Append('\n').Append(body);
         }
-
-        string body = sb.ToString().Trim();
-        return body.Length == 0 ? null : body;
+        return sb.ToString();
     }
 
-    private static int FindHeading(string[] lines, Func<string, bool> match)
+    private static List<(string Version, string Body)> Parse(string markdown)
     {
-        for (int i = 0; i < lines.Length; i++)
-            if (IsEntryHeading(lines[i]) && match(lines[i])) return i;
-        return -1;
+        string[] lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        List<(string, string)> entries = new();
+        string? version = null;
+        var body = new StringBuilder();
+        foreach (string line in lines)
+        {
+            if (IsEntryHeading(line))
+            {
+                if (version is not null) entries.Add((version, body.ToString().Trim()));
+                version = line[3..].Trim();
+                body.Clear();
+                continue;
+            }
+            if (version is null || IsBugReportsLine(line)) continue;
+            body.Append(line).Append('\n');
+        }
+        if (version is not null) entries.Add((version, body.ToString().Trim()));
+        return entries;
     }
 
     // A CHANGELOG version heading: "## 3.79.0". The top-level "# Version history"
@@ -50,13 +71,8 @@ public static class ChangelogExtractor
     private static bool IsEntryHeading(string line) =>
         line.StartsWith("## ", StringComparison.Ordinal);
 
-    private static bool HeadingMatchesVersion(string heading, string version)
-    {
-        string text = heading[3..].Trim();                  // after "## "
-        string want = version.TrimStart('v', 'V');
-        string got = text.TrimStart('v', 'V');
-        return string.Equals(got, want, StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool SameVersion(string a, string b) =>
+        string.Equals(a.TrimStart('v', 'V'), b.Trim().TrimStart('v', 'V'), StringComparison.OrdinalIgnoreCase);
 
     private static bool IsBugReportsLine(string line) =>
         line.TrimStart().StartsWith("- bug reports addressed", StringComparison.OrdinalIgnoreCase);

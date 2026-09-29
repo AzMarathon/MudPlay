@@ -110,6 +110,21 @@ public sealed class MonsterHpTracker
         EstimateChanged?.Invoke(i.Name);
     }
 
+    // Our room spell hit every monster in the room for about amount.
+    public void NoteAreaDamage(int amount)
+    {
+        if (amount <= 0) return;
+        DateTimeOffset now = _now();
+        foreach (Instance i in _room)
+        {
+            Advance(i, now);
+            if (i.RegenFrom is null) i.RegenFrom = now;
+            i.Hp = Math.Max(0, i.Hp - amount);
+            i.Hurt = true;
+            EstimateChanged?.Invoke(i.Name);
+        }
+    }
+
     // The running estimate for the first monster of this name, or null when there's
     // no such monster.
     public int? Estimate(string name)

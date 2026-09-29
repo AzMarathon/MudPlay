@@ -216,41 +216,45 @@ public sealed class UpdateServiceTests
         "- Self-update feature\n";
 
     [Fact]
-    public void TopEntry_ReturnsMatchingVersionBullets_DropsHeadingAndBugLine()
+    public void EntriesSince_OneVersionBehind_IsThatEntry_DropsHeadingAndBugLine()
     {
-        string? notes = ChangelogExtractor.TopEntry(SampleChangelog, "3.79.0");
+        string? notes = ChangelogExtractor.EntriesSince(SampleChangelog, "3.78.0", "3.79.0");
         Assert.Equal(
             "- Auto-detect completed quests from flags\n- Quest editor complete-value spinner",
             notes);
     }
 
     [Fact]
-    public void TopEntry_NoVersion_FallsBackToTopEntry()
+    public void EntriesSince_UpdatingLate_ShowsEveryEntrySkipped()
     {
-        string? notes = ChangelogExtractor.TopEntry(SampleChangelog);
-        Assert.StartsWith("- Auto-detect completed quests", notes);
-        Assert.DoesNotContain("Self-update", notes);        // stops at the next ## heading
+        string? notes = ChangelogExtractor.EntriesSince(SampleChangelog, "3.77.0", "3.79.0");
+        Assert.Equal(
+            "Version 3.79.0\n- Auto-detect completed quests from flags\n- Quest editor complete-value spinner"
+            + "\n\nVersion 3.78.0\n- Self-update feature",
+            notes);
     }
 
+    // Entries merged after the release shipped aren't in the download, so they're
+    // left out even when the changelog read already has them.
     [Fact]
-    public void TopEntry_PicksTheNamedOlderEntry_NotJustTheTop()
+    public void EntriesSince_LeavesOutEntriesNewerThanTheRelease()
     {
-        string? notes = ChangelogExtractor.TopEntry(SampleChangelog, "3.78.0");
+        string? notes = ChangelogExtractor.EntriesSince(SampleChangelog, "3.77.0", "3.78.0");
         Assert.Equal("- Self-update feature", notes);
     }
 
     [Fact]
-    public void TopEntry_ToleratesLeadingV_InVersion()
-        => Assert.StartsWith("- Auto-detect", ChangelogExtractor.TopEntry(SampleChangelog, "v3.79.0"));
+    public void EntriesSince_ToleratesLeadingV()
+        => Assert.Equal("- Self-update feature", ChangelogExtractor.EntriesSince(SampleChangelog, "v3.77.0", "v3.78.0"));
 
     [Fact]
-    public void TopEntry_UnknownVersion_FallsBackToTopEntry()
-        => Assert.StartsWith("- Auto-detect", ChangelogExtractor.TopEntry(SampleChangelog, "9.9.9"));
+    public void EntriesSince_UncomparableCurrent_FallsBackToTheReleaseEntry()
+        => Assert.Equal("- Self-update feature", ChangelogExtractor.EntriesSince(SampleChangelog, "dev", "3.78.0"));
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("# Version history\n\nno entries here\n")]   // no ## heading
-    public void TopEntry_ReturnsNull_WhenNothingToShow(string md)
-        => Assert.Null(ChangelogExtractor.TopEntry(md));
+    public void EntriesSince_ReturnsNull_WhenNothingToShow(string md)
+        => Assert.Null(ChangelogExtractor.EntriesSince(md, "3.0.0", "3.1.0"));
 }

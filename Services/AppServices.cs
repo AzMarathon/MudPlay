@@ -4684,7 +4684,11 @@ public sealed class AppServices
             MonsterHp.MaxHp, MonsterHp.HpRegen,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud, log: Log);
         RoomClassifier.EntitiesObserved += MonsterHpEstimates.NoteRoomEntities;
-        RoundDamage.Attributed += line => MonsterHpEstimates.NoteDamage(line.Sides);
+        RoundDamage.Attributed += line =>
+        {
+            if (line.Foes > 0) MonsterHpEstimates.NoteAreaDamage(line.Sides.Amount);
+            else MonsterHpEstimates.NoteDamage(line.Sides);
+        };
         ItemMagic = new Game.Combat.ItemMagicIndex(GameData);
         SpellReqLevel = new Game.Combat.SpellReqLevelIndex(GameData);
         MonsterResist = new Game.Combat.MonsterResistIndex(GameData);
@@ -4893,7 +4897,7 @@ public sealed class AppServices
         Combat.BackstabResolved += CombatSession.OnBackstabResolved;
         Profile.ProfileLoaded  += _ => { CombatSession.Reset(); CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
         Profile.ProfileMutated += _ => { CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
-        GameData.ActiveSetChanged += _ => { _ownSpellMatcherCache.Clear(); CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
+        GameData.ActiveSetChanged += _ => { _ownSpellLineCache.Clear(); CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
         Spellbook.Changed += CombatSession.RefreshMatchers;
 
         // TimeAnalysisTracker. Divides the session's wall-clock time
@@ -9317,11 +9321,11 @@ public sealed class AppServices
     // cast goes before any spell has landed (CombatSessionTracker.ResolvePendingSpellMiss)
     // — then every other spell the class can learn whose message carries a damage
     // figure, so a hand-cast spell gets its row too. A spell in two slots is added once.
-    private IReadOnlyList<(string Name, Game.Spells.CasterMessageMatcher Matcher)> OwnSpellMatchers()
+    private IReadOnlyList<Game.Spells.SpellLineMatcher> OwnSpellMatchers()
     {
         Models.Profile.CombatSettings combat =
             ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
-        List<(string, Game.Spells.CasterMessageMatcher)> list = new();
+        List<Game.Spells.SpellLineMatcher> list = new();
         HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
         Add(combat.NormalAttackSpell?.SpellName);
         Add(combat.AlternateAttackSpell?.SpellName);
@@ -9342,30 +9346,57 @@ public sealed class AppServices
                     && !string.Equals(spell.Short.Trim(), wanted, StringComparison.OrdinalIgnoreCase))
                     continue;
                 string name = spell.Name.Trim();
-                if (seen.Add(name) && OwnSpellMatcher(spell) is { } matcher)
-                    list.Add((name, matcher));
+                if (seen.Add(name))
+                    list.AddRange(OwnSpellLines(spell).Select(l => l with { Name = name }));
                 return;
             }
         }
     }
 
-    // One spell's damage-line matcher, cached by spell number since the whole class
-    // list is rebuilt on every refresh. Null when its caster message carries no damage
-    // figure. Cleared on a game-data set swap, which can change the messages.
-    private readonly Dictionary<int, Game.Spells.CasterMessageMatcher?> _ownSpellMatcherCache = new();
+    // One spell's damage-line matchers, cached by spell number since the whole class
+    // list is rebuilt on every refresh. Cleared on a game-data set swap, which can
+    // change the messages.
+    //   * Its caster line, when that carries the damage. Some spells' own record holds
+    //     only the cast emote while the damage line sits on a record of the same name
+    //     (Paradigm dragonfire #288 gestures; #263 carries "A withering blast of
+    //     dragonfire sears {target} for {damage} damage!"), so every same-named damage
+    //     wording counts — only ours follows our own cast.
+    //   * The damage line of each spell it chains to, as a follow-up (necromantic
+    //     bolt's "{target}'s life is drained for {damage} damage!").
+    private readonly Dictionary<int, IReadOnlyList<Game.Spells.SpellLineMatcher>> _ownSpellLineCache = new();
 
-    private Game.Spells.CasterMessageMatcher? OwnSpellMatcher(Game.Spells.KnownSpell spell)
+    private IReadOnlyList<Game.Spells.SpellLineMatcher> OwnSpellLines(Game.Spells.KnownSpell spell)
     {
-        if (_ownSpellMatcherCache.TryGetValue(spell.Number, out Game.Spells.CasterMessageMatcher? cached))
+        if (_ownSpellLineCache.TryGetValue(spell.Number, out IReadOnlyList<Game.Spells.SpellLineMatcher>? cached))
             return cached;
-        string? template = FindSpellMessage(spell.Number, spell.Name)?.CasterMessage;
-        Game.Spells.CasterMessageMatcher? matcher =
-            template is not null && (template.Contains("{d}") || template.Contains("{dmg}") || template.Contains("{damage}"))
-                ? Game.Spells.CasterMessageMatcher.TryCreate(template)
-                : null;
-        _ownSpellMatcherCache[spell.Number] = matcher;
-        return matcher;
+        List<Game.Spells.SpellLineMatcher> lines = new();
+        HashSet<string> templates = new(StringComparer.Ordinal);
+        string? own = FindSpellMessage(spell.Number, spell.Name)?.CasterMessage;
+        if (HasDamageSlot(own)) AddLine(own!, followUp: false);
+        else
+            foreach (Models.GameData.MessageRecord m in Messages.Messages)
+                if (string.Equals(m.Name.Trim(), spell.Name.Trim(), StringComparison.OrdinalIgnoreCase)
+                    && HasDamageSlot(m.CasterMessage))
+                    AddLine(m.CasterMessage, followUp: false);
+        if (SpellFormulaFor(spell.Number) is { } formula)
+            foreach (Game.Spells.SpellAbility ability in formula.Abilities)
+                if (ability.Code == 151 && ability.Value > 0
+                    && FindSpellMessage(ability.Value, string.Empty)?.CasterMessage is { } chained
+                    && HasDamageSlot(chained))
+                    AddLine(chained, followUp: true);
+        _ownSpellLineCache[spell.Number] = lines;
+        return lines;
+
+        void AddLine(string template, bool followUp)
+        {
+            if (templates.Add(template) && Game.Spells.CasterMessageMatcher.TryCreate(template) is { } matcher)
+                lines.Add(new Game.Spells.SpellLineMatcher(spell.Name.Trim(), matcher, followUp));
+        }
     }
+
+    private static bool HasDamageSlot(string? template)
+        => template is not null
+           && (template.Contains("{d}") || template.Contains("{dmg}") || template.Contains("{damage}"));
 
     // Resolve one attack-spell slot name to its caster-message matcher: match
     // the live spellbook by full name (the form a slot stores) or 4-letter

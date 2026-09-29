@@ -1,9 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.122.2**
-> - Session Stats: backstabs keep their own landed / failed rate; Hit / Miss / Crit rates cover regular attacks only
-> - A backstab that misses or loses its sneak counts as a BS miss, not a regular miss
+> **Version 3.122.6**
+> - Sell detours: a shop that just didn't sell an item is retried after 10 minutes instead of being written off for the session; only a refusal or an unreachable shop sticks
+> - Round totals: your room spells credit every monster in the room, and monster HP estimates drop for each
+> - Necromantic bolt's drain counts toward the bolt's own damage in Session Stats, not as a proc
+> - Mage dragonfire and arcane assault damage lines are recognised as your spell (arcane assault's Paradigm seed wording fixed)
+> - The update window lists every version you're skipping, and nothing merged after the release you're downloading
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
