@@ -1,8 +1,11 @@
 # Version history
 
-## 3.125.3
+## 3.125.5
 
 - Settings → Combat: new "Only my totals" option under Show combat round totals prints just your own row each round
+- Round totals list you first, then your party, then monsters, biggest dealer first in each
+- A party member's room spell is credited to them on every monster, not to unknown
+- bug reports addressed: paradigm-20260929-161536
 
 ## 3.125.2
 

@@ -10,8 +10,9 @@ namespace MudPlay.Game.Combat;
 // The program log and bug report get the same numbers as two compact lines:
 //   [Round 3 dealt: You 45, large orc 12, unknown 8]
 //   [Round 3 taken: large orc 75, You 12, unknown 20]
-// Every combatant in the room is listed (zeros included), biggest first; "unknown"
-// last, only when a line named no side. With selfOnly the table carries just our own
+// Every combatant in the room is listed (zeros included): us first, then our party,
+// other players and monsters, biggest dealer first within each; "unknown" last, only
+// when a line named no side. With selfOnly the table carries just our own
 // row. Damage nobody dealt (a poison tick) shows
 // only in its victim's Taken. Every table row is its own full-line
 // "[ … ]" so it stays a client notice (ClientNotice) that no line parser reads a
@@ -26,7 +27,8 @@ public static class RoundTotalsFormatter
     {
         List<(string Name, int Dealt, int Taken)> rows = round.Combatants
             .Where(c => !selfOnly || c.Name == DamageLineAttributor.Self)
-            .OrderByDescending(c => c.Dealt)
+            .OrderBy(c => c.Kind)
+            .ThenByDescending(c => c.Dealt)
             .ThenByDescending(c => c.Taken)
             .Select(c => (c.Name, c.Dealt, c.Taken))
             .ToList();
