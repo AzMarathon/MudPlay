@@ -90,6 +90,8 @@ public static class NavActivity
             return ("Waiting — sneak on cooldown", NavActivityKind.Waiting);
         if (gates.Contains(MovementCoordinator.SneakSettleGate))
             return ("Waiting — sneaking", NavActivityKind.Waiting);
+        if (gates.Contains(MovementCoordinator.SneakCastGate))
+            return ("Waiting — casting before re-sneaking", NavActivityKind.Waiting);
 
         // Brief per-room settle beats while a room reveals a late-arriving hostile.
         // They're a moment in the middle of moving, not a real stop, so they read as

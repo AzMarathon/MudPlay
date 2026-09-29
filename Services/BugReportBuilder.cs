@@ -523,6 +523,10 @@ public static class BugReportBuilder
             Kv(sb, "Sneak keeping — queued", string.Join(" · ", svc.SneakGuard.Queued.Select(q => $"'{q.Command}'")));
         if (svc.Equipment.HeldGearKinds.Count > 0)
             Kv(sb, "Sneak keeping — gear held", string.Join(", ", svc.Equipment.HeldGearKinds));
+        // A cast held on the way stops the walk in the next NPC-free room.
+        Kv(sb, "Sneak keeping — cast held", svc.CastDirector.HasSneakHeldCast
+            ? (svc.Stealth.IsHoldingForCast ? "yes — the step waits here while it goes out" : "yes — stops in the next NPC-free room")
+            : "no");
         if (svc.Health.IsGateFleeing)
             Kv(sb, "Sneak keeping — gate flee", svc.CastDirector.IsEmergencyHealDue
                 ? "emergency heal due; it goes out, the re-sneak waits for it"

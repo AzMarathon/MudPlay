@@ -477,6 +477,44 @@ public sealed class StealthManagerTests
         Assert.True(h.Stealth.ReadyToMoveSneaking());
     }
 
+    // Report paradigm-20260928-165844: a buff sneak keeping held on the way goes out in
+    // the first NPC-free room — the step and the arrival `sn` wait, and the re-sneak
+    // after the cast sends us on.
+    [Fact]
+    public void HeldCast_ClearRoom_HoldsStepUntilTheCastGoesOut()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+        bool castDue = true;
+        h.Stealth.SetHeldCastCheck(() => castDue);
+
+        h.Stealth.NoteRoomChanged();
+        Assert.Empty(h.Sent);                               // arrival sn waits for the cast
+        Assert.False(h.Stealth.ReadyToMoveSneaking());
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCastGate));
+
+        castDue = false;
+        h.Stealth.ReSneakAfterCast();                       // CastFired
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCastGate));
+        Assert.Equal("sn", h.LastSent());
+        h.Feed("Attempting to sneak...");
+        Assert.True(h.Stealth.ReadyToMoveSneaking());
+    }
+
+    [Fact]
+    public void HeldCast_NpcRoom_DoesNotHold()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+        h.Stealth.SetHeldCastCheck(() => true);
+        h.Stealth.SetSneakBlockCheck(() => true);
+
+        Assert.True(h.Stealth.ReadyToMoveSneaking());
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCastGate));
+    }
+
     // Report paradigm-20260927-014032: the answer timer ran out on retry 2 and the loop
     // stepped in seen. Retries keep the route held until the sneak takes (or 15s).
     [Fact]

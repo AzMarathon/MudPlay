@@ -1949,6 +1949,17 @@ public sealed class AppServices
     // idling until the next round. Hooked from MainWindowViewModel.SendUserInput.
     public Game.Combat.OutboundCastObserver OutboundCast { get; private set; } = null!;
 
+    // Any command that ends a sneak (GAME_MECHANICS "What ends a sneak") marks it
+    // broken so the next move re-sneaks — the engine's own sends through the send
+    // gate, and hand-typed lines through SendUserInput (report
+    // paradigm-20260928-163051: a typed `sea` left the client believing it still
+    // sneaked, so sneak keeping held every buff for a quarter of an hour).
+    public void NoteSentForSneak(string command)
+    {
+        if (Game.Stealth.SneakBreakingCommands.EndsSneak(command, shadowRest: CharacterHasShadowRest()))
+            Stealth.NoteSneakBroken($"'{command.Trim()}'");
+    }
+
     // Sniffs a hand-typed PHYSICAL attack verb so Combat treats it as a user override
     // (holds the auto attack until next round). Hooked from SendUserInput.
     public Game.Combat.OutboundAttackObserver OutboundAttack { get; private set; } = null!;
@@ -3826,6 +3837,15 @@ public sealed class AppServices
         // switch waits out the short real-time window a kill's exp / *Combat Off* packet
         // needs to land + drop the target, instead of corpse-casting the alternate at a
         // mob the capping cast just killed. Same one-shot shape as the settle scheduler.
+        // Attack-order re-fire quiet window: a UI-thread one-shot so attack-last /
+        // attack-after re-fire once the party's staggered announces have gone quiet.
+        Combat.SetRefireSettleScheduler((delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+        });
+
         Combat.SetSwitchDispatchScheduler((delay, callback) =>
         {
             var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
@@ -3929,7 +3949,9 @@ public sealed class AppServices
         // vanishes from a same-room re-parse (with no departure line) is a kill we
         // never engaged — start its timer. The room comes from the live tracker.
         RoomClassifier.EntitiesObserved += obs =>
-            BossTimers.OnRoomEntitiesObserved(obs, RoomTracker.State.CurrentRoom?.Key);
+            BossTimers.OnRoomEntitiesObserved(obs, RoomTracker.State.CurrentRoom?.Key,
+                RoomTracker.State.CurrentRoom?.Name,
+                movePending: RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending);
 
         // Leader-rest nudge: a standing-idle follower's own PlayerState may
         // not change between the 5s par polls that flip the leader's
@@ -4448,6 +4470,7 @@ public sealed class AppServices
         // self-gates on auto-sneak being on, being out of combat, and no NPC present,
         // so this no-ops for a non-stealth character or an in-combat cast.
         CastDirector.CastFired += () => Stealth.ReSneakAfterCast();
+        Combat.SetCastBeforeBackstabReannounce(() => CastDirector.Evaluate() is not null);
         // Same resume, but for a HAND-typed cast: a manual cast-code never
         // routes through CastDirector, so sniff the wire for one and arm the
         // identical signal. A cast-code is any Spells.Short in the active
@@ -4457,7 +4480,13 @@ public sealed class AppServices
             // A hand-typed cast feeds BOTH the combat resume signal and the buff-recast
             // clock: NoteManualBuffCast arms the timer (by cast code) for a hand-cast buff
             // so the Buff Watchdog + recast engine track it the same as an engine cast.
-            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c, target); });
+            // A hand cast ends a sneak like an engine one, so it re-sneaks the same way.
+            onManualCast: (c, target) =>
+            {
+                Combat.OnManualCastObserved(c, target);
+                CastDirector.NoteManualBuffCast(c, target);
+                Stealth.ReSneakAfterCast();
+            });
         // Classify a hand-typed cast: a combat spell (round energy 1–1000) is the user
         // taking the round's attack — a user override — while an in-between spell (heal
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
@@ -4493,16 +4522,14 @@ public sealed class AppServices
         // `hide` per AutoMode toggles.
         Stealth = new Game.Stealth.StealthManager(Router, PlayerState, Log);
         Stealth.SetSneakHoldForHeal(() => Health.IsGateFleeing && CastDirector.IsEmergencyHealDue);
+        // A cast sneak keeping held on the way stops the walk in the next NPC-free room.
+        Stealth.SetHeldCastCheck(() => CastDirector.HasSneakHeldCast);
         // Sneak keeping at the engine send gate: a command that can wait (an invite, a
         // say) is held while SneakGuard keeps the sneak, and any sent command that ends
         // a sneak marks it broken so the next move re-sneaks.
         EngineGate.SetSneakHooks(
             takeForLater: cmd => Game.Stealth.SneakBreakingCommands.CanWait(cmd) && SneakGuard.TakeIfHeld(cmd),
-            sent: cmd =>
-            {
-                if (Game.Stealth.SneakBreakingCommands.EndsSneak(cmd, shadowRest: CharacterHasShadowRest()))
-                    Stealth.NoteSneakBroken($"'{cmd}'");
-            });
+            sent: NoteSentForSneak);
         Stealth.SetAutoToggles(
             isAutoSneakEnabled: () => ReadAutoModeFlag(d => d.AutoSneak),
             isAutoHideEnabled:  () => ReadAutoModeFlag(d => d.AutoHide));
@@ -7077,6 +7104,10 @@ public sealed class AppServices
             // Party follower = in a party and not the leader; gates the opt-in
             // follower pass-through stash (Cash → "stash as follower").
             isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader);
+        // Settings → Other "Only auto-invite while navigation is running": a walk,
+        // loop or auto-lair (running or paused), or an auto-deposit / train trip.
+        AutoParty.SetNavigationProbe(() =>
+            MovementControl.IsActive || AutoDeposit.IsRerouting || TrainerWalk.IsBusy || TrainFunding.IsBusy);
         // Return-leg light provisioning: the reroute owns the walker end-to-end, so
         // the reactive shop router is suppressed (IsRerouting) — this manager runs
         // its own bank -> shop -> origin light detour and needs the `i` dump to
@@ -10676,6 +10707,7 @@ public sealed class AppServices
         ComebackRequest.Enabled = dto.AutoRequestComebackWhenLeftBehind;
         // Auto-discard offload verb: hide <item> vs drop <item>.
         AutoDiscard.HideMode = dto.HideWhenDiscarding;
+        AutoParty.OnlyWhileNavigating = dto.AutoInviteOnlyWhileNavigating;
     }
 
     private void ResetOtherToDefaults()
@@ -10686,6 +10718,7 @@ public sealed class AppServices
         PartyComeback.MaxBacktrackRooms = defaults.MaxComebackBacktrackRooms;
         ComebackRequest.Enabled = defaults.AutoRequestComebackWhenLeftBehind;
         AutoDiscard.HideMode = defaults.HideWhenDiscarding;
+        AutoParty.OnlyWhileNavigating = defaults.AutoInviteOnlyWhileNavigating;
     }
 
     // Push the loaded character's

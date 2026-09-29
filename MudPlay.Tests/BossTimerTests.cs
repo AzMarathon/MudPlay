@@ -331,11 +331,47 @@ public sealed class BossTimerTests : IDisposable
         var (_, timers, _) = NewStores();
         RoomKey room = new(1, 1678);
 
-        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "giant spider"), room);
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "giant spider"), room, "Spider Lair");
         Assert.Null(timers.KilledAt("giant spider"));   // still present, not yet a kill
 
-        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), room);
-        Assert.NotNull(timers.KilledAt("giant spider"));   // vanished on re-parse → killed
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), room, "Spider Lair");
+        Assert.Null(timers.KilledAt("giant spider"));   // held until the display names the room
+        timers.OnRoomDisplayed("Spider Lair");
+        Assert.NotNull(timers.KilledAt("giant spider"));   // same room re-shown without it → killed
+    }
+
+    // Report paradigm-20260928-163621: "Also here:" arrives before "Obvious exits:", so
+    // a room command out of the boss's room (`go manhole`) had the next room's roster
+    // read against the boss's room while the tracker still held it.
+    [Fact]
+    public void RosterFallback_NextRoomsRoster_DoesNotMark()
+    {
+        SeedGameData(RealmType.ParaMud, ("mayor godfrey", 784, 2, 1));
+        SeedBosses(Boss("mayor godfrey", number: 784, rooms: "1/2"));
+        var (_, timers, _) = NewStores();
+        RoomKey square = new(1, 2);
+
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "Mayor Godfrey"), square, "Town Square");
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "large giant rat"), square, "Town Square");
+        timers.OnRoomDisplayed("Sewer Tunnel, Junction");
+
+        Assert.Null(timers.KilledAt("mayor godfrey"));
+    }
+
+    [Fact]
+    public void RosterFallback_MoveInFlight_DoesNotMark()
+    {
+        SeedGameData(RealmType.ParaMud, ("giant spider", 52, 5, 1));
+        SeedBosses(Boss("giant spider", number: 52, rooms: "1/1678"));
+        var (_, timers, _) = NewStores();
+        RoomKey room = new(1, 1678);
+
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "giant spider"), room, "Spider Lair");
+        // A same-named neighbour's roster while our step is still landing.
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), room, "Spider Lair", movePending: true);
+        timers.OnRoomDisplayed("Spider Lair");
+
+        Assert.Null(timers.KilledAt("giant spider"));
     }
 
     [Fact]

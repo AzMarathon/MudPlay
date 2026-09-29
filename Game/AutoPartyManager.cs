@@ -161,6 +161,13 @@ public sealed class AutoPartyManager : IDisposable
     // loop engine exist, so they're injected here once available. isLooping
     // reports whether a loop circuit is currently active — the wait only
     // engages while looping.
+    // Settings → Other: auto-invite a seen player only while navigation is running.
+    public bool OnlyWhileNavigating { get; set; }
+    private Func<bool>? _isNavigating;
+
+    // What "navigation is running" means for OnlyWhileNavigating — wired in AppServices.
+    public void SetNavigationProbe(Func<bool> isNavigating) => _isNavigating = isNavigating;
+
     public void SetMovementGate(MovementCoordinator coordinator, Func<bool> isLooping)
     {
         _coordinator = coordinator;
@@ -558,6 +565,8 @@ public sealed class AutoPartyManager : IDisposable
 
         if (!FindCustomization(given, out PlayerCustomization c)) return;
         if (!c.InviteToPartyIfSeen) return;
+        // Settings → Other "Only auto-invite while navigation is running".
+        if (OnlyWhileNavigating && _isNavigating?.Invoke() != true) return;
 
         // Uninvite suppression — if we just kicked this player, don't
         // re-add them. Lazy expiry on read so the map self-prunes.

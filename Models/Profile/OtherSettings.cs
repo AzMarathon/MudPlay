@@ -100,6 +100,13 @@ public sealed class OtherSettings
     // worse outcome. Char-tier setting; surfaced in Settings → Other.
     public bool AutoRequestComebackWhenLeftBehind { get; set; } = true;
 
+    // When true, a player flagged "invite to party if seen" is auto-invited only while
+    // navigation is running — a walk, loop or auto-lair (running or paused), or an
+    // auto-deposit / train trip — not while standing idle. Default false (invite
+    // whenever seen). Char-tier; Settings → Other. Pushed into
+    // Game.AutoPartyManager.OnlyWhileNavigating.
+    public bool AutoInviteOnlyWhileNavigating { get; set; }
+
     // When true (default) a look at a monster surfaces its estimated remaining
     // hit points — both in the status-bar "TGT HP:" slot and as a yellow line in
     // the terminal scrollback. Off suppresses both. Char-tier; Settings → Other.

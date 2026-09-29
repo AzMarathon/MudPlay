@@ -1546,6 +1546,7 @@ public sealed class CastingDirector : IDisposable
         // heal through; StealthManager holds its re-sneak until the heal has gone out.
         bool deferSneakMaintenance = _deferMaintenanceWhileStealthed?.Invoke() == true;
         bool emergencyHealBypass = _emergencyHealBypass?.Invoke() == true;
+        HasSneakHeldCast = false;
 
         foreach (SpellCategory category in PrioritisedCategories(spells))
         {
@@ -1581,6 +1582,9 @@ public sealed class CastingDirector : IDisposable
             {
                 _log?.Combat(LogCategory,
                     $"sneak kept: {cand.Spell} ({category}) held — the backstab is still owed, our sneaked move is landing, or we're sneaking past hostiles.");
+                // Only one we could pay for stops the walk in the next clear room.
+                if (!(_manaCostLookup?.Invoke(cand.Spell) is { } heldCost && _state.Ma < heldCost))
+                    HasSneakHeldCast = true;
                 continue;
             }
 
@@ -1825,6 +1829,11 @@ public sealed class CastingDirector : IDisposable
     // ----- Self heal --------------------------------------------------
 
     // True when the emergency self-heal's trigger is met (and heals are on).
+    // True when the last decision pass held a due cast (not a debuff) only because the
+    // sneak was being kept. StealthManager stops the walk for it in the next NPC-free
+    // room, where the cast can go out and we re-sneak.
+    public bool HasSneakHeldCast { get; private set; }
+
     public bool IsEmergencyHealDue =>
         _isEnabled() && PickEmergencySelfHeal(_readSpells(), _readHealth()) is not null;
 

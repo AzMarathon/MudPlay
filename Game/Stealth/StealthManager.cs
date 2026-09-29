@@ -117,7 +117,12 @@ public sealed class StealthManager : IDisposable
     public bool ReadyToMoveSneaking()
     {
         if (_isAutoSneakEnabled?.Invoke() != true || _coordinator is null) return true;
-        if (_settleHold || _cooldownHoldSince is not null) return false;
+        if (_settleHold || _cooldownHoldSince is not null || _castHold) return false;
+        if (CastWantsThisRoom())
+        {
+            BeginCastHold();
+            return false;
+        }
         if (IsStealthed || _stateValue == StealthState.AttemptingSneak) return true;
         if (_moveUnsneakedOnce) { _moveUnsneakedOnce = false; return true; }
         if (_state.InCombat || _isSneakBlockedByRoom?.Invoke() == true) return true;
@@ -147,11 +152,65 @@ public sealed class StealthManager : IDisposable
         _settleTimer.Start();
     }
 
-    // Reset States: release the sn-answer and combat-cooldown movement holds.
+    // Reset States: release the sn-answer, combat-cooldown and held-cast movement holds.
     public void ReleaseMovementHolds(string why)
     {
         ReleaseSettleHold(why);
         ReleaseCooldownHold(why);
+        ReleaseCastHold(why);
+    }
+
+    // A buff / heal / cure that sneak keeping held while we moved (the sneaked step is
+    // always landing, so it never finds a gap) goes out in the first NPC-free room:
+    // the step waits for it, the arrival `sn` waits too, and the re-sneak after the
+    // cast (ReSneakAfterCast) sends us on (report paradigm-20260928-165844). Capped:
+    // a cast that doesn't go out in time is given up for this room.
+    private static readonly TimeSpan CastHoldCap = TimeSpan.FromSeconds(7);
+    private Func<bool>? _castDue;
+    private bool _castHold;
+    private bool _castHoldSpentThisRoom;
+    private DateTimeOffset _castHoldSince;
+    private Avalonia.Threading.DispatcherTimer? _castHoldTimer;
+
+    public void SetHeldCastCheck(Func<bool> castDue) => _castDue = castDue;
+
+    public bool IsHoldingForCast => _castHold;
+
+    private bool CastWantsThisRoom() =>
+        !_castHoldSpentThisRoom
+        && !_state.InCombat
+        && _isSneakBlockedByRoom?.Invoke() != true
+        && _castDue?.Invoke() == true;
+
+    private void BeginCastHold()
+    {
+        if (_coordinator is null || _castHold) return;
+        _castHold = true;
+        _castHoldSince = NowProvider();
+        _coordinator.AssertGate(MovementCoordinator.SneakCastGate, nameof(StealthManager),
+            "a held buff goes out in this NPC-free room before we re-sneak");
+        _castHoldTimer?.Stop();
+        _castHoldTimer = new Avalonia.Threading.DispatcherTimer(TimeSpan.FromSeconds(1),
+            Avalonia.Threading.DispatcherPriority.Background, (_, _) =>
+            {
+                if (_castDue?.Invoke() != true)
+                    ReleaseCastHold("nothing left to cast here");
+                else if (NowProvider() - _castHoldSince >= CastHoldCap)
+                {
+                    _castHoldSpentThisRoom = true;
+                    ReleaseCastHold($"the cast didn't go out in {CastHoldCap.TotalSeconds:0}s — moving on");
+                }
+            });
+        _castHoldTimer.Start();
+    }
+
+    private void ReleaseCastHold(string why)
+    {
+        _castHoldTimer?.Stop();
+        _castHoldTimer = null;
+        if (!_castHold) return;
+        _castHold = false;
+        _coordinator?.ClearGate(MovementCoordinator.SneakCastGate, nameof(StealthManager), why);
     }
 
     private void ReleaseSettleHold(string why)
@@ -280,6 +339,8 @@ public sealed class StealthManager : IDisposable
         // We moved anyway (a manual step, a flee) — the hold was for the room we left.
         ReleaseCooldownHold("moved");
         ReleaseSettleHold("moved");
+        ReleaseCastHold("moved");
+        _castHoldSpentThisRoom = false;
 
         // Moving breaks hide — you can't move while hidden, so a confirmed room
         // change means any optimistic hidden state is gone. Cleared before the
@@ -373,6 +434,7 @@ public sealed class StealthManager : IDisposable
     // no NPC present) decide whether the `sn` actually goes out.
     public void ReSneakAfterCast()
     {
+        ReleaseCastHold("the held cast went out");
         if (_isAutoSneakEnabled?.Invoke() != true) return;
         if (_state.InCombat) return;
         if (_stateValue == StealthState.Sneaking)
@@ -456,6 +518,13 @@ public sealed class StealthManager : IDisposable
         }
         _heldForHealLogged = false;
         if (_stateValue != StealthState.Idle && _stateValue != StealthState.Failed) return false;
+        // A held buff is about to go out here, and it would end the sneak straight
+        // away — the re-sneak after it does the job.
+        if (reason != "pre-move" && (_castHold || CastWantsThisRoom()))
+        {
+            _log?.Info(LogCategory, $"auto-sneak waits ({reason}): a held buff goes out first");
+            return false;
+        }
 
         // Any NPC in the room prevents sneak from taking — don't burn an
         // `sn` the server will reject. The move (if engine-driven)
