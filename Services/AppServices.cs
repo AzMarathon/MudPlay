@@ -3581,6 +3581,24 @@ public sealed class AppServices
         // damage line or *Combat Off*. Both are app-lifetime singletons, so no
         // unsubscribe is needed.
         Tick.CombatTickElapsed += RoundDamage.OnCombatTick;
+        // The ledger names combatants from the room roster, the party and ourselves.
+        RoomClassifier.EntitiesObserved += RoundDamage.NoteRoomEntities;
+        // Wire Inspector → Classified shows how the ledger read each damage line.
+        RoundDamage.LineAttributed += CombatClassifier.NoteLedger;
+        RoundDamage.SetNameSources(
+            partyNames: () => PartyState.Members.Select(m => m.Name),
+            selfName: () => Party.LocalCharacterName ?? Profile.Current?.Name);
+        // Settings → Combat "Show combat round totals": print each round's ledger
+        // (read per round, so the checkbox applies at once). A round of misses only
+        // has nothing to show.
+        RoundDamage.RoundComplete += round =>
+        {
+            if (round.Combatants.Count == 0 && round.UnknownDealt == 0 && round.UnknownTaken == 0) return;
+            if (!ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat").ShowCombatRoundTotals) return;
+            (string dealt, string taken) = Game.Combat.RoundTotalsFormatter.Format(round);
+            WriteTerminalNotice(dealt);
+            WriteTerminalNotice(taken);
+        };
         // Reset round counter + ring on BBS connect to match
         // CombatSessionTracker's session-boundary convention — the
         // reset hook lives here on the data producer.
@@ -4068,6 +4086,7 @@ public sealed class AppServices
         // TickEngine.CombatTickElapsed so the next round can cast.
         Cast = new Game.Spells.CastCoordinator(Router, Log);
         Tick.CombatTickElapsed += Cast.OnCombatTick;
+        Cast.CastSent += _ => RoundDamage.NoteOwnCast();
 
         // ConditionTracker reads MessageStore +
         // line-side patterns to surface ActiveFlags. CastingDirector
@@ -4507,6 +4526,7 @@ public sealed class AppServices
             // A hand cast ends a sneak like an engine one, so it re-sneaks the same way.
             onManualCast: (c, target) =>
             {
+                RoundDamage.NoteOwnCast();
                 Combat.OnManualCastObserved(c, target);
                 CastDirector.NoteManualBuffCast(c, target);
                 Stealth.ReSneakAfterCast();
@@ -4866,6 +4886,7 @@ public sealed class AppServices
         // weapon swap (Inventory.Changed).
         CombatSession = new Game.Combat.CombatSessionTracker(
             Router, RoundDamage, AttackSpellMatchers, EquippedWeaponProcMatcher);
+        RoundDamage.SetOwnSpellLineCheck(CombatSession.MatchesOwnSpellOrProc);
         Profile.ProfileLoaded  += _ => { CombatSession.Reset(); CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
         Profile.ProfileMutated += _ => { CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
         GameData.ActiveSetChanged += _ => { _procWeaponName = null; CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };

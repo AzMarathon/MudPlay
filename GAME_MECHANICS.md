@@ -1432,6 +1432,28 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
 - **Fix (v3.50.10).** `TickEngine` flags whether the tick in flight is damage-line-driven (`LastCombatTickWasDamageDriven`); on such a tick `CastingDirector` held the non-heal survival categories (cure / buff / debuff) so the round's slot isn't spent on unconfirmed HP. (That fix left heals eligible as "safe on the stale read"; superseded 2026-09-28 — see the next bullet.)
 - **Burst-settle hold (v3.118.7, report `paradigm-20260928-131549`).** Heals were not safe on a partial read: the tick picked `gdhe` at a partial 236 (54%), spending the round's one slot, and the burst ended at 72 (17%) with the Emergency heal (`mgra`, < 50%) locked out for a round; a reactive pass at a partial 362 also fired `grhe` and a second tick re-fired it (`You have already cast a spell this round!`). `CastingDirector` now stamps a burst on a damage-line tick and on every HP drop, and holds **every** between-round cast until HP has been quiet for `BurstSettleWindow` (400 ms), then a scheduled settled pass picks on the final HP. The one exception: an **Emergency heal already due** on the partial read fires at once (HP only falls inside a burst, so that tier can't turn out wrong) — unless a due cast the user ranked above it exists, which then waits for the settled pass. The timer-fallback tick and out-of-combat heartbeat are HP-fresh, so they're unaffected.
 
+### Damage lines — who hit whom
+*Status: [OBSERVED] 2026-09-28 (Stock 1.11p `wccmmud.dll` strings and the `wccmsg2` message table) · Realm: Stock — Paradigm not recorded*
+
+- **Every damage line ends `for N damage!`, but nothing else about its shape is fixed.** The rest is the engine's own melee wording, a monster attack's own verb phrase, or a spell's message.
+- **The engine's melee lines** (hardcoded in the DLL):
+  - `You %s %s for %d damage!` — your hit;
+  - `%s %s you for %d damage!` — a hit on you;
+  - `%s %s %s for %s damage!` — what everyone else in the room sees, including a party member's hit;
+  - `critically %s` is prefixed to the verb on a critical.
+- **Each monster attack and each spell carries its own three lines** in the message table: line 1 to the attacker / caster, line 2 to the victim, line 3 to the room.
+  - Monster attack phrases run to several words: `The %s claws you with its pincers for %d damage!`, `The %s bites your ankle for %d damage!`.
+- **Many spells show the caster the same text the room sees.** E.g. message 139: line 1 `Dark flame sears %s for %d damage!` and line 3 `Dark flame sears %s for %s damage!`.
+  - So such a line doesn't say who cast it: yours reads exactly like a party member's.
+  - Line 2 to the victim names no caster either (`Dark flame sears you for %d damage!`).
+- **A victim can be named first:** `%s is scorched for %d damage!`, `%s's life is drained for %d damage!`.
+- **Damage to you with no attacker named:** `You are poisoned for %d damage!`, `You combust for %d damage!`, `Your blood is drained for %d damage!`. The only `Your ... is` damage lines are blood / life / soul drains; every other `Your ...` damage line is your weapon or spell hitting something.
+- **Area effects name no one:** `An earthquake rocks the room for %d damage!`.
+
+**Client use:**
+- `DamageLineAttributor` names each side by matching the room roster, the party and "you" inside the line, not by grammar. `RoundDamageTracker` keeps the per-round ledger; a caster's-eye spell line counts as ours only when it matches our configured attack spell or weapon proc and we cast within the last few seconds.
+- The ledger feeds Settings → Combat "Show combat round totals" (issue #245), Session Stats' per-round damage, the Wire Inspector's Classified `[Ledger: …]` tags and the bug report.
+
 ### Kill detection and monster-kill message order
 *Status: CONFIRMED 2026-07-23 (bug-report captures); exp-line and AoE rules CONFIRMED 2026-08-15 (user); fight-over rule CONFIRMED 2026-09-08 (user)*
 

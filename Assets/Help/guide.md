@@ -1742,7 +1742,7 @@ Backscroll is a **snapshot taken when you open it**, not a live tail — to pick
 
 Open **Session Stats** from the **View** menu or its toolbar button (it has no default hotkey — you can assign one on Settings → Shortcuts). It tracks this session's performance in a stack of panels: **Kills/hour** and **Exp/hour** graphs, an **HP/MA per loop step** chart, and **Player Statistics**, **Time Analysis**, and **Session Statistics** tables (kills, experience, currency, and time spent moving, resting, and fighting). While a loop is running, the **Session Statistics** panel also shows a **Loop laps** readout — one lap is a full completion of the circuit — with the laps completed, last and average lap time, the live current-lap timer, and the room each lap starts at.
 
-The **Player Statistics** panel breaks combat down by swing type (hit / miss / crit / backstab), per-round damage, weapon procs, and — when you fight with **attack spells** — one row **per spell**, showing its damage range, cast count, and accuracy. Spell casts are tracked apart from weapon swings: a cast's flavor line ("You scatter some ashes…!") is no longer miscounted as a swing miss, so a spell caster's miss rate reflects real resists (usually near zero on Paradigm, where most combat spells don't fail to land) rather than one phantom miss per cast.
+The **Player Statistics** panel breaks combat down by swing type (hit / miss / crit / backstab), per-round damage, weapon procs, and — when you fight with **attack spells** — one row **per spell**, showing its damage range, cast count, and accuracy. Spell casts are tracked apart from weapon swings: a cast's flavor line ("You scatter some ashes…!") is no longer miscounted as a swing miss, so a spell caster's miss rate reflects real resists (usually near zero on Paradigm, where most combat spells don't fail to land) rather than one phantom miss per cast. **Per-round damage** is only what *you* dealt: party members' hits and monster spells landing on you aren't counted in it (the round ledger behind *Show combat round totals* sorts them out).
 
 - **Right-click** the panel area to show or hide individual panels, and **drag a panel by its title** to reorder them — your layout is saved per character.
 - **Reset session** zeroes every counter and restarts the clocks; individual panels have their own **Reset** too. (These don't ask for confirmation.)
@@ -1881,7 +1881,7 @@ Press **F5** to open the **Wire Inspector** — a troubleshooting view of the da
 
 - **Raw** — control codes made visible (e.g. `^[` for escape).
 - **Stripped** — the same stream with the ANSI escape sequences removed.
-- **Classified** — each combat-window line tagged with how the combat engine read it (e.g. `[Combat: Monster Miss (you)]`, `[Combat: You Hit]`, `[Combat: Armor Block (you)]`). It also marks each **recognized monster death** with `[Monster Death: <name>]`, and an exp-inferred death whose message *wasn't* recognized as `[Monster Death: inferred from exp — message not recognized]`, so an unrecognized death line stands out.
+- **Classified** — each combat-window line tagged with how the combat engine read it (e.g. `[Combat: Monster Miss (you)]`, `[Combat: You Hit]`, `[Combat: Armor Block (you)]`). Every **damage** line also shows how the round ledger credited it: `[Ledger: Bob → large orc 9]` (who dealt it → who took it, and how much), `unknown` for a side the line doesn't name, and `not counted (no round)` for a line that fell outside a combat round. A party member's fight shows here too, even when you aren't in combat yourself. See *Show combat round totals* under Settings → Combat. It also marks each **recognized monster death** with `[Monster Death: <name>]`, and an exp-inferred death whose message *wasn't* recognized as `[Monster Death: inferred from exp — message not recognized]`, so an unrecognized death line stands out.
 
 **Raw and Classified are on by default** (Stripped off); unchecking a pane collapses its column so the others fill, and your choice sticks. It shows inbound server output only, and keeps the most recent 64 KB.
 
@@ -1917,7 +1917,7 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 
 **Before you start changing things — a few things worth knowing:**
 - Nearly every setting documented here takes effect **live**, with no restart or reconnect required — this guide calls out the exceptions explicitly (e.g. terminal scrollback size, a handful of BBS-connection fields that only apply on the *next* connect).
-- A handful of controls exist in the UI but currently **do nothing** — they're either genuine stubs (the whole Sounds tab) or fields that were built but never wired into the automation engines (Combat's *Polite mode* and *Show combat round totals*). This guide flags every one of them explicitly rather than describing invented behavior.
+- A handful of controls exist in the UI but currently **do nothing** — they're either genuine stubs (the whole Sounds tab) or fields that were built but never wired into the automation engines (Combat's *Polite mode*). This guide flags every one of them explicitly rather than describing invented behavior.
 - Many settings only matter once a corresponding **master switch** is on. For example, the entire Auto-Light tab only matters once the Auto-Light engine itself is enabled (Settings → General, or its toolbar toggle); Combat/Spells/Health settings only matter while Auto-Combat is on.
 
 ## Local control API
@@ -2723,11 +2723,24 @@ The override applies to the monster record **placed or summoned in your current 
 
 At **0 mana** a mana-costing action can't land (the server silently ignores it), so the engine falls back to your physical weapon and resumes casting once mana recovers.
 
-### Show combat round totals ⚠️ Not currently functional
+### Show combat round totals
 
 **Default:** Off
-**What it's intended to do:** Append a running total of damage dealt to the terminal after each combat round.
-**Important notes:** Like Polite mode above, this control is fully editable but **not consumed anywhere in the automation engine** — turning it on currently has no visible effect.
+**What it does:** After each combat round, prints two yellow lines to the terminal: who **dealt** damage that round and who **took** it, for **everyone in the room** — you, party members, other players and monsters:
+
+```
+[Round 3 dealt: You 45 · Bob 30 · large orc 12 · unknown 8]
+[Round 3 taken: large orc 75 · You 12 · unknown 20]
+```
+
+The round number counts from 1 in each fight. Biggest numbers come first; anyone who did or took nothing that round is left out, and a round of nothing but misses prints nothing.
+
+**Important notes:**
+- **How damage is credited.** Each "… for N damage!" line is read against the room's occupants (from *Also here:*), your party and "you". "Bob slashes large orc for 30" credits Bob, and "The large orc claws you with its pincers for 12" is damage you took from the orc.
+- **unknown** collects damage a line doesn't name a side for. Examples: a spell whose line names no caster ("Acid sears you"), an area effect ("An earthquake rocks the room"), a poison tick, or someone the room display hasn't shown yet.
+- **Your own attack spells.** Many spell lines read the same to the caster as to everyone watching ("Dark flame sears the orc for 12 damage!"). Such a line counts as **yours** when it's one of your configured attack spells (or your weapon's proc) and you cast within the last few seconds. Otherwise its dealer is unknown. If a party member casts the same spell in the same round, theirs counts as yours too.
+- **Two monsters with the same name** share one entry, because the game prints them identically.
+- **Where else it shows up.** The same ledger feeds Session Stats' per-round damage (your row only), the program log (`[Round]` rows) and the bug report (last 10 rounds). The Wire Inspector's **Classified** pane shows how each damage line was credited.
 
 ---
 
@@ -3853,7 +3866,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Multi-attack / AOE debuff / single debuff / normal / alternate attack spell | unset | spell code + MinEnemies(0-20) + MaxCastsPerRoom(null/0-100) + MinManaPerCast | `MultiAttackSpell`, `AreaDebuffSpell`, `SingleTargetDebuffSpell`, `NormalAttackSpell`, `AlternateAttackSpell` | Models/Profile/CombatSettings.cs |
 | Multi-attack 2 (enable + slot) | off, unset | bool + spell code + MaxCastsPerRoom(null/0-100) + MinManaPerCast (MinEnemies shared with slot 1) | `MultiAttack2Enabled`, `MultiAttack2Spell` | Models/Profile/CombatSettings.cs |
 | Drain (life-steal) spell + HP trigger + Drains override AOE | unset / 50% / off | spell code + MaxCastsPerRoom + MinManaPerCast; DrainHpTrigger(0-100); DrainsOverrideAoe(bool) | `DrainSpell`, `DrainHpTrigger`, `DrainsOverrideAoe` | Models/Profile/CombatSettings.cs |
-| Show combat round totals ⚠️ unwired | `false` | bool | `ShowCombatRoundTotals` | Models/Profile/CombatSettings.cs |
+| Show combat round totals | `false` | bool | `ShowCombatRoundTotals` | Models/Profile/CombatSettings.cs |
 
 ### Spells / Health
 
@@ -3953,7 +3966,7 @@ The following were traced and confirmed to have **no** exposed setting — liste
 
 ---
 
-*This guide reflects the MudPlay source as of the `main` branch. Two settings in the Combat tab (Polite mode, Show combat round totals) and the entire Sounds tab are present in the UI but not currently wired to any runtime behavior — see their entries above for details. If a setting here stops matching what you see in the app, the code is the source of truth; please report the discrepancy.*
+*This guide reflects the MudPlay source as of the `main` branch. One setting in the Combat tab (Polite mode) and the entire Sounds tab are present in the UI but not currently wired to any runtime behavior — see their entries above for details. If a setting here stops matching what you see in the app, the code is the source of truth; please report the discrepancy.*
 
 ---
 

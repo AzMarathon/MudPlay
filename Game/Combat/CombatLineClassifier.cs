@@ -29,10 +29,19 @@ public sealed class CombatLineClassifier : IDisposable
     // Recent combat-window lines + how each was classified, for the Wire Inspector's
     // classified view and the bug-report capture. Only lines inside a combat window
     // (plus the *Combat Engaged*/*Combat Off* markers) are kept, so the log is a
-    // focused combat trace rather than the whole terminal stream. Bounded ring.
+    // focused combat trace rather than the whole terminal stream — except a damage
+    // line the round ledger read, which is kept wherever it falls. Bounded ring.
     private const int LogCap = 1000;
     private readonly object _logLock = new();
-    private readonly Queue<ClassifiedLine> _log = new();
+    private readonly LinkedList<ClassifiedLine> _log = new();
+
+    // The round ledger's reading of a damage line reaches NoteLedger from a separate
+    // LineDispatched handler, before or after OnLine sees the same line. The last
+    // line OnLine saw (and whether it kept it) lets a late tag find its entry; an
+    // early tag waits here for OnLine.
+    private string? _lastSeenText;
+    private bool _lastSeenRecorded;
+    private (string Text, string Tag)? _pendingLedger;
 
     // The most recent line's classification (None for non-combat / out-of-window
     // lines). The Wire Inspector reads this per dispatched line.
@@ -57,11 +66,13 @@ public sealed class CombatLineClassifier : IDisposable
             _inCombatWindow = true;
             LastKind = CombatLineKind.None;
             Record(line.Text, CombatLineKind.None);
+            Seen(line.Text, recorded: true);
             return;
         }
         if (line.Text.StartsWith("*Combat Off*", StringComparison.Ordinal))
         {
             Record(line.Text, CombatLineKind.None);   // record before closing the window
+            Seen(line.Text, recorded: true);
             _inCombatWindow = false;
             LastKind = CombatLineKind.None;
             return;
@@ -70,8 +81,10 @@ public sealed class CombatLineClassifier : IDisposable
         (TerminalColor fg, bool bold) = DominantForeground(line);
         CombatLineKind kind = Classify(line.Text, fg, bold, _inCombatWindow);
         LastKind = kind;
-        if (_inCombatWindow)
-            Record(line.Text, kind);
+        string? ledger = TakePendingLedger(line.Text);
+        bool recorded = _inCombatWindow || ledger is not null;
+        if (recorded) Record(line.Text, kind, ledger);
+        Seen(line.Text, recorded);
         if (kind != CombatLineKind.None)
             LineClassified?.Invoke(line, kind);
     }
@@ -161,13 +174,48 @@ public sealed class CombatLineClassifier : IDisposable
         return (TerminalColor.Default, false);
     }
 
-    private void Record(string text, CombatLineKind kind)
+    private void Record(string text, CombatLineKind kind, string? ledger = null)
     {
         lock (_logLock)
         {
-            _log.Enqueue(new ClassifiedLine(text, kind));
-            while (_log.Count > LogCap) _log.Dequeue();
+            _log.AddLast(new ClassifiedLine(text, kind, ledger));
+            while (_log.Count > LogCap) _log.RemoveFirst();
         }
+    }
+
+    private void Seen(string text, bool recorded)
+    {
+        _lastSeenText = text;
+        _lastSeenRecorded = recorded;
+    }
+
+    private string? TakePendingLedger(string text)
+    {
+        if (_pendingLedger is not { } p || p.Text != text) return null;
+        _pendingLedger = null;
+        return p.Tag;
+    }
+
+    // The round ledger read text as tag. Attach it to that line's entry — recording
+    // the line if OnLine skipped it outside a combat window — or hold it for OnLine
+    // when the ledger saw the line first.
+    public void NoteLedger(string text, string tag)
+    {
+        if (_lastSeenText != text)
+        {
+            _pendingLedger = (text, tag);
+            return;
+        }
+        lock (_logLock)
+        {
+            if (_lastSeenRecorded && _log.Last is { } last && last.Value.Text == text)
+            {
+                last.Value = last.Value with { Ledger = tag };
+                return;
+            }
+        }
+        Record(text, CombatLineKind.None, tag);
+        _lastSeenRecorded = true;
     }
 
     // The most recent up-to-`max` combat-window lines with their classification.
@@ -181,7 +229,8 @@ public sealed class CombatLineClassifier : IDisposable
     }
 
     // Render the classified log as text: each line, with a "[Combat: <label>]" tag
-    // appended to the lines that classified. Shared by the Wire Inspector's
+    // appended to the lines that classified and a "[Ledger: <who> → <whom> <n>]" tag
+    // to the damage lines the round ledger read. Shared by the Wire Inspector's
     // classified pane and the bug-report capture.
     public string RenderLog(int max = LogCap)
     {
@@ -191,6 +240,7 @@ public sealed class CombatLineClassifier : IDisposable
             sb.Append(e.Text);
             string label = Label(e.Kind);
             if (label.Length != 0) sb.Append("    [Combat: ").Append(label).Append(']');
+            if (e.Ledger is { } ledger) sb.Append("    [Ledger: ").Append(ledger).Append(']');
             sb.Append('\n');
         }
         return sb.ToString();
@@ -211,6 +261,8 @@ public sealed class CombatLineClassifier : IDisposable
     public void Clear()
     {
         lock (_logLock) _log.Clear();
+        _pendingLedger = null;
+        _lastSeenText = null;
     }
 
     // Human-readable tag for the classified view; empty for None.
@@ -238,5 +290,6 @@ public sealed class CombatLineClassifier : IDisposable
     }
 }
 
-// One classified combat-window line: the (de-ANSI'd) text and how it was read.
-public readonly record struct ClassifiedLine(string Text, CombatLineKind Kind);
+// One classified combat-window line: the (de-ANSI'd) text, how it was read, and for a
+// damage line how the round ledger read it (RoundTotalsFormatter.LedgerTag).
+public readonly record struct ClassifiedLine(string Text, CombatLineKind Kind, string? Ledger = null);
