@@ -24,7 +24,7 @@ namespace MudPlay.Services;
 // directly after a previously accepted statline. This rejects another player's
 // prompt quoted inside chat ("Bob gossips: [HP=671/KAI=40]:w") without losing
 // the chained rewrites this scanner exists to preserve.
-public sealed class WirePromptScanner
+public sealed partial class WirePromptScanner
 {
     private const int BufferCap = 1024;
 
@@ -51,12 +51,19 @@ public sealed class WirePromptScanner
     // Fired once per matched status line, in the order observed on the wire.
     public event Action<PromptObservation>? PromptObserved;
 
-    // Fired (at most once per Append) when a default-shaped statline appears that
-    // the active pattern did NOT match — i.e. the live prompt isn't the statline
-    // the editor authored. Drives the logon reconciler to resend `set statline`.
-    // Structurally unreachable while the active pattern IS the default, so
-    // default-statline users never see it (and never trigger a resend).
-    public event Action? PromptShapeUnmatched;
+    // Fired (at most once per Append) when statline-shaped text sits where the
+    // prompt goes but the active pattern matched nothing in that read — the live
+    // prompt isn't the statline Settings -> Statline describes. Carries the
+    // offending prompt text. Fires for the default pattern too: a server whose
+    // class default (or a statline set by hand in-game) isn't one of the stock
+    // shapes leaves HP unreadable exactly like a drifted custom statline does.
+    // StatlineReconciler decides what a run of these means.
+    public event Action<string>? PromptShapeUnmatched;
+
+    // Buffer offset just past the last statline-shaped text reported unmatched.
+    // Unmatched text isn't consumed (it may be the head of a prompt the active
+    // pattern completes on the next read), so this keeps it from re-firing.
+    private int _unmatchedScanFrom;
 
     // Swap in the status-line pattern for the active profile's statline — built
     // by StatlinePromptRegexBuilder from the editor command string. Installed on
@@ -127,8 +134,11 @@ public sealed class WirePromptScanner
         foreach (Match m in _statusLine.Matches(text))
         {
             if (!IsPromptBoundary(text, m.Index, previousAcceptedEnd)) continue;
-            if (!int.TryParse(m.Groups["hp"].Value, out int hp)) continue;
+            // The prompt IS the editor's statline even when it carries no HP
+            // (a custom template without %h) — that's no mismatch to correct,
+            // just nothing to observe.
             activeMatched = true;
+            if (!int.TryParse(m.Groups["hp"].Value, out int hp)) continue;
 
             string typeRaw = m.Groups["type"].Value;
             ManaType manaType = typeRaw switch
@@ -159,26 +169,35 @@ public sealed class WirePromptScanner
             previousAcceptedEnd = lastEnd;
         }
 
-        // Mismatch detection for the logon reconciler: if the active pattern
-        // matched nothing here but a default-shaped statline IS present, the
-        // server is printing a statline our editor-built pattern doesn't
-        // recognise (typically: editor holds a custom statline but the game is
-        // still on the class default). Signal it once so the reconciler can
-        // resend `set statline`. Skipped when the active pattern already IS the
-        // default — default-statline users can't drift, so they never resend.
-        if (!activeMatched && !ReferenceEquals(_statusLine, StatlinePromptRegexBuilder.Default))
+        // Mismatch detection: the active pattern matched nothing here, yet
+        // statline-shaped text sits where the prompt goes — the start of a
+        // wire row, which is where the server parks the prompt before our
+        // command's echo or leaves the cursor after output. The server is
+        // printing a statline our editor-built pattern doesn't recognise
+        // (editor holds a custom statline but the game is on the class default,
+        // or the game prints a shape the Default pattern doesn't cover). Signal
+        // it once per read; the reconciler counts consecutive signals, so one
+        // stray bracketed server line can't act on its own.
+        if (!activeMatched)
         {
-            bool defaultMatched = false;
-            int previousDefaultEnd = -1;
-            foreach (Match d in StatlinePromptRegexBuilder.Default.Matches(text))
+            string? unmatched = null;
+            // Text chained straight onto the last reported prompt is a prompt
+            // position too, same as the chained-rewrite rule for matches.
+            int previousShapeEnd = _unmatchedScanFrom > 0 ? _unmatchedScanFrom : -1;
+            foreach (Match c in StatlineShape().Matches(text, Math.Min(_unmatchedScanFrom, text.Length)))
             {
-                if (!IsPromptBoundary(text, d.Index, previousDefaultEnd)) continue;
-                defaultMatched = true;
-                int end = d.Index + d.Length;
-                if (end > lastEnd) lastEnd = end;
-                previousDefaultEnd = end;
+                if (!IsPromptBoundary(text, c.Index, previousShapeEnd)) continue;
+                // Every statline carries at least a number; bracketed menu
+                // prompts like "[MAJORMUD]:" don't.
+                if (!c.ValueSpan.ContainsAnyInRange('0', '9')) continue;
+                unmatched = c.Value;
+                previousShapeEnd = c.Index + c.Length;
             }
-            if (defaultMatched) PromptShapeUnmatched?.Invoke();
+            if (unmatched is not null)
+            {
+                _unmatchedScanFrom = previousShapeEnd;
+                PromptShapeUnmatched?.Invoke(unmatched);
+            }
         }
 
         // Drop everything up to the last match — the tail (anything after the
@@ -236,6 +255,7 @@ public sealed class WirePromptScanner
     {
         if (count <= 0) return;
         _buffer.Remove(0, count);
+        _unmatchedScanFrom = Math.Max(0, _unmatchedScanFrom - count);
 
         int write = 0;
         for (int read = 0; read < _promptBoundaries.Count; read++)
@@ -259,8 +279,15 @@ public sealed class WirePromptScanner
         _buffer.Clear();
         _promptBoundaries.Clear();
         _promptBoundaries.Add(0);
+        _unmatchedScanFrom = 0;
         _state = StripState.Normal;
     }
+
+    // Statline-shaped text: one or more bracketed groups closed by a colon —
+    // "[HP=145/MA=46]:", "[HP=145/145][MA=46/46]:", "[HP=12 MA=3]:". Loose on
+    // purpose: it only has to recognise that a prompt arrived, not read it.
+    [GeneratedRegex(@"\[[^\[\]]{1,40}\](?:\s?\[[^\[\]]{1,40}\]){0,4}\s?:", RegexOptions.CultureInvariant)]
+    private static partial Regex StatlineShape();
 
     private enum StripState : byte { Normal, EscSeen, Csi }
 }

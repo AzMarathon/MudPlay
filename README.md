@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.124.0**
-> - Spells tab: new Seed column shows when a spell's message differs from the shipped seed (text edited, fields edited, yours only, removed)
-> - Spells tab: new Differs from seed filter lists only those spells
-> - Spells tab: Compare with seed… shows your spell messages beside the seed's, field by field, and puts any you pick back to the seed (deleted seed messages can be restored)
+> **Version 3.125.0**
+> - The client now spots a game prompt that doesn't match Settings → Statline, Default included, and resets it (`set statline full` on Default)
+> - A mismatch the reset can't fix shows a terminal notice and a status-bar warning; HP can't be read until it's fixed
+> - Bug reports carry a Statline section (editor command, live prompt, reset progress)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

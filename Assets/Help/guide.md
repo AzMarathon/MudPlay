@@ -3489,6 +3489,16 @@ Settings → Statline, modeled on MegaMUD's Statline dialog. Statline is **serve
 **How the options work:** Pick tokens from the **Customize** dropdown (current/max HP, current/max mana, resting flag, wealth, experience, color codes, and more) and click **Add** to build a custom string. **Default** resets back to `full`.
 **Important notes:** When you change this and click OK/Apply while connected, MudPlay sends the updated `set statline` command to the game immediately. On each connect it also checks that the game's live prompt matches your saved statline and re-sends the command if it doesn't (self-correcting, up to 3 retries) — so a server reset that lost your custom statline fixes itself without you having to do anything.
 
+### When the game's prompt doesn't match
+
+MudPlay reads your HP and mana from the prompt. If the game's prompt doesn't match Settings → Statline, MudPlay can't read them, and every HP-based automation (resting, healing, door bashing, running) acts as if you were at 0 HP. This applies to **Default** as well as a custom statline — some servers, or a statline set by hand in the game, print a shape Default doesn't cover (for example `[HP=145/145][MA=46/46]:`).
+
+- **How it's detected:** once you're in the game (after the first room display), MudPlay looks at the text where the prompt sits — at the start of the line, before your command's echo or where the cursor waits. If that text looks like a statline (bracketed, with numbers, ending in `:`) but doesn't match Settings → Statline for **3 prompts in a row**, it's a mismatch. A single matching prompt resets the count, and BBS menus before you enter the game never count.
+- **Automatic reset:** MudPlay then sends `set statline <your Settings → Statline command>` — `set statline full` when you're on Default — up to 3 times, a couple of seconds apart. The first prompt that matches ends it.
+- **The warning:** if the resets don't take, MudPlay prints a red terminal notice showing the game's prompt, and a red **STATLINE MISMATCH** warning appears in the status bar. Hover it for the details; click it to open Settings → Statline. It clears as soon as a prompt matches.
+- **What to do:** set Settings → Statline to match what the game prints (use **Customize** to build it — e.g. `[HP=%h/%H][MA=%m/%M]:` for the prompt above), or type `set statline full` in the game to go back to the class default. If you use a custom statline the game won't take, switch Settings → Statline back to Default.
+- **In a bug report:** the **Statline** section shows your Settings → Statline command, whether the latest prompt matched, the last prompt that didn't, and where the automatic reset got to.
+
 ---
 
 ## Other

@@ -1,5 +1,12 @@
 # Version history
 
+## 3.125.0
+
+- The client now spots a game prompt that doesn't match Settings → Statline, Default included, and resets it (`set statline full` on Default)
+- A mismatch the reset can't fix shows a terminal notice and a status-bar warning; HP can't be read until it's fixed
+- Bug reports carry a Statline section (editor command, live prompt, reset progress)
+- bug reports addressed: stock-20260929-111956
+
 ## 3.124.0
 
 - Spells tab: new Seed column shows when a spell's message differs from the shipped seed (text edited, fields edited, yours only, removed)

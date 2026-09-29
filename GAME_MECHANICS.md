@@ -231,12 +231,13 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **The prompt/statline is user-defined.** MajorMUD's `set statline` lets a player format the prompt however they like. The default is bracketed HP/mana (`[HP=%h/MA=%m]: %r`, or `KAI`, or HP-only), and that is what the vast majority run. A custom statline can be any shape (`set statline full custom <template>`). Stock 1.11p accepts `ON`, `OFF`, `FULL`, `CUSTOM xxx` and `FULL CUSTOM xxx` (`Valid statline options: ON, OFF, FULL, CUSTOM xxx, FULL CUSTOM xxx`) *([OBSERVED] `wccmmud.dll` 1.11p)*. Paradigm takes the same options *([CONFIRMED] 2026-09-28, user)*.
 - **Paradigm may sometimes reset the statline to the default mid-session** *([NEEDS CONFIRMATION] 2026-09-28, user: a Paradigm bug that may since have been fixed)*. The client's re-send on a parser mismatch covers it either way.
 - **Template static text is exact; dynamic parts are `%`-wildcards** (`%h`, `%m`, `%r`, …).
+- **Not every server prints a stock-shaped prompt.** *([OBSERVED] 2026-09-29, report `stock-20260929-111956`, a Stock-based server)* A level-10 Cleric printed `[HP=145/145][MA=46/46]:` (current/max HP and mana in separate brackets), which the Default parser doesn't read. Unknown whether that is that server's class default or a statline the player set in-game.
 - **The configured statline is what actually prints on the wire.** MudPlay is the source of truth for the live statline: it sends `set statline` on logon and re-sends it on any parser mismatch.
 - **Echo detection keys off the player's configured prompt, not a hardcoded `[HP=..]:`.** The same template compiles into the exact matcher used to read HP/mana AND to find the echoed command after the prompt, so the move-echo gate works whatever statline the player sets.
 - **If an echo can't be read, the tracker falls back to timing rather than freezing.**
 
 **Client use:**
-- StatlineReconciler sends `set statline` on logon and re-sends it on a parser mismatch.
+- StatlineReconciler re-sends `set statline` on a parser mismatch (3 unmatched in-game prompts in a row) — `set statline full` for a Default editor — and warns the user when 3 resends don't take (report `stock-20260929-111956`).
 - StatlinePromptRegexBuilder compiles the template into the prompt matcher, which reads HP/mana and locates the echoed command.
 
 ### Command rate limit (typing/sending too fast)

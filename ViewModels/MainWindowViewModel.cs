@@ -421,6 +421,14 @@ public partial class MainWindowViewModel : ObservableObject
     // True when ReconnectCountdownText should render. Bound by the status bar.
     public bool IsReconnectCountdownVisible => !string.IsNullOrEmpty(ReconnectCountdownText);
 
+    // Status-bar statline-mismatch warning: the explanation shown as its tooltip.
+    // Set while StatlineReconciler has the mismatch flagged; empty hides it.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsStatlineMismatchVisible))]
+    private string _statlineMismatchTip = string.Empty;
+
+    public bool IsStatlineMismatchVisible => !string.IsNullOrEmpty(StatlineMismatchTip);
+
     // ----- Status-bar location slot (mirrors NavigationViewModel) ----
 
     // Text shown in the bottom status bar's location slot. Mirrors the
@@ -851,6 +859,12 @@ public partial class MainWindowViewModel : ObservableObject
             Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
                 $"[GAME DATA: table '{table}' is corrupt and was not loaded — re-import the set; "
                 + "some features will be missing data]", TerminalStatusKind.Error));
+        // A statline mismatch the reconciler couldn't fix leaves HP unreadable, so
+        // every HP-gated engine stalls with no visible cause — warn on the terminal
+        // once and keep a status-bar warning up until a prompt matches. POST it:
+        // FlagChanged fires from inside PromptScanner.Append.
+        AppServices.Current.StatlineReconcile.FlagChanged +=
+            () => Avalonia.Threading.Dispatcher.UIThread.Post(OnStatlineFlagChanged);
         AppServices.Current.Profile.BbsPinApplied      += _ => RebuildGameDataSetsMenu();
         AppServices.Current.Profile.ProfileMutated     += _ => RebuildGameDataSetsMenu();
         AppServices.Current.Profile.ProfileLoaded      += _ => RebuildGameDataSetsMenu();
@@ -1001,6 +1015,10 @@ public partial class MainWindowViewModel : ObservableObject
         // And settles a boss's roster vanish: the "Also here:" it went missing from is a
         // kill only if this display is the same room.
         _roomDisplayParser.RoomParsed += obs => AppServices.Current.BossTimers.OnRoomDisplayed(obs.Name);
+        // A room display is the statline reconciler's in-game gate. Not the first
+        // matching prompt — a prompt that never matches is the very thing it
+        // watches for.
+        _roomDisplayParser.RoomParsed += _ => AppServices.Current.StatlineReconcile.NoteRoomDisplayed();
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine);
@@ -3031,7 +3049,8 @@ public partial class MainWindowViewModel : ObservableObject
                 // Reconcile the statline to the editor on EVERY connect —
                 // unconditional, unlike the auto-login-gated engines. Resets
                 // the Synced latch + retry counter; the actual resend (if any)
-                // is mismatch-gated and fires off the first in-game prompt.
+                // is mismatch-gated and fires off a run of unmatched in-game
+                // prompts.
                 AppServices.Current.StatlineReconcile.Arm();
                 // Arm the follower reconnect-rejoin latch on every connect. It
                 // only fires (@comeback + @invite) on the first in-game room if
@@ -3211,6 +3230,20 @@ public partial class MainWindowViewModel : ObservableObject
         string line = $"\r\n{sgr}{text}\x1b[0m\r\n";
         byte[] bytes = System.Text.Encoding.Latin1.GetBytes(line);
         Emulator.Feed(bytes);
+    }
+
+    private void OnStatlineFlagChanged()
+    {
+        string? notice = AppServices.Current.StatlineReconcile.FlagNotice;
+        if (notice is null)
+        {
+            StatlineMismatchTip = string.Empty;
+            return;
+        }
+        if (IsStatlineMismatchVisible) return;
+        WriteTerminalStatus(notice, TerminalStatusKind.Error);
+        StatlineMismatchTip = notice.Trim('[', ']', ' ')
+            + "\n\nClick to open Settings -> Statline. This warning clears as soon as a prompt matches.";
     }
 
     // Bridge for the Settings window's Statline tab: pushes a single

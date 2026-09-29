@@ -737,8 +737,9 @@ public sealed class AppServices
         = Game.StatlinePromptRegexBuilder.Default;
 
     // Reasserts the editor's statline on every connect. Verifies the live
-    // prompt against the editor-built pattern and resends set statline
-    // when the game has drifted (e.g. a fresh character on the class default).
+    // prompt against the editor-built pattern, resends set statline when the
+    // game has drifted (e.g. a fresh character on the class default), and
+    // flags the mismatch to the user when the resends don't take.
     public Game.StatlineReconciler StatlineReconcile { get; }
 
     // Sniffs the post-IAC wire stream for "BBS shutting down in N minutes"
