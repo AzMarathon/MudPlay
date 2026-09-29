@@ -67,6 +67,7 @@ public static class BugReportBuilder
             new("Live engine state", SafeSection(() => BuildEngineState(svc))),
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
             new("Combat rounds (last 10)", SafeSection(() => BuildCombatRounds(svc))),
+            new("Session combat stats", SafeSection(() => BuildSessionCombat(svc))),
             new("Monster HP estimates", SafeSection(() => BuildMonsterHpEstimates(svc))),
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
             new("Combat profiles", SafeSection(() => BuildCombatProfiles(svc))),
@@ -642,6 +643,24 @@ public static class BugReportBuilder
     // The last rounds' damage ledgers, oldest first: who the client credited with
     // what damage, for a report that the round totals or Session Stats' per-round
     // damage look wrong.
+    // Session Stats' Player Statistics as the window shows them, plus the spells whose
+    // lines it can recognise — the basis for a "counted as a swing" / "proc missing" report.
+    private static string BuildSessionCombat(AppServices svc)
+    {
+        Game.Combat.CombatSessionStats c = svc.CombatSession.Snapshot();
+        StringBuilder sb = new();
+        Kv(sb, "Swings", $"{c.TotalSwings} (hit {c.Hits}, crit {c.Crits}, backstab {c.Backstabs}, miss {c.Misses}; hit {c.HitPercent:F0}%, crit {c.CritPercent:F0}%)");
+        Kv(sb, "Swing damage", $"{c.PhysicalMinDamage}-{c.PhysicalMaxDamage}, avg {c.PhysicalAvgDamage:F0}");
+        Kv(sb, "Procs", $"{c.ProcHits} ({c.ProcMinDamage}-{c.ProcMaxDamage}, total {c.ProcTotalDamage})");
+        foreach (Game.Combat.SpellCombatStat sp in c.Spells)
+            Kv(sb, $"Spell {sp.Name}", $"{sp.Landed} landed, {sp.Misses} resisted ({sp.RangeText}, total {sp.TotalDamage})");
+        Kv(sb, "Hit by", $"{c.MobHits} ({c.HitTakenMinDamage}-{c.HitTakenMaxDamage}, avg {c.HitTakenAvgDamage:F0}); avoided {c.AvoidedAttacks} of {c.IncomingAttacks}");
+        Kv(sb, "Rounds with damage", $"{c.RoundsWithDamage} ({c.RoundMinDamage}-{c.RoundMaxDamage}, avg {c.RoundAvgDamage:F0})");
+        IReadOnlyList<string> spells = svc.CombatSession.RecognisedSpells;
+        Kv(sb, "Recognised spells", spells.Count == 0 ? "(none)" : string.Join(", ", spells));
+        return sb.ToString();
+    }
+
     // The running HP estimate for each monster in the room — what `look` sharpens the
     // wound band with.
     private static string BuildMonsterHpEstimates(AppServices svc)

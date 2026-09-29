@@ -1,5 +1,11 @@
 # Version history
 
+## 3.122.1
+
+- Session Stats reads the round-totals ledger: every proc of yours counts, and any spell your class knows gets its own row instead of counting as a swing
+- Session Stats Defense shows the blows that hit you: count, damage range, average and hit rate
+- Bug report captures the Session Stats combat figures
+
 ## 3.122.0
 
 - Your profile saves which windows are open and reopens them where they were when you load it; loading another profile matches its windows
