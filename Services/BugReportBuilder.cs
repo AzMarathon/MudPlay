@@ -67,6 +67,7 @@ public static class BugReportBuilder
             new("Live engine state", SafeSection(() => BuildEngineState(svc))),
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
             new("Combat rounds (last 10)", SafeSection(() => BuildCombatRounds(svc))),
+            new("Monster HP estimates", SafeSection(() => BuildMonsterHpEstimates(svc))),
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
             new("Combat profiles", SafeSection(() => BuildCombatProfiles(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
@@ -641,6 +642,14 @@ public static class BugReportBuilder
     // The last rounds' damage ledgers, oldest first: who the client credited with
     // what damage, for a report that the round totals or Session Stats' per-round
     // damage look wrong.
+    // The running HP estimate for each monster in the room — what `look` sharpens the
+    // wound band with.
+    private static string BuildMonsterHpEstimates(AppServices svc)
+    {
+        IReadOnlyList<string> rows = svc.MonsterHpEstimates.Describe();
+        return rows.Count == 0 ? "_(no monsters tracked in the room)_" : string.Concat(rows.Select(r => $"- {r}\n"));
+    }
+
     private static string BuildCombatRounds(AppServices svc)
     {
         IReadOnlyList<Game.Combat.RoundSummary> recent = svc.RoundDamage.Recent;

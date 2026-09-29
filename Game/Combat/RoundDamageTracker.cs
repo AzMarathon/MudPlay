@@ -98,6 +98,11 @@ public sealed class RoundDamageTracker : IDisposable
     // RoundTotalsFormatter.LedgerTag) — the Wire Inspector's Classified view.
     public event Action<string, string>? LineAttributed;
 
+    // Fired for each damage line with its two sides as the ledger names them (room
+    // display names, DamageLineAttributor.Self for us), whether or not it fell in a
+    // round — MonsterHpTracker's running estimates.
+    public event Action<DamageAttribution>? Attributed;
+
     // Snapshot of the ring buffer, oldest first.
     public IReadOnlyList<RoundSummary> Recent
     {
@@ -185,6 +190,7 @@ public sealed class RoundDamageTracker : IDisposable
         bool opens = _state.InCombat
             || source == DamageLineAttributor.Self
             || (source is not null && target is not null);
+        Attributed?.Invoke(new DamageAttribution(a.NoDealer ? null : source, target, a.Amount, a.NoDealer));
         bool counted = _current is not null || opens;
         if (LineAttributed is { } attributed)
             attributed(text, RoundTotalsFormatter.LedgerTag(a.NoDealer ? null : source, target, a.Amount, counted, a.NoDealer));

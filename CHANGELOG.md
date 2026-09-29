@@ -1,5 +1,10 @@
 # Version history
 
+## 3.121.0
+
+- `look <monster>` prints its max HP, its wound band and HP range, and a best guess from the damage it's taken and its regen: `[large orc: 100 HP, Sev: 30-49, ~41]`
+- The status bar's TGT HP shows the look's range with the best guess in brackets, following the damage after the look
+
 ## 3.120.0
 
 - **Show combat round totals** works: after each round it prints a table of what everyone in the room dealt and took, plus an unknown row

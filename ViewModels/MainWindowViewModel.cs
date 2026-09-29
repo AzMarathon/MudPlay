@@ -945,6 +945,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.MonsterHp.MaxHp,
             AppServices.Current.Log);
         _monsterLookParser.TargetObserved += OnMonsterLookTarget;
+        AppServices.Current.MonsterHpEstimates.EstimateChanged += OnMonsterEstimateChanged;
         // A kill in the room retires whatever target we last looked at.
         AppServices.Current.MonsterDeath.MonsterDied += OnMonsterDied;
         // Quest becomes available (trained past its min level, or the login dump) → a
@@ -1828,22 +1829,50 @@ public partial class MainWindowViewModel : ObservableObject
             RefreshLocationSlot();
         });
 
+    // The monster last looked at, whose running HP estimate the status bar follows,
+    // and the range its look gave.
+    private string? _lookedMonster;
+    private string _lookedBand = "";
+
     private void OnMonsterLookTarget(Game.MonsterLookObserved obs)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            // The band always sharpens the running estimate, shown or not.
+            Game.Combat.MonsterHpRead? read = AppServices.Current.MonsterHpEstimates.OnLook(obs.Name, obs.Estimate);
             // Gated by Settings → Other "Show monster HP lookup" (default on).
             if (!AppServices.Current.Resolver
                     .Resolve<Models.Profile.OtherSettings>("Other").ShowMonsterHpLookup)
                 return;
-            string hp = obs.Estimate.Describe();
-            TargetHpText = $"TGT HP: {hp}";
+            _lookedMonster = obs.Name;
+            _lookedBand = obs.Estimate.Describe();
+            TargetHpText = read is { } r ? $"TGT HP: {_lookedBand} [~{r.BestGuess}]" : $"TGT HP: {_lookedBand}";
             // Also drop a yellow line into the terminal scrollback so the estimate
-            // is logged, not only shown in the transient status slot.
-            WriteTerminalStatus($"[{obs.Name} remaining Hitpoints: {hp}]", TerminalStatusKind.Notice);
+            // is logged, not only shown in the transient status slot: max HP, the wound
+            // band's shorthand and range, and the best guess from the damage seen and
+            // regen — "[large orc: 100 HP, Crit: 20-29, ~24]".
+            string wound = $"{Game.MonsterLookParser.WoundShorthand(obs.Wound)}: {_lookedBand}";
+            string line = read is { } l
+                ? $"{obs.Name}: {l.MaxHp} HP, {wound}, ~{l.BestGuess}"
+                : $"{obs.Name}: {wound}";
+            WriteTerminalStatus($"[{line}]", TerminalStatusKind.Notice);
+        });
+
+    // Damage landed on the looked-at monster: the bracketed best guess follows it; the
+    // range stays the look's.
+    private void OnMonsterEstimateChanged(string name)
+        => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (_lookedMonster is not { } looked || !looked.Equals(name, StringComparison.OrdinalIgnoreCase)) return;
+            if (AppServices.Current.MonsterHpEstimates.Estimate(looked) is int e)
+                TargetHpText = $"TGT HP: {_lookedBand} [~{e}]";
         });
 
     private void OnMonsterDied(Game.Combat.MonsterDeathEvent _)
-        => Avalonia.Threading.Dispatcher.UIThread.Post(() => TargetHpText = "");
+        => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            TargetHpText = "";
+            _lookedMonster = null;
+        });
 
     private void OnQuestAvailable(string questName)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>

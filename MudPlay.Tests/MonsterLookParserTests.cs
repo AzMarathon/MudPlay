@@ -31,7 +31,7 @@ public sealed class MonsterLookParserTests
     {
         MonsterHpEstimate est = MonsterLookParser.EstimateHp(70, "mortally wounded")!.Value;
         Assert.True(est.Mortal);
-        Assert.Equal("≤0", est.Describe());
+        Assert.Equal("0", est.Describe());
     }
 
     // Second independent max HP (25-HP acid slime) so the ceil math isn't only
@@ -69,7 +69,7 @@ public sealed class MonsterLookParserTests
     {
         Assert.Equal("70",    new MonsterHpEstimate(70, 70, Mortal: false).Describe());
         Assert.Equal("35-48", new MonsterHpEstimate(35, 48, Mortal: false).Describe());
-        Assert.Equal("≤0",    new MonsterHpEstimate(0, 0, Mortal: true).Describe());
+        Assert.Equal("0",     new MonsterHpEstimate(0, 0, Mortal: true).Describe());
     }
 
     // ---- Wound-line parsing (TryParseWoundLine) ----------------------------
@@ -204,4 +204,16 @@ public sealed class MonsterLookParserTests
 
         Assert.Empty(observed);
     }
+
+    // The look readout's short band names (user, 2026-09-29).
+    [Theory]
+    [InlineData("unwounded", "Full")]
+    [InlineData("slightly wounded", "Slight")]
+    [InlineData("moderately wounded", "Mod")]
+    [InlineData("heavily wounded", "Hvy")]
+    [InlineData("severely wounded", "Sev")]
+    [InlineData("critically wounded", "Crit")]
+    [InlineData("very critically wounded", "V.Crit")]
+    public void WoundShorthand_EveryBand(string wound, string shorthand)
+        => Assert.Equal(shorthand, MonsterLookParser.WoundShorthand(wound));
 }

@@ -108,7 +108,7 @@ public sealed partial class MonsterLookParser : IDisposable
 
             _log?.Info("MonsterLook",
                 $"look target '{candidate}' (#{n}, {hp} HP) {wound} → {estimate.Describe()}");
-            TargetObserved?.Invoke(new MonsterLookObserved(candidate, estimate));
+            TargetObserved?.Invoke(new MonsterLookObserved(candidate, estimate, wound));
             return;
         }
     }
@@ -163,6 +163,20 @@ public sealed partial class MonsterLookParser : IDisposable
 
     private static int CeilDiv(int a, int b) => (a + b - 1) / b;
 
+    // The short name the look readout uses for a wound descriptor (user, 2026-09-29).
+    public static string WoundShorthand(string woundPhrase) => woundPhrase switch
+    {
+        "unwounded"               => "Full",
+        "slightly wounded"        => "Slight",
+        "moderately wounded"      => "Mod",
+        "heavily wounded"         => "Hvy",
+        "severely wounded"        => "Sev",
+        "critically wounded"      => "Crit",
+        "very critically wounded" => "V.Crit",
+        "mortally wounded"        => "Mortal",
+        _                         => woundPhrase,
+    };
+
     [GeneratedRegex(
         @"^\s*(?:It|He|She|They)\s+appears\s+to\s+be\s+(?<wound>very\s+critically\s+wounded|critically\s+wounded|mortally\s+wounded|severely\s+wounded|heavily\s+wounded|moderately\s+wounded|slightly\s+wounded|unwounded)\s*\.\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
@@ -180,12 +194,14 @@ public readonly record struct MonsterHpEstimate(int Low, int High, bool Mortal)
 {
     public bool IsFull => !Mortal && Low == High;
 
+    // Plain ASCII: the terminal readout goes out through CP437.
     public string Describe()
-        => Mortal      ? "≤0"
+        => Mortal      ? "0"
          : IsFull      ? Low.ToString()
                        : $"{Low}-{High}";
 }
 
-// A resolved look observation: the monster's display name plus its estimated HP
-// window. Name is the wire name the look echoed (may carry a size prefix).
-public readonly record struct MonsterLookObserved(string Name, MonsterHpEstimate Estimate);
+// A resolved look observation: the monster's display name, its estimated HP window,
+// and the wound descriptor that produced it (lower-cased, e.g. "heavily wounded").
+// Name is the wire name the look echoed (may carry a size prefix).
+public readonly record struct MonsterLookObserved(string Name, MonsterHpEstimate Estimate, string Wound);
