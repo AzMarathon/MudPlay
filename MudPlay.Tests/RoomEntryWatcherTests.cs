@@ -517,6 +517,20 @@ public sealed class RoomEntryWatcherTests
         Assert.Equal("acid slime", h.Arrivals[0].Name);
     }
 
+    // The client's own yellow notices can name a monster ("[Round 1 dealt: You 59,
+    // small green slime 0]"). Reading one as an arrival re-engaged a monster that had
+    // just died (report paradigm-20260928-230226).
+    [Fact]
+    public void ClientNotice_YellowMonsterName_NotAnArrival()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "small green slime");
+        string line = "[Round 1 dealt: You 59, small green slime 0]";
+        h.Feed(line, h.AttrsWithFg(line, index: 3));
+
+        Assert.Empty(h.Arrivals);
+    }
+
     // A plain room description names a monster but in default colour (all white) —
     // never an arrival, regardless of the room-descriptions-on setting.
     [Fact]

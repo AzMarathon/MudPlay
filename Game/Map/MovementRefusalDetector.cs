@@ -107,6 +107,15 @@ public sealed partial class MovementRefusalDetector : IDisposable
             return;
         }
 
+        // We fell (a failed jump, or a fall after a drop): the landing is probably not
+        // the room the move was headed for.
+        if (FellLine().IsMatch(text))
+        {
+            _tracker.NoteFell(when);
+            _log?.Info("MoveRefusal", $"fell — re-checking where we landed: {text.Trim()}");
+            return;
+        }
+
         // A room script refused the typed exit command. The tracker only reverts a
         // typed command in flight, since several of these lines also answer
         // ordinary commands. A cardinal in flight falls through: two of the lines
@@ -199,6 +208,13 @@ public sealed partial class MovementRefusalDetector : IDisposable
         + @"|He shakes his head at you, ""Stop playing tricks on an old man!"")\s*$",
         RegexOptions.CultureInvariant)]
     private static partial Regex RoomCommandRefused();
+
+    // The failed-jump fall (spell `drops`) and the pit falls (`level N fall`) —
+    // GAME_MECHANICS "Damage lines — who hit whom".
+    [GeneratedRegex(
+        @"^\s*(?:You fall to the ground with a thud, taking \d+ damage!|You take \d+ damage from the fall!)\s*$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex FellLine();
 
     [GeneratedRegex(
         @"^\s*(?:" + DefaultPatterns.ExitGateRefusals + @")\s*$",

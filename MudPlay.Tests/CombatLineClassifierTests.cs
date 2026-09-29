@@ -94,6 +94,29 @@ public sealed class CombatLineClassifierTests
         => Assert.Equal(CombatLineKind.None,
             Classify("The fierce orc lieutenant swings at you with their scimitar!", Cyan, inWindow: false));
 
+    // Poison damage starts "You" like our own hit, but it's damage we took
+    // (report paradigm-20260929-003750).
+    [Fact]
+    public void PoisonTick_IsDamageToYou_NotYourHit()
+        => Assert.Equal(CombatLineKind.DamageYou,
+            Classify("You are poisoned for 2 damage!", Red, bold: true));
+
+    // The smash penalty — a smash's secondary effect — and the engine's "just …"
+    // outcome wordings, read from the words since they carry no colour cue.
+    [Theory]
+    [InlineData("You are smashed to the ground!", CombatLineKind.SmashedYou)]
+    [InlineData("You smashed Bob to the ground!", CombatLineKind.SmashedOther)]
+    [InlineData("Bob is smashed to the ground defenseless!", CombatLineKind.SmashedOther)]
+    [InlineData("The orc is smashed to the floor defenseless!", CombatLineKind.SmashedOther)]
+    [InlineData("Bob's just glanced off of the orc's armour.", CombatLineKind.ArmorBlockOther)]
+    [InlineData("Bob just dodged an attack from the orc.", CombatLineKind.DodgeOther)]
+    [InlineData("The orc just missed an attack against Bob.", CombatLineKind.MonsterMissOther)]
+    [InlineData("You take 12 damage from the flames!", CombatLineKind.DamageYou)]
+    [InlineData("A bolt of lightning from the heavens strikes you for 12 points damage!", CombatLineKind.DamageYou)]
+    [InlineData("You sing the song of blasting, causing 40 damage to your foes!", CombatLineKind.PlayerHit)]
+    public void EngineOutcomeWordings(string line, CombatLineKind kind)
+        => Assert.Equal(kind, Classify(line, White));
+
     [Fact]
     public void NonCombatWhiteLine_IsNone()
         => Assert.Equal(CombatLineKind.None,
@@ -105,5 +128,52 @@ public sealed class CombatLineClassifierTests
         using var c = new CombatLineClassifier(new MudPlay.Services.MessageRouter());
         c.NoteMonsterDeath(950);
         Assert.Contains("[Monster Death: +950 exp]", c.RenderLog());
+    }
+
+    private static void Dispatch(MudPlay.Services.MessageRouter router, string text)
+        => router.Dispatch(new LineExtractor.EmittedLine(
+            text, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+
+    // The round ledger's reading lands on the same line's entry whichever of the two
+    // LineDispatched handlers sees the line first.
+    [Fact]
+    public void LedgerTag_AfterTheClassifierSawTheLine_TagsThatEntry()
+    {
+        var router = new MudPlay.Services.MessageRouter();
+        using var c = new CombatLineClassifier(router);
+        Dispatch(router, "*Combat Engaged*");
+        Dispatch(router, "Bob slashes goblin for 9 damage!");
+        c.NoteLedger("Bob slashes goblin for 9 damage!", "Bob → goblin 9");
+
+        ClassifiedLine e = c.SnapshotLog()[^1];
+        Assert.Equal("Bob slashes goblin for 9 damage!", e.Text);
+        Assert.Equal("Bob → goblin 9", e.Ledger);
+        Assert.Contains("[Ledger: Bob → goblin 9]", c.RenderLog());
+    }
+
+    [Fact]
+    public void LedgerTag_BeforeTheClassifierSawTheLine_WaitsForIt()
+    {
+        var router = new MudPlay.Services.MessageRouter();
+        using var c = new CombatLineClassifier(router);
+        Dispatch(router, "*Combat Engaged*");
+        c.NoteLedger("Bob slashes goblin for 9 damage!", "Bob → goblin 9");
+        Dispatch(router, "Bob slashes goblin for 9 damage!");
+
+        Assert.Single(c.SnapshotLog(), e => e.Ledger == "Bob → goblin 9");
+    }
+
+    // A damage line outside our own combat window (a party member's fight) is still
+    // kept once the ledger read it.
+    [Fact]
+    public void LedgerTag_OutsideTheCombatWindow_KeepsTheLine()
+    {
+        var router = new MudPlay.Services.MessageRouter();
+        using var c = new CombatLineClassifier(router);
+        Dispatch(router, "The goblin bites Bob for 2 damage!");
+        c.NoteLedger("The goblin bites Bob for 2 damage!", "goblin → Bob 2");
+
+        ClassifiedLine e = Assert.Single(c.SnapshotLog());
+        Assert.Equal("goblin → Bob 2", e.Ledger);
     }
 }

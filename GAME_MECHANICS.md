@@ -1432,6 +1432,41 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
 - **Fix (v3.50.10).** `TickEngine` flags whether the tick in flight is damage-line-driven (`LastCombatTickWasDamageDriven`); on such a tick `CastingDirector` held the non-heal survival categories (cure / buff / debuff) so the round's slot isn't spent on unconfirmed HP. (That fix left heals eligible as "safe on the stale read"; superseded 2026-09-28 — see the next bullet.)
 - **Burst-settle hold (v3.118.7, report `paradigm-20260928-131549`).** Heals were not safe on a partial read: the tick picked `gdhe` at a partial 236 (54%), spending the round's one slot, and the burst ended at 72 (17%) with the Emergency heal (`mgra`, < 50%) locked out for a round; a reactive pass at a partial 362 also fired `grhe` and a second tick re-fired it (`You have already cast a spell this round!`). `CastingDirector` now stamps a burst on a damage-line tick and on every HP drop, and holds **every** between-round cast until HP has been quiet for `BurstSettleWindow` (400 ms), then a scheduled settled pass picks on the final HP. The one exception: an **Emergency heal already due** on the partial read fires at once (HP only falls inside a burst, so that tier can't turn out wrong) — unless a due cast the user ranked above it exists, which then waits for the settled pass. The timer-fallback tick and out-of-combat heartbeat are HP-fresh, so they're unaffected.
 
+### Damage lines — who hit whom
+*Status: [OBSERVED] 2026-09-28 (Stock 1.11p `wccmmud.dll` strings and the `wccmsg2` message table) · Realm: Stock — Paradigm not recorded*
+
+- **Every damage line ends `for N damage!`, but nothing else about its shape is fixed.** The rest is the engine's own melee wording, a monster attack's own verb phrase, or a spell's message.
+- **The engine's melee lines** (hardcoded in the DLL):
+  - `You %s %s for %d damage!` — your hit;
+  - `%s %s you for %d damage!` — a hit on you;
+  - `%s %s %s for %s damage!` — what everyone else in the room sees, including a party member's hit;
+  - `critically %s` is prefixed to the verb on a critical.
+- **Each monster attack and each spell carries its own three lines** in the message table: line 1 to the attacker / caster, line 2 to the victim, line 3 to the room.
+  - Monster attack phrases run to several words: `The %s claws you with its pincers for %d damage!`, `The %s bites your ankle for %d damage!`.
+- **Many spells show the caster the same text the room sees.** E.g. message 139: line 1 `Dark flame sears %s for %d damage!` and line 3 `Dark flame sears %s for %s damage!`.
+  - So such a line doesn't say who cast it: yours reads exactly like a party member's.
+  - Line 2 to the victim names no caster either (`Dark flame sears you for %d damage!`).
+- **A victim can be named first:** `%s is scorched for %d damage!`, `%s's life is drained for %d damage!`.
+- **A monster attack that names only the attacker is the victim's own view** — the victim is you. Message 2431: line 1 `The %s releases a bolt of force from its palm for %d damage!`, line 2 (the room) `The %s releases a bolt of force at %s for %s damage!`. *([OBSERVED] Paradigm too, report `paradigm-20260928-231609`: `The mad wizard throws a flask, which explodes for 5 damage!` with HP 91 → 86.)*
+- **Damage to you with no attacker named:** `You are poisoned for %d damage!`, `You combust for %d damage!`, `Your blood is drained for %d damage!`. These are conditions or effects on you — nobody dealt them (the client counts them as damage taken only, report `paradigm-20260929-003750`). The only `Your ... is` damage lines are blood / life / soul drains; every other `Your ...` damage line is your weapon or spell hitting something.
+- **Area effects name no one:** `An earthquake rocks the room for %d damage!`.
+- **Other damage wordings** in the Stock message table, without `for N damage` *([OBSERVED] 2026-09-29, `wccmsg2`)*:
+  - `You take %d damage from the flames!` / `You take %d lightning damage!` / `You take %d damage!` (also after a sentence: `The %s opens, and then snaps shut tightly. You take %d damage!`);
+  - `%s takes %d acid damage!` / `%s takes %d damage from the cold!` — often the **caster's own view** of a spell, naming only the victim;
+  - `…, causing %d damage!` / `…, causing you %d damage!` / `… upon the room, doing %d damage!` / `A counterstrike at you does %d damage!`;
+  - `You fall to the ground with a thud, taking %d damage!`.
+  - Heals share the word but aren't damage: `healing %d damage`, `is healed of %d damage`, `regenerating %d damage`; so do `…, but your armour absorbs the damage!` and `You resist the poison, and take only partial damage!` (no number).
+- **Falls** *([CONFIRMED] 2026-09-29, user; spells from the message seed and TBInfo)*: `You fall to the ground with a thud, taking %d damage!` is the failed-jump message (spell `drops`, #321; Paradigm also #5487) — used on the slum warehouse rooftops. `You take %d damage from the fall!` is the `level 1`–`level 5 fall` spells (#689, #707–#710), cast by the map-12 `jump pit` / `jump shaft` / `enter pit` room commands after the drop.
+  - **Seeing either fall line usually means you didn't land in the room you were heading for** *([CONFIRMED] 2026-09-29, user)*. **Client use:** `MovementRefusalDetector` → `RoomTracker.NoteFell` drops the move's predicted landing and goes Suspect, so the next room display is resolved from scratch (and Paradigm asks `rm` when no engine is driving); a running walk or loop replans through its recovery gate.
+- **`A bolt of lightning from the heavens strikes you for %d points damage!`** *([CONFIRMED] 2026-09-29, user · Realm: Stock)*: only with evil punishments turned on, or a sysop's punish command. Nobody in the room dealt it.
+- **`You sing the %s, causing %d damage to your foes!`** *([CONFIRMED] 2026-09-29, user)*: the bard's **song of blasting**, an area spell that hits every hostile in the room.
+- **The smash penalty** *([CONFIRMED] 2026-09-29, user)*: `You smashed %s to the ground!` · `You are smashed to the ground!` · `%s is smashed to the ground defenseless!` · `The %s is smashed to the floor defenseless!` are the secondary effect of a smash landing — the penalty applied to whoever was smashed. No damage.
+- **The engine also has** `%s's just glanced off of %s's armour.` · `%s just dodged an attack from %s.` · `%s just missed an attack against %s.` *([OBSERVED] 2026-09-29, `wccmmud.dll` strings; where they print isn't recorded)*.
+
+**Client use:**
+- `DamageLineAttributor` names each side by matching the room roster, the party and "you" inside the line, not by grammar, across all the wordings above; damage nobody dealt (a condition, a fall, the heavens' bolt) counts only as taken. `CombatLineClassifier` labels those lines `Damage (you)` and the smash penalty `Smashed (you)` / `Smashed (other)`. `RoundDamageTracker` keeps the per-round ledger; a caster's-eye spell line counts as ours only when it matches our configured attack spell or weapon proc and we cast within the last few seconds.
+- The ledger feeds Settings → Combat "Show combat round totals" (issue #245), Session Stats' per-round damage, the Wire Inspector's Classified `[Ledger: …]` tags and the bug report.
+
 ### Kill detection and monster-kill message order
 *Status: CONFIRMED 2026-07-23 (bug-report captures); exp-line and AoE rules CONFIRMED 2026-08-15 (user); fight-over rule CONFIRMED 2026-09-08 (user)*
 
@@ -4535,11 +4570,11 @@ glass jug               5               2 gold crowns
 - `SellDetourManager` walks a walk-to / loop / Auto-Lair to such a shop for an item flagged *Make detours to sell this item*, then carries on (see *Auto-buy / auto-discard band semantics* for the counts).
 
 ### Auto-buy / auto-discard band semantics
-*Status: **Client policy** — CONFIRMED 2026-07-10 (user design); sell floor and detour count 2026-09-28 (user)*
+*Status: **Client policy** — CONFIRMED 2026-07-10 (user design); sell floor and detour count 2026-09-28 (user); blank detour count 2026-09-29 (user)*
 
 - **Auto-discard with no Min/Max band set → discard *all*** of that item (drop every copy).
 - **Auto-sell (in passing or on a detour) keeps Min. to keep when it's above 0, else sells every copy** — whether or not *Must have minimum* is ticked.
-- **A sell detour goes once more than *Detour to sell if above* are carried** (blank = as soon as there's one to sell).
+- **A sell detour goes once more than *Detour to sell if above* are carried, and more than Min. to keep.** 0 = as soon as there are more than Min. to keep (the first copy when that's blank or 0). **Blank = no detour**, and the item editor shows a red warning when detours are ticked with the count blank. *(An earlier note said blank went as soon as there was one to sell; superseded 2026-09-29, user.)*
 - **Auto-buy with no band → buy as many as affordable.**
 - **Ticking Auto-buy on in the item-edit dialog defaults `MaxToGet` to 10** (the user changes it from
   there). So a freshly-flagged auto-buy item is bounded at 10 by default, never unbounded-by-accident.

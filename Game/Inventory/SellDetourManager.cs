@@ -62,6 +62,9 @@ public sealed class SellDetourManager : IDisposable
     private Dictionary<int, int> _carriedAtShop = new();
     private bool _gateHeld;
     private bool _disposed;
+    // Why the last Evaluate with a due item didn't detour — logged on change, shown in
+    // the bug report, so "it never detoured" names its cause.
+    private string? _lastDecline;
 
     public SellDetourManager(
         Func<IReadOnlyList<Candidate>> candidates,
@@ -94,12 +97,21 @@ public sealed class SellDetourManager : IDisposable
     public bool IsDetouring => _phase != Phase.Idle;
 
     // One-line status for the bug report.
-    public string Status => _phase switch
+    public string Status
     {
-        Phase.Idle => "idle",
-        Phase.WalkingBack => $"walking back to {_origin} (resume {_resume.Kind})",
-        _ => $"{_phase} at/to {_shop} (resume {_resume.Kind})",
-    };
+        get
+        {
+            string phase = _phase switch
+            {
+                Phase.Idle => "idle",
+                Phase.WalkingBack => $"walking back to {_origin} (resume {_resume.Kind})",
+                _ => $"{_phase} at/to {_shop} (resume {_resume.Kind})",
+            };
+            string refused = _refused.Count == 0 ? "none"
+                : string.Join(", ", _refused.Select(r => $"item #{r.Item} at {r.Shop}"));
+            return $"{phase}; last decline: {_lastDecline ?? "(none)"}; shops that sold nothing: {refused}";
+        }
+    }
 
     // Re-check whether a detour is due. Driven by the heartbeat and inventory changes;
     // a no-op unless a walk / loop / lair runs, the room is settled and nothing else
@@ -114,21 +126,36 @@ public sealed class SellDetourManager : IDisposable
         RoomKey cur = here.Key;
         RoomKey back = resume.WalkDestination ?? cur;
         List<RoomKey> shops = new();
+        List<string> skipped = new();
         foreach (Candidate c in _candidates())
         {
             if (!c.Due) continue;
+            if (c.Shops.Count == 0) { skipped.Add($"{c.Name}: no shop that trades it among your picks"); continue; }
             List<RoomKey> usable = c.Shops.Where(s => !_refused.Contains((c.Number, s))).ToList();
-            if (usable.Count == 0) continue;
+            if (usable.Count == 0) { skipped.Add($"{c.Name}: its shops sold nothing earlier this session"); continue; }
             // The engine reaches one of its shops anyway: Auto-sell sells in passing.
-            if (usable.Any(s => s.Equals(cur) || ReachedAnyway(s, resume, cur))) continue;
+            RoomKey? passing = usable.Cast<RoomKey?>()
+                .FirstOrDefault(s => s!.Value.Equals(cur) || ReachedAnyway(s.Value, resume, cur));
+            if (passing is not null)
+            {
+                skipped.Add($"{c.Name}: the {resume.Kind} reaches {passing} itself");
+                continue;
+            }
             shops.AddRange(usable);
         }
-        if (shops.Count == 0) { ReleaseStop("nothing to sell"); return; }
+        if (shops.Count == 0)
+        {
+            if (skipped.Count > 0) Decline(string.Join("; ", skipped));
+            ReleaseStop("nothing to sell");
+            return;
+        }
         if (!PathItemShopRouter.TrySelectShop(shops.Distinct().ToList(), cur, back, _distance, out RoomKey shop))
         {
+            Decline($"no route from {cur} to {string.Join(", ", shops.Distinct())} and back");
             ReleaseStop("no reachable shop");
             return;
         }
+        _lastDecline = null;
 
         // Mid-step: hold the engine at the room it's entering and take over there.
         if (_tracker.State.Confidence != RoomConfidence.Confirmed)
@@ -151,6 +178,13 @@ public sealed class SellDetourManager : IDisposable
         finally { _drivingWalker = false; }
         ReleaseStop("detour started");
         GoToShop(shop);
+    }
+
+    private void Decline(string why)
+    {
+        if (why == _lastDecline) return;
+        _lastDecline = why;
+        _log?.Info(LogCategory, $"due to sell but not detouring — {why}");
     }
 
     // Reset States: stand down without resuming.

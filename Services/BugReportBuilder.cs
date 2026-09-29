@@ -66,6 +66,7 @@ public static class BugReportBuilder
             new("Keybindings", SafeSection(() => BuildKeybindings(svc))),
             new("Live engine state", SafeSection(() => BuildEngineState(svc))),
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
+            new("Combat rounds (last 10)", SafeSection(() => BuildCombatRounds(svc))),
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
             new("Combat profiles", SafeSection(() => BuildCombatProfiles(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
@@ -636,6 +637,23 @@ public static class BugReportBuilder
     // " x20" for a positive per-room cast cap; blank for null/0 (unlimited).
     private static string CountSuffix(int? count) => count is > 0 ? $" x{count}" : string.Empty;
     private static string ManaSuffix(int? mana) => mana is > 0 ? $" m{mana}" : string.Empty;
+
+    // The last rounds' damage ledgers, oldest first: who the client credited with
+    // what damage, for a report that the round totals or Session Stats' per-round
+    // damage look wrong.
+    private static string BuildCombatRounds(AppServices svc)
+    {
+        IReadOnlyList<Game.Combat.RoundSummary> recent = svc.RoundDamage.Recent;
+        if (recent.Count == 0) return "_(no combat rounds this session)_";
+        StringBuilder sb = new();
+        foreach (Game.Combat.RoundSummary r in recent.Skip(Math.Max(0, recent.Count - 10)))
+        {
+            (string dealt, string taken) = Game.Combat.RoundTotalsFormatter.Format(r);
+            sb.Append("- ").Append(r.EndedAt.ToString("HH:mm:ss")).Append(' ')
+              .Append(dealt).Append(' ').Append(taken).Append('\n');
+        }
+        return sb.ToString();
+    }
 
     // The engine's live engageability verdict for every monster seen in the
     // current room — the reasoning behind a "skip un-actionable … Unkillable"

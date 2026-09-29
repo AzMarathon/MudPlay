@@ -1,28 +1,40 @@
 namespace MudPlay.Game.Combat;
 
-// One closed combat round emitted by RoundDamageTracker. Carries the aggregate
-// damage / hit-rate snapshot CastingDirector uses to decide next-round casts and
-// CombatSessionTracker aggregates over the session.
+// One closed combat round emitted by RoundDamageTracker: who dealt and took how
+// much damage in it, as far as the lines name them.
 //
-// RoundNumber is a monotonic counter; resets on RoundDamageTracker.Reset (called
-// on new BBS connection / character switch). StartedAt is the wall-clock time of
-// the first damage line belonging to this round. EndedAt is the wall-clock time
-// the round closed — either 5s+ since StartedAt as observed on a fresh damage
-// line, or via an external close trigger (CombatStatus=Off, manual Reset).
-// DamageDealt is the sum of damage captures across all UserHits lines in this
-// round; DamageTaken is the sum across all MobHits lines. Hits is the count of
-// damage-bearing lines (UserHits + MobHits) regardless of side; Misses is the
-// count of MobMisses lines. HpBefore/HpAfter and MaBefore/MaAfter snapshot
-// PlayerState.Hp / .Ma at StartedAt and EndedAt.
+// RoundNumber counts every round since the last RoundDamageTracker.Reset (new BBS
+// connection / character switch); FightRound counts rounds within the current fight,
+// from 1, restarting once the room is clear of hostiles. StartedAt is the first
+// damage line of the round, EndedAt when it closed.
+// Combatants holds one row per named combatant, the local player as
+// DamageLineAttributor.Self. UnknownDealt is damage whose dealer no line named;
+// UnknownTaken is damage whose victim none named (an area effect). HpBefore/HpAfter
+// and MaBefore/MaAfter snapshot PlayerState at StartedAt and EndedAt.
 public readonly record struct RoundSummary(
     int RoundNumber,
+    int FightRound,
     DateTimeOffset StartedAt,
     DateTimeOffset EndedAt,
-    int DamageDealt,
-    int DamageTaken,
-    int Hits,
-    int Misses,
+    IReadOnlyList<CombatantDamage> Combatants,
+    int UnknownDealt,
+    int UnknownTaken,
     int HpBefore,
     int HpAfter,
     int MaBefore,
-    int MaAfter);
+    int MaAfter)
+{
+    // The local player's own row.
+    public int DamageDealt => Self.Dealt;
+    public int DamageTaken => Self.Taken;
+
+    private CombatantDamage Self
+    {
+        get
+        {
+            foreach (CombatantDamage c in Combatants)
+                if (c.Name == DamageLineAttributor.Self) return c;
+            return default;
+        }
+    }
+}

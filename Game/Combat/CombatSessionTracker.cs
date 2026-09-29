@@ -20,8 +20,9 @@ namespace MudPlay.Game.Combat;
 // patterns) so a recognised line vetoes the physical-swing classifier in
 // OnUserHits — a spell / proc is never double-counted as a melee swing, and
 // never moves the hit / miss / crit denominators or the physical extent. Its
-// damage still reaches the per-round total through RoundDamageTracker's own
-// subscription. A weapon proc only counts when the previous offensive line was
+// damage still reaches the per-round total through RoundDamageTracker's ledger,
+// which asks MatchesOwnSpellOrProc whether a line names no caster because it's
+// ours. A weapon proc only counts when the previous offensive line was
 // a landed swing, matching the MajorMUD rule that a proc fires after a basic
 // attack connects.
 //
@@ -139,6 +140,16 @@ public sealed class CombatSessionTracker : IDisposable
     {
         _spellMatchers = _resolveSpellMatchers?.Invoke() ?? Array.Empty<(string, CasterMessageMatcher)>();
         _procMatcher = _resolveProcMatcher?.Invoke();
+    }
+
+    // True when line is the caster's-eye damage line of one of our configured attack
+    // spells or our weapon's proc. RoundDamageTracker uses it to own a spell line that
+    // names no caster.
+    public bool MatchesOwnSpellOrProc(string line)
+    {
+        foreach ((string _, CasterMessageMatcher m) in _spellMatchers)
+            if (m.TryMatchDamage(line, out _)) return true;
+        return _procMatcher is { } proc && proc.TryMatchDamage(line, out _);
     }
 
     // Per-spell accumulator, created on first sight of a spell so the display keeps
@@ -277,7 +288,7 @@ public sealed class CombatSessionTracker : IDisposable
         // counted when the previous offensive line was a landed hit. Folding it
         // into its own row (not _hit) keeps it out of the swing accuracy +
         // physical extent; its damage still rolls into the per-round total via
-        // RoundDamageTracker's own UserHits subscription.
+        // RoundDamageTracker's ledger.
         if (_lastWasLandedSwing && _procMatcher is { } proc && proc.TryMatchDamage(text, out int pdmg))
         {
             _proc.Add(pdmg);

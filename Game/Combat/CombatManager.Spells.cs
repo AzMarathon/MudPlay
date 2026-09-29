@@ -795,13 +795,13 @@ public sealed partial class CombatManager
             // paradigm-20260815-130957: "hamm set to 2, swapped after the first cast").
             // Gate the tally to once per real round so MaxCasts counts rounds cast, not
             // tick fires — the cap-preempt still fires on the genuine capping-round tick.
-            // Robust count: tally at most ONCE per real combat round. The round
-            // boundary is RoundDamageTracker's timer-driven RoundCount (one per 5s
-            // round), so multiple damage-line ticks inside one round — our multi-hit,
-            // the mob's counter-swing, a stale interval — collapse to a single tally,
-            // and a genuine round that lands fast still counts (fixes the -055820 vs
-            // -120938 wall-clock tension). Falls back to the wall-clock gate only when
-            // no round-count source is wired (legacy tests).
+            // Robust count: tally at most ONCE per real cast. ReadRoundCount is wired to
+            // ConfirmedAttackCastCount (see its declaration), which moves once per cast
+            // actually seen landing, so multiple damage-line ticks for one cast — our
+            // multi-hit, the mob's counter-swing, a stale interval — collapse to a
+            // single tally, and a genuine cast that lands fast still counts (fixes the
+            // -055820 vs -120938 wall-clock tension). Falls back to the wall-clock gate
+            // only when no count source is wired (legacy tests).
             if (ReadRoundCount is { } readRound)
             {
                 int round = readRound();

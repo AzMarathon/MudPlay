@@ -3575,12 +3575,35 @@ public sealed class AppServices
         // per-character persisted; the user can flip either from the Log pane.
         RoundDamage = new Game.Combat.RoundDamageTracker(
             Router, PlayerState, Log,
-            shouldWriteTrace: () => LogDiagnostics.AutoCollectLogs);
+            shouldWriteTrace: () => LogDiagnostics.AutoCollectLogs,
+            // UI-thread one-shot, same as the door FSM's: ends a round once its lines go quiet.
+            scheduleDelay: (delay, callback) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+                return new DispatcherTimerHandle(timer);
+            });
         // Drive round boundaries off the 5-second combat heartbeat so each round
         // closes (and is counted) in real time rather than lagging until the next
         // damage line or *Combat Off*. Both are app-lifetime singletons, so no
         // unsubscribe is needed.
         Tick.CombatTickElapsed += RoundDamage.OnCombatTick;
+        // The ledger names combatants from the room roster, the party and ourselves.
+        RoomClassifier.EntitiesObserved += RoundDamage.NoteRoomEntities;
+        // Wire Inspector → Classified shows how the ledger read each damage line.
+        RoundDamage.LineAttributed += CombatClassifier.NoteLedger;
+        RoundDamage.SetNameSources(
+            partyNames: () => PartyState.Members.Select(m => m.Name),
+            selfName: () => Party.LocalCharacterName ?? Profile.Current?.Name);
+        // Settings → Combat "Show combat round totals": print each round's ledger
+        // as a table (read per round, so the checkbox applies at once). One notice for
+        // all its lines, so no blank line falls between them.
+        RoundDamage.RoundComplete += round =>
+        {
+            if (!ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat").ShowCombatRoundTotals) return;
+            WriteTerminalNotice(string.Join("\r\n", Game.Combat.RoundTotalsFormatter.Table(round)));
+        };
         // Reset round counter + ring on BBS connect to match
         // CombatSessionTracker's session-boundary convention — the
         // reset hook lives here on the data producer.
@@ -4068,6 +4091,7 @@ public sealed class AppServices
         // TickEngine.CombatTickElapsed so the next round can cast.
         Cast = new Game.Spells.CastCoordinator(Router, Log);
         Tick.CombatTickElapsed += Cast.OnCombatTick;
+        Cast.CastSent += _ => RoundDamage.NoteOwnCast();
 
         // ConditionTracker reads MessageStore +
         // line-side patterns to surface ActiveFlags. CastingDirector
@@ -4507,6 +4531,7 @@ public sealed class AppServices
             // A hand cast ends a sneak like an engine one, so it re-sneaks the same way.
             onManualCast: (c, target) =>
             {
+                RoundDamage.NoteOwnCast();
                 Combat.OnManualCastObserved(c, target);
                 CastDirector.NoteManualBuffCast(c, target);
                 Stealth.ReSneakAfterCast();
@@ -4866,6 +4891,7 @@ public sealed class AppServices
         // weapon swap (Inventory.Changed).
         CombatSession = new Game.Combat.CombatSessionTracker(
             Router, RoundDamage, AttackSpellMatchers, EquippedWeaponProcMatcher);
+        RoundDamage.SetOwnSpellLineCheck(CombatSession.MatchesOwnSpellOrProc);
         Profile.ProfileLoaded  += _ => { CombatSession.Reset(); CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
         Profile.ProfileMutated += _ => { CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
         GameData.ActiveSetChanged += _ => { _procWeaponName = null; CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
@@ -5403,8 +5429,11 @@ public sealed class AppServices
             level: () => PlayerStats.Level,
             defaultGearBonus: DefaultGearPoolBonus,
             defaultWorn: DefaultSetWorn,
+            // A stat already on its way (auto-train's after a level-up) answers the
+            // same question — don't send a second (report paradigm-20260928-231447).
             canCheckNow: () => PlayerState.HasPromptData && !PlayerState.InCombat
-                && !Equipment.IsApplyingSet && !TrainerMenu.MenuOwnsKeyboard,
+                && !Equipment.IsApplyingSet && !TrainerMenu.MenuOwnsKeyboard
+                && !Stats.ScreenExpected,
             sendStat: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("stat\r")),
             log: Log);
         Tick.HeartbeatElapsed += PoolBaseline.Poll;
@@ -10677,13 +10706,17 @@ public sealed class AppServices
         foreach (string entry in Inventory.Snapshot.CarriedItems)
         {
             if (ResolveAutoSellItem(entry) is not { Sell: true } item) continue;
-            carried[item.Number] = carried.TryGetValue(item.Number, out var g) ? (g.Item, g.Count + 1) : (item, 1);
+            // A stack is one entry carrying its count ("2 crude stone club").
+            int copies = Game.Inventory.CountedCommand.SplitLeadingCount(entry).Count;
+            carried[item.Number] = carried.TryGetValue(item.Number, out var g) ? (g.Item, g.Count + copies) : (item, copies);
         }
         var result = new System.Collections.Generic.List<Game.Inventory.SellDetourManager.Candidate>();
         foreach ((int number, (Game.Inventory.AutoSellManager.ResolvedSell item, int count)) in carried)
         {
             Models.GameData.ItemOverlay overlay = ResolveItemOverlay(number);
-            if (overlay.SellDetour != true) continue;
+            // "Detour to sell if above" left blank means no detour (user, 2026-09-29);
+            // 0 is a real count — go once above Min. to keep.
+            if (overlay.SellDetour != true || string.IsNullOrWhiteSpace(overlay.SellDetourAbove)) continue;
             int above = ParseCount(overlay.SellDetourAbove, 0);
             System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> trading = ShopRoomsSellingItem(number);
             var picks = new System.Collections.Generic.HashSet<Game.Map.RoomKey>();
