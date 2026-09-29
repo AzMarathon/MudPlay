@@ -22,32 +22,48 @@ public sealed class BackstabMatchupCalculatorTests
     {
         BackstabMatchup r = BackstabMatchupCalculator.Evaluate(
             Stabber(accuracy: 150, min: 37, max: 50), Target(hp: 35, dr: 5),
-            bsDefense: 0, seesHidden: false, sureHitPercent: 90);
+            bsDefense: 0, seesHidden: false);
 
         Assert.Equal(BackstabVerdict.HighRollOnly, r.Verdict);
         Assert.Equal(32, r.MinDamage);
         Assert.Equal(45, r.MaxDamage);
     }
 
+    // A sure kill needs the stab at the realm's ceiling: Stock clamps at 99.
     [Fact]
-    public void MinAfterDrKills_AndSureToLand_IsSureKill()
+    public void MinAfterDrKills_AtTheHitCeiling_IsSureKill()
     {
         BackstabMatchup r = BackstabMatchupCalculator.Evaluate(
             Stabber(accuracy: 150, min: 40, max: 50), Target(hp: 35, dr: 5),
-            bsDefense: 0, seesHidden: false, sureHitPercent: 90);
+            bsDefense: 0, seesHidden: false);
 
+        Assert.Equal(99, r.HitCap);
+        Assert.Equal(99, r.HitPercent);
         Assert.Equal(BackstabVerdict.SureKill, r.Verdict);
         Assert.True(r.IsOneStabKill);
     }
 
+    // One point under the ceiling isn't "always hits".
+    [Fact]
+    public void MinAfterDrKills_OneUnderCeiling_IsKillIfItLands()
+    {
+        // 103 − (20/4 + 0) = 98, one under Stock's 99.
+        BackstabMatchup r = BackstabMatchupCalculator.Evaluate(
+            Stabber(accuracy: 103, min: 40, max: 50), Target(hp: 35, ac: 20),
+            bsDefense: 0, seesHidden: false);
+
+        Assert.Equal(98, r.HitPercent);
+        Assert.Equal(BackstabVerdict.KillIfItLands, r.Verdict);
+    }
+
     // Stock backstab to-hit is accuracy − (AC/4 + BSDefense): a high backstab
-    // defence drops a stab that would kill below the sure-hit bar.
+    // defence drops a stab that would kill below the realm's 99% ceiling.
     [Fact]
     public void BsDefenseDragsHitBelowBar_IsKillIfItLands()
     {
         BackstabMatchup r = BackstabMatchupCalculator.Evaluate(
             Stabber(accuracy: 100, min: 40, max: 50), Target(hp: 35, ac: 20),
-            bsDefense: 30, seesHidden: false, sureHitPercent: 90);
+            bsDefense: 30, seesHidden: false);
 
         Assert.Equal(100 - (20 / 4 + 30), r.HitPercent);
         Assert.Equal(BackstabVerdict.KillIfItLands, r.Verdict);
@@ -58,16 +74,16 @@ public sealed class BackstabMatchupCalculatorTests
     public void MaxAfterDrBelowHp_CantKill_AndDrOverMax_NoDamage()
     {
         Assert.Equal(BackstabVerdict.CantKill, BackstabMatchupCalculator.Evaluate(
-            Stabber(150, 20, 30), Target(hp: 35, dr: 2), 0, false, 90).Verdict);
+            Stabber(150, 20, 30), Target(hp: 35, dr: 2), 0, false).Verdict);
         Assert.Equal(BackstabVerdict.NoDamage, BackstabMatchupCalculator.Evaluate(
-            Stabber(150, 20, 30), Target(hp: 35, dr: 30), 0, false, 90).Verdict);
+            Stabber(150, 20, 30), Target(hp: 35, dr: 30), 0, false).Verdict);
     }
 
     [Fact]
     public void SeesHidden_NoOpener()
     {
         BackstabMatchup r = BackstabMatchupCalculator.Evaluate(
-            Stabber(150, 90, 120), Target(hp: 10), 0, seesHidden: true, sureHitPercent: 90);
+            Stabber(150, 90, 120), Target(hp: 10), 0, seesHidden: true);
         Assert.Equal(BackstabVerdict.SeesHidden, r.Verdict);
         Assert.False(r.IsOneStabKill);
     }

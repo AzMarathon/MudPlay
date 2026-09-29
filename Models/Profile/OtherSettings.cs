@@ -133,11 +133,6 @@ public sealed class OtherSettings
     // character's own offense buffs (e.g. shadowform) folded into the matchup as if up.
     public List<string> MonsterIntelAppliedBuffs { get; set; } = new();
 
-    // Monster Intel: the backstab to-hit % a stab must reach before a min-damage
-    // kill counts as a sure one-stab kill (the Backstab rounds basis and the
-    // Your Matchup verdict). Char-tier, edited in the window. Range 1..100.
-    public int MonsterIntelBackstabSureHit { get; set; } = 95;
-
     // Note: the former per-character verbose toggles (VerboseCombat /
     // VerboseRoomClassifier / VerboseCasting / VerboseCash / VerboseStealth) +
     // WriteCombatRoundTrace lived here briefly. They moved to the Log pane menu

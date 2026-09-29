@@ -136,12 +136,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _buffSummary = "";
     public bool HasKnownBuffs => BuffOptions.Count > 0;
 
-    // The backstab to-hit % a min-damage kill must reach to count as a sure
-    // one-stab kill. Char-tier; _suppressSureHitPersist guards the initial load.
-    [ObservableProperty] private int _backstabSureHit = 95;
-    private bool _suppressSureHitPersist;
-    public bool CanBackstab => _usableMelee.Contains(MudAttackType.Backstab);
-
     public DataGridCollectionView RowsView { get; }
 
     [ObservableProperty] private string? _nameFilter;
@@ -230,9 +224,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 _roundsAttackKey = saved.MonsterIntelRoundsAttack!;
             foreach (string k in saved.MonsterIntelAppliedDebuffs) _appliedDebuffKeys.Add(k);
             foreach (string k in saved.MonsterIntelAppliedBuffs) _appliedBuffKeys.Add(k);
-            _suppressSureHitPersist = true;
-            BackstabSureHit = System.Math.Clamp(saved.MonsterIntelBackstabSureHit, 1, 100);
-            _suppressSureHitPersist = false;
 
             // RowsView was just constructed with Filter = PassesFilter, which
             // reads IncomingHitPercent — still every entry's default -1 until
@@ -524,7 +515,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // preserving the user's show/hide + rounds-attack picks.
         _usableMelee.Clear();
         _usableMelee.AddRange(CharacterCalculator.UsableMeleeAttacks(_stats!, _gameData));
-        OnPropertyChanged(nameof(CanBackstab));
         RebuildAttackOptions();
 
         // Estimated Rounds to Kill — the player-offense direction against each
@@ -944,15 +934,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         return parts.Count == 0 ? "no offense effect" : string.Join(" · ", parts);
     }
 
-    partial void OnBackstabSureHitChanged(int value)
-    {
-        if (_suppressSureHitPersist || !_hasCharacterContext) return;
-        OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
-        dto.MonsterIntelBackstabSureHit = System.Math.Clamp(value, 1, 100);
-        _resolver.WriteAt(SettingsTier.Character, "Other", dto);
-        RecomputeRoundsColumn();
-    }
-
     // ----- Backstab opener -----
 
     // The worn set as it stands for the opener: the Backstab set's weapon swapped
@@ -980,7 +961,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private BackstabMatchup EvaluateBackstab(
         PlayerMatchupProfile bs, MonsterCatalogEntry m, MonsterMatchupProfile? target = null)
         => BackstabMatchupCalculator.Evaluate(
-            bs, target ?? MonsterProfileFor(m), m.BsDefense, m.SeesHidden, BackstabSureHit);
+            bs, target ?? MonsterProfileFor(m), m.BsDefense, m.SeesHidden);
 
     // The backstab's Your Matchup line: a one-stab verdict judged on the min stab
     // after DR, with the working (range, DR, to-hit vs backstab defence) beneath.
@@ -995,14 +976,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             BackstabVerdict.NoDamage => $"Backstab: its {r.DamageResist} DR stops the whole stab",
             BackstabVerdict.CantKill => $"Backstab: can't kill it in one stab — max {r.MaxDamage} vs {hp} HP",
             BackstabVerdict.HighRollOnly => $"Backstab: kills only on a high roll — min {r.MinDamage} vs {hp} HP",
-            BackstabVerdict.KillIfItLands => $"Backstab: one-stab kill if it lands — but only {r.HitPercent}% to land",
+            BackstabVerdict.KillIfItLands => $"Backstab: one-stab kill if it lands — {r.HitPercent}% to land, not the {r.HitCap}% ceiling",
             _ => $"Backstab: sure one-stab kill — min {r.MinDamage} ≥ {hp} HP · {r.HitPercent}% to land",
         };
         if (r.Verdict == BackstabVerdict.SeesHidden) return new MatchupAttackLine(text, null, basis);
 
         BackstabWorn(_inventory!.Snapshot.EquippedItems, out string? setWeapon);
         string detail = $"{r.MinDamage}–{r.MaxDamage} dmg after {r.DamageResist} DR ({bs.BackstabMin}–{bs.BackstabMax} before) · "
-            + $"{r.HitPercent}% to land vs backstab defence {m.BsDefense} (sure kill needs {BackstabSureHit}%)"
+            + $"{r.HitPercent}% to land vs backstab defence {m.BsDefense} (a sure kill needs the {r.HitCap}% ceiling)"
             + (setWeapon is null ? "" : $" · with {setWeapon}");
         return new MatchupAttackLine(text, detail, basis);
     }

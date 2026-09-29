@@ -4,7 +4,7 @@
 > **Version 3.118.0**
 > - Monster Intel highlights the attack picked for Est. Rounds to Kill in Your Matchup
 > - Backstab gets a one-stab verdict: your minimum stab after the monster's DR vs its HP, to-hit against its backstab defence
-> - New **Sure backstab at** % sets when that counts as a sure kill; Backstab as the rounds pick reads 1 or —
+> - A sure one-stab kill must also land at the game's ceiling (100% Paradigm, 99% Stock); Backstab as the rounds pick reads 1 or —
 > - Backstab is worked out with your Backstab gear set's weapon
 > - **Apply Buffs** counts your own offense buffs (e.g. shadowform) in Monster Intel as if they're up
 > - Saving Settings → Other no longer resets Monster Intel's attack and debuff picks

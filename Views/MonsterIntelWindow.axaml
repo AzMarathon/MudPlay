@@ -326,15 +326,6 @@
                                    Foreground="{StaticResource AccentAmberBrush}"
                                    ToolTip.Tip="Monsters that pass your other filters but take more rounds than the cap to kill, so they're left out of the list. Raise Max Rnds to Kill to see them."/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,4"
-                                IsVisible="{Binding CanBackstab}">
-                        <TextBlock Classes="FieldLabel" Text="Sure backstab at %:" VerticalAlignment="Center"/>
-                        <NumericUpDown Value="{Binding BackstabSureHit, Mode=TwoWay}"
-                                       Minimum="1" Maximum="100" Increment="1"
-                                       FormatString="0" ShowButtonSpinner="True"
-                                       Width="90" MinWidth="90"
-                                       ToolTip.Tip="A backstab counts as a sure one-stab kill only when its MINIMUM damage, after the monster's DR, reaches the monster's HP AND your chance to land it (vs the monster's backstab defence) is at least this. With Backstab picked for Est. Rounds to Kill, sure kills read 1 and everything else reads —. Saved automatically, per character."/>
-                    </StackPanel>
                     <CheckBox Content="Hide regen timers" IsChecked="{Binding HideRegenMonsters, Mode=TwoWay}"
                               VerticalAlignment="Center" Margin="0,0,0,4"
                               ToolTip.Tip="Hide monsters that respawn on their own timer (bosses, lair leaders, and other timed spawns — any with a non-zero respawn/regen time), leaving only freely-farmable monsters."/>

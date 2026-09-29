@@ -295,7 +295,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             MonsterIntelRoundsAttack = saved.MonsterIntelRoundsAttack,
             MonsterIntelAppliedDebuffs = saved.MonsterIntelAppliedDebuffs,
             MonsterIntelAppliedBuffs = saved.MonsterIntelAppliedBuffs,
-            MonsterIntelBackstabSureHit = saved.MonsterIntelBackstabSureHit,
             // Drop rows with no item to wear (a rule with no action does nothing);
             // the rest persist as edited.
             LocationEquipRules    = LocationEquipRules
