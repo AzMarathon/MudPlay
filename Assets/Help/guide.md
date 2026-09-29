@@ -1484,11 +1484,11 @@ Select several rows (click-drag, or Ctrl / Shift-click) on the **Monsters**, **I
 
 Items and Monsters open an editable pane on the left with the read-only **Other Info (from MDB)** on the right.
 
-**For an item** you can flip its automation flags (**Auto-collect, Auto-discard, Auto-buy, Auto-sell, Auto-stash**, and more), set **Min. to keep / Max to get**, and toggle **Auto-obtain for path**.
+**For an item** the left side groups its settings by what they do: **Getting it** (Auto-collect, Auto-buy, **Max to get**, Cannot be taken, Auto-open for a container, Auto-obtain for path), **Keeping it** (Must have minimum, **Min. to keep**, Loyal item) and **Getting rid of it** (Auto-sell with its sell-detour options, Auto-stash, Auto-discard), plus the item's on-use message. Hover any box for what it does. The window remembers its size and position.
 
 **Selling.** With **Auto-sell** on (and Auto-Get Items running), walking into a shop room whose shop has the item in its inventory listing sells it straight away — no `list` needed. Selling keeps your **Min. to keep** count when it's above 0, and sells every copy when it's 0 or blank. Your walk or loop waits while it sells (*Waiting — selling*).
 
-**Sell detours.** Tick **Make detours to sell this item** (beside Auto-sell) and a walk-to, loop or Auto-Lair will turn aside to sell it once you carry more than **Detour to sell if above**, and more than **Min. to keep**. **0** goes as soon as you carry more than Min. to keep (your first copy when that's blank or 0). **Blank means no detour**, so a red warning appears beside the box when detours are ticked with it blank:
+**Sell detours.** Tick **Make detours to sell it** (under Auto-sell, once Auto-sell is on) and a walk-to, loop or Auto-Lair will turn aside to sell it once you carry more than the **when carrying more than** count, and more than **Min. to keep**. **0** goes as soon as you carry more than Min. to keep (your first copy when that's blank or 0). **Blank means no detour**, so a red warning appears under the box when detours are ticked with it blank:
 
 - **Which shop:** tick **Sell here** on the shops in the **Bought / sold** list to choose. With none ticked, any shop that trades the item can be used. Among the allowed shops, it picks the one that adds the fewest steps.
 - **The trip:** the route stops at the next room, walks to the shop, sells, then carries on. A walk-to heads on to its destination; a loop or Auto-Lair walks back to where it stopped and picks up again.

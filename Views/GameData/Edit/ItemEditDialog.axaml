@@ -4,11 +4,11 @@
         xmlns:conv="using:MudPlay.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="740"
+        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="560"
         x:Class="MudPlay.Views.GameData.Edit.ItemEditDialog"
         x:DataType="vm:ItemEditDialogViewModel"
         Title="{Binding Title}"
-        Width="920" Height="740"
+        Width="1000" Height="560"
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>
@@ -22,6 +22,18 @@
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,6,0,4"/>
+        </Style>
+        <Style Selector="Border.Group">
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="8,6"/>
+        </Style>
+        <Style Selector="TextBlock.GroupHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
         </Style>
         <Style Selector="TextBlock.MdbKey">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
@@ -53,34 +65,25 @@
         <Grid RowDefinitions="*,Auto" RowSpacing="10">
 
             <!-- ===== Two panes: editable left + read-only MDB right =====
-                 Same shape as MonsterEditDialog — GridSplitter persists
-                 the column ratio per profile via SplitterLayoutStore. The
-                 default split (0.75* / 1*) sits the splitter just past the
-                 editable side's right edge: the Name / Options / Details
-                 boxes are all left-aligned and none is wider than ~360px,
-                 so the extra room belongs to the read-only MDB / chest
-                 pane on the right. SplitterLayoutStore restores the user's
-                 last-dragged ratio over this default. -->
-            <Grid Grid.Row="0" x:Name="PanesGrid" ColumnDefinitions="0.75*,6,*">
+                 The editable side is a fixed width that fits its groups side by
+                 side, so it needs no splitter and no scrolling at the default
+                 size; the read-only MDB pane takes whatever width is left.
+                 WindowLayouts remembers the window's size and place. -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*" ColumnSpacing="10">
 
                 <!-- Editable -->
                 <Border Grid.Column="0"
                         BorderBrush="{StaticResource ChromeBorderBrush}"
-                        BorderThickness="1" CornerRadius="3" Padding="10"
-                        Margin="0,0,8,0">
+                        BorderThickness="1" CornerRadius="3" Padding="10">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="10" Width="540">
 
-                            <!-- Item Name + Use tier — kept narrow and left-aligned
-                                 so they sit at the pane's left edge, up against
-                                 the splitter's default position. -->
-                            <Grid ColumnDefinitions="46,280" RowDefinitions="Auto,Auto"
-                                  ColumnSpacing="8" RowSpacing="6"
-                                  HorizontalAlignment="Left">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Name"/>
-                                <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name, Mode=TwoWay}"/>
-                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Use"/>
-                                <ComboBox  Grid.Row="1" Grid.Column="1"
+                            <!-- Name + Use tier on one row. -->
+                            <Grid ColumnDefinitions="Auto,*,Auto,190" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Name"/>
+                                <TextBox   Grid.Column="1" Text="{Binding Name, Mode=TwoWay}"/>
+                                <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Use" Margin="6,0,0,0"/>
+                                <ComboBox  Grid.Column="3"
                                            ItemsSource="{Binding AvailableTiers}"
                                            SelectedItem="{Binding UseTier, Mode=TwoWay}"
                                            HorizontalAlignment="Stretch"
@@ -93,137 +96,114 @@
                                 </ComboBox>
                             </Grid>
 
-                            <!-- Options — 9 checkboxes laid out in two columns.
-                                 Auto-equip + Can use to backstab dropped (auto-equip
-                                 is owned by the Equipment Manager section; backstab
-                                 eligibility is derived from ability code 116 at
-                                 combat time, not user-overridable here). -->
-                            <TextBlock Classes="SectionHeader" Text="Options" Margin="0,10,0,4"/>
-                            <Border BorderBrush="{StaticResource ChromeBorderBrush}"
-                                    BorderThickness="1" CornerRadius="3" Padding="8"
-                                    HorizontalAlignment="Left">
-                                <Grid ColumnDefinitions="Auto,16,Auto">
-                                    <StackPanel Grid.Column="0" Spacing="2">
-                                        <CheckBox Content="Auto-collect"         IsChecked="{Binding AutoCollect,     Mode=TwoWay}"/>
-                                        <CheckBox Content="Auto-discard"         IsChecked="{Binding AutoDiscard,     Mode=TwoWay}"/>
-                                        <CheckBox Content="Auto-open"            IsChecked="{Binding AutoOpen,        Mode=TwoWay}"
-                                                  IsEnabled="{Binding CanAutoOpen}"
-                                                  ToolTip.Tip="{Binding AutoOpenTooltip}"/>
-                                        <CheckBox Content="Auto-buy"             IsChecked="{Binding AutoBuy,         Mode=TwoWay}"
-                                                  IsEnabled="{Binding CanBuySell}"
-                                                  ToolTip.Tip="{Binding BuySellTooltip}"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="12">
-                                            <CheckBox Content="Auto-sell"            IsChecked="{Binding AutoSell,        Mode=TwoWay}"
+                            <!-- The options, grouped by what they do with the item, each
+                                 beside the number it uses. -->
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+
+                                <StackPanel Grid.Column="0" Spacing="10">
+                                    <Border Classes="Group">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Classes="GroupHeader" Text="Getting it"/>
+                                            <CheckBox Content="Auto-collect" IsChecked="{Binding AutoCollect, Mode=TwoWay}"
+                                                      ToolTip.Tip="Pick it up from rooms during walks and loops."/>
+                                            <CheckBox Content="Auto-buy" IsChecked="{Binding AutoBuy, Mode=TwoWay}"
                                                       IsEnabled="{Binding CanBuySell}"
-                                                      ToolTip.Tip="{Binding BuySellTooltip}"/>
-                                            <CheckBox Content="Make detours to sell this item"
-                                                      IsChecked="{Binding SellDetour, Mode=TwoWay}"
-                                                      IsEnabled="{Binding CanSellDetour}"
-                                                      ToolTip.Tip="With Auto-sell on: once you carry more than 'Detour to sell if above', a walk, loop or Auto-Lair turns aside to a shop that trades this item, sells it, then carries on. Tick 'Sell here' on the shops in Bought / sold to choose which ones (none ticked = any of them)."/>
+                                                      ToolTip.Tip="{Binding AutoBuyTooltip}"/>
+                                            <Grid ColumnDefinitions="*,80" Margin="0,2">
+                                                <TextBlock Classes="FieldLabel" Text="Max to get"
+                                                           ToolTip.Tip="Stop collecting or buying at this many. Blank = All."/>
+                                                <TextBox Grid.Column="1" Text="{Binding MaxToGet, Mode=TwoWay}"
+                                                         PlaceholderText="All"
+                                                         ToolTip.Tip="Stop collecting or buying at this many. Blank = All."/>
+                                            </Grid>
+                                            <CheckBox Content="Cannot be taken" IsChecked="{Binding CannotBeTaken, Mode=TwoWay}"
+                                                      ToolTip.Tip="Never pick it up, even with Auto-collect on."/>
+                                            <CheckBox Content="Auto-open" IsChecked="{Binding AutoOpen, Mode=TwoWay}"
+                                                      IsVisible="{Binding CanAutoOpen}"
+                                                      ToolTip.Tip="Open this container as soon as it's in your inventory."/>
+                                            <CheckBox Content="Auto-obtain for path" IsChecked="{Binding AutoObtainForPath, Mode=TwoWay}"
+                                                      ToolTip.Tip="When a route needs this item, go get it (party redistribute, shop buy via bank withdraw, or drop reroute) instead of failing the only route or asking in the route picker. Min. to keep / Max to get set how many per person."/>
                                         </StackPanel>
-                                        <CheckBox Content="Auto-stash"           IsChecked="{Binding AutoStash,       Mode=TwoWay}"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="2" Spacing="2">
-                                        <CheckBox Content="Cannot be taken"      IsChecked="{Binding CannotBeTaken,   Mode=TwoWay}"/>
-                                        <CheckBox Content="Must have minimum"    IsChecked="{Binding MustHaveMinimum, Mode=TwoWay}"/>
-                                        <CheckBox Content="Loyal item"           IsChecked="{Binding LoyalItem,       Mode=TwoWay}"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
+                                    </Border>
 
-                            <!-- Details — overlay-editable carry policy only. The
-                                 read-only MDB facts (weight, item type, body slot,
-                                 bought/sold) live in the right-pane "Other Info".
-                                 Constrained to HorizontalAlignment=Left + fixed column
-                                 widths so the controls don't stretch toward the splitter. -->
-                            <TextBlock Classes="SectionHeader" Text="Details" Margin="0,10,0,4"/>
-                            <Grid ColumnDefinitions="140,80,Auto"
-                                  RowDefinitions="Auto,Auto,Auto"
-                                  ColumnSpacing="8" RowSpacing="6"
-                                  HorizontalAlignment="Left">
-
-                                <!-- Row 0: Min. to keep -->
-                                <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Min. to keep"
-                                           ToolTip.Tip="Engines will not drop / discard below this count. Leave blank for none."/>
-                                <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding MinToKeep, Mode=TwoWay}"
-                                           PlaceholderText="None"/>
-
-                                <!-- Row 1: Detour to sell if above -->
-                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Detour to sell if above"
-                                           IsEnabled="{Binding SellDetour}"
-                                           ToolTip.Tip="With 'Make detours to sell this item' on: a detour goes once you carry more than this many, and more than Min. to keep. 0 = as soon as you carry more than Min. to keep (the first copy when that's blank or 0). Blank = no detour."/>
-                                <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding SellDetourAbove, Mode=TwoWay}"
-                                           IsEnabled="{Binding SellDetour}"
-                                           PlaceholderText="None"/>
-                                <TextBlock Grid.Row="1" Grid.Column="2" VerticalAlignment="Center"
-                                           Foreground="{StaticResource AccentRedBrush}"
-                                           Text="⚠ Set a number — blank means no detour"
-                                           IsVisible="{Binding NeedsSellDetourAbove}"/>
-
-                                <!-- Row 2: Max to get -->
-                                <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Max to get"
-                                           ToolTip.Tip="Stop auto-acquiring at this count. Leave blank for 'All'."/>
-                                <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding MaxToGet, Mode=TwoWay}"
-                                           PlaceholderText="All"/>
-                            </Grid>
-
-                            <!-- Navigation — when a planned route needs this item to
-                                 cross a gate or survive a hazard and the party lacks
-                                 it, "Auto-obtain for path" tells the walker to go get
-                                 it (via every method — party redistribute, shop buy,
-                                 bank withdraw, drop reroute) instead of failing the
-                                 sole-route case or surfacing the two-route case in the
-                                 route picker. Min/Max above bound how many are
-                                 acquired per person. -->
-                            <TextBlock Classes="SectionHeader" Text="Navigation" Margin="0,10,0,4"/>
-                            <Border BorderBrush="{StaticResource ChromeBorderBrush}"
-                                    BorderThickness="1" CornerRadius="3" Padding="8"
-                                    HorizontalAlignment="Left">
-                                <CheckBox Content="Auto-obtain for path"
-                                          IsChecked="{Binding AutoObtainForPath, Mode=TwoWay}"
-                                          ToolTip.Tip="When a route needs this item, acquire it automatically (party redistribute, shop buy via bank withdraw, or drop reroute) instead of failing the sole route or surfacing the choice in the route picker."/>
-                            </Border>
-
-                            <!-- On-use / proc message — an item-claimed message record
-                                 (its "use <item>" buff line, or a weapon-proc line) is
-                                 authored / edited here, not from the Messages tab, mirroring
-                                 how a spell's message is edited from the Spells tab. Hidden
-                                 when the dialog was built with no message-editing surface. -->
-                            <TextBlock Classes="SectionHeader" Text="Message" Margin="0,10,0,4"
-                                       IsVisible="{Binding CanEditAttachedMessage}"/>
-                            <Border BorderBrush="{StaticResource ChromeBorderBrush}"
-                                    BorderThickness="1" CornerRadius="3" Padding="8"
-                                    HorizontalAlignment="Left"
-                                    IsVisible="{Binding CanEditAttachedMessage}">
-                                <StackPanel Spacing="6">
-                                    <TextBlock Text="{Binding AttachedMessageDisplay}"
-                                               TextWrapping="Wrap" MaxWidth="300"
-                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                    <Button Content="{Binding AttachedMessageButtonText}"
-                                            Command="{Binding EditAttachedMessageCommand}"
-                                            HorizontalAlignment="Left"/>
+                                    <Border Classes="Group">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Classes="GroupHeader" Text="Keeping it"/>
+                                            <CheckBox Content="Must have minimum" IsChecked="{Binding MustHaveMinimum, Mode=TwoWay}"
+                                                      ToolTip.Tip="Always keep at least Min. to keep of it."/>
+                                            <Grid ColumnDefinitions="*,80" Margin="0,2">
+                                                <TextBlock Classes="FieldLabel" Text="Min. to keep"
+                                                           ToolTip.Tip="Engines won't drop, discard or sell below this many. Blank = none."/>
+                                                <TextBox Grid.Column="1" Text="{Binding MinToKeep, Mode=TwoWay}"
+                                                         PlaceholderText="None"
+                                                         ToolTip.Tip="Engines won't drop, discard or sell below this many. Blank = none."/>
+                                            </Grid>
+                                            <CheckBox Content="Loyal item" IsChecked="{Binding LoyalItem, Mode=TwoWay}"
+                                                      ToolTip.Tip="Never drop or discard it."/>
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
-                            </Border>
+
+                                <StackPanel Grid.Column="1" Spacing="10">
+                                    <Border Classes="Group">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Classes="GroupHeader" Text="Getting rid of it"/>
+                                            <CheckBox Content="Auto-sell" IsChecked="{Binding AutoSell, Mode=TwoWay}"
+                                                      IsEnabled="{Binding CanBuySell}"
+                                                      ToolTip.Tip="{Binding AutoSellTooltip}"/>
+                                            <StackPanel Margin="22,0,0,0" Spacing="2" IsVisible="{Binding CanSellDetour}">
+                                                <CheckBox Content="Make detours to sell it"
+                                                          IsChecked="{Binding SellDetour, Mode=TwoWay}"
+                                                          ToolTip.Tip="Once you carry more than the count below, a walk, loop or Auto-Lair turns aside to a shop that trades this item, sells it, then carries on."/>
+                                                <StackPanel Spacing="2" IsVisible="{Binding SellDetour}">
+                                                    <Grid ColumnDefinitions="*,70" Margin="0,2">
+                                                        <TextBlock Classes="FieldLabel" Text="when carrying more than"
+                                                                   ToolTip.Tip="A detour goes once you carry more than this many, and more than Min. to keep. 0 = as soon as you carry more than Min. to keep (the first copy when that's blank or 0). Blank = no detour."/>
+                                                        <TextBox Grid.Column="1" Text="{Binding SellDetourAbove, Mode=TwoWay}"
+                                                                 PlaceholderText="None"/>
+                                                    </Grid>
+                                                    <TextBlock Foreground="{StaticResource AccentRedBrush}" FontSize="11"
+                                                               TextWrapping="Wrap"
+                                                               Text="⚠ Set a number — blank means no detour"
+                                                               IsVisible="{Binding NeedsSellDetourAbove}"/>
+                                                    <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                                               Text="Tick 'Sell here' on the shops at right to choose where (none = any)."/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <CheckBox Content="Auto-stash" IsChecked="{Binding AutoStash, Mode=TwoWay}"
+                                                      ToolTip.Tip="Stash it at your stash room."/>
+                                            <CheckBox Content="Auto-discard" IsChecked="{Binding AutoDiscard, Mode=TwoWay}"
+                                                      ToolTip.Tip="Drop it as soon as it's picked up."/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- On-use / proc message — an item-claimed message record
+                                         (its "use <item>" buff line, or a weapon-proc line) is
+                                         authored / edited here, not from the Messages tab, mirroring
+                                         how a spell's message is edited from the Spells tab. Hidden
+                                         when the dialog was built with no message-editing surface. -->
+                                    <Border Classes="Group" IsVisible="{Binding CanEditAttachedMessage}">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Classes="GroupHeader" Text="On-use message"/>
+                                            <TextBlock Text="{Binding AttachedMessageDisplay}"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                            <Button Content="{Binding AttachedMessageButtonText}"
+                                                    Command="{Binding EditAttachedMessageCommand}"
+                                                    HorizontalAlignment="Left"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
 
                         </StackPanel>
                     </ScrollViewer>
                 </Border>
 
-                <!-- Drag handle. -->
-                <GridSplitter Grid.Column="1"
-                              Width="6"
-                              HorizontalAlignment="Stretch"
-                              VerticalAlignment="Stretch"
-                              ResizeDirection="Columns"
-                              ResizeBehavior="PreviousAndNext"
-                              Background="{StaticResource ChromeBorderBrush}"
-                              ShowsPreview="False"/>
-
                 <!-- Read-only MDB info -->
-                <Border Grid.Column="2"
+                <Border Grid.Column="1"
                         BorderBrush="{StaticResource ChromeBorderBrush}"
                         BorderThickness="1" CornerRadius="3" Padding="10"
-                        Margin="8,0,0,0"
                         Background="{StaticResource ChromeBgSunkenBrush}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
