@@ -63,6 +63,9 @@ public sealed class DamageLineAttributorTests
     [InlineData("Bob sings the song of blasting to you, causing 12 damage!", "Bob", "You", false)]
     [InlineData("You sing the song of blasting, causing 12 damage to your foes!", "You", null, false)]
     [InlineData("You summon a demon upon the room doing 12 damage!", "You", null, false)]
+    // A room spell's caster view: only the caster sees it aimed at "your foes".
+    [InlineData("A hellish storm of fire and brimstone scorches your foes for 12 damage!", "You", null, false)]
+    [InlineData("You summon a demon which drains your enemies for 12 damage!", "You", null, false)]
     // Stock's evil punishment / a sysop's punish: nobody in the room dealt it.
     [InlineData("A bolt of lightning from the heavens strikes you for 12 points damage!", null, "You", true)]
     public void OtherDamageWordings(string line, string? source, string? target, bool noDealer)

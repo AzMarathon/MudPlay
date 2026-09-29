@@ -174,6 +174,25 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal(20, r.UnknownTaken);
     }
 
+    // Our room spell names no victim: every monster in the room takes the amount
+    // (report paradigm-20260929-063213).
+    [Fact]
+    public void OurRoomSpell_HitsEveryMonsterInTheRoom()
+    {
+        using Harness h = new();
+        List<string> tags = new();
+        h.Tracker.LineAttributed += (_, tag) => tags.Add(tag);
+        h.Feed("A hellish storm of fire and brimstone scorches your foes for 50 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(100, Row(r, DamageLineAttributor.Self).Dealt);
+        Assert.Equal(50, Row(r, "large giant rat").Taken);
+        Assert.Equal(50, Row(r, "goblin").Taken);
+        Assert.Equal(0, Row(r, "Bob").Taken);          // a player, not a foe
+        Assert.Equal(0, r.UnknownTaken);
+        Assert.Equal("You → 2 foes 50 each", Assert.Single(tags));
+    }
+
     // Damage nobody dealt — a condition or effect — is yours to take and no one's to
     // deal, so it doesn't land in unknown (report paradigm-20260929-003750).
     [Theory]

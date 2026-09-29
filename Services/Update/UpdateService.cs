@@ -68,10 +68,10 @@ public sealed class UpdateService : IDisposable
                 return Store(new(UpdateAvailability.UpToDate, current, rel.Version,
                     null, null, rel.HtmlUrl, rel.Notes, null));
 
-            // A newer build: show its CHANGELOG entry, not the hand-authored release
-            // body (that's publish boilerplate — the asset table + checksum notes).
-            // Fall back to the release body if the changelog can't be fetched/parsed.
-            string? notes = await TryFetchChangelogNotesAsync(rel, ct).ConfigureAwait(false) ?? rel.Notes;
+            // A newer build: show the CHANGELOG entries it brings, not the hand-authored
+            // release body (that's publish boilerplate — the asset table + checksum
+            // notes). Fall back to the release body if the changelog can't be fetched/parsed.
+            string? notes = await TryFetchChangelogNotesAsync(rel, current, ct).ConfigureAwait(false) ?? rel.Notes;
 
             UpdateAsset? asset = rel.Assets.FirstOrDefault(a => UpdatePlatform.MatchesCurrentPlatform(a.Name));
             if (asset is null)
@@ -113,16 +113,18 @@ public sealed class UpdateService : IDisposable
         return await installer.ApplyAsync(result, progress, prepareExit, onExit, ct).ConfigureAwait(false);
     }
 
-    // Fetch CHANGELOG.md at the release's tag and pull out that version's entry — the
-    // real "what's new" the update window shows. Best-effort: a null (repo has no
-    // CHANGELOG at that ref, network hiccup, unparsable) falls back to the release body.
-    private async Task<string?> TryFetchChangelogNotesAsync(UpdateRelease rel, CancellationToken ct)
+    // Fetch CHANGELOG.md at the release's tag — never main, which already carries
+    // entries merged after the release — and pull out every entry newer than what's
+    // running: the real "what's new" the update window shows. Best-effort: a null (repo
+    // has no CHANGELOG at that ref, network hiccup, unparsable) falls back to the
+    // release body.
+    private async Task<string?> TryFetchChangelogNotesAsync(UpdateRelease rel, string current, CancellationToken ct)
     {
         string url = $"{RawContentBase}/{rel.RawTag}/CHANGELOG.md";
         try
         {
             string md = await _http.GetStringAsync(url, ct).ConfigureAwait(false);
-            return ChangelogExtractor.TopEntry(md, rel.Version);
+            return ChangelogExtractor.EntriesSince(md, current, rel.Version);
         }
         catch
         {

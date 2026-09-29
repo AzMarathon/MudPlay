@@ -61,10 +61,12 @@ public static class RoundTotalsFormatter
     // How the ledger read one damage line, for the Wire Inspector's Classified view:
     // "Bob → large orc 9", "unknown → You 5", "no attacker → You 2" for damage nobody
     // dealt, or "not counted (no round): ..." for a line that fell outside a round.
-    public static string LedgerTag(string? source, string? target, int amount, bool counted, bool noDealer = false)
+    public static string LedgerTag(string? source, string? target, int amount, bool counted, bool noDealer = false, int foes = 0)
     {
         string dealer = noDealer ? "no attacker" : source ?? "unknown";
-        string entry = $"{dealer} → {target ?? "unknown"} {amount}";
+        string entry = foes > 0
+            ? $"{dealer} → {foes} {(foes == 1 ? "foe" : "foes")} {amount} each"
+            : $"{dealer} → {target ?? "unknown"} {amount}";
         return counted ? entry : $"not counted (no round): {entry}";
     }
 

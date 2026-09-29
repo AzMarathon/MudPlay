@@ -47,14 +47,14 @@ public sealed class CombatSessionTracker : IDisposable
     // Our known spells' caster-message matchers, configured attack slots first,
     // refreshed on the data boundaries (see RefreshMatchers). A null resolver means no
     // spell recognition — our spell lines then count as procs or swings.
-    private readonly Func<IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>>? _resolveSpellMatchers;
-    private IReadOnlyList<(string Name, CasterMessageMatcher Matcher)> _spellMatchers =
-        Array.Empty<(string, CasterMessageMatcher)>();
+    private readonly Func<IReadOnlyList<SpellLineMatcher>>? _resolveSpellMatchers;
+    private IReadOnlyList<SpellLineMatcher> _spellMatchers = Array.Empty<SpellLineMatcher>();
 
-    // Per-spell landed damage + resisted-cast count, keyed by spell name. Landed = a
-    // recognised damage line; Misses = a resisted cast (see ResolvePendingSpellMiss).
-    // Ordered by first appearance for a stable display.
-    private sealed class SpellAccum { public DamageTally Dmg; public int Misses; }
+    // Per-spell damage per landed cast + resisted-cast count, keyed by spell name. A
+    // landing is a recognised damage line, and a follow-up line (the spell the cast
+    // chains to) adds to the cast it follows; Misses = a resisted cast (see
+    // ResolvePendingSpellMiss). Ordered by first appearance for a stable display.
+    private sealed class SpellAccum { public List<int> Casts = new(); public int Misses; }
     private readonly Dictionary<string, SpellAccum> _perSpell = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _spellOrder = new();
     private string? _lastSpell;
@@ -64,7 +64,6 @@ public sealed class CombatSessionTracker : IDisposable
     private DamageTally _backstab;
     private DamageTally _round;
     private DamageTally _proc;
-    private DamageTally _spell;
     private DamageTally _hitTaken;
     // The last counted miss may actually be a spell-cast EMOTE ("You scatter some
     // ashes in a sweeping motion!") — a self-emote ending in "!" the miss skeleton
@@ -104,7 +103,7 @@ public sealed class CombatSessionTracker : IDisposable
     public CombatSessionTracker(
         MessageRouter router,
         RoundDamageTracker rounds,
-        Func<IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>>? resolveSpellMatchers = null)
+        Func<IReadOnlyList<SpellLineMatcher>>? resolveSpellMatchers = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(rounds);
@@ -130,19 +129,20 @@ public sealed class CombatSessionTracker : IDisposable
     // that move them: connect / character switch, a Combat-tab edit, a game-data set
     // swap, and a spellbook change.
     public void RefreshMatchers()
-        => _spellMatchers = _resolveSpellMatchers?.Invoke() ?? Array.Empty<(string, CasterMessageMatcher)>();
+        => _spellMatchers = _resolveSpellMatchers?.Invoke() ?? Array.Empty<SpellLineMatcher>();
 
     // The spells whose damage lines we recognise, configured attack slots first.
-    public IReadOnlyList<string> RecognisedSpells => _spellMatchers.Select(m => m.Name).ToList();
+    public IReadOnlyList<string> RecognisedSpells
+        => _spellMatchers.Where(m => !m.FollowUp).Select(m => m.Name).ToList();
 
     // True when line is the caster's-eye damage line of one of our spells.
     // RoundDamageTracker uses it to own a spell line that names no caster.
     public bool MatchesOwnSpell(string line) => SpellOf(line, out _) is not null;
 
-    private string? SpellOf(string line, out int damage)
+    private SpellLineMatcher? SpellOf(string line, out int damage)
     {
-        foreach ((string name, CasterMessageMatcher m) in _spellMatchers)
-            if (m.TryMatchDamage(line, out damage)) return name;
+        foreach (SpellLineMatcher m in _spellMatchers)
+            if (m.Matcher.TryMatchDamage(line, out damage)) return m;
         damage = 0;
         return null;
     }
@@ -184,10 +184,11 @@ public sealed class CombatSessionTracker : IDisposable
         foreach (string name in _spellOrder)
         {
             SpellAccum a = _perSpell[name];
-            if (a.Dmg.Count == 0 && a.Misses == 0) continue;
+            if (a.Casts.Count == 0 && a.Misses == 0) continue;
             list.Add(new SpellCombatStat(
-                name, a.Dmg.Count, a.Misses,
-                a.Dmg.Count == 0 ? 0 : a.Dmg.Min, a.Dmg.Max, a.Dmg.Sum));
+                name, a.Casts.Count, a.Misses,
+                a.Casts.Count == 0 ? 0 : a.Casts.Min(), a.Casts.Count == 0 ? 0 : a.Casts.Max(),
+                a.Casts.Sum(d => (long)d)));
         }
         return list;
     }
@@ -196,7 +197,11 @@ public sealed class CombatSessionTracker : IDisposable
     // the min/max across whichever swing categories have landed; an empty
     // category contributes nothing.
     public CombatSessionStats Snapshot()
-        => new(
+    {
+        DamageTally spell = default;
+        foreach (SpellAccum a in _perSpell.Values)
+            foreach (int d in a.Casts) spell.Add(d);
+        return new(
             Hits:                _hit.Count,
             Crits:               _crit.Count,
             Backstabs:           _backstab.Count,
@@ -225,11 +230,12 @@ public sealed class CombatSessionTracker : IDisposable
             ProcMinDamage:       _proc.Count == 0 ? 0 : _proc.Min,
             ProcMaxDamage:       _proc.Max,
             ProcTotalDamage:     _proc.Sum,
-            SpellHits:           _spell.Count,
-            SpellMinDamage:      _spell.Count == 0 ? 0 : _spell.Min,
-            SpellMaxDamage:      _spell.Max,
-            SpellTotalDamage:    _spell.Sum,
+            SpellHits:           spell.Count,
+            SpellMinDamage:      spell.Count == 0 ? 0 : spell.Min,
+            SpellMaxDamage:      spell.Max,
+            SpellTotalDamage:    spell.Sum,
             Spells:              BuildSpellStats());
+    }
 
     // Zero every counter — called on the session boundary (connect / character
     // switch), matching RoundDamageTracker.Reset.
@@ -240,7 +246,6 @@ public sealed class CombatSessionTracker : IDisposable
         _backstab = default;
         _round = default;
         _proc = default;
-        _spell = default;
         _hitTaken = default;
         _perSpell.Clear();
         _spellOrder.Clear();
@@ -300,11 +305,19 @@ public sealed class CombatSessionTracker : IDisposable
 
         // One of our spells. Its cast line ("You cast … for N damage!") has the
         // first-person "You" source UserHits also matches, so it's claimed here.
-        if (SpellOf(line.Text, out int dmg) is { } spell)
+        if (SpellOf(line.Text, out int dmg) is { } matched)
         {
-            _spell.Add(dmg);
-            Spell(spell).Dmg.Add(dmg);
-            _lastSpell = spell;
+            _recognizedLine = line.Text;
+            List<int> casts = Spell(matched.Name).Casts;
+            if (matched.FollowUp)
+            {
+                // The chained spell's line belongs to the cast it follows.
+                if (casts.Count > 0) casts[^1] += dmg;
+                Changed?.Invoke();
+                return;
+            }
+            casts.Add(dmg);
+            _lastSpell = matched.Name;
             // The cast's emote was just counted as a physical miss; a landed spell
             // means that "miss" was the emote — retract it so spell combat doesn't
             // inflate the miss count.

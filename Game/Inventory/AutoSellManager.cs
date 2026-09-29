@@ -99,6 +99,9 @@ public sealed class AutoSellManager : IDisposable
     // Raised when a round of selling ends (everything sold, refused or timed out).
     public event Action? Finished;
 
+    // Raised with the item Number when the shop refuses to buy it.
+    public event Action<int>? ItemRefused;
+
     // Bind the wire sender — the gate-wrapped engine pipeline from
     // MainWindowViewModel.
     public void SetWireSender(Action<byte[]> sender)
@@ -226,6 +229,7 @@ public sealed class AutoSellManager : IDisposable
         if (_resolve(name) is not { } r) return;
         if (r.Number != _queue[_active].Number) return;
         _log?.Info(LogCategory, $"shop refuses item={_queue[_active].Name} — stopping this item");
+        ItemRefused?.Invoke(r.Number);
         _active++;
         PumpActive();
     }

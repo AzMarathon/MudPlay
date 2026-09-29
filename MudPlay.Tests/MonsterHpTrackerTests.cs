@@ -115,6 +115,20 @@ public sealed class MonsterHpTrackerTests
         Assert.Equal(100, h.Tracker.Estimate("orc"));   // the survivor is untouched
     }
 
+    // Our room spell hits every monster, both of a shared name included.
+    [Fact]
+    public void AreaDamage_HitsEveryMonster()
+    {
+        Harness h = new();
+        h.Room(RoomObservationSource.AlsoHere, ("orc", 1), ("orc", 1), ("rat", 2));
+        h.Tracker.NoteAreaDamage(8);
+
+        Assert.Equal(92, h.Tracker.Estimate("orc"));
+        Assert.Equal(4, h.Tracker.Estimate("rat"));
+        h.Room(RoomObservationSource.Death, ("orc", 1), ("rat", 2));
+        Assert.Equal(92, h.Tracker.Estimate("orc"));   // the survivor was hit too
+    }
+
     [Fact]
     public void RoomChange_ForgetsEverything()
     {
