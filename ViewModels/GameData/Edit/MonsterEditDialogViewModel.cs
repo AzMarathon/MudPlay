@@ -122,11 +122,11 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     // spell) isn't judged.
     private readonly Func<string, KnownSpell?>? _findSpell;
     public string? PreAttackSpellError => SlotError(PreAttackSpellId, Game.Combat.OverrideSpellFit.IsDebuff,
-        "isn't a debuff (a 0-energy, between-round spell on one enemy)");
+        "isn't a debuff (a 0-energy, between-round spell on an enemy or the room)");
     public string? NormalSpellError => SlotError(NormalSpellId, Game.Combat.OverrideSpellFit.IsAttack,
-        "isn't an attack spell (one that costs energy and targets a single enemy)");
+        "isn't an attack spell (one that costs energy and hits an enemy or the room)");
     public string? AltSpellError => SlotError(AltSpellId, Game.Combat.OverrideSpellFit.IsAttack,
-        "isn't an attack spell (one that costs energy and targets a single enemy)");
+        "isn't an attack spell (one that costs energy and hits an enemy or the room)");
     public string? SpellErrors => string.Join("\n",
         new[] { PreAttackSpellError, NormalSpellError, AltSpellError }.Where(e => e is not null)) is { Length: > 0 } all
         ? all : null;

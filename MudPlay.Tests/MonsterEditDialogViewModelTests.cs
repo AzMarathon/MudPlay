@@ -384,13 +384,16 @@ public sealed class MonsterEditDialogViewModelTests
     // ----- override spell slots ------------------------------------------
 
     // Shaped like the class spells in the game data: mmis and dfir (#288) cost energy
-    // on one enemy; fear is a 0-energy spell on one enemy; esto hits the room.
+    // on one enemy, esto hits the room; fear and stnk are 0-energy on one enemy and
+    // on the room; mend is cast on yourself.
     private static readonly Dictionary<string, KnownSpell> Spells = new(StringComparer.OrdinalIgnoreCase)
     {
         ["mmis"] = Spell(1, "mmis", energy: 500, targets: 8),
         ["dfir"] = Spell(288, "dfir", energy: 1000, targets: 8),
         ["fear"] = Spell(3, "fear", energy: 0, targets: 8),
         ["esto"] = Spell(4, "esto", energy: 1000, targets: 12),
+        ["stnk"] = Spell(5, "stnk", energy: 0, targets: 12),
+        ["mend"] = Spell(6, "mend", energy: 0, targets: 2),
     };
 
     private static KnownSpell Spell(int n, string code, int energy, int targets)
@@ -406,14 +409,16 @@ public sealed class MonsterEditDialogViewModelTests
     public void SpellLists_OfferOnlyWhatFitsTheSlot()
     {
         MonsterEditDialogViewModel vm = SpellVm();
-        Assert.Equal(new[] { "fear" }, vm.DebuffSuggestions.Select(p => p.Short));
-        Assert.Equal(new[] { "mmis", "dfir" }, vm.AttackSuggestions.Select(p => p.Short));
+        Assert.Equal(new[] { "fear", "stnk" }, vm.DebuffSuggestions.Select(p => p.Short));
+        Assert.Equal(new[] { "mmis", "dfir", "esto" }, vm.AttackSuggestions.Select(p => p.Short));
     }
 
     [Theory]
     [InlineData("mmis", null, null)]      // an attack spell as the debuff
     [InlineData(null, "fear", null)]      // a debuff as the attack spell
-    [InlineData(null, null, "esto")]      // a room spell as the alt attack
+    [InlineData(null, null, "fear")]      // a debuff as the alt attack
+    [InlineData("esto", null, null)]      // a room attack as the debuff
+    [InlineData("mend", null, null)]      // a spell on yourself as the debuff
     public void WrongKindOfSpell_BlocksSave(string? debuff, string? spell, string? alt)
     {
         MonsterEditDialogViewModel vm = SpellVm();
@@ -430,7 +435,7 @@ public sealed class MonsterEditDialogViewModelTests
     {
         MonsterEditDialogViewModel vm = SpellVm();
         vm.PreAttackSpellId = "fear";
-        vm.NormalSpellId = "dfir";
+        vm.NormalSpellId = "esto";        // a room spell is an attack too
         vm.AltSpellId = "1234";           // a Spell.Number isn't judged
 
         Assert.Null(vm.SpellErrors);

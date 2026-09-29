@@ -468,13 +468,15 @@ public sealed partial class CombatManager
                 // it again for the rest of the capture. Clearing it unconditionally here
                 // means the next tick always gets a chance to retry, cast blocked or not.
                 _combatOff = false;
-                // Room-wide multi-attack spells (e.g. dancing blades) hit every enemy
-                // and MUST be cast bare — `blad`, never `blad <mob>` (the server treats
-                // the targeted form as an unknown command). Single-target attack/debuff
+                // Room-wide spells (e.g. dancing blades) hit every enemy and MUST be
+                // cast bare — `blad`, never `blad <mob>` (the server treats the targeted
+                // form as an unknown command). That's the multi-attack slots, and a room
+                // spell a monster's attack override names. Single-target attack/debuff
                 // spells keep their mob; _castingSpellTarget still tracks the round's mob.
-                string? castTarget = decision.Action is CombatSpellAction.MultiAttack
-                                                      or CombatSpellAction.MultiAttack2
-                    ? null : picked.RawName;
+                bool roomSpell = decision.Action is CombatSpellAction.MultiAttack
+                                                 or CombatSpellAction.MultiAttack2
+                                 || IsRoomScoped(decision.Spell);
+                string? castTarget = roomSpell ? null : picked.RawName;
                 // AttacksBlocked short-circuits the cast: an AttackPrevented condition
                 // makes the server reject an attack spell exactly like a weapon swing, so
                 // fall into the owed/retry branch and re-attempt next tick when it clears.
@@ -496,9 +498,7 @@ public sealed partial class CombatManager
                     // Record / end the room-attack channel. A multi-attack cast opens
                     // (or continues) the channel; any other attack action switches off
                     // it, so drop the marker — the post-kill re-pick guard keys on it.
-                    _roomChannelSpell = decision.Action is CombatSpellAction.MultiAttack
-                                                        or CombatSpellAction.MultiAttack2
-                        ? decision.Spell : null;
+                    _roomChannelSpell = roomSpell ? decision.Spell : null;
                     if (decision.Action == CombatSpellAction.DrainSpell)
                         _log?.Info(LogCategory,
                             $"drain-life {decision.Spell} vs {picked.RawName} — HP under trigger, overriding the round's attack");
@@ -1009,6 +1009,12 @@ public sealed partial class CombatManager
     // Excludes WeaponAttack (the thing we're leaving), Backstab (a stealth opener, not
     // a cascade rung), and the between-round debuffs (resolved separately, not round
     // owners). Used by the weapon→spell re-climb.
+    // A spell whose targeting scope is the room (DebuffTargeting.IsAreaEnemy). False
+    // when the code can't be resolved.
+    private bool IsRoomScoped(string? code)
+        => code is not null && _resolveSpellByCode?.Invoke(code) is { } spell
+           && DebuffTargeting.IsAreaEnemy(spell.Targets);
+
     private static bool IsAttackSpellRoundOwner(CombatSpellAction action) => action is
         CombatSpellAction.NormalAttackSpell or CombatSpellAction.AlternateAttackSpell
         or CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2
@@ -1149,9 +1155,11 @@ public sealed partial class CombatManager
         }
 
         // Area debuffs blanket the room and MUST be cast bare — `stnk`, never
-        // `stnk <mob>`; a single-target debuff keeps its mob.
+        // `stnk <mob>` — whether from the AoE slot or a monster's debuff override; a
+        // single-target debuff keeps its mob.
         string? castTarget =
-            decision.Action == CombatSpellAction.AreaDebuff ? null : picked.RawName;
+            decision.Action == CombatSpellAction.AreaDebuff || IsRoomScoped(decision.Spell)
+                ? null : picked.RawName;
         // A pre-attack debuff is offensive output too — hold it while AttackPrevented is
         // active (fear doesn't stop debuffs). Returning false lets the caller try the
         // attack directly, which its own AttacksBlocked gate then also holds, so nothing
@@ -1302,8 +1310,10 @@ public sealed partial class CombatManager
         int targets = spell.Targets;
         bool ok = decision.Action switch
         {
+            // A monster's debuff override may name a room debuff too (cast bare).
             CombatSpellAction.SingleDebuff =>
-                DebuffTargeting.IsBetweenRound(energy) && DebuffTargeting.IsSingleTargetEnemy(targets),
+                DebuffTargeting.IsBetweenRound(energy)
+                && (DebuffTargeting.IsSingleTargetEnemy(targets) || isOverride && DebuffTargeting.IsAreaEnemy(targets)),
             CombatSpellAction.AreaDebuff =>
                 DebuffTargeting.IsBetweenRound(energy) && DebuffTargeting.IsAreaEnemy(targets),
             _ => true,

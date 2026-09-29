@@ -1462,6 +1462,41 @@ public sealed class CombatManagerSpellsTests
         Assert.DoesNotContain("harm giant rat", h.AllSent);
     }
 
+    // A room debuff in a monster's debuff override is allowed and cast bare.
+    [Fact]
+    public void PreAttackOverride_RoomDebuff_IsCastBare()
+    {
+        using Harness h = new();
+        h.SpellShorts[71] = "stnk";
+        h.SpellsByCode["stnk"] = new KnownSpell(71, "stnk", "stinking cloud", 1, 1, 1, 12,
+            new SpellFormulaInput { EnergyCost = 0 });
+        h.Overlays[80] = new MonsterOverlay { OverridePreAttackSpellId = 71, OverridePreAttackCount = 1 };
+        h.AddMonster(80, "cave bear");
+
+        h.Feed("Also here: cave bear.");
+
+        Assert.Contains("stnk", h.AllSent);
+        Assert.DoesNotContain("stnk cave bear", h.AllSent);
+    }
+
+    // A room spell in a monster's attack override is cast bare, like a multi-attack —
+    // the targeted form is an unknown command to the server.
+    [Fact]
+    public void AttackOverride_RoomSpell_IsCastBare()
+    {
+        using Harness h = new();
+        h.SpellShorts[566] = "esto";
+        h.SpellsByCode["esto"] = new KnownSpell(566, "esto", "eldritch storm", 1, 1, 1, 12,
+            new SpellFormulaInput { EnergyCost = 1000 });
+        h.Overlays[1] = new MonsterOverlay { OverrideAttackSpellId = 566 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+
+        Assert.Equal("esto", h.LastSent);
+        Assert.DoesNotContain("esto giant rat", h.AllSent);
+    }
+
     [Fact]
     public void AttackOverride_NullCount_StillActivatesWithUnlimitedCap()
     {
