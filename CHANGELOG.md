@@ -1,5 +1,9 @@
 # Version history
 
+## 3.125.8
+
+- Settings → Combat: "Only my totals" replaced by Me / Party / Other players / Monsters boxes that pick which round-totals rows print (none ticked prints nothing; updating with round totals on starts all four ticked)
+
 ## 3.125.7
 
 - Every window's menu, hotkey and toolbar entry opens it, brings it forward when buried, or closes it when already in front

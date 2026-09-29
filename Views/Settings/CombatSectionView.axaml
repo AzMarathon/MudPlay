@@ -677,11 +677,17 @@
                 <CheckBox Content="Show combat round totals"
                           IsChecked="{Binding ShowCombatRoundTotals, Mode=TwoWay}"
                           ToolTip.Tip="Append the per-round damage roll-up to the terminal after each round."/>
-                <CheckBox Content="Only my totals"
-                          Margin="24,0,0,0"
-                          IsEnabled="{Binding ShowCombatRoundTotals}"
-                          IsChecked="{Binding ShowCombatRoundTotalsSelfOnly, Mode=TwoWay}"
-                          ToolTip.Tip="Print just your own row each round (what you dealt and took) instead of every combatant in the room."/>
+                <WrapPanel Margin="24,0,0,0" IsEnabled="{Binding ShowCombatRoundTotals}"
+                           ToolTip.Tip="Which rows the round table prints. Tick all four for the full table; with none ticked it doesn't print. The unknown row prints whenever the table does.">
+                    <CheckBox Content="Me" Margin="0,0,16,0"
+                              IsChecked="{Binding ShowCombatRoundTotalsSelf, Mode=TwoWay}"/>
+                    <CheckBox Content="Party" Margin="0,0,16,0"
+                              IsChecked="{Binding ShowCombatRoundTotalsParty, Mode=TwoWay}"/>
+                    <CheckBox Content="Other players" Margin="0,0,16,0"
+                              IsChecked="{Binding ShowCombatRoundTotalsPlayers, Mode=TwoWay}"/>
+                    <CheckBox Content="Monsters"
+                              IsChecked="{Binding ShowCombatRoundTotalsMonsters, Mode=TwoWay}"/>
+                </WrapPanel>
 
             </StackPanel>
         </Grid>

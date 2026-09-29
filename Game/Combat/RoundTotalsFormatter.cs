@@ -12,8 +12,8 @@ namespace MudPlay.Game.Combat;
 //   [Round 3 taken: large orc 75, You 12, unknown 20]
 // Every combatant in the room is listed (zeros included): us first, then our party,
 // other players and monsters, biggest dealer first within each; "unknown" last, only
-// when a line named no side. With selfOnly the table carries just our own
-// row. Damage nobody dealt (a poison tick) shows
+// when a line named no side. The table carries only the kinds of row asked for
+// (Settings → Combat), plus unknown; asked for none, it's empty. Damage nobody dealt (a poison tick) shows
 // only in its victim's Taken. Every table row is its own full-line
 // "[ … ]" so it stays a client notice (ClientNotice) that no line parser reads a
 // monster name out of. Plain ASCII: the terminal draws the notice through CP437,
@@ -23,16 +23,17 @@ public static class RoundTotalsFormatter
     // Longest combatant name the table shows in full; longer ones are cut.
     private const int MaxNameWidth = 24;
 
-    public static IReadOnlyList<string> Table(RoundSummary round, bool selfOnly = false)
+    public static IReadOnlyList<string> Table(RoundSummary round, IReadOnlyCollection<CombatantKind> shown)
     {
+        if (shown.Count == 0) return Array.Empty<string>();
         List<(string Name, int Dealt, int Taken)> rows = round.Combatants
-            .Where(c => !selfOnly || c.Name == DamageLineAttributor.Self)
+            .Where(c => shown.Contains(c.Kind))
             .OrderBy(c => c.Kind)
             .ThenByDescending(c => c.Dealt)
             .ThenByDescending(c => c.Taken)
             .Select(c => (c.Name, c.Dealt, c.Taken))
             .ToList();
-        if (!selfOnly && (round.UnknownDealt > 0 || round.UnknownTaken > 0))
+        if (round.UnknownDealt > 0 || round.UnknownTaken > 0)
             rows.Add(("unknown", round.UnknownDealt, round.UnknownTaken));
 
         int nameWidth = Math.Min(MaxNameWidth,

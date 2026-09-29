@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.125.7**
-> - Every window's menu, hotkey and toolbar entry opens it, brings it forward when buried, or closes it when already in front
-> - Settings saves on that close, like OK
-> - Raising a window now brings it above the others on Linux window managers that ignored it
+> **Version 3.125.8**
+> - Settings → Combat: "Only my totals" replaced by Me / Party / Other players / Monsters boxes that pick which round-totals rows print (none ticked prints nothing; updating with round totals on starts all four ticked)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
