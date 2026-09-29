@@ -193,7 +193,7 @@ public sealed class WirePromptScannerTests
         WirePromptScanner s = new();
         s.InstallRegex(StatlinePromptRegexBuilder.Build("full custom <HP %h>"));
         int unmatched = 0;
-        s.PromptShapeUnmatched += () => unmatched++;
+        s.PromptShapeUnmatched += _ => unmatched++;
 
         s.Append(B("Mindcrime gossips: [HP=671/KAI=40]:w\r\n"));
 
@@ -223,7 +223,7 @@ public sealed class WirePromptScannerTests
         s.InstallRegex(StatlinePromptRegexBuilder.Build("full custom <HP %h>"));
         var observed = Collect(s);
         int unmatched = 0;
-        s.PromptShapeUnmatched += () => unmatched++;
+        s.PromptShapeUnmatched += _ => unmatched++;
 
         s.Append(B("[HP=120]:"));
 
@@ -232,16 +232,99 @@ public sealed class WirePromptScannerTests
     }
 
     [Fact]
-    public void PromptShapeUnmatched_NeverFiresOnDefaultPattern()
+    public void PromptShapeUnmatched_DoesNotFire_WhenDefaultPromptsMatchDefaultPattern()
     {
-        // Default-statline users run the permissive pattern AS the active
-        // one, so there's nothing to drift from → mismatch is structurally
-        // unreachable even when prompts arrive.
+        // Default-statline user on a stock-shaped prompt → the active (default)
+        // pattern reads every one, so nothing is unmatched.
         WirePromptScanner s = new();
         int unmatched = 0;
-        s.PromptShapeUnmatched += () => unmatched++;
+        s.PromptShapeUnmatched += _ => unmatched++;
 
         s.Append(B("[HP=120]:[HP=27/MA=31]:"));
+        s.Append(B("\x1b[79D\x1b[K[HP=145/MA=46]: look west\r\n"));
+
+        Assert.Equal(0, unmatched);
+    }
+
+    [Fact]
+    public void PromptShapeUnmatched_FiresOnDefaultPattern_WhenGamePrintsAnotherShape()
+    {
+        // Report stock-20260929-111956: Settings -> Statline on Default, but the
+        // game prints "[HP=145/145][MA=46/46]:" — the prompt sits at the row
+        // start before the echoed command, and the Default pattern can't read it.
+        WirePromptScanner s = new();
+        var observed = Collect(s);
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+
+        s.Append(B("\x1b[79D\x1b[K\x1b[0;37m[HP=145/145][MA=46/46]: go manhole\r\n"));
+
+        Assert.Equal(new[] { "[HP=145/145][MA=46/46]:" }, unmatched);
+        Assert.Empty(observed);
+    }
+
+    [Fact]
+    public void CustomEditorMatchingTheReportPrompt_ReadsHpAndMana()
+    {
+        // The remedy the mismatch warning points at: author the game's shape in
+        // Settings -> Statline and the parser reads it.
+        WirePromptScanner s = new();
+        s.InstallRegex(StatlinePromptRegexBuilder.Build("full custom [HP=%h/%H][MA=%m/%M]:"));
+        var observed = Collect(s);
+        int unmatched = 0;
+        s.PromptShapeUnmatched += _ => unmatched++;
+
+        s.Append(B("\x1b[79D\x1b[K\x1b[0;37m[HP=145/145][MA=46/46]: go manhole\r\n"));
+
+        Assert.Equal(0, unmatched);
+        Assert.Single(observed);
+        Assert.Equal(145, observed[0].Hp);
+        Assert.Equal(46, observed[0].Mana);
+        Assert.Equal(ManaType.Mana, observed[0].ManaType);
+    }
+
+    [Fact]
+    public void PromptShapeUnmatched_FiresOncePerPrompt_NotAgainForTheSameText()
+    {
+        WirePromptScanner s = new();
+        int unmatched = 0;
+        s.PromptShapeUnmatched += _ => unmatched++;
+
+        // Cursor-parked prompt, then unrelated output, then the next prompt.
+        s.Append(B("\x1b[79D\x1b[K[HP=145/145][MA=46/46]: "));
+        s.Append(B("\r\n>> Cricket has just logged on, 103 users on-line.\r\n"));
+        Assert.Equal(1, unmatched);
+
+        s.Append(B("\x1b[79D\x1b[K[HP=145/145][MA=46/46]: "));
+        Assert.Equal(2, unmatched);
+    }
+
+    [Fact]
+    public void PromptShapeUnmatched_IgnoresMenusAndNonStatlineText()
+    {
+        // BBS / game menus and ordinary output are not statlines: no digit in the
+        // brackets, no bracketed-group-then-colon shape, or not at a row start.
+        WirePromptScanner s = new();
+        int unmatched = 0;
+        s.PromptShapeUnmatched += _ => unmatched++;
+
+        s.Append(B("\r\n[MAJORMUD]: "));
+        s.Append(B("\r\nPress any key to continue: "));
+        s.Append(B("\r\nMain System Menu (TOP) Make your selection (A,B,C or X to exit): "));
+        s.Append(B("\r\nMindcrime gossips: [HP=671/KAI=40]:w\r\n"));
+
+        Assert.Equal(0, unmatched);
+    }
+
+    [Fact]
+    public void PromptShapeUnmatched_DoesNotFire_WhenTheSameReadAlsoMatches()
+    {
+        // A matching prompt in the read means the parser is reading the game.
+        WirePromptScanner s = new();
+        int unmatched = 0;
+        s.PromptShapeUnmatched += _ => unmatched++;
+
+        s.Append(B("\r\n[Sysop 1]: server message\r\n\x1b[79D\x1b[K[HP=145/MA=46]: "));
 
         Assert.Equal(0, unmatched);
     }
@@ -255,11 +338,63 @@ public sealed class WirePromptScannerTests
         s.InstallRegex(StatlinePromptRegexBuilder.Build("full custom [HP=%h]:"));
         var observed = Collect(s);
         int unmatched = 0;
-        s.PromptShapeUnmatched += () => unmatched++;
+        s.PromptShapeUnmatched += _ => unmatched++;
 
         s.Append(B("[HP=120]:"));
 
         Assert.Equal(0, unmatched);
         Assert.Single(observed);
+    }
+
+    // ----- the cursor's row when a command goes out -----
+
+    // A statline set to plain text has no brackets or digits for the shape check,
+    // but it's still what sits on the cursor's row when a command goes out.
+    [Fact]
+    public void CommandSent_ReportsAPlainTextPrompt()
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+
+        s.Append(B("Slimy Sewer Tunnel\r\nObvious exits: south, east, west\r\npenis"));
+        Assert.Empty(unmatched);            // nothing statline-shaped arrived
+
+        s.NoteCommandSent();
+        Assert.Equal(new[] { "penis" }, unmatched);
+
+        s.NoteCommandSent();                // a second command before the next prompt
+        Assert.Single(unmatched);           // the same prompt isn't counted twice
+
+        s.Append(B("\r\nSlimy Sewer Tunnel\r\npenis"));
+        s.NoteCommandSent();
+        Assert.Equal(2, unmatched.Count);   // the next prompt is
+    }
+
+    [Fact]
+    public void CommandSent_AfterAMatchingPrompt_ReportsNothing()
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+
+        s.Append(B("Obvious exits: south\r\n[HP=91/MA=7]:"));
+        s.NoteCommandSent();
+        s.NoteCommandSent();                // an engine burst before the next prompt
+
+        Assert.Empty(unmatched);
+    }
+
+    [Fact]
+    public void CommandSent_WithNothingOnTheCursorRow_ReportsNothing()
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+
+        s.Append(B("Obvious exits: south\r\n"));
+        s.NoteCommandSent();
+
+        Assert.Empty(unmatched);
     }
 }

@@ -493,7 +493,7 @@
                      RegenTracker. -->
         <Border DockPanel.Dock="Bottom" Classes="StatusBar">
             <!-- Layout (left → right):
-                 [chip] [room name, Auto] [flex] [look target] [flex] [ticks] [connection]
+                 [chip] [room name, Auto] [flex] [look target] [flex] [statline warning + ticks] [connection]
                  The room-name slot is Auto so the walk-to readout (C/D/Steps)
                  takes its natural width and never trims while space is free; a
                  star spacer on each side of the look-target lets it float in the
@@ -539,6 +539,24 @@
                 <StackPanel Grid.Column="5"
                             Orientation="Horizontal" Spacing="14"
                             VerticalAlignment="Center">
+                    <!-- Statline mismatch: the game's prompt doesn't match Settings →
+                         Statline and the automatic reset didn't take, so HP / MA
+                         can't be read. Stays up until a prompt matches; click opens
+                         the Statline tab. -->
+                    <Button Padding="0"
+                            MinHeight="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding IsStatlineMismatchVisible}"
+                            ToolTip.Tip="{Binding StatlineMismatchTip}"
+                            Command="{Binding OpenSettingsTabCommand}"
+                            CommandParameter="statline">
+                        <TextBlock Classes="StatusSlot"
+                                   Foreground="{StaticResource AccentRedBrush}"
+                                   FontWeight="Bold"
+                                   Text="STATLINE MISMATCH"/>
+                    </Button>
                     <TextBlock x:Name="CombatTickLabel"
                                Classes="StatusSlot StatusMono"
                                Text="{Binding CombatTickText}"/>

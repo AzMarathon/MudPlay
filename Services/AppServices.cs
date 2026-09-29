@@ -737,8 +737,9 @@ public sealed class AppServices
         = Game.StatlinePromptRegexBuilder.Default;
 
     // Reasserts the editor's statline on every connect. Verifies the live
-    // prompt against the editor-built pattern and resends set statline
-    // when the game has drifted (e.g. a fresh character on the class default).
+    // prompt against the editor-built pattern, resends set statline when the
+    // game has drifted (e.g. a fresh character on the class default), and
+    // flags the mismatch to the user when the resends don't take.
     public Game.StatlineReconciler StatlineReconcile { get; }
 
     // Sniffs the post-IAC wire stream for "BBS shutting down in N minutes"
@@ -2708,6 +2709,7 @@ public sealed class AppServices
             Player.ApplyStatScreenMax(
                 Stats.LastCaptureReadHits ? snapshot.MaxHits : 0,
                 Stats.LastCaptureReadPool ? snapshot.MaxMana : 0);
+            NotePoolType(snapshot.MaxMana, snapshot.MaxKai);
             // A full `stat` with the Default set on records the rest engine's basis.
             if (Stats.LastCaptureReadHits && Stats.LastCaptureReadPool)
                 PoolBaseline.OnStatScreen(snapshot.MaxHits,
@@ -2780,6 +2782,7 @@ public sealed class AppServices
             // high-water mark from prompts. Null / never-stat'd passes 0,
             // which ApplyStatScreenMax ignores.
             Player.ApplyStatScreenMax(p.LastKnownStats?.MaxHits ?? 0, p.LastKnownStats?.MaxMana ?? 0);
+            NotePoolType(p.LastKnownStats?.MaxMana ?? 0, p.LastKnownStats?.MaxKai ?? 0);
             SeedSpellbook(p.LastKnownStats);
             // Restore the learned checkmarks. Seed the names AUTHORITATIVELY (not
             // resolve-and-drop): profile load can run before the game-data set is
@@ -9497,6 +9500,14 @@ public sealed class AppServices
         Game.Spells.CasterMessageMatcher? matcher = AttackSpellMatcherFor(spellCode);
         _attackSpellMatcherCache[spellCode] = matcher;
         return matcher;
+    }
+
+    // Whether the character's pool is mana or kai, from its stat screen — how a custom
+    // statline's %m reads when no MA= / KAI= label sits in front of it.
+    private void NotePoolType(int maxMana, int maxKai)
+    {
+        if (maxKai > 0) PromptScanner.UnlabeledManaType = Game.ManaType.Kai;
+        else if (maxMana > 0) PromptScanner.UnlabeledManaType = Game.ManaType.Mana;
     }
 
     // The given (first) name of fullName, or null

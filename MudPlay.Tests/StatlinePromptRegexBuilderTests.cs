@@ -10,9 +10,9 @@ public sealed class StatlinePromptRegexBuilderTests
 {
     private static byte[] B(string s) => Encoding.Latin1.GetBytes(s);
 
-    private static List<PromptObservation> RunThroughScanner(Regex regex, string wire)
+    private static List<PromptObservation> RunThroughScanner(Regex regex, string wire, ManaType unlabeled = ManaType.Mana)
     {
-        WirePromptScanner s = new();
+        WirePromptScanner s = new() { UnlabeledManaType = unlabeled };
         s.InstallRegex(regex);
         List<PromptObservation> seen = new();
         s.PromptObserved += seen.Add;
@@ -38,6 +38,8 @@ public sealed class StatlinePromptRegexBuilderTests
     [InlineData("[HP=120]:", 120, ManaType.None, 0)]
     [InlineData("[HP=27/MA=31]:", 27, ManaType.Mana, 31)]
     [InlineData("[HP=44/KAI=2]:", 44, ManaType.Kai, 2)]
+    // Some realms take HP and mana to four digits.
+    [InlineData("[HP=1234/MA=1050]:", 1234, ManaType.Mana, 1050)]
     public void Default_MatchesAllThreeClassShapes(string wire, int hp, ManaType type, int mana)
     {
         var seen = RunThroughScanner(StatlinePromptRegexBuilder.Default, wire);
@@ -70,6 +72,49 @@ public sealed class StatlinePromptRegexBuilderTests
         Assert.Single(seen);
         Assert.Equal(-4, seen[0].Hp);
         Assert.Equal(31, seen[0].Mana);
+    }
+
+    // Report paradigm-20260929-122409: "]%r: " printed "] :" while standing — a space
+    // before the colon the template doesn't place, and none after it.
+    [Fact]
+    public void CustomStatline_RestingFlagSpaceAndTrailingSpace_StillMatch()
+    {
+        Regex regex = StatlinePromptRegexBuilder.Build("full custom [HP=%h/%H MA=%m/%M]%r: ");
+
+        var seen = RunThroughScanner(regex,
+            "\x1b[79D\x1b[K\x1b[0;37m[HP=\x1b[0;37m91\x1b[0m/91 MA=11/42] :\x1b[0mw\r\n");
+        Assert.Single(seen);
+        Assert.Equal(91, seen[0].Hp);
+        Assert.Equal(11, seen[0].Mana);
+        Assert.Equal(PlayerPosition.Standing, seen[0].Position);
+    }
+
+    // Any label (or none) in front of %m: the character's own pool (from its stat
+    // screen) says whether it's mana or kai. The trailing space before an unprinted
+    // %r doesn't reach the wire.
+    [Theory]
+    [InlineData(ManaType.Mana)]
+    [InlineData(ManaType.Kai)]
+    public void CustomStatline_UnlabelledMana_ReadsAsTheCharactersPool(ManaType pool)
+    {
+        Regex regex = StatlinePromptRegexBuilder.Build("full custom HP=%h/%H MANA=%m/%M %r");
+
+        var seen = RunThroughScanner(regex, "\r\nHP=91/91 MANA=7/42", pool);
+        Assert.Single(seen);
+        Assert.Equal(91, seen[0].Hp);
+        Assert.Equal(7, seen[0].Mana);
+        Assert.Equal(pool, seen[0].ManaType);
+    }
+
+    [Fact]
+    public void CustomStatline_ReadsFourDigitMana()
+    {
+        Regex regex = StatlinePromptRegexBuilder.Build("full custom [HP=%h/MA=%m]:");
+
+        var seen = RunThroughScanner(regex, "[HP=1234/MA=1050]:");
+        Assert.Single(seen);
+        Assert.Equal(1234, seen[0].Hp);
+        Assert.Equal(1050, seen[0].Mana);
     }
 
     [Fact]

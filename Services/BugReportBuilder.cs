@@ -55,6 +55,7 @@ public static class BugReportBuilder
         [
             new("Session", SafeSection(() => BuildSession(svc, realm, now))),
             new("Player state", SafeSection(() => BuildPlayerState(svc))),
+            new("Statline", SafeSection(() => BuildStatline(svc))),
             new("Party", SafeSection(() => BuildParty(svc))),
             new("Inventory", SafeSection(() => BuildInventory(svc))),
             new("Player Workshop", SafeSection(() => BuildWorkshop(svc))),
@@ -1060,6 +1061,31 @@ public static class BugReportBuilder
         sb.Append('\n');
         sb.Append("**Stat screen (PlayerStats)**\n\n");
         sb.Append(Json(svc.PlayerStats));
+        return sb.ToString();
+    }
+
+    // Editor statline vs what the game actually prints. A prompt the parser can't
+    // read leaves HP at 0 and stalls every HP-gated engine with no other symptom
+    // (report stock-20260929-111956), so this answers "is HP being read at all?".
+    private static string BuildStatline(AppServices svc)
+    {
+        StringBuilder sb = new();
+        StatlineReconciler r = svc.StatlineReconcile;
+        string? editor = r.DesiredCommand;
+        Kv(sb, "Editor command", StatlineSyntax.IsDefault(editor)
+            ? "full (Default)"
+            : StatlineSyntax.NormalizeForWire(editor!));
+        Kv(sb, "Latest prompt matches Settings -> Statline", r.LastPromptMatched switch
+        {
+            true  => "yes",
+            false => "NO",
+            null  => "(no prompt seen)",
+        });
+        Kv(sb, "Last unmatched prompt", r.LastUnmatchedPrompt is { } p ? $"`{p}`" : "(none)");
+        Kv(sb, "Reconciler", $"armed={r.IsArmed}, in game={r.IsInGame}, synced={r.IsSynced}, "
+            + $"unmatched in a row={r.ConsecutiveMismatches}/{r.MismatchThreshold}, "
+            + $"resends={r.Retries}/{r.MaxRetries}, gave up={r.HasGivenUp}");
+        Kv(sb, "Mismatch warning", r.IsFlagged ? "SHOWING" : "off");
         return sb.ToString();
     }
 

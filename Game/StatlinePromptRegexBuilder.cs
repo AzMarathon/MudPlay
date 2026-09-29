@@ -44,7 +44,7 @@ public static class StatlinePromptRegexBuilder
     // reading freezes at its last positive value — the drop gate never fires and
     // the emergency hangup never sees the bleeding-out window.
     public static Regex Default { get; } = new(
-        @"\[HP=(?<hp>-?\d{1,4})(?:\/(?<type>MA|KAI)=(?<mana>\d{1,3}))?(?:\s\((?<statea>Resting|Meditating)\)\s)?\]:(?:\s\((?<stateb>Resting|Meditating)\))?",
+        @"\[HP=(?<hp>-?\d{1,4})(?:\/(?<type>MA|KAI)=(?<mana>\d{1,4}))?(?:\s\((?<statea>Resting|Meditating)\)\s)?\]:(?:\s\((?<stateb>Resting|Meditating)\))?",
         RegexOptions.Compiled);
 
     // Compile the scanner regex for command. Default / blank / full returns
@@ -57,7 +57,9 @@ public static class StatlinePromptRegexBuilder
         // Formatting codes (%f0-7, %b0-7, %d, %B, %N, %U, %L, %R) render as ANSI
         // escapes the scanner strips before the regex ever runs, so drop them
         // from the template up front. What's left is the plain wildcard idiom.
-        string template = StatlineSyntax.StripFormatting(StatlineSyntax.ExtractTemplate(command!));
+        // A template's trailing space didn't reach the wire (report
+        // paradigm-20260929-122409: "]%r: " printed "] :"), so it can't be required.
+        string template = StatlineSyntax.StripFormatting(StatlineSyntax.ExtractTemplate(command!)).TrimEnd();
 
         var pattern = new StringBuilder();
         var literal = new StringBuilder();
@@ -75,7 +77,7 @@ public static class StatlinePromptRegexBuilder
                         // Peel a trailing MA / KAI label out of the pending
                         // literal so it captures as the type group.
                         FlushLiteralBeforeMana(pattern, literal);
-                        pattern.Append(@"(?<mana>\d{1,3})");
+                        pattern.Append(@"(?<mana>\d{1,4})");
                         break;
                     case 'n':
                         // Newline: the scanner drops CR / LF, so %n contributes
@@ -115,7 +117,10 @@ public static class StatlinePromptRegexBuilder
         'h' => @"(?<hp>-?\d{1,4})",  // signed: negative HP while mortally wounded
         'H' => @"\d{1,4}",
         'M' => @"\d{1,4}",
-        'r' => @"(?:\s?\((?<statea>Resting|Meditating)\))?",
+        // %r prints nothing unless resting or meditating (user, 2026-09-29), yet "]%r: "
+        // printed "] :" (report paradigm-20260929-122409) — a space the template doesn't
+        // place there — so a space before the flag is optional, as is the flag.
+        'r' => @"\s?(?:\((?<statea>Resting|Meditating)\))?",
         'c' => @"\d+",
         'x' => @"\d+",
         'X' => @"\d+",
@@ -126,9 +131,23 @@ public static class StatlinePromptRegexBuilder
     private static void FlushLiteral(StringBuilder pattern, StringBuilder literal)
     {
         if (literal.Length == 0) return;
-        pattern.Append(Regex.Escape(literal.ToString()));
+        AppendLiteral(pattern, literal.ToString());
         literal.Clear();
     }
+
+    // A template's literal text, with each run of spaces made flexible: the game
+    // drops a trailing space and has printed one the template didn't place
+    // (report paradigm-20260929-122409), so spacing can't be required to the letter.
+    private static void AppendLiteral(StringBuilder pattern, string literal)
+    {
+        foreach (string part in SpaceRun.Split(literal))
+        {
+            if (part.Length == 0) continue;
+            pattern.Append(part.Trim().Length == 0 ? @"\s*" : Regex.Escape(part));
+        }
+    }
+
+    private static readonly Regex SpaceRun = new(@"(\s+)", RegexOptions.Compiled);
 
     // The MA / KAI label preceding %m is literal text in a custom statline, but
     // the scanner reads a type group off it to set ManaType. Split the pending
@@ -141,16 +160,17 @@ public static class StatlinePromptRegexBuilder
         Match label = ManaLabelRegex.Match(lit);
         if (!label.Success)
         {
-            // No MA / KAI label — degenerate template; emit the literal as-is.
-            // ManaType stays None at decode, so the mana value isn't read.
-            if (lit.Length != 0) pattern.Append(Regex.Escape(lit));
+            // No MA / KAI label (any other label, or none): the mana still captures,
+            // and the scanner reads it as the character's own pool
+            // (WirePromptScanner.UnlabeledManaType).
+            AppendLiteral(pattern, lit);
             return;
         }
 
         string before = lit[..label.Index];
-        if (before.Length != 0) pattern.Append(Regex.Escape(before));
+        AppendLiteral(pattern, before);
         pattern.Append("(?<type>").Append(Regex.Escape(label.Groups["label"].Value)).Append(')');
-        pattern.Append(Regex.Escape(label.Groups["sep"].Value));
+        AppendLiteral(pattern, label.Groups["sep"].Value);
     }
 
     // Trailing MA / KAI label with an optional `=` separator (spaces tolerated).

@@ -46,8 +46,27 @@ public sealed partial class StatlineSectionViewModel : SettingsSectionViewModel
     // What goes on the wire after "set statline". Default is full; user can type
     // a raw wildcard string or "full custom <wildcards>".
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CurrentStatlinePreview))]
+    [NotifyPropertyChangedFor(nameof(CurrentStatlinePreview), nameof(SaveWarning), nameof(HasSaveWarning))]
     private string _command = StatlineSyntax.Default;
+
+    // A custom statline missing what the engines read off the prompt — HP, mana,
+    // resting — leaves them blind (HP reads 0, a rest is never seen), so say so,
+    // here and before saving.
+    public override string? SaveWarning
+    {
+        get
+        {
+            bool? hasMana = _playerState.HasPromptData
+                ? _playerState.ManaType != ManaType.None
+                : _playerState.MaxMa > 0 ? true : null;
+            IReadOnlyList<string> missing = StatlineSyntax.MissingEngineFields(Command, hasMana);
+            return missing.Count == 0 ? null
+                : "MudPlay reads HP, mana and resting from the prompt for its automation, but this statline needs:\n"
+                  + string.Join("\n", missing.Select(m => "- " + m));
+        }
+    }
+
+    public bool HasSaveWarning => SaveWarning is not null;
 
     // Read-only preview that mirrors how the BBS will render the prompt once
     // Command is in effect. Synthesised from live PlayerState values where
@@ -165,6 +184,12 @@ public sealed partial class StatlineSectionViewModel : SettingsSectionViewModel
     {
         // Any live HP / MA / position / class change can shift the preview.
         OnPropertyChanged(nameof(CurrentStatlinePreview));
+        // Learning whether the character has a mana pool settles the warning's mana part.
+        if (e.PropertyName is nameof(PlayerState.ManaType) or nameof(PlayerState.HasPromptData) or nameof(PlayerState.MaxMa))
+        {
+            OnPropertyChanged(nameof(SaveWarning));
+            OnPropertyChanged(nameof(HasSaveWarning));
+        }
     }
 
     private void LoadFromProfile()

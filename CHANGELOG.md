@@ -1,5 +1,15 @@
 # Version history
 
+## 3.125.0
+
+- The client now spots a game prompt that doesn't match Settings → Statline — Default included, any prompt text, all session — and resets it (`set statline full` on Default)
+- A mismatch the reset can't fix shows a terminal notice and a status-bar warning; HP can't be read until it's fixed
+- Bug reports carry a Statline section (editor command, live prompt, reset progress)
+- The prompt parser reads mana up to four digits, like HP
+- Settings → Statline warns (and asks before saving) when a custom statline leaves out current HP, current mana or the resting flag, or runs numbers together
+- Custom statlines read mana under any label or none (mana vs kai comes from the stat screen), with forgiving spacing
+- bug reports addressed: stock-20260929-111956
+
 ## 3.124.0
 
 - Spells tab: new Seed column shows when a spell's message differs from the shipped seed (text edited, fields edited, yours only, removed)
