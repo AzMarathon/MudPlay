@@ -1,13 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.123.0**
-> - Party members' HP moves between `par` polls: damage seen on them comes off, heals seen landing on them go on
-> - Heals without a printed amount count the spell's average at the caster's level (lowest level when unknown)
-> - `par` and @health replies reset the estimate; party heals react within the round
-> - Bug report shows each member's HP estimate against the last `par`
-> - A member's drain heals them by the damage it did
-> - Close wounds is no longer counted as damage dealt to the member it heals
+> **Version 3.123.1**
+> - Your message edits are kept on top of the shipped messages, so seed fixes still reach every message you haven't changed
+> - Added monster names are kept on top of the shipped monster list the same way
+> - Older per-set message files convert automatically on first load (old file kept as messages.json.pre-delta)
+> - Changing only a message's flags or links no longer detaches its text from the seed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

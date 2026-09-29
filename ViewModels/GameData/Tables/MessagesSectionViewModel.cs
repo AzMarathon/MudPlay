@@ -12,8 +12,8 @@ namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Messages tab. Surfaces the active game-data set's Messages/Responses
 // catalogue from MessageStore. Records are paired per set: seeded from the wcc-derived
-// universal seed (Data/Global/Messages.seed.json), persisted per set at
-// Data/game data/{set}/messages.json on first edit. Switching the active set swaps the
+// universal seed (Data/Global/Messages.seed.json), with the user's edits kept per set as a
+// delta over it at Data/game data/{set}/messages.json. Switching the active set swaps the
 // catalogue in real time.
 public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IEditableTableSectionViewModel
 {

@@ -307,10 +307,25 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         ushort reservedBits = (ushort)(_original.RawFlagsHex & ReservedBitsMask);
         ushort raw = (ushort)((ushort)typed | reservedBits);
 
+        // An edit that leaves the identity text alone keeps the record's Id, even when
+        // that Id predates an in-place seed text fix (so no longer hashes from the text):
+        // the saved edit then stays an override of that seed record, and later seed
+        // fixes to its text still reach it.
+        bool identityUnchanged = !_isNew
+            && !string.IsNullOrEmpty(_original.Id)
+            && string.Equals(Name,            _original.Name,            StringComparison.Ordinal)
+            && string.Equals(CasterMessage,   _original.CasterMessage,   StringComparison.Ordinal)
+            && string.Equals(TargetMessage,   _original.TargetMessage,   StringComparison.Ordinal)
+            && string.Equals(WitnessMessage,  _original.WitnessMessage,  StringComparison.Ordinal)
+            && string.Equals(AppliedMessage,  _original.AppliedMessage,  StringComparison.Ordinal)
+            && string.Equals(AppliedEndsWith, _original.AppliedEndsWith, StringComparison.Ordinal);
+
         MessageRecord updated = new(
-            Id:              MessageRecord.ComputeId(
-                                 Name, CasterMessage, TargetMessage, WitnessMessage,
-                                 AppliedMessage, AppliedEndsWith),
+            Id:              identityUnchanged
+                                 ? _original.Id
+                                 : MessageRecord.ComputeId(
+                                       Name, CasterMessage, TargetMessage, WitnessMessage,
+                                       AppliedMessage, AppliedEndsWith),
             Name:            Name,
             Flags:           typed,
             RawFlagsHex:     raw,

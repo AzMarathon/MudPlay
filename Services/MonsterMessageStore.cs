@@ -9,14 +9,29 @@ namespace MudPlay.Services;
 // can produce in combat (hit / death / armor-block / dodge / miss + flavor
 // prefixes).
 //
+// The catalogue is the universal seed with the user's additions (placeholder names
+// for unknown monsters) layered on top from the per-set file, which holds only the
+// DELTA against the seed (see SeedDelta) so a shipped seed update still reaches
+// every record the user hasn't changed.
+//
 // Wiring: AppServices subscribes the store to
-// GameDataCache.ActiveSetChanged — on every set switch the per-set file is
-// reloaded (missing file ⇒ falls back to the universal seed; missing seed ⇒
-// empty catalogue). The Monsters tab edit dialog binds individual records via
-// the standard load-edit-save flow shared with the spell-message editor.
+// GameDataCache.ActiveSetChanged — on every set switch the catalogue is rebuilt
+// from the seed plus the per-set file (missing seed ⇒ just the per-set records).
 public sealed class MonsterMessageStore
 {
     private readonly LogService? _log;
+
+    // The Name is the record's identity and always comes from the seed; Links are what
+    // a user can change on a seed record without re-Id-ing it.
+    internal static readonly SeedDelta<MonsterMessageRecord> Delta = new(
+        id:            r => r.Id,
+        name:          r => r.Name,
+        links:         r => r.Links,
+        withoutLinks:  r => r with { Links = null },
+        applyOverride: (seed, user) => seed with { Links = user.Links });
+
+    // The seed the live catalogue was built over — Save diffs against it.
+    private List<MonsterMessageRecord> _seed = [];
 
     // Live mirror of the active set's monster-message records.
     // BulkObservableCollection so a full (re)load raises one Reset instead of
@@ -36,53 +51,52 @@ public sealed class MonsterMessageStore
         _log = log;
     }
 
-    // Switch the catalogue to setName's on-disk file. Pass null to clear (no
-    // set active). Load priority:
-    //   1. Per-set file AppPaths.MonsterMessagesFile — the canonical
-    //      persisted state once a user has saved.
-    //   2. Universal seed AppPaths.DefaultMonsterMessagesSeedFile — applies on
-    //      first launch; the monster Number ↔ message mapping is universal for
-    //      1.11p, usable as a starting point for other realms (the editor lets
-    //      the user fix mismatches).
-    //   3. Bundled seed AppPaths.BundledMonsterMessagesSeedFile shipped beside the
-    //      app — the read-only floor. Reached only when the Global copy is missing
-    //      (never bootstrapped, or deleted), so the catalogue is never empty; last,
-    //      so it never overrides a user's per-set edits.
+    // Switch the catalogue to setName's data. Pass null to clear (no set active).
+    // The seed comes first-readable-wins from:
+    //   1. the universal seed AppPaths.DefaultMonsterMessagesSeedFile in Global/ — the
+    //      monster Number ↔ name mapping is universal for 1.11p, usable as a starting
+    //      point for other realms;
+    //   2. the bundled seed AppPaths.BundledMonsterMessagesSeedFile — the read-only
+    //      floor, reached only when the Global copy is missing, so the catalogue is
+    //      never empty.
+    // The user's delta file AppPaths.MonsterMessagesFile is then layered over it.
     // Neither seed is ever written.
     public void Load(string? setName)
     {
         ActiveSet = setName;
         if (string.IsNullOrWhiteSpace(setName))
         {
+            _seed = [];
             Messages.ReplaceAll([]);
             _log?.Log(LogSeverity.Info, "MonsterMessages", "no active game-data set — monster-message catalogue cleared.");
             return;
         }
 
-        (List<MonsterMessageRecord> loaded, string source) = LoadFrom(setName);
+        (List<MonsterMessageRecord> seed, string seedSource) = LoadSeed();
+        _seed = seed;
+        List<MonsterMessageRecord>? withEdits =
+            Delta.Load(AppPaths.MonsterMessagesFile(setName), seed, _log, "MonsterMessages");
+        List<MonsterMessageRecord> loaded = withEdits ?? seed;
+        string source = withEdits is null ? seedSource : $"the {seedSource} plus the per-set edits file";
         Messages.ReplaceAll(loaded);
 
         if (loaded.Count == 0)
             _log?.Log(LogSeverity.Warn, "MonsterMessages",
-                $"set '{setName}': 0 monster-message records — no per-set file, Global seed, or bundled seed was " +
+                $"set '{setName}': 0 monster-message records — no Global seed, bundled seed, or per-set file was " +
                 "found or parsed, so monster combat lines are not recognized.");
         else
             _log?.Log(LogSeverity.Info, "MonsterMessages",
                 $"set '{setName}': loaded {loaded.Count} monster-message records from {source}.");
     }
 
-    // First readable source wins (per-set edits → Global seed → bundled floor); the
-    // bundled copy is last so it never overrides a user's edits, and keeps the catalogue
-    // non-empty even when the Global seed was never bootstrapped or was deleted.
-    private (List<MonsterMessageRecord> Records, string Source) LoadFrom(string setName)
+    // Global seed (re-synced from the embedded copy every launch) → bundled floor.
+    private (List<MonsterMessageRecord> Records, string Source) LoadSeed()
     {
-        if (TryLoad(AppPaths.MonsterMessagesFile(setName)) is { } perSet)
-            return (perSet, "per-set file");
         if (TryLoad(AppPaths.DefaultMonsterMessagesSeedFile) is { } globalSeed)
             return (globalSeed, "Global seed");
         if (TryLoad(AppPaths.BundledMonsterMessagesSeedFile) is { } bundled)
             return (bundled, "bundled seed");
-        return ([], "none");
+        return ([], "no seed");
     }
 
     // Parsed list (possibly empty) iff the file existed AND parsed cleanly;
@@ -102,11 +116,12 @@ public sealed class MonsterMessageStore
         }
     }
 
-    // Persist Messages to ActiveSet's file.
+    // Persist the user's edits (the catalogue's delta against the seed it was loaded
+    // over) to ActiveSet's file.
     public void Save()
     {
         if (string.IsNullOrWhiteSpace(ActiveSet)) return;
-        JsonStore.Save(AppPaths.MonsterMessagesFile(ActiveSet), Messages);
+        Delta.Save(AppPaths.MonsterMessagesFile(ActiveSet), Messages, _seed, _log, "MonsterMessages");
     }
 
     // Replace the catalogue with records and persist.
