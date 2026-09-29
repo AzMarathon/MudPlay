@@ -336,6 +336,7 @@ public sealed partial class PartyManager : IDisposable
         // see "X stops to rest.", ahead of the 5s par poll, so a follower's
         // HealthManager can mirror the leader's rest immediately.
         _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberRestObserved,   OnMemberRestObserved));
+        State.Members.CollectionChanged += OnMembersChangedForHpEstimates;
     }
 
     // Bind the wire-sender used for auto-invite of a reconnecting disconnected
@@ -507,6 +508,7 @@ public sealed partial class PartyManager : IDisposable
         if (_disposed) return;
         _disposed = true;
         if (_lines is not null) _lines.LineEmitted -= OnLineEmitted;
+        State.Members.CollectionChanged -= OnMembersChangedForHpEstimates;
         foreach (IDisposable s in _subs) s.Dispose();
         _subs.Clear();
     }
@@ -1344,6 +1346,7 @@ public sealed partial class PartyManager : IDisposable
         // correct AT THE MOMENT the add fires, not after.
         PartyMember member = AddOrTouchMember(name, isSelf);
         if (klass.Length > 0) member.Class = klass;
+        NoteHpReading(member, hpPct, "par");
         member.HpPercent = hpPct;
         if (mpPct is { } v)
         {
@@ -1493,12 +1496,98 @@ public sealed partial class PartyManager : IDisposable
         foreach (PartyMember m in State.Members)
         {
             if (!GivenNameOf(m.Name).Equals(given, StringComparison.OrdinalIgnoreCase)) continue;
+            int hpPct = hpMax > 0 ? hpCur * 100 / hpMax : 0;
+            NoteHpReading(m, hpPct, "@health");
             m.BaselineHp = hpMax;
             m.BaselineMp = mpMax;
-            m.HpPercent  = hpMax > 0 ? hpCur * 100 / hpMax : 0;
+            m.HpPercent  = hpPct;
             m.MpPercent  = mpMax > 0 ? mpCur * 100 / mpMax : 0;
             m.IsKai      = isKai;
             return;
+        }
+    }
+
+    // ----- HP between polls ----------------------------------------------
+    // `par` only gives a member's HP as a percentage, every few seconds. Between polls
+    // PartyHpEstimator moves it by the damage and heals we see land on them, so a party
+    // heal can react before the next poll. The estimate is kept in absolute HP here —
+    // stepping the rounded percentage instead would drift a little on every line — and
+    // is thrown away whenever `par` or an @health reply states the real value.
+
+    private readonly Dictionary<PartyMember, int> _hpEstimates = new();
+    private readonly Dictionary<PartyMember, PartyHpReading> _hpReadings = new();
+
+    // A `par` row or @health reply replaced an estimate that had drifted from it:
+    // (member name, estimated %, stated %, "par" / "@health").
+    public event Action<string, int, int, string>? HpEstimateCorrected;
+
+    // True when some member other than us can be estimated — joined, with a max HP
+    // from the @health exchange and a percentage seen. Every line checks this first, so
+    // a solo player or a party of non-MudPlay members costs nothing.
+    public bool HasHpEstimableMember()
+    {
+        foreach (PartyMember m in State.Members)
+            if (IsHpEstimable(m)) return true;
+        return false;
+    }
+
+    // Move a member's HP by delta (damage negative, heals positive). Returns the member
+    // and their new estimate, or null when the name isn't an estimable member. Clamped
+    // to 0..max; the written percentage never drops below 1, because 0 means "not seen
+    // yet" to PartyVitalsWatcher.
+    public (string Name, int Hp, int MaxHp)? AdjustMemberHp(string name, int delta)
+    {
+        if (string.IsNullOrEmpty(name) || delta == 0) return null;
+        string given = GivenNameOf(name.Trim());
+        foreach (PartyMember m in State.Members)
+        {
+            if (!IsHpEstimable(m)) continue;
+            if (!GivenNameOf(m.Name).Equals(given, StringComparison.OrdinalIgnoreCase)) continue;
+            int max = m.BaselineHp;
+            int current = _hpEstimates.TryGetValue(m, out int est) ? est : max * m.HpPercent / 100;
+            int next = Math.Clamp(current + delta, 0, max);
+            _hpEstimates[m] = next;
+            m.HpPercent = Math.Max(1, next * 100 / max);
+            return (m.Name, next, max);
+        }
+        return null;
+    }
+
+    // The member's running estimate (null when none is in play) and the last HP the
+    // game stated for them — the bug report's between-polls readout.
+    public (int? EstimateHp, PartyHpReading? LastReading) HpEstimateOf(PartyMember member)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        return (_hpEstimates.TryGetValue(member, out int est) ? est : null,
+                _hpReadings.TryGetValue(member, out PartyHpReading r) ? r : null);
+    }
+
+    private static bool IsHpEstimable(PartyMember m)
+        => !m.IsSelf && !m.IsInvited && m.BaselineHp > 0 && m.HpPercent > 0;
+
+    // The game just stated the member's HP: the estimate gives way to it.
+    private void NoteHpReading(PartyMember member, int percent, string source)
+    {
+        if (member.IsSelf) return;
+        if (_hpEstimates.Remove(member) && member.HpPercent != percent)
+            HpEstimateCorrected?.Invoke(member.Name, member.HpPercent, percent, source);
+        _hpReadings[member] = new PartyHpReading(percent, NowProvider(), source);
+    }
+
+    private void OnMembersChangedForHpEstimates(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+        {
+            _hpEstimates.Clear();
+            _hpReadings.Clear();
+            return;
+        }
+        if (e.OldItems is null) return;
+        foreach (object? o in e.OldItems)
+        {
+            if (o is not PartyMember m) continue;
+            _hpEstimates.Remove(m);
+            _hpReadings.Remove(m);
         }
     }
 

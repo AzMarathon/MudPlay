@@ -352,6 +352,10 @@ public static class BugReportBuilder
             // Invited rows carry no health round-trip yet, so their percents are
             // meaningless — skip the H/M readout for them.
             if (!m.IsInvited) sb.Append("  [").Append(m.HpRichDisplay).Append(' ').Append(m.MaRichDisplay).Append(']');
+            // Between-polls HP: the running estimate (damage / heals seen since the
+            // game last stated this member's HP) against that last statement, so a
+            // "party heal fired late / early" report shows what the heal picker read.
+            if (!m.IsSelf && !m.IsInvited) sb.Append("  {hp: ").Append(HpEstimateNote(svc, m)).Append('}');
             // Level source drives the party level-gate routing; surface each
             // member's known level (exact + staleness, else title band) so a
             // "party routed the wrong way around a gate" report shows what the
@@ -368,10 +372,31 @@ public static class BugReportBuilder
 
         // The most-constraining (Low, High) window the level gate routes on, or
         // "(n/a)" when not leading / nobody's level is known.
+        Kv(sb, "HP estimate heal reader", svc.PartyHp.ReaderSummary);
+
         (int Low, int High)? window = svc.PartyLevel.Bounds();
         Kv(sb, "Party level window",
             window is { } w ? $"{w.Low}–{w.High}" : "(n/a — solo, following, or no levels known)");
         return sb.ToString();
+    }
+
+    // One member's HP estimate against the last HP the game stated for them.
+    private static string HpEstimateNote(AppServices svc, PartyMember m)
+    {
+        (int? estimate, PartyHpReading? last) = svc.Party.HpEstimateOf(m);
+        string stated = last is { } r
+            ? $"last {r.Source} {r.Percent}% {FormatAgeSeconds(DateTimeOffset.UtcNow - r.At)}"
+            : "no par / @health reading yet";
+        if (m.BaselineHp <= 0) return $"not estimated (max HP unknown); {stated}";
+        return estimate is { } est
+            ? $"estimate ~{est}/{m.BaselineHp} ({m.HpPercent}%); {stated}"
+            : $"no estimate in play; {stated}";
+    }
+
+    private static string FormatAgeSeconds(TimeSpan age)
+    {
+        if (age < TimeSpan.Zero) age = TimeSpan.Zero;
+        return age.TotalSeconds < 120 ? $"{age.TotalSeconds:0}s ago" : $"{age.TotalMinutes:0}m ago";
     }
 
     // One member's level as the party level-gate check sees it: the exact level

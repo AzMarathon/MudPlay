@@ -328,4 +328,29 @@ public sealed class CasterMessageMatcherTests
 
         Assert.False(m!.TryResolveTarget("Raijin gossips: hi", "fuj", out _));
     }
+
+    [Fact]
+    public void TryMatchCaptures_ReturnsEachSlotByRole_AndTheNumber()
+    {
+        CasterMessageMatcher m = CasterMessageMatcher.TryCreate("{source} casts {spellname} on {target}, healing {damage} damage!")!;
+
+        Assert.True(m.TryMatchCaptures("Raijin casts greater healing on Bob, healing 1,204 damage!", out MessageCaptures caps));
+        Assert.Equal("Raijin", caps.Source);
+        Assert.Equal("greater healing", caps.Spell);
+        Assert.Equal("Bob", caps.Target);
+        Assert.Equal(1204, caps.Number);
+        Assert.Equal(new[] { "Raijin", "greater healing", "Bob" }, caps.Names);
+    }
+
+    [Fact]
+    public void TryMatchCaptures_UnpinnedSlots_AreNull()
+    {
+        CasterMessageMatcher m = CasterMessageMatcher.TryCreate("{target} is healed!")!;
+
+        Assert.True(m.TryMatchCaptures("Bob is healed!", out MessageCaptures caps));
+        Assert.Equal("Bob", caps.Target);
+        Assert.Null(caps.Spell);
+        Assert.Null(caps.Source);
+        Assert.Null(caps.Number);
+    }
 }

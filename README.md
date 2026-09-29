@@ -1,12 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.122.12**
-> - Session Stats shows Exp needed (with the target level) and Will level in, off the same countdown as the status bar TNL
-> - Time Analysis gains Sneak % (rooms entered sneaking where it held) and Walk (average seconds per step); loop laps move there too
-> - Session Statistics value / coins / items table: Collected, Deposit/Sold and Stashed, plus Income rate by value and by coin count
-> - Deposits and stashes you type by hand count too; bank deposits now count under Deposit/Sold, not Stashed
-> - Each section's Reset clears exactly the lines under it
+> **Version 3.123.0**
+> - Party members' HP moves between `par` polls: damage seen on them comes off, heals seen landing on them go on
+> - Heals without a printed amount count the spell's average at the caster's level (lowest level when unknown)
+> - `par` and @health replies reset the estimate; party heals react within the round
+> - Bug report shows each member's HP estimate against the last `par`
+> - A member's drain heals them by the damage it did
+> - Close wounds is no longer counted as damage dealt to the member it heals
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

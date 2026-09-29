@@ -80,6 +80,7 @@ public sealed class DamageLineAttributorTests
     [InlineData("Bob is healed of 12 damage!")]
     [InlineData("You cast regeneration on Bob, regenerating 12 damage!")]
     [InlineData("The healer heals you of 12 damage!")]
+    [InlineData("You cast close wounds on Bob closing their wounds for 12 damage!")]
     [InlineData("The orc smacks you, but your armour absorbs the damage!")]
     [InlineData("You resist the poison, and take only partial damage!")]
     public void HealsAndAbsorbs_AreNotDamage(string line)

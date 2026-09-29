@@ -80,6 +80,11 @@ public static partial class DamageLineAttributor
         result = default;
         if (string.IsNullOrWhiteSpace(line)) return false;
         string text = line.Trim();
+        // Close wounds prints its heal as "... closing their wounds for 20 damage!" — the
+        // damage shape, but the member it names gained the HP.
+        if (text.Contains("closing their wounds for", StringComparison.Ordinal)
+            || text.Contains("closing your wounds for", StringComparison.Ordinal))
+            return false;
 
         if (DamageLine().Match(text) is { Success: true } m && int.TryParse(m.Groups["dmg"].Value, out int amount))
         {

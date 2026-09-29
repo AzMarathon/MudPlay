@@ -348,6 +348,24 @@ public sealed class SpellCalculatorTests
     }
 
     [Fact]
+    public void SingleCastHeal_OneCastsRange_NoMultiplier()
+    {
+        // minor healing shape at level 5: 2 + 5/3 .. 8 + 10/3; a 500-energy cast would
+        // double under the per-round getter.
+        SpellFormulaInput spell = new()
+        {
+            MinBase = 2, MinInc = 1, MinIncLVLs = 3,
+            MaxBase = 8, MaxInc = 2, MaxIncLVLs = 3,
+            ReqLevel = 1, Cap = 10, EnergyCost = 500,
+            Abilities = [new SpellAbility(18, 0)],
+        };
+
+        Assert.Equal(3, SpellCalculator.SingleCastMinHeal(spell, 5));
+        Assert.Equal(11, SpellCalculator.SingleCastMaxHeal(spell, 5));
+        Assert.Equal(0, SpellCalculator.SingleCastMinDamage(spell, 5));
+    }
+
+    [Fact]
     public void SingleCast_StillScalesByLevel()
     {
         // lightning bolt shape: 12 + L min, 20 + 2L max — a monster at level 20
