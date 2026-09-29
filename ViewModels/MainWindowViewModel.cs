@@ -1847,12 +1847,13 @@ public partial class MainWindowViewModel : ObservableObject
             _lookedBand = obs.Estimate.Describe();
             TargetHpText = read is { } r ? $"TGT HP: {_lookedBand} [~{r.BestGuess}]" : $"TGT HP: {_lookedBand}";
             // Also drop a yellow line into the terminal scrollback so the estimate
-            // is logged, not only shown in the transient status slot: max HP, the range
-            // the wound band gives, and the best guess from the damage seen and regen.
+            // is logged, not only shown in the transient status slot: max HP, the wound
+            // band's shorthand and range, and the best guess from the damage seen and
+            // regen — "[large orc: 100 HP, crit: 20-29, ~24]".
+            string wound = $"{Game.MonsterLookParser.WoundShorthand(obs.Wound)}: {_lookedBand}";
             string line = read is { } l
-                ? $"{obs.Name}: {l.MaxHp} HP max, {_lookedBand} by its wounds, best guess ~{l.BestGuess}"
-                  + (l.RegenSeen ? " (regen tick seen)" : "")
-                : $"{obs.Name} remaining Hitpoints: {_lookedBand}";
+                ? $"{obs.Name}: {l.MaxHp} HP, {wound}, ~{l.BestGuess}"
+                : $"{obs.Name}: {wound}";
             WriteTerminalStatus($"[{line}]", TerminalStatusKind.Notice);
         });
 

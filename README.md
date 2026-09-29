@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.121.0**
-> - `look <monster>` prints its max HP, the range its wounds give, and a best guess at its HP from the damage it's taken and its regen
+> - `look <monster>` prints its max HP, its wound band and HP range, and a best guess from the damage it's taken and its regen: `[large orc: 100 HP, Sev: 30-49, ~41]`
 > - The status bar's TGT HP shows the look's range with the best guess in brackets, following the damage after the look
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

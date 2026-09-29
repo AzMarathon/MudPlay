@@ -68,7 +68,7 @@ public sealed class MonsterHpTrackerTests
         h.Room(RoomObservationSource.AlsoHere, ("orc", 1));
         h.Hit("orc", 10);   // ~90, but the look says heavily wounded (50-69)
 
-        Assert.Equal(new MonsterHpRead(100, 69, false), h.Tracker.OnLook("orc", Band("heavily wounded")));
+        Assert.Equal(new MonsterHpRead(100, 69), h.Tracker.OnLook("orc", Band("heavily wounded")));
     }
 
     // The damage we saw says it should read lower than it does: a regen tick fired.
@@ -79,7 +79,7 @@ public sealed class MonsterHpTrackerTests
         h.Room(RoomObservationSource.AlsoHere, ("orc", 1));
         h.Hit("orc", 55);   // ~45 → severely (30-49); a tick of 10 makes 55 → heavily
 
-        Assert.Equal(new MonsterHpRead(100, 55, true), h.Tracker.OnLook("orc", Band("heavily wounded")));
+        Assert.Equal(new MonsterHpRead(100, 55), h.Tracker.OnLook("orc", Band("heavily wounded")));
     }
 
     // A look after a look that shows a better band: a regen tick fired between them,
@@ -93,7 +93,7 @@ public sealed class MonsterHpTrackerTests
         Assert.Equal(49, h.Tracker.OnLook("orc", Band("severely wounded"))!.Value.BestGuess);
 
         h.Now = h.Now.AddSeconds(10);                             // not a full interval
-        Assert.True(h.Tracker.OnLook("orc", Band("heavily wounded")) is { BestGuess: 59, RegenSeen: true });
+        Assert.Equal(59, h.Tracker.OnLook("orc", Band("heavily wounded"))!.Value.BestGuess);
 
         h.Now = h.Now.AddSeconds(29);                             // 29 s since the seen tick
         Assert.Equal(59, h.Tracker.Estimate("orc"));

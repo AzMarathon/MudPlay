@@ -147,7 +147,7 @@ public sealed class MonsterHpTracker
         i.TicksSinceLook = 0;
         if (i.Hp != before)
             _log?.Info(LogCategory, $"look moved '{i.Name}' from ~{before} to ~{i.Hp} (band {band.Describe()})");
-        return new MonsterHpRead(i.MaxHp, i.Hp, regenSeen);
+        return new MonsterHpRead(i.MaxHp, i.Hp);
     }
 
     // One line per tracked monster, for the bug report.

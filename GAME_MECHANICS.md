@@ -1018,7 +1018,7 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 - **Band → HP range.** For a band `[lo, hi)`: `Low = ceil(lo·M/100)`, `High = ceil(hi·M/100) − 1` — exactly the integer HP values that read as that band.
 - **Why the range is worth having.** Against a **high-HP boss with fast regen / self-heal**, the per-round scroll outpaces any attempt to tally HP by counting damage lines, so the wound band is the only reliable read of where the boss's "HP gate" sits.
 - **Client use:**
-  - Implemented in `MonsterLookParser` → status-bar `TGT HP: min-max [~best guess]` and a terminal line with max HP, the band's range and the best guess; the best guess is `MonsterHpTracker`'s running estimate, pulled into the band (see *Monsters, lairs & spawns → Monster HP regen*).
+  - Implemented in `MonsterLookParser` → status-bar `TGT HP: min-max [~best guess]` and a terminal line `[<name>: <max> HP, <band>: min-max, ~<best guess>]` with the band shortened (Full / Slight / mod / Hvy / Sev / crit / v.crit, user 2026-09-29); the best guess is `MonsterHpTracker`'s running estimate, pulled into the band (see *Monsters, lairs & spawns → Monster HP regen*).
   - Name→HP resolution goes through `RoomEntityClassifier.ResolveLookedMonsterNumber`, which prefers the monster variant actually in the room so shared names / adjective prefixes resolve to the right HP.
 
 ---

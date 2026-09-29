@@ -3508,10 +3508,10 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 **Default:** On
 **What it does:** When you `look <monster>`, MudPlay shows its estimated remaining hit points in two places. Turning this off suppresses both.
-- **The terminal** gets a yellow line with the monster's max HP, the range its wound band gives, and a **best guess**: `[large orc: 100 HP max, 35-48 by its wounds, best guess ~41]`.
+- **The terminal** gets a yellow line with the monster's max HP, its wound band and that band's HP range, and a **best guess**: `[large orc: 100 HP, Sev: 30-49, ~41]`. The bands are **Full** (unwounded), **Slight**, **mod** (moderately), **Hvy** (heavily), **Sev** (severely), **crit** (critically) and **v.crit** (very critically).
 - **The status bar's TGT HP:** slot shows the range with the best guess in brackets, `TGT HP: 35-48 [~41]`. The bracket follows the damage the monster takes after the look.
 
-**How the best guess works:** it starts from the monster's max HP and subtracts the damage the round totals credited to it (see *Show combat round totals*). It adds the monster's regen every 30 seconds on Paradigm or 90 seconds on Stock while it's hurt. Every `look` keeps it inside the wound band. When a look shows a regen tick fired (the band rose since the last look, or it held up despite the damage), it counts that tick, says `(regen tick seen)`, and re-times the regen from then. With two monsters of the same name in the room, attacks and looks go to the first one listed in *Also here:*, and so does the estimate.
+**How the best guess works:** it starts from the monster's max HP and subtracts the damage the round totals credited to it (see *Show combat round totals*). It adds the monster's regen every 30 seconds on Paradigm or 90 seconds on Stock while it's hurt. Every `look` keeps it inside the wound band. When a look shows a regen tick fired (the band rose since the last look, or it held up despite the damage), it adds that tick to the best guess and re-times the regen from then. With two monsters of the same name in the room, attacks and looks go to the first one listed in *Also here:*, and so does the estimate.
 
 ### Enable the Great Pyramid climb solver / Enable the asylum (random-teleport maze) solver
 
