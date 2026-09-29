@@ -78,6 +78,7 @@ public sealed class MonsterRecordDialogService
             resolveSpellShort:  _spellShort.NumberByShort,
             resolveSpellNumber: _spellShort.ShortByNumber,
             spellSuggestions:   AppServices.Current.Spellbook.AvailablePicks,
+            findSpell:          AppServices.Current.Spellbook.FindByCastCode,
             manaModePercentage: AppServices.Current.CombatSpellManaModeIsPercentage,
             liveMaxMa:          AppServices.Current.PlayerState.MaxMa,
             locationSuggestions: _overlaySeed.LocationSuggestions);

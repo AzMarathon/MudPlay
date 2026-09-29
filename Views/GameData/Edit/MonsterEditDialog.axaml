@@ -5,11 +5,11 @@
         xmlns:spells="using:MudPlay.Game.Spells"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="780"
+        mc:Ignorable="d" d:DesignWidth="1040" d:DesignHeight="600"
         x:Class="MudPlay.Views.GameData.Edit.MonsterEditDialog"
         x:DataType="vm:MonsterEditDialogViewModel"
         Title="{Binding Title}"
-        Width="920" Height="780"
+        Width="1040" Height="600"
         WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
@@ -17,7 +17,7 @@
              Short cast-code (ValueMemberBinding); this only shapes the list display,
              mirroring the Settings → Combat spell slots. -->
         <DataTemplate x:Key="SpellPickItem" x:DataType="spells:SpellPick">
-            <TextBlock Text="{Binding Display}"/>
+            <TextBlock Text="{Binding Display}" Classes.unlearnedPick="{Binding !Learned}"/>
         </DataTemplate>
     </Window.Resources>
 
@@ -36,6 +36,41 @@
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,3,0,1"/>
+        </Style>
+        <!-- As in Settings → Combat: an unlearned spell is struck through and dimmed. -->
+        <Style Selector="TextBlock.unlearnedPick">
+            <Setter Property="TextDecorations" Value="Strikethrough"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <!-- A spell that doesn't fit its slot. -->
+        <Style Selector="AutoCompleteBox.badSpell">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="AutoCompleteBox.badSpell /template/ TextBox">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
+        <Style Selector="Border.Group">
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="8,6"/>
+        </Style>
+        <Style Selector="TextBlock.GroupHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style Selector="TextBlock.Hint">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <!-- Typed numbers: the spinner buttons would double each box's width. -->
+        <Style Selector="NumericUpDown.Compact">
+            <Setter Property="ShowButtonSpinner" Value="False"/>
+            <Setter Property="Width" Value="62"/>
         </Style>
         <Style Selector="TextBlock.MdbKey">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
@@ -89,55 +124,22 @@
         <Grid RowDefinitions="*,Auto" RowSpacing="10">
 
             <!-- ===== Two panes: editable left + read-only MDB right =====
-                 The middle column hosts a GridSplitter — drag to rebalance the
-                 two side widths. The ratio persists per character profile via
-                 SplitterLayoutStore (id = "MonsterEditDialog"). Initial split
-                 is skewed toward the left (1.3* / 1*) — the editable side
-                 carries the Monster / Details / Attack-Priority + Options /
-                 Combat-Messages stack which needs more room than a true
-                 50/50 split would give it. -->
-            <Grid Grid.Row="0" x:Name="PanesGrid" ColumnDefinitions="1.3*,6,*">
+                 The editable side is a fixed width that fits its groups without
+                 scrolling, so it needs no splitter; the read-only MDB pane takes
+                 whatever width is left, which lets long room lists wrap.
+                 WindowLayouts remembers the window's size and place. -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*" ColumnSpacing="10">
 
                 <!-- Editable -->
                 <Border Grid.Column="0"
                         BorderBrush="{StaticResource ChromeBorderBrush}"
-                        BorderThickness="1" CornerRadius="3" Padding="10"
-                        Margin="0,0,8,0">
+                        BorderThickness="1" CornerRadius="3" Padding="10">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="2">
-                            <!-- Name + Use — left-aligned, value column fixed
-                                 so they don't track the splitter. 240 comfortably
-                                 fits the longest monster names + the Use-tier
-                                 labels without the old excess width. -->
-                            <TextBlock Classes="SectionHeader" Text="Monster"/>
-                            <Grid ColumnDefinitions="68,240" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
-                                  ColumnSpacing="6" RowSpacing="4"
-                                  HorizontalAlignment="Left">
+                        <StackPanel Spacing="10" Width="470">
+
+                            <Grid ColumnDefinitions="60,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
                                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Name"/>
                                 <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name, Mode=TwoWay}"/>
-                                <!-- Where it lives. Blank = not set; pick an existing label or type a
-                                     new one. A box still showing the installed label saves nothing. -->
-                                <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Landmass"
-                                           ToolTip.Tip="The big walkable landmass this monster lives on (e.g. Mainland). Blank = not set. Pick an existing label or type a new one."/>
-                                <AutoCompleteBox Grid.Row="2" Grid.Column="1"
-                                                 Text="{Binding Landmass, Mode=TwoWay}"
-                                                 ItemsSource="{Binding LocationSuggestions.Landmasses}"
-                                                 FilterMode="Contains" MinimumPrefixLength="0"
-                                                 PlaceholderText="not set"/>
-                                <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Region"
-                                           ToolTip.Tip="The region you walk through to reach it (e.g. Volcano). Blank = not set."/>
-                                <AutoCompleteBox Grid.Row="3" Grid.Column="1"
-                                                 Text="{Binding Region, Mode=TwoWay}"
-                                                 ItemsSource="{Binding LocationSuggestions.Regions}"
-                                                 FilterMode="Contains" MinimumPrefixLength="0"
-                                                 PlaceholderText="not set"/>
-                                <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Area"
-                                           ToolTip.Tip="The named place inside the region (e.g. a lair or a cave). Blank = not set."/>
-                                <AutoCompleteBox Grid.Row="4" Grid.Column="1"
-                                                 Text="{Binding Area, Mode=TwoWay}"
-                                                 ItemsSource="{Binding LocationSuggestions.Areas}"
-                                                 FilterMode="Contains" MinimumPrefixLength="0"
-                                                 PlaceholderText="not set"/>
                                 <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Use"/>
                                 <ComboBox  Grid.Row="1" Grid.Column="1"
                                            ItemsSource="{Binding AvailableTiers}"
@@ -152,158 +154,170 @@
                                 </ComboBox>
                             </Grid>
 
-                            <!-- Details — left-aligned grid, fixed value
-                                 column widths so the Relationship dropdown
-                                 + Override spell rows don't stretch with
-                                 the splitter. The value column is 140: the
-                                 relationship options + override spell ids /
-                                 cast-codes are all short, so the old 280 was
-                                 wasted width. -->
-                            <TextBlock Classes="SectionHeader" Text="Details"/>
-                            <!-- Per-monster single-target combat overrides mirror the
-                                 Settings → Combat spell grid rung-for-rung: three spell
-                                 pickers (Debuff / Normal / Alternate) each with a per-room
-                                 "Max casts" cap + a "Min mana to cast" floor stacked beneath
-                                 it (same NumericUpDown + %↔value label as the Combat tab),
-                                 plus a Physical-attack command box. A configured slot
-                                 substitutes its spell into the matching rung of the same
-                                 gated cascade for this species. Narrow two-column layout;
-                                 the sub-rows span both columns, indented under the picker. -->
-                            <Grid ColumnDefinitions="130,210"
-                                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
-                                  ColumnSpacing="6" RowSpacing="4"
-                                  HorizontalAlignment="Left">
-
-                                <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Relationship"/>
-                                <ComboBox  Grid.Row="0" Grid.Column="1"
-                                           ItemsSource="{Binding AvailableRelationships}"
-                                           SelectedItem="{Binding Relationship, Mode=TwoWay}"
-                                           HorizontalAlignment="Stretch"/>
-
-                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Debuff (single target)"
-                                           ToolTip.Tip="Single-target debuff to cast on this monster, over the global Combat-tab debuff. Pick from the list (or type a cast-code / Spell.Number). Max casts caps casts per room (blank = unlimited); Min mana to cast is read as % or absolute per the Combat tab's mana mode. Runs the same gates as the Combat-tab slot — a debuff the target's level blocks is skipped."/>
-                                <AutoCompleteBox Grid.Row="1" Grid.Column="1"
-                                                 Text="{Binding PreAttackSpellId, Mode=TwoWay}"
-                                                 ItemsSource="{Binding SpellSuggestions}"
-                                                 ValueMemberBinding="{ReflectionBinding Short}"
-                                                 ItemFilter="{Binding SpellSuggestionFilter}"
-                                                 ItemTemplate="{StaticResource SpellPickItem}"
-                                                 PlaceholderText="code or name…"/>
-                                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
-                                            Orientation="Horizontal" Spacing="6" Margin="16,0,0,0">
-                                    <TextBlock Classes="FieldLabel" Text="Max casts"/>
-                                    <NumericUpDown Value="{Binding PreAttackCount, Mode=TwoWay}"
-                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100"
-                                                   ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
-                                    <TextBlock Classes="FieldLabel" Text="Min mana to cast" Margin="8,0,0,0"/>
-                                    <NumericUpDown Value="{Binding PreAttackMinMana, Mode=TwoWay}"
-                                                   Minimum="0" Maximum="{Binding SpellManaMax}"
-                                                   FormatString="0" Increment="1" Width="108"/>
-                                    <TextBlock Classes="FieldLabel" Text="{Binding PreAttackMinManaConverted}"/>
+                            <!-- Where it lives. Blank = not set; pick an existing label or
+                                 type a new one. A box still showing the installed label saves
+                                 nothing. -->
+                            <Border Classes="Group">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Classes="GroupHeader" Text="Where it lives"/>
+                                    <Grid ColumnDefinitions="60,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="4">
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Landmass"
+                                                   ToolTip.Tip="The big walkable landmass this monster lives on (e.g. Mainland). Blank = not set. Pick an existing label or type a new one."/>
+                                        <AutoCompleteBox Grid.Row="0" Grid.Column="1"
+                                                         Text="{Binding Landmass, Mode=TwoWay}"
+                                                         ItemsSource="{Binding LocationSuggestions.Landmasses}"
+                                                         FilterMode="Contains" MinimumPrefixLength="0"
+                                                         PlaceholderText="not set"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Region"
+                                                   ToolTip.Tip="The region you walk through to reach it (e.g. Volcano). Blank = not set."/>
+                                        <AutoCompleteBox Grid.Row="1" Grid.Column="1"
+                                                         Text="{Binding Region, Mode=TwoWay}"
+                                                         ItemsSource="{Binding LocationSuggestions.Regions}"
+                                                         FilterMode="Contains" MinimumPrefixLength="0"
+                                                         PlaceholderText="not set"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Area"
+                                                   ToolTip.Tip="The named place inside the region (e.g. a lair or a cave). Blank = not set."/>
+                                        <AutoCompleteBox Grid.Row="2" Grid.Column="1"
+                                                         Text="{Binding Area, Mode=TwoWay}"
+                                                         ItemsSource="{Binding LocationSuggestions.Areas}"
+                                                         FilterMode="Contains" MinimumPrefixLength="0"
+                                                         PlaceholderText="not set"/>
+                                    </Grid>
                                 </StackPanel>
+                            </Border>
 
-                                <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Normal attack spell"
-                                           ToolTip.Tip="Spell that replaces the global Combat-tab Normal-attack spell on this monster, occupying the normal rung of the same gated cascade. Pick from the list (or type a cast-code / Spell.Number). Max casts caps casts per room (blank = unlimited); Min mana to cast is the floor (% or absolute). Spell-only — a raw attack verb goes in the Physical attack box below. Runs all the same gates: a spell the target is immune / level / element-resist blocked from is skipped down the cascade."/>
-                                <AutoCompleteBox Grid.Row="3" Grid.Column="1"
-                                                 Text="{Binding NormalSpellId, Mode=TwoWay}"
-                                                 ItemsSource="{Binding SpellSuggestions}"
-                                                 ValueMemberBinding="{ReflectionBinding Short}"
-                                                 ItemFilter="{Binding SpellSuggestionFilter}"
-                                                 ItemTemplate="{StaticResource SpellPickItem}"
-                                                 PlaceholderText="code or name…"/>
-                                <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
-                                            Orientation="Horizontal" Spacing="6" Margin="16,0,0,0">
-                                    <TextBlock Classes="FieldLabel" Text="Max casts"/>
-                                    <NumericUpDown Value="{Binding NormalCount, Mode=TwoWay}"
-                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100"
-                                                   ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
-                                    <TextBlock Classes="FieldLabel" Text="Min mana to cast" Margin="8,0,0,0"/>
-                                    <NumericUpDown Value="{Binding NormalMinMana, Mode=TwoWay}"
-                                                   Minimum="0" Maximum="{Binding SpellManaMax}"
-                                                   FormatString="0" Increment="1" Width="108"/>
-                                    <TextBlock Classes="FieldLabel" Text="{Binding NormalMinManaConverted}"/>
-                                </StackPanel>
-
-                                <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Alternate attack spell"
-                                           ToolTip.Tip="Spell that replaces the global Combat-tab Alternate-attack spell on this monster, the alternate rung of the same cascade (fired when the normal rung can't). Pick from the list (or type a cast-code / Spell.Number). Max casts / Min mana to cast as above. Spell-only."/>
-                                <AutoCompleteBox Grid.Row="5" Grid.Column="1"
-                                                 Text="{Binding AltSpellId, Mode=TwoWay}"
-                                                 ItemsSource="{Binding SpellSuggestions}"
-                                                 ValueMemberBinding="{ReflectionBinding Short}"
-                                                 ItemFilter="{Binding SpellSuggestionFilter}"
-                                                 ItemTemplate="{StaticResource SpellPickItem}"
-                                                 PlaceholderText="code or name…"/>
-                                <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
-                                            Orientation="Horizontal" Spacing="6" Margin="16,0,0,0">
-                                    <TextBlock Classes="FieldLabel" Text="Max casts"/>
-                                    <NumericUpDown Value="{Binding AltCount, Mode=TwoWay}"
-                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100"
-                                                   ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
-                                    <TextBlock Classes="FieldLabel" Text="Min mana to cast" Margin="8,0,0,0"/>
-                                    <NumericUpDown Value="{Binding AltMinMana, Mode=TwoWay}"
-                                                   Minimum="0" Maximum="{Binding SpellManaMax}"
-                                                   FormatString="0" Increment="1" Width="108"/>
-                                    <TextBlock Classes="FieldLabel" Text="{Binding AltMinManaConverted}"/>
-                                </StackPanel>
-
-                                <TextBlock Grid.Row="7" Grid.Column="0" Classes="FieldLabel" Text="Physical attack"
-                                           ToolTip.Tip="Raw attack verb (attack, bash, kick…) that replaces the weapon command on this monster — but only on a round the engine already chose physical. It does NOT force physical or suppress the spell rungs, and carries no mana / cap gating. Blank = use the Combat-tab attack command."/>
-                                <TextBox Grid.Row="7" Grid.Column="1"
-                                         Text="{Binding PhysicalCommand, Mode=TwoWay}"
-                                         PlaceholderText="verb (attack, bash…)"/>
-                            </Grid>
-
-                            <!-- Attack Priority + Options border boxes —
-                                 fixed widths + left-aligned so they sit
-                                 cleanly inside the pane instead of
-                                 stretching all the way to the splitter. -->
-                            <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="14"
-                                  HorizontalAlignment="Left" Margin="0,4,0,0">
-                                <Border Grid.Column="0" Width="220"
-                                        BorderBrush="{StaticResource ChromeBorderBrush}"
-                                        BorderThickness="1" CornerRadius="3" Padding="8">
-                                    <StackPanel>
-                                        <TextBlock Classes="SectionHeader" Text="Attack Priority"/>
-                                        <ComboBox ItemsSource="{Binding AvailablePriorities}"
-                                                  SelectedItem="{Binding Priority, Mode=TwoWay}"
-                                                  HorizontalAlignment="Stretch"/>
-                                    </StackPanel>
-                                </Border>
-                                <Border Grid.Column="1" Width="220"
-                                        BorderBrush="{StaticResource ChromeBorderBrush}"
-                                        BorderThickness="1" CornerRadius="3" Padding="8">
-                                    <StackPanel>
-                                        <TextBlock Classes="SectionHeader" Text="Options"/>
-                                        <CheckBox Content="Don't backstab" IsChecked="{Binding DontBackstab, Mode=TwoWay}"/>
+                            <Border Classes="Group">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Classes="GroupHeader" Text="Fighting it"/>
+                                    <Grid ColumnDefinitions="Auto,*,Auto,*" ColumnSpacing="8">
+                                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Relationship"
+                                                   ToolTip.Tip="Enemy — kill on sight. Neutral — only if it attacks first (or Combat → attack all monsters is on). Friend — never attack. Flee — run from it on sight. Hangup — disconnect on sight."/>
+                                        <ComboBox  Grid.Column="1"
+                                                   ItemsSource="{Binding AvailableRelationships}"
+                                                   SelectedItem="{Binding Relationship, Mode=TwoWay}"
+                                                   HorizontalAlignment="Stretch"/>
+                                        <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Priority"
+                                                   ToolTip.Tip="Which enemy in the room to target first: First, then High, Normal, Low, Last."/>
+                                        <ComboBox  Grid.Column="3"
+                                                   ItemsSource="{Binding AvailablePriorities}"
+                                                   SelectedItem="{Binding Priority, Mode=TwoWay}"
+                                                   HorizontalAlignment="Stretch"/>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="16">
+                                        <CheckBox Content="Don't backstab" IsChecked="{Binding DontBackstab, Mode=TwoWay}"
+                                                  ToolTip.Tip="Never open on this monster with a backstab."/>
                                         <CheckBox Content="Kill on sight"
                                                   IsChecked="{Binding KillOnSight, Mode=TwoWay}"
                                                   IsVisible="{Binding ShowKillOnSight}"
                                                   ToolTip.Tip="Engage this neutral monster like an enemy. Neutrals never attack first, so other passive neutrals stay safe to rest among between kills."/>
                                     </StackPanel>
-                                </Border>
-                            </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Per-monster single-target combat overrides mirror the
+                                 Settings → Combat spell grid rung-for-rung: three spell
+                                 pickers (Debuff / Normal / Alternate), each with a per-room
+                                 cast cap and a mana floor, plus a Physical-attack command. A
+                                 configured slot substitutes its spell into the matching rung
+                                 of the same gated cascade for this species. -->
+                            <Border Classes="Group">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Classes="GroupHeader" Text="Attacks on this monster (blank = use the Combat tab)"/>
+                                    <Grid ColumnDefinitions="Auto,*,62,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                                          ColumnSpacing="6" RowSpacing="4">
+                                        <TextBlock Grid.Row="0" Grid.Column="2" Classes="Hint" Text="Max casts"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="3" Classes="Hint" Text="Min mana"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Debuff"
+                                                   ToolTip.Tip="Single-target debuff to cast on this monster, over the Combat tab's debuff. Lists only debuffs (0-energy, between-round spells on one enemy or the whole room — a room debuff is cast bare). Pick from the list (or type a cast-code / Spell.Number). Runs the same gates as the Combat-tab slot — a debuff the target's level blocks is skipped."/>
+                                        <AutoCompleteBox Grid.Row="1" Grid.Column="1"
+                                                         Text="{Binding PreAttackSpellId, Mode=TwoWay}"
+                                                         Classes.badSpell="{Binding PreAttackSpellError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                         ItemsSource="{Binding DebuffSuggestions}"
+                                                         ValueMemberBinding="{ReflectionBinding Short}"
+                                                         ItemFilter="{Binding SpellSuggestionFilter}"
+                                                         ItemTemplate="{StaticResource SpellPickItem}"
+                                                         PlaceholderText="code or name…"
+                                                         ToolTip.Tip="Single-target debuff to cast on this monster, over the Combat tab's debuff. Lists only debuffs (0-energy, between-round spells on one enemy or the whole room — a room debuff is cast bare). Pick from the list (or type a cast-code / Spell.Number). Runs the same gates as the Combat-tab slot — a debuff the target's level blocks is skipped."/>
+                                        <NumericUpDown Grid.Row="1" Grid.Column="2" Classes="Compact"
+                                                       Value="{Binding PreAttackCount, Mode=TwoWay}"
+                                                       Minimum="0" Maximum="100" FormatString="0" Increment="1"
+                                                       PlaceholderText="∞"
+                                                       ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
+                                        <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" Spacing="4">
+                                            <NumericUpDown Classes="Compact"
+                                                           Value="{Binding PreAttackMinMana, Mode=TwoWay}"
+                                                           Minimum="0" Maximum="{Binding SpellManaMax}"
+                                                           FormatString="0" Increment="1"
+                                                           ToolTip.Tip="Don't cast it below this much mana — read as % or points per the Combat tab's mana mode."/>
+                                            <TextBlock Classes="Hint" Text="{Binding PreAttackMinManaConverted}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Spell"
+                                                   ToolTip.Tip="Spell that replaces the Combat tab's Normal-attack spell on this monster, in the normal rung of the same gated cascade. Pick from the list (or type a cast-code / Spell.Number). Lists only attack spells (ones that cost energy, on one enemy or the whole room — a room spell is cast bare). A raw attack verb goes in Physical below. A spell the target is immune / level / element-resist blocked from is skipped down the cascade."/>
+                                        <AutoCompleteBox Grid.Row="2" Grid.Column="1"
+                                                         Text="{Binding NormalSpellId, Mode=TwoWay}"
+                                                         Classes.badSpell="{Binding NormalSpellError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                         ItemsSource="{Binding AttackSuggestions}"
+                                                         ValueMemberBinding="{ReflectionBinding Short}"
+                                                         ItemFilter="{Binding SpellSuggestionFilter}"
+                                                         ItemTemplate="{StaticResource SpellPickItem}"
+                                                         PlaceholderText="code or name…"
+                                                         ToolTip.Tip="Spell that replaces the Combat tab's Normal-attack spell on this monster, in the normal rung of the same gated cascade. Pick from the list (or type a cast-code / Spell.Number). Lists only attack spells (ones that cost energy, on one enemy or the whole room — a room spell is cast bare). A raw attack verb goes in Physical below. A spell the target is immune / level / element-resist blocked from is skipped down the cascade."/>
+                                        <NumericUpDown Grid.Row="2" Grid.Column="2" Classes="Compact"
+                                                       Value="{Binding NormalCount, Mode=TwoWay}"
+                                                       Minimum="0" Maximum="100" FormatString="0" Increment="1"
+                                                       PlaceholderText="∞"
+                                                       ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
+                                        <StackPanel Grid.Row="2" Grid.Column="3" Orientation="Horizontal" Spacing="4">
+                                            <NumericUpDown Classes="Compact"
+                                                           Value="{Binding NormalMinMana, Mode=TwoWay}"
+                                                           Minimum="0" Maximum="{Binding SpellManaMax}"
+                                                           FormatString="0" Increment="1"
+                                                           ToolTip.Tip="Don't cast it below this much mana — read as % or points per the Combat tab's mana mode."/>
+                                            <TextBlock Classes="Hint" Text="{Binding NormalMinManaConverted}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Alt spell"
+                                                   ToolTip.Tip="Spell that replaces the Combat tab's Alternate-attack spell on this monster — the alternate rung of the same cascade, fired when Spell can't. Lists only attack spells. Pick from the list (or type a cast-code / Spell.Number)."/>
+                                        <AutoCompleteBox Grid.Row="3" Grid.Column="1"
+                                                         Text="{Binding AltSpellId, Mode=TwoWay}"
+                                                         Classes.badSpell="{Binding AltSpellError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                         ItemsSource="{Binding AttackSuggestions}"
+                                                         ValueMemberBinding="{ReflectionBinding Short}"
+                                                         ItemFilter="{Binding SpellSuggestionFilter}"
+                                                         ItemTemplate="{StaticResource SpellPickItem}"
+                                                         PlaceholderText="code or name…"
+                                                         ToolTip.Tip="Spell that replaces the Combat tab's Alternate-attack spell on this monster — the alternate rung of the same cascade, fired when Spell can't. Lists only attack spells. Pick from the list (or type a cast-code / Spell.Number)."/>
+                                        <NumericUpDown Grid.Row="3" Grid.Column="2" Classes="Compact"
+                                                       Value="{Binding AltCount, Mode=TwoWay}"
+                                                       Minimum="0" Maximum="100" FormatString="0" Increment="1"
+                                                       PlaceholderText="∞"
+                                                       ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
+                                        <StackPanel Grid.Row="3" Grid.Column="3" Orientation="Horizontal" Spacing="4">
+                                            <NumericUpDown Classes="Compact"
+                                                           Value="{Binding AltMinMana, Mode=TwoWay}"
+                                                           Minimum="0" Maximum="{Binding SpellManaMax}"
+                                                           FormatString="0" Increment="1"
+                                                           ToolTip.Tip="Don't cast it below this much mana — read as % or points per the Combat tab's mana mode."/>
+                                            <TextBlock Classes="Hint" Text="{Binding AltMinManaConverted}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Physical"
+                                                   ToolTip.Tip="Raw attack verb (attack, bash, kick…) that replaces the weapon command on this monster — but only on a round the engine already chose physical. It does NOT force physical or suppress the spell rungs, and carries no mana / cap gating. Blank = use the Combat-tab attack command."/>
+                                        <TextBox Grid.Row="4" Grid.Column="1"
+                                                 Text="{Binding PhysicalCommand, Mode=TwoWay}"
+                                                 PlaceholderText="verb (attack, bash…)"
+                                                 ToolTip.Tip="Raw attack verb (attack, bash, kick…) that replaces the weapon command on this monster — but only on a round the engine already chose physical. Blank = use the Combat-tab attack command."/>
+                                    </Grid>
+                                    <TextBlock Text="{Binding SpellErrors}" IsVisible="{Binding SpellErrors, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                               Foreground="{StaticResource AccentRedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </Border>
 
-                <!-- Drag handle. Width fixed by the column's GridLength; the
-                     ResizeBehavior keeps the operation scoped to the two
-                     star-width neighbours so the dialog overall stays the
-                     same width while only the split moves. -->
-                <GridSplitter Grid.Column="1"
-                              Width="6"
-                              HorizontalAlignment="Stretch"
-                              VerticalAlignment="Stretch"
-                              ResizeDirection="Columns"
-                              ResizeBehavior="PreviousAndNext"
-                              Background="{StaticResource ChromeBorderBrush}"
-                              ShowsPreview="False"/>
-
                 <!-- Read-only MDB info -->
-                <Border Grid.Column="2"
+                <Border Grid.Column="1"
                         BorderBrush="{StaticResource ChromeBorderBrush}"
                         BorderThickness="1" CornerRadius="3" Padding="10"
-                        Margin="8,0,0,0"
                         Background="{StaticResource ChromeBgSunkenBrush}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>

@@ -1,3 +1,4 @@
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
@@ -378,5 +379,66 @@ public sealed class MonsterEditDialogViewModelTests
             writableTiers: [SettingsTier.Character],
             locationSuggestions: s);
         Assert.Same(s, vm.LocationSuggestions);
+    }
+
+    // ----- override spell slots ------------------------------------------
+
+    // Shaped like the class spells in the game data: mmis and dfir (#288) cost energy
+    // on one enemy, esto hits the room; fear and stnk are 0-energy on one enemy and
+    // on the room; mend is cast on yourself.
+    private static readonly Dictionary<string, KnownSpell> Spells = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["mmis"] = Spell(1, "mmis", energy: 500, targets: 8),
+        ["dfir"] = Spell(288, "dfir", energy: 1000, targets: 8),
+        ["fear"] = Spell(3, "fear", energy: 0, targets: 8),
+        ["esto"] = Spell(4, "esto", energy: 1000, targets: 12),
+        ["stnk"] = Spell(5, "stnk", energy: 0, targets: 12),
+        ["mend"] = Spell(6, "mend", energy: 0, targets: 2),
+    };
+
+    private static KnownSpell Spell(int n, string code, int energy, int targets)
+        => new(n, code, code, 1, 1, 1, targets, new SpellFormulaInput { EnergyCost = energy });
+
+    private static MonsterEditDialogViewModel SpellVm() => new(
+        wccNoStr: "1", mdbName: "rat", existing: null,
+        currentTier: SettingsTier.Character, mdbInfo: Array.Empty<MdbInfoRow>(),
+        spellSuggestions: Spells.Keys.Select(k => new SpellPick(k, k)).ToArray(),
+        findSpell: code => Spells.TryGetValue(code, out KnownSpell s) ? s : null);
+
+    [Fact]
+    public void SpellLists_OfferOnlyWhatFitsTheSlot()
+    {
+        MonsterEditDialogViewModel vm = SpellVm();
+        Assert.Equal(new[] { "fear", "stnk" }, vm.DebuffSuggestions.Select(p => p.Short));
+        Assert.Equal(new[] { "mmis", "dfir", "esto" }, vm.AttackSuggestions.Select(p => p.Short));
+    }
+
+    [Theory]
+    [InlineData("mmis", null, null)]      // an attack spell as the debuff
+    [InlineData(null, "fear", null)]      // a debuff as the attack spell
+    [InlineData(null, null, "fear")]      // a debuff as the alt attack
+    [InlineData("esto", null, null)]      // a room attack as the debuff
+    [InlineData("mend", null, null)]      // a spell on yourself as the debuff
+    public void WrongKindOfSpell_BlocksSave(string? debuff, string? spell, string? alt)
+    {
+        MonsterEditDialogViewModel vm = SpellVm();
+        vm.PreAttackSpellId = debuff ?? string.Empty;
+        vm.NormalSpellId = spell ?? string.Empty;
+        vm.AltSpellId = alt ?? string.Empty;
+
+        Assert.NotNull(vm.SpellErrors);
+        Assert.False(vm.SaveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void FittingOrUnknownSpells_Save()
+    {
+        MonsterEditDialogViewModel vm = SpellVm();
+        vm.PreAttackSpellId = "fear";
+        vm.NormalSpellId = "esto";        // a room spell is an attack too
+        vm.AltSpellId = "1234";           // a Spell.Number isn't judged
+
+        Assert.Null(vm.SpellErrors);
+        Assert.True(vm.SaveCommand.CanExecute(null));
     }
 }

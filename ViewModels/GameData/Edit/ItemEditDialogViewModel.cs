@@ -32,10 +32,12 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     // honest about what the flags will do.
     public bool CanBuySell { get; }
 
-    // Only surfaces (non-null) for a light, where the two toggles are greyed —
-    // explains why. Null on a normal item so no tooltip shows on the enabled box.
-    public string? BuySellTooltip =>
-        CanBuySell ? null : "LIGHT items are managed by Auto-light — Auto-buy / Auto-sell don't apply.";
+    // On a light the two toggles are greyed, and the tooltip says why.
+    private const string LightNote = "LIGHT items are managed by Auto-light — Auto-buy / Auto-sell don't apply.";
+    public string AutoBuyTooltip => CanBuySell
+        ? "Buy it, up to Max to get, when a shop's list shows it in stock and you can afford it." : LightNote;
+    public string AutoSellTooltip => CanBuySell
+        ? "Sell it down to Min. to keep whenever you're in a shop that trades it." : LightNote;
 
     // Auto-open only applies to container items — the engine sends `open <item>`
     // when a flagged container enters inventory, which is meaningless for a
