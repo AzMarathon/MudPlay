@@ -237,4 +237,28 @@ public sealed class CombatSettingsTests
         Assert.Null(slot.MaxCastsPerRoom);   // blank = no per-room cast cap
         Assert.Equal(0, slot.MinManaPerCast);
     }
+
+    // The round-totals row boxes on settings saved before they existed follow "Show
+    // combat round totals", so an update neither hides a table that was on nor turns
+    // one on.
+    [Theory]
+    [InlineData("""{"ShowCombatRoundTotals":true}""", true)]
+    [InlineData("""{"ShowCombatRoundTotals":true,"ShowCombatRoundTotalsSelfOnly":true}""", true)]
+    [InlineData("""{"ShowCombatRoundTotals":false}""", false)]
+    [InlineData("""{}""", false)]
+    public void OlderSettings_RowsFollowTheTableSwitch(string json, bool rows)
+    {
+        CombatSettings c = JsonSerializer.Deserialize<CombatSettings>(json)!;
+        Assert.Equal(rows, c.ShowsRoundTotalsRow(c.ShowCombatRoundTotalsSelf));
+        Assert.Equal(rows, c.ShowsRoundTotalsRow(c.ShowCombatRoundTotalsMonsters));
+    }
+
+    [Fact]
+    public void SavedBoxes_AreKeptAsSaved()
+    {
+        CombatSettings c = JsonSerializer.Deserialize<CombatSettings>(
+            """{"ShowCombatRoundTotals":true,"ShowCombatRoundTotalsSelf":true,"ShowCombatRoundTotalsParty":false}""")!;
+        Assert.True(c.ShowsRoundTotalsRow(c.ShowCombatRoundTotalsSelf));
+        Assert.False(c.ShowsRoundTotalsRow(c.ShowCombatRoundTotalsParty));
+    }
 }

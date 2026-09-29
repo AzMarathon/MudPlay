@@ -251,11 +251,17 @@ public sealed class CombatSettings
     public bool ShowCombatRoundTotals { get; set; }
 
     // With ShowCombatRoundTotals, which rows the table prints: ours, our party's, other
-    // players', the monsters'. All default false; with none ticked no table prints.
-    public bool ShowCombatRoundTotalsSelf { get; set; }
-    public bool ShowCombatRoundTotalsParty { get; set; }
-    public bool ShowCombatRoundTotalsPlayers { get; set; }
-    public bool ShowCombatRoundTotalsMonsters { get; set; }
+    // players', the monsters'. With none ticked no table prints. Read through
+    // ShowsRoundTotalsRow.
+    public bool? ShowCombatRoundTotalsSelf { get; set; }
+    public bool? ShowCombatRoundTotalsParty { get; set; }
+    public bool? ShowCombatRoundTotalsPlayers { get; set; }
+    public bool? ShowCombatRoundTotalsMonsters { get; set; }
+
+    // A box missing from settings saved before the boxes existed follows
+    // ShowCombatRoundTotals: a table that was on keeps every row, one that was off
+    // stays off (user, 2026-09-29).
+    public bool ShowsRoundTotalsRow(bool? box) => box ?? ShowCombatRoundTotals;
 }
 
 // One spell-row entry in the Combat tab's Spell-combat section (multi-attack 1 and

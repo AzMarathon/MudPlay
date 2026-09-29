@@ -3627,10 +3627,10 @@ public sealed class AppServices
             Models.Profile.CombatSettings combat = ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
             if (!combat.ShowCombatRoundTotals) return;
             List<Game.Combat.CombatantKind> shown = new(4);
-            if (combat.ShowCombatRoundTotalsSelf) shown.Add(Game.Combat.CombatantKind.Self);
-            if (combat.ShowCombatRoundTotalsParty) shown.Add(Game.Combat.CombatantKind.Party);
-            if (combat.ShowCombatRoundTotalsPlayers) shown.Add(Game.Combat.CombatantKind.Player);
-            if (combat.ShowCombatRoundTotalsMonsters) shown.Add(Game.Combat.CombatantKind.Monster);
+            if (combat.ShowsRoundTotalsRow(combat.ShowCombatRoundTotalsSelf)) shown.Add(Game.Combat.CombatantKind.Self);
+            if (combat.ShowsRoundTotalsRow(combat.ShowCombatRoundTotalsParty)) shown.Add(Game.Combat.CombatantKind.Party);
+            if (combat.ShowsRoundTotalsRow(combat.ShowCombatRoundTotalsPlayers)) shown.Add(Game.Combat.CombatantKind.Player);
+            if (combat.ShowsRoundTotalsRow(combat.ShowCombatRoundTotalsMonsters)) shown.Add(Game.Combat.CombatantKind.Monster);
             IReadOnlyList<string> table = Game.Combat.RoundTotalsFormatter.Table(round, shown);
             if (table.Count > 0) WriteTerminalNotice(string.Join("\r\n", table));
         };

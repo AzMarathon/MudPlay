@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.125.8**
-> - Settings → Combat: "Only my totals" replaced by Me / Party / Other players / Monsters boxes that pick which round-totals rows print (all off by default; none ticked prints nothing)
+> - Settings → Combat: "Only my totals" replaced by Me / Party / Other players / Monsters boxes that pick which round-totals rows print (none ticked prints nothing; updating with round totals on starts all four ticked)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

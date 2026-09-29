@@ -867,10 +867,10 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         DrainsOverrideAoe         = dto.DrainsOverrideAoe;
 
         ShowCombatRoundTotals = dto.ShowCombatRoundTotals;
-        ShowCombatRoundTotalsSelf     = dto.ShowCombatRoundTotalsSelf;
-        ShowCombatRoundTotalsParty    = dto.ShowCombatRoundTotalsParty;
-        ShowCombatRoundTotalsPlayers  = dto.ShowCombatRoundTotalsPlayers;
-        ShowCombatRoundTotalsMonsters = dto.ShowCombatRoundTotalsMonsters;
+        ShowCombatRoundTotalsSelf     = dto.ShowsRoundTotalsRow(dto.ShowCombatRoundTotalsSelf);
+        ShowCombatRoundTotalsParty    = dto.ShowsRoundTotalsRow(dto.ShowCombatRoundTotalsParty);
+        ShowCombatRoundTotalsPlayers  = dto.ShowsRoundTotalsRow(dto.ShowCombatRoundTotalsPlayers);
+        ShowCombatRoundTotalsMonsters = dto.ShowsRoundTotalsRow(dto.ShowCombatRoundTotalsMonsters);
     }
 
     private CombatSettings ReadOrDefault()
