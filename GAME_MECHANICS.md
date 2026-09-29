@@ -3118,6 +3118,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
   - So the two sides of one link can differ: `3/740` → `3/784` is party-safe, `3/784` → `3/740` splits.
   - **The spell path, in the engine** *([OBSERVED] `wccmmud.dll` 1.11p `_cast_no_target`)*: a teleport spell with target 13 moves the caster, then each member of the caster's group to the same room, with no `_stop_following`. Any other target calls `_stop_following(<caster>, −1)` and moves only the caster.
+  - **Client use (leader):** crossing a splitting teleport while leading notes it as our own teleport (`PartyComebackManager.NoteOwnTeleport`, as for a token), so the `<name> is no longer following you.` lines it prints aren't taken for members left behind; the re-invite on landing (`AutoPartyManager.NotePartySplitTeleport`) regroups the party.
   - **Client use:** a room `CMD` that `cast`s a Full Party Area teleport becomes a Teleport edge flagged `RoomExit.MovesWholeParty` (`TBInfoCastTeleportResolver` reports `WholeParty`); `SpecialExitDispatch` sends only the leader's keyword across it — no `.@party` relay, no re-invite. Every other Teleport edge still relays and reforms.
   - The named random teleports (`teleport_silvermere`, `teleport_sewers`, … `teleport_obsidian`) pick a random room in their area and take the same path, so they split too.
 
