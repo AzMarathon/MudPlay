@@ -3,7 +3,8 @@ namespace MudPlay.Game.Combat;
 // Immutable snapshot of the session's activity counters, produced by
 // SessionActivityTracker.Snapshot for the Session Stats panel's "Session
 // Statistics" section: how many monsters fell, how much experience was earned,
-// and the copper-value currency picked up vs. stashed/deposited.
+// the copper and items collected / deposited-or-sold / stashed, the rooms
+// entered while sneaking (and how many held), and the timed walk steps.
 //
 // The MonstersKilled / ExperienceEarned / Currency* figures are LIFETIME totals
 // for the session (cleared only by a full reset). The per-hour rates divide the
@@ -22,8 +23,23 @@ public readonly record struct SessionActivityStats(
     long CurrencyStashed,
     int RateKills,
     long RateExperience,
-    long RateCurrency)
+    long RateCurrency,
+    long CurrencyDeposited,
+    int ItemsCollected,
+    int ItemsSold,
+    int ItemsStashed,
+    int SneakEntries,
+    int SneakHeld,
+    int Steps,
+    TimeSpan StepTime)
 {
+    // Share of sneaking room entries where the sneak held, 0–100; null before the
+    // first one.
+    public double? SneakPercent => SneakEntries > 0 ? 100.0 * SneakHeld / SneakEntries : null;
+
+    // Average send-to-arrival time of a walk step; null before the first one.
+    public TimeSpan? AverageStep => Steps > 0 ? StepTime / Steps : null;
+
     // Monsters killed per hour across the current rate window, 0 before any time
     // has elapsed.
     public double KillsPerHour => Rate(RateKills);

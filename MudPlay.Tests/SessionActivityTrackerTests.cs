@@ -261,7 +261,116 @@ public sealed class SessionActivityTrackerTests
         Assert.Equal(s.KillsPerHour, series[^1], 3);
     }
 
+    // ----- copper / items ----------------------------------------------
+
+    [Fact]
+    public void ItemsAndDepositSold_SumSeparately_AndIgnoreNonPositive()
+    {
+        (SessionActivityTracker t, _) = Make();
+        t.NoteItemsCollected(3);
+        t.NoteItemsCollected(0);          // ignored
+        t.NoteItemsStashed(5);
+        t.NoteItemsStashed(-1);           // ignored
+        t.NoteCurrencyDeposited(1000);    // bank
+        t.NoteCurrencyDeposited(0);       // ignored
+        t.NoteSale(2, 250);               // two items for 250 copper
+        t.NoteSale(1, 0);                 // sold for nothing still counts the item
+
+        SessionActivityStats s = t.Snapshot();
+        Assert.Equal(3, s.ItemsCollected);
+        Assert.Equal(5, s.ItemsStashed);
+        Assert.Equal(3, s.ItemsSold);
+        Assert.Equal(1250L, s.CurrencyDeposited);   // deposits + sale proceeds
+        Assert.Equal(0L, s.CurrencyStashed);        // deposits no longer count as stashed
+        Assert.Equal(0L, s.CurrencyCollected);      // sales aren't pickups
+    }
+
+    // ----- sneak ---------------------------------------------------------
+
+    [Fact]
+    public void SneakPercent_IsHeldOverEntries_NullBeforeAny()
+    {
+        (SessionActivityTracker t, _) = Make();
+        Assert.Null(t.Snapshot().SneakPercent);
+
+        t.NoteSneakEntry(true);
+        t.NoteSneakEntry(true);
+        t.NoteSneakEntry(true);
+        t.NoteSneakEntry(false);
+
+        SessionActivityStats s = t.Snapshot();
+        Assert.Equal(4, s.SneakEntries);
+        Assert.Equal(3, s.SneakHeld);
+        Assert.Equal(75d, s.SneakPercent!.Value, 3);
+    }
+
+    // ----- walk ----------------------------------------------------------
+
+    [Fact]
+    public void Walk_AveragesSendToArrival_OnlyForTimedSteps()
+    {
+        (SessionActivityTracker t, Clock c) = Make();
+        Assert.Null(t.Snapshot().AverageStep);
+
+        t.NoteStepSent();
+        c.Advance(1.0 / 60);              // 1 s
+        t.NoteStepArrived();
+
+        c.Advance(5);                     // stopped between steps (a fight): not counted
+
+        t.NoteStepSent();
+        c.Advance(2.0 / 60);              // 2 s
+        t.NoteStepArrived();
+
+        t.NoteStepArrived();              // no step in flight: ignored
+
+        SessionActivityStats s = t.Snapshot();
+        Assert.Equal(2, s.Steps);
+        Assert.Equal(1.5, s.AverageStep!.Value.TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void Walk_AbandonedStep_IsNotCounted()
+    {
+        (SessionActivityTracker t, Clock c) = Make();
+        t.NoteStepSent();
+        c.Advance(1);
+        Assert.True(t.NoteStepAbandoned());   // refused / re-looked
+        Assert.False(t.NoteStepAbandoned());  // nothing left to drop
+        t.NoteStepArrived();                  // late arrival no longer timed
+
+        Assert.Equal(0, t.Snapshot().Steps);
+    }
+
     // ----- reset / change ----------------------------------------------
+
+    [Fact]
+    public void Reset_ZeroesTheCopperItemsSneakAndWalkFigures()
+    {
+        (SessionActivityTracker t, Clock c) = Make();
+        t.NoteItemsCollected(2);
+        t.NoteItemsStashed(2);
+        t.NoteSale(1, 100);
+        t.NoteCurrencyDeposited(500);
+        t.NoteSneakEntry(true);
+        t.NoteStepSent();
+        c.Advance(1.0 / 60);
+        t.NoteStepArrived();
+        t.NoteStepSent();                 // in flight across the reset
+
+        t.Reset();
+        c.Advance(1.0 / 60);
+        t.NoteStepArrived();              // belongs to the old session: dropped
+
+        SessionActivityStats s = t.Snapshot();
+        Assert.Equal(0, s.ItemsCollected);
+        Assert.Equal(0, s.ItemsStashed);
+        Assert.Equal(0, s.ItemsSold);
+        Assert.Equal(0L, s.CurrencyDeposited);
+        Assert.Equal(0, s.SneakEntries);
+        Assert.Equal(0, s.Steps);
+        Assert.Equal(TimeSpan.Zero, s.StepTime);
+    }
 
     [Fact]
     public void Reset_ZeroesEverything_AndRestartsTheClock()

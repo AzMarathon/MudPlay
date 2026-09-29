@@ -1,12 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.122.6**
-> - Sell detours: a shop that just didn't sell an item is retried after 10 minutes instead of being written off for the session; only a refusal or an unreachable shop sticks
-> - Round totals: your room spells credit every monster in the room, and monster HP estimates drop for each
-> - Necromantic bolt's drain counts toward the bolt's own damage in Session Stats, not as a proc
-> - Mage dragonfire and arcane assault damage lines are recognised as your spell (arcane assault's Paradigm seed wording fixed)
-> - The update window lists every version you're skipping, and nothing merged after the release you're downloading
+> **Version 3.122.10**
+> - Session Stats shows Exp needed (with the target level) and Will level in, off the same countdown as the status bar TNL
+> - Session Stats Sneak %: share of rooms entered while sneaking where the sneak held
+> - Session Stats Walk: average seconds per walk / loop step, from the move going out to the new room
+> - Session Stats copper / items table: Collected, Deposit/Sold and Stashed, plus the Income rate; bank deposits now count under Deposit/Sold, not Stashed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

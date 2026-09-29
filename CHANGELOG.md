@@ -1,5 +1,12 @@
 # Version history
 
+## 3.122.10
+
+- Session Stats shows Exp needed (with the target level) and Will level in, off the same countdown as the status bar TNL
+- Session Stats Sneak %: share of rooms entered while sneaking where the sneak held
+- Session Stats Walk: average seconds per walk / loop step, from the move going out to the new room
+- Session Stats copper / items table: Collected, Deposit/Sold and Stashed, plus the Income rate; bank deposits now count under Deposit/Sold, not Stashed
+
 ## 3.122.6
 
 - Sell detours: a shop that just didn't sell an item is retried after 10 minutes instead of being written off for the session; only a refusal or an unreachable shop sticks

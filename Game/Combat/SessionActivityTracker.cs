@@ -1,16 +1,18 @@
 namespace MudPlay.Game.Combat;
 
-// Counts the session's monster kills, experience earned, and currency picked up
-// vs. stashed/deposited for the Session Stats panel's "Session Statistics"
-// section, and keeps a history of kill / experience / currency events so the
-// panel can draw kills/hour and exp/hour sparklines and report every per-hour
-// rate. Produces a SessionActivityStats snapshot plus bucketed series via
-// KillsPerHourSeries and ExperiencePerHourSeries.
+// Counts the session's monster kills, experience earned, and the copper and
+// items collected / deposited-or-sold / stashed for the Session Stats panel's
+// "Session Statistics" section, plus how often a sneak held on entering a room
+// and how long a walk step takes. Keeps a history of kill / experience /
+// currency events so the panel can draw kills/hour and exp/hour sparklines and
+// report every per-hour rate. Produces a SessionActivityStats snapshot plus
+// bucketed series via KillsPerHourSeries and ExperiencePerHourSeries.
 //
 // Owns no source subscriptions — kills arrive from
-// MonsterDeathWatcher.MonsterDied and experience from a MessageRouter pattern —
-// so inputs are pushed in via the Note* forwarders and AppServices wires the
-// sources. This mirrors TimeAnalysisTracker and keeps the tracker
+// MonsterDeathWatcher.MonsterDied, experience from a MessageRouter pattern,
+// items from InventoryManager, sneak entries from StealthManager and steps from
+// RoomTracker — so inputs are pushed in via the Note* forwarders and AppServices
+// wires the sources. This mirrors TimeAnalysisTracker and keeps the tracker
 // dependency-free behind an injectable clock for unit tests. Every Note* call
 // and Snapshot runs on the marshalled dispatch thread (the sources all fire
 // there), so the counters are lock-free.
@@ -51,6 +53,19 @@ public sealed class SessionActivityTracker
     private long _experienceEarned;
     private long _currencyCollected;
     private long _currencyStashed;
+    private long _currencyDeposited;
+    private int _itemsCollected;
+    private int _itemsSold;
+    private int _itemsStashed;
+    private int _sneakEntries;
+    private int _sneakHeld;
+    private int _steps;
+    private TimeSpan _stepTime;
+
+    // When the walk step now in flight went out; null between steps. Only the
+    // send-to-arrival span counts, so time stopped between steps (a fight, a rest,
+    // a gate) never lands in the average.
+    private DateTimeOffset? _stepSentAt;
 
     // Rate-window anchor: the session/reset start. The window spans
     // [EffectiveStart(now), now] where EffectiveStart caps the look-back at
@@ -118,13 +133,83 @@ public sealed class SessionActivityTracker
         Changed?.Invoke();
     }
 
-    // Add currency removed from the player this session — stash-room hides and
-    // bank deposits alike — as a copper value. Non-positive amounts are ignored.
+    // Add currency hidden in a stash room this session, as a copper value.
+    // Non-positive amounts are ignored.
     public void NoteCurrencyStashed(long copper)
     {
         if (copper <= 0) return;
         _currencyStashed += copper;
         Changed?.Invoke();
+    }
+
+    // Add currency banked this session, as a copper value. Non-positive amounts
+    // are ignored. Shares the Deposit/Sold total with sale proceeds.
+    public void NoteCurrencyDeposited(long copper)
+    {
+        if (copper <= 0) return;
+        _currencyDeposited += copper;
+        Changed?.Invoke();
+    }
+
+    // A confirmed shop sale: count items sold for copper. The proceeds join bank
+    // deposits in the Deposit/Sold copper total.
+    public void NoteSale(int count, long copper)
+    {
+        if (count <= 0 && copper <= 0) return;
+        if (count > 0) _itemsSold += count;
+        if (copper > 0) _currencyDeposited += copper;
+        Changed?.Invoke();
+    }
+
+    // Add items picked up off the floor. Non-positive counts are ignored.
+    public void NoteItemsCollected(int count)
+    {
+        if (count <= 0) return;
+        _itemsCollected += count;
+        Changed?.Invoke();
+    }
+
+    // Add items hidden in a stash room. Non-positive counts are ignored.
+    public void NoteItemsStashed(int count)
+    {
+        if (count <= 0) return;
+        _itemsStashed += count;
+        Changed?.Invoke();
+    }
+
+    // One room entered while sneaking: held = the room confirmed the sneak, false
+    // = it broke on the way in (loud or silent).
+    public void NoteSneakEntry(bool held)
+    {
+        _sneakEntries++;
+        if (held) _sneakHeld++;
+        Changed?.Invoke();
+    }
+
+    // A walk step's move just went out — starts its timer. A second send before
+    // the first arrives restarts it from the later send.
+    public void NoteStepSent() => _stepSentAt = _clock();
+
+    // The step in flight reached its new room — adds its send-to-arrival time to
+    // the walk average. No-op when no step is being timed.
+    public void NoteStepArrived()
+    {
+        if (_stepSentAt is not { } sent) return;
+        _stepSentAt = null;
+        TimeSpan took = _clock() - sent;
+        if (took < TimeSpan.Zero) return;
+        _steps++;
+        _stepTime += took;
+        Changed?.Invoke();
+    }
+
+    // The step in flight didn't land (refused, re-looked, lost the room) — drop
+    // its timer without counting it. True when a timed step was dropped.
+    public bool NoteStepAbandoned()
+    {
+        if (_stepSentAt is null) return false;
+        _stepSentAt = null;
+        return true;
     }
 
     // Point-in-time copy of the session's activity counters: lifetime totals for
@@ -149,7 +234,15 @@ public sealed class SessionActivityTracker
             CurrencyStashed:   _currencyStashed,
             RateKills:         _killTimes.Count,
             RateExperience:    windowExperience,
-            RateCurrency:      windowCurrency);
+            RateCurrency:      windowCurrency,
+            CurrencyDeposited: _currencyDeposited,
+            ItemsCollected:    _itemsCollected,
+            ItemsSold:         _itemsSold,
+            ItemsStashed:      _itemsStashed,
+            SneakEntries:      _sneakEntries,
+            SneakHeld:         _sneakHeld,
+            Steps:             _steps,
+            StepTime:          _stepTime);
     }
 
     // Kills/hour as a buckets-point running-average curve across the current rate
@@ -249,6 +342,15 @@ public sealed class SessionActivityTracker
         _experienceEarned = 0;
         _currencyCollected = 0;
         _currencyStashed = 0;
+        _currencyDeposited = 0;
+        _itemsCollected = 0;
+        _itemsSold = 0;
+        _itemsStashed = 0;
+        _sneakEntries = 0;
+        _sneakHeld = 0;
+        _steps = 0;
+        _stepTime = TimeSpan.Zero;
+        _stepSentAt = null;
         ResetRates();
     }
 

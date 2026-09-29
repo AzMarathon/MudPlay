@@ -237,6 +237,11 @@ public sealed class StealthManager : IDisposable
     // confirmation.
     public event Action? SilentSneakLost;
 
+    // Fires once per room entered while sneaking: true when the room confirmed it
+    // (`Sneaking...`), false when it broke on the way in — the loud line or a silent
+    // loss. Feeds the session's sneak success rate.
+    public event Action<bool>? SneakEntry;
+
     public StealthManager(
         MessageRouter router,
         PlayerState state,
@@ -355,6 +360,7 @@ public sealed class StealthManager : IDisposable
             Transition(StealthState.Idle);
             _state.IsSneaking = false;
             SilentSneakLost?.Invoke();
+            SneakEntry?.Invoke(false);
         }
         else if (_stateValue == StealthState.AttemptingSneak && !_sneakConfirmedThisRoom)
         {
@@ -618,6 +624,7 @@ public sealed class StealthManager : IDisposable
         // arrived unseen. Re-arms the silent-loss watchdog.
         _awaitingArrivalConfirm = false;
         EstablishSneaking();
+        SneakEntry?.Invoke(true);
     }
 
     // Shared positive-signal handler: marks sneak established (clean initiate ACK
@@ -648,6 +655,7 @@ public sealed class StealthManager : IDisposable
         _sneakBrokeOnEntryAt = NowProvider();
         Transition(StealthState.Idle);
         _state.IsSneaking = false;
+        SneakEntry?.Invoke(false);
     }
 
     // "You make a sound as you enter the room!" lands just before the room display,

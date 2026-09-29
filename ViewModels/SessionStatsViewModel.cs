@@ -96,8 +96,14 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrencyCollectedText), nameof(CurrencyCollectedTip),
         nameof(CurrencyPerHourText), nameof(CurrencyStashedText), nameof(CurrencyStashedTip),
-        nameof(KillsRateText), nameof(ExpRateText), nameof(TimeToLevelText))]
+        nameof(CurrencyDepositedText), nameof(CurrencyDepositedTip),
+        nameof(SneakText), nameof(SneakTip), nameof(WalkText), nameof(WalkTip),
+        nameof(KillsRateText), nameof(ExpRateText))]
     private SessionActivityStats _activity;
+
+    // The shared TNL clock, read once per refresh so the countdown under the exp
+    // graph and the Exp needed / Will level in rows all show the same reading.
+    private (TimeToLevelEstimator.Result Estimate, TimeSpan? Remaining) _tnl;
 
     // Kills/hour series feeding the kills sparkline; reassigned each refresh.
     [ObservableProperty]
@@ -342,6 +348,15 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     public string CurrencyPerHourText   => CurrencyFormat.Denominate(Activity.CurrencyPerHour, _naming.RunicName);
     public string CurrencyStashedText   => CurrencyFormat.Denominate(Activity.CurrencyStashed, _naming.RunicName);
     public string CurrencyStashedTip    => CurrencyFormat.Full(Activity.CurrencyStashed, _naming.RunicName);
+    public string CurrencyDepositedText => CurrencyFormat.Denominate(Activity.CurrencyDeposited, _naming.RunicName);
+    public string CurrencyDepositedTip  => CurrencyFormat.Full(Activity.CurrencyDeposited, _naming.RunicName);
+
+    // ----- Session Statistics (sneak + walk) ---------------------------
+
+    public string SneakText => Activity.SneakPercent is { } p ? $"{p:F0}%" : "—";
+    public string SneakTip  => $"{Activity.SneakHeld:N0} of {Activity.SneakEntries:N0} rooms entered while sneaking kept the sneak.";
+    public string WalkText  => Activity.AverageStep is { } step ? $"{step.TotalSeconds:F2}s" : "—";
+    public string WalkTip   => $"Average from a move going out to the new room showing, over {Activity.Steps:N0} walk / loop steps.";
 
     // ----- Rate-graph scales -------------------------------------------
     // The sparklines normalise each series to its own min–max, so the plot is
@@ -454,7 +469,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
             // The shared TNL clock (AppServices.SelfTimeToLevel) — the status bar and the
             // Party window's self row read the same countdown, so all three agree.
-            (TimeToLevelEstimator.Result r, TimeSpan? remaining) = _selfTimeToLevel();
+            (TimeToLevelEstimator.Result r, TimeSpan? remaining) = _tnl;
             if (r.TargetLevel <= 0) return "exp chart unavailable — import game data";
 
             string bankedPart = $"{r.BankableLevels} level{(r.BankableLevels == 1 ? "" : "s")} gained";
@@ -464,6 +479,28 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
                     : $"{Fmt(eta)} until level {r.TargetLevel}";
 
             return $"{bankedPart} · {etaPart}";
+        }
+    }
+
+    // Exp still to earn for the level the countdown targets, with that level —
+    // MegaMUD's "Exp. needed". Banked-aware like the countdown, so it's the first
+    // level the running exp hasn't reached, not merely the next one to train.
+    public string ExpNeededText => _stats.Level > 0 && _tnl.Estimate.TargetLevel > 0
+        ? $"{_tnl.Estimate.ExpNeeded:N0} (L{_tnl.Estimate.TargetLevel})"
+        : "—";
+
+    // The same countdown as TimeToLevelText, on its own row.
+    public string WillLevelInText
+    {
+        get
+        {
+            if (_stats.Level <= 0 || _tnl.Estimate.TargetLevel <= 0) return "—";
+            return _tnl.Remaining switch
+            {
+                null => "rate unknown",
+                { } eta when eta <= TimeSpan.Zero => "ready to level",
+                { } eta => Fmt(eta),
+            };
         }
     }
 
@@ -561,7 +598,10 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
         // The countdown reads live PlayerStats + the wall clock, so it must
         // re-fire every tick even when the Activity snapshot compares equal.
+        _tnl = _selfTimeToLevel();
         OnPropertyChanged(nameof(TimeToLevelText));
+        OnPropertyChanged(nameof(ExpNeededText));
+        OnPropertyChanged(nameof(WillLevelInText));
 
         // Lap readouts read the runner live (current lap ticks up each second);
         // re-fire them every tick, same as the countdown above.

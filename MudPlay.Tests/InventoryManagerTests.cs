@@ -86,7 +86,7 @@ public sealed class InventoryManagerTests
         using Harness h = new();
         (string Name, int Count)? sold = null;
         (string Name, int Count)? dropped = null;
-        h.Inv.ItemSold += (n, c) => sold = (n, c);
+        h.Inv.ItemSold += (n, c, _) => sold = (n, c);
         h.Inv.ItemDropped += (n, c) => dropped = (n, c);
 
         // Paradigm's counted forms — SplitLeadingCount strips the leading count.
@@ -98,11 +98,38 @@ public sealed class InventoryManagerTests
     }
 
     [Fact]
+    public void Sold_CarriesTheSalePriceInCopper()
+    {
+        using Harness h = new();
+        long? price = null;
+        h.Inv.ItemSold += (_, _, copper) => price = copper;
+
+        h.Feed("You sold 5 orc-head for 250 copper farthings.");
+
+        Assert.Equal(250L, price);
+    }
+
+    [Fact]
+    public void Took_FiresItemTaken_WithNameAndCount()
+    {
+        using Harness h = new();
+        List<(string Name, int Count)> taken = new();
+        h.Inv.ItemTaken += (n, c) => taken.Add((n, c));
+
+        h.Feed("You took rusty dagger.");
+        h.Feed("You took 5 orc-head.");                // Paradigm's counted get
+        h.Feed("You took 12 damage.");                 // damage, not a get
+        h.Feed("You picked up 10 gold crowns");         // coin pickup, not an item
+
+        Assert.Equal(new[] { ("rusty dagger", 1), ("orc-head", 5) }, taken);
+    }
+
+    [Fact]
     public void SoldSingular_StockForm_FiresCountOne()
     {
         using Harness h = new();
         (string Name, int Count)? sold = null;
-        h.Inv.ItemSold += (n, c) => sold = (n, c);
+        h.Inv.ItemSold += (n, c, _) => sold = (n, c);
 
         h.Feed("You sold lantern for 101 copper farthings.");
 

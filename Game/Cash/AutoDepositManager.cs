@@ -129,7 +129,7 @@ public sealed class AutoDepositManager : IDisposable
 
     // Fires when a bank `dep` is dispatched on arrival, carrying the deposited
     // copper value. Lets the Session Stats tracker count bank-deposited wealth
-    // alongside stash-room hides.
+    // in its Deposit/Sold figure.
     public event Action<long>? Deposited;
     private DepositPhase _phase = DepositPhase.Idle;
     private DetourResume _resume;

@@ -153,8 +153,14 @@ public sealed partial class InventoryManager : IDisposable
     // one-at-a-time Stock form both resolve to (name, N). Lets a consumer react to
     // exactly what left the pack (e.g. the Chest Offload window reconciling its list
     // against confirmed sales/drops rather than optimistically or by re-diffing).
-    public event Action<string, int>? ItemSold;
+    // ItemSold also carries the sale's copper value off the same line.
+    public event Action<string, int, long>? ItemSold;
     public event Action<string, int>? ItemDropped;
+
+    // Fired (singular name + count) for each `You took <item>.` — an item entering
+    // the pack off the floor, manual or automated get alike. Coin pickups use a
+    // different verb and never raise it.
+    public event Action<string, int>? ItemTaken;
 
     // Another player handed us an item: (item name, giver). Items only — a coin
     // hand-off isn't raised. Lets death recovery treat gear a party member recovered
@@ -602,9 +608,9 @@ public sealed partial class InventoryManager : IDisposable
                 CountedCommand.SplitLeadingCount(sold.Groups[1].Value.TrimEnd());
             RemoveCarried(soldName, soldCount);
             AdjustItemWeight(soldName, -soldCount);
-            ItemSold?.Invoke(soldName, soldCount);
-
             long price = ParsePriceToCopper(sold.Groups[2].Value);
+            ItemSold?.Invoke(soldName, soldCount, price);
+
             if (price > 0)
             {
                 lock (_lock) ApplyTransaction(price);
@@ -657,6 +663,7 @@ public sealed partial class InventoryManager : IDisposable
             (int count, string name) = CountedCommand.SplitLeadingCount(gotItem.Groups[1].Value.TrimEnd());
             AddCarried(name, count);
             AdjustItemWeight(name, +count);
+            ItemTaken?.Invoke(name, count);
             return;
         }
 

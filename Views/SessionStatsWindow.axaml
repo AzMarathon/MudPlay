@@ -520,19 +520,61 @@
                         <TextBlock Grid.Column="1" Classes="valr" Text="{Binding Activity.ExperienceEarned, StringFormat='{}{0:N0}'}"/>
                         <TextBlock Grid.Column="2" Classes="valr" Text="{Binding Activity.ExperiencePerHour, StringFormat='{}{0:N0}'}"/>
                     </Grid>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Exp needed"
+                                   ToolTip.Tip="Experience still to earn for the level the countdown is heading for — the first level your exp hasn't reached yet."/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding ExpNeededText}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Will level in"
+                                   ToolTip.Tip="Time to that level at this session's exp rate — the same countdown as the status bar's TNL."/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding WillLevelInText}"/>
+                    </Grid>
+
+                    <!-- copper | items table: coin as denominations, items as counts. -->
+                    <Grid ColumnDefinitions="*,76,72" Margin="0,4,0,0">
+                        <TextBlock Grid.Column="1" Classes="colhdr" Text="copper" HorizontalAlignment="Right"/>
+                        <TextBlock Grid.Column="2" Classes="colhdr" Text="items" HorizontalAlignment="Right"/>
+                    </Grid>
                     <Grid ColumnDefinitions="*,76,72">
-                        <TextBlock Grid.Column="0" Classes="lbl" Text="Currency"
-                                   ToolTip.Tip="Currency picked up this session, shown as coin denominations."/>
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Collected"
+                                   ToolTip.Tip="Coin and items picked up this session."/>
                         <TextBlock Grid.Column="1" Classes="valr" Text="{Binding CurrencyCollectedText}"
                                    ToolTip.Tip="{Binding CurrencyCollectedTip}"/>
-                        <TextBlock Grid.Column="2" Classes="valr" Text="{Binding CurrencyPerHourText}"/>
+                        <TextBlock Grid.Column="2" Classes="valr" Text="{Binding Activity.ItemsCollected, StringFormat='{}{0:N0}'}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,76,72">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Deposit/Sold"
+                                   ToolTip.Tip="Coin banked by auto-deposit plus coin from items sold, and the number of items sold."/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding CurrencyDepositedText}"
+                                   ToolTip.Tip="{Binding CurrencyDepositedTip}"/>
+                        <TextBlock Grid.Column="2" Classes="valr" Text="{Binding Activity.ItemsSold, StringFormat='{}{0:N0}'}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,76,72">
                         <TextBlock Grid.Column="0" Classes="lbl" Text="Stashed"
-                                   ToolTip.Tip="Currency stashed or bank-deposited this session, shown as coin denominations."/>
+                                   ToolTip.Tip="Coin and items hidden in stash rooms by the stash automation this session."/>
                         <TextBlock Grid.Column="1" Classes="valr" Text="{Binding CurrencyStashedText}"
                                    ToolTip.Tip="{Binding CurrencyStashedTip}"/>
-                        <TextBlock Grid.Column="2" Classes="dim" Text="—" HorizontalAlignment="Right"/>
+                        <TextBlock Grid.Column="2" Classes="valr" Text="{Binding Activity.ItemsStashed, StringFormat='{}{0:N0}'}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Income rate"
+                                   ToolTip.Tip="Coin picked up per hour, over the same window as the other per-hour rates."/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding CurrencyPerHourText, StringFormat='{}{0}/hr'}"/>
+                    </Grid>
+
+                    <TextBlock Classes="sub" Text="Other"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Sneak"
+                                   ToolTip.Tip="Share of rooms you entered while sneaking where the sneak held."/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding SneakText}"
+                                   ToolTip.Tip="{Binding SneakTip}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Walk"
+                                   ToolTip.Tip="Average time per walk or loop step, from the move going out to the new room showing. Time stopped between steps doesn't count."/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding WalkText}"
+                                   ToolTip.Tip="{Binding WalkTip}"/>
                     </Grid>
 
                     <!-- Loop laps — one lap = a full completion of the running loop.
