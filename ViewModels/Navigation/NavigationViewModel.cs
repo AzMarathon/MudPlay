@@ -608,6 +608,24 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 break;
         }
 
+        // Pause opened the builder from the running loop. A resume from anywhere —
+        // the toolbar, a hotkey, not just this window's Run — closes it again unless
+        // it was edited; otherwise the running loop stayed drawn as the red builder
+        // line (report paradigm-20260929-125946).
+        if (_loopBuilderOpenedByPause
+            && e.Kind is LoopEventKind.Resumed or LoopEventKind.StepCompleted
+            && _services.LoopRunner.State != Game.Map.LoopState.Paused)
+        {
+            bool edited = LoopBuilder is { } builder
+                       && _services.LoopRunner.CurrentLoop is { } running
+                       && BuilderClicksDifferFrom(builder, running);
+            if (!edited)
+            {
+                _loopBuilderOpenedByPause = false;
+                if (CurrentMode == NavigationMode.LoopBuild) ToggleLoopMode();
+            }
+        }
+
         OnPropertyChanged(nameof(IsLoopRunning));
         RefreshLoopOverlays();
         RefreshEngineActionKind();
@@ -640,8 +658,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // on top of the red preview — once the user resumes, the
         // runner re-fires LoopRunner events and this branch falls
         // through to the running-cycle path below.
+        // Only while the loop is actually paused: an edited builder left open after a
+        // resume mustn't hide the loop that's running.
         if (CurrentMode == NavigationMode.LoopBuild
-            && LoopBuilder is { HasClicks: true })
+            && LoopBuilder is { HasClicks: true }
+            && runner.State == Game.Map.LoopState.Paused)
         {
             LoopPath = null;
             LoopApproachPreviewPath = null;
