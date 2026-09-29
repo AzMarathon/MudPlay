@@ -6546,7 +6546,10 @@ public sealed class AppServices
             // a paused loop / walk still owns its gear), and its set comes off after the
             // user's idle delay.
             navIdle: () => MovementControl.State == Game.Map.MovementEngineState.Idle,
-            scheduleAfter: ScheduleOnce);
+            scheduleAfter: ScheduleOnce,
+            // A sit confirmed within a few seconds of a finished rest is that rest's
+            // tail, not a new one.
+            restJustEnded: () => Health.RecoveredWithin(TimeSpan.FromSeconds(5)));
         OutboundMovement.MoveSent += AutoEquip.OnMoveSent;
 
         // Per-game-data-set loop catalogue. Loops live

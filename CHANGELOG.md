@@ -1,5 +1,10 @@
 # Version history
 
+## 3.123.3
+
+- A rest a regen tick finished before the game confirmed the sit no longer swaps in the pre-rest set, so the walk doesn't carry rest gear into the next fight
+- bug reports addressed: paradigm-20260929-115648
+
 ## 3.123.1
 
 - Your message edits are kept on top of the shipped messages, so seed fixes still reach every message you haven't changed

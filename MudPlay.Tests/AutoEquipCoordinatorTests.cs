@@ -1035,4 +1035,37 @@ public sealed class AutoEquipCoordinatorTests
         coord.OnAboutToEnterRoom(lairB);         // adjacent lair → stay in Default
         Assert.Empty(applied);
     }
+
+    // ===== a sit confirmed after the rest already finished =====
+
+    // The rest's regen tick topped mana off on the next prompt, so the gates cleared
+    // before the server confirmed "You are now meditating": no pre-rest swap, or the
+    // walk would carry the rest gear into the next fight (report
+    // paradigm-20260929-115648). A sit with no rest just ended — typed by hand —
+    // still wears the set.
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void SitAfterRestFinished_SkipsThePreRestSwap(bool restJustEnded, bool expectSwap)
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestMana, enabled: true, "mana-set"));
+        var applied = new System.Collections.Generic.List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true,
+            restJustEnded: () => restJustEnded);
+
+        player.Position = PlayerPosition.Meditating;
+
+        Assert.Equal(expectSwap, applied.Contains("mana-set"));
+    }
 }

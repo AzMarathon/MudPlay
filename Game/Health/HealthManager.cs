@@ -689,6 +689,11 @@ public sealed class HealthManager : IDisposable
     // opts into "bless while resting."
     public bool IsRecoveringRest => _hpGateAsserted || _maGateAsserted;
 
+    // A rest we sent finished (the pools reached their targets) within window — for a
+    // sit the server confirms only after that, which is the tail of a finished rest.
+    public bool RecoveredWithin(TimeSpan window) => _now() - _recoveredAt <= window;
+    private DateTimeOffset _recoveredAt = DateTimeOffset.MinValue;
+
     // True between the rest emit and the corresponding stand emit.
     public bool RestInFlight => _restInFlight;
 
@@ -1456,6 +1461,7 @@ public sealed class HealthManager : IDisposable
             _log?.Combat(LogCategory,
                 $"recovered hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
             _restInFlight = false;
+            _recoveredAt = _now();
             _restConfirmedByPrompt = false;
         }
 

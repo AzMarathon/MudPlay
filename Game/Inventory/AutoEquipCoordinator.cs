@@ -130,6 +130,8 @@ public sealed class AutoEquipCoordinator : IDisposable
     // typed move; _scheduleAfter arms that revert (null = never reverts, tests aside).
     private readonly Func<bool>? _navIdle;
     private readonly Func<TimeSpan, Action, IDisposable>? _scheduleAfter;
+    // Whether a rest the health engine sent just finished (see OnPositionChanged).
+    private readonly Func<bool>? _restJustEnded;
     private bool _inManualMovementSet;
     private IDisposable? _manualIdleRevert;
 
@@ -148,7 +150,8 @@ public sealed class AutoEquipCoordinator : IDisposable
         Func<bool>? isMoving = null,
         Func<Action, IDisposable>? scheduleCombatGearSwap = null,
         Func<bool>? navIdle = null,
-        Func<TimeSpan, Action, IDisposable>? scheduleAfter = null)
+        Func<TimeSpan, Action, IDisposable>? scheduleAfter = null,
+        Func<bool>? restJustEnded = null)
     {
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(readEquipment);
@@ -168,6 +171,7 @@ public sealed class AutoEquipCoordinator : IDisposable
         _isLair = isLair;
         _isMoving = isMoving;
         _scheduleCombatGearSwap = scheduleCombatGearSwap;
+        _restJustEnded = restJustEnded;
         _navIdle = navIdle;
         _scheduleAfter = scheduleAfter;
         _log = log;
@@ -585,6 +589,17 @@ public sealed class AutoEquipCoordinator : IDisposable
             // swap-to-Default-on-combat restore (report paradigm-20260916-104923). Combat
             // gear holds until OnCombatStateChanged restores the rest set once combat clears.
             if (_player.InCombat) return;
+            // The server confirmed the sit after the rest it began had already
+            // finished — a regen tick topped the pool off on the very next prompt, so
+            // the gates cleared before "You are now meditating" arrived. Wearing the
+            // pre-rest set now would walk the next room in it and swap it all back
+            // there, under attack (report paradigm-20260929-115648).
+            if (!(_hpGateAsserted() || _maGateAsserted()) && _restJustEnded?.Invoke() == true)
+            {
+                _log?.Info(EquipmentManager.LogCategory,
+                    $"sat down after the rest had already finished — not swapping into '{restType}'");
+                return;
+            }
             // Sitting to rest leaves the movement set — clear the latch so the next
             // OnMovementStarted re-applies travel gear on the resume (otherwise the
             // idempotency guard thinks we're still travelling and never re-wears it).
