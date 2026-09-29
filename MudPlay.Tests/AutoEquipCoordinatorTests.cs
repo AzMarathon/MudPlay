@@ -1068,4 +1068,36 @@ public sealed class AutoEquipCoordinatorTests
 
         Assert.Equal(expectSwap, applied.Contains("mana-set"));
     }
+
+    // Before `rest` goes out, the pre-rest set the held gates call for goes on; a
+    // set already worn (NoChange) or a fight means no swap and no wait.
+    [Fact]
+    public void WearRestGearBeforeResting_FiresTheGatedSet_OnlyWhenItSwaps()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "hp-set"),
+            SetFor(EquipTriggerType.PreRestMana, enabled: true, "mana-set"));
+        var applied = new System.Collections.Generic.List<string>();
+        EquipResult result = EquipResult.Applied;
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => true,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return result; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        Assert.True(coord.WearRestGearBeforeResting());
+        Assert.Equal(new[] { "hp-set" }, applied);
+
+        result = EquipResult.NoChange;               // already wearing it
+        Assert.False(coord.WearRestGearBeforeResting());
+
+        result = EquipResult.Applied;
+        player.InCombat = true;
+        Assert.False(coord.WearRestGearBeforeResting());
+    }
 }

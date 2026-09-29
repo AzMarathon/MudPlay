@@ -656,14 +656,14 @@ public sealed class AutoEquipCoordinator : IDisposable
     private static bool IsRestPosture(PlayerPosition p) =>
         p is PlayerPosition.Resting or PlayerPosition.Meditating;
 
-    private void Fire(EquipTriggerType type)
+    private bool Fire(EquipTriggerType type)
     {
         // Respect the automation master switch — with the Auto-All kill-switch
         // engaged the user has silenced every engine, so a posture transition or
         // loop start must not auto-swap gear. Explicit applies (Workshop "Apply
         // Now", "Equip All", @equip <set>) don't flow through here, so they still
         // work with the kill-switch on.
-        if (!_isAutoEnabled()) return;
+        if (!_isAutoEnabled()) return false;
         // An item-cast buff swap just borrowed an equip slot and restores it itself
         // (see _lastItemCastSwapAt) — often the very rest-break that swap caused is
         // what fired this. Hold so the sequencer's own restore isn't doubled.
@@ -671,9 +671,9 @@ public sealed class AutoEquipCoordinator : IDisposable
         {
             _log?.Debug(EquipmentManager.LogCategory,
                 $"auto-equip '{type}' held: item-cast swap in progress (its own restore owns the slot)");
-            return;
+            return false;
         }
-        if (ResolveTarget(_readEquipment(), type) is not { } setId) return;
+        if (ResolveTarget(_readEquipment(), type) is not { } setId) return false;
         // Hold the fire until a full 'i' has established the worn set. Diffing a
         // set against an empty (never-parsed) loadout treats every item as unworn
         // and emits redundant `wear`s — e.g. re-wielding the weapon already held.
@@ -681,15 +681,26 @@ public sealed class AutoEquipCoordinator : IDisposable
         {
             _log?.Debug(EquipmentManager.LogCategory,
                 $"auto-equip '{type}' held: worn loadout unknown (no inventory dump yet)");
-            return;
+            return false;
         }
-        if (_applyBySetId(setId) == EquipResult.Applied)
-        {
-            // Stamp a real Default swap so the stand-up that follows a recovery-
-            // complete revert doesn't fire a second one (report -125103).
-            if (type == EquipTriggerType.Default) _lastDefaultAppliedAt = _now();
-            _log?.Info(EquipmentManager.LogCategory, $"auto-equip '{type}' applied its set");
-        }
+        if (_applyBySetId(setId) != EquipResult.Applied) return false;
+        // Stamp a real Default swap so the stand-up that follows a recovery-
+        // complete revert doesn't fire a second one (report -125103).
+        if (type == EquipTriggerType.Default) _lastDefaultAppliedAt = _now();
+        _log?.Info(EquipmentManager.LogCategory, $"auto-equip '{type}' applied its set");
+        return true;
+    }
+
+    // The health engine is about to send `rest`: put on the pre-rest set the held
+    // gates call for first, since a wear after the sit breaks the rest and resting
+    // again restarts its timer. True when a swap started — the rest waits for it.
+    public bool WearRestGearBeforeResting()
+    {
+        if (_player.InCombat) return false;
+        if (ClassifyRest(PlayerPosition.Resting, _hpGateAsserted(), _maGateAsserted()) is not { } type)
+            return false;
+        _inMovementSet = false;
+        return Fire(type);
     }
 
     public void Dispose()

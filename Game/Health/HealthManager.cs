@@ -523,6 +523,16 @@ public sealed class HealthManager : IDisposable
         _equipmentApplying = equipmentApplying;
     }
 
+    // Wire the "wear the rest gear first" hook (AutoEquipCoordinator
+    // .WearRestGearBeforeResting): true when it started a swap, which the `rest` then
+    // waits out (see the send site).
+    public void SetRestGearFirst(Func<bool> wearRestGearFirst)
+    {
+        ArgumentNullException.ThrowIfNull(wearRestGearFirst);
+        _wearRestGearFirst = wearRestGearFirst;
+    }
+    private Func<bool>? _wearRestGearFirst;
+
     // Wire the rest-target pool ceilings (see the _defaultSetMax* / _realMax* fields).
     // Both providers are optional — unset leaves the pre-existing live-max behaviour.
     public void SetRestPoolMaxProviders(
@@ -1448,12 +1458,26 @@ public sealed class HealthManager : IDisposable
             string restReason = anyGateConfirmed ? ""
                 : leaderWaitedRest ? " (waited — resting to use the downtime)"
                 : " (opportunistic, leader resting)";
-            SendChained(s.PreRestCommand);
-            SendCommand(command);
-            _log?.Combat(LogCategory,
-                $"{command}{restReason} " +
-                $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
-            _restInFlight = true;
+            // Every wear stands a resting character up, and resting again starts the
+            // rest's timer over (user, 2026-09-29) — so the rest gear goes on first and
+            // `rest` follows once the swap has streamed (the swap-done re-evaluate sends
+            // it, the gear already worn). Meditation survives a swap, so it goes out now
+            // and its gear follows the sit.
+            if (command == "rest" && _wearRestGearFirst?.Invoke() == true)
+            {
+                _log?.Combat(LogCategory,
+                    $"rest held — wearing the rest gear first so the swap can't break the rest " +
+                    $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+            }
+            else
+            {
+                SendChained(s.PreRestCommand);
+                SendCommand(command);
+                _log?.Combat(LogCategory,
+                    $"{command}{restReason} " +
+                    $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+                _restInFlight = true;
+            }
         }
         else if (!shouldRest && _restInFlight)
         {
