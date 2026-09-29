@@ -74,6 +74,21 @@ public sealed class StatlinePromptRegexBuilderTests
         Assert.Equal(31, seen[0].Mana);
     }
 
+    // Report paradigm-20260929-122409: "]%r: " printed "] :" while standing — a space
+    // before the colon the template doesn't place, and none after it.
+    [Fact]
+    public void CustomStatline_RestingFlagSpaceAndTrailingSpace_StillMatch()
+    {
+        Regex regex = StatlinePromptRegexBuilder.Build("full custom [HP=%h/%H MA=%m/%M]%r: ");
+
+        var seen = RunThroughScanner(regex,
+            "\x1b[79D\x1b[K\x1b[0;37m[HP=\x1b[0;37m91\x1b[0m/91 MA=11/42] :\x1b[0mw\r\n");
+        Assert.Single(seen);
+        Assert.Equal(91, seen[0].Hp);
+        Assert.Equal(11, seen[0].Mana);
+        Assert.Equal(PlayerPosition.Standing, seen[0].Position);
+    }
+
     [Fact]
     public void CustomStatline_ReadsFourDigitMana()
     {

@@ -57,7 +57,9 @@ public static class StatlinePromptRegexBuilder
         // Formatting codes (%f0-7, %b0-7, %d, %B, %N, %U, %L, %R) render as ANSI
         // escapes the scanner strips before the regex ever runs, so drop them
         // from the template up front. What's left is the plain wildcard idiom.
-        string template = StatlineSyntax.StripFormatting(StatlineSyntax.ExtractTemplate(command!));
+        // A template's trailing space didn't reach the wire (report
+        // paradigm-20260929-122409: "]%r: " printed "] :"), so it can't be required.
+        string template = StatlineSyntax.StripFormatting(StatlineSyntax.ExtractTemplate(command!)).TrimEnd();
 
         var pattern = new StringBuilder();
         var literal = new StringBuilder();
@@ -115,7 +117,10 @@ public static class StatlinePromptRegexBuilder
         'h' => @"(?<hp>-?\d{1,4})",  // signed: negative HP while mortally wounded
         'H' => @"\d{1,4}",
         'M' => @"\d{1,4}",
-        'r' => @"(?:\s?\((?<statea>Resting|Meditating)\))?",
+        // %r prints nothing unless resting or meditating (user, 2026-09-29), yet "]%r: "
+        // printed "] :" (report paradigm-20260929-122409) — a space the template doesn't
+        // place there — so a space before the flag is optional, as is the flag.
+        'r' => @"\s?(?:\((?<statea>Resting|Meditating)\))?",
         'c' => @"\d+",
         'x' => @"\d+",
         'X' => @"\d+",
