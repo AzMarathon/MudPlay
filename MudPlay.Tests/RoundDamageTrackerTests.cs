@@ -426,8 +426,8 @@ public sealed class RoundDamageTrackerTests
         RoundSummary r = h.CloseRound();
 
         (string dealt, string taken) = RoundTotalsFormatter.Format(r);
-        Assert.Equal("[Round 1 dealt: You 45 · Bob 30 · large giant rat 12 · goblin 0 · unknown 8]", dealt);
-        Assert.Equal("[Round 1 taken: large giant rat 75 · You 12 · goblin 0 · Bob 0 · unknown 8]", taken);
+        Assert.Equal("[Round 1 dealt: You 45, Bob 30, large giant rat 12, goblin 0, unknown 8]", dealt);
+        Assert.Equal("[Round 1 taken: large giant rat 75, You 12, goblin 0, Bob 0, unknown 8]", taken);
     }
 
     // Everyone in the room is listed every round, even with nothing against them.
@@ -439,8 +439,8 @@ public sealed class RoundDamageTrackerTests
         RoundSummary r = h.CloseRound();
 
         (string dealt, string taken) = RoundTotalsFormatter.Format(r);
-        Assert.Equal("[Round 1 dealt: You 2 · large giant rat 0 · goblin 0 · Bob 0]", dealt);
-        Assert.Equal("[Round 1 taken: You 0 · large giant rat 0 · goblin 0 · Bob 0 · unknown 2]", taken);
+        Assert.Equal("[Round 1 dealt: You 2, large giant rat 0, goblin 0, Bob 0]", dealt);
+        Assert.Equal("[Round 1 taken: You 0, large giant rat 0, goblin 0, Bob 0, unknown 2]", taken);
     }
 
     [Fact]
@@ -476,6 +476,24 @@ public sealed class RoundDamageTrackerTests
         h.Settle!();
         RoundSummary r = Assert.Single(h.Completed);
         Assert.Equal(14, r.DamageDealt);
+    }
+
+    // On a kill, *Combat Off* lands mid-burst and the other monsters' swings of the
+    // same round follow it; with the settle timer they stay in that round.
+    [Fact]
+    public void CombatOff_WithSettleTimer_LeavesTheRoundOpenForTheRestOfTheBurst()
+    {
+        using Harness h = new(withScheduler: true);
+        h.Feed("You skewer goblin for 8 damage!");
+        h.Feed("*Combat Off*");
+        h.Feed("The large giant rat bites you for 3 damage!");
+        Assert.Empty(h.Completed);
+
+        h.Now = h.Now.AddMilliseconds(600);
+        h.Settle!();
+        RoundSummary r = Assert.Single(h.Completed);
+        Assert.Equal(8, r.DamageDealt);
+        Assert.Equal(3, r.DamageTaken);
     }
 
     // The next round's first line fires the combat tick after that line opened its

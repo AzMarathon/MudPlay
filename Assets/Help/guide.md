@@ -2729,8 +2729,8 @@ At **0 mana** a mana-costing action can't land (the server silently ignores it),
 **What it does:** After each combat round, prints two yellow lines to the terminal: who **dealt** damage that round and who **took** it, for **everyone in the room** — you, party members, other players and monsters:
 
 ```
-[Round 3 dealt: You 45 · Bob 30 · large orc 12 · unknown 8]
-[Round 3 taken: large orc 75 · You 12 · unknown 20]
+[Round 3 dealt: You 45, Bob 30, large orc 12, unknown 8]
+[Round 3 taken: large orc 75, You 12, unknown 20]
 ```
 
 The round number counts from 1 in each fight. **Everyone in the room is listed every round** — you, your party, other players and monsters — even at 0, biggest numbers first. **unknown** only appears when a line couldn't be pinned to anyone. A round prints half a second after its last line, so the totals sit right under that round's combat.

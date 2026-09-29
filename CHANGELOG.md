@@ -5,6 +5,8 @@
 - **Show combat round totals** works: after each round it prints who dealt and who took damage, for everyone in the room, plus an unknown bucket
 - Session Stats' per-round damage counts only your own damage, no longer party members' hits or monster spells
 - The Wire Inspector's Classified pane shows who each damage line was credited to, and the bug report carries the last 10 rounds
+- The client's own yellow notices are never read as a monster arriving (a notice naming a dead monster made combat re-attack it)
+- bug reports addressed: paradigm-20260928-230226, paradigm-20260928-230456
 
 ## 3.119.3
 

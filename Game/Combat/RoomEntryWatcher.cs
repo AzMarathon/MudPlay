@@ -215,6 +215,11 @@ public sealed class RoomEntryWatcher : IDisposable
         if (text.StartsWith("Also here:", StringComparison.Ordinal)
             || text.StartsWith("You notice ", StringComparison.Ordinal)) return;
 
+        // The client's own notices are yellow and can name a monster ("[Round 1
+        // dealt: You 59, small green slime 0]") — reading one as an arrival
+        // re-engaged a monster we'd just killed (report paradigm-20260928-230226).
+        if (ClientNotice.IsNotice(text)) return;
+
         if (!TryFindYellowMonster(line, out RoomEntity monster)) return;
 
         // A later yellow mention of a monster already in the room isn't a new

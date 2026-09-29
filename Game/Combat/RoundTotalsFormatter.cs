@@ -2,8 +2,10 @@ namespace MudPlay.Game.Combat;
 
 // The two lines a round's damage ledger prints as, for the terminal ("Show combat
 // round totals"), the program log and the bug report:
-//   [Round 3 dealt: You 45 · Bob 30 · large orc 12 · unknown 8]
-//   [Round 3 taken: large orc 75 · You 12 · unknown 20]
+//   [Round 3 dealt: You 45, Bob 30, large orc 12, unknown 8]
+//   [Round 3 taken: large orc 75, You 12, unknown 20]
+// Plain ASCII: the terminal draws the notice through CP437, where a Latin-1 "·"
+// comes out as "╖".
 // Every combatant in the room is listed, biggest first (zeros included); "unknown"
 // last, only when a line named no side; "none" for a round with no one in it.
 public static class RoundTotalsFormatter
@@ -33,7 +35,7 @@ public static class RoundTotalsFormatter
             .Select(r => $"{r.Name} {r.Amount}")
             .ToList();
         if (unknown > 0) parts.Add($"unknown {unknown}");
-        string body = parts.Count == 0 ? "none" : string.Join(" · ", parts);
+        string body = parts.Count == 0 ? "none" : string.Join(", ", parts);
         return $"[Round {fightRound} {what}: {body}]";
     }
 }

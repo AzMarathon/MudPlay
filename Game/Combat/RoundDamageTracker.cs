@@ -10,8 +10,8 @@ namespace MudPlay.Game.Combat;
 //
 // A round's lines arrive as one burst and the next round's burst is ~5 s away, so a
 // round closes once its lines have gone quiet for SettleWindow — its totals print
-// right after its own lines. *Combat Off* and local death close it at once
-// (MarkCombatEnded). TickEngine's CombatTickElapsed heartbeat (OnCombatTick) is the
+// right after its own lines. Local death closes it at once (MarkCombatEnded), as
+// does *Combat Off* when no scheduler is bound. TickEngine's CombatTickElapsed heartbeat (OnCombatTick) is the
 // backstop when no scheduler is bound; it fires on the NEXT round's first combat
 // line as well as on a 5 s timer, so it only closes a round at least MinTickAge
 // old — never the one that line just opened.
@@ -120,13 +120,7 @@ public sealed class RoundDamageTracker : IDisposable
         _router.LineDispatched += OnLine;
         // A monster swinging and missing is round activity with no damage line.
         _mobMissesSub    = router.Subscribe(KnownPatterns.MobMisses,   _ => { Current(_now()); NoteActivity(); });
-        // TieBreak ahead of CombatManager's CombatStatus handler: on a *Combat Off*
-        // that closes a round, this must CloseCurrent (bump RoundCount + fire
-        // RoundComplete) BEFORE CombatManager's between-round-cast resume re-decides,
-        // so the interrupted attack-spell round is tallied toward MaxCasts first and
-        // the resume doesn't re-announce the same spell uncapped (LBOL 2x, report
-        // paradigm-20260820-063541).
-        _combatStatusSub = router.Subscribe(KnownPatterns.CombatStatus, OnCombatStatus, tieBreak: 100);
+        _combatStatusSub = router.Subscribe(KnownPatterns.CombatStatus, OnCombatStatus);
     }
 
     // Late-bound sources for naming combatants: the party's names, the local
@@ -226,9 +220,12 @@ public sealed class RoundDamageTracker : IDisposable
         return space < 0 ? t : t[..space];
     }
 
+    // *Combat Off* comes mid-burst — on a kill, the other monsters' swings of the same
+    // round follow it (report paradigm-20260928-230456) — so with the settle timer
+    // bound the round is left to close on its own quiet. Without one it closes here.
     private void OnCombatStatus(MatchResult match)
     {
-        if (match.Groups.Count == 0) return;
+        if (_scheduleDelay is not null || match.Groups.Count == 0) return;
         string status = match.Groups[0];
         if (string.Equals(status, "Off", StringComparison.OrdinalIgnoreCase))
             MarkCombatEnded();
@@ -285,10 +282,8 @@ public sealed class RoundDamageTracker : IDisposable
             CloseCurrent(_now());
     }
 
-    // Explicitly close the current round (no-op when none is open) — driven
-    // internally by *Combat Off* and exposed publicly so other subsystems (e.g. a
-    // death watcher) can mark the end of a fight without waiting for the next
-    // round-tick.
+    // Explicitly close the current round (no-op when none is open) — local death,
+    // and *Combat Off* when no settle scheduler is bound.
     public void MarkCombatEnded()
     {
         if (_current is null) return;

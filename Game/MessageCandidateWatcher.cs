@@ -259,12 +259,6 @@ public sealed class MessageCandidateWatcher : IDisposable
         return false;
     }
 
-    // A full-line "[ … ]" is the client's own WriteTerminalStatus notice
-    // ("[CONNECTING TO: …]", "[… Quest is Now Available]", "[MDB IMPORT …]") — never
-    // a server message, so drop it regardless of in-game state.
-    private static bool IsClientStatusLine(string text) =>
-        text.Length >= 2 && text[0] == '[' && text[^1] == ']';
-
     // The bright-cyan title line of a room display. RoomDisplayParser reads room
     // displays straight off the wire and registers no MessageRouter pattern, so a
     // room name looks like "never seen, no pattern matched" and gets staged (the
@@ -324,7 +318,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         // either: a blank line or a status notice landing between the death message
         // and the experience line would otherwise defeat the positional rule above.
         if (text.Length < MinLineLength) return;
-        if (IsClientStatusLine(text)) return;
+        if (ClientNotice.IsNotice(text)) return;
         if (IsRecentCommand(text, line.Timestamp)) return;
 
         // A real server line that isn't the experience gain — whatever was held can't
