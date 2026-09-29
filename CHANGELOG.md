@@ -1,5 +1,13 @@
 # Version history
 
+## 3.122.0
+
+- Your profile saves which windows are open and reopens them where they were when you load it; loading another profile matches its windows
+- The Game Data Browser remembers its position
+- Weapon procs in the round totals go to whoever just hit that monster, not unknown
+- Fixed a crash when a boss kill was logged while a Bosses grid cell was being edited
+- bug reports addressed: Crash-20260929-045332, paradigm-20260929-043055
+
 ## 3.121.0
 
 - `look <monster>` prints its max HP, its wound band and HP range, and a best guess from the damage it's taken and its regen: `[large orc: 100 HP, Sev: 30-49, ~41]`

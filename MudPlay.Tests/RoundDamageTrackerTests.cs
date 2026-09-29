@@ -250,6 +250,37 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal(12, r.UnknownDealt);
     }
 
+    // A weapon proc names only its victim; it lands right after the swing that set it
+    // off, so it's the hitter's (report paradigm-20260929-043055).
+    [Fact]
+    public void WeaponProc_GoesToWhoeverJustHitThatMonster()
+    {
+        using Harness h = new();
+        h.Feed("You cut goblin for 11 damage!");
+        h.Feed("goblin takes 3 damage from the cold!");
+        h.Feed("Flames burn goblin for 15 damage!");
+        h.Feed("Bob shatters large giant rat for 47 damage!");
+        h.Feed("large giant rat's life is drained for 12 damage!");
+        h.Feed("A magic missile streaks out at large giant rat for 19 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(29, r.DamageDealt);
+        Assert.Equal(78, Row(r, "Bob").Dealt);
+        Assert.Equal(0, r.UnknownDealt);
+    }
+
+    // A caster-less hit on a monster nobody just hit stays unknown.
+    [Fact]
+    public void CasterlessHit_WithNoHitBeforeIt_StaysUnknown()
+    {
+        using Harness h = new();
+        h.Feed("You cut goblin for 11 damage!");
+        h.Feed("Flames burn large giant rat for 15 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(15, r.UnknownDealt);
+    }
+
     [Fact]
     public void NonDamageLine_IsIgnored()
     {

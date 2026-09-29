@@ -13,6 +13,7 @@ public partial class GameDataBrowserWindow : Window
         // without this the keypress lands on this window instead of MainWindow
         // and the toggle command never fires.
         GlobalHotkeys.Attach(this);
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "gamedata");
         // Browser VMs subscribe to long-lived AppServices events
         // (GameDataCache.ActiveSetChanged, engine CollectionChanged).
         // Dispose detaches them so the VM tree — plus every cached
