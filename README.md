@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.123.3**
-> - A rest a regen tick finished before the game confirmed the sit no longer swaps in the pre-rest set, so the walk doesn't carry rest gear into the next fight
-> - The pre-rest set goes on before `rest` is sent, so the swap can't break the rest and restart its timer (meditation keeps the gear-after-sit order)
+> **Version 3.123.4**
+> - The Game Data Browser's Toggles column sorts like the other columns
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

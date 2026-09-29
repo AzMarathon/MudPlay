@@ -318,7 +318,8 @@ public partial class GameDataTableSectionView : UserControl
 
     // A fixed-width Toggles cell: trims a crowded flag list with an ellipsis and carries
     // the whole list as a hover tooltip, so multiple flags stay legible instead of being
-    // lost to column sizing. Width is an initial value — the user can drag it wider.
+    // lost to column sizing. Width is an initial value — the user can drag it wider. It
+    // sorts like the text columns, off the same cell comparer.
     private static DataGridTemplateColumn BuildTogglesColumn(VisibleColumn vc)
     {
         int idx = vc.CellIndex;
@@ -328,6 +329,9 @@ public partial class GameDataTableSectionView : UserControl
             Tag                = vc.Key,
             Width              = new DataGridLength(180),
             CustomSortComparer = new NumericAwareCellComparer(idx),
+            // A template column has no bound property for the grid to judge
+            // comparable, so it reads as unsortable unless told; the comparer sorts it.
+            CanUserSort        = true,
             CellTemplate = new FuncDataTemplate<GameDataRow>((_, _) =>
             {
                 TextBlock tb = new()
