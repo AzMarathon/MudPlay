@@ -394,6 +394,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // ----- Display --------------------------------------------------
 
     [ObservableProperty] private bool _showCombatRoundTotals;
+    [ObservableProperty] private bool _showCombatRoundTotalsSelfOnly;
 
     // ----- Combat profiles (staged quick-swap chip bar) -------------
 
@@ -723,6 +724,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             DrainsOverrideAoe = DrainsOverrideAoe,
 
             ShowCombatRoundTotals = ShowCombatRoundTotals,
+            ShowCombatRoundTotalsSelfOnly = ShowCombatRoundTotalsSelfOnly,
     };
 
     // Commit the staged edits through the shared session, which folds BOTH tabs'
@@ -859,6 +861,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         DrainsOverrideAoe         = dto.DrainsOverrideAoe;
 
         ShowCombatRoundTotals = dto.ShowCombatRoundTotals;
+        ShowCombatRoundTotalsSelfOnly = dto.ShowCombatRoundTotalsSelfOnly;
     }
 
     private CombatSettings ReadOrDefault()
@@ -1011,6 +1014,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     // Display
     partial void OnShowCombatRoundTotalsChanged(bool value)      => MarkDirty();
+    partial void OnShowCombatRoundTotalsSelfOnlyChanged(bool value) => MarkDirty();
 
     // One Target Priority dropdown row — pairs the enum value with its friendly label.
     public sealed record TargetPriorityOption(TargetPriority Value, string Label);

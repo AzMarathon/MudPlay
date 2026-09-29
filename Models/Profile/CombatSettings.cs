@@ -249,6 +249,10 @@ public sealed class CombatSettings
     // Append the per-round damage roll-up to the terminal canvas after each
     // round. Default false.
     public bool ShowCombatRoundTotals { get; set; }
+
+    // With ShowCombatRoundTotals: print only our own row, not every combatant's.
+    // Default false.
+    public bool ShowCombatRoundTotalsSelfOnly { get; set; }
 }
 
 // One spell-row entry in the Combat tab's Spell-combat section (multi-attack 1 and

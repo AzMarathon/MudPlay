@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.125.2**
-> - A loop resumed from the toolbar or a hotkey after a Navigation pause no longer stays drawn as the red builder line
+> **Version 3.125.3**
+> - Settings → Combat: new "Only my totals" option under Show combat round totals prints just your own row each round
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

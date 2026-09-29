@@ -540,6 +540,26 @@ public sealed class RoundDamageTrackerTests
         Assert.All(RoundTotalsFormatter.Table(r), line => Assert.True(ClientNotice.IsNotice(line)));
     }
 
+    // "Only my totals": just our own row, no one else's and no unknown.
+    [Fact]
+    public void Table_SelfOnly_ShowsJustOurRow()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("You slash large giant rat for 45 damage!");
+        h.Feed("Bob slashes large giant rat for 30 damage!");
+        h.Feed("The large giant rat bites you for 12 damage!");
+        h.Feed("An earthquake rocks the room for 8 damage!");
+        RoundSummary r = h.CloseRound();
+
+        IReadOnlyList<string> table = RoundTotalsFormatter.Table(r, selfOnly: true);
+        Assert.Equal(3, table.Count);
+        Assert.StartsWith("[Round 1 ", table[0]);
+        Assert.Contains("Combatant", table[1]);
+        Assert.Matches(@"^\[ You\s+45\s+12 \]$", table[2]);
+        Assert.All(table, line => Assert.True(ClientNotice.IsNotice(line)));
+    }
+
     [Fact]
     public void Formatter_NoCombatants_SaysNone()
     {
