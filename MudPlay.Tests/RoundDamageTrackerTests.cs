@@ -193,6 +193,45 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal("You → 2 foes 50 each", Assert.Single(tags));
     }
 
+    // A party member's room spell names nobody; the caster's announce right before it
+    // says whose it is, and every monster in the room takes the amount (report
+    // paradigm-20260929-161536).
+    [Fact]
+    public void PartyMembersRoomSpell_IsTheirs_OnEveryMonster()
+    {
+        using Harness h = new();
+        List<string> tags = new();
+        h.Tracker.LineAttributed += (_, tag) => tags.Add(tag);
+        h.State.InCombat = true;
+        h.Feed("Bob summons a powerful tempest into the room!");
+        h.Feed("An acidic tempest blows through the room for 431 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(862, Row(r, "Bob").Dealt);
+        Assert.Equal(431, Row(r, "large giant rat").Taken);
+        Assert.Equal(431, Row(r, "goblin").Taken);
+        Assert.Equal(0, r.UnknownDealt);
+        Assert.Equal(0, r.UnknownTaken);
+        Assert.Equal("Bob → 2 foes 431 each", Assert.Single(tags));
+    }
+
+    // Only the line right before counts, and a monster's announce is never a caster
+    // whose spell hits the monsters.
+    [Theory]
+    [InlineData("goblin summons a powerful tempest into the room!")]
+    [InlineData("Bob moves to attack goblin.")]
+    public void RoomDamage_WithoutAPlayersAnnounce_StaysUnknown(string previous)
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed(previous);
+        h.Feed("An acidic tempest blows through the room for 431 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(431, r.UnknownDealt);
+        Assert.Equal(431, r.UnknownTaken);
+    }
+
     // Damage nobody dealt — a condition or effect — is yours to take and no one's to
     // deal, so it doesn't land in unknown (report paradigm-20260929-003750).
     [Theory]
@@ -538,6 +577,41 @@ public sealed class RoundDamageTrackerTests
             "[ unknown              8      8 ]",
         }, RoundTotalsFormatter.Table(r));
         Assert.All(RoundTotalsFormatter.Table(r), line => Assert.True(ClientNotice.IsNotice(line)));
+    }
+
+    // Us first, then the party, then monsters — whoever dealt more within each.
+    [Fact]
+    public void Table_OrdersSelfThenPartyThenMonsters()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("The large giant rat bites you for 50 damage!");
+        h.Feed("The goblin bites Bob for 20 damage!");
+        h.Feed("Bob slashes goblin for 5 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(new[] { "You", "Bob", "large giant rat", "goblin" },
+            RoundTotalsFormatter.Table(r).Skip(2).Select(line => line[2..].Split("  ")[0].Trim()));
+    }
+
+    // "Only my totals": just our own row, no one else's and no unknown.
+    [Fact]
+    public void Table_SelfOnly_ShowsJustOurRow()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("You slash large giant rat for 45 damage!");
+        h.Feed("Bob slashes large giant rat for 30 damage!");
+        h.Feed("The large giant rat bites you for 12 damage!");
+        h.Feed("An earthquake rocks the room for 8 damage!");
+        RoundSummary r = h.CloseRound();
+
+        IReadOnlyList<string> table = RoundTotalsFormatter.Table(r, selfOnly: true);
+        Assert.Equal(3, table.Count);
+        Assert.StartsWith("[Round 1 ", table[0]);
+        Assert.Contains("Combatant", table[1]);
+        Assert.Matches(@"^\[ You\s+45\s+12 \]$", table[2]);
+        Assert.All(table, line => Assert.True(ClientNotice.IsNotice(line)));
     }
 
     [Fact]

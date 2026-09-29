@@ -837,6 +837,7 @@ If a member drops, the party can auto-re-invite and reform on reconnect, and a m
 - **A follower who reconnects** within the *If leading, accept @comeback for* time (default 2 minutes) telepaths `@comeback <map/room>` to their leader, so the leader walks straight to them. After a longer drop the party has moved on, and no `@comeback` goes out. MudPlay waits up to 5 seconds after re-entering for your room to be confirmed, since the game can put you back somewhere other than where you dropped. Only if it can't confirm your room does a bare `@comeback` go out, and the leader backtracks along their own path instead.
 - **A leader** takes that `@comeback` for up to *If leading, accept @comeback for* minutes after the member dropped, even once they've re-entered the realm.
 - **If the leader is already backtracking** for that member and their `@comeback` names a room, the leader heads for that room instead.
+- **When a member drops, the leader holds in place** for their reconnect. That hold ends once the leader sets off to pick them up (or turns them down), so a leader waiting on a returning member still walks to them.
 - **If the leader gave up looking** and went idle, a `@comeback` from that member within the same number of minutes still recovers them, and the leader then resumes the walk, loop or Auto-Lair the search interrupted.
 
 ---
@@ -2785,7 +2786,10 @@ At **0 mana** a mana-costing action can't land (the server silently ignores it),
 [ unknown                8     20 ]
 ```
 
-The round number starts again at 1 once the room is clear of hostiles, so each fight counts its own rounds. **Everyone in the room is listed every round** — you, your party, other players and monsters — even at 0, biggest dealer first. **unknown** only appears when a line couldn't be pinned to anyone. The program log and bug report keep the same numbers as two compact lines per round. A round prints as soon as its lines stop (a quarter of a second), or the moment the room is clear, so the totals sit right under that round's combat, ahead of your next action.
+The round number starts again at 1 once the room is clear of hostiles, so each fight counts its own rounds. **Everyone in the room is listed every round** — you, your party, other players and monsters — even at 0. **You** always come first, then your party, then other players and monsters; within each group the biggest dealer is on top. A room spell (yours or a party member's) is credited to its caster and counts against every monster in the room. **unknown** only appears when a line couldn't be pinned to anyone. The program log and bug report keep the same numbers as two compact lines per round. A round prints as soon as its lines stop (a quarter of a second), or the moment the room is clear, so the totals sit right under that round's combat, ahead of your next action.
+
+
+**Only my totals** (a sub-option, Off by default, enabled while round totals are on) trims the table to your own row: what **you** dealt and took that round, with no one else and no *unknown*.
 
 **Important notes:**
 - **How damage is credited.** Each "… for N damage!" line is read against the room's occupants (from *Also here:*), your party and "you". "Bob slashes large orc for 30" credits Bob, and "The large orc claws you with its pincers for 12" is damage you took from the orc.

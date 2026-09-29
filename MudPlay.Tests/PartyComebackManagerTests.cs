@@ -82,6 +82,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         public required AutoLairManager Lair { get; init; }
         public required LairTimerStore Timers { get; init; }
         public required PartyComebackManager Comeback { get; init; }
+        public required MovementCoordinator Coordinator { get; init; }
 
         public string LastReply => Encoding.Latin1.GetString(Engine.LastSentForTests[^1]);
 
@@ -140,6 +141,7 @@ public sealed class PartyComebackManagerTests : IDisposable
             Lair = lair,
             Timers = timers,
             Comeback = comeback,
+            Coordinator = coord,
         };
     }
 
@@ -197,6 +199,28 @@ public sealed class PartyComebackManagerTests : IDisposable
 
         h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
         Assert.Contains("already in progress", h.LastReply);
+    }
+
+    // A follower who dropped and came back asks for a pickup: our hold for their
+    // reconnect must not park the walk to them, or the leader never moves while
+    // they wait on it.
+    [Fact]
+    public void ReturnedMember_Comeback_WalksDespiteTheirReconnectHold()
+    {
+        using Harness h = NewHarness();
+        using PartyDisconnectMovementGate hold = new(h.Party, h.Coordinator);
+        h.Comeback.ReleaseHolds = hold.Release;
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank just disconnected!!!."));
+        Assert.True(h.Coordinator.IsPaused);
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // the lair's first step settles
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+
+        Assert.Contains("coming to your location for pickup", h.LastReply);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.False(h.Coordinator.IsPaused);
     }
 
     // ----- left-behind eligibility (leader-side authorisation) -------

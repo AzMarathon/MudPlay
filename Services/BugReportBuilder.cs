@@ -290,6 +290,8 @@ public static class BugReportBuilder
             ? "(nobody)"
             : string.Join(", ", svc.PartyEssentials.WaitingMembers.Select(m =>
                 svc.PartyEssentials.OkDistrusted.Contains(m) ? $"{m} (full window, @ok ignored)" : m)));
+        Kv(sb, "Reconnect hold for", svc.PartyDisconnectMovement.PendingMembers.Count == 0
+            ? "(nobody)" : string.Join(", ", svc.PartyDisconnectMovement.PendingMembers));
         Kv(sb, "Recovering member", svc.PartyComeback.RecoveringMember is { } rec
             ? (svc.PartyComeback.RecoveringLeftBehind ? $"{rec} (left behind by our move)" : rec)
             : "(none in flight)");

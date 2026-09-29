@@ -29,7 +29,11 @@ namespace MudPlay.Game.Combat;
 // Our room spell names no victim, only the room ("A hellish storm of fire and brimstone
 // scorches your foes for 603 damage!"): every monster in the room at the time takes about that much,
 // each adjusted by its own magic resistance, which no line shows (user, 2026-09-29) —
-// so each is credited the full amount.
+// so each is credited the full amount. Someone else's room spell names nobody at all
+// ("An acidic tempest blows through the room for 431 damage!"), but the line right
+// before it is the caster's announce ("Midnight summons a powerful tempest into the
+// room!"), so it's theirs, spread over the room's monsters the same way (report
+// paradigm-20260929-161536).
 //
 // A damage line opens a round when we're in combat, when it's ours, or when it names
 // both sides (someone else's fight in the room). Damage to us with no named source —
@@ -97,6 +101,8 @@ public sealed class RoundDamageTracker : IDisposable
     private DateTimeOffset _lastOwnCastAt = DateTimeOffset.MinValue;
     // The last hit that named both sides — a proc right after it is the hitter's.
     private (string Source, string Target, DateTimeOffset At)? _lastHit;
+    // The line before the one being read — a room spell's caster announce.
+    private string? _previousLine;
 
     private DebugLogWriter? _trace;
     private RoundAccumulator? _current;
@@ -196,6 +202,8 @@ public sealed class RoundDamageTracker : IDisposable
         // LineDispatched already leaves out other players' chat.
         if (line.IsPromptLine) return;
         string text = line.Text;
+        string? previous = _previousLine;
+        _previousLine = text;
         if (!text.Contains(" damage", StringComparison.Ordinal)) return;
 
         Dictionary<string, string> display = Names();
@@ -222,9 +230,16 @@ public sealed class RoundDamageTracker : IDisposable
             source = hit.Source;
             proc = true;
         }
+        bool othersRoomSpell = false;
+        if (source is null && target is null && !a.NoDealer && _foes.Count > 0 && HitsTheRoom(text)
+            && AnnouncedBy(previous, display) is { } caster)
+        {
+            source = caster;
+            othersRoomSpell = true;
+        }
         if (source is not null && target is not null && !a.NoDealer) _lastHit = (source, target, now);
 
-        bool roomSpell = source == DamageLineAttributor.Self && target is null && !a.NoDealer
+        bool roomSpell = (source == DamageLineAttributor.Self || othersRoomSpell) && target is null && !a.NoDealer
             && _foes.Count > 0 && HitsTheRoom(text);
         IReadOnlyList<string> foesHit = roomSpell ? _foes : Array.Empty<string>();
 
@@ -260,6 +275,21 @@ public sealed class RoundDamageTracker : IDisposable
            || text.Contains("your enemies", StringComparison.OrdinalIgnoreCase)
            || text.Contains("the room", StringComparison.OrdinalIgnoreCase);
 
+    // The player a room spell's announce line opens with ("Midnight summons a powerful
+    // tempest into the room!") — never a monster, whose room spell would hit us.
+    private string? AnnouncedBy(string? announce, Dictionary<string, string> display)
+    {
+        if (announce is null || !HitsTheRoom(announce)) return null;
+        string? caster = null;
+        foreach (string name in display.Keys)
+            if (name.Length > (caster?.Length ?? 0)
+                && announce.StartsWith(name + " ", StringComparison.OrdinalIgnoreCase))
+                caster = name;
+        if (caster is null) return null;
+        string shown = display[caster];
+        return _foes.Contains(shown, StringComparer.OrdinalIgnoreCase) ? null : shown;
+    }
+
     // Everyone a line may name: the room roster plus the party, minus ourselves.
     private Dictionary<string, string> Names()
     {
@@ -277,6 +307,25 @@ public sealed class RoundDamageTracker : IDisposable
         }
         if (self is not null) names.Remove(GivenName(self));
         return names;
+    }
+
+    // Us, a member of our party, a monster in the room, or anyone else (another player).
+    private CombatantKind KindOf(string name)
+    {
+        if (name == DamageLineAttributor.Self) return CombatantKind.Self;
+        if (_partyNames is not null)
+        {
+            string? self = _selfName?.Invoke();
+            foreach (string member in _partyNames())
+            {
+                string given = GivenName(member);
+                if (self is not null && given.Equals(GivenName(self), StringComparison.OrdinalIgnoreCase)) continue;
+                if (given.Equals(name, StringComparison.OrdinalIgnoreCase)) return CombatantKind.Party;
+            }
+        }
+        foreach (string foe in _foes)
+            if (foe.Equals(name, StringComparison.OrdinalIgnoreCase)) return CombatantKind.Monster;
+        return CombatantKind.Player;
     }
 
     private static string Display(string name, Dictionary<string, string> display)
@@ -396,7 +445,7 @@ public sealed class RoundDamageTracker : IDisposable
             FightRound:   _current.FightRound,
             StartedAt:    _current.StartedAt,
             EndedAt:      endedAt,
-            Combatants:   _current.Rows(),
+            Combatants:   _current.Rows(KindOf),
             UnknownDealt: _current.UnknownDealt,
             UnknownTaken: _current.UnknownTaken,
             HpBefore:     _current.HpStart,
@@ -474,8 +523,8 @@ public sealed class RoundDamageTracker : IDisposable
             foreach (string name in names) For(name);
         }
 
-        public IReadOnlyList<CombatantDamage> Rows()
-            => _rows.Values.Select(r => new CombatantDamage(r.Name, r.Dealt, r.Taken)).ToArray();
+        public IReadOnlyList<CombatantDamage> Rows(Func<string, CombatantKind> kindOf)
+            => _rows.Values.Select(r => new CombatantDamage(r.Name, r.Dealt, r.Taken, kindOf(r.Name))).ToArray();
     }
 
     private sealed class Row(string name)

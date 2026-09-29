@@ -3619,12 +3619,15 @@ public sealed class AppServices
         GameData.ActiveSetChanged += _ => PartyHp.Invalidate();
         Messages.Messages.CollectionChanged += (_, _) => PartyHp.Invalidate();
         // Settings → Combat "Show combat round totals": print each round's ledger
-        // as a table (read per round, so the checkbox applies at once). One notice for
-        // all its lines, so no blank line falls between them.
+        // as a table (read per round, so the checkboxes apply at once) — everyone's,
+        // or with "Only my totals" just our own row. One notice for all its lines, so
+        // no blank line falls between them.
         RoundDamage.RoundComplete += round =>
         {
-            if (!ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat").ShowCombatRoundTotals) return;
-            WriteTerminalNotice(string.Join("\r\n", Game.Combat.RoundTotalsFormatter.Table(round)));
+            Models.Profile.CombatSettings combat = ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
+            if (!combat.ShowCombatRoundTotals) return;
+            WriteTerminalNotice(string.Join("\r\n",
+                Game.Combat.RoundTotalsFormatter.Table(round, combat.ShowCombatRoundTotalsSelfOnly)));
         };
         // Reset round counter + ring on BBS connect to match
         // CombatSessionTracker's session-boundary convention — the
@@ -7011,6 +7014,13 @@ public sealed class AppServices
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
+        // A dropped member's reconnect hold (or their @wait) would park the walk to
+        // pick them up — the leader never moves while they wait on it.
+        PartyComeback.ReleaseHolds = (given, reason) =>
+        {
+            PartyDisconnectMovement.Release(given, reason);
+            PartyEssentials.ReleaseWait(given);
+        };
         // Their pending @wait would park the walk back to them behind the party-wait gate.
         Party.MemberLeftBehind += PartyEssentials.ReleaseWait;
 

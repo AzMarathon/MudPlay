@@ -188,6 +188,12 @@ public sealed class PartyComebackManager : IDisposable
     // it; null in tests.
     public Action<string>? ForgetLeaderCallback { get; set; }
 
+    // Invoked with a member's given name and why, once we commit to walking to them
+    // or decline them: whatever still holds our movement for that member (their
+    // reconnect hold, a pending @wait) would park the pickup walk, and the member
+    // is waiting on that walk. AppServices wires it; null in tests.
+    public Action<string, string>? ReleaseHolds { get; set; }
+
     // Test seam — every outbound wire buffer, in order.
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
@@ -508,6 +514,8 @@ public sealed class PartyComebackManager : IDisposable
         // Stop the running engine(s) so the recovery walk runs without a
         // competing command stream or an asserted pause gate.
         StopRunningEngines("comeback recovery");
+        // After the stop, so clearing the hold can't let the stopped engine step off.
+        ReleaseHolds?.Invoke(senderGiven, "walking to pick them up");
 
         if (target is { } room)
         {
@@ -533,6 +541,7 @@ public sealed class PartyComebackManager : IDisposable
     {
         _wire.Send($"/{given} @forget");
         _party.ForgetReconnectMember(given);
+        ReleaseHolds?.Invoke(given, "declined their pickup");
         _log?.Info(LogCategory, $"declined recovery of {given} — sent @forget and dropped them.");
     }
 
@@ -554,6 +563,7 @@ public sealed class PartyComebackManager : IDisposable
 
         _log?.Info(LogCategory, $"@forget from {ctx.Sender} — dropping them from the party.");
         _party.ForgetReconnectMember(given);
+        ReleaseHolds?.Invoke(given, "@forget");
         // If they were our leader, clear the crash-rejoin memory so a later
         // reconnect doesn't keep telepathing @comeback at them.
         ForgetLeaderCallback?.Invoke(given);
