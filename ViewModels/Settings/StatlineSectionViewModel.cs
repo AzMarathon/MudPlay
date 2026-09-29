@@ -61,8 +61,8 @@ public sealed partial class StatlineSectionViewModel : SettingsSectionViewModel
                 : _playerState.MaxMa > 0 ? true : null;
             IReadOnlyList<string> missing = StatlineSyntax.MissingEngineFields(Command, hasMana);
             return missing.Count == 0 ? null
-                : "This statline leaves out " + string.Join("; ", missing)
-                  + ". MudPlay reads these from the prompt for resting, healing, running and the rest of its automation.";
+                : "MudPlay reads HP, mana and resting from the prompt for its automation, but this statline needs:\n"
+                  + string.Join("\n", missing.Select(m => "- " + m));
         }
     }
 

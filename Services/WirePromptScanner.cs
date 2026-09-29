@@ -79,6 +79,11 @@ public sealed partial class WirePromptScanner
     // by StatlinePromptRegexBuilder from the editor command string. Installed on
     // profile load / mutation so the scanner reads exactly the shape the BBS was
     // told to print.
+    // The pool an unlabelled %m reads as. A custom statline may put any label (or
+    // none) in front of %m; the character's stat screen says whether its pool is mana
+    // or kai (AppServices keeps this current). Mana until a stat screen says otherwise.
+    public ManaType UnlabeledManaType { get; set; } = ManaType.Mana;
+
     public void InstallRegex(Regex statusLine)
     {
         ArgumentNullException.ThrowIfNull(statusLine);
@@ -155,6 +160,7 @@ public sealed partial class WirePromptScanner
             {
                 "MA"  => ManaType.Mana,
                 "KAI" => ManaType.Kai,
+                _ when m.Groups["mana"].Success => UnlabeledManaType,
                 _      => ManaType.None,
             };
 

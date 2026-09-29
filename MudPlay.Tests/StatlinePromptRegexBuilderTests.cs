@@ -10,9 +10,9 @@ public sealed class StatlinePromptRegexBuilderTests
 {
     private static byte[] B(string s) => Encoding.Latin1.GetBytes(s);
 
-    private static List<PromptObservation> RunThroughScanner(Regex regex, string wire)
+    private static List<PromptObservation> RunThroughScanner(Regex regex, string wire, ManaType unlabeled = ManaType.Mana)
     {
-        WirePromptScanner s = new();
+        WirePromptScanner s = new() { UnlabeledManaType = unlabeled };
         s.InstallRegex(regex);
         List<PromptObservation> seen = new();
         s.PromptObserved += seen.Add;
@@ -87,6 +87,23 @@ public sealed class StatlinePromptRegexBuilderTests
         Assert.Equal(91, seen[0].Hp);
         Assert.Equal(11, seen[0].Mana);
         Assert.Equal(PlayerPosition.Standing, seen[0].Position);
+    }
+
+    // Any label (or none) in front of %m: the character's own pool (from its stat
+    // screen) says whether it's mana or kai. The trailing space before an unprinted
+    // %r doesn't reach the wire.
+    [Theory]
+    [InlineData(ManaType.Mana)]
+    [InlineData(ManaType.Kai)]
+    public void CustomStatline_UnlabelledMana_ReadsAsTheCharactersPool(ManaType pool)
+    {
+        Regex regex = StatlinePromptRegexBuilder.Build("full custom HP=%h/%H MANA=%m/%M %r");
+
+        var seen = RunThroughScanner(regex, "\r\nHP=91/91 MANA=7/42", pool);
+        Assert.Single(seen);
+        Assert.Equal(91, seen[0].Hp);
+        Assert.Equal(7, seen[0].Mana);
+        Assert.Equal(pool, seen[0].ManaType);
     }
 
     [Fact]

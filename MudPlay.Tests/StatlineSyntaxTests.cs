@@ -40,11 +40,24 @@ public sealed class StatlineSyntaxTests
         Assert.Contains("only if your class has mana", only);
     }
 
-    // The label in front of %m is how the parser tells mana from kai.
+    // Any label, or none, in front of %m: the stat screen says whether it's mana or kai.
     [Theory]
-    [InlineData("full custom [HP=%h %m]%r:", false)]
-    [InlineData("full custom [HP=%h KAI=%m]%r:", true)]
-    [InlineData("full custom [HP=%h MA = %m]%r:", true)]
-    public void ManaNeedsItsLabel(string command, bool complete)
-        => Assert.Equal(complete, StatlineSyntax.MissingEngineFields(command, hasMana: true).Count == 0);
+    [InlineData("full custom [HP=%h %m]%r:")]
+    [InlineData("full custom HP=%h/%H MANA=%m/%M %r")]
+    [InlineData("full custom [HP=%h KAI=%m]%r:")]
+    public void ManaNeedsNoLabel(string command)
+        => Assert.Empty(StatlineSyntax.MissingEngineFields(command, hasMana: true));
+
+    // "%h%H%m%M" printed "91913242": no boundary between the numbers.
+    [Theory]
+    [InlineData("full custom %h%H%m%M %r", true)]
+    [InlineData("full custom %h/%H %m/%M %r", false)]
+    [InlineData("full custom H%hM%m%r", false)]
+    public void NumbersSideBySide_AreFlagged(string command, bool flagged)
+        => Assert.Equal(flagged,
+            StatlineSyntax.MissingEngineFields(command, hasMana: true).Any(m => m.Contains("side by side")));
+
+    [Fact]
+    public void EveryProblemIsListed()
+        => Assert.Equal(2, StatlineSyntax.MissingEngineFields("full custom %h%H%m%M", hasMana: true).Count);
 }

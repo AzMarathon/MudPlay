@@ -168,7 +168,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     {
         List<SettingsSectionViewModel> flagged = Sections.Where(s => s.IsDirty && s.SaveWarning is not null).ToList();
         if (flagged.Count == 0) return true;
-        string body = string.Join("\n\n", flagged.Select(s => $"{s.Title}: {s.SaveWarning}")) + "\n\nSave anyway?";
+        string body = string.Join("\n\n", flagged.Select(s => $"{s.Title}\n{s.SaveWarning}")) + "\n\nSave anyway?";
         if (await Services.AppServices.Current.Confirm.ConfirmAsync("Before saving", body, "Save anyway")) return true;
         SelectedSection = flagged[0];
         return false;

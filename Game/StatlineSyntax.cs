@@ -53,8 +53,8 @@ public static partial class StatlineSyntax
     }
 
     // What a custom statline leaves out that the engines read off the prompt: current
-    // HP (%h), current mana (%m behind its MA= / KAI= label — the label is how the
-    // parser tells mana from kai), and the resting flag (%r). hasMana: true / false
+    // HP (%h), current mana (%m — any label, or none: the stat screen says mana or
+    // kai), and the resting flag (%r). hasMana: true / false
     // when the character's pool is known, null when it isn't yet (mana is then
     // asked for, with a note). Empty for the class default, which carries them all.
     public static IReadOnlyList<string> MissingEngineFields(string? command, bool? hasMana)
@@ -66,17 +66,18 @@ public static partial class StatlineSyntax
         if (hasMana != false)
         {
             string note = hasMana is null ? " - only if your class has mana or kai" : "";
-            int at = template.IndexOf("%m", StringComparison.Ordinal);
-            if (at < 0) missing.Add($"current mana (MA=%m or KAI=%m){note}");
-            else if (!ManaLabelBefore().IsMatch(template[..at]))
-                missing.Add($"an MA= or KAI= label right before %m, so the mana can be read{note}");
+            if (!template.Contains("%m", StringComparison.Ordinal)) missing.Add($"current mana (%m){note}");
         }
         if (!template.Contains("%r", StringComparison.Ordinal)) missing.Add("the resting flag (%r)");
+        // Numbers printed back to back ("%h%H%m%M" -> "91913242") have no boundary to
+        // read them apart by — 91/91/32/42 and 919/13/2/42 look the same.
+        if (AdjacentNumbers().IsMatch(template))
+            missing.Add("something between number wildcards that sit side by side (like %h%H) - a space, / or a letter - so each number can be read apart");
         return missing;
     }
 
-    [GeneratedRegex(@"(?:MA|KAI)\s*=?\s*$")]
-    private static partial Regex ManaLabelBefore();
+    [GeneratedRegex(@"%[hHmMcxX]%[hHmMcxX]")]
+    private static partial Regex AdjacentNumbers();
 
     // Strip colour / formatting wildcards — they never reach plain prompt text.
     public static string StripFormatting(string template)

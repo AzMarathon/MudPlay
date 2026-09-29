@@ -131,9 +131,23 @@ public static class StatlinePromptRegexBuilder
     private static void FlushLiteral(StringBuilder pattern, StringBuilder literal)
     {
         if (literal.Length == 0) return;
-        pattern.Append(Regex.Escape(literal.ToString()));
+        AppendLiteral(pattern, literal.ToString());
         literal.Clear();
     }
+
+    // A template's literal text, with each run of spaces made flexible: the game
+    // drops a trailing space and has printed one the template didn't place
+    // (report paradigm-20260929-122409), so spacing can't be required to the letter.
+    private static void AppendLiteral(StringBuilder pattern, string literal)
+    {
+        foreach (string part in SpaceRun.Split(literal))
+        {
+            if (part.Length == 0) continue;
+            pattern.Append(part.Trim().Length == 0 ? @"\s*" : Regex.Escape(part));
+        }
+    }
+
+    private static readonly Regex SpaceRun = new(@"(\s+)", RegexOptions.Compiled);
 
     // The MA / KAI label preceding %m is literal text in a custom statline, but
     // the scanner reads a type group off it to set ManaType. Split the pending
@@ -146,16 +160,17 @@ public static class StatlinePromptRegexBuilder
         Match label = ManaLabelRegex.Match(lit);
         if (!label.Success)
         {
-            // No MA / KAI label — degenerate template; emit the literal as-is.
-            // ManaType stays None at decode, so the mana value isn't read.
-            if (lit.Length != 0) pattern.Append(Regex.Escape(lit));
+            // No MA / KAI label (any other label, or none): the mana still captures,
+            // and the scanner reads it as the character's own pool
+            // (WirePromptScanner.UnlabeledManaType).
+            AppendLiteral(pattern, lit);
             return;
         }
 
         string before = lit[..label.Index];
-        if (before.Length != 0) pattern.Append(Regex.Escape(before));
+        AppendLiteral(pattern, before);
         pattern.Append("(?<type>").Append(Regex.Escape(label.Groups["label"].Value)).Append(')');
-        pattern.Append(Regex.Escape(label.Groups["sep"].Value));
+        AppendLiteral(pattern, label.Groups["sep"].Value);
     }
 
     // Trailing MA / KAI label with an optional `=` separator (spaces tolerated).
