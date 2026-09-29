@@ -553,9 +553,6 @@ public sealed partial class CombatManager
         // New round — reset the per-round exp-line tally the AoE-wipe path reads.
         _expGainsThisRound = 0;
 
-        // New round — the attack-order re-fire cap (the AttackLast reposition) resets.
-        _attackOrderRefiresThisRound = 0;
-
         // New round — re-arm the once-per-round attack-immunity handler so the next
         // round's "no effect" burst can drive the next cascade step.
         _immunityHandledThisRound = false;

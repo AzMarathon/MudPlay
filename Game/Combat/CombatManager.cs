@@ -775,12 +775,9 @@ public sealed partial class CombatManager : IDisposable
     // have gone quiet for RefireSettle and goes out once, after the last of them — a
     // next-turn flush fired between them, leaving a later member behind us (the
     // triple-attack of report paradigm-20260922-130230, then a 3-member party where the
-    // attack-last member swung before the attack-after one). A qualifying announce that
-    // still lands after our re-fire gets one more; the per-round cap, reset at the
-    // round tick, stops two attack-last clients answering each other all round.
+    // attack-last member swung before the attack-after one). Every qualifying announce
+    // that lands after ours is answered — there's no per-round cap (user, 2026-09-28).
     private static readonly TimeSpan RefireSettle = TimeSpan.FromMilliseconds(500);
-    private const int MaxAttackOrderRefiresPerRound = 2;
-    private int _attackOrderRefiresThisRound;
     private int _refireGeneration;
     private Action<TimeSpan, Action>? _scheduleRefireSettle;
 
@@ -2806,7 +2803,6 @@ public sealed partial class CombatManager : IDisposable
             _                            => false,
         };
         if (!fire) return;
-        if (_attackOrderRefiresThisRound >= MaxAttackOrderRefiresPerRound) return;
 
         // Coalesce the round's burst: record this as the pending re-fire and flush once
         // the announces go quiet (see RefireSettle), so several party announces collapse
@@ -2842,9 +2838,6 @@ public sealed partial class CombatManager : IDisposable
         if (!_isEnabled()) return;
         if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase))
             return;
-
-        // Committing to the re-fire — count it against the round's cap.
-        _attackOrderRefiresThisRound++;
 
         CombatSettings settings = _readSettings();
 

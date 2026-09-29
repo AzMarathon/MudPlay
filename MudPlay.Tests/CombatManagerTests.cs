@@ -1220,10 +1220,9 @@ public sealed class CombatManagerTests
     }
 
     // A 3-member party: the attack-after member re-fires on the leader's announce and
-    // lands after our re-fire. Attack-last answers it once more; a further announce
-    // that round is past the cap.
+    // lands after our re-fire. Attack-last answers every announce that lands after ours.
     [Fact]
-    public void AttackTimingLastParty_AnnounceAfterOurRefire_RefiresOnceMore()
+    public void AttackTimingLastParty_AnnounceAfterOurRefire_AlwaysRefires()
     {
         using Harness h = new();
         List<Action> settle = new();
@@ -1243,8 +1242,30 @@ public sealed class CombatManagerTests
         Assert.Equal(3, h.Sent.Count);           // back behind Cidir
 
         h.Feed("Nineteen moves to attack fat greater wyvern.");
-        Assert.Equal(2, settle.Count);            // capped — no third re-fire scheduled
-        Assert.Equal(3, h.Sent.Count);
+        settle[^1]();
+        Assert.Equal(4, h.Sent.Count);           // and again — no per-round cap
+    }
+
+    // Attack last room: anyone in the room announcing after us — party or not — gets
+    // answered, every time.
+    [Fact]
+    public void AttackTimingLastRoom_EveryLaterAnnounce_Refires()
+    {
+        using Harness h = new();
+        List<Action> settle = new();
+        h.Combat.SetRefireSettleScheduler((_, a) => settle.Add(a));
+        h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
+        h.AddMonster(1, "fat greater wyvern", killable: true);
+
+        h.Feed("Also here: fat greater wyvern.");
+        h.Feed("Stranger moves to attack fat greater wyvern.");
+        settle[^1]();
+        h.Feed("Drifter moves to attack fat greater wyvern.");
+        settle[^1]();
+        h.Feed("Stranger moves to attack fat greater wyvern.");
+        settle[^1]();
+
+        Assert.Equal(4, h.Sent.Count);
     }
 
     [Fact]

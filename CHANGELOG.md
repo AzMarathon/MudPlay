@@ -6,7 +6,7 @@
 - A buff held while sneaking goes out in the next NPC-free room: the walk pauses, casts, re-sneaks and carries on
 - A buff held for a backstab goes out as soon as the backstab round is over, before the re-attack
 - Walking out of a boss's room (e.g. `go manhole`) no longer starts its respawn timer
-- Attack last / attack after re-announce once the party's announces go quiet, so you really land last
+- Attack last re-announces after every announce that lands after yours (once the burst goes quiet), so you really land last
 - bug reports addressed: paradigm-20260928-163051, paradigm-20260928-163621, paradigm-20260928-165844, paradigm-20260928-165954
 
 ## 3.118.0
