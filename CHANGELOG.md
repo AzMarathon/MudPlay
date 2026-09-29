@@ -1,8 +1,9 @@
 # Version history
 
-## 3.125.10
+## 3.125.11
 
 - Game Data item and monster windows: options grouped by what they do, every box explained on hover, no splitter to drag, and they remember their size
+- Game Data monster overrides: Debuff lists only debuffs, Spell / Alt spell (were Normal / Alternate) list only attack spells, and a spell of the wrong kind blocks Save
 
 ## 3.125.8
 

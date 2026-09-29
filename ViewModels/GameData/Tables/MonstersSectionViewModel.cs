@@ -484,6 +484,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             // Typeahead for the override spell pickers — the character's castable
             // spells, same source the Settings → Combat spell slots use.
             spellSuggestions:   AppServices.Current.Spellbook.AvailablePicks,
+            findSpell:          AppServices.Current.Spellbook.FindByCastCode,
             // Min-mana control parity with Settings → Combat (mode caps the box + drives
             // the %↔value label; live max mana snapshot for the conversion).
             manaModePercentage: AppServices.Current.CombatSpellManaModeIsPercentage,

@@ -42,7 +42,11 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     [ObservableProperty] private MonsterAttackPriority _priority = MonsterAttackPriority.Normal;
 
     // ----- Debuff (single target) rung -----
-    [ObservableProperty] private string _preAttackSpellId = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PreAttackSpellError))]
+    [NotifyPropertyChangedFor(nameof(SpellErrors))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    private string _preAttackSpellId = string.Empty;
     // Per-room cast cap — null (blank) = unlimited, matching CombatSpellSlot.MaxCastsPerRoom
     // and the Settings → Combat NumericUpDown.
     [ObservableProperty] private int? _preAttackCount;
@@ -56,7 +60,11 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     // ----- Normal attack spell rung -----
     // Spell-only: a Spell.Number, or a cast-code that resolves to one (see
     // ResolveSpellOverride). A raw attack verb belongs in the Physical attack box.
-    [ObservableProperty] private string _normalSpellId = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NormalSpellError))]
+    [NotifyPropertyChangedFor(nameof(SpellErrors))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    private string _normalSpellId = string.Empty;
     [ObservableProperty] private int? _normalCount;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NormalMinManaConverted))]
@@ -64,7 +72,11 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
 
     // ----- Alternate attack spell rung -----
     // Spell-only, same as Normal — occupies the alternate rung of the same cascade.
-    [ObservableProperty] private string _altSpellId = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AltSpellError))]
+    [NotifyPropertyChangedFor(nameof(SpellErrors))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    private string _altSpellId = string.Empty;
     [ObservableProperty] private int? _altCount;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AltMinManaConverted))]
@@ -97,11 +109,36 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
             : $"{(int)System.Math.Round(value * 100.0 / _liveMaxMa)}%";
     }
 
-    // Spell typeahead for the three spell-override pickers (debuff / normal / alternate)
-    // — the character's castable spells (SpellbookState.AvailablePicks), same source the
-    // Settings → Combat spell slots use. Empty in headless tests. The box commits the
-    // pick's Short cast-code.
-    public IReadOnlyList<SpellPick> SpellSuggestions { get; }
+    // Spell typeahead for the three spell-override pickers — the character's castable
+    // spells (SpellbookState.AvailablePicks, the Settings → Combat source) that fit the
+    // slot: debuffs for the debuff box, attack spells for the two attack boxes
+    // (Game.Combat.OverrideSpellFit). Unfiltered when no spell lookup was given (tests).
+    // The box commits the pick's Short cast-code.
+    public IReadOnlyList<SpellPick> DebuffSuggestions { get; }
+    public IReadOnlyList<SpellPick> AttackSuggestions { get; }
+
+    // A box holding a known spell that doesn't fit its slot. Save stays off until it's
+    // cleared or fixed; a code the lookup can't resolve (a Spell.Number, another class's
+    // spell) isn't judged.
+    private readonly Func<string, KnownSpell?>? _findSpell;
+    public string? PreAttackSpellError => SlotError(PreAttackSpellId, Game.Combat.OverrideSpellFit.IsDebuff,
+        "isn't a debuff (a between-round spell on one enemy that does no damage)");
+    public string? NormalSpellError => SlotError(NormalSpellId, Game.Combat.OverrideSpellFit.IsAttack,
+        "isn't an attack spell (one that damages a single enemy)");
+    public string? AltSpellError => SlotError(AltSpellId, Game.Combat.OverrideSpellFit.IsAttack,
+        "isn't an attack spell (one that damages a single enemy)");
+    public string? SpellErrors => string.Join("\n",
+        new[] { PreAttackSpellError, NormalSpellError, AltSpellError }.Where(e => e is not null)) is { Length: > 0 } all
+        ? all : null;
+
+    private string? SlotError(string text, Func<KnownSpell, bool> fits, string why)
+        => string.IsNullOrWhiteSpace(text) || _findSpell?.Invoke(text.Trim()) is not { } spell || fits(spell)
+            ? null
+            : $"'{text.Trim()}' {why}.";
+
+    private IReadOnlyList<SpellPick> Fitting(IReadOnlyList<SpellPick> picks, Func<KnownSpell, bool> fits)
+        => _findSpell is null ? picks
+            : picks.Where(p => _findSpell(p.Short) is { } spell && fits(spell)).ToArray();
 
     // Match typed text against either the cast-code or the spell name, so a slot is
     // findable by code or name even though the box commits the code.
@@ -176,6 +213,7 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         Func<string, int?>? resolveSpellShort = null,
         Func<int, string?>? resolveSpellNumber = null,
         IReadOnlyList<SpellPick>? spellSuggestions = null,
+        Func<string, KnownSpell?>? findSpell = null,
         bool manaModePercentage = true,
         int liveMaxMa = 0,
         MonsterLocationSuggestions? locationSuggestions = null)
@@ -183,7 +221,10 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         LocationSuggestions = locationSuggestions ?? MonsterLocationSuggestions.Empty;
         _resolveSpellShort = resolveSpellShort;
         _resolveSpellNumber = resolveSpellNumber;
-        SpellSuggestions = spellSuggestions ?? Array.Empty<SpellPick>();
+        _findSpell = findSpell;
+        IReadOnlyList<SpellPick> picks = spellSuggestions ?? Array.Empty<SpellPick>();
+        DebuffSuggestions = Fitting(picks, Game.Combat.OverrideSpellFit.IsDebuff);
+        AttackSuggestions = Fitting(picks, Game.Combat.OverrideSpellFit.IsAttack);
         _manaModePercentage = manaModePercentage;
         _liveMaxMa = liveMaxMa;
         WccNoStr      = wccNoStr;
@@ -260,7 +301,9 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
             _resolveSpellShort, _installedLocation);
     }
 
-    [RelayCommand]
+    private bool CanSave() => SpellErrors is null;
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
     private void Save()
     {
         MonsterOverlay overlay = Compose(LiveFields(), _resolveSpellShort, _installedLocation);
