@@ -8,6 +8,8 @@ public enum CombatLineKind
 {
     None = 0,          // not a recognized combat outcome (or outside a combat window)
     PlayerHit,         // your attack lands ("You … for N damage!")
+    DamageYou,         // damage to you nobody dealt — a condition or effect
+                       // ("You are poisoned for 2 damage!")
     PlayerMiss,        // your attack whiffs ("You miss your throw at X!")
     MonsterHitYou,     // a monster's attack lands on you ("… you for N damage!")
     MonsterHitOther,   // a monster's attack lands on someone else

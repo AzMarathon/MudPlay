@@ -174,6 +174,8 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal(20, r.UnknownTaken);
     }
 
+    // Damage nobody dealt — a condition or effect — is yours to take and no one's to
+    // deal, so it doesn't land in unknown (report paradigm-20260929-003750).
     [Theory]
     [InlineData("You are poisoned for 5 damage!")]
     [InlineData("Your blood is drained for 5 damage!")]
@@ -185,7 +187,7 @@ public sealed class RoundDamageTrackerTests
         RoundSummary r = h.CloseRound();
 
         Assert.Equal(5, r.DamageTaken);
-        Assert.Equal(5, r.UnknownDealt);
+        Assert.Equal(0, r.UnknownDealt);
     }
 
     [Fact]
@@ -460,6 +462,32 @@ public sealed class RoundDamageTrackerTests
         (string dealt, string taken) = RoundTotalsFormatter.Format(r);
         Assert.Equal("[Round 1 dealt: You 2, large giant rat 0, goblin 0, Bob 0]", dealt);
         Assert.Equal("[Round 1 taken: You 0, large giant rat 0, goblin 0, Bob 0, unknown 2]", taken);
+    }
+
+    // The terminal's table: one row per combatant in the room, biggest dealer first,
+    // unknown last, every row its own "[ … ]" notice line.
+    [Fact]
+    public void Table_OneRowPerCombatant()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("You slash large giant rat for 45 damage!");
+        h.Feed("Bob slashes large giant rat for 30 damage!");
+        h.Feed("The large giant rat bites you for 12 damage!");
+        h.Feed("An earthquake rocks the room for 8 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(new[]
+        {
+            "[Round 1 -----------------------]",
+            "[ Combatant        Dealt  Taken ]",
+            "[ You                 45     12 ]",
+            "[ Bob                 30      0 ]",
+            "[ large giant rat     12     75 ]",
+            "[ goblin               0      0 ]",
+            "[ unknown              8      8 ]",
+        }, RoundTotalsFormatter.Table(r));
+        Assert.All(RoundTotalsFormatter.Table(r), line => Assert.True(ClientNotice.IsNotice(line)));
     }
 
     [Fact]

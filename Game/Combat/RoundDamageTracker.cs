@@ -177,7 +177,7 @@ public sealed class RoundDamageTracker : IDisposable
         string? source = a.Source is null ? null : Display(a.Source, display);
         string? target = a.Target is null ? null : Display(a.Target, display);
         DateTimeOffset now = _now();
-        if (source is null && target != DamageLineAttributor.Self
+        if (source is null && !a.NoDealer && target != DamageLineAttributor.Self
             && now - _lastOwnCastAt <= OwnCastWindow
             && _isOwnSpellLine?.Invoke(text) == true)
             source = DamageLineAttributor.Self;
@@ -187,13 +187,17 @@ public sealed class RoundDamageTracker : IDisposable
             || (source is not null && target is not null);
         bool counted = _current is not null || opens;
         if (LineAttributed is { } attributed)
-            attributed(text, RoundTotalsFormatter.LedgerTag(source, target, a.Amount, counted));
+            attributed(text, RoundTotalsFormatter.LedgerTag(a.NoDealer ? null : source, target, a.Amount, counted, a.NoDealer));
         if (!counted) return;
 
         RoundAccumulator round = Current(now);
         NoteActivity();
-        if (source is null) round.UnknownDealt += a.Amount;
-        else round.For(source).Dealt += a.Amount;
+        // Damage nobody dealt (a poison tick) is only damage taken.
+        if (!a.NoDealer)
+        {
+            if (source is null) round.UnknownDealt += a.Amount;
+            else round.For(source).Dealt += a.Amount;
+        }
         if (target is null) round.UnknownTaken += a.Amount;
         else round.For(target).Taken += a.Amount;
     }

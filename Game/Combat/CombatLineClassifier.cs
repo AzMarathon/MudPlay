@@ -100,6 +100,10 @@ public sealed class CombatLineClassifier : IDisposable
         // The local player's own swing ("You hurl … for N damage!" / "You miss …!").
         if (text.StartsWith("You ", StringComparison.Ordinal))
         {
+            // "You are poisoned for 2 damage!" also starts "You" but hurts us.
+            if (hit && DamageLineAttributor.TryAttribute(text, Array.Empty<string>(), out DamageAttribution a)
+                && a.NoDealer)
+                return CombatLineKind.DamageYou;
             if (hit) return CombatLineKind.PlayerHit;
             if (IsCyan(fg)) return CombatLineKind.PlayerMiss;
             return CombatLineKind.None;
@@ -269,6 +273,7 @@ public sealed class CombatLineClassifier : IDisposable
     public static string Label(CombatLineKind kind) => kind switch
     {
         CombatLineKind.PlayerHit        => "You Hit",
+        CombatLineKind.DamageYou        => "Damage (you)",
         CombatLineKind.PlayerMiss       => "You Miss",
         CombatLineKind.MonsterHitYou    => "Monster Hit (you)",
         CombatLineKind.MonsterHitOther  => "Monster Hit (other)",

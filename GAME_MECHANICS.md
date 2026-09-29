@@ -1448,7 +1448,7 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
   - Line 2 to the victim names no caster either (`Dark flame sears you for %d damage!`).
 - **A victim can be named first:** `%s is scorched for %d damage!`, `%s's life is drained for %d damage!`.
 - **A monster attack that names only the attacker is the victim's own view** — the victim is you. Message 2431: line 1 `The %s releases a bolt of force from its palm for %d damage!`, line 2 (the room) `The %s releases a bolt of force at %s for %s damage!`. *([OBSERVED] Paradigm too, report `paradigm-20260928-231609`: `The mad wizard throws a flask, which explodes for 5 damage!` with HP 91 → 86.)*
-- **Damage to you with no attacker named:** `You are poisoned for %d damage!`, `You combust for %d damage!`, `Your blood is drained for %d damage!`. The only `Your ... is` damage lines are blood / life / soul drains; every other `Your ...` damage line is your weapon or spell hitting something.
+- **Damage to you with no attacker named:** `You are poisoned for %d damage!`, `You combust for %d damage!`, `Your blood is drained for %d damage!`. These are conditions or effects on you — nobody dealt them (the client counts them as damage taken only, report `paradigm-20260929-003750`). The only `Your ... is` damage lines are blood / life / soul drains; every other `Your ...` damage line is your weapon or spell hitting something.
 - **Area effects name no one:** `An earthquake rocks the room for %d damage!`.
 
 **Client use:**

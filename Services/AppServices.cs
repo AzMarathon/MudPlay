@@ -3597,13 +3597,12 @@ public sealed class AppServices
             partyNames: () => PartyState.Members.Select(m => m.Name),
             selfName: () => Party.LocalCharacterName ?? Profile.Current?.Name);
         // Settings → Combat "Show combat round totals": print each round's ledger
-        // (read per round, so the checkbox applies at once). One notice for both
-        // lines, so no blank line falls between them.
+        // as a table (read per round, so the checkbox applies at once). One notice for
+        // all its lines, so no blank line falls between them.
         RoundDamage.RoundComplete += round =>
         {
             if (!ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat").ShowCombatRoundTotals) return;
-            (string dealt, string taken) = Game.Combat.RoundTotalsFormatter.Format(round);
-            WriteTerminalNotice(dealt + "\r\n" + taken);
+            WriteTerminalNotice(string.Join("\r\n", Game.Combat.RoundTotalsFormatter.Table(round)));
         };
         // Reset round counter + ring on BBS connect to match
         // CombatSessionTracker's session-boundary convention — the

@@ -1881,7 +1881,7 @@ Press **F5** to open the **Wire Inspector** — a troubleshooting view of the da
 
 - **Raw** — control codes made visible (e.g. `^[` for escape).
 - **Stripped** — the same stream with the ANSI escape sequences removed.
-- **Classified** — each combat-window line tagged with how the combat engine read it (e.g. `[Combat: Monster Miss (you)]`, `[Combat: You Hit]`, `[Combat: Armor Block (you)]`). Every **damage** line also shows how the round ledger credited it: `[Ledger: Bob → large orc 9]` (who dealt it → who took it, and how much), `unknown` for a side the line doesn't name, and `not counted (no round)` for a line that fell outside a combat round. A party member's fight shows here too, even when you aren't in combat yourself. See *Show combat round totals* under Settings → Combat. It also marks each **recognized monster death** with `[Monster Death: <name>]`, and an exp-inferred death whose message *wasn't* recognized as `[Monster Death: inferred from exp — message not recognized]`, so an unrecognized death line stands out.
+- **Classified** — each combat-window line tagged with how the combat engine read it (e.g. `[Combat: Monster Miss (you)]`, `[Combat: You Hit]`, `[Combat: Armor Block (you)]`). Every **damage** line also shows how the round ledger credited it: `[Ledger: Bob → large orc 9]` (who dealt it → who took it, and how much), `unknown` for a side the line doesn't name, `no attacker` for damage nobody dealt (a poison tick, tagged `[Combat: Damage (you)]`), and `not counted (no round)` for a line that fell outside a combat round. A party member's fight shows here too, even when you aren't in combat yourself. See *Show combat round totals* under Settings → Combat. It also marks each **recognized monster death** with `[Monster Death: <name>]`, and an exp-inferred death whose message *wasn't* recognized as `[Monster Death: inferred from exp — message not recognized]`, so an unrecognized death line stands out.
 
 **Raw and Classified are on by default** (Stripped off); unchecking a pane collapses its column so the others fill, and your choice sticks. It shows inbound server output only, and keeps the most recent 64 KB.
 
@@ -2726,18 +2726,24 @@ At **0 mana** a mana-costing action can't land (the server silently ignores it),
 ### Show combat round totals
 
 **Default:** Off
-**What it does:** After each combat round, prints two yellow lines to the terminal: who **dealt** damage that round and who **took** it, for **everyone in the room** — you, party members, other players and monsters:
+**What it does:** After each combat round, prints a small yellow table to the terminal: how much damage each combatant **dealt** and **took** that round, one row for **everyone in the room** — you, party members, other players and monsters:
 
 ```
-[Round 3 dealt: You 45, Bob 30, large orc 12, unknown 8]
-[Round 3 taken: large orc 75, You 12, unknown 20]
+[Round 3 ------------------------]
+[ Combatant          Dealt  Taken ]
+[ You                   45     12 ]
+[ Bob                   30      0 ]
+[ large orc             12     75 ]
+[ goblin                 0      0 ]
+[ unknown                8     20 ]
 ```
 
-The round number starts again at 1 once the room is clear of hostiles, so each fight counts its own rounds. **Everyone in the room is listed every round** — you, your party, other players and monsters — even at 0, biggest numbers first. **unknown** only appears when a line couldn't be pinned to anyone. A round prints as soon as its lines stop (a quarter of a second), or the moment the room is clear, so the totals sit right under that round's combat, ahead of your next action.
+The round number starts again at 1 once the room is clear of hostiles, so each fight counts its own rounds. **Everyone in the room is listed every round** — you, your party, other players and monsters — even at 0, biggest dealer first. **unknown** only appears when a line couldn't be pinned to anyone. The program log and bug report keep the same numbers as two compact lines per round. A round prints as soon as its lines stop (a quarter of a second), or the moment the room is clear, so the totals sit right under that round's combat, ahead of your next action.
 
 **Important notes:**
 - **How damage is credited.** Each "… for N damage!" line is read against the room's occupants (from *Also here:*), your party and "you". "Bob slashes large orc for 30" credits Bob, and "The large orc claws you with its pincers for 12" is damage you took from the orc.
-- **unknown** collects damage a line doesn't name a side for. Examples: a spell whose line names no caster ("Acid sears you"), an area effect ("An earthquake rocks the room"), a poison tick, or someone the room display hasn't shown yet.
+- **unknown** collects damage a line doesn't name a side for. Examples: a spell whose line names no caster ("Acid sears you"), an area effect ("An earthquake rocks the room"), or someone the room display hasn't shown yet.
+- **Damage nobody dealt** — a poison tick ("You are poisoned for 2 damage!"), "You combust", "Your blood is drained" — counts only under your **Taken**; no one is credited with dealing it.
 - **Your own attack spells.** Many spell lines read the same to the caster as to everyone watching ("Dark flame sears the orc for 12 damage!"). Such a line counts as **yours** when it's one of your configured attack spells (or your weapon's proc) and you cast within the last few seconds. Otherwise its dealer is unknown. If a party member casts the same spell in the same round, theirs counts as yours too.
 - **Two monsters with the same name** share one entry, because the game prints them identically.
 - **Where else it shows up.** The same ledger feeds Session Stats' per-round damage (your row only), the program log (`[Round]` rows) and the bug report (last 10 rounds). The Wire Inspector's **Classified** pane shows how each damage line was credited.

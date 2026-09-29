@@ -46,6 +46,19 @@ public sealed class DamageLineAttributorTests
         Assert.Equal(12, a.Amount);
     }
 
+    // A condition or effect on us has no dealer at all, unlike a spell whose caster
+    // the line just doesn't name.
+    [Theory]
+    [InlineData("You are poisoned for 12 damage!", true)]
+    [InlineData("You combust for 12 damage!", true)]
+    [InlineData("Your blood is drained for 12 damage!", true)]
+    [InlineData("Acid sears you for 12 damage!", false)]
+    public void NoDealer_OnlyForConditionsOnYou(string line, bool noDealer)
+    {
+        Assert.True(DamageLineAttributor.TryAttribute(line, Names, out DamageAttribution a));
+        Assert.Equal(noDealer, a.NoDealer);
+    }
+
     [Theory]
     [InlineData("You take 5 damage for bashing the door!")]
     [InlineData("The orc swings at you, but misses!")]

@@ -67,16 +67,11 @@ public static partial class DamageLineAttributor
         if (StartsWithWord(pre, "You"))
         {
             string next = FirstWord(pre[3..]);
-            if (PassiveAfterYou.Contains(next))
+            // "You are poisoned" / "You combust for 12 damage!" (a bare verb with no one
+            // after it): a condition or effect on us — nobody dealt it.
+            if (PassiveAfterYou.Contains(next) || pre[3..].Trim().IndexOf(' ') < 0)
             {
-                result = new DamageAttribution(null, Self, amount);
-                return true;
-            }
-            // "You combust for 12 damage!" — a bare verb with no one after it is
-            // something happening to us.
-            if (pre[3..].Trim().IndexOf(' ') < 0)
-            {
-                result = new DamageAttribution(null, Self, amount);
+                result = new DamageAttribution(null, Self, amount, NoDealer: true);
                 return true;
             }
             source = Self;
@@ -89,7 +84,7 @@ public static partial class DamageLineAttributor
             // sword strikes the orc", "Your foes are drenched in acid").
             if (YourPartIsHit().IsMatch(pre))
             {
-                result = new DamageAttribution(null, Self, amount);
+                result = new DamageAttribution(null, Self, amount, NoDealer: true);
                 return true;
             }
             result = new DamageAttribution(Self, FindTarget(pre, 4, names), amount);

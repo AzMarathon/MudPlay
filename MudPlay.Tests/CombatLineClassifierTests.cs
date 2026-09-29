@@ -94,6 +94,13 @@ public sealed class CombatLineClassifierTests
         => Assert.Equal(CombatLineKind.None,
             Classify("The fierce orc lieutenant swings at you with their scimitar!", Cyan, inWindow: false));
 
+    // Poison damage starts "You" like our own hit, but it's damage we took
+    // (report paradigm-20260929-003750).
+    [Fact]
+    public void PoisonTick_IsDamageToYou_NotYourHit()
+        => Assert.Equal(CombatLineKind.DamageYou,
+            Classify("You are poisoned for 2 damage!", Red, bold: true));
+
     [Fact]
     public void NonCombatWhiteLine_IsNone()
         => Assert.Equal(CombatLineKind.None,
