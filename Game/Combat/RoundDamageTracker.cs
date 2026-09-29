@@ -39,8 +39,10 @@ public sealed class RoundDamageTracker : IDisposable
     // Capacity of the in-memory ring buffer of recent rounds.
     public const int RingCapacity = 50;
 
-    // A round opening this long after the previous one closed starts a new fight
-    // (FightRound back to 1). Back-to-back rounds open within one round of each other.
+    // FightRound restarts at 1 once the room is clear of hostiles (InCombat dropping),
+    // or when a round opens this long after the previous one closed — a fight InCombat
+    // never covered, like a party member's while we stood by. Back-to-back rounds of
+    // one fight open within one round of each other.
     private static readonly TimeSpan FightGap = TimeSpan.FromSeconds(7);
 
     // How long a cast we sent can still own a caster's-eye spell line: the round it
@@ -80,6 +82,7 @@ public sealed class RoundDamageTracker : IDisposable
     private RoundAccumulator? _current;
     private int _roundCounter;
     private int _fightRound;
+    private bool _fightOver;
     private DateTimeOffset? _lastClosedAt;
     private bool _disposed;
 
@@ -118,6 +121,7 @@ public sealed class RoundDamageTracker : IDisposable
         _scheduleDelay = scheduleDelay;
 
         _router.LineDispatched += OnLine;
+        _state.PropertyChanged += OnStateChanged;
         // A monster swinging and missing is round activity with no damage line.
         _mobMissesSub    = router.Subscribe(KnownPatterns.MobMisses,   _ => { Current(_now()); NoteActivity(); });
         _combatStatusSub = router.Subscribe(KnownPatterns.CombatStatus, OnCombatStatus);
@@ -223,6 +227,12 @@ public sealed class RoundDamageTracker : IDisposable
     // *Combat Off* comes mid-burst — on a kill, the other monsters' swings of the same
     // round follow it (report paradigm-20260928-230456) — so with the settle timer
     // bound the round is left to close on its own quiet. Without one it closes here.
+    // The room is clear of hostiles: the next round is a new fight's first.
+    private void OnStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PlayerState.InCombat) && !_state.InCombat) _fightOver = true;
+    }
+
     private void OnCombatStatus(MatchResult match)
     {
         if (_scheduleDelay is not null || match.Groups.Count == 0) return;
@@ -236,7 +246,8 @@ public sealed class RoundDamageTracker : IDisposable
     private RoundAccumulator Current(DateTimeOffset now)
     {
         if (_current is not null) return _current;
-        if (_lastClosedAt is not { } closed || now - closed > FightGap) _fightRound = 0;
+        if (_fightOver || _lastClosedAt is not { } closed || now - closed > FightGap) _fightRound = 0;
+        _fightOver = false;
         _fightRound++;
         _current = new RoundAccumulator
         {
@@ -300,6 +311,7 @@ public sealed class RoundDamageTracker : IDisposable
         _current = null;
         _roundCounter = 0;
         _fightRound = 0;
+        _fightOver = false;
         _lastClosedAt = null;
         lock (_ringLock) _ring.Clear();
     }
@@ -363,6 +375,7 @@ public sealed class RoundDamageTracker : IDisposable
         if (_disposed) return;
         _disposed = true;
         _router.LineDispatched -= OnLine;
+        _state.PropertyChanged -= OnStateChanged;
         _mobMissesSub.Dispose();
         _combatStatusSub.Dispose();
         _settleTimer?.Dispose();

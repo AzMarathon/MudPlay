@@ -354,6 +354,25 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal(new[] { 5, 8, 2 }, h.Completed.Select(r => r.DamageDealt));
     }
 
+    // Monsters that walk in right after a kill are a new fight once the room was
+    // clear, however quickly they follow (report paradigm-20260928-231225).
+    [Fact]
+    public void RoomClearedOfHostiles_RestartsTheRoundCount()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("You hit goblin for 5 damage!");
+        h.CloseRound();
+        h.Feed("You hit goblin for 8 damage!");
+        h.State.InCombat = false;   // the goblin died; the room is clear
+        h.CloseRound();
+        h.State.InCombat = true;    // a new monster walks in straight away
+        h.Feed("You hit large giant rat for 2 damage!");
+        h.CloseRound();
+
+        Assert.Equal(new[] { 1, 2, 1 }, h.Completed.Select(r => r.FightRound));
+    }
+
     // ----- Reset path -------------------------------------------------
 
     [Fact]

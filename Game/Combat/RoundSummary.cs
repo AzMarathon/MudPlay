@@ -5,7 +5,8 @@ namespace MudPlay.Game.Combat;
 //
 // RoundNumber counts every round since the last RoundDamageTracker.Reset (new BBS
 // connection / character switch); FightRound counts rounds within the current fight,
-// from 1. StartedAt is the first damage line of the round, EndedAt when it closed.
+// from 1, restarting once the room is clear of hostiles. StartedAt is the first
+// damage line of the round, EndedAt when it closed.
 // Combatants holds one row per named combatant, the local player as
 // DamageLineAttributor.Self. UnknownDealt is damage whose dealer no line named;
 // UnknownTaken is damage whose victim none named (an area effect). HpBefore/HpAfter
