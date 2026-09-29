@@ -8,23 +8,13 @@ namespace MudPlay.Game.Combat;
 // the room dealt and took, plus the damage no line names a side for — and emits it as
 // a RoundSummary at each round boundary. Keeps a ring buffer of the last 50 rounds.
 //
-// Round boundaries are driven by TickEngine's CombatTickElapsed heartbeat (wired
-// in AppServices), NOT by the damage lines themselves. OnCombatTick closes
-// whatever round is open, so every 5-second tick with activity yields exactly
-// one round in real time: a burst of swings inside one window collapses into a
-// single round, and a fight's final round closes on the next tick instead of
-// lingering (open and uncounted) until the next combat. Damage lines only
-// accumulate into the open round. *Combat Off* and local death close the current
-// round early via MarkCombatEnded.
-//
-// The heartbeat has two sources (see TickEngine): a 100 ms timer that fires the
-// tick exactly 5 s after the round's first hit, and the damage lines themselves
-// (debounced to at most one tick per round). In practice the timer wins — the
-// next round's server output arrives a full 5 s + network latency later, so the
-// open round is already closed by the timer tick before that line lands. Because
-// OnCombatTick is a no-op when no round is open, the round COUNT is correct
-// regardless of which source fires or how the router happens to order same-line
-// handlers; only a same-line tie could nudge one hit across the boundary.
+// A round's lines arrive as one burst and the next round's burst is ~5 s away, so a
+// round closes once its lines have gone quiet for SettleWindow — its totals print
+// right after its own lines. *Combat Off* and local death close it at once
+// (MarkCombatEnded). TickEngine's CombatTickElapsed heartbeat (OnCombatTick) is the
+// backstop when no scheduler is bound; it fires on the NEXT round's first combat
+// line as well as on a 5 s timer, so it only closes a round at least MinTickAge
+// old — never the one that line just opened.
 //
 // Every "... for N damage!" line is read by DamageLineAttributor against the room
 // roster (NoteRoomEntities) and the party. A caster's-eye spell line names no caster
@@ -57,11 +47,20 @@ public sealed class RoundDamageTracker : IDisposable
     // lands in, with slack for the line arriving just after the tick.
     private static readonly TimeSpan OwnCastWindow = TimeSpan.FromSeconds(6);
 
+    // Quiet after a round's last line that ends it (see the header).
+    private static readonly TimeSpan SettleWindow = TimeSpan.FromMilliseconds(500);
+
+    // The youngest round the combat tick may close.
+    private static readonly TimeSpan MinTickAge = TimeSpan.FromSeconds(1);
+
     private readonly MessageRouter _router;
     private readonly PlayerState _state;
     private readonly LogService? _log;
     private readonly Func<bool> _shouldWriteTrace;
     private readonly Func<DateTimeOffset> _now;
+    private readonly Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
+    private IDisposable? _settleTimer;
+    private DateTimeOffset _lastActivityAt;
 
     private readonly IDisposable _mobMissesSub;
     private readonly IDisposable _combatStatusSub;
@@ -106,7 +105,8 @@ public sealed class RoundDamageTracker : IDisposable
         PlayerState state,
         LogService? log = null,
         Func<bool>? shouldWriteTrace = null,
-        Func<DateTimeOffset>? clock = null)
+        Func<DateTimeOffset>? clock = null,
+        Func<TimeSpan, Action, IDisposable>? scheduleDelay = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(state);
@@ -115,10 +115,11 @@ public sealed class RoundDamageTracker : IDisposable
         _log   = log;
         _shouldWriteTrace = shouldWriteTrace ?? (static () => false);
         _now = clock ?? (static () => DateTimeOffset.Now);
+        _scheduleDelay = scheduleDelay;
 
         _router.LineDispatched += OnLine;
         // A monster swinging and missing is round activity with no damage line.
-        _mobMissesSub    = router.Subscribe(KnownPatterns.MobMisses,   _ => Current(_now()));
+        _mobMissesSub    = router.Subscribe(KnownPatterns.MobMisses,   _ => { Current(_now()); NoteActivity(); });
         // TieBreak ahead of CombatManager's CombatStatus handler: on a *Combat Off*
         // that closes a round, this must CloseCurrent (bump RoundCount + fire
         // RoundComplete) BEFORE CombatManager's between-round-cast resume re-decides,
@@ -150,6 +151,8 @@ public sealed class RoundDamageTracker : IDisposable
             if (!string.IsNullOrWhiteSpace(e.ResolvedName)) names.TryAdd(e.ResolvedName, e.RawName);
         }
         _rosterNames = names;
+        // Someone arriving mid-round is in the room for the rest of it.
+        _current?.Seed(Names().Values);
     }
 
     // We sent a cast (engine or typed), so a caster's-eye spell line in the next few
@@ -186,6 +189,7 @@ public sealed class RoundDamageTracker : IDisposable
         if (!counted) return;
 
         RoundAccumulator round = Current(now);
+        NoteActivity();
         if (source is null) round.UnknownDealt += a.Amount;
         else round.For(source).Dealt += a.Amount;
         if (target is null) round.UnknownTaken += a.Amount;
@@ -230,9 +234,8 @@ public sealed class RoundDamageTracker : IDisposable
             MarkCombatEnded();
     }
 
-    // The open round, opening a fresh one when none is in flight. Round boundaries
-    // come from OnCombatTick, not from here — so a whole 5-second window's worth of
-    // lines lands in the same round.
+    // The open round, opening a fresh one when none is in flight. Every combatant
+    // in the room gets a row up front, so the totals list them even at zero.
     private RoundAccumulator Current(DateTimeOffset now)
     {
         if (_current is not null) return _current;
@@ -245,16 +248,41 @@ public sealed class RoundDamageTracker : IDisposable
             HpStart    = _state.Hp,
             MaStart    = _state.Ma,
         };
+        _current.For(DamageLineAttributor.Self);
+        _current.Seed(Names().Values);
         return _current;
     }
 
-    // The 5-second round heartbeat (TickEngine.CombatTickElapsed). Close the open
-    // round so it's counted in real time; a no-op between fights, when no round is
-    // in flight. This is what makes the session-stats round count advance once per
-    // ticker fire instead of lagging until the next damage line or *Combat Off*.
+    // A line belonging to the open round: restart the quiet clock that ends it. One
+    // timer per round — when it fires early it re-arms for the rest of the window.
+    private void NoteActivity()
+    {
+        _lastActivityAt = _now();
+        if (_settleTimer is null && _scheduleDelay is not null)
+            _settleTimer = _scheduleDelay(SettleWindow, OnSettle);
+    }
+
+    private void OnSettle()
+    {
+        _settleTimer?.Dispose();
+        _settleTimer = null;
+        if (_current is null) return;
+        TimeSpan quiet = _now() - _lastActivityAt;
+        if (quiet < SettleWindow && _scheduleDelay is not null)
+        {
+            _settleTimer = _scheduleDelay(SettleWindow - quiet, OnSettle);
+            return;
+        }
+        CloseCurrent(_now());
+    }
+
+    // The combat heartbeat (TickEngine.CombatTickElapsed), the backstop close. It
+    // also fires on the next round's first line, after that line opened its round,
+    // so a round younger than MinTickAge is left open.
     public void OnCombatTick()
     {
-        if (_current is not null) CloseCurrent(_now());
+        if (_current is not null && _now() - _current.StartedAt >= MinTickAge)
+            CloseCurrent(_now());
     }
 
     // Explicitly close the current round (no-op when none is open) — driven
@@ -272,6 +300,8 @@ public sealed class RoundDamageTracker : IDisposable
     // aggregates.
     public void Reset()
     {
+        _settleTimer?.Dispose();
+        _settleTimer = null;
         _current = null;
         _roundCounter = 0;
         _fightRound = 0;
@@ -281,6 +311,8 @@ public sealed class RoundDamageTracker : IDisposable
 
     private void CloseCurrent(DateTimeOffset endedAt)
     {
+        _settleTimer?.Dispose();
+        _settleTimer = null;
         if (_current is null) return;
         _roundCounter++;
         RoundSummary summary = new(
@@ -338,6 +370,7 @@ public sealed class RoundDamageTracker : IDisposable
         _router.LineDispatched -= OnLine;
         _mobMissesSub.Dispose();
         _combatStatusSub.Dispose();
+        _settleTimer?.Dispose();
         _trace?.Dispose();
     }
 
@@ -357,6 +390,11 @@ public sealed class RoundDamageTracker : IDisposable
         {
             if (!_rows.TryGetValue(name, out Row? row)) _rows[name] = row = new Row(name);
             return row;
+        }
+
+        public void Seed(IEnumerable<string> names)
+        {
+            foreach (string name in names) For(name);
         }
 
         public IReadOnlyList<CombatantDamage> Rows()

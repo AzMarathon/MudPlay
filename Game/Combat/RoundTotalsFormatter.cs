@@ -4,7 +4,8 @@ namespace MudPlay.Game.Combat;
 // round totals"), the program log and the bug report:
 //   [Round 3 dealt: You 45 · Bob 30 · large orc 12 · unknown 8]
 //   [Round 3 taken: large orc 75 · You 12 · unknown 20]
-// Biggest first, "unknown" last, zero rows left out; "none" when nobody dealt / took any.
+// Every combatant in the room is listed, biggest first (zeros included); "unknown"
+// last, only when a line named no side; "none" for a round with no one in it.
 public static class RoundTotalsFormatter
 {
     public static (string Dealt, string Taken) Format(RoundSummary round)
@@ -28,7 +29,6 @@ public static class RoundTotalsFormatter
     private static string Line(int fightRound, string what, IEnumerable<(string Name, int Amount)> rows, int unknown)
     {
         List<string> parts = rows
-            .Where(r => r.Amount > 0)
             .OrderByDescending(r => r.Amount)
             .Select(r => $"{r.Name} {r.Amount}")
             .ToList();

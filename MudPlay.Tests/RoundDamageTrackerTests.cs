@@ -21,11 +21,16 @@ public sealed class RoundDamageTrackerTests
         public List<RoundSummary> Completed { get; } = new();
         public DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
         public bool OwnSpell;
+        // The settle timer the tracker armed, when the harness gives it a scheduler.
+        public Action? Settle;
 
-        public Harness(Func<bool>? shouldWriteTrace = null)
+        public Harness(Func<bool>? shouldWriteTrace = null, bool withScheduler = false)
         {
             DefaultPatterns.Seed(Router);
-            Tracker = new RoundDamageTracker(Router, State, Log, shouldWriteTrace, clock: () => Now);
+            Tracker = new RoundDamageTracker(Router, State, Log, shouldWriteTrace, clock: () => Now,
+                scheduleDelay: withScheduler
+                    ? (_, callback) => { Settle = callback; return new Handle(() => Settle = null); }
+                    : null);
             Tracker.RoundComplete += Completed.Add;
             Tracker.SetNameSources(
                 partyNames: () => new[] { "Fujin Blade", "Bob Smith" },
@@ -50,13 +55,20 @@ public sealed class RoundDamageTrackerTests
             Router.Dispatch(emitted);
         }
 
+        // The 5 s combat tick closes the round.
         public RoundSummary CloseRound()
         {
+            Now = Now.AddSeconds(5);
             Tracker.OnCombatTick();
             return Completed[^1];
         }
 
         public void Dispose() => Tracker.Dispose();
+
+        private sealed class Handle(Action onDispose) : IDisposable
+        {
+            public void Dispose() => onDispose();
+        }
     }
 
     private static CombatantDamage Row(RoundSummary r, string name)
@@ -157,7 +169,7 @@ public sealed class RoundDamageTrackerTests
         h.Feed("An earthquake rocks the room for 20 damage!");
         RoundSummary r = h.CloseRound();
 
-        Assert.Empty(r.Combatants);
+        Assert.All(r.Combatants, c => Assert.Equal((0, 0), (c.Dealt, c.Taken)));
         Assert.Equal(20, r.UnknownDealt);
         Assert.Equal(20, r.UnknownTaken);
     }
@@ -294,7 +306,7 @@ public sealed class RoundDamageTrackerTests
         h.Feed("The goblin swings at you");
         RoundSummary r = h.CloseRound();
 
-        Assert.Empty(r.Combatants);
+        Assert.All(r.Combatants, c => Assert.Equal((0, 0), (c.Dealt, c.Taken)));
         Assert.Equal(0, r.UnknownDealt);
     }
 
@@ -414,17 +426,71 @@ public sealed class RoundDamageTrackerTests
         RoundSummary r = h.CloseRound();
 
         (string dealt, string taken) = RoundTotalsFormatter.Format(r);
-        Assert.Equal("[Round 1 dealt: You 45 · Bob 30 · large giant rat 12 · unknown 8]", dealt);
-        Assert.Equal("[Round 1 taken: large giant rat 75 · You 12 · unknown 8]", taken);
+        Assert.Equal("[Round 1 dealt: You 45 · Bob 30 · large giant rat 12 · goblin 0 · unknown 8]", dealt);
+        Assert.Equal("[Round 1 taken: large giant rat 75 · You 12 · goblin 0 · Bob 0 · unknown 8]", taken);
+    }
+
+    // Everyone in the room is listed every round, even with nothing against them.
+    [Fact]
+    public void Formatter_ListsEveryCombatant_EvenAtZero()
+    {
+        using Harness h = new();
+        h.Feed("You skewer red slime for 2 damage!");
+        RoundSummary r = h.CloseRound();
+
+        (string dealt, string taken) = RoundTotalsFormatter.Format(r);
+        Assert.Equal("[Round 1 dealt: You 2 · large giant rat 0 · goblin 0 · Bob 0]", dealt);
+        Assert.Equal("[Round 1 taken: You 0 · large giant rat 0 · goblin 0 · Bob 0 · unknown 2]", taken);
     }
 
     [Fact]
-    public void Formatter_NobodyTookDamage_SaysNone()
+    public void Formatter_NoCombatants_SaysNone()
     {
         RoundSummary r = new(1, 2, default, default,
-            new[] { new CombatantDamage("You", 0, 0) }, 0, 0, 0, 0, 0, 0);
+            Array.Empty<CombatantDamage>(), 0, 0, 0, 0, 0, 0);
         (string dealt, string taken) = RoundTotalsFormatter.Format(r);
         Assert.Equal("[Round 2 dealt: none]", dealt);
         Assert.Equal("[Round 2 taken: none]", taken);
+    }
+
+    // ----- when a round closes ---------------------------------------
+
+    // A round ends once its lines go quiet, so its totals follow its own lines instead
+    // of waiting for the next round to start.
+    [Fact]
+    public void QuietAfterTheBurst_ClosesTheRound()
+    {
+        using Harness h = new(withScheduler: true);
+        h.Feed("You skewer goblin for 2 damage!");
+        h.Now = h.Now.AddMilliseconds(100);
+        h.Feed("You impale goblin for 12 damage!");
+        Assert.NotNull(h.Settle);
+
+        // The timer armed on the first line fires 500 ms after it: only 400 ms of quiet,
+        // so it waits out the rest.
+        h.Now = h.Now.AddMilliseconds(400);
+        h.Settle!();
+        Assert.Empty(h.Completed);
+
+        h.Now = h.Now.AddMilliseconds(100);
+        h.Settle!();
+        RoundSummary r = Assert.Single(h.Completed);
+        Assert.Equal(14, r.DamageDealt);
+    }
+
+    // The next round's first line fires the combat tick after that line opened its
+    // round; the tick must not close it with just that one line.
+    [Fact]
+    public void CombatTick_DoesNotCloseARoundThatJustOpened()
+    {
+        using Harness h = new();
+        h.Feed("The goblin flails at you!");
+        h.Feed("You skewer goblin for 2 damage!");
+        h.Tracker.OnCombatTick();
+        Assert.Empty(h.Completed);
+
+        h.Feed("You impale goblin for 12 damage!");
+        RoundSummary r = h.CloseRound();
+        Assert.Equal(14, r.DamageDealt);
     }
 }

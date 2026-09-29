@@ -3575,7 +3575,15 @@ public sealed class AppServices
         // per-character persisted; the user can flip either from the Log pane.
         RoundDamage = new Game.Combat.RoundDamageTracker(
             Router, PlayerState, Log,
-            shouldWriteTrace: () => LogDiagnostics.AutoCollectLogs);
+            shouldWriteTrace: () => LogDiagnostics.AutoCollectLogs,
+            // UI-thread one-shot, same as the door FSM's: ends a round once its lines go quiet.
+            scheduleDelay: (delay, callback) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+                return new DispatcherTimerHandle(timer);
+            });
         // Drive round boundaries off the 5-second combat heartbeat so each round
         // closes (and is counted) in real time rather than lagging until the next
         // damage line or *Combat Off*. Both are app-lifetime singletons, so no
@@ -3589,15 +3597,13 @@ public sealed class AppServices
             partyNames: () => PartyState.Members.Select(m => m.Name),
             selfName: () => Party.LocalCharacterName ?? Profile.Current?.Name);
         // Settings → Combat "Show combat round totals": print each round's ledger
-        // (read per round, so the checkbox applies at once). A round of misses only
-        // has nothing to show.
+        // (read per round, so the checkbox applies at once). One notice for both
+        // lines, so no blank line falls between them.
         RoundDamage.RoundComplete += round =>
         {
-            if (round.Combatants.Count == 0 && round.UnknownDealt == 0 && round.UnknownTaken == 0) return;
             if (!ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat").ShowCombatRoundTotals) return;
             (string dealt, string taken) = Game.Combat.RoundTotalsFormatter.Format(round);
-            WriteTerminalNotice(dealt);
-            WriteTerminalNotice(taken);
+            WriteTerminalNotice(dealt + "\r\n" + taken);
         };
         // Reset round counter + ring on BBS connect to match
         // CombatSessionTracker's session-boundary convention — the
