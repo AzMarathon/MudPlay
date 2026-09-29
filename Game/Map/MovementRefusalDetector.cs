@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Text.RegularExpressions;
 using MudPlay.Services;
+using MudPlay.Services.Patterns;
 using MudPlay.Terminal;
 
 namespace MudPlay.Game.Map;
@@ -106,6 +107,27 @@ public sealed partial class MovementRefusalDetector : IDisposable
             return;
         }
 
+        // A room script refused the typed exit command. The tracker only reverts a
+        // typed command in flight, since several of these lines also answer
+        // ordinary commands. A cardinal in flight falls through: two of the lines
+        // are also item-exit refusals.
+        if (RoomCommandRefused().IsMatch(text) && _tracker.NoteCommandMoveRefused(when))
+        {
+            _log?.Info("MoveRefusal", $"room command refused: {text.Trim()}");
+            return;
+        }
+
+        // A gated exit or room turned the move away. Only while a move is Pending:
+        // a level-capped room answers with two of these lines for one move, and the
+        // second must not drop a later queued move.
+        if (ExitGateRefused().IsMatch(text))
+        {
+            if (_tracker.State.Confidence != RoomConfidence.Pending) return;
+            _tracker.NoteMoveBlocked(when);
+            _log?.Info("MoveRefusal", $"exit refused: {text.Trim()}");
+            return;
+        }
+
         // A confusion fumble consumes the just-sent command — for a MOVE the step never
         // lands, so revert like any other refusal. The wordings come from game data
         // (Confused records' ConfuseFumbleLine) via the injected predicate, not a
@@ -154,6 +176,34 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*You are too (paralyzed|confused|stunned|dazed) to move(?: anywhere)?[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TooImpairedToMove();
+
+    // The refusals a teleporting room command prints when a condition on its script
+    // line fails: no monsters in the room, a minimum level, alignment, a carried or
+    // room item, a present monster, a price. Each is the message the Stock 1.11p
+    // script names for that condition (GAME_MECHANICS "Room-command refusals");
+    // Paradigm is assumed to share them.
+    [GeneratedRegex(
+        @"^\s*(?:You (?:cannot|can't) do that right now!"
+        + @"|You can't get to that right now!"
+        + @"|You do not see (?:that|a portal) here\."
+        + @"|You want to go where\?\?"
+        + @"|You do not have that\."
+        + @"|A strange power holds you back!"
+        + @"|The (?:dark power of the portal|swirling chaotic energy of the vortex) forces you back!"
+        + @"|That would be suicide without the proper equipment\."
+        + @"|You quaff the bubbling white potion, but nothing happens\."
+        + @"|The Grey Lord simply stares at you in silence\."
+        + @"|The Grey Lord shakes his head, ""You must first grow further, young one\."""
+        + @"|Jorah exclaims, ""You do not care about Balance! Begone, fool!"""
+        + @"|He says, ""I may be old, but I count quite well and you are short!"""
+        + @"|He shakes his head at you, ""Stop playing tricks on an old man!"")\s*$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex RoomCommandRefused();
+
+    [GeneratedRegex(
+        @"^\s*(?:" + DefaultPatterns.ExitGateRefusals + @")\s*$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex ExitGateRefused();
 
     [GeneratedRegex(
         @"^\s*You can't see well enough to move[.!]?\s*$",

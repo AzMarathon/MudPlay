@@ -1,5 +1,11 @@
 # Version history
 
+## 3.119.3
+
+- Walks and loops notice a refused room command ("You cannot do that right now!", a level / alignment / item check) at once, retry once, then re-plan
+- Gate refusals (level caps, permission, item, alignment, timed exit) no longer leave a walk waiting on its stall timer
+- Toll shortfalls and item / ability exits' own refusal lines are recognised; an NPC who refuses a transport isn't asked again
+
 ## 3.119.0
 
 - Auto-sell sells as soon as you walk into a shop that trades the item (no `list`), keeping Min. to keep when it's above 0 (0 = sell all)

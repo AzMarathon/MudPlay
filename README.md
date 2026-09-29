@@ -1,12 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.119.0**
-> - Auto-sell sells as soon as you walk into a shop that trades the item (no `list`), keeping Min. to keep when it's above 0 (0 = sell all)
-> - New item option **Make detours to sell this item**: a walk, loop or Auto-Lair turns aside to sell once you carry more than **Detour to sell if above**, at the shops you tick **Sell here**
-> - Rest / heal / flee percentages use your max HP and mana from a `stat` taken in your Default gear, re-read only after a level-up or a Default-gear change
-> - An `exp` screen no longer overwrites your max HP / mana with an older `stat`'s numbers
-> - "Meditation will not help at this time" counts mana as full; a follower swaps back to Default, re-checks, then sends @ok
+> **Version 3.119.3**
+> - Walks and loops notice a refused room command ("You cannot do that right now!", a level / alignment / item check) at once, retry once, then re-plan
+> - Gate refusals (level caps, permission, item, alignment, timed exit) no longer leave a walk waiting on its stall timer
+> - Toll shortfalls and item / ability exits' own refusal lines are recognised; an NPC who refuses a transport isn't asked again
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

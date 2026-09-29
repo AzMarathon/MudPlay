@@ -77,6 +77,13 @@ public sealed class DefaultPatternsTests
     [InlineData("You may not pass through that exit at this point in time.")]
     [InlineData("You may not drag anyone through this exit.")]
     [InlineData("Your sysop must purchase the Dragon's Teeth add-on before you may move through this exit.")]
+    [InlineData("You do not have enough to cover the toll of 5 gold crowns.")]
+    // "Closed" is a shut door or gate, "closed" a locked one.
+    [InlineData("The gate is Closed!")]
+    [InlineData("The door is Closed!")]
+    // Item and ability exits print their own refusal in place of the generic line.
+    [InlineData("You can barely keep afloat in this water, much less swim!")]
+    [InlineData("A shimmering field blocks your passage!")]
     public void DirectionFailedRegex_MatchesEveryRefusal(string line)
         => Assert.True(PatternById(KnownPatterns.DirectionFailed).TryMatch(Line(line), out _));
 

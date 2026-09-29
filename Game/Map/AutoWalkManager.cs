@@ -407,6 +407,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _recovery = recovery;
 
         _tracker.StateChanged += OnTrackerStateChanged;
+        _tracker.CommandMoveRefused += OnCommandMoveRefused;
         _coordinator.PauseStateChanged += OnCoordinatorPauseChanged;
         _coordinator.GatesChanged += OnGatesChangedForAbandon;
         if (_promptScanner is not null)
@@ -2817,6 +2818,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _log?.Info("Walker",
             $"greet teleport landed at {newKey} (expected {_expectedAfterCurrentMove}); replanning");
         TryReplanOrFail(RoomConfidence.Confirmed);
+    }
+
+    // The NPC's script refused the ask outright (alignment, level, missing item) —
+    // not a failed skill roll, so re-asking can never succeed. Stand down before the
+    // tracker's revert lands; the generic blocked path then retries once and replans.
+    private void OnCommandMoveRefused()
+    {
+        if (!_awaitingGreetTeleport) return;
+        _log?.Info("Walker",
+            $"greet teleport '{_greetTeleportCommand}' refused by the NPC; not re-asking.");
+        ClearGreetTeleportWait();
     }
 
     // The re-ask watchdog fired. Catches the case a failed transport emits NO fresh
