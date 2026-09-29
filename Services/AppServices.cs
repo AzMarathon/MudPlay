@@ -1301,6 +1301,7 @@ public sealed class AppServices
     // HP-range readout (MonsterLookParser turns a wound descriptor into an
     // absolute HP window).
     public Game.Combat.MonsterHpIndex MonsterHp { get; private set; } = null!;
+    public Game.Combat.MonsterHpTracker MonsterHpEstimates { get; private set; } = null!;
 
     // Lookup of each weapon's HitMagic level (code 142) in
     // the active game-data set. Paired with MonsterMagic for
@@ -4677,6 +4678,13 @@ public sealed class AppServices
         // data is silent.
         MonsterMagic = new Game.Combat.MonsterMagicIndex(GameData);
         MonsterHp = new Game.Combat.MonsterHpIndex(GameData);
+        // Running HP estimate per monster in the room: max HP less the damage the round
+        // ledger saw, plus regen, pulled into the wound band by every `look`.
+        MonsterHpEstimates = new Game.Combat.MonsterHpTracker(
+            MonsterHp.MaxHp, MonsterHp.HpRegen,
+            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud, log: Log);
+        RoomClassifier.EntitiesObserved += MonsterHpEstimates.NoteRoomEntities;
+        RoundDamage.Attributed += MonsterHpEstimates.NoteDamage;
         ItemMagic = new Game.Combat.ItemMagicIndex(GameData);
         SpellReqLevel = new Game.Combat.SpellReqLevelIndex(GameData);
         MonsterResist = new Game.Combat.MonsterResistIndex(GameData);

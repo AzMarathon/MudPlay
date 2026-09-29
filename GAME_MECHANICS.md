@@ -1018,7 +1018,7 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 - **Band → HP range.** For a band `[lo, hi)`: `Low = ceil(lo·M/100)`, `High = ceil(hi·M/100) − 1` — exactly the integer HP values that read as that band.
 - **Why the range is worth having.** Against a **high-HP boss with fast regen / self-heal**, the per-round scroll outpaces any attempt to tally HP by counting damage lines, so the wound band is the only reliable read of where the boss's "HP gate" sits.
 - **Client use:**
-  - Implemented in `MonsterLookParser` → status-bar `Target: min-max`.
+  - Implemented in `MonsterLookParser` → status-bar `TGT HP: min-max [~best guess]` and a terminal line with max HP, the band's range and the best guess; the best guess is `MonsterHpTracker`'s running estimate, pulled into the band (see *Monsters, lairs & spawns → Monster HP regen*).
   - Name→HP resolution goes through `RoomEntityClassifier.ResolveLookedMonsterNumber`, which prefers the monster variant actually in the room so shared names / adjective prefixes resolve to the right HP.
 
 ---
@@ -1375,6 +1375,14 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 - The per-monster overlay `Relationship` (`Enemy` / `Neutral` / `Friend` / `Flee` / `Hangup`) drives auto-combat. `Enemy` = engage on sight; `Neutral` = leave alone.
 - The **KillOnSight** flag (Monster edit dialog, shown only for `Neutral`) makes auto-combat **engage a neutral like an enemy** — but because neutrals never open on you, the *other* un-engaged neutrals still don't block resting, so between kills the engine rests/meditates (only when below the rest trigger) before turning on the next one.
 - **Hand-attacking a passive neutral.** If *you* hand-attack one (a manual swing or combat cast), it turns hostile per the mechanic above, so the client marks that instance user-engaged and the auto-combat engine **takes over finishing it** — treating it like an enemy until it dies (and holding the walker in the room) instead of stopping the moment you engaged it. It's keyed per-instance by name and pruned once the mob is gone, so it never leaks onto a freshly-arrived same-named passive neutral; the *other* un-engaged neutrals stay passive and rest-safe. `Enemy` monsters are unchanged.
+
+### Shared monster names — attacks and looks take the first
+*Status: CONFIRMED 2026-09-29 (user) · Realm: both*
+
+- **Monsters in a room are told apart by their name prefixes** (`large orc`, `nasty orc`). When two carry no prefix, or the same one, **an attack or a `look` at that shared name goes to the first monster of that name in the `Also here:` line**.
+
+**Client use:**
+- `MonsterHpTracker` credits damage at a shared name, and a look's band, to the first instance; a death removes the first, an arrival joins at the end.
 
 ### Monster target selection — who it swings at once fighting
 *Status: Stock CONFIRMED (stock DLL source, user-provided); Paradigm CONFIRMED (user writeup, Paradigm only; matches the Paradigm developer's write-up shared by the user 2026-09-27); realm split CONFIRMED 2026-09-26 (user) · Realm: differs — see bullets*
@@ -2572,6 +2580,17 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 - **An item at a 100% drop rate always drops to the floor, summoned or not** *([CONFIRMED] 2026-09-28, user)*.
 - **A monster summoned by a room trigger can be summoned again once it's dead, unless it has a regen timer** *([CONFIRMED] 2026-09-28, user)*. Its item dropping changes nothing: kill it, take the item, leave the room and come back, and it's there to kill for another. Examples: the golden lion key in the pyramid, and the monster guarding the dark elf city.
 - **Re-typing the summon keyword is *not* a known way to force a second monster** while one is already up.
+
+### Monster HP regen
+*Status: amount CONFIRMED 2026-09-29 (user, MMUD-Explorer's monster panel); cycle per MMUD-Explorer by the user's call 2026-09-29, `[CONFLICT — ask the user]` with the Stock DLL · Realm: differs*
+
+- **A hurt monster regains its `HPRegen` (Monsters table) every regen tick, for as long as it's alive and below max HP** *([CONFIRMED] 2026-09-29, user: a Newhaven giant rat has 12 HP and recovers 1 HP every 30 s while it's alive and hurt)*. Every monster has its own amount.
+- **The cycle, as the client uses it (MMUD-Explorer):** every **30 s / 6 rounds on Paradigm**, every **90 s / 18 rounds on Stock** — the same for every monster (`GMUD_MOB_HPREGEN_ROUNDS = 6`, `STOCK_MOB_HPREGEN_ROUNDS = 18`). *Client policy — the user chose MMUD-Explorer's figures for now (2026-09-29).*
+- **`[CONFLICT — ask the user]` The Stock 1.11p DLL regenerates every monster once per *slow tick*** — the same tick that pays player HP regen and bleeds a dropped player, 30 s by default and a sysop setting — not every 90 s *([OBSERVED] 2026-09-29, `wccmmud.dll` `_background_slow` → `_slow_update_monsters` / `_slow_update_monster`; the BBS polling loop steps through one monster per poll until the pass is done)*. `_slow_update_monster` adds the known-monster record's `+0x7c` (`HPRegen`: 1 on the giant rat) when HP is below max (`+0x78`: 12), capped at max; before that it subtracts a per-tick amount from another field (offset `0x14`, likely damage over time on the monster). The user also said every monster has its own cycle (2026-09-29), which neither source shows.
+- **A `look` shows a regen tick fired** *([CONFIRMED] 2026-09-29, user)* when the wound band improves between looks, or when the damage dealt says the band should have dropped and it didn't.
+
+**Client use:**
+- `MonsterHpTracker` keeps a running estimate per monster in the room (max HP less the round ledger's damage, plus regen), re-times the regen cycle when a look shows a tick fired, and pulls the estimate into each look's band (see *Health, resting & recovery → Looking at a monster — coarse wound bands*).
 
 ### Monster movement lines
 

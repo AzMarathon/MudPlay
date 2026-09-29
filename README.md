@@ -1,18 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.120.0**
-> - **Show combat round totals** works: after each round it prints a table of what everyone in the room dealt and took, plus an unknown row
-> - Poison ticks and other damage nobody dealt count only as damage you took
-> - Round totals and the Wire Inspector read every damage wording the engine uses (traps, falls, songs, "causing N damage"), and label the smash penalty
-> - A fall (failed jump) makes navigation re-check where you landed instead of assuming the planned room
-> - Session Stats' per-round damage counts only your own damage, no longer party members' hits or monster spells
-> - The Wire Inspector's Classified pane shows who each damage line was credited to, and the bug report carries the last 10 rounds
-> - The client's own yellow notices are never read as a monster arriving (a notice naming a dead monster made combat re-attack it)
-> - Auto-sell and sell detours count a stacked entry ("2 crude stone club") as every copy in it, so "Detour to sell if above" is reached
-> - A sell detour that's due but doesn't go says why in the program log and bug report
-> - "Detour to sell if above" left blank means no detour (a red warning shows beside it); 0 goes once above Min. to keep
-> - After a level-up, the Default-gear check waits for auto-train's `stat` instead of sending a second
+> **Version 3.121.0**
+> - `look <monster>` prints its max HP, the range its wounds give, and a best guess at its HP from the damage it's taken and its regen
+> - The status bar's TGT HP shows the look's range with the best guess in brackets, following the damage after the look
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
