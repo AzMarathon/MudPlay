@@ -104,14 +104,55 @@ public sealed class DialogService
     }
 
     // Bring an open window to the front: un-minimize first (a minimized window can't take
-    // focus), then activate.
+    // focus), then activate. Several Linux WMs won't restack an owned window above its
+    // siblings on Activate alone, so a momentary Topmost flip forces the raise (as
+    // WindowBehaviors does on click); a genuinely Topmost window is left as it is.
     public static void RaiseExisting(Window window)
     {
         ArgumentNullException.ThrowIfNull(window);
         if (window.WindowState == WindowState.Minimized)
             window.WindowState = WindowState.Normal;
+        if (window.Owner is not null && !window.Topmost)
+        {
+            window.Topmost = true;
+            window.Topmost = false;
+        }
         window.Activate();
     }
+
+    // A menu / hotkey / toolbar re-press on an open window: close it when it's already in
+    // front, else bring it forward. close is the window's own way out (Settings saves
+    // first); plain Close otherwise.
+    public static void RaiseOrClose(Window window, Action? close = null)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        if (IsInFront(window)) (close ?? window.Close)();
+        else RaiseExisting(window);
+    }
+
+    // Focused, or — while one of our windows has focus — above every window of ours it
+    // overlaps. A hotkey is usually pressed in the terminal, so the window it toggles is
+    // in plain view but not focused; focus alone would only ever "raise" it again.
+    private static bool IsInFront(Window window)
+    {
+        if (!window.IsVisible || window.WindowState == WindowState.Minimized) return false;
+        if (window.IsActive) return true;
+        if (Avalonia.Application.Current?.ApplicationLifetime
+            is not Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+            return false;
+        Window[] shown = desktop.Windows
+            .Where(w => w.IsVisible && w.WindowState != WindowState.Minimized)
+            .ToArray();
+        if (!shown.Any(w => w.IsActive)) return false;   // another app is in front
+        Window.SortWindowsByZOrder(shown);                // bottom first
+        Avalonia.PixelRect bounds = Bounds(window);
+        for (int i = Array.IndexOf(shown, window) + 1; i < shown.Length; i++)
+            if (Bounds(shown[i]).Intersects(bounds)) return false;
+        return true;
+    }
+
+    private static Avalonia.PixelRect Bounds(Window window)
+        => new(window.Position, Avalonia.PixelSize.FromSize(window.FrameSize ?? window.ClientSize, window.RenderScaling));
 
     // Keep an owned modeless child coupled to the main window through a taskbar
     // restore. On some Linux WMs the app-group's last-active window (e.g. the map)

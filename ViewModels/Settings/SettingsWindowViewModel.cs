@@ -15,10 +15,9 @@ namespace MudPlay.ViewModels.Settings;
 //   OK     = apply dirty sections, close.
 //   Apply  = apply dirty sections, stay open.
 //   Cancel / title-bar X = drop pending edits, close.
-//   Settings hotkey / menu re-press while open = raise the window to front
-//     (RaiseExisting); pending edits are left as-is, per CLAUDE.md's
-//     raise-to-front window policy. OK / Apply / Cancel are the only commit /
-//     discard paths.
+//   Settings hotkey / menu re-press while open = raise it when it's buried; when
+//     it's already in front, the same as OK (ApplyAndClose) — CLAUDE.md's
+//     window re-press policy.
 public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposable
 {
     private readonly ProfileService _profile;
@@ -106,8 +105,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     public bool IsCommitted { get; private set; }
 
     // Save path — apply every dirty section, then ask the host window to close.
-    // Called by the OK button AND by the MainWindow toggle-hotkey re-press path
-    // (per CLAUDE.md). When Confirm save settings is on, "No" returns to the
+    // Called by the OK button AND by a menu / hotkey re-press while the window is in
+    // front (MainWindowViewModel.RaiseOrClose). When Confirm save settings is on, "No" returns to the
     // editor with no save and no close.
     public async void ApplyAndClose()
     {

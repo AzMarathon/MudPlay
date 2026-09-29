@@ -113,7 +113,7 @@ The automation engines — Auto-Combat, Auto-Heal, Auto-Nuke, navigation looping
 
 # The Interface
 
-The **terminal** is the center of MudPlay — everything the game sends, rendered as a CP437/ANSI screen, and where everything you type is sent. Around it, every other panel is a **modeless window**: open it from the **View** menu, a **toolbar** icon, its **hotkey**, or the **terminal's right-click menu**. Pressing that same control again **brings the window to the front** if it's open but buried (behind another window or minimized); for **read-only windows** (Conversation, Log, Backscroll, Party, Buff Watchdog, Spell Book, Monster Intel, Session Stats, and the like) pressing it again while the window is **already focused/frontmost closes it** — so the same key both summons and dismisses. **Edit windows** (Settings, Workshop, Game Data, the macro/trigger editors) only ever raise; you close them with **Save** / **Cancel** / the title-bar **X** so pending edits are never lost. The terminal always stays live while you configure or check anything.
+The **terminal** is the center of MudPlay — everything the game sends, rendered as a CP437/ANSI screen, and where everything you type is sent. Around it, every other panel is a **modeless window**: open it from the **View** menu, a **toolbar** icon, its **hotkey**, or the **terminal's right-click menu**. Every window's control works the same way: if the window **isn't open**, it opens; if it's open but **buried** (behind another window, or minimized), it comes **to the front**; if it's **already in front** (focused, or on top with nothing covering it), it **closes** — so the same key both summons and dismisses. **Settings** saves your pending changes as it closes this way, just like **OK**; the title-bar **X** and **Cancel** still throw them away. A menu entry that opens a window at a particular tab (e.g. *Settings → Events*) switches an open window to that tab instead of closing it, unless it's already showing it. The terminal always stays live while you configure or check anything.
 
 ## The terminal and status bar
 
@@ -153,7 +153,7 @@ Select a placed entry (or folder) and type a **Name** to rename it however you l
 
 ## The windows
 
-Each is modeless; pressing its key again brings it to the front if it's already open. Default hotkeys are shown; all are rebindable.
+Each is modeless; pressing its key again brings it to the front if it's buried, or closes it if it's already in front. Default hotkeys are shown; all are rebindable.
 
 - **Navigation** (Alt+M) — the room map: where you are, your route lines, and the controls for GOTO, loops, and Auto-Lair.
 - **Backscroll** (Alt+L) — scroll back through terminal history, with search and export. See **Tools & Diagnostics** for how to use it.
@@ -874,7 +874,7 @@ For mana-regen classes, the caster can rest to regen and — if configured — r
 
 ## The Spell Book (F2)
 
-Press **F2** to open the **Spell Book** — a read-only reference to your class's spells. It's a lookup companion for the Spells settings, not a place you configure automation: use it to find a spell's cast-code and effect, then type that code into the pickers on **Settings → Spells**. F2 again closes it, and it updates itself as you play (type `spells` or `stat` in the game to refresh what it knows).
+Press **F2** to open the **Spell Book** — a read-only reference to your class's spells. It's a lookup companion for the Spells settings, not a place you configure automation: use it to find a spell's cast-code and effect, then type that code into the pickers on **Settings → Spells**. F2 again closes it (or brings it forward if it's buried), and it updates itself as you play (type `spells` or `stat` in the game to refresh what it knows).
 
 The list also respects your **alignment** — a Good-only, Evil-only, or Neutral-only spell you haven't learned yet stays hidden until your alignment actually matches it, everywhere the class list feeds (the book itself and the Settings → Spells pickers alike). An Evil-only spell needs you to be Outlaw or worse, so a Seedy character doesn't see one; on Stock, Seedy counts as Neutral for spells as it does for gear. A spell you've **already** learned never disappears, even if your alignment later drifts away from it — an alignment-quest reward stays yours.
 
@@ -1703,7 +1703,7 @@ This is the quick "what is it" summary; the full record (loot, every placement, 
 
 # Conversation
 
-Press **Alt+C** to open the **Conversation** window — a dedicated view of all the chat MudPlay pulls out of the terminal, with its own input box so you can talk without hunting for the game prompt. Alt+C again closes it.
+Press **Alt+C** to open the **Conversation** window — a dedicated view of all the chat MudPlay pulls out of the terminal, with its own input box so you can talk without hunting for the game prompt. Alt+C again closes it (or brings it forward if it's buried).
 
 ## The chat log
 
@@ -1743,7 +1743,7 @@ The window keeps its history even after you close it, and replays your last sess
 
 # Tools & Diagnostics
 
-A few smaller windows for reviewing your session and troubleshooting. Each is modeless and toggles closed when you press its key again.
+A few smaller windows for reviewing your session and troubleshooting. Each is modeless: pressing its key again brings it forward if it's buried, or closes it if it's already in front.
 
 ## Program Log (F4)
 
@@ -1798,7 +1798,7 @@ All of these reset with the rest of the session (connect, character switch, **Re
 
 ## Buff Watchdog
 
-Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. This is the **one place you configure every automated buff** — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts all live here now, in a single unified list — **and** it shows a live timer bar for each one as it runs. Re-selecting the menu item (or toolbar button) toggles it closed.
+Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. This is the **one place you configure every automated buff** — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts all live here now, in a single unified list — **and** it shows a live timer bar for each one as it runs. Re-selecting the menu item (or toolbar button) brings it forward if it's buried, or closes it if it's already in front.
 
 ### Building the buff list
 

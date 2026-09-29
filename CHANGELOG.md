@@ -1,5 +1,11 @@
 # Version history
 
+## 3.125.7
+
+- Every window's menu, hotkey and toolbar entry opens it, brings it forward when buried, or closes it when already in front
+- Settings saves on that close, like OK
+- Raising a window now brings it above the others on Linux window managers that ignored it
+
 ## 3.125.6
 
 - Settings → Combat: new "Only my totals" option under Show combat round totals prints just your own row each round
