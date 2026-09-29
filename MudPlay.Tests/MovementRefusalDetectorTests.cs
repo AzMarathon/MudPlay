@@ -333,6 +333,23 @@ public sealed class MovementRefusalDetectorTests : IDisposable
         Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
     }
 
+    // A fall usually means the move landed somewhere else: drop the prediction and
+    // re-check, whether the move is still pending or already confirmed.
+    [Theory]
+    [InlineData("You fall to the ground with a thud, taking 12 damage!")]
+    [InlineData("You take 12 damage from the fall!")]
+    public void FallLine_DropsThePredictionToSuspect(string line)
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        tracker.SetLocated(new RoomKey(1, 1));
+        tracker.NoteMoveSent("jump roof", cardinal: Direction.N);
+
+        detector.FeedTestLine(line);
+
+        Assert.Equal(RoomConfidence.Suspect, tracker.State.Confidence);
+        Assert.False(tracker.HasQueuedMoves);
+    }
+
     [Fact]
     public void RefusalFromNonPending_StateIsNoOp()
     {

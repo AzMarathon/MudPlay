@@ -5,6 +5,7 @@
 > - **Show combat round totals** works: after each round it prints a table of what everyone in the room dealt and took, plus an unknown row
 > - Poison ticks and other damage nobody dealt count only as damage you took
 > - Round totals and the Wire Inspector read every damage wording the engine uses (traps, falls, songs, "causing N damage"), and label the smash penalty
+> - A fall (failed jump) makes navigation re-check where you landed instead of assuming the planned room
 > - Session Stats' per-round damage counts only your own damage, no longer party members' hits or monster spells
 > - The Wire Inspector's Classified pane shows who each damage line was credited to, and the bug report carries the last 10 rounds
 > - The client's own yellow notices are never read as a monster arriving (a notice naming a dead monster made combat re-attack it)

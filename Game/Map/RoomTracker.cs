@@ -938,6 +938,20 @@ public sealed class RoomTracker
             "un-counting it so the tracker doesn't run a room ahead.");
     }
 
+    // A fall line — "You fall to the ground with a thud, taking N damage!" (a failed
+    // jump) or "You take N damage from the fall!" — usually means the move didn't
+    // land where it was headed (user, 2026-09-29). Drop the prediction and go Suspect,
+    // so the next room display is resolved from scratch rather than assumed to be the
+    // planned landing (and Paradigm asks `rm` when no engine is driving). Where the
+    // fall IS the plan (the map-12 pit jumps), the re-check just confirms the room.
+    public void NoteFell(DateTimeOffset? whenUtc = null)
+    {
+        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        if (State.Confidence is not (RoomConfidence.Confirmed or RoomConfidence.Pending)) return;
+        while (!_pending.IsEmpty) DropMostRecentPending();
+        EnterSuspect(when, "fell — the move may not have landed where it was headed");
+    }
+
     // A typed exit command (touch altar / enter portal / a teleport keyword) was
     // refused by a condition in its room script — monsters in the room, or a level /
     // alignment / item / price check — so it never moved us. Those refusal lines
