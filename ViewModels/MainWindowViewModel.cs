@@ -5095,7 +5095,8 @@ public partial class MainWindowViewModel : ObservableObject
                 svc.PlayerStats, svc.Inventory, svc.Spellbook, svc.ItemMagic,
                 svc.MonsterObservations, svc.PlayerState,
                 buffProvider: () => svc.Profile.Current?.PartyBuffs,
-                profile: svc.Profile),
+                profile: svc.Profile,
+                isBuffUp: svc.Conditions.IsActiveByName),
         };
         window.Closed += (_, _) => _monsterIntel = null;
         _monsterIntel = window;

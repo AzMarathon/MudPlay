@@ -118,6 +118,10 @@ public sealed record MonsterCatalogEntry(
     // TypeOfResists-1 spell be resisted outright.
     public bool AntiMagic => Abilities.Any(a => a.Code == 51);
 
+    // SeeHidden (ability 57) spots a sneaking or hidden character, so no
+    // surprise opener lands on it.
+    public bool SeesHidden => Abilities.Any(a => a.Code == 57);
+
     // The level this monster casts spellNumber at, or 0 when it doesn't cast it.
     //
     // Only real SPELL slots (AttType 2) and between-rounds spells count. On a spell

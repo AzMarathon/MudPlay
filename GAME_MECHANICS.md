@@ -1228,22 +1228,27 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 - The client keys off the first-line failure tell and, when *Run if BS fails* is on, flees on a detected failure (routed through the normal break-before-flee escape path).
 
 ### Backstab damage and accuracy
-*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (`_move_player_to_fighter`, `_calculate_attack`), matching MMUD-Explorer's Stock branch; Paradigm accuracy / defence from the Paradigm developer's source, damage from MMUD-Explorer's GreaterMUD branch, the swap and +min damage CONFIRMED 2026-09-27 (user) · Realm: differs*
+*Status: Stock [OBSERVED] `wccmmud.dll` 1.11p (`_move_player_to_fighter`, `_calculate_attack`), matching MMUD-Explorer's Stock branch; Paradigm accuracy / defence from the Paradigm developer's source, damage from MMUD-Explorer's GreaterMUD branch, the swap and +min damage CONFIRMED 2026-09-27 (user); the vs-monster defence, hit chance and DR rows from MMUD-Explorer's `CalculateAttackDefense` / `CalculateAttack` (2026-09-28), not yet traced in the DLL · Realm: differs*
 
 | Step | Stock | Paradigm |
 |---|---|---|
 | **Accuracy** | `(Stealth + AGL)/2 + BSAccu/2`, **+5** with class stealth or **−15** with race-only stealth, + the accuracy-ability bonus (highest of abilities 22 / 105 / 106), **−10** if you fought last round | `Stealth/3 + ((AGL − 50) + Level)/2 + 15 + BSAccu` + all accuracy abilities, **−15** if the weapon is too heavy |
 | **Defence (vs a player)** | — | `(AC + prev + Perception·0.8 + ward)/2 + shadow` |
+| **Defence (vs a monster)** *(MMUD-Explorer, both branches)* | `AC/4 + BSDefense` | `AC/4 + BSDefense` |
+| **Hit chance** | accuracy − defence, then the realm's floor / cap (8–99) and the monster's dodge | `100 − defence² / (accuracy²/140)`, then the floor / cap (2–100) and dodge |
 | **Base range** | the weapon's min / max with strength and +max damage, as for a normal hit | the same, plus **+min damage on the min** |
 | **Backstab range** | min `= 2·min + 2·Level + Stealth/10 + BS min (117)`; max `= 2·max + 2·Level + Stealth/10 + BS max (118)` | same |
 | **Race-only stealth** | ×75%, then ×`(Level + 100)/100` | ×75%, **no** level scale |
 | **Class stealth** | ×`(Level + 100)/100` | ×`(Level + 100)/100` |
 | **Min above max** | the max is **raised to** the min | the two **swap**: the min side (fed by +min damage and BS min) becomes the max, the max side (fed by +max damage and BS max) the min |
 | **Crit** | never | never |
+| **Monster's DR** *(MMUD-Explorer)* | taken off both ends of the range once (backstab has no after-roll multiplier) | taken off both ends once |
 
 - BSAccu is ability 116. All division truncates.
+- MMUD-Explorer also has a `AC + BSDefense` defence for a defender that sees hidden. That case doesn't arise against a monster: a see-hidden monster spots the sneak, so there's no surprise opener at all (see *Backstab*).
 
 **Client use:**
+- `BackstabMatchupCalculator` (Monster Intel's one-stab verdict, 2026-09-28): the min stab after DR against the monster's HP, the to-hit via `CombatCalculator.CalculateHitChance` with `isBackstab`.
 - `CombatCalculator.CalcBackstabAccuracy` / `CalcBSDamage`. Before 2026-09-27 the client left Stock's accuracy-ability bonus and race-only level scale out, didn't count +min damage on Paradigm, and swapped min / max on both realms.
 - Item Finder's Find Best normally scores each item alone against the current gear, which the swap / clamp defeats: several +min pieces can flip the range together while none does alone. For the backstab min / max criteria `TrialGearFinder.FindBestOfPasses` runs a pass per side (`CalcBSSides` — each side is a plain sum of its bonuses) plus the average and the criterion's own score, prices each complete set with `ItemDamageModel.BackstabOfPicks`, and keeps the best. "Backstab Dmg (avg)" needs none of this: a swap doesn't change the average.
 
@@ -2280,6 +2285,20 @@ How one damage spell cast against a monster is worked out.
 - **Same ability codes as the equip/buff resolvers:** AC 2/10, DR 7 [stored ×10], Dodge 34, Accuracy 22/105/106. Debuff values are stored signed ("-20"), so the fold takes the magnitude.
 - **Client use:**
   - Modelled only in Monster Intel's "Apply Debuffs" WHAT-IF (`MonsterDebuffCalculator` + the `MonsterMatchupCalculator` monster-swing model) — the app does NOT apply debuff stat effects during live combat; this is a preview.
+
+### Shadowform (spell 130) and buffs in the `stat` numbers
+*Status: mixed — per-fact tags inline · Realm: differs*
+
+- **A buff's Stealth shows in `stat` while it's up** *([CONFIRMED] 2026-09-28, user; capture: level-8 Gypsy, `stat` Stealth 83 → 90 after casting shadowform)*. So a projection built on the live `stat` Stealth must not add an active buff's Stealth again.
+- **Shadowform's abilities** *([OBSERVED] game data)*:
+  - **Stock (1.11p):** Stealth (27), a cast message (115) and ability 178.
+  - **Paradigm (1.9.1):** the same, plus BS accuracy (116) **+5** and BS min / max (117 / 118).
+  - Stealth and BS min / max carry AbilVal 0, so they take the spell's magnitude: **5, +1 per 3 levels** (cap 30). Level 8 gives **+7**, which matches the capture above.
+  - *Greater shadowform* (#5587, Paradigm, level 36) adds BS accuracy +10, Stealth +20 and removes spell 130.
+- **Ability 178 ("Shadowform") is only a `look` description** *([OBSERVED] `wccmmud.dll` 1.11p)*. Looking at a player or monster carrying it prints that long text in place of the normal description; no combat code reads it.
+
+**Client use:**
+- `BuffOffenseCalculator` folds the checked buffs in Monster Intel's "Apply Buffs" what-if, and skips a buff's Stealth while `ConditionTracker.IsActiveByName` says it's up.
 
 ### Condition Effects flags derive from the linked spell's ability codes
 *Status: CONFIRMED 2026-09-04 (user + game-data) · Realm: both (Paradigm 1.9.1 / Stock 1.11.p)*

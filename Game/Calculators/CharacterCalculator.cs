@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Quests;
+using MudPlay.Game.Spells;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Calculators;
@@ -525,9 +526,12 @@ public static class CharacterCalculator
     // on the attack. Each branch mirrors the corresponding path in
     // CharacterInfoSectionViewModel.ComputeDerivedCombat so Monster Intel's
     // rounds-to-kill and the Character Info sheet compute from one recipe.
+    // buff adds the what-if offense of buffs the caller assumes are up (see
+    // BuffOffenseCalculator); its accuracy joins the same highest-single rule
+    // Stock applies to every other accuracy source.
     public static PlayerMatchupProfile BuildMeleeAttackProfile(
         MudAttackType type, PlayerStats stats, IReadOnlyList<EquippedItem> worn,
-        EncumbranceReading encum, GameDataCache gameData)
+        EncumbranceReading encum, GameDataCache gameData, BuffOffense buff = default)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(worn);
@@ -539,6 +543,17 @@ public static class CharacterCalculator
         if (raceRow is JsonElement r) ApplyAbilityBonuses(combined, r, stats.Race);
         if (classRow is JsonElement c) ApplyAbilityBonuses(combined, c, stats.Class);
         EquipmentStatSummary t = combined.Totals;
+        if (buff.Any)
+        {
+            t.PlusAccuracy += buff.Accuracy;
+            if (buff.Accuracy > t.MaxSingleAbil22) t.MaxSingleAbil22 = buff.Accuracy;
+            t.PlusBSAccuracy += buff.BsAccuracy;
+            t.PlusBSMin += buff.BsMin;
+            t.PlusBSMax += buff.BsMax;
+            t.PlusMaxDamage += buff.MaxDamage;
+            t.PlusCrits += buff.Crits;
+        }
+        int stealth = stats.Stealth + buff.Stealth;
 
         RealmType realm = gameData.ActiveRealm;
         int nCombatLevel = classRow is JsonElement cr ? GetInt(cr, "CombatLVL") : 0;
@@ -550,6 +565,7 @@ public static class CharacterCalculator
         bool hasWeapon;
         int critChance = 0;
         int avgCritDamage = 0;
+        int bsMin = 0, bsMax = 0;
 
         switch (type)
         {
@@ -581,16 +597,18 @@ public static class CharacterCalculator
                 bool hasClassStealth = ClassCapabilities.ClassHasStealth(classRow);
                 int bsNormAccy = realm == RealmType.ParaMud ? t.TotalWornAccy + effectiveAbil22 : effectiveAbil22;
                 accuracy = CombatCalculator.CalcBackstabAccuracy(
-                    stats.Stealth, stats.Agility, stats.Level, stats.Strength, t.WeaponStrReq,
+                    stealth, stats.Agility, stats.Level, stats.Strength, t.WeaponStrReq,
                     t.PlusBSAccuracy, bsNormAccy, hasClassStealth, realm);
 
                 // WeaponMin/Max are 0 unarmed, which CalcBSDamage folds into the
                 // strength-only profile — a backstab still lands bare-handed, so
                 // gate HasWeapon on damage output rather than a weapon being worn.
                 BSDamageResult bsDmg = CombatCalculator.CalcBSDamage(
-                    stats.Level, stats.Stealth, stats.Strength, t.WeaponMin, t.WeaponMax,
+                    stats.Level, stealth, stats.Strength, t.WeaponMin, t.WeaponMax,
                     t.PlusBSMin, t.PlusBSMax, t.PlusMaxDamage, hasClassStealth, realm, t.PlusMinDamage);
                 avgDamage = (bsDmg.MinDamage + bsDmg.MaxDamage) / 2;
+                bsMin = bsDmg.MinDamage;
+                bsMax = bsDmg.MaxDamage;
                 swingsPerRound = 1;   // a backstab is always a single strike
                 hasWeapon = avgDamage > 0;
                 break;
@@ -653,7 +671,9 @@ public static class CharacterCalculator
             DamageResist: (int)t.PlusDR,
             CritChancePercent: critChance,
             AvgCritDamage: avgCritDamage,
-            MonsterDrMultiplier: CombatCalculator.DrMultiplierFor(type, realm));
+            MonsterDrMultiplier: CombatCalculator.DrMultiplierFor(type, realm),
+            BackstabMin: bsMin,
+            BackstabMax: bsMax);
     }
 
     // Maps a single MajorMUD ability ID + value onto the matching summary field

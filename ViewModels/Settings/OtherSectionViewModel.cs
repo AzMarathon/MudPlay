@@ -275,6 +275,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     {
         if (_profile.Current is not { } profile) return;
 
+        OtherSettings saved = ReadOrDefault();
         OtherSettings dto = new()
         {
             MaxSuicideLivesThreshold = Math.Clamp(MaxSuicideLivesThreshold, 0, 9),
@@ -286,10 +287,15 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             MaxComebackBacktrackRooms = Math.Clamp(MaxComebackBacktrackRooms, 1, 50),
             AutoRequestComebackWhenLeftBehind = AutoRequestComebackWhenLeftBehind,
             ShowMonsterHpLookup   = ShowMonsterHpLookup,
-            // Not edited on this tab (Monster Intel owns it directly) —
-            // carry the current Character-tier value through so Apply here
-            // doesn't reset it to the compile-time default.
-            RoundsToKillCap       = ReadOrDefault().RoundsToKillCap,
+            // Not edited on this tab (Monster Intel owns them directly) —
+            // carry the current Character-tier values through so Apply here
+            // doesn't reset them to the compile-time defaults.
+            RoundsToKillCap       = saved.RoundsToKillCap,
+            MonsterIntelHiddenAttacks = saved.MonsterIntelHiddenAttacks,
+            MonsterIntelRoundsAttack = saved.MonsterIntelRoundsAttack,
+            MonsterIntelAppliedDebuffs = saved.MonsterIntelAppliedDebuffs,
+            MonsterIntelAppliedBuffs = saved.MonsterIntelAppliedBuffs,
+            MonsterIntelBackstabSureHit = saved.MonsterIntelBackstabSureHit,
             // Drop rows with no item to wear (a rule with no action does nothing);
             // the rest persist as edited.
             LocationEquipRules    = LocationEquipRules
