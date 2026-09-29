@@ -243,6 +243,11 @@ public partial class GameDataTableSectionView : UserControl
             WildcardsButton.Content   = editable.WildcardsLabel ?? "Wildcards";
             WildcardsButton.IsVisible = true;
         }
+        if (editable.SeedCompareCommand is { } seedCompare)
+        {
+            SeedCompareButton.Command   = seedCompare;
+            SeedCompareButton.IsVisible = true;
+        }
         if (editable.ExportCommand is { } export)
         {
             ExportButton.Command   = export;

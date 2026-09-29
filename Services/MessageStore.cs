@@ -139,6 +139,21 @@ public sealed class MessageStore
         Delta.Save(AppPaths.MessagesFile(ActiveSet), Messages, _seed, _log, "Messages");
     }
 
+    // How the live catalogue departs from the seed it was built over.
+    public List<SeedDelta<MessageRecord>.Difference> SeedDifferences() => Delta.Compare(Messages, _seed);
+
+    // Put each of useSeed back to the seed (see SeedDelta.Revert) and persist — the saved
+    // delta shrinks by those messages, so they follow the seed again. Returns how many
+    // applied; an entry the catalogue has moved on from since it was listed is skipped.
+    public int RevertToSeed(IEnumerable<SeedDelta<MessageRecord>.Difference> useSeed)
+    {
+        SeedDelta<MessageRecord>.RevertResult result = Delta.Revert(Messages, _seed, useSeed);
+        if (result.Reverted == 0) return 0;
+        Messages.ReplaceAll(result.Records);
+        Save();
+        return result.Reverted;
+    }
+
     // Replace the catalogue with records and persist.
     public void Replace(IEnumerable<MessageRecord> records)
     {

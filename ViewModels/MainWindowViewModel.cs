@@ -3674,12 +3674,7 @@ public partial class MainWindowViewModel : ObservableObject
     // thing they were hunting for (reported on a fresh install with two clients open:
     // Profile Management opened behind another window and looked like nothing happened).
     // Closing is done through the window's own X / Cancel / Save controls.
-    private static void RaiseExisting(Avalonia.Controls.Window window)
-    {
-        if (window.WindowState == Avalonia.Controls.WindowState.Minimized)
-            window.WindowState = Avalonia.Controls.WindowState.Normal;
-        window.Activate();
-    }
+    private static void RaiseExisting(Avalonia.Controls.Window window) => DialogService.RaiseExisting(window);
 
     // Re-press behavior for READ-ONLY windows (no pending Save/Cancel state — Conversation,
     // LogPane, Backscroll, the reference/stat windows, help dialogs). If the window is

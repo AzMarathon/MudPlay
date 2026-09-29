@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
@@ -25,6 +26,10 @@ namespace MudPlay.ViewModels.GameData.Tables;
 // variants of one effect line) stack as cascaded windows the user drags apart if needed. Zero
 // matches surfaces a one-shot info dialog naming the spell so the user sees the gap rather than a
 // silent no-op.
+//
+// The Seed column and the "Differs from seed" filter show which spells' message records
+// aren't plain seed records; "Compare with seed…" opens them beside the seed's and puts
+// any the user picks back to it.
 public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditableTableSectionViewModel
 {
     private readonly GameDataCache _cache;
@@ -56,7 +61,12 @@ public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditabl
         "MinBase",
         "MaxBase",
         "Dur",
+        SeedColumn,
     };
+
+    // How the spell's linked message record(s) differ from the shipped seed; blank when
+    // they're plain seed records.
+    private const string SeedColumn = "Seed";
 
     public override string SearchKeyColumn => "Name";
 
@@ -65,6 +75,7 @@ public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditabl
         Title, "spell", "magery", "mana", "cast", "level", "code", "short", "target",
         // Ailment keywords the filter box understands (see RowMatches).
         "poison", "confuse", "blind", "hold", "ailment",
+        "seed", "differs", "compare", "revert", "restore",
     };
 
     public override string? FilterHint =>
@@ -80,6 +91,30 @@ public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditabl
 
     ICommand IEditableTableSectionViewModel.OpenEditCommand => OpenLinkedMessagesCommand;
 
+    // "Compare with seed…": the selected spells' message differences from the seed, or every
+    // spell-linked difference (removed seed records included) when nothing is selected.
+    // Concurrent executions allowed so a re-press while the dialog is open reaches the
+    // handler, which raises the open window instead of opening another.
+    public IAsyncRelayCommand CompareWithSeedCommand { get; }
+
+    ICommand? IEditableTableSectionViewModel.SeedCompareCommand => CompareWithSeedCommand;
+
+    private readonly BoolFilter _differsFromSeed = new(
+        "Differs from seed", SeedColumn, v => !string.IsNullOrEmpty(v),
+        "Only spells whose message isn't the plain seed record: your edited copy, flag / link " +
+        "changes, a message you added for the spell, or a seed message you deleted.");
+
+    // Spell-linked message differences and the Seed-column label per spell number. Built on
+    // the UI thread whenever the catalogue changes and swapped in whole, because the row
+    // build (ComputeRowCells) runs on a worker thread and must not read the live catalogue.
+    private List<SeedDelta<MessageRecord>.Difference> _spellDifferences = [];
+    private IReadOnlyDictionary<int, string> _seedStates = new Dictionary<int, string>();
+
+    private readonly NotifyCollectionChangedEventHandler? _messagesHandler;
+
+    // The open compare dialog, so a re-press raises it rather than opening a duplicate.
+    private MessageSeedCompareDialogViewModel? _openCompare;
+
     public SpellsSectionViewModel(
         GameDataCache cache,
         SettingsResolver? resolver = null,
@@ -91,6 +126,135 @@ public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditabl
         _dialogs  = dialogs;
         _ailments = new SpellAilmentIndex(cache);
         OpenLinkedMessagesCommand = new AsyncRelayCommand<GameDataRow?>(OpenLinkedMessagesAsync);
+        CompareWithSeedCommand = new AsyncRelayCommand(
+            CompareWithSeedAsync, () => _spellDifferences.Count > 0, AsyncRelayCommandOptions.AllowConcurrentExecutions);
+        FilterGroups.Add(new FilterGroup("Messages", bools: new[] { _differsFromSeed }));
+
+        if (_messages is not null)
+        {
+            RefreshSeedStates();
+            _messagesHandler = (_, _) => OnMessagesChanged();
+            _messages.Messages.CollectionChanged += _messagesHandler;
+        }
+    }
+
+    public override void Dispose()
+    {
+        if (_messages is not null && _messagesHandler is not null)
+            _messages.Messages.CollectionChanged -= _messagesHandler;
+        base.Dispose();
+    }
+
+    protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(JsonElement element)
+    {
+        if (!element.TryGetProperty("Number", out JsonElement num) || !num.TryGetInt32(out int number))
+            return null;
+        return _seedStates.TryGetValue(number, out string? state)
+            ? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) { [SeedColumn] = state }
+            : null;
+    }
+
+    private void RefreshSeedStates()
+    {
+        _spellDifferences = _messages is null
+            ? []
+            : _messages.SeedDifferences().Where(d => LinkedSpells(d).Any()).ToList();
+        _seedStates = SeedStatesBySpell(_spellDifferences);
+        CompareWithSeedCommand.NotifyCanExecuteChanged();
+    }
+
+    // A message edit anywhere can change a spell's Seed cell. Rebuild the rows only when
+    // some spell's state actually moved, and keep the user's selected spell selected.
+    private void OnMessagesChanged()
+    {
+        IReadOnlyDictionary<int, string> before = _seedStates;
+        RefreshSeedStates();
+        if (!IsLoaded || SameStates(before, _seedStates)) return;
+        string? selected = SelectedRow?.Get("Number");
+        Reload();
+        if (selected is not null) SelectRowMatching(r => r.Get("Number") == selected);
+    }
+
+    private static bool SameStates(IReadOnlyDictionary<int, string> a, IReadOnlyDictionary<int, string> b)
+        => a.Count == b.Count && a.All(kv => b.TryGetValue(kv.Key, out string? v) && v == kv.Value);
+
+    // The Spells numbers a difference's message is linked to — either side's Links, since
+    // an edited copy may have been re-linked.
+    internal static IEnumerable<int> LinkedSpells(SeedDelta<MessageRecord>.Difference d)
+        => new[] { d.Seed, d.Current }
+            .Where(r => r?.Links is not null)
+            .SelectMany(r => r!.Links!)
+            .Where(l => string.Equals(l.Table, "Spells", StringComparison.OrdinalIgnoreCase))
+            .Select(l => l.Number)
+            .Distinct();
+
+    // The Seed-column text per spell: each kind of difference its messages carry, once each.
+    internal static IReadOnlyDictionary<int, string> SeedStatesBySpell(IEnumerable<SeedDelta<MessageRecord>.Difference> differences)
+    {
+        Dictionary<int, SortedSet<SeedDifferenceKind>> kinds = new();
+        foreach (SeedDelta<MessageRecord>.Difference d in differences)
+            foreach (int spell in LinkedSpells(d))
+            {
+                if (!kinds.TryGetValue(spell, out SortedSet<SeedDifferenceKind>? set)) kinds[spell] = set = new();
+                set.Add(d.Kind);
+            }
+        return kinds.ToDictionary(kv => kv.Key, kv => string.Join(", ", kv.Value.Select(SeedLabel)));
+    }
+
+    private static string SeedLabel(SeedDifferenceKind kind) => kind switch
+    {
+        SeedDifferenceKind.Edited   => "text edited",
+        SeedDifferenceKind.Override => "fields edited",
+        SeedDifferenceKind.Added    => "yours only",
+        _                           => "removed",
+    };
+
+    private async Task CompareWithSeedAsync()
+    {
+        if (_dialogs is null || _messages is null) return;
+        if (_openCompare is not null && _dialogs.RaiseIfOpen(_openCompare)) return;
+
+        IReadOnlyList<GameDataRow> selection = SelectedRows.Count > 0
+            ? SelectedRows.ToList()
+            : (SelectedRow is null ? Array.Empty<GameDataRow>() : new[] { SelectedRow });
+
+        List<SeedDelta<MessageRecord>.Difference> differences =
+            _messages.SeedDifferences().Where(d => LinkedSpells(d).Any()).ToList();
+        if (selection.Count > 0)
+        {
+            HashSet<int> picked = new();
+            foreach (GameDataRow row in selection)
+                if (int.TryParse(row.Get("Number"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n))
+                    picked.Add(n);
+            differences = differences.Where(d => LinkedSpells(d).Any(picked.Contains)).ToList();
+            if (differences.Count == 0)
+            {
+                _dialogs.ShowInfo("Compare with seed",
+                    "The selected spells' messages are plain seed records — nothing to compare. " +
+                    "Clear the selection to compare every spell message that differs from the seed.");
+                return;
+            }
+        }
+        if (differences.Count == 0) return;
+
+        MessageSeedCompareDialogViewModel vm = new(differences, _messages.ActiveSet);
+        _openCompare = vm;
+        MessageSeedCompareResult? result;
+        try
+        {
+            result = await _dialogs.OpenWindowAsync<MessageSeedCompareDialogViewModel, MessageSeedCompareResult>(vm);
+        }
+        finally
+        {
+            _openCompare = null;
+        }
+        if (result is null) return;
+
+        int reverted = result.UseSeed.Count == 0 ? 0 : _messages.RevertToSeed(result.UseSeed);
+        int stale = result.UseSeed.Count - reverted;
+        AppServices.Current.Log.Info("Messages",
+            $"Compare with seed: reverted {reverted} spell message(s) to the seed, kept {result.Kept} of yours" +
+            (stale > 0 ? $"; {stale} changed since the comparison opened and were left as they are." : "."));
     }
 
     // Extend the base name/text filter with ailment-keyword matching: typing an
