@@ -101,6 +101,22 @@ public sealed class CombatLineClassifierTests
         => Assert.Equal(CombatLineKind.DamageYou,
             Classify("You are poisoned for 2 damage!", Red, bold: true));
 
+    // The smash penalty — a smash's secondary effect — and the engine's "just …"
+    // outcome wordings, read from the words since they carry no colour cue.
+    [Theory]
+    [InlineData("You are smashed to the ground!", CombatLineKind.SmashedYou)]
+    [InlineData("You smashed Bob to the ground!", CombatLineKind.SmashedOther)]
+    [InlineData("Bob is smashed to the ground defenseless!", CombatLineKind.SmashedOther)]
+    [InlineData("The orc is smashed to the floor defenseless!", CombatLineKind.SmashedOther)]
+    [InlineData("Bob's just glanced off of the orc's armour.", CombatLineKind.ArmorBlockOther)]
+    [InlineData("Bob just dodged an attack from the orc.", CombatLineKind.DodgeOther)]
+    [InlineData("The orc just missed an attack against Bob.", CombatLineKind.MonsterMissOther)]
+    [InlineData("You take 12 damage from the flames!", CombatLineKind.DamageYou)]
+    [InlineData("A bolt of lightning from the heavens strikes you for 12 points damage!", CombatLineKind.DamageYou)]
+    [InlineData("You sing the song of blasting, causing 40 damage to your foes!", CombatLineKind.PlayerHit)]
+    public void EngineOutcomeWordings(string line, CombatLineKind kind)
+        => Assert.Equal(kind, Classify(line, White));
+
     [Fact]
     public void NonCombatWhiteLine_IsNone()
         => Assert.Equal(CombatLineKind.None,

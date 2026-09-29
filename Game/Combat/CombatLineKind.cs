@@ -19,6 +19,8 @@ public enum CombatLineKind
     DodgeOther,        // someone else dodges a monster's swing
     MonsterMissYou,    // a monster swings at you and misses (no contact)
     MonsterMissOther,  // a monster swings at someone else and misses
+    SmashedYou,        // the smash penalty landed on you ("You are smashed to the ground!")
+    SmashedOther,      // it landed on someone else — your smash or another's
     Reflect,           // a worn thorns/ShockShield item strikes the attacker back
                        // ("The armour spikes stab <monster> for N damage!") — the
                        // monster is the victim, so it's our (or a party member's)

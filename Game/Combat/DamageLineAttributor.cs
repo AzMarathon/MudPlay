@@ -21,9 +21,31 @@ public static partial class DamageLineAttributor
 
     // A damage line: everything before " for N damage" is the part naming the two
     // sides. Anchored at the end so a quoted chat line carrying the phrase mid-line
-    // still has to end on it; chat is filtered by the caller in any case.
-    [GeneratedRegex(@"^(?<pre>.+?) for (?<dmg>\d+) damage[!.]\s*$", RegexOptions.CultureInvariant)]
+    // still has to end on it; chat is filtered by the caller in any case. "points
+    // damage" is the Stock evil-punishment / sysop lightning bolt.
+    [GeneratedRegex(@"^(?<pre>.+?) for (?<dmg>\d+) (?:points )?damage[!.]\s*$", RegexOptions.CultureInvariant)]
     private static partial Regex DamageLine();
+
+    // The other damage wordings in the Stock message table (spells, traps, hazards):
+    // "You take 12 damage from the flames!" / "You took 5 damage!" — also after a
+    // sentence ("The box snaps shut tightly. You take 8 damage!").
+    [GeneratedRegex(@"(?:^|[.!] )You (?:take|took) (?<dmg>\d+) (?:\w+ )?damage(?: from .+)?[!.]\s*$", RegexOptions.CultureInvariant)]
+    private static partial Regex YouTakeDamage();
+
+    // "The orc takes 20 acid damage!" / "Bob takes 8 damage from the fall!"
+    [GeneratedRegex(@"^(?<victim>.+?) takes (?<dmg>\d+) (?:\w+ )?damage(?<from> from .+)?[!.]\s*$", RegexOptions.CultureInvariant)]
+    private static partial Regex TakesDamage();
+
+    // "The flask explodes, causing 14 damage!" / "..., causing you 6 damage!" / "...
+    // upon the room, doing 30 damage!" / "A counterstrike at you does 9 damage!" /
+    // "You fall to the ground with a thud, taking 12 damage!" / "You sing the song of
+    // blasting, causing 40 damage to your foes!"
+    [GeneratedRegex(@"^(?<pre>.+?),? (?<how>causing|doing|does|taking) (?<you>you )?(?<dmg>\d+) damage(?: to your foes)?[!.]\s*$", RegexOptions.CultureInvariant)]
+    private static partial Regex EffectDamage();
+
+    // Stock's evil punishment / a sysop's punish command — no combatant dealt it (user,
+    // 2026-09-29).
+    private const string HeavensBolt = "A bolt of lightning from the heavens";
 
     // "you" as a whole word — never "your" / "yours".
     [GeneratedRegex(@"\byou\b(?!r)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
@@ -51,17 +73,66 @@ public static partial class DamageLineAttributor
 
     // Try to read line as a damage line. names are the other combatants that can be
     // named in it (room roster and party, not the local player); the longest match
-    // wins, so "large orc" beats "orc".
+    // wins, so "large orc" beats "orc". Heals ("healing 12 damage", "is healed of 12
+    // damage") match none of the shapes.
     public static bool TryAttribute(string line, IReadOnlyCollection<string> names, out DamageAttribution result)
     {
         result = default;
         if (string.IsNullOrWhiteSpace(line)) return false;
-        Match m = DamageLine().Match(line.Trim());
-        if (!m.Success || !int.TryParse(m.Groups["dmg"].Value, out int amount)) return false;
+        string text = line.Trim();
 
-        string pre = m.Groups["pre"].Value;
+        if (DamageLine().Match(text) is { Success: true } m && int.TryParse(m.Groups["dmg"].Value, out int amount))
+        {
+            string pre = m.Groups["pre"].Value;
+            result = pre.StartsWith(HeavensBolt, StringComparison.Ordinal)
+                ? new DamageAttribution(null, Self, amount, NoDealer: true)
+                : FromPre(pre, amount, names);
+            return true;
+        }
+
+        if (YouTakeDamage().Match(text) is { Success: true } take && int.TryParse(take.Groups["dmg"].Value, out amount))
+        {
+            result = new DamageAttribution(null, Self, amount, NoDealer: true);
+            return true;
+        }
+
+        if (TakesDamage().Match(text) is { Success: true } takes && int.TryParse(takes.Groups["dmg"].Value, out amount))
+        {
+            // A caster's own view of a spell ("The orc takes 20 acid damage!") names only
+            // the victim; a fall is damage nobody dealt.
+            string victimText = takes.Groups["victim"].Value;
+            int at = StartsWithWord(victimText, "The") ? 4 : 0;
+            string? victim = LongestNameAt(victimText, at, names) is { } v && at + v.Length == victimText.Length
+                ? v.Name : null;
+            bool fall = takes.Groups["from"].Value.Trim().Equals("from the fall", StringComparison.OrdinalIgnoreCase);
+            result = new DamageAttribution(null, victim, amount, NoDealer: fall);
+            return true;
+        }
+
+        if (EffectDamage().Match(text) is { Success: true } effect && int.TryParse(effect.Groups["dmg"].Value, out amount))
+        {
+            string pre = effect.Groups["pre"].Value;
+            if (effect.Groups["how"].Value == "taking")
+            {
+                // "You fall to the ground with a thud, taking 12 damage!": whoever the
+                // line starts with took it, and nobody dealt it.
+                int at = StartsWithWord(pre, "The") ? 4 : 0;
+                string? victim = StartsWithWord(pre, "You") ? Self
+                    : LongestNameAt(pre, at, names) is { } v ? v.Name : null;
+                result = new DamageAttribution(null, victim, amount, NoDealer: true);
+                return true;
+            }
+            // "causing you N damage" names us as the victim.
+            result = FromPre(effect.Groups["you"].Success ? pre + " you" : pre, amount, names);
+            return true;
+        }
+        return false;
+    }
+
+    // Name both sides from the part of a damage line before its amount.
+    private static DamageAttribution FromPre(string pre, int amount, IReadOnlyCollection<string> names)
+    {
         string? source = null;
-        string? target = null;
         int rest;
 
         if (StartsWithWord(pre, "You"))
@@ -70,10 +141,7 @@ public static partial class DamageLineAttributor
             // "You are poisoned" / "You combust for 12 damage!" (a bare verb with no one
             // after it): a condition or effect on us — nobody dealt it.
             if (PassiveAfterYou.Contains(next) || pre[3..].Trim().IndexOf(' ') < 0)
-            {
-                result = new DamageAttribution(null, Self, amount, NoDealer: true);
-                return true;
-            }
+                return new DamageAttribution(null, Self, amount, NoDealer: true);
             source = Self;
             rest = 3;
         }
@@ -81,14 +149,14 @@ public static partial class DamageLineAttributor
         {
             // "Your blood / life / soul is drained" is damage we took. Every other
             // "Your ..." damage line is our weapon or spell hitting something ("Your
-            // sword strikes the orc", "Your foes are drenched in acid").
+            // sword strikes the orc", "Your foes are drenched in acid") — unless it
+            // names us as the victim ("Your flesh dissolves, causing you 6 damage!").
             if (YourPartIsHit().IsMatch(pre))
-            {
-                result = new DamageAttribution(null, Self, amount, NoDealer: true);
-                return true;
-            }
-            result = new DamageAttribution(Self, FindTarget(pre, 4, names), amount);
-            return true;
+                return new DamageAttribution(null, Self, amount, NoDealer: true);
+            string? hit = FindTarget(pre, 4, names);
+            return hit == Self
+                ? new DamageAttribution(null, Self, amount)
+                : new DamageAttribution(Self, hit, amount);
         }
         else
         {
@@ -98,10 +166,7 @@ public static partial class DamageLineAttributor
                 // "Bob is scorched" / "The orc's life is drained": the name is the
                 // victim, and the line doesn't say who did it.
                 if (PassiveAfterName().IsMatch(pre[(start + lead.Length)..]))
-                {
-                    result = new DamageAttribution(null, lead.Name, amount);
-                    return true;
-                }
+                    return new DamageAttribution(null, lead.Name, amount);
                 source = lead.Name;
                 rest = start + lead.Length;
             }
@@ -111,14 +176,13 @@ public static partial class DamageLineAttributor
             }
         }
 
-        target = FindTarget(pre, rest, names);
+        string? target = FindTarget(pre, rest, names);
         // A named attacker with no victim named is the victim's own view of the hit —
         // the room sees "... at <victim> for N damage!" instead ("The mad wizard throws a
         // flask, which explodes for 5 damage!", report paradigm-20260928-231609; Stock
         // message 2431 has the same pair).
         if (source is not null && source != Self && target is null) target = Self;
-        result = new DamageAttribution(source, target, amount);
-        return true;
+        return new DamageAttribution(source, target, amount);
     }
 
     // The combatant the line names after position from: "you", or the known name

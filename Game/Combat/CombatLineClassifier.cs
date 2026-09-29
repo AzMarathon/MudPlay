@@ -95,15 +95,20 @@ public sealed class CombatLineClassifier : IDisposable
     {
         if (!inWindow || string.IsNullOrEmpty(text)) return CombatLineKind.None;
 
-        bool hit = HitDamage.IsMatch(text);
+        // Damage in any of the engine's wordings (DamageLineAttributor), colour-independent.
+        bool hit = DamageLineAttributor.TryAttribute(text, Array.Empty<string>(), out DamageAttribution a);
+
+        // Damage nobody dealt, on us: "You are poisoned for 2 damage!", "Your blood is
+        // drained", the heavens' punishment bolt.
+        if (hit && a.NoDealer && a.Target == DamageLineAttributor.Self) return CombatLineKind.DamageYou;
+
+        // The smash penalty landing — a secondary effect of a smash (user, 2026-09-29).
+        if (SmashedYouLine.IsMatch(text)) return CombatLineKind.SmashedYou;
+        if (SmashedOtherLine.IsMatch(text)) return CombatLineKind.SmashedOther;
 
         // The local player's own swing ("You hurl … for N damage!" / "You miss …!").
         if (text.StartsWith("You ", StringComparison.Ordinal))
         {
-            // "You are poisoned for 2 damage!" also starts "You" but hurts us.
-            if (hit && DamageLineAttributor.TryAttribute(text, Array.Empty<string>(), out DamageAttribution a)
-                && a.NoDealer)
-                return CombatLineKind.DamageYou;
             if (hit) return CombatLineKind.PlayerHit;
             if (IsCyan(fg)) return CombatLineKind.PlayerMiss;
             return CombatLineKind.None;
@@ -112,6 +117,15 @@ public sealed class CombatLineClassifier : IDisposable
         // Incoming / third-party. Addressing "you"/"your" marks it as against us;
         // otherwise it landed on another player.
         bool vsYou = You.IsMatch(text);
+
+        // Another fighter's outcome in the engine's "just …" wording, which carries no
+        // colour cue of its own.
+        if (text.Contains(" just glanced off of ", StringComparison.Ordinal))
+            return vsYou ? CombatLineKind.ArmorBlockYou : CombatLineKind.ArmorBlockOther;
+        if (text.Contains(" just dodged an attack from ", StringComparison.Ordinal))
+            return vsYou ? CombatLineKind.DodgeYou : CombatLineKind.DodgeOther;
+        if (text.Contains(" just missed an attack against ", StringComparison.Ordinal))
+            return vsYou ? CombatLineKind.MonsterMissYou : CombatLineKind.MonsterMissOther;
 
         if (hit)
         {
@@ -139,9 +153,13 @@ public sealed class CombatLineClassifier : IDisposable
         return CombatLineKind.None;
     }
 
-    // "… for N damage" is the hit marker, colour-independent.
-    private static readonly Regex HitDamage =
-        new(@"\bfor \d+ damage\b", RegexOptions.Compiled);
+    // "You are smashed to the ground!"
+    private static readonly Regex SmashedYouLine =
+        new(@"^You are smashed to the ground!", RegexOptions.Compiled);
+    // "You smashed Bob to the ground!" / "Bob is smashed to the ground defenseless!" /
+    // "The orc is smashed to the floor defenseless!"
+    private static readonly Regex SmashedOtherLine =
+        new(@"^(?:You smashed .+ to the ground!|.+ is smashed to the (?:ground|floor) defenseless!)", RegexOptions.Compiled);
     // "you" / "your" as an addressee — the us-vs-others split.
     private static readonly Regex You =
         new(@"\byou(?:r)?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -274,6 +292,8 @@ public sealed class CombatLineClassifier : IDisposable
     {
         CombatLineKind.PlayerHit        => "You Hit",
         CombatLineKind.DamageYou        => "Damage (you)",
+        CombatLineKind.SmashedYou       => "Smashed (you)",
+        CombatLineKind.SmashedOther     => "Smashed (other)",
         CombatLineKind.PlayerMiss       => "You Miss",
         CombatLineKind.MonsterHitYou    => "Monster Hit (you)",
         CombatLineKind.MonsterHitOther  => "Monster Hit (other)",
