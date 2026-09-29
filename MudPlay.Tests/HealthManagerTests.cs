@@ -909,6 +909,40 @@ public sealed class HealthManagerTests
         Assert.True(h.Health.RestInFlight);
     }
 
+    // A wear after the sit breaks the rest and resting again restarts its timer, so
+    // the rest gear goes on first and `rest` follows once it's worn (user,
+    // 2026-09-29).
+    [Fact]
+    public void RestGear_GoesOnBeforeTheRest()
+    {
+        using Harness h = new();
+        int swaps = 0;
+        bool worn = false;
+        h.Health.SetRestGearFirst(() =>
+        {
+            if (worn) return false;          // already on — nothing to swap
+            swaps++;
+            h.EquipmentApplying = true;
+            return true;
+        });
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 50;
+
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(1, swaps);
+        Assert.DoesNotContain("rest", h.SentLines);   // held for the swap
+        Assert.False(h.Health.RestInFlight);
+
+        worn = true;
+        h.EquipmentApplying = false;                  // the swap streamed
+        h.Health.Evaluate();
+
+        Assert.Contains("rest", h.SentLines);
+        Assert.True(h.Health.RestInFlight);
+        Assert.Equal(1, swaps);
+    }
+
     [Fact]
     public void ForceClear_ThenHostileReconfirmed_DoesNotRest()
     {

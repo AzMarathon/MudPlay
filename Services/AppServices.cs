@@ -5449,6 +5449,9 @@ public sealed class AppServices
         // `rest` between every command (the rest/stand thrash of a pre-rest gear swap,
         // report paradigm-20260825-103537).
         Health.SetEquipmentApplyingProbe(() => Equipment.IsApplyingSet);
+        // `rest` waits for the rest gear to go on first — a wear after the sit breaks
+        // the rest (AutoEquip is built further down; the lambda reads it at call time).
+        Health.SetRestGearFirst(() => AutoEquip.WearRestGearBeforeResting());
         // Anchor rest triggers/targets to the DEFAULT gear set's max HP/mana (so a
         // Pre-rest set that swaps a +MaxHP/+MaxMana item doesn't move the target the
         // user tuned against their normal loadout), capped by the current gear's real
@@ -6546,7 +6549,10 @@ public sealed class AppServices
             // a paused loop / walk still owns its gear), and its set comes off after the
             // user's idle delay.
             navIdle: () => MovementControl.State == Game.Map.MovementEngineState.Idle,
-            scheduleAfter: ScheduleOnce);
+            scheduleAfter: ScheduleOnce,
+            // A sit confirmed within a few seconds of a finished rest is that rest's
+            // tail, not a new one.
+            restJustEnded: () => Health.RecoveredWithin(TimeSpan.FromSeconds(5)));
         OutboundMovement.MoveSent += AutoEquip.OnMoveSent;
 
         // Per-game-data-set loop catalogue. Loops live

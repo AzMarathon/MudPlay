@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.123.1**
-> - Your message edits are kept on top of the shipped messages, so seed fixes still reach every message you haven't changed
-> - Added monster names are kept on top of the shipped monster list the same way
-> - Older per-set message files convert automatically on first load (old file kept as messages.json.pre-delta)
-> - Changing only a message's flags or links no longer detaches its text from the seed
+> **Version 3.123.3**
+> - A rest a regen tick finished before the game confirmed the sit no longer swaps in the pre-rest set, so the walk doesn't carry rest gear into the next fight
+> - The pre-rest set goes on before `rest` is sent, so the swap can't break the rest and restart its timer (meditation keeps the gear-after-sit order)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

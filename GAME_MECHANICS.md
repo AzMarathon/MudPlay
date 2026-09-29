@@ -925,6 +925,13 @@ How HP works from full health down through dropping and death, how monster healt
   - `HealthManager`'s confirm/interrupt latch (`_restInFlight` / `_restConfirmedByPrompt`) only recognized `PlayerPosition.Resting`, never `PlayerPosition.Meditating`. So a `meditate` send's confirmation step never fired, the interruption step's guard never tripped either, and the latch stuck `true` forever after a meditate got interrupted in place (no room move to fall back on and clear it via `NoteRoomChanged`).
   - Fixed by treating Resting and Meditating as the same "in a resting-family position" state for the confirm/interrupt check. `rest` was never affected, since its position always matched.
 
+### Gear swaps interrupt resting, not meditating
+*Status: see inline tags · Realm: Paradigm observed; rest rule from the user*
+
+- **Wearing or removing gear stands a resting character up, and resting again restarts the rest timer from full** *([CONFIRMED] 2026-09-29, user)*: every `wear` / `eq` / `rem`.
+- **Meditation isn't broken by a swap** *([OBSERVED] 2026-09-29, report `paradigm-20260929-115648`: `(Meditating)` held through eight `wear` / `eq` / `rem` commands)*.
+- **Client use:** the pre-rest set goes on before `rest` is sent — `HealthManager` asks `AutoEquipCoordinator.WearRestGearBeforeResting` and holds the rest while the swap streams. For `meditate` the gear follows the sit.
+
 ### ShadowRest
 *Status: CONFIRMED (user) · Realm: Paradigm (not present in stock)*
 

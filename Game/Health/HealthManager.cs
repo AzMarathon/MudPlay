@@ -523,6 +523,16 @@ public sealed class HealthManager : IDisposable
         _equipmentApplying = equipmentApplying;
     }
 
+    // Wire the "wear the rest gear first" hook (AutoEquipCoordinator
+    // .WearRestGearBeforeResting): true when it started a swap, which the `rest` then
+    // waits out (see the send site).
+    public void SetRestGearFirst(Func<bool> wearRestGearFirst)
+    {
+        ArgumentNullException.ThrowIfNull(wearRestGearFirst);
+        _wearRestGearFirst = wearRestGearFirst;
+    }
+    private Func<bool>? _wearRestGearFirst;
+
     // Wire the rest-target pool ceilings (see the _defaultSetMax* / _realMax* fields).
     // Both providers are optional — unset leaves the pre-existing live-max behaviour.
     public void SetRestPoolMaxProviders(
@@ -688,6 +698,11 @@ public sealed class HealthManager : IDisposable
     // standing / idly resting), so blessing defers to recovery unless the user
     // opts into "bless while resting."
     public bool IsRecoveringRest => _hpGateAsserted || _maGateAsserted;
+
+    // A rest we sent finished (the pools reached their targets) within window — for a
+    // sit the server confirms only after that, which is the tail of a finished rest.
+    public bool RecoveredWithin(TimeSpan window) => _now() - _recoveredAt <= window;
+    private DateTimeOffset _recoveredAt = DateTimeOffset.MinValue;
 
     // True between the rest emit and the corresponding stand emit.
     public bool RestInFlight => _restInFlight;
@@ -1443,12 +1458,26 @@ public sealed class HealthManager : IDisposable
             string restReason = anyGateConfirmed ? ""
                 : leaderWaitedRest ? " (waited — resting to use the downtime)"
                 : " (opportunistic, leader resting)";
-            SendChained(s.PreRestCommand);
-            SendCommand(command);
-            _log?.Combat(LogCategory,
-                $"{command}{restReason} " +
-                $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
-            _restInFlight = true;
+            // Every wear stands a resting character up, and resting again starts the
+            // rest's timer over (user, 2026-09-29) — so the rest gear goes on first and
+            // `rest` follows once the swap has streamed (the swap-done re-evaluate sends
+            // it, the gear already worn). Meditation survives a swap, so it goes out now
+            // and its gear follows the sit.
+            if (command == "rest" && _wearRestGearFirst?.Invoke() == true)
+            {
+                _log?.Combat(LogCategory,
+                    $"rest held — wearing the rest gear first so the swap can't break the rest " +
+                    $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+            }
+            else
+            {
+                SendChained(s.PreRestCommand);
+                SendCommand(command);
+                _log?.Combat(LogCategory,
+                    $"{command}{restReason} " +
+                    $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+                _restInFlight = true;
+            }
         }
         else if (!shouldRest && _restInFlight)
         {
@@ -1456,6 +1485,7 @@ public sealed class HealthManager : IDisposable
             _log?.Combat(LogCategory,
                 $"recovered hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
             _restInFlight = false;
+            _recoveredAt = _now();
             _restConfirmedByPrompt = false;
         }
 
