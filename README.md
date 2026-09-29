@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.125.9**
-> - Game Data item window: options grouped by what they do, every box explained on hover, no splitter to drag, and it remembers its size
+> **Version 3.125.10**
+> - Game Data item and monster windows: options grouped by what they do, every box explained on hover, no splitter to drag, and they remember their size
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

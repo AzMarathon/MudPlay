@@ -1,8 +1,8 @@
 # Version history
 
-## 3.125.9
+## 3.125.10
 
-- Game Data item window: options grouped by what they do, every box explained on hover, no splitter to drag, and it remembers its size
+- Game Data item and monster windows: options grouped by what they do, every box explained on hover, no splitter to drag, and they remember their size
 
 ## 3.125.8
 
