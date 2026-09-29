@@ -1,5 +1,12 @@
 # Version history
 
+## 3.123.0
+
+- Party members' HP moves between `par` polls: damage seen on them comes off, heals seen landing on them go on
+- Heals without a printed amount count the spell's average at the caster's level (lowest level when unknown)
+- `par` and @health replies reset the estimate; party heals react within the round
+- Bug report shows each member's HP estimate against the last `par`
+
 ## 3.122.12
 
 - Session Stats shows Exp needed (with the target level) and Will level in, off the same countdown as the status bar TNL

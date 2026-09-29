@@ -1157,6 +1157,10 @@ public sealed class AppServices
     // CombatSessionTracker consume the RoundComplete event.
     public Game.Combat.RoundDamageTracker RoundDamage { get; private set; } = null!;
 
+    // Party members' HP between `par` polls, from the damage and heals seen landing on
+    // them. Set right after RoundDamage, whose damage lines it reads.
+    public Game.PartyHpEstimator PartyHp { get; private set; } = null!;
+
     // Aggregates combat lines + RoundDamage rounds
     // into the session combat figures (hit / miss / crit / dodge rates,
     // physical & backstab damage extents, per-round damage) the Session
@@ -3597,6 +3601,15 @@ public sealed class AppServices
         RoundDamage.SetNameSources(
             partyNames: () => PartyState.Members.Select(m => m.Name),
             selfName: () => Party.LocalCharacterName ?? Profile.Current?.Name);
+        // Party HP between polls: the ledger's damage on members plus the heals seen
+        // landing on them. The heal reader comes from the Spells table + message
+        // catalogue, so a set switch or a message edit rebuilds it on next use.
+        PartyHp = new Game.PartyHpEstimator(Router, RoundDamage, Party,
+            buildReader: BuildHealLineReader,
+            ownLevel: () => Stats.HasParsed ? PlayerStats.Level : 0,
+            log: Log);
+        GameData.ActiveSetChanged += _ => PartyHp.Invalidate();
+        Messages.Messages.CollectionChanged += (_, _) => PartyHp.Invalidate();
         // Settings → Combat "Show combat round totals": print each round's ledger
         // as a table (read per round, so the checkbox applies at once). One notice for
         // all its lines, so no blank line falls between them.
@@ -9249,6 +9262,14 @@ public sealed class AppServices
             ReadSection<Models.Profile.HealthSettings>(Profile.Current, "Health");
         int floor = (int)Math.Round(maxMa * (health.BlessIfAboveMa / 100.0));
         return PlayerState.Ma - cost >= floor;
+    }
+
+    private Game.Spells.HealLineReader BuildHealLineReader()
+    {
+        IReadOnlyList<Game.Spells.HealSpell> heals = GameData.GetRawTable("Spells") is { } doc
+            ? Game.Spells.HealLineReader.InstantHeals(doc.RootElement)
+            : Array.Empty<Game.Spells.HealSpell>();
+        return new Game.Spells.HealLineReader(heals, Messages.Messages);
     }
 
     // Find the active set's Models.GameData.MessageRecord

@@ -1976,6 +1976,19 @@ How one damage spell cast against a monster is worked out.
     party-settings heal, regardless of which spell sits in the slot: it can't know per-spell whether a
     self-cast is legal, and the caster's own dips are the Spells + Ailments self-heal slots' job anyway.
 
+### Heal lines — who was healed, and by how much
+*Status: see inline tags · Realm: both (Stock message table `wccmsg2` and the Paradigm 1.9.1 message seed carry the same heal wordings)*
+
+- **A party heal (`Spells.Targets` 13) heals every party member by the amount the caster's line shows** *([CONFIRMED] 2026-09-29, user)*: `You cast {spellname} on your party, healing {damage} damage!` means each member got that much. The party is always in one room (*Party → Co-location and the `Also here:` line*), so "every member" is the whole party.
+- **Only some views of a heal carry its amount** *([OBSERVED] 2026-09-29, Stock `wccmsg2` messages 15 / 109 / 127 / 317 / 8250 and the Paradigm message seed)*:
+  - the caster's line of a single-target heal: `You cast {spellname} on {target}, healing {damage} damage!` (minor healing), `… for {damage} healing!` (major healing), `…, regenerating {damage} damage!` (mend), `… closing their wounds for {damage} damage!` (close wounds);
+  - the "is healed of" family, in every view: `{target} is healed of {damage} damage!` / `You are healed of {damage} damage!` (white satin gloves, annointed hands, divine healing);
+  - the NPC healer: `The healer heals you of %d damage!` / `The healer heals %s of %s damage!` (Stock message 317).
+- **Everyone else sees no number:** the room's `{source} casts {spellname} on {target}!`, a party heal's `{source} casts {spellname} on the room!`, and the target's own `{source} casts {spellname} on you!`. That generic cast line is shared by every targeted spell, so it's a heal only when `{spellname}` is one.
+- **Heals with a duration (`Dur` > 0) heal over time** — `regeneration`, `righteousness`, `rejuvinating field`, `song of life` — so a single line doesn't say how much they'll restore. `Targets` 1 heals (potions, fungus, food) only ever heal the user. *([OBSERVED] 2026-09-29, Paradigm 1.9.1 and 1.11p `Spells` data)*
+- **Which view a party member gets for another member's party heal** *[NEEDS CONFIRMATION]*: the record's target line (`{source} casts {spellname} on you, healing {damage} damage!`) or the room line (`{source} casts {spellname} on the room!`)? The client reads either without double-counting only if a member never gets both for one cast.
+- **Client use:** `HealLineReader` recognises instant (`Dur` 0) heal spells' caster and witness lines, plus a party heal's target line (every member got that amount, per the first rule). It leaves out heals that also carry a damage or drain ability (who gained the HP is ambiguous) — **Client policy**. `PartyHpEstimator` adds the heal to the member between `par` polls: the line's number when it has one, otherwise the spell's average heal at the caster's known level (the spell's lowest level when the caster's level is unknown — **Client policy**, so an unknown heal is never over-counted). A party heal is applied only when it was our party's: our cast, the target line, or a caster who is in our party — **Client policy**.
+
 ### Item-cast spells — how a `CastsSp` fires (on-use vs combat proc)
 *Status: CONFIRMED 2026-07-18 (user); message-record rules CONFIRMED (user + item panels)*
 

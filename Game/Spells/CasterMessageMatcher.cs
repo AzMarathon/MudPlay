@@ -212,6 +212,52 @@ public sealed class CasterMessageMatcher
         Match m = _regex.Match(line);
         if (!m.Success) return false;
 
+        damage = FirstNumber(m) ?? 0;
+        return true;
+    }
+
+    // How many name captures (every placeholder but the numeric ones) the template has.
+    public int NameCaptureCount => _stringGroupIndexes.Length;
+
+    // Whether the template pins each semantic slot, and whether it carries a number.
+    public bool PinsTarget => IndexOfRole(PlaceholderRole.Target) >= 0;
+    public bool PinsSpell => IndexOfRole(PlaceholderRole.Spell) >= 0;
+    public bool PinsSource => IndexOfRole(PlaceholderRole.Source) >= 0;
+    public bool HasNumber => _numberGroupIndexes.Length > 0;
+
+    // Match the line and hand back every capture by what it is: the names in template
+    // order, the pinned {spellname} / {target} / {source} slots (null when the template
+    // doesn't pin one), and the first number (null when there's none). For a reader
+    // that has to work out from the line alone who was involved, rather than confirm a
+    // cast it already knows about.
+    public bool TryMatchCaptures(string? line, out MessageCaptures captures)
+    {
+        captures = default;
+        if (string.IsNullOrEmpty(line)) return false;
+
+        Match m = _regex.Match(line);
+        if (!m.Success) return false;
+
+        string[] names = new string[_stringGroupIndexes.Length];
+        for (int i = 0; i < _stringGroupIndexes.Length; i++)
+            names[i] = m.Groups[_stringGroupIndexes[i]].Value.Trim();
+        captures = new MessageCaptures(
+            names,
+            Spell:  CaptureOf(names, PlaceholderRole.Spell),
+            Target: CaptureOf(names, PlaceholderRole.Target),
+            Source: CaptureOf(names, PlaceholderRole.Source),
+            Number: FirstNumber(m));
+        return true;
+    }
+
+    private string? CaptureOf(string[] names, PlaceholderRole role)
+    {
+        int i = IndexOfRole(role);
+        return i >= 0 ? names[i] : null;
+    }
+
+    private int? FirstNumber(Match m)
+    {
         foreach (int gi in _numberGroupIndexes)
         {
             string raw = m.Groups[gi].Value;
@@ -221,12 +267,9 @@ public sealed class CasterMessageMatcher
                     System.Globalization.NumberStyles.AllowLeadingSign,
                     System.Globalization.CultureInfo.InvariantCulture,
                     out int v))
-            {
-                damage = v;
-                break;
-            }
+                return v;
         }
-        return true;
+        return null;
     }
 
     // True when the line matches AND a capture equals target (case-insensitive,

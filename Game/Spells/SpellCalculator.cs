@@ -52,6 +52,17 @@ public static class SpellCalculator
         => Scaled(spell, level, healsInstead: false, useMax: true, resolveChain, energyRem: 0,
                   applyEnergyMultiplier: false, visited: null, default);
 
+    // Single-cast healing: what one landed heal restores, not the per-round total. A
+    // heal line reports one cast, so the energy multiplier doesn't apply; and a heal
+    // never chains (the chained end-cast is always computed as damage).
+    public static long SingleCastMinHeal(in SpellFormulaInput spell, int level)
+        => Scaled(spell, level, healsInstead: true, useMax: false, resolveChain: null, energyRem: 0,
+                  applyEnergyMultiplier: false, visited: null, default);
+
+    public static long SingleCastMaxHeal(in SpellFormulaInput spell, int level)
+        => Scaled(spell, level, healsInstead: true, useMax: true, resolveChain: null, energyRem: 0,
+                  applyEnergyMultiplier: false, visited: null, default);
+
     // Minimum per-round healing at level.
     public static long MinHeal(in SpellFormulaInput spell, int level,
         Func<int, SpellFormulaInput?>? resolveChain = null,
