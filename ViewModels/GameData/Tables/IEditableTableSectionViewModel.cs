@@ -57,8 +57,8 @@ public interface IEditableTableSectionViewModel
     ICommand? WildcardsCommand => null;
     string? WildcardsLabel => null;
 
-    // Optional "Compare with seed…" button next to Add / Remove. Only the Incomplete
-    // Messages tab uses it; the command's CanExecute greys the button out while nothing
-    // differs from the shipped seed.
+    // Optional "Compare with seed…" button next to the filter box. Only the Spells tab uses
+    // it; the command's CanExecute greys the button out while no spell message differs
+    // from the shipped seed.
     ICommand? SeedCompareCommand => null;
 }

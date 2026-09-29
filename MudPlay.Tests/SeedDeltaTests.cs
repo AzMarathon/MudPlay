@@ -5,6 +5,7 @@ using System.Linq;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
+using MudPlay.ViewModels.GameData.Tables;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -392,6 +393,30 @@ public sealed class SeedDeltaTests : IDisposable
         // The set switched: the seed record isn't in this seed.
         MessageRecord[] otherSeed = { Rec("alpha", "You cast alpha.", 1) };
         Assert.Equal(0, Delta.Revert(new[] { edited }, otherSeed, new[] { diff }).Reverted);
+    }
+
+    [Fact]
+    public void SpellsTab_SeedStatePerSpell_CoversEachKindAndBothSidesLinks()
+    {
+        MessageRecord a = Rec("alpha", "You cast alpha.", 1);
+        MessageRecord b = Rec("bravo", "You cast bravo.", 2);
+        MessageRecord c = Rec("charlie", "You cast charlie.", 3);
+        MessageRecord d = Rec("delta", "You cast delta.", 4);
+        MessageRecord[] seed = { a, b, c, d };
+        MessageRecord itemProc = Rec("proc", "Your blade flares.", 0) with { Links = new[] { new GameDataLink("Items", 9) } };
+        // An extra message the user added for spell 1 beside its seed record.
+        MessageRecord mineForAlpha = Rec("alpha", "You cast alpha loudly.", 1);
+        MessageRecord[] current = { a, EditText(b, "my bravo"), c with { CastResponse = "^M" }, mineForAlpha, itemProc };
+
+        List<SeedDelta<MessageRecord>.Difference> diffs = Delta.Compare(current, seed);
+        IReadOnlyDictionary<int, string> states = SpellsSectionViewModel.SeedStatesBySpell(diffs);
+
+        Assert.Equal("yours only", states[1]);
+        Assert.Equal("text edited", states[2]);
+        Assert.Equal("fields edited", states[3]);
+        Assert.Equal("removed", states[4]);
+        Assert.Equal(4, states.Count);   // the item-linked record belongs to no spell
+        Assert.Empty(SpellsSectionViewModel.LinkedSpells(diffs.Single(x => ReferenceEquals(x.Current, itemProc))));
     }
 
     [Fact]

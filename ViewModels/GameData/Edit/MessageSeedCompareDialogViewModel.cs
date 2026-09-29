@@ -9,7 +9,7 @@ using MudPlay.ViewModels.Import;
 
 namespace MudPlay.ViewModels.GameData.Edit;
 
-// Game Data Browser → Incomplete Messages → "Compare with seed…". Lists each message that
+// Game Data Browser → Spells → "Compare with seed…". Lists each spell message that
 // differs from the shipped seed with the seed's record beside the user's, and lets the
 // user put any of them back to the seed. Nothing changes until Apply; Cancel or the
 // title-bar X discards every pick.

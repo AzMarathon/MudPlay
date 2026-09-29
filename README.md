@@ -2,9 +2,9 @@
 
 <!-- current-version:start -->
 > **Version 3.124.0**
-> - Messages tab: new Differs from seed filter lists every message you edited, re-flagged or added
-> - Messages tab: new Seed column marks how each record differs from the shipped seed
-> - Compare with seed… shows your messages beside the seed's, field by field, and puts any you pick back to the seed (deleted seed messages can be restored)
+> - Spells tab: new Seed column shows when a spell's message differs from the shipped seed (text edited, fields edited, yours only, removed)
+> - Spells tab: new Differs from seed filter lists only those spells
+> - Spells tab: Compare with seed… shows your spell messages beside the seed's, field by field, and puts any you pick back to the seed (deleted seed messages can be restored)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

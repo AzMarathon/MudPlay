@@ -22,6 +22,10 @@ public sealed class DialogService
     private readonly Dictionary<Type, Func<Window>> _windowFactories = new();
     private Window? _mainWindow;
 
+    // The window hosting each open dialog, keyed by its view-model, so a caller that holds
+    // only the VM can raise its window on a re-press (see RaiseIfOpen).
+    private readonly Dictionary<object, Window> _openByViewModel = new(ReferenceEqualityComparer.Instance);
+
     // Record the application's main window so dialogs can be owned by it. Called
     // once during app startup from App.OnFrameworkInitializationCompleted.
     public void SetMainWindow(Window mainWindow)
@@ -76,14 +80,37 @@ public sealed class DialogService
             tcs.TrySetResult(default);
             viewModel.CloseRequested -= OnCloseRequested;
             window.Closed -= OnWindowClosed;
+            _openByViewModel.Remove(viewModel);
         }
 
         viewModel.CloseRequested += OnCloseRequested;
         window.Closed += OnWindowClosed;
+        _openByViewModel[viewModel] = window;
 
         AttachRestoreOwnerOnActivate(window);
         window.Show(_mainWindow);
         return tcs.Task;
+    }
+
+    // Raise the window hosting viewModel if it's still open; false when it isn't. Lets a
+    // command that opens a dialog bring the existing one forward on a re-press instead of
+    // opening a duplicate (CLAUDE.md's raise-to-front rule) — it never closes or commits.
+    public bool RaiseIfOpen(object viewModel)
+    {
+        ArgumentNullException.ThrowIfNull(viewModel);
+        if (!_openByViewModel.TryGetValue(viewModel, out Window? window)) return false;
+        RaiseExisting(window);
+        return true;
+    }
+
+    // Bring an open window to the front: un-minimize first (a minimized window can't take
+    // focus), then activate.
+    public static void RaiseExisting(Window window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        if (window.WindowState == WindowState.Minimized)
+            window.WindowState = WindowState.Normal;
+        window.Activate();
     }
 
     // Keep an owned modeless child coupled to the main window through a taskbar

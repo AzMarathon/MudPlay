@@ -32,7 +32,7 @@
     </UserControl.Styles>
 
     <!-- Table content, a drag handle, and the filter sidebar. Tables that expose
-         no filters (all but Monsters and Incomplete Messages) have HasFilterPanel = false, so
+         no filters (all but Monsters and Spells) have HasFilterPanel = false, so
          the splitter and sidebar collapse (their Auto/0 columns shrink to nothing)
          and the layout looks exactly as before. The sidebar column's width is set
          in code-behind and the GridSplitter resizes it. -->
@@ -120,9 +120,9 @@
                     <Button x:Name="RemoveButton" Content="Remove" IsVisible="False"/>
                     <!-- Optional "Wildcards" viewer (Triggers tab only); wired in code-behind. -->
                     <Button x:Name="WildcardsButton" Content="Wildcards" IsVisible="False"/>
-                    <!-- Optional "Compare with seed…" (Incomplete Messages tab); wired in code-behind. -->
+                    <!-- Optional "Compare with seed…" (Spells tab); wired in code-behind. -->
                     <Button x:Name="SeedCompareButton" Content="Compare with seed…" IsVisible="False"
-                            ToolTip.Tip="Compare the selected messages (or, with none selected, every message that differs) with the shipped seed, and put any back to it"/>
+                            ToolTip.Tip="Compare the selected spells' messages (or, with none selected, every spell message that differs) with the shipped seed, and put any back to it"/>
                     <!-- Optional soft "Dismiss" (Unrecognized Lines tab); wired in code-behind. -->
                     <Button x:Name="DismissButton" Content="Dismiss" IsVisible="False"/>
                 </StackPanel>
