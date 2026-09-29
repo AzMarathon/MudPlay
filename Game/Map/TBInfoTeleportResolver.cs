@@ -47,10 +47,10 @@ public static class TBInfoTeleportResolver
     // gate) so the user can see how to traverse a teleport-bypassed door without
     // opening the game data browser.
     //
-    // A "minlevel N [failTB]" directive anywhere in the same line gates the
-    // teleport: the player must be level ≥ N or the game jumps to the fail
-    // textblock instead of teleporting. We surface N (the fail textblock id is
-    // irrelevant to the walker).
+    // A "minlevel N [failMessage]" directive anywhere in the same line gates the
+    // teleport: the player must be level ≥ N or the game prints the fail message
+    // instead of teleporting. We surface N (MovementRefusalDetector recognises the
+    // message itself).
     public static IEnumerable<(string Keyword, RoomKey Destination, int MinLevel)>
         EnumerateTeleports(TBInfoStore store, int roomCmd)
     {

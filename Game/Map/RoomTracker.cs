@@ -185,6 +185,11 @@ public sealed class RoomTracker
     // the like) — raised after the tracker has un-counted it.
     public event Action? MoveBlocked;
 
+    // A room script refused the typed exit command in flight — raised BEFORE the
+    // revert, so a consumer that retries the command on its own (the walker's greet
+    // re-ask) can stand down before the revert's transition reaches it.
+    public event Action? CommandMoveRefused;
+
     // Optional authoritative-position resync hook (Paradigm `rm`). Invoked when the
     // tracker drops to Suspect on an AMBIGUOUS observation it can't self-resolve —
     // e.g. a forced, non-directional transport (a boat disembark, a teleport-trap
@@ -931,6 +936,24 @@ public sealed class RoomTracker
         _log?.Log(LogSeverity.Info, "RoomTracker",
             "Command dropped by the game's typing-rate limiter while a move was in flight; " +
             "un-counting it so the tracker doesn't run a room ahead.");
+    }
+
+    // A typed exit command (touch altar / enter portal / a teleport keyword) was
+    // refused by a condition in its room script — monsters in the room, or a level /
+    // alignment / item / price check — so it never moved us. Those refusal lines
+    // are generic ("You do not see that here.") and also answer ordinary commands,
+    // so revert only when the move in flight is a typed command sent within
+    // DroppedCommandWindow; a pending cardinal is never touched. Returns whether it
+    // reverted.
+    public bool NoteCommandMoveRefused(DateTimeOffset? whenUtc = null)
+    {
+        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        if (State.Confidence != RoomConfidence.Pending) return false;
+        if (MostRecentPending() is not { Command: not null } last) return false;
+        if (when - last.SentAt > DroppedCommandWindow) return false;
+        CommandMoveRefused?.Invoke();
+        NoteMoveBlocked(when);
+        return true;
     }
 
     // The server echoes the command you typed back on the prompt line
@@ -1955,16 +1978,19 @@ public sealed class RoomTracker
     }
 
     // Peek (without dropping) the cardinal of the most-recently queued pending
-    // move — the one a just-seen refusal line pertains to. ConcurrentQueue has no
-    // tail-peek, so drain + reinsert. Null when the queue is empty or the tail was
-    // a text-command move carrying no cardinal.
-    private Direction? MostRecentPendingCardinal()
+    // move — the one a just-seen refusal line pertains to. Null when the queue is
+    // empty or the tail was a text-command move carrying no cardinal.
+    private Direction? MostRecentPendingCardinal() => MostRecentPending()?.Cardinal;
+
+    // Peek the most-recently queued pending move. ConcurrentQueue has no
+    // tail-peek, so drain + reinsert.
+    private PendingMove? MostRecentPending()
     {
         if (_pending.IsEmpty) return null;
         var keep = new List<PendingMove>(_pending.Count);
         while (_pending.TryDequeue(out PendingMove m)) keep.Add(m);
         foreach (PendingMove m in keep) _pending.Enqueue(m);
-        return keep.Count > 0 ? keep[^1].Cardinal : null;
+        return keep.Count > 0 ? keep[^1] : null;
     }
 
     // Drop one direction from the cached open-door set (the door just reported

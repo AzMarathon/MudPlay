@@ -228,4 +228,28 @@ public sealed class AutoWalkManagerGreetTeleportTests : IDisposable
         Assert.Equal(1, h.AskCount);
         Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
     }
+
+    [Fact]
+    public void GreetTeleport_RefusedByTheNpc_StopsReAsking_AndFailsAfterBoundedRetries()
+    {
+        Harness h = NewHarness();
+        WalkToBarmaidAndAsk(h);
+
+        // The NPC's script turned the ask down outright (alignment / level / item),
+        // so there is no roll to retry: the re-ask watchdog stands down and the
+        // generic blocked path retries a bounded number of times, then fails.
+        int refusals = 0;
+        while (h.Walker.State == WalkState.Walking && refusals < 10)
+        {
+            Assert.True(h.Tracker.NoteCommandMoveRefused());
+            refusals++;
+        }
+
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Equal(refusals, h.AskCount);
+
+        h.FireDeadline();   // stood down — no watchdog re-ask
+        Assert.Equal(refusals, h.AskCount);
+    }
 }

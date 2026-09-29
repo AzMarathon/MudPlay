@@ -249,6 +249,90 @@ public sealed class MovementRefusalDetectorTests : IDisposable
         Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
     }
 
+    // A gated exit or room refused the move. These used to reach only the
+    // DirectionFailed router pattern, which does nothing while a move is Pending, so
+    // the refused move stranded the walker until its stall watchdog.
+    [Theory]
+    [InlineData("You have progressed too far for this room.")]
+    [InlineData("You are not permitted in that room!")]
+    [InlineData("You do not have the appropriate item to go that direction!")]
+    [InlineData("You do not have enough to cover the toll of 5 gold crowns.")]
+    // An item exit's own refusal, printed in place of the generic item line.
+    [InlineData("You do not have a room ticket.")]
+    // Also a room-command refusal; with a cardinal in flight it falls through here.
+    [InlineData("A strange power holds you back!")]
+    public void ExitGateRefusal_RevertsPendingCardinal(string line)
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        SetupPending(tracker);
+
+        detector.FeedTestLine(line);
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    // A level-capped room answers one move with two lines; the second must not
+    // drop a move queued after the refused one.
+    [Fact]
+    public void ExitGateRefusal_SecondLineForSameMove_LeavesLaterMoveQueued()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        SetupPending(tracker);
+
+        detector.FeedTestLine("You have progressed too far for this room.");
+        detector.FeedTestLine("You are not permitted in that room!");
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.False(tracker.HasQueuedMoves);
+    }
+
+    // A room script refused the typed exit command (touch altar / enter portal).
+    [Theory]
+    [InlineData("You cannot do that right now!")]
+    [InlineData("You do not see that here.")]
+    [InlineData("The dark power of the portal forces you back!")]
+    [InlineData("The Grey Lord simply stares at you in silence.")]
+    public void RoomCommandRefusal_RevertsPendingTypedCommand(string line)
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        tracker.SetLocated(new RoomKey(1, 1));
+        tracker.NoteMoveSent("touch altar", cardinal: Direction.N);
+
+        detector.FeedTestLine(line);
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    // The generic refusals also answer ordinary commands, so a cardinal in flight
+    // is never reverted by one.
+    [Fact]
+    public void RoomCommandRefusal_LeavesPendingCardinal()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        SetupPending(tracker);
+
+        detector.FeedTestLine("You do not have that.");
+
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+    }
+
+    // A typed command outstanding longer than the attribution window isn't what
+    // the refusal answered.
+    [Fact]
+    public void RoomCommandRefusal_OutsideWindow_LeavesPendingCommand()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        var sent = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        tracker.SetLocated(new RoomKey(1, 1), sent);
+        tracker.NoteMoveSent("touch altar", cardinal: Direction.N, whenUtc: sent);
+
+        detector.FeedTestLine("You cannot do that right now!", sent.AddSeconds(5));
+
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+    }
+
     [Fact]
     public void RefusalFromNonPending_StateIsNoOp()
     {

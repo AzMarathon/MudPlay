@@ -16,6 +16,37 @@ namespace MudPlay.Services.Patterns;
 // a text regex.
 public static class DefaultPatterns
 {
+    // The replies to a move a gated exit or room turned away, without anchors so
+    // DirectionFailed and MovementRefusalDetector (which reverts the refused move)
+    // share one list: level caps, permission, a spell / item / alignment / ability
+    // / sysop-add-on gate, a timed exit, dragging a downed ally, a toll you can't
+    // pay, and the refusals particular item and ability exits print in place of
+    // the generic line (GAME_MECHANICS "Refused ("bonked") moves").
+    public const string ExitGateRefusals =
+        @"You have progressed too far for this room\."
+        + @"|You have progressed too far to go through this exit!"
+        + @"|You have not progressed far enough to go through this exit!"
+        + @"|You are not permitted in that room!"
+        + @"|You need to cast a spell to go that way!"
+        + @"|You do not have the appropriate item to go that direction!"
+        + @"|You may not go through this exit!"
+        + @"|You are too (?:good|evil) to go through this exit!"
+        + @"|You may not pass through that exit at this point in time\."
+        + @"|You may not drag anyone through this exit\."
+        + @"|Your sysop must purchase the .+ before you may move through this exit\."
+        + @"|You do not have enough to cover the toll of \d+ .+\."
+        + @"|A strange power holds you back!"
+        + @"|That would be suicide without the proper equipment\."
+        + @"|You walk into a shimmering wall!"
+        + @"|You do not have a room ticket\."
+        + @"|Nothing you have will allow you to scale the mountain face\."
+        + @"|You can barely keep afloat in this water, much less swim!"
+        + @"|You don't have a mine pass, so you can't enter the mines\."
+        + @"|There is no way you can climb up without some assistance!"
+        + @"|You are stopped by an invisible barrier!"
+        + @"|A shimmering field blocks your passage!"
+        + @"|The portal is shut!";
+
     // Populate router's known-patterns catalog. No handlers are attached — each
     // subsystem (ChatRouter, combat tracker, etc.) registers its own handlers by
     // id via MessageRouter.Subscribe.
@@ -58,9 +89,10 @@ public static class DefaultPatterns
 
         // ----- Movement --------------------------------------------------
         // Every "you didn't move" reply folded into one alternation: the no-exit
-        // line, the closed door/gate line, and the three refusal lines a gated room
-        // answers with — two level-cap phrasings (room-scoped and exit-scoped) plus
-        // the permission refusal, which arrives alongside the room-scoped one.
+        // line, the closed door/gate line, and ExitGateRefusals — among them the
+        // three lines a level-capped room answers with, two level-cap phrasings
+        // (room-scoped and exit-scoped) plus the permission refusal, which arrives
+        // alongside the room-scoped one.
         //
         // These caps are realm-custom and absent from the stock 1.11p data, so
         // routing cannot know about them in advance — the client only ever learns
@@ -69,24 +101,14 @@ public static class DefaultPatterns
         // stock-20260913-233911). Deliberately distinct from the trainer's
         // "...too far to USE THE TRAINING provided here", which is not a move.
         //
-        // The Stock engine's other exit refusals: a spell / item / level /
-        // alignment / sysop-add-on gate, a timed exit, and dragging a downed ally
-        // through an exit that won't take them.
+        // The Stock engine's other exit refusals are in ExitGateRefusals. The engine
+        // capitalises "Closed" when the door or gate is merely shut and prints
+        // "closed" when it is locked (GAME_MECHANICS "Refused ("bonked") moves").
         yield return new RegexPattern(KnownPatterns.DirectionFailed,
             @"^(?:There is no exit in that direction!"
-            + @"|The (?:door|gate) is closed(?: in that direction)?!"
+            + @"|The (?:door|gate) is [Cc]losed(?: in that direction)?!"
             + @"|There is a closed door in that direction!"
-            + @"|You have progressed too far for this room\."
-            + @"|You have progressed too far to go through this exit!"
-            + @"|You have not progressed far enough to go through this exit!"
-            + @"|You are not permitted in that room!"
-            + @"|You need to cast a spell to go that way!"
-            + @"|You do not have the appropriate item to go that direction!"
-            + @"|You may not go through this exit!"
-            + @"|You are too (?:good|evil) to go through this exit!"
-            + @"|You may not pass through that exit at this point in time\."
-            + @"|You may not drag anyone through this exit\."
-            + @"|Your sysop must purchase the .+ before you may move through this exit\.)");
+            + @"|" + ExitGateRefusals + ")");
         yield return new RegexPattern(KnownPatterns.BashFailed,
             @"^Your attempts to bash through fail!$");
         yield return new RegexPattern(KnownPatterns.HeardMovement,

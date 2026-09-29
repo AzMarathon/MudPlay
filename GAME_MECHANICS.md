@@ -2615,13 +2615,21 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - `Your sysop must purchase the <add-on> before you may move through this exit.` (the add-on name is wrapped in colour codes)
   - `You may not drag anyone through this exit.`: only while you're dragging a downed ally (`drag <name>`) through an exit that won't take them. *([CONFIRMED] 2026-09-27, user.)*
   - `You may not go through this exit during tournament play!` is also in the table, but it never comes up in play. *([CONFIRMED] 2026-09-27, user.)* The client doesn't match it.
+  - `You do not have enough to cover the toll of %d %s.`: a toll you can't pay (see *Toll exits*). *([OBSERVED] 2026-09-28, `_move_user`.)*
+- **`Closed` with a capital means shut, `closed` means locked** *([OBSERVED] 2026-09-28, Stock 1.11p `_move_user` @0x418129–0x4181d5; Paradigm not recorded)*. Walking into a shut but unlocked door prints `The door is Closed!` (gate: `The gate is Closed!`); a locked one prints `The door is closed!` / `The gate is closed!`. A key exit prints `There is a closed door in that direction!` either way.
+- **Item and ability exits print their own refusal from the map data** *([OBSERVED] 2026-09-28, Stock 1.11p `_move_user` @0x417d0e and @0x418eca plus the `wccmp002.dat` exit fields; Paradigm not recorded, but the client matches these lines on both realms by the user's call 2026-09-28)*.
+  - An item exit prints its own message and falls back to `You do not have the appropriate item to go that direction!` only when it has none. An ability exit prints its own message and is silent when it has none.
+  - The 1.11p item-exit refusals: `A strange power holds you back!` (70 exits), `That would be suicide without the proper equipment.`, `You walk into a shimmering wall!`, `You do not have a room ticket.`, `Nothing you have will allow you to scale the mountain face.`, `You can barely keep afloat in this water, much less swim!`, `You don't have a mine pass, so you can't enter the mines.`, `There is no way you can climb up without some assistance!`, `You are stopped by an invisible barrier!`.
+  - The 1.11p ability-exit refusals: `A shimmering field blocks your passage!`, `A strange power holds you back!`.
+  - The one 1.11p timed exit with its own closed line (1/288 south) prints `The portal is shut!` in place of `You may not pass through that exit at this point in time.`.
+  - The class, race, level and alignment exits carry a message in the map data too, but the 1.11p engine never prints it; they print the fixed lines above.
 - **The player's on-screen room does not re-print on a refusal** — this is the authoritative signal the client keys on.
 - **Corollary: a room redisplay that still matches the room you moved from is never the result of a refused move.** While a move is pending, seeing the source room again can only be a **passive re-look** — a combat-clear, a monster/player arrival or departure notice, a bare re-glance — carrying no position signal.
 - **A genuine self-loop exit is a real move, not a passive redisplay:** a genuine self-loop exit that lands back in the same room is a real move with a real room display; it resolves as a normal predicted-neighbour match because the exit's target *is* the source, so it is not confused with a passive redisplay.
 
 **Client use:**
 - `MovementRefusalDetector` matches the refusal lines and calls `RoomTracker.NoteMoveBlocked` (which drops the pending move and re-confirms at the source).
-- The exit-gate refusals (level, spell, item, alignment, add-on, timed, drag) and the closed-door forms are in the `DirectionFailed` pattern instead, which drops the pending move through `RoomTracker.NoteDirectionFailed` (report `stock-20260913-233911` for the level cap).
+- The exit-gate refusals (level, permission, spell, item, alignment, add-on, timed, drag, toll, and the item / ability / timed exits' own lines) are one list, `DefaultPatterns.ExitGateRefusals`. `MovementRefusalDetector` reverts the pending move on any of them, only while a move is Pending, because a level-capped room answers one move with two lines. The `DirectionFailed` router pattern carries the same list and the closed-door forms, and demotes a Confirmed tracker to Suspect through `RoomTracker.NoteDirectionFailed` (report `stock-20260913-233911` for the level cap). *(An earlier note said `NoteDirectionFailed` drops the pending move; it does nothing while one is Pending, so these refusals stranded the walker until its stall watchdog. Superseded 2026-09-28.)*
 - The tracker ignores a source-room redisplay while a move is pending and keeps waiting for the move's real outcome (a different room), rather than inferring a refusal from the redisplay alone.
 
 ### Too heavy to move (over max encumbrance)
@@ -3499,6 +3507,30 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **Client use:**
   - The give router reuses `GuardDoorCommandResolver.LastWord` for the single-word target; only the
     picker's human-readable "(ask …)" promise keeps the full name.
+
+### Room-command refusals
+*Status: [OBSERVED] 2026-09-28 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo) · Realm: Stock — Paradigm not recorded; the client matches these lines on both realms by the user's call 2026-09-28*
+
+- **A condition in a room command or `ask` keyword line names the message it prints when it fails.** In `minlevel 10 3246`, `nomonsters 503` or `checkitem 570 657`, the last number is a **message number**, not a textblock.
+  - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`.
+  - On failure the engine prints the message's line 1 to you and line 2 to the room (@0x46f360), and the rest of that line doesn't run. With no message number the refusal is silent.
+- **A refused command never redisplays the room**, the same as a refused move (see *Refused ("bonked") moves*).
+- **The 1.11p refusals on command lines that teleport** (the TBInfo line holds a `teleport`, directly or through `text N`):
+
+  | Condition | Refusal |
+  |---|---|
+  | `nomonsters` | `You cannot do that right now!` · `You can't do that right now!` · `You can't get to that right now!` |
+  | `minlevel` | `A strange power holds you back!` · `The dark power of the portal forces you back!` · `The swirling chaotic energy of the vortex forces you back!` · `The Grey Lord shakes his head, "You must first grow further, young one."` |
+  | `goodaligned` / `evilaligned` | `The Grey Lord simply stares at you in silence.` · `Jorah exclaims, "You do not care about Balance! Begone, fool!"` |
+  | `roomitem` / `needmonster` | `You do not see that here.` · `You do not see a portal here.` · `You want to go where??` · `You can't do that right now!` · `You quaff the bubbling white potion, but nothing happens.` |
+  | `checkitem` | `You do not have that.` · `That would be suicide without the proper equipment.` · `He shakes his head at you, "Stop playing tricks on an old man!"` |
+  | `price` | `He says, "I may be old, but I count quite well and you are short!"` |
+
+- Several of these (`You do not have that.`, `You do not see that here.`) are also the engine's everyday replies to ordinary commands.
+
+**Client use:**
+- `MovementRefusalDetector.RoomCommandRefused` matches the table; `RoomTracker.NoteCommandMoveRefused` reverts the pending move only when it is a typed command (a text exit, teleport keyword or `ask`) sent within the last 3 seconds, so an everyday reply can't revert a cardinal move.
+- `AutoWalkManager` stops re-asking a greet teleport the NPC refused (`RoomTracker.CommandMoveRefused`), since a refusal isn't a failed skill roll; the step then retries once and replans like any refused move.
 
 ### Cast-on-walk exits and random teleports
 *Status: CONFIRMED (game data v1.11p map 9)*
