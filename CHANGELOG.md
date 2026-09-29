@@ -1,5 +1,12 @@
 # Version history
 
+## 3.118.7
+
+- Heals wait for a round's hits to finish landing before picking Minor vs Major, so the round's one cast isn't spent on the wrong tier
+- Emergency heal fires the moment HP crosses its trigger mid-round instead of being locked out by an early Major/Minor heal
+- No more doubled heal in one round ("already cast a spell this round")
+- bug reports addressed: paradigm-20260928-131549
+
 ## 3.118.6
 
 - Typed commands that end a sneak (search, doors, gear, casts) now count, so buffs aren't held on a sneak you'd already broken

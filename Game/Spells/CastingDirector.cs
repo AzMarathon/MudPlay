@@ -226,16 +226,28 @@ public sealed class CastingDirector : IDisposable
     // the current round window and no round tick has freed it since).
     private bool SlotSpentThisRound => _now() - _betweenRoundSlotUsedAt < RoundWindow;
 
-    // True only for the duration of a single Evaluate driven by a damage-line combat
-    // tick (set in OnCombatTick, cleared in its finally). While set, the non-heal
-    // survival categories (cure / buff / debuff) are skipped: HP is unconfirmed for
-    // this round (the prompt hasn't landed), so spending the round's one between-round
-    // slot on a non-heal could pre-empt a life-threat heal that becomes due the instant
-    // the prompt arrives — report paradigm-20260904-214056, where an armour buff fired
-    // on a stale HP=254 read while the player was actually at 117 and died two rounds
-    // later. Heals stay eligible (safe on the stale read; the prompt's reactive Evaluate
-    // fires the real one). Always false for reactive / idle / timer-fallback passes.
-    private bool _hpUnconfirmedThisPass;
+    // Burst-settle guard. A round's hits arrive as a burst, and Paradigm redraws the
+    // statline after EVERY line, so while the burst lands _state.Hp is a partial read
+    // that is still falling. Picking anything on it spends the round's one between-round
+    // slot too early: an armour buff fired on a stale HP=254 while the player was at 117
+    // (report paradigm-20260904-214056), and a Major heal picked at a partial 236 left
+    // the Emergency heal locked out of the slot when the burst finished at 72 (report
+    // paradigm-20260928-131549). The server runs the cast after the round's output
+    // either way (the echo lands on the final prompt), so waiting for HP to settle costs
+    // nothing. _hpBurstAt is stamped by a damage-line combat tick and by every HP drop;
+    // until BurstSettleWindow passes quietly, only an Emergency heal may fire (HP only
+    // falls inside a burst, so a due Emergency tier can't turn out wrong), and a settled
+    // pass is scheduled to pick the rest on the final HP.
+    private DateTime _hpBurstAt = DateTime.MinValue;
+    private int _lastSeenHp;
+    private static readonly TimeSpan BurstSettleWindow = TimeSpan.FromMilliseconds(400);
+    // Runs the settled pass after a delay (a one-shot dispatcher timer in the app, a
+    // captured callback in tests). Unset = the guard is off, so a hold can never be
+    // stranded without a scheduled re-evaluation.
+    private Action<TimeSpan, Action>? _scheduleSettledPass;
+    private bool _settledPassPending;
+    // Logs the hold once per burst instead of once per statline redraw.
+    private bool _settleHoldLogged;
 
     // A mana-regen roll-spell reroll the reroller staged (last roll below its
     // threshold). It's offered by PickSelfBuff at PriorityBuffing and cast through
@@ -371,6 +383,7 @@ public sealed class CastingDirector : IDisposable
         _isEnabled = isEnabled;
         _log = log;
 
+        _lastSeenHp = _state.Hp;
         _state.PropertyChanged += OnStateChanged;
         // React to a PARTY MEMBER's HP dropping, not just our own state / the combat
         // tick. The party-heal picker reads each member's HpPercent, but that value
@@ -407,22 +420,25 @@ public sealed class CastingDirector : IDisposable
                readSpells, readHealth, readPartySettings: null,
                isEnabled, log) { }
 
-    // Wire the "is this combat tick damage-line-driven?" probe (TickEngine). While it
-    // reads true, OnCombatTick's pass treats _state.Hp as unconfirmed for the round and
-    // holds the non-heal categories. Optional — unset means every tick is treated as
-    // HP-fresh (the pre-guard behaviour).
+    // Wire the "is this combat tick damage-line-driven?" probe (TickEngine). A true
+    // read marks a round burst as landing (see _hpBurstAt). Optional — unset means
+    // every tick is treated as HP-fresh.
     public void SetCombatTickSource(Func<bool> isDamageDriven) =>
         _combatTickDamageDriven = isDamageDriven;
 
+    // Wire the delayed-callback scheduler that runs the settled pass once a round
+    // burst goes quiet (see _hpBurstAt). Without it the burst-settle hold is off.
+    public void SetSettledPassScheduler(Action<TimeSpan, Action> schedule) =>
+        _scheduleSettledPass = schedule;
+
     // Hook to TickEngine.CombatTickElapsed — drives between-round evaluations. A tick
-    // fired straight off a server combat line runs before the round's prompt refreshes
-    // HP, so flag the pass as HP-unconfirmed and let RunDecisionPass hold the non-heal
-    // categories until a fresh-HP pass (the imminent prompt's reactive Evaluate).
+    // fired straight off a server combat line runs while the round's burst is still
+    // landing, so stamp the burst before the pass: RunDecisionPass then holds all but
+    // an Emergency heal until HP settles.
     public void OnCombatTick()
     {
-        _hpUnconfirmedThisPass = _combatTickDamageDriven?.Invoke() ?? false;
-        try { Evaluate(); }
-        finally { _hpUnconfirmedThisPass = false; }
+        if (_combatTickDamageDriven?.Invoke() == true) _hpBurstAt = _now();
+        Evaluate();
     }
 
     // Hook to TickEngine.HeartbeatElapsed (1 s) — drives the SAME between-round
@@ -1406,6 +1422,12 @@ public sealed class CastingDirector : IDisposable
         switch (e.PropertyName)
         {
             case nameof(PlayerState.Hp):
+                // A falling HP read means a burst is still landing — stamp it before
+                // this reactive pass so it's treated as unsettled.
+                if (_state.Hp < _lastSeenHp) _hpBurstAt = _now();
+                _lastSeenHp = _state.Hp;
+                Evaluate();
+                break;
             case nameof(PlayerState.MaxHp):
             case nameof(PlayerState.Ma):
             case nameof(PlayerState.MaxMa):
@@ -1489,6 +1511,26 @@ public sealed class CastingDirector : IDisposable
         return cast;
     }
 
+    // True while a round burst is still landing — a damage-line tick or an HP drop
+    // within BurstSettleWindow. Always false when no scheduler is wired.
+    private bool HpSettling() =>
+        _scheduleSettledPass is not null && _now() - _hpBurstAt < BurstSettleWindow;
+
+    // Queue one re-evaluation for when the current burst goes quiet. A later HP drop
+    // extends the window; the pass then finds it still settling and re-queues for the
+    // remainder, so at most one callback is ever outstanding.
+    private void ScheduleSettledPass()
+    {
+        if (_settledPassPending || _scheduleSettledPass is null) return;
+        _settledPassPending = true;
+        TimeSpan wait = _hpBurstAt + BurstSettleWindow - _now();
+        _scheduleSettledPass(wait < TimeSpan.Zero ? TimeSpan.Zero : wait, () =>
+        {
+            _settledPassPending = false;
+            if (!_disposed) Evaluate();
+        });
+    }
+
     // True while an AttackPrevented condition (stun / petrify / bind) is active —
     // see CombatManager.AttacksBlocked, the identical check for the attack slot.
     // Edge-logged so a report shows exactly when the hold began and lifted.
@@ -1514,26 +1556,34 @@ public sealed class CastingDirector : IDisposable
 
         PartySettings? partySettings = _readPartySettings?.Invoke();
 
+        // Burst-settle guard (see _hpBurstAt): while a round's hits are still landing,
+        // HP is a partial read. Only an Emergency heal already due on it may fire;
+        // everything else waits for the settled pass, which picks on the final HP.
+        bool settling = HpSettling();
+        if (settling)
+        {
+            ScheduleSettledPass();
+            if (!healRestEnabled || PickEmergencySelfHeal(spells, health) is null)
+            {
+                if (!_settleHoldLogged)
+                {
+                    _settleHoldLogged = true;
+                    _log?.Combat(LogCategory,
+                        $"between-round casts held — HP still settling mid-burst (hp={_state.Hp}/{_state.MaxHp}); re-deciding once it lands.");
+                }
+                return null;
+            }
+        }
+        else
+        {
+            _settleHoldLogged = false;
+        }
+
         // Log the full between-round queue (all due candidates, priority-ordered) before
         // firing the top one. Reached only when a cast can actually go out — Evaluate
         // gates on the cast cooldown upstream — so it lands ~once per between-round, not
         // every heartbeat poll.
         LogDueQueue(spells, health, partySettings, healRestEnabled, blessEnabled);
-
-        // Stale-HP guard (see _hpUnconfirmedThisPass): when this pass is driven by a
-        // damage-line combat tick, _state.Hp still holds the previous round's value —
-        // the prompt that refreshes it lands later in the burst. Hold the non-heal
-        // survival categories (cure / buff / debuff) so the round's one between-round
-        // slot isn't spent on them while HP is unknown; the imminent prompt's reactive
-        // Evaluate re-runs on fresh HP and fires a heal if one is due. Heals stay
-        // eligible here — they're safe on the stale read (they simply don't fire when
-        // it looks healthy, and the prompt catches the real drop). (report
-        // paradigm-20260904-214056: an armour buff fired on a stale HP=254 read while
-        // the player was already at 117 and died two rounds later.)
-        bool holdNonHeal = _hpUnconfirmedThisPass && _state.InCombat;
-        if (holdNonHeal)
-            _log?.Combat(LogCategory,
-                "between-round non-heal categories held — HP unconfirmed on a damage-driven tick (prompt pending).");
 
         // Sneak keeping (Game.Stealth.SneakGuard): every in-between cast ends a sneak,
         // so while a backstab is still owed here, our sneaked move is landing, or we're
@@ -1550,10 +1600,6 @@ public sealed class CastingDirector : IDisposable
 
         foreach (SpellCategory category in PrioritisedCategories(spells))
         {
-            if (holdNonHeal
-                && category is SpellCategory.Curing or SpellCategory.Buffing or SpellCategory.Debuffing)
-                continue;
-
             CastCandidate? pick = category switch
             {
                 // Heal / cure / debuff stay under AutoHealRest; buffing under
@@ -1573,6 +1619,11 @@ public sealed class CastingDirector : IDisposable
 
             if (pick is not { } cand) continue;
             if (string.IsNullOrWhiteSpace(cand.Spell)) continue;
+
+            // Mid-burst only the Emergency heal may jump ahead of the settled pass. A due
+            // cast the user ranked above it keeps its place: stop here and let the
+            // settled pass fire it on the final HP.
+            if (settling && category != SpellCategory.EmergencyHeal) return null;
 
             // Sneak keeping: a cast came due while the sneak is being kept — hold it
             // (see deferSneakMaintenance above). Logged only here (where a

@@ -735,6 +735,25 @@ public sealed class CastingDirectorTests
         /// the round and holds the non-heal categories (cure / buff / debuff).</summary>
         public bool CombatTickDamageDriven { get; set; }
 
+        /// <summary>Settled passes the director queued (delay, callback). Only
+        /// captured after <see cref="EnableBurstSettle"/> — the burst-settle hold is
+        /// off without a scheduler, so the rest of the suite keeps its reactive
+        /// same-pass behaviour.</summary>
+        public List<(TimeSpan Delay, Action Run)> SettledPasses { get; } = new();
+
+        public void EnableBurstSettle() =>
+            Director.SetSettledPassScheduler((delay, run) => SettledPasses.Add((delay, run)));
+
+        /// <summary>Advance the clock past the queued settle delay and run the
+        /// settled pass, as the one-shot timer would.</summary>
+        public void RunSettledPass()
+        {
+            (TimeSpan delay, Action run) = SettledPasses[^1];
+            SettledPasses.Clear();
+            Now += delay;
+            run();
+        }
+
         /// <summary>Extra unified-list buffs (party / member / whole-party) beyond the
         /// self-bless the tests set via <see cref="Spells"/>. Rarely used here.</summary>
         public BuffSettings PartyBuffs { get; } = new();
@@ -1191,19 +1210,19 @@ public sealed class CastingDirectorTests
         Assert.Equal("bless", h.CastsSent[0]);
     }
 
-    // ----- Stale-HP guard: hold non-heal casts on a damage-driven tick ----
-    // A combat tick fired off a server damage line runs before that round's
-    // prompt refreshes HP, so _state.Hp is one round stale. Holding the
-    // non-heal categories there keeps the round's one between-round slot open
-    // for a heal that becomes due the instant the prompt lands (report
-    // paradigm-20260904-214056). AutoBless/AutoHealRest are toggled off during
-    // State setup so the reactive Evaluate those assignments trigger doesn't
-    // fire the cast before OnCombatTick — the pass under test.
+    // ----- Burst-settle guard: pick on the final HP, not a partial read ----
+    // A round's hits land as a burst and Paradigm redraws the statline after every
+    // line, so mid-burst HP is a partial read that keeps falling. The director holds
+    // every between-round cast until HP settles (a damage-line tick or an HP drop
+    // opens the window), except an Emergency heal already due on the partial read.
+    // AutoBless/AutoHealRest are toggled off during State setup so the reactive
+    // Evaluate those assignments trigger doesn't fire before the pass under test.
 
     [Fact]
-    public void Buff_OnDamageDrivenCombatTick_Held()
+    public void Buff_OnDamageDrivenCombatTick_HeldUntilSettled()
     {
         using CureHarness h = new();
+        h.EnableBurstSettle();
         h.AutoBlessEnabled = false;              // no buff during setup's reactive passes
         h.State.InCombat = true;
         h.Spells.SelfBlessDuringCombat = true;
@@ -1214,9 +1233,11 @@ public sealed class CastingDirectorTests
         h.AutoBlessEnabled = true;                // now eligible, not yet evaluated
         h.CombatTickDamageDriven = true;
 
-        h.Director.OnCombatTick();                // damage-driven tick — HP unconfirmed
-
+        h.Director.OnCombatTick();                // damage-driven tick — burst landing
         Assert.Empty(h.CastsSent);                // buff held
+
+        h.RunSettledPass();                       // burst went quiet, HP never moved
+        Assert.Equal(new[] { "bless" }, h.CastsSent);
     }
 
     [Fact]
@@ -1225,6 +1246,7 @@ public sealed class CastingDirectorTests
         // Same setup, but a timer-fallback tick (not damage-driven) is HP-fresh,
         // so the buff fires normally — proves the guard is tick-source-specific.
         using CureHarness h = new();
+        h.EnableBurstSettle();
         h.AutoBlessEnabled = false;
         h.State.InCombat = true;
         h.Spells.SelfBlessDuringCombat = true;
@@ -1241,36 +1263,117 @@ public sealed class CastingDirectorTests
         Assert.Equal("bless", h.CastsSent[0]);
     }
 
-    [Fact]
-    public void Heal_OnDamageDrivenCombatTick_StillFires()
+    // Report paradigm-20260928-131549 settings: 433 max HP, minor < 85%, major < 75%,
+    // emergency < 50% (216), grhe / gdhe / mgra, Emergency on priority slot 1.
+    private static CureHarness PriestHarness()
     {
-        // Heals are NOT held on a stale tick: a stale-low read heals correctly,
-        // and a stale-high read simply doesn't fire (the prompt catches it). Here
-        // HP reads low, so the heal must fire even on a damage-driven tick.
-        using CureHarness h = new();
-        h.AutoHealRestEnabled = false;            // no heal during setup's reactive passes
+        CureHarness h = new();
+        h.EnableBurstSettle();
+        h.AutoHealRestEnabled = false;
         h.State.InCombat = true;
-        h.Spells.MajorHealSpell = "grhe";
-        h.Health.MajorHealCombatTrigger = 40;
-        h.State.MaxHp = 100;
-        h.State.Hp = 30;                          // 30% < 40% → heal due
+        h.Spells.MinorHealSpell = "grhe";
+        h.Spells.MajorHealSpell = "gdhe";
+        h.Spells.EmergencyHealSpell = "mgra";
+        h.Health.MinorHealCombatTrigger = 85;
+        h.Health.MajorHealCombatTrigger = 75;
+        h.Health.EmergencyHealTrigger = 50;
+        h.State.MaxMa = 747;
+        h.State.Ma = 700;
+        h.State.MaxHp = 433;
+        h.State.Hp = 411;
         h.AutoHealRestEnabled = true;
         h.CombatTickDamageDriven = true;
-
-        h.Director.OnCombatTick();
-
-        Assert.Single(h.CastsSent);
-        Assert.Equal("grhe", h.CastsSent[0]);
+        return h;
     }
 
     [Fact]
-    public void StaleDamageTick_HoldsBuff_ThenPromptDrivesHeal()
+    public void MajorHeal_NotPickedOnPartialHp_EmergencyFiresWhenBurstCrossesItsTrigger()
     {
-        // Full incident replay (paradigm-20260904-214056): a due armour buff on a
-        // damage-driven tick reads HP=254 (stale-healthy), so it must be HELD; when
-        // the round's prompt lands with the real HP=117, the reactive Evaluate fires
-        // the heal into the slot the buff correctly left open.
+        // Incident replay (13:14:22): the tick fired at a partial HP=236 (54%) and
+        // picked gdhe, spending the round's slot; the burst finished at 72 (17%) and
+        // the Emergency heal was locked out for a full round.
+        using CureHarness h = PriestHarness();
+        h.State.Hp = 236;
+
+        h.Director.OnCombatTick();                // first hit line — HP still partial
+        Assert.Empty(h.CastsSent);                // no Major heal on the partial read
+
+        h.State.Hp = 213;                         // statline redraw: 49% < 50% emergency
+        Assert.Equal(new[] { "mgra" }, h.CastsSent);
+
+        h.State.Hp = 72;                          // rest of the burst
+        h.RunSettledPass();
+        Assert.Equal(new[] { "mgra" }, h.CastsSent);   // one cast per round, still mgra
+    }
+
+    [Fact]
+    public void SettledPass_PicksTierOnFinalHp_OneCastPerRound()
+    {
+        // Incident replay (13:14:07): grhe fired at a partial 362, then again at 350
+        // ("already cast this round"); the burst actually ended at 264 (61%), a Major
+        // heal. Hold through the redraws, then one gdhe on the settled HP.
+        using CureHarness h = PriestHarness();
+
+        h.State.Hp = 362;                         // redraw after the first hit
+        h.Director.OnCombatTick();                // damage-line tick
+        h.State.Hp = 350;
+        h.State.Hp = 261;
+        Assert.Empty(h.CastsSent);                // nothing picked mid-burst
+
+        h.RunSettledPass();
+        Assert.Equal(new[] { "gdhe" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void SettledPass_RequeuesWhileHpKeepsFalling()
+    {
+        // A drop landing after the settled pass was queued extends the window: the
+        // pass finds HP still settling and re-queues rather than picking early.
+        using CureHarness h = PriestHarness();
+
+        h.State.Hp = 330;                         // 76%: a Minor heal, held mid-burst
+        Assert.Single(h.SettledPasses);
+        (TimeSpan delay, Action run) = h.SettledPasses[0];
+        h.SettledPasses.Clear();
+
+        h.Now += delay - TimeSpan.FromMilliseconds(100);
+        h.State.Hp = 300;                         // late hit: 69% → major, window restarts
+        h.Now += TimeSpan.FromMilliseconds(100);
+        run();                                    // first timer fires inside the new window
+        Assert.Empty(h.CastsSent);
+        Assert.Single(h.SettledPasses);           // re-queued for the remainder
+
+        h.RunSettledPass();
+        Assert.Equal(new[] { "gdhe" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void EmergencyHeal_MidBurst_WaitsWhenUserRankedADueCastAboveIt()
+    {
+        // Emergency is a reorderable row. Mid-burst it may only jump the settled pass
+        // when nothing due is ranked above it — a user-promoted Major heal keeps its
+        // place and fires on the settled HP instead.
+        using CureHarness h = PriestHarness();
+        h.Spells.PriorityMajorSelfHeal = 1;
+        h.Spells.PriorityEmergencyHeal = 2;
+
+        h.Director.OnCombatTick();
+        h.State.Hp = 150;                         // 35%: Emergency and Major both due
+        Assert.Empty(h.CastsSent);
+
+        h.RunSettledPass();
+        Assert.Equal(new[] { "gdhe" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void StaleDamageTick_HoldsBuff_ThenSettledPassDrivesHeal()
+    {
+        // Report paradigm-20260904-214056 replay: a due armour buff on a
+        // damage-driven tick reads HP=254 (stale-healthy), so it must be HELD; the
+        // burst lands the real HP=117 and the settled pass fires the heal into the
+        // slot the buff correctly left open.
         using CureHarness h = new();
+        h.EnableBurstSettle();
         h.AutoBlessEnabled = false;
         h.AutoHealRestEnabled = true;
         h.State.InCombat = true;
@@ -1289,10 +1392,10 @@ public sealed class CastingDirectorTests
         h.Director.OnCombatTick();
         Assert.Empty(h.CastsSent);                 // buff held, heal not due on stale read
 
-        // The round's prompt lands with the real HP — the reactive Evaluate it
-        // triggers runs on fresh HP and the heal wins the slot the buff left open.
         h.State.Hp = 117;                          // 117 < 192 → major heal due
+        Assert.Empty(h.CastsSent);                 // still mid-burst
 
+        h.RunSettledPass();
         Assert.Single(h.CastsSent);
         Assert.Equal("grhe", h.CastsSent[0]);      // the heal, not the buff
     }
