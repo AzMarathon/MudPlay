@@ -10715,7 +10715,9 @@ public sealed class AppServices
         foreach ((int number, (Game.Inventory.AutoSellManager.ResolvedSell item, int count)) in carried)
         {
             Models.GameData.ItemOverlay overlay = ResolveItemOverlay(number);
-            if (overlay.SellDetour != true) continue;
+            // "Detour to sell if above" left blank means no detour (user, 2026-09-29);
+            // 0 is a real count — go once above Min. to keep.
+            if (overlay.SellDetour != true || string.IsNullOrWhiteSpace(overlay.SellDetourAbove)) continue;
             int above = ParseCount(overlay.SellDetourAbove, 0);
             System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> trading = ShopRoomsSellingItem(number);
             var picks = new System.Collections.Generic.HashSet<Game.Map.RoomKey>();

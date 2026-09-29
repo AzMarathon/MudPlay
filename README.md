@@ -8,6 +8,7 @@
 > - The client's own yellow notices are never read as a monster arriving (a notice naming a dead monster made combat re-attack it)
 > - Auto-sell and sell detours count a stacked entry ("2 crude stone club") as every copy in it, so "Detour to sell if above" is reached
 > - A sell detour that's due but doesn't go says why in the program log and bug report
+> - "Detour to sell if above" left blank means no detour (a red warning shows beside it); 0 goes once above Min. to keep
 > - After a level-up, the Default-gear check waits for auto-train's `stat` instead of sending a second
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

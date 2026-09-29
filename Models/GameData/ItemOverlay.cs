@@ -59,8 +59,8 @@ public sealed record ItemOverlay
     // SellDetourAbove are carried, sells, then carries on (SellDetourManager).
     public bool? SellDetour { get; init; }
 
-    // Carried count above which a sell detour goes. Raw string like MinToKeep;
-    // blank = any copy above the keep floor.
+    // Carried count above which a sell detour goes (and above Min. to keep). Raw
+    // string like MinToKeep; blank = no detour, 0 = any copy above Min. to keep.
     public string? SellDetourAbove { get; init; }
 
     // The shops a sell detour may use, as comma-separated "map/room" keys of the

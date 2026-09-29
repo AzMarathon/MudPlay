@@ -68,14 +68,23 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     [ObservableProperty] private bool _autoBuy;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSellDetour))]
+    [NotifyPropertyChangedFor(nameof(NeedsSellDetourAbove))]
     private bool _autoSell;
 
     // Detour to a shop to sell this item (needs Auto-sell — the detour only walks
     // there; Auto-sell does the selling). The shops it may use are the Bought /
     // sold rows ticked "Sell here" (none ticked = any of them).
-    [ObservableProperty] private bool _sellDetour;
-    [ObservableProperty] private string _sellDetourAbove = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NeedsSellDetourAbove))]
+    private bool _sellDetour;
+
+    // Blank means no detour, so a ticked detour with the count left blank does
+    // nothing — NeedsSellDetourAbove shows the red nudge beside the box.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NeedsSellDetourAbove))]
+    private string _sellDetourAbove = string.Empty;
     public bool CanSellDetour => CanBuySell && AutoSell;
+    public bool NeedsSellDetourAbove => CanSellDetour && SellDetour && string.IsNullOrWhiteSpace(SellDetourAbove);
     private readonly HashSet<string> _sellShops = new(StringComparer.Ordinal);
     [ObservableProperty] private bool _autoStash;
     [ObservableProperty] private bool _cannotBeTaken;

@@ -137,7 +137,7 @@
                                  Constrained to HorizontalAlignment=Left + fixed column
                                  widths so the controls don't stretch toward the splitter. -->
                             <TextBlock Classes="SectionHeader" Text="Details" Margin="0,10,0,4"/>
-                            <Grid ColumnDefinitions="140,80"
+                            <Grid ColumnDefinitions="140,80,Auto"
                                   RowDefinitions="Auto,Auto,Auto"
                                   ColumnSpacing="8" RowSpacing="6"
                                   HorizontalAlignment="Left">
@@ -151,10 +151,14 @@
                                 <!-- Row 1: Detour to sell if above -->
                                 <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Detour to sell if above"
                                            IsEnabled="{Binding SellDetour}"
-                                           ToolTip.Tip="With 'Make detours to sell this item' on: a detour goes once you carry more than this many. Leave blank to go as soon as you carry one you'd sell."/>
+                                           ToolTip.Tip="With 'Make detours to sell this item' on: a detour goes once you carry more than this many, and more than Min. to keep. 0 = as soon as you carry more than Min. to keep (the first copy when that's blank or 0). Blank = no detour."/>
                                 <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding SellDetourAbove, Mode=TwoWay}"
                                            IsEnabled="{Binding SellDetour}"
-                                           PlaceholderText="Any"/>
+                                           PlaceholderText="None"/>
+                                <TextBlock Grid.Row="1" Grid.Column="2" VerticalAlignment="Center"
+                                           Foreground="{StaticResource AccentRedBrush}"
+                                           Text="⚠ Set a number — blank means no detour"
+                                           IsVisible="{Binding NeedsSellDetourAbove}"/>
 
                                 <!-- Row 2: Max to get -->
                                 <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Max to get"

@@ -1474,7 +1474,7 @@ Items and Monsters open an editable pane on the left with the read-only **Other 
 
 **Selling.** With **Auto-sell** on (and Auto-Get Items running), walking into a shop room whose shop has the item in its inventory listing sells it straight away — no `list` needed. Selling keeps your **Min. to keep** count when it's above 0, and sells every copy when it's 0 or blank. Your walk or loop waits while it sells (*Waiting — selling*).
 
-**Sell detours.** Tick **Make detours to sell this item** (beside Auto-sell) and a walk-to, loop or Auto-Lair will turn aside to sell it once you carry more than **Detour to sell if above** (blank = as soon as you carry one you'd sell):
+**Sell detours.** Tick **Make detours to sell this item** (beside Auto-sell) and a walk-to, loop or Auto-Lair will turn aside to sell it once you carry more than **Detour to sell if above**, and more than **Min. to keep**. **0** goes as soon as you carry more than Min. to keep (your first copy when that's blank or 0). **Blank means no detour**, so a red warning appears beside the box when detours are ticked with it blank:
 
 - **Which shop:** tick **Sell here** on the shops in the **Bought / sold** list to choose. With none ticked, any shop that trades the item can be used. Among the allowed shops, it picks the one that adds the fewest steps.
 - **The trip:** the route stops at the next room, walks to the shop, sells, then carries on. A walk-to heads on to its destination; a loop or Auto-Lair walks back to where it stopped and picks up again.

@@ -98,4 +98,25 @@ public sealed class ItemEditDialogViewModelTests
         Assert.Equal("5", saved.SellDetourAbove);
         Assert.Equal("1/10,2/20", saved.SellShops);
     }
+
+    // A blank detour count means no detour, so ticking detours with it blank shows the
+    // red nudge; any number, 0 included, clears it.
+    [Fact]
+    public void SellDetour_BlankCount_ShowsTheWarning()
+    {
+        ItemEditDialogViewModel vm = new(
+            wccNoStr: "1", mdbName: "dagger",
+            existing: new ItemOverlay { AutoSell = true, SellDetour = true },
+            currentTier: SettingsTier.Character, mdbInfo: NoInfo,
+            shops: new[] { new ShopSaleRow("Shop A - 1/10", "", 1, 10) },
+            shopSalesForCharm: _ => new[] { new ShopSaleRow("Shop A - 1/10", "", 1, 10) });
+        Assert.True(vm.NeedsSellDetourAbove);
+
+        vm.SellDetourAbove = "0";
+        Assert.False(vm.NeedsSellDetourAbove);
+
+        vm.SellDetourAbove = "";
+        vm.SellDetour = false;
+        Assert.False(vm.NeedsSellDetourAbove);
+    }
 }
