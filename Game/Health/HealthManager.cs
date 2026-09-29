@@ -182,6 +182,18 @@ public sealed class HealthManager : IDisposable
     // forever and the party @ok never went out).
     private int? _manaGameFullAt;
     private int _manaGameFullMax;
+
+    // A follower's @ok waits while a Pre-rest set is still worn (or a swap is
+    // streaming): back in Default gear first, a fresh prompt checks the pools, then
+    // @ok (user, 2026-09-28). Capped so a revert that never comes can't strand it.
+    private Func<bool>? _holdPartyOk;
+    private DateTimeOffset? _partyOkHeldSince;
+    private static readonly TimeSpan PartyOkHoldCap = TimeSpan.FromSeconds(20);
+
+    // True while a rested follower's @ok is waiting on the gear revert.
+    public bool IsPartyOkHeldForGear => _partyOkHeldSince is not null;
+
+    public void SetPartyOkHold(Func<bool> hold) => _holdPartyOk = hold;
     // The idle-stall watchdog force-clears combat OPTIMISTICALLY and sends a resync
     // CR; the re-display that re-confirms a still-present monster lands a beat later.
     // Resting the instant InCombat flips false fires in that gap — a blinded / slow
@@ -1077,8 +1089,24 @@ public sealed class HealthManager : IDisposable
             bool maRested = _state.MaxMa <= 0 || _state.Ma >= maRestMax || ManaAtGameFull();
             if (hpRested && maRested)
             {
-                _partyWaitSignaled = false;
-                _requestPartyOk?.Invoke();
+                bool gearHeld = _holdPartyOk?.Invoke() == true;
+                if (gearHeld && _partyOkHeldSince is null)
+                {
+                    _partyOkHeldSince = _now();
+                    _log?.Info(LogCategory, "rested — @ok waits for the Default gear to go back on and the pools to be checked");
+                }
+                if (!gearHeld || _now() - _partyOkHeldSince >= PartyOkHoldCap)
+                {
+                    if (gearHeld)
+                        _log?.Info(LogCategory, $"Default gear not back after {PartyOkHoldCap.TotalSeconds:0}s — sending @ok anyway");
+                    _partyOkHeldSince = null;
+                    _partyWaitSignaled = false;
+                    _requestPartyOk?.Invoke();
+                }
+            }
+            else
+            {
+                _partyOkHeldSince = null;
             }
         }
 

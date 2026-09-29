@@ -903,8 +903,19 @@ How HP works from full health down through dropping and death, how monster healt
 *Status: CONFIRMED 2026-09-27 (user) · wording [OBSERVED] `wccmmud.dll` 1.11p string table*
 
 - **`meditate` with mana already full is refused with `Meditation will not help at this time.`** You don't start meditating.
-- **The refusal can come below the max the client works out** *([OBSERVED] report `paradigm-20260928-223148`)*: right after a Pre-rest Mana gear swap the client read 423/448, but the game refused at 423 and `par` showed `[M:100%]`. *[NEEDS CONFIRMATION] — does worn +max-mana gear raise the game's max straight away, or only later?*
-- **Client use:** `HealthManager.NoteMeditateNotNeeded` drops the unanswered meditate and records the current mana as the game's full mark while the client's max stays the same (the mark rises with any higher reading). Reaching it counts as rested: the mana gate clears, the party `@ok` goes out and top-off stops. Before 2026-09-28 it rested on toward the client's own max, which the game never reached, so a follower's `@ok` never went out.
+- **Gear that changes max HP / mana changes it the moment it's worn or removed** *([CONFIRMED] 2026-09-28, user)*.
+- **Client use:**
+  - `HealthManager.NoteMeditateNotNeeded` drops the unanswered meditate and records the current mana as the game's full mark while the client's max stays the same (the mark rises with any higher reading). Reaching it counts as rested and clears the mana gate.
+  - A follower's `@ok` then waits for the Pre-rest set to come off (`HealthManager.SetPartyOkHold`): the Default set goes back on, a CR re-reads the pools, then `@ok` goes out (**Client policy**, user 2026-09-28). The hold is capped at 20 s.
+  - Report `paradigm-20260928-223148`: the client read 423/448 when the game said 423 was full. The 448 was the client's mistake. An `exp` screen had re-applied the maxima from an older `stat` read with the Pre-rest set on (423), over the Default gear's real 398. The next swap then added +25 on top. Fixed: only a screen that showed Hits / the pool sets the maxima (`StatParser.LastCaptureReadHits` / `LastCaptureReadPool`).
+
+### Rest basis — the Default-gear baseline
+*Status: **Client policy** — CONFIRMED 2026-09-28 (user) · Realm: both*
+
+- **Rest, heal and flee percentages resolve against the max HP / mana recorded from a `stat` screen taken with the Default gear set worn.** No other gear's screen, and no `exp` screen, changes it.
+- **It only goes stale when the level changes, or when the Default set changes in a way that alters its max HP / mana bonus.** Then a `stat` goes out the next time the Default set is on and nothing is in progress; the old values stay in use until it lands.
+
+**Client use:** `DefaultPoolBaselineKeeper` records and refreshes it (persisted as `CharacterProfile.DefaultPoolBaseline`). `AppServices.DefaultBasisMaxHp` / `DefaultBasisMaxMa` feed it to `HealthManager` and `CastingDirector`, falling back to `DefaultSetMaxPool`'s gear estimate before the first recording. The current-gear caps in `RestThresholds` still apply.
 
 ### Casting a spell interrupts resting / meditating
 *Status: CONFIRMED 2026-08-20 (user)*

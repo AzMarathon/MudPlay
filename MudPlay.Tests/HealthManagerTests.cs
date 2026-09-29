@@ -1786,6 +1786,31 @@ public sealed class HealthManagerTests
         Assert.Equal(1, oks);
     }
 
+    // A rested follower's @ok waits until the Pre-rest set is off again (user,
+    // 2026-09-28): Default gear back on, pools re-checked, then @ok.
+    [Fact]
+    public void Follower_PartyOk_WaitsForTheDefaultGear()
+    {
+        using Harness h = new();
+        int oks = 0;
+        bool preRestOn = true;
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => { },
+            requestPartyOk: () => oks++);
+        h.Health.SetPartyOkHold(() => preRestOn);
+
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);
+        h.State.Ma = 20;                  // @wait
+        h.State.Ma = 95;                  // rested — but the Pre-rest set is still on
+        Assert.Equal(0, oks);
+        Assert.True(h.Health.IsPartyOkHeldForGear);
+
+        preRestOn = false;                // Default back on
+        h.Health.Evaluate();
+        Assert.Equal(1, oks);
+    }
+
     // ----- Multi-step flee + auto-resume (Cluster 5b foundation) ----
 
     /// <summary>Fake engine for testing the flee dispatch — captures

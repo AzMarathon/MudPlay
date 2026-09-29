@@ -1811,6 +1811,10 @@ public sealed class AppServices
     // a stash room), walks back, and restarts the captured engine.
     public Game.Cash.AutoDepositManager AutoDeposit { get; private set; } = null!;
 
+    // The Default-gear max HP / pool the rest engine resolves against (recorded from a
+    // `stat` screen with the Default set on).
+    public Game.Health.DefaultPoolBaselineKeeper PoolBaseline { get; private set; } = null!;
+
     // Sell detours — an item flagged "Make detours to sell this item" turns a walk,
     // loop or Auto-Lair aside to a shop that trades it (see SellDetourManager).
     public Game.Inventory.SellDetourManager SellDetour { get; private set; } = null!;
@@ -2693,8 +2697,16 @@ public sealed class AppServices
             // learns the maxima as a high-water mark that reads low until the
             // character is seen at full. The stat screen reports the true
             // ceilings — snap PlayerState.MaxHp/MaxMa to them (routed through
-            // PromptParser to keep it the sole writer of the max fields).
-            Player.ApplyStatScreenMax(snapshot.MaxHits, snapshot.MaxMana);
+            // PromptParser to keep it the sole writer of the max fields) — but only the
+            // ones this screen actually showed: an `exp` screen's snapshot still carries
+            // the last `stat`'s maxima, read under whatever gear was worn then.
+            Player.ApplyStatScreenMax(
+                Stats.LastCaptureReadHits ? snapshot.MaxHits : 0,
+                Stats.LastCaptureReadPool ? snapshot.MaxMana : 0);
+            // A full `stat` with the Default set on records the rest engine's basis.
+            if (Stats.LastCaptureReadHits && Stats.LastCaptureReadPool)
+                PoolBaseline.OnStatScreen(snapshot.MaxHits,
+                    snapshot.MaxMana > 0 ? snapshot.MaxMana : snapshot.MaxKai);
             SeedSpellbook(snapshot);
         };
         // Alignment doesn't come from `stat` (see SeedSpellbook above) — it's only
@@ -5384,14 +5396,42 @@ public sealed class AppServices
         // user tuned against their normal loadout), capped by the current gear's real
         // stat-screen max (so a rest set that LOWERS the pool can never strand the rest
         // out of reach — report paradigm-20260902-052036).
+        // The basis is the recorded Default-gear baseline (PoolBaseline) once one exists.
+        PoolBaseline = new Game.Health.DefaultPoolBaselineKeeper(
+            read: () => Profile.Current?.DefaultPoolBaseline,
+            write: b => { if (Profile.Current is { } p) { p.DefaultPoolBaseline = b; Profile.Save(); } },
+            level: () => PlayerStats.Level,
+            defaultGearBonus: DefaultGearPoolBonus,
+            defaultWorn: DefaultSetWorn,
+            canCheckNow: () => PlayerState.HasPromptData && !PlayerState.InCombat
+                && !Equipment.IsApplyingSet && !TrainerMenu.MenuOwnsKeyboard,
+            sendStat: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("stat\r")),
+            log: Log);
+        Tick.HeartbeatElapsed += PoolBaseline.Poll;
+        // A rested follower's @ok waits until the Pre-rest set is off again; once the
+        // swap back to Default lands, a CR re-reads the pools (after the max-pool settle
+        // window) and the re-evaluation sends it.
+        Health.SetPartyOkHold(() => CurrentEquippedIsPreRestSet() || Equipment.IsApplyingSet);
+        Equipment.ApplyingChanged += applying =>
+        {
+            if (applying || !Health.IsPartyOkHeldForGear) return;
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("\r"));
+                Health.Evaluate();
+            };
+            timer.Start();
+        };
         Health.SetRestPoolMaxProviders(
-            () => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp),
-            () => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa),
+            () => DefaultBasisMaxHp(),
+            () => DefaultBasisMaxMa(),
             () => PlayerStats.MaxHits,
             () => PlayerStats.MaxMana);
         // Self-heal HP triggers anchor to the Default set too (same basis as rest).
         CastDirector.SetRestPoolMaxHp(
-            () => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerStats.MaxHits),
+            () => DefaultBasisMaxHp(),
             () => PlayerStats.MaxHits);
 
         // Hold every movement engine while a paced gear-set apply streams, so the
@@ -8082,9 +8122,49 @@ public sealed class AppServices
     // live pool max before a stat screen / when none of the Default set's items is
     // owned; FromDefaultSet says which basis it is, for the "(def)" / "(live)" marker.
     public (int Max, bool FromDefaultSet) RestPreviewMaxHp()
-        => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp) is int v and > 0 ? (v, true) : (PlayerState.MaxHp, false);
+        => DefaultBasisMaxHp() is int v and > 0 ? (v, true) : (PlayerState.MaxHp, false);
     public (int Max, bool FromDefaultSet) RestPreviewMaxMa()
-        => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa) is int v and > 0 ? (v, true) : (PlayerState.MaxMa, false);
+        => DefaultBasisMaxMa() is int v and > 0 ? (v, true) : (PlayerState.MaxMa, false);
+
+    // The Default-gear max the rest engine resolves against: the recorded baseline
+    // (a `stat` read with the Default set on — see DefaultPoolBaselineKeeper), kept
+    // even while stale until a fresh one lands; before the first one, estimated from
+    // the live max and the gear bonuses (DefaultSetMaxPool).
+    private int DefaultBasisMaxHp()
+        => PoolBaseline.Current is { MaxHp: > 0 } b ? b.MaxHp
+            : DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp);
+    private int DefaultBasisMaxMa()
+        => PoolBaseline.Current is { MaxMa: > 0 } b ? b.MaxMa
+            : DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa);
+
+    // The Default set's summed +MaxHP / +MaxMana item bonus (owned items only, like
+    // DefaultSetMaxPool), or null when no Default set is configured.
+    private (int Hp, int Ma)? DefaultGearPoolBonus()
+    {
+        IReadOnlyList<Game.Inventory.EquippedItem> items = DefaultSetEquippedItems();
+        if (items.Count == 0) return null;
+        Game.Calculators.EquipmentStatSummary t = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(items, GameData).Totals;
+        return (t.PlusMaxHp, t.PlusMaxMana);
+    }
+
+    // The Default set is on: every Default item we own is worn, and the worn gear's
+    // max-pool bonus matches the Default set's (so nothing else worn shifts the maxima).
+    private bool DefaultSetWorn()
+    {
+        IReadOnlyList<Game.Inventory.EquippedItem> items = DefaultSetEquippedItems();
+        if (items.Count == 0) return false;
+        List<string> worn = Inventory.Snapshot.EquippedItems.Select(w => w.Name.Trim()).ToList();
+        foreach (Game.Inventory.EquippedItem item in items)
+        {
+            int i = worn.FindIndex(n => string.Equals(n, item.Name, StringComparison.OrdinalIgnoreCase));
+            if (i < 0) return false;
+            worn.RemoveAt(i);
+        }
+        Game.Calculators.EquipmentStatSummary w = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals;
+        return DefaultGearPoolBonus() is { } d && d.Hp == w.PlusMaxHp && d.Ma == w.PlusMaxMana;
+    }
 
     // The max HP or mana the DEFAULT gear set would give (selector picks the pool
     // from an equipment-stat summary). Re-bases the LIVE gear-aware pool max off the

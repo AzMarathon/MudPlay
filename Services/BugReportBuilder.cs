@@ -1142,6 +1142,11 @@ public static class BugReportBuilder
             $"{svc.AutoLair.TravelCostModel.EstimateTravel(1).TotalSeconds:0.00} s");
         Kv(sb, "Auto-deposit reroute", svc.AutoDeposit.RerouteStatus);
         Kv(sb, "Sell detour", svc.SellDetour.Status);
+        Kv(sb, "Default-gear pool baseline", svc.PoolBaseline.Current is { } pb
+            ? $"HP {pb.MaxHp}, pool {pb.MaxMa} at level {pb.Level} (gear +{pb.DefaultGearHp}/+{pb.DefaultGearMa}, {pb.RecordedAt:u})"
+              + (svc.PoolBaseline.IsStale ? " — stale, re-reading `stat` in Default gear" : "")
+            : "none yet — using the gear estimate");
+        Kv(sb, "Party @ok held for gear", svc.Health.IsPartyOkHeldForGear.ToString());
         Kv(sb, "Auto-sell", svc.AutoSell.IsSelling ? "selling here" : "idle");
         // Roomba Mode (GhSweepManager) — a "sweep won't start / got stuck"
         // report needs the phase, lap count, and how much of the sort queue

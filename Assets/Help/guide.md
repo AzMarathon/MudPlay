@@ -2823,7 +2823,14 @@ Settings → Health. Two stacked sections — **Health (HP)** on top, **Mana / K
 
 The percentage is read against your **Default gear set's** max HP / mana — so a Pre-rest HP/Mana set that swaps in an item which changes your max doesn't move the target you tuned — and it's capped at your current gear's real max, so a rest set that lowers your pool can never leave you resting for a level you can't physically reach. The **heal**, **flee (run)**, and **emergency-hangup** HP triggers anchor to the same Default-set max, so they fire at the HP you tuned regardless of what set is worn.
 
-Only Default-set items you actually **have** (worn or carried) count toward that max — an item lost to a deathpile, sold, or never obtained is left out, and when you have none of them (or before your first inventory check) the **live** max is used instead. The figure beside each threshold says which basis it's using: **(def)** for the Default-set max, **(live)** for your current max.
+**Where that max comes from:** MudPlay records your max HP and mana from a `stat` screen, but only one taken while your **Default set** is worn:
+- **Other screens don't count:** a `stat` in other gear, or an `exp` screen, never changes it.
+- **When it's re-read:** only when you level up or change your Default set in a way that alters your max HP or mana. Then MudPlay sends a `stat` itself the next time your Default set is on and nothing else is going on, and keeps using the old figures until it lands.
+- **Before the first one:** until a `stat` has been seen in Default gear, the max is worked out from your current max and your gear's bonuses.
+
+Only Default-set items you actually **have** (worn or carried) count — an item lost to a deathpile, sold, or never obtained is left out, and when you have none of them (or before your first inventory check) the **live** max is used instead. The figure beside each threshold says which basis it's using: **(def)** for the Default-set max, **(live)** for your current max.
+
+**Following a party:** when your `@wait` was for mana and the game says `Meditation will not help at this time.`, your mana is full. MudPlay swaps your Default set back on, re-reads your HP and mana, then sends `@ok`.
 
 ### Rest if below (HP / MA)
 
