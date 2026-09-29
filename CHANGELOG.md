@@ -1,5 +1,9 @@
 # Version history
 
+## 3.123.4
+
+- The Game Data Browser's Toggles column sorts like the other columns
+
 ## 3.123.3
 
 - A rest a regen tick finished before the game confirmed the sit no longer swaps in the pre-rest set, so the walk doesn't carry rest gear into the next fight
