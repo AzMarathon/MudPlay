@@ -228,7 +228,7 @@
                                         <TextBlock Grid.Row="0" Grid.Column="2" Classes="Hint" Text="Max casts"/>
                                         <TextBlock Grid.Row="0" Grid.Column="3" Classes="Hint" Text="Min mana"/>
                                         <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Debuff"
-                                                   ToolTip.Tip="Single-target debuff to cast on this monster, over the Combat tab's debuff. Lists only debuffs (between-round spells on one enemy that do no damage). Pick from the list (or type a cast-code / Spell.Number). Runs the same gates as the Combat-tab slot — a debuff the target's level blocks is skipped."/>
+                                                   ToolTip.Tip="Single-target debuff to cast on this monster, over the Combat tab's debuff. Lists only debuffs (0-energy, between-round spells on one enemy). Pick from the list (or type a cast-code / Spell.Number). Runs the same gates as the Combat-tab slot — a debuff the target's level blocks is skipped."/>
                                         <AutoCompleteBox Grid.Row="1" Grid.Column="1"
                                                          Text="{Binding PreAttackSpellId, Mode=TwoWay}"
                                                          Classes.badSpell="{Binding PreAttackSpellError, Converter={x:Static ObjectConverters.IsNotNull}}"
@@ -237,7 +237,7 @@
                                                          ItemFilter="{Binding SpellSuggestionFilter}"
                                                          ItemTemplate="{StaticResource SpellPickItem}"
                                                          PlaceholderText="code or name…"
-                                                         ToolTip.Tip="Single-target debuff to cast on this monster, over the Combat tab's debuff. Lists only debuffs (between-round spells on one enemy that do no damage). Pick from the list (or type a cast-code / Spell.Number). Runs the same gates as the Combat-tab slot — a debuff the target's level blocks is skipped."/>
+                                                         ToolTip.Tip="Single-target debuff to cast on this monster, over the Combat tab's debuff. Lists only debuffs (0-energy, between-round spells on one enemy). Pick from the list (or type a cast-code / Spell.Number). Runs the same gates as the Combat-tab slot — a debuff the target's level blocks is skipped."/>
                                         <NumericUpDown Grid.Row="1" Grid.Column="2" Classes="Compact"
                                                        Value="{Binding PreAttackCount, Mode=TwoWay}"
                                                        Minimum="0" Maximum="100" FormatString="0" Increment="1"
@@ -252,7 +252,7 @@
                                             <TextBlock Classes="Hint" Text="{Binding PreAttackMinManaConverted}"/>
                                         </StackPanel>
                                         <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Spell"
-                                                   ToolTip.Tip="Spell that replaces the Combat tab's Normal-attack spell on this monster, in the normal rung of the same gated cascade. Pick from the list (or type a cast-code / Spell.Number). Lists only attack spells (ones that damage a single enemy). A raw attack verb goes in Physical below. A spell the target is immune / level / element-resist blocked from is skipped down the cascade."/>
+                                                   ToolTip.Tip="Spell that replaces the Combat tab's Normal-attack spell on this monster, in the normal rung of the same gated cascade. Pick from the list (or type a cast-code / Spell.Number). Lists only attack spells (ones that cost energy and target a single enemy). A raw attack verb goes in Physical below. A spell the target is immune / level / element-resist blocked from is skipped down the cascade."/>
                                         <AutoCompleteBox Grid.Row="2" Grid.Column="1"
                                                          Text="{Binding NormalSpellId, Mode=TwoWay}"
                                                          Classes.badSpell="{Binding NormalSpellError, Converter={x:Static ObjectConverters.IsNotNull}}"
@@ -261,7 +261,7 @@
                                                          ItemFilter="{Binding SpellSuggestionFilter}"
                                                          ItemTemplate="{StaticResource SpellPickItem}"
                                                          PlaceholderText="code or name…"
-                                                         ToolTip.Tip="Spell that replaces the Combat tab's Normal-attack spell on this monster, in the normal rung of the same gated cascade. Pick from the list (or type a cast-code / Spell.Number). Lists only attack spells (ones that damage a single enemy). A raw attack verb goes in Physical below. A spell the target is immune / level / element-resist blocked from is skipped down the cascade."/>
+                                                         ToolTip.Tip="Spell that replaces the Combat tab's Normal-attack spell on this monster, in the normal rung of the same gated cascade. Pick from the list (or type a cast-code / Spell.Number). Lists only attack spells (ones that cost energy and target a single enemy). A raw attack verb goes in Physical below. A spell the target is immune / level / element-resist blocked from is skipped down the cascade."/>
                                         <NumericUpDown Grid.Row="2" Grid.Column="2" Classes="Compact"
                                                        Value="{Binding NormalCount, Mode=TwoWay}"
                                                        Minimum="0" Maximum="100" FormatString="0" Increment="1"

@@ -383,22 +383,18 @@ public sealed class MonsterEditDialogViewModelTests
 
     // ----- override spell slots ------------------------------------------
 
-    // Shaped like the game data: mmis costs energy and damages; dfir damages at 0
-    // energy; fear is a 0-energy single-enemy spell with no damage; esto hits the room.
+    // Shaped like the class spells in the game data: mmis and dfir (#288) cost energy
+    // on one enemy; fear is a 0-energy spell on one enemy; esto hits the room.
     private static readonly Dictionary<string, KnownSpell> Spells = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["mmis"] = Spell(1, "mmis", energy: 500, targets: 8, damage: 17),
-        ["dfir"] = Spell(2, "dfir", energy: 0, targets: 8, damage: 1),
-        ["fear"] = Spell(3, "fear", energy: 0, targets: 8, damage: null),
-        ["esto"] = Spell(4, "esto", energy: 1000, targets: 12, damage: 17),
+        ["mmis"] = Spell(1, "mmis", energy: 500, targets: 8),
+        ["dfir"] = Spell(288, "dfir", energy: 1000, targets: 8),
+        ["fear"] = Spell(3, "fear", energy: 0, targets: 8),
+        ["esto"] = Spell(4, "esto", energy: 1000, targets: 12),
     };
 
-    private static KnownSpell Spell(int n, string code, int energy, int targets, int? damage)
-        => new(n, code, code, 1, 1, 1, targets, new SpellFormulaInput
-        {
-            EnergyCost = energy,
-            Abilities = damage is { } d ? [new SpellAbility(d, 0)] : [],
-        });
+    private static KnownSpell Spell(int n, string code, int energy, int targets)
+        => new(n, code, code, 1, 1, 1, targets, new SpellFormulaInput { EnergyCost = energy });
 
     private static MonsterEditDialogViewModel SpellVm() => new(
         wccNoStr: "1", mdbName: "rat", existing: null,
