@@ -17,7 +17,7 @@ public sealed record SimProc(
 {
     public bool DamageOverTime => DurationSeconds > 0 && DamageMax > 0;
 
-    private const int AcCode = 2, AccuracyCode = 22, DodgeCode = 34, HoldPersonCode = 74;
+    private const int HoldPersonCode = 74;
 
     // A proc carries no cast level of its own (GAME_MECHANICS "Monster on-hit procs
     // (`AttHitSpell-N`) are physical attacks, not casts"), so a level-scaled spell is
@@ -35,11 +35,11 @@ public sealed record SimProc(
         foreach (SpellAbility ab in f.Abilities)
         {
             int value = ab.Value != 0 ? ab.Value : (int)affMax;
+            if (MonsterDebuffCalculator.IsAccuracyCode(ab.Code)) { accuracy += value; continue; }
             switch (ab.Code)
             {
-                case AcCode: ac += value; break;
-                case DodgeCode: dodge += value; break;
-                case AccuracyCode: accuracy += value; break;
+                case MonsterDebuffCalculator.AcCode or MonsterDebuffCalculator.AcBlurCode: ac += value; break;
+                case MonsterDebuffCalculator.DodgeCode: dodge += value; break;
                 case HoldPersonCode: holds |= value > 0; break;
             }
         }

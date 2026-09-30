@@ -1,12 +1,14 @@
 using System.IO;
 using MudPlay.Game.Map;
 using MudPlay.Services;
+using MudPlay.ViewModels.Navigation;
 using Xunit;
 
 namespace MudPlay.Tests;
 
 // The lap the loop simulator walks carries each waypoint command's delay in the
-// room it runs in — including a command after the lap's last move.
+// room it runs in — including a command after the lap's last move — and a loop
+// loaded into the estimator keeps its commands for the simulation until edited.
 public sealed class RouteExpResolverSimLapTests : IDisposable
 {
     private readonly string _root =
@@ -26,8 +28,7 @@ public sealed class RouteExpResolverSimLapTests : IDisposable
         ]
         """;
 
-    [Fact]
-    public void CommandAfterTheLastMoveCountsInTheStartRoom()
+    private (GameDataCache Cache, RoomGraphManager Graph) Load()
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Json);
@@ -35,6 +36,13 @@ public sealed class RouteExpResolverSimLapTests : IDisposable
         cache.SwitchSet("alpha");
         RoomGraphManager graph = new(cache);
         graph.OnActiveSetChanged("alpha");
+        return (cache, graph);
+    }
+
+    [Fact]
+    public void CommandAfterTheLastMoveCountsInTheStartRoom()
+    {
+        (GameDataCache cache, RoomGraphManager graph) = Load();
         using var timers = new LairTimerStore(cache, graph, new RoomTracker(graph));
         using var resolver = new RouteExpResolver(graph, new BfsMapper(graph), timers, cache);
 
@@ -51,5 +59,25 @@ public sealed class RouteExpResolverSimLapTests : IDisposable
         Assert.Equal(new RoomKey(1, 1), lap[0].Key);
         Assert.Equal(3.0, lap[0].PauseSeconds);
         Assert.Equal(2.0, lap[1].PauseSeconds);
+    }
+
+    [Fact]
+    public void LoadedLoopKeepsItsCommandsForTheSimulationUntilEdited()
+    {
+        (GameDataCache cache, RoomGraphManager graph) = Load();
+        using var timers = new LairTimerStore(cache, graph, new RoomTracker(graph));
+        using var resolver = new RouteExpResolver(graph, new BfsMapper(graph), timers, cache);
+        var bfs = new BfsMapper(graph);
+        var session = new ExpEstimatorSessionViewModel(resolver, new LoopManager(bfs, graph), graph, cache);
+
+        session.LoadWaypoints(new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1)),
+            new LoopWaypoint(new RoomKey(1, 2), "x", 2000),
+        });
+        Assert.Equal(2.0, resolver.ResolveSimLap(session.SimWaypoints())[1].PauseSeconds);
+
+        session.MoveClick(0, 1);
+        Assert.All(session.SimWaypoints(), w => Assert.Null(w.Command));
     }
 }

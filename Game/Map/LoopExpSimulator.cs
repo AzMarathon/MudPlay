@@ -81,8 +81,9 @@ public sealed record ExpSimSettings(
     double RoundsPerMob,
     double RealConditionsMultiplier = 0.9,
     double SecondsPerRound = 5.0,
-    // Stock and Paradigm differ only in how often a room's summon spell re-rolls
-    // (see RoomSummon): Paradigm on the combat round, Stock on the medium tick.
+    // Stock and Paradigm differ in how often a room's summon spell re-rolls (see
+    // RoomSummon: Paradigm on the combat round, Stock on the medium tick) and in
+    // a lair's respawn clock (one per room on Stock, one per mob on Paradigm).
     // Kill-rate (RoundsPerMob) is realm-agnostic — the user sets it directly.
     RealmType Realm = RealmType.Stock);
 
@@ -162,6 +163,7 @@ public static class LoopExpSimulator
         // A room's summon spell re-rolls on the realm's tick: Paradigm on the combat
         // round, Stock on the slower 6s medium tick. See RoomSummon + SummonFires.
         double roomSpellTick = s.Realm == RealmType.ParaMud ? tick : StockMediumTickSeconds;
+        bool roomClock = s.Realm != RealmType.ParaMud;
 
         // Lair / fixture defs, DEDUPED by (room, target index): a room revisited in
         // the lap is the SAME physical lair, so its mobs share one set of respawn
@@ -229,17 +231,20 @@ public static class LoopExpSimulator
         double walkSeconds = lap.Count * step;
 
         // ----- Discrete visit-sequence simulation -----
-        // Walk the real room order over a measured hour. Each lair mob carries its
-        // own respawn clock keyed to WHEN THAT MOB WAS KILLED — killable only at or
-        // after (last kill + T); arriving early just finds the room empty (confirmed
-        // mechanic). Killing what's up and walking straight through what isn't means
+        // Walk the real room order over a measured hour. On Paradigm each lair mob
+        // carries its own respawn clock keyed to WHEN THAT MOB WAS KILLED — killable
+        // only at or after (last kill + T); arriving early just finds the room empty.
+        // Stock keeps one clock for the whole room, restarted by every kill in it, so
+        // the room refills all at once T after its LAST kill (GAME_MECHANICS "Lair
+        // respawn timers"). Killing what's up and walking straight through what isn't means
         // an out-and-back line re-crosses just-cleared lairs as EMPTY rooms, whose
         // walk wastes whole combat ticks (floor(stretch/tick)) — the throughput the
         // old rate model gave away by treating those rooms as always-productive.
         // Single-target kills one mob per round (720/hr ceiling); AoE clears the room
         // in Waves passes regardless of count, so it runs above that ceiling. Per-mob
         // clocks desynchronise the loop so a dense loop settles at its real operating
-        // point instead of a synchronised kill-then-idle wave, and the lap is floored
+        // point instead of a synchronised kill-then-idle wave (a Stock room's mobs come
+        // back together, but separate rooms still drift apart), and the lap is floored
         // at walkSeconds so it can't beat walking speed. A warm-up burns off the cold
         // start (every mob ready at t=0) so the measured hour is steady state.
         var availAt = new double[defCount][];
@@ -309,6 +314,19 @@ public static class LoopExpSimulator
                             double shortfall = soonest - now;
                             if (shortfall > 0 && shortfall < closest[d]) closest[d] = shortfall;
                         }
+                    }
+                }
+
+                if (killedHere && roomClock)
+                {
+                    // Stock: the room's last death — after every fight fought here
+                    // this visit — restarts the one clock every lair slot here
+                    // shares, including a lair that was still empty.
+                    double lastDeath = now + roomCombat;
+                    foreach (int d in posDefs[p])
+                    {
+                        if (defInstant[d]) continue;
+                        Array.Fill(availAt[d], lastDeath + defRespawn[d]);
                     }
                 }
 

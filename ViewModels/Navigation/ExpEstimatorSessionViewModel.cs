@@ -32,6 +32,9 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     private readonly SimulationSource? _simulation;
     private readonly LogService? _log;
     private readonly List<RoomKey> _clicks = new();
+    // A loaded loop's own waypoints, so the simulation counts its in-room commands'
+    // delays; dropped by any edit to the route, which then runs as bare clicks.
+    private IReadOnlyList<LoopWaypoint>? _loadedWaypoints;
     // The walk pace the shown SimResult was run at — the bug report quotes this, not
     // a pace recomputed from gear that may have changed since.
     private double _simWalkUsed;
@@ -151,16 +154,36 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         if (_graph.GetRoom(key) is not { } room) return;
         if (_clicks.Count > 0 && _clicks[^1].Equals(key)) return;   // adjacent dupe gap-fills to nothing
         _clicks.Add(key);
+        _loadedWaypoints = null;
         Clicks.Add(new LoopBuilderRow(Clicks.Count + 1, key, room.DisplayName));
         OnPropertyChanged(nameof(HasClicks));
         ClearSimulation();
         Recompute();
     }
 
+    // Seed the session from a saved loop. Its waypoints are kept for the simulation
+    // only when every one made it in as a click — a room missing from the map would
+    // leave them describing a different route.
+    public void LoadWaypoints(IReadOnlyList<LoopWaypoint> waypoints)
+    {
+        ArgumentNullException.ThrowIfNull(waypoints);
+        foreach (LoopWaypoint w in waypoints) AddClick(w.Key);
+        var keys = new List<RoomKey>(waypoints.Count);
+        foreach (LoopWaypoint w in waypoints)
+            if (keys.Count == 0 || !keys[^1].Equals(w.Key)) keys.Add(w.Key);
+        _loadedWaypoints = keys.SequenceEqual(_clicks) ? waypoints : null;
+    }
+
+    // The route the simulation walks: the loaded loop's waypoints while unedited,
+    // else the bare clicks.
+    internal IReadOnlyList<LoopWaypoint> SimWaypoints() =>
+        _loadedWaypoints ?? _clicks.Select(k => new LoopWaypoint(k)).ToList();
+
     public void RemoveClickAt(int index)
     {
         if (index < 0 || index >= _clicks.Count) return;
         _clicks.RemoveAt(index);
+        _loadedWaypoints = null;
         Clicks.RemoveAt(index);
         Renumber();
         OnPropertyChanged(nameof(HasClicks));
@@ -196,6 +219,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             Recompute();
             return false;
         }
+        _loadedWaypoints = null;
         ClearSimulation();
         return true;
     }
@@ -208,6 +232,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         RoomKey key = _clicks[fromIndex];
         _clicks.RemoveAt(fromIndex);
         _clicks.Insert(toIndex, key);
+        _loadedWaypoints = null;
         Clicks.Move(fromIndex, toIndex);
         Renumber();
         ClearSimulation();
@@ -218,6 +243,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     {
         ClearSimulation();
         _clicks.Clear();
+        _loadedWaypoints = null;
         Clicks.Clear();
         Lairs.Clear();
         ExpPerHour = 0;
@@ -271,7 +297,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         return new ExpEstimatorSnapshot(
             ProposedName, rooms, SecondsPerStep, AreaCombat, RoundsPerMob, RealConditionsMultiplier,
             ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses, summonLines, RealmLabel,
-            SimResult is null ? null : SimLines.ToList(), SimResult is null ? SimWalkSeconds : _simWalkUsed, SimHours,
+            SimResult is null ? null : SimLines.ToList(), SimResult is null ? 0 : _simWalkUsed, SimHours,
             CheckLines.Count == 0 ? null
                 : (string.IsNullOrEmpty(CheckStatus) ? CheckLines : CheckLines.Prepend(CheckStatus)).ToList());
     }
@@ -292,8 +318,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
                 SimStatus = "No character yet — log in and type stat so the client knows your level and pools.";
                 return;
             }
-            var waypoints = _clicks.Select(k => new LoopWaypoint(k)).ToList();
-            IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(waypoints, _filter);
+            IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(SimWaypoints(), _filter);
             if (lap.Count == 0)
             {
                 SimStatus = "The route has no walkable lap — fix the loop first.";
@@ -450,7 +475,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     {
         SimLines.Clear();
         SimLines.Add($"≈ {r.ExpPerHour:N0} exp/hr  ({r.MinExpPerHour:N0} – {r.MaxExpPerHour:N0} over {r.Runs.Count} runs)");
-        SimLines.Add($"{r.KillsPerHour:0} kills/hr  ·  {r.Runs.Average(x => x.AvgLapSeconds):0}s/lap  ·  walking {walkSeconds:0.00}s/room");
+        string lap = r.AvgLapSeconds > 0 ? $"{r.AvgLapSeconds:0}s/lap" : "no lap finished";
+        SimLines.Add($"{r.KillsPerHour:0} kills/hr  ·  {lap}  ·  walking {walkSeconds:0.00}s/room");
         SimLines.Add($"Attacking {r.Share(x => x.AttackingSeconds):P0} · moving {r.Share(x => x.MovingSeconds):P0} · " +
                      $"resting {r.Share(x => x.RestingSeconds):P0} · meditating {r.Share(x => x.MeditatingSeconds):P0} · " +
                      $"waiting {r.Share(x => x.WaitingSeconds):P0}");
@@ -465,7 +491,10 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             SimLines.Add("Per hour: " + string.Join(", ", casts.Take(6).Select(c => $"{c.Spell} {c.PerHour:0}")));
     }
 
-    private void ClearSimulation(bool alsoCheck = false)
+    // Drop the result (and stop a run still going) — the route, a simulation
+    // setting, the character or the game-data set changed under it. alsoCheck also
+    // drops the live check, which reads saved loops rather than the sketch.
+    public void ClearSimulation(bool alsoCheck = false)
     {
         _simCancel?.Cancel();
         SimResult = null;

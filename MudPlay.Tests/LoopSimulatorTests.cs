@@ -14,11 +14,12 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // Pins the character loop simulation: a lair refills only on its respawn clock —
-// one per slot on Paradigm, one per room on Stock — (on entry, or on the spawn pass while standing in it; an unresolved clock
-// only on entry), a fight the character can't survive ends the run and counts
-// against the hours asked for, resting follows the Health-tab rest gates and the
-// realm's rest-tick cycle, lawful evil spares an Outlaw-or-worse character, and a
-// configured attack spell is cast by the chooser.
+// one per slot on Paradigm, one per room on Stock that every death in the room
+// restarts — on entry, or on the spawn pass while standing in it (an unresolved
+// clock only on entry). A fight the character can't survive ends the run and
+// counts against the hours asked for, resting follows the Health-tab rest gates
+// and the realm's rest-tick cycle, lawful evil spares an Outlaw-or-worse
+// character, and a configured attack spell is cast by the chooser.
 public sealed class LoopSimulatorTests
 {
     private static MonsterCatalogEntry Mob(int number, int hp, int exp, int align = 3,
@@ -220,9 +221,9 @@ public sealed class LoopSimulatorTests
     }
 
     [Fact]
-    public void BurningHitSpellTicksEachSpellRoundForItsDuration()
+    public void BurningHitSpellTicksEvery3SecondsForItsDuration()
     {
-        // One landed hit sets a 30 s burn of 7 a spell round: no damage on the hit, then
+        // One landed hit sets a 30 s burn of 7 every 3 s: no damage on the hit, then
         // ~10 ticks. The monster survives one round (one chomp lands) and dies on the
         // next before it swings again, so that one burn is all the damage there is.
         var slot = new MonsterAttackSlot("chomps", Type: 1, Percent: 100, TruePercent: 100, MinDamage: 0, MaxDamage: 0,
@@ -374,15 +375,20 @@ public sealed class LoopSimulatorTests
     [Fact]
     public void ParadigmRestPaysFullOnlyOnEveryThirdTick()
     {
-        // Same seed, same fight, same damage taken: the rest cycle whose first two
-        // ticks are reduced takes longer to rest back up than one paying in full.
+        // Counted from lying down, each cycle pays a third, a third, then in full.
+        var cycle = new SimRegen(_ => 0, _ => 30, _ => 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true,
+            RestFullEvery: 3, RestReducedShare: 1.0 / 3);
+        Assert.Equal(new[] { 10.0, 10.0, 30.0, 10.0, 10.0, 30.0 },
+            Enumerable.Range(1, 6).Select(t => Math.Round(cycle.RestTickHp(t), 6)));
+
+        // Played out — same seed, same fight, same damage taken — that cycle takes
+        // longer to rest back up than one paying in full every tick.
         var health = new HealthSettings { RestIfBelowHp = 99, RestMaxHp = 100, UseMeditateAbility = false };
         LoopSimRun Rest(SimRegen regen) => LoopSimulator.Run(Character(maxHp: 200, health: health, regen: regen),
             new[] { Lair(1, 1, 7200, 7), Empty(2) },
             World(Mob(7, hp: 1500, exp: 100, align: 1, Hit(25, 25))), secondsPerStep: 1, hours: 0.5, seed: 1);
 
-        LoopSimRun cycled = Rest(new SimRegen(_ => 0, _ => 30, _ => 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true,
-            RestFullEvery: 3, RestReducedShare: 1.0 / 3));
+        LoopSimRun cycled = Rest(cycle);
         LoopSimRun full = Rest(new SimRegen(_ => 0, _ => 30, _ => 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true));
 
         Assert.True(full.RestingSeconds > 0);
@@ -431,22 +437,120 @@ public sealed class LoopSimulatorTests
         Assert.Null(outlaw.DiedAtSeconds);
     }
 
-    [Fact]
-    public void StockLairRunsOneRoomClockThatEveryKillRestarts()
+    // A one-cast-a-round attack spell that never misses, so every fight lasts a
+    // fixed number of rounds and a run's timing doesn't hang on the seed.
+    private static SimCharacter Caster(RealmType realm, int damagePerRound)
     {
-        // A 2-mob, 60 s lair whose mobs take ~60 s each to kill. Per slot (Paradigm)
-        // the first slot is back by the time the second dies, so the character is
-        // never kept waiting: one kill a minute. On Stock the second kill restarts the
-        // room's one clock for both slots, so the pair only returns 60 s after it: at
-        // most two kills per ~180 s.
-        SimRoom[] lap = { Lair(1, 2, 60, 7), Empty(2) };
-        var world = World(Mob(7, hp: 11500, exp: 100));
-        LoopSimRun stock = LoopSimulator.Run(Character(realm: RealmType.Stock), lap, world,
-            secondsPerStep: 1, hours: 1, seed: 1);
-        LoopSimRun paradigm = LoopSimulator.Run(Character(realm: RealmType.ParaMud), lap, world,
-            secondsPerStep: 1, hours: 1, seed: 1);
+        var combat = new CombatSettings();
+        combat.NormalAttackSpell.SpellName = "blst";
+        var spells = new Dictionary<string, SimSpell>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["blst"] = new SimSpell("blst", 1, ManaPerCast: 1, FiresPerRound: 1, CastChance: 100,
+                MinDamagePerRound: damagePerRound, MaxDamagePerRound: damagePerRound, UsesMagicResist: false,
+                TypeOfResists: 0, AttType: 0, MinHeal: 0, MaxHeal: 0),
+        };
+        return Character(damage: 0, combat: combat, spells: spells, maxMana: 100000, realm: realm);
+    }
 
-        Assert.InRange(stock.Kills, 30, 2 + 2 * 3600 / 180);
-        Assert.InRange(paradigm.Kills, 55, 61);
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    public void StockLairRunsOneRoomClockThatEveryKillRestarts(int seed)
+    {
+        // A 2-mob lair on a 62 s clock; each mob takes exactly 12 rounds (dies at
+        // 55 s and 115 s). Per slot (Paradigm) the first slot is ready at 117 s, back
+        // on the next entry and dead at 175 s: three kills in 200 s. On Stock the
+        // 115 s kill pushes the room's one clock to 177 s for both slots: two kills.
+        SimRoom[] lap = { Lair(1, 2, 62, 7), Empty(2) };
+        var world = World(Mob(7, hp: 1200, exp: 100));
+        const double hours = 200.0 / 3600;
+        LoopSimRun stock = LoopSimulator.Run(Caster(RealmType.Stock, 100), lap, world, 1, hours, seed);
+        LoopSimRun paradigm = LoopSimulator.Run(Caster(RealmType.ParaMud, 100), lap, world, 1, hours, seed);
+
+        Assert.Equal(2, stock.Kills);
+        Assert.Equal(3, paradigm.Kills);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    public void StockFixtureKillRestartsTheLairRoomClock(int seed)
+    {
+        // A lair room whose placed fixture is back on every entry and dies each visit,
+        // well inside the lair's 62 s clock. On Stock each fixture death restarts the
+        // room clock, so the lair mob never returns after its first kill; Paradigm's
+        // per-slot clock ignores the fixture and the lair keeps refilling.
+        SimRoom[] lap = { new(new RoomKey(1, 1), 8, 1, new[] { 7 }, 62), Empty(2) };
+        var world = World(Mob(7, hp: 10, exp: 1000), Mob(8, hp: 10, exp: 1));
+        LoopSimRun stock = LoopSimulator.Run(Caster(RealmType.Stock, 100), lap, world, 1, hours: 1, seed);
+        LoopSimRun paradigm = LoopSimulator.Run(Caster(RealmType.ParaMud, 100), lap, world, 1, hours: 1, seed);
+
+        static long LairKills(LoopSimRun r) => (r.Exp - r.Kills) / 999;   // 1,000 exp a lair kill, 1 a fixture
+        Assert.True(stock.Kills > 100);
+        Assert.Equal(1, LairKills(stock));
+        Assert.True(LairKills(paradigm) > 40);
+    }
+
+    [Fact]
+    public void MonsterWeCannotHurtStillTriggersTheHangUp()
+    {
+        // A hostile above the weapon's magic level, with no attack spell: nothing to
+        // fight, but it hits 20 a round while the character rests beside it. Its hits
+        // put the live client in combat, so the 50% hang-up fires before a death.
+        var health = new HealthSettings { RestIfBelowHp = 90, RestMaxHp = 100, HangIfBelowHp = 50, UseMeditateAbility = false };
+        MonsterCatalogEntry ghost = Mob(9, hp: 1000, exp: 10, align: 1, Hit(20, 20, accuracy: 9999)) with { Magical = 20 };
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 100, health: health), new[] { Lair(1, 1, 3600, 9), Empty(2) },
+            World(ghost), secondsPerStep: 1, hours: 0.25, seed: 1);
+
+        Assert.NotNull(run.HungUpAtSeconds);
+        Assert.Null(run.DiedAtSeconds);
+    }
+
+    [Fact]
+    public void MonsterWeCannotHurtStillTriggersTheRun()
+    {
+        var health = new HealthSettings { RestIfBelowHp = 90, RestMaxHp = 100, RunIfBelowHp = 50, HangIfBelowHp = 0,
+            UseMeditateAbility = false };
+        MonsterCatalogEntry ghost = Mob(9, hp: 1000, exp: 10, align: 1, Hit(20, 20, accuracy: 9999)) with { Magical = 20 };
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 100, health: health, combat: new CombatSettings { RunDistance = 1 }),
+            new[] { Lair(1, 1, 3600, 9), Empty(2) }, World(ghost), secondsPerStep: 1, hours: 0.25, seed: 1);
+
+        Assert.True(run.Flees > 0);
+    }
+
+    [Fact]
+    public void FledCharacterReturnsOnlyAboveItsRunTrigger()
+    {
+        // No rest trigger, so nothing holds the character away but the run trigger:
+        // walking back at once at 40% HP would take two more 30-damage hits to a
+        // death; waiting until HP climbs back over 50% never does.
+        var health = new HealthSettings { RunIfBelowHp = 50, RestIfBelowHp = 0, HangIfBelowHp = 0, UseMeditateAbility = false };
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 100, damage: 1, health: health, combat: new CombatSettings { RunDistance = 1 }),
+            new[] { Lair(1, 1, 3600, 8), Empty(2) }, World(Mob(8, hp: 100000, exp: 10, align: 1, Hit(30, 30, accuracy: 9999))),
+            secondsPerStep: 1, hours: 0.5, seed: 1);
+
+        Assert.True(run.Flees > 0);
+        Assert.Null(run.DiedAtSeconds);
+    }
+
+    [Fact]
+    public void FailedRerollCastKeepsTheCycleGoing()
+    {
+        // An endless reroll cycle no roll satisfies, on a spell that lands half the
+        // time and outlasts the run: every round's recast goes out whether the last
+        // one landed or not. Ending the cycle on a failed cast would leave the buff
+        // sitting there after a handful of casts.
+        var spells = new Dictionary<string, SimSpell>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["prfl"] = Spell("prfl", mana: 1, duration: 36000, manaRegenMin: 0, manaRegenMax: 100) with { CastChance = 50 },
+        };
+        var buffs = new[] { new SimBuff("prfl", 0, false, false, false, RerollBelow: 101, RerollCount: 0, RerollInfinite: true) };
+        var health = new HealthSettings { BlessIfAboveMa = 0, RestIfBelowMa = 0, UseMeditateAbility = false };
+        LoopSimRun run = LoopSimulator.Run(
+            Character(spells: spells, buffs: buffs, maxMana: 1000, health: health),
+            new[] { Empty(1), Empty(2) }, World(), secondsPerStep: 1, hours: 0.5, seed: 1);
+
+        int casts = run.Casts.GetValueOrDefault("prfl");
+        Assert.True(casts > 300, $"cast {casts} times");
     }
 }

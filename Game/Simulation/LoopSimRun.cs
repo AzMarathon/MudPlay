@@ -30,7 +30,6 @@ public sealed record LoopSimRun(
     public double RequestedHours => RequestedSeconds / 3600.0;
     public double ExpPerHour => RequestedHours > 0 ? Exp / RequestedHours : 0;
     public double KillsPerHour => RequestedHours > 0 ? Kills / RequestedHours : 0;
-    public double AvgLapSeconds => Laps > 0 ? Seconds / Laps : 0;
     public double DamageTakenPerHour => RequestedHours > 0 ? DamageTaken / RequestedHours : 0;
 }
 
@@ -48,6 +47,17 @@ public sealed record LoopSimSummary(IReadOnlyList<LoopSimRun> Runs, IReadOnlyLis
     public int HangUps => Runs.Count(r => r.HungUpAtSeconds is not null);
     public double DamageTakenPerHour => Runs.Count > 0 ? Runs.Average(r => r.DamageTakenPerHour) : 0;
     public double FleesPerHour => Runs.Sum(r => r.RequestedHours) is > 0 and var h ? Runs.Sum(r => r.Flees) / h : 0;
+
+    // Pooled over the runs that finished a lap, so one that died before its first
+    // doesn't pull the figure toward 0. 0 when no run finished one.
+    public double AvgLapSeconds
+    {
+        get
+        {
+            int laps = Runs.Sum(r => r.Laps);
+            return laps > 0 ? Runs.Where(r => r.Laps > 0).Sum(r => r.Seconds) / laps : 0;
+        }
+    }
     public int LowestHpPercent => Runs.Count > 0 ? Runs.Min(r => r.LowestHpPercent) : 100;
     public int LowestManaPercent => Runs.Count > 0 ? Runs.Min(r => r.LowestManaPercent) : 100;
 

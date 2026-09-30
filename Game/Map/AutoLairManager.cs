@@ -13,8 +13,9 @@ namespace MudPlay.Game.Map;
 //
 // The picker is timer-aware: it tries to step into each marked lair as
 // close to its respawn ready-at as possible while never entering early
-// (an early entry triggers the spawn check and burns the timer
-// immediately).
+// (an early entry finds the room empty, and on Paradigm — timed from the
+// entry — restarts the countdown; Stock's clock runs from the last kill,
+// see LairTimerStore.ClockStart).
 //
 // State machine:
 //   Idle        — not running; no scheduler tick; walker untouched.
@@ -712,9 +713,8 @@ public sealed class AutoLairManager : IDisposable
             // A fight that never resolves — unkillable, fled, or a missed
             // clear-signal — must not park the scheduler here forever.
             ? $"engage timeout ({EngageTimeoutSeconds}s)"
-            // Nothing turned up in the grace window, so the lair hadn't respawned.
-            // Entering already burned its timer, so there's nothing to gain by
-            // standing here; go find one that's ready.
+            // Nothing turned up in the grace window, so the lair hadn't respawned;
+            // go find one that's ready.
             : $"lair empty after {EmptyLairGrace.TotalSeconds:0}s — nothing to fight");
     }
 
@@ -728,7 +728,10 @@ public sealed class AutoLairManager : IDisposable
     {
         _engageTimer.Stop();
         if (!IsActive || IsPaused) return;
-        _log?.Info("AutoLair", $"engagement done — {why}; picking the next lair.");
+        string readyAgain = CurrentTarget is { } lair && _timers.NextReadyAt(lair, GetOverride(lair)) is { } at
+            ? $" ({lair} ready again {at.ToLocalTime():HH:mm:ss})"
+            : "";
+        _log?.Info("AutoLair", $"engagement done — {why}{readyAgain}; picking the next lair.");
         SetPhase(AutoLairPhase.Approaching);
         EvaluateAndDispatch();
     }

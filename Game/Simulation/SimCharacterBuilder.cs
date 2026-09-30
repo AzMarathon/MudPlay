@@ -156,17 +156,15 @@ public static class SimCharacterBuilder
                 SpellCalculator.SingleCastMinHeal(f, stats.Level),
                 SpellCalculator.SingleCastMaxHeal(f, stats.Level),
                 DurationSeconds: SpellCalculator.Duration(f, stats.Level) * SpellCalculator.SpellRoundSecondsWallClock,
-                ManaRegenMin: RegenRange(f, stats.Level, ManaRegenCode).Min,
-                ManaRegenMax: RegenRange(f, stats.Level, ManaRegenCode).Max,
-                HpRegenMin: RegenRange(f, stats.Level, HpRegenCode).Min,
-                HpRegenMax: RegenRange(f, stats.Level, HpRegenCode).Max,
+                ManaRegenMin: RegenRange(f, stats.Level, RegenSpellClassifier.ManaRegenCode).Min,
+                ManaRegenMax: RegenRange(f, stats.Level, RegenSpellClassifier.ManaRegenCode).Max,
+                HpRegenMin: RegenRange(f, stats.Level, RegenSpellClassifier.HpRegenCode).Min,
+                HpRegenMax: RegenRange(f, stats.Level, RegenSpellClassifier.HpRegenCode).Max,
                 Debuff: MonsterDebuffCalculator.AffectsMonsterStats(known)
                     ? MonsterDebuffCalculator.Fold(new[] { known }, stats.Level) : default));
         }
         return map;
     }
-
-    private const int HpRegenCode = 123, ManaRegenCode = 145;
 
     // The regen percent a spell adds while it's up: a stored value is fixed, a 0 is
     // rolled from the spell's level-scaled range each cast (GAME_MECHANICS "Mana
@@ -177,7 +175,7 @@ public static class SimCharacterBuilder
         foreach (SpellAbility a in f.Abilities)
         {
             if (a.Code != code) continue;
-            if (a.Value != 0) return code == HpRegenCode && a.Value < 0 ? (0, 0) : (a.Value, a.Value);
+            if (a.Value != 0) return code == RegenSpellClassifier.HpRegenCode && a.Value < 0 ? (0, 0) : (a.Value, a.Value);
             (long lo, long hi) = SpellCalculator.AffectMagnitude(f, level);
             return ((int)lo, (int)hi);
         }

@@ -50,15 +50,17 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     // FormatLairRegen is shared by the map tooltip and the Room Info panel, so
     // both surfaces show the identical "Max Regen: N @ time" line.
     [Theory]
-    [InlineData(2, 5, "Max Regen: 2 @ 4m 30s")]   // Delay 5 → (5-1)m 30s
-    [InlineData(3, 1, "Max Regen: 3 @ 30s")]      // Delay 1 → 30s
-    [InlineData(1, 0, "Max Regen: 1")]            // no Delay → count only
-    public void FormatLairRegen_FormatsCountAndTime(int max, int delay, string expected)
-        => Assert.Equal(expected, RoomTooltipBuilder.FormatLairRegen(max, delay));
+    [InlineData(2, 5, RealmType.ParaMud, "Max Regen: 2 @ 4m 30s")]   // Delay 5 → (5-1)m 30s
+    [InlineData(3, 1, RealmType.ParaMud, "Max Regen: 3 @ 30s")]      // Delay 1 → 30s
+    [InlineData(2, 5, RealmType.Stock, "Max Regen: 2 @ 5-6m")]       // Delay to Delay + 1 min after the last kill
+    [InlineData(3, 1, RealmType.Stock, "Max Regen: 3 @ 1-2m")]
+    [InlineData(1, 0, RealmType.Stock, "Max Regen: 1")]              // no Delay → count only
+    public void FormatLairRegen_FormatsCountAndTime(int max, int delay, RealmType realm, string expected)
+        => Assert.Equal(expected, RoomTooltipBuilder.FormatLairRegen(max, delay, realm));
 
     [Fact]
     public void FormatLairRegen_NoLair_ReturnsEmpty()
-        => Assert.Equal(string.Empty, RoomTooltipBuilder.FormatLairRegen(null, 5));
+        => Assert.Equal(string.Empty, RoomTooltipBuilder.FormatLairRegen(null, 5, RealmType.Stock));
 
     [Fact]
     public void ParseLairTag_NMR183_HandlesTrailingGroupBracket()
@@ -161,7 +163,7 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         // Lair-tag members render under the "Lair:" line (the Max-N moves to the
         // Max Regen line below).
         Assert.Contains("Lair: Sewer Rat(#100), Sewer Snake(#101)", text);  // record numbers appended
-        Assert.Contains("Max Regen: 2 @ 4m 30s", text);     // Delay=5 → 4m 30s
+        Assert.Contains("Max Regen: 2 @ 5-6m", text);       // Delay=5 on a Stock set → 5-6m
     }
 
     [Fact]
