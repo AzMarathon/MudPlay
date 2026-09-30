@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.127.7**
+> **Version 3.127.8**
 > - Level Projection's Stealth column shows your sneak chance beside it: 84 (84%), or 100% from the level of a completed Perfect Stealth quest
 > - Every Level Projection column header explains its figure on hover, with the Paradigm formula when a Paradigm realm is loaded
 > - Session Statistics is grouped like the other panels (kills & experience, coin, items), with room below its last row
@@ -9,6 +9,7 @@
 > - Paradigm Picklocks counts CHM (weighted double); Paradigm crit has no 75 cap and adds the low-Combat class bonus (+4 for a Mage down to 0 for a Witchunter)
 > - Carry weight, magic resistance and crit's AGI term are marked confirmed for Paradigm
 > - Crit chance in the Workshop Calculators, Monster Intel and the Item Finder now includes the crit your level and stats give, not just +Crits gear
+> - Settings → General's recent-profiles count box is wide enough to show its number
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
