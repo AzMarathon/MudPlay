@@ -151,7 +151,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.GameData.ActiveSetChanged += OnActiveSetDropSimulation;
     }
 
-    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _) => ExpEstimator?.ClearSimulation(alsoCheck: true);
+    // A ranking is for the character it started with, so a swap stops it too (a set
+    // switch already does, through the graph reload).
+    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _)
+    {
+        ExpEstimator?.CancelRanking();
+        ExpEstimator?.ClearSimulation(alsoCheck: true);
+    }
     private void OnActiveSetDropSimulation(string? _) => ExpEstimator?.ClearSimulation(alsoCheck: true);
 
     // Per-second pump for CURRENT NAV lair countdowns. Cheap to leave
