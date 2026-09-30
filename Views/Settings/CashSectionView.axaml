@@ -145,6 +145,15 @@
                           IsChecked="{Binding StashAsFollower, Mode=TwoWay}"
                           ToolTip.Tip="When you're a party follower (in a party, not leading), stash currency as the leader drags you through your marked stash rooms. Off by default; your own loop is held by the leader-drag gate, so this opts the pass-through back in."/>
 
+                <!-- ============ Detours ============ -->
+                <TextBlock Classes="SectionHeader" Text="Detours"/>
+                <CheckBox Content="No combat during an auto-sell detour"
+                          IsChecked="{Binding NoCombatOnSellDetour, Mode=TwoWay}"
+                          ToolTip.Tip="While a loop or Auto-Lair turns aside to sell an item (an item's 'Make detours to sell it'), don't start fights — walk past hostiles as if Auto-Combat were off — until the detour is back and the loop picks up again. A rest that triggers on the way still clears the room first. Your Auto-Combat toggle isn't changed."/>
+                <CheckBox Content="No combat during an auto-deposit trip"
+                          IsChecked="{Binding NoCombatOnDepositTrip, Mode=TwoWay}"
+                          ToolTip.Tip="While auto-deposit takes a loop or Auto-Lair to the bank (or an off-route stash room) and back, don't start fights — walk past hostiles as if Auto-Combat were off — until it's back and the loop picks up again. A rest that triggers on the way still clears the room first. Your Auto-Combat toggle isn't changed."/>
+
                 <!-- ============ Collection Rules ============ -->
                 <TextBlock Classes="SectionHeader" Text="Collection Rules"/>
 

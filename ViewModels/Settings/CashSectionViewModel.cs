@@ -39,6 +39,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         "Copper", "Silver", "Gold", "Platinum", "Runic",
         "Collect", "Ignore", "Discard",
         "Auto-deposit", "Stashing", "Bank", "Keep on hand", "Wealth threshold",
+        "Detour", "No combat", "Sell detour",
         "Coin count", "Coins exceed",
         "Encumbrance", "Weight", "Light", "Medium", "Heavy",
         "Auto-get", "Get item", "Collection rules",
@@ -84,6 +85,10 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
 
     // Stash while dragged through a marked stash room as a party follower.
     [ObservableProperty] private bool _stashAsFollower;
+
+    // No combat until an auto-sell detour / auto-deposit trip is back on the loop.
+    [ObservableProperty] private bool _noCombatOnSellDetour;
+    [ObservableProperty] private bool _noCombatOnDepositTrip;
 
     // Dropdown source for both denomination pickers (low → high).
     public IReadOnlyList<CoinDenomination> DenominationChoices { get; } =
@@ -167,6 +172,8 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
 
             StashCoinCutoff = StashCoinCutoff,
             StashAsFollower = StashAsFollower,
+            NoCombatOnSellDetour = NoCombatOnSellDetour,
+            NoCombatOnDepositTrip = NoCombatOnDepositTrip,
 
             SkipCollectIfMakesLight    = SkipCollectIfMakesLight,
             SkipCollectIfMakesMedium   = SkipCollectIfMakesMedium,
@@ -238,6 +245,8 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
 
         StashCoinCutoff = dto.StashCoinCutoff;
         StashAsFollower = dto.StashAsFollower;
+        NoCombatOnSellDetour = dto.NoCombatOnSellDetour;
+        NoCombatOnDepositTrip = dto.NoCombatOnDepositTrip;
 
         SkipCollectIfMakesLight    = dto.SkipCollectIfMakesLight;
         SkipCollectIfMakesMedium   = dto.SkipCollectIfMakesMedium;
@@ -297,6 +306,8 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     partial void OnKeepOnHandDenominationChanged(CoinDenomination value) => MarkDirty();
     partial void OnStashCoinCutoffChanged(StashCoinCutoff value)      => MarkDirty();
     partial void OnStashAsFollowerChanged(bool value)                => MarkDirty();
+    partial void OnNoCombatOnSellDetourChanged(bool value)           => MarkDirty();
+    partial void OnNoCombatOnDepositTripChanged(bool value)          => MarkDirty();
     // ----- Encumbrance-gate cascade ---------------------------------
     // The three gates are nested by strictness: Light (strictest) ⊃
     // Medium ⊃ Heavy (loosest). Checking a stricter gate subsumes the

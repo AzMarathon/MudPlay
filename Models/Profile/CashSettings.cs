@@ -64,6 +64,13 @@ public sealed class CashSettings
     // off. Banking (which needs its own walk to the bank) is unaffected.
     public bool StashAsFollower { get; set; }
 
+    // Hold combat off while a detour takes us out of the loop / auto-lair — an
+    // auto-sell detour, or an auto-deposit trip to the bank or stash — until it's
+    // back and the engine resumes. The room is treated as if Auto-Combat were off
+    // (a rest there still fights to clear it). Default off.
+    public bool NoCombatOnSellDetour { get; set; }
+    public bool NoCombatOnDepositTrip { get; set; }
+
     // ----- Coin encumbrance gate + cascade ---------------------------
     // The "Cash + Items" tab exposes these; CashManager.CollectCoins gates coin
     // pickups against the bracket boundary they name.
