@@ -4751,8 +4751,7 @@ public sealed class AppServices
         // Running HP estimate per monster in the room: max HP less the damage the round
         // ledger saw, plus regen, pulled into the wound band by every `look`.
         MonsterHpEstimates = new Game.Combat.MonsterHpTracker(
-            MonsterHp.MaxHp, MonsterHp.HpRegen,
-            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud, log: Log);
+            MonsterHp.MaxHp, MonsterHp.HpRegen, log: Log);
         RoomClassifier.EntitiesObserved += MonsterHpEstimates.NoteRoomEntities;
         // The round ledger numbers same-named monsters off these estimates, and with
         // Settings → Combat "Cap at monster HP" caps a monster's damage taken at the HP

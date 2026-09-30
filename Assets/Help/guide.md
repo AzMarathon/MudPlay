@@ -1779,7 +1779,7 @@ The **Apply Debuffs** button (just under Edit Attacks) folds your known enemy de
 
 - **Damage:** your **minimum** stab after the monster's **DR** must reach its HP. A 37 minimum against a 35 HP monster with 5 DR leaves 32, so it isn't a one-stab kill.
 - **To-hit:** the stab is rolled against the monster's **backstab defence** (a quarter of its AC plus its BS Defense), not its full AC.
-- **Verdict:** **sure one-stab kill** when the min kills *and* the stab lands as often as the game ever allows: **100% on Paradigm**, **99% on Stock** (Stock never lets any attack be certain, a stab included). Otherwise it says *one-stab kill if it lands*, *kills only on a high roll*, *can't kill it in one stab*, or *it sees hidden* (a see-hidden monster spots your sneak, so no surprise lands).
+- **Verdict:** **sure one-stab kill** when the min kills *and* the stab lands as often as the game ever allows: **100% on Paradigm**, **98% on Stock** (Stock never lets any attack be certain, a stab included). Otherwise it says *one-stab kill if it lands*, *kills only on a high roll*, *can't kill it in one stab*, or *it sees hidden* (a see-hidden monster spots your sneak, so no surprise lands).
 - **The working** — your range before and after DR, and the to-hit — sits on a second line.
 - **Weapon:** if your Equipment Manager's **Backstab** set names a weapon, the stab is worked out with that weapon (the one you'll actually swing), and the line says so.
 
@@ -3701,7 +3701,7 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 - **The terminal** gets a yellow line with the monster's max HP, its wound band and that band's HP range, and a **best guess**: `[large orc: 100 HP, Sev: 30-49, ~41]`. The bands are **Full** (unwounded), **Slight**, **Mod** (moderately), **Hvy** (heavily), **Sev** (severely), **Crit** (critically) and **V.Crit** (very critically).
 - **The status bar's TGT HP:** slot shows the range with the best guess in brackets, `TGT HP: 35-48 [~41]`. The bracket follows the damage the monster takes after the look.
 
-**How the best guess works:** it starts from the monster's max HP and subtracts the damage the round totals credited to it (see *Show combat round totals*). It adds the monster's regen every 30 seconds on Paradigm or 90 seconds on Stock while it's hurt. Every `look` keeps it inside the wound band. When a look shows a regen tick fired (the band rose since the last look, or it held up despite the damage), it adds that tick to the best guess and re-times the regen from then. With two monsters of the same name in the room, attacks and looks go to the first one listed in *Also here:*, and so does the estimate.
+**How the best guess works:** it starts from the monster's max HP and subtracts the damage the round totals credited to it (see *Show combat round totals*). It adds the monster's regen every 30 seconds while it's hurt, on both realms. Every `look` keeps it inside the wound band. When a look shows a regen tick fired (the band rose since the last look, or it held up despite the damage), it adds that tick to the best guess and re-times the regen from then. With two monsters of the same name in the room, attacks and looks go to the first one listed in *Also here:*, and so does the estimate.
 
 ### Enable the Great Pyramid climb solver / Enable the asylum (random-teleport maze) solver
 

@@ -11,8 +11,8 @@ namespace MudPlay.Game.Combat;
 // name goes to the FIRST of them (user, 2026-09-29), so damage and looks land on the
 // first instance, a death removes the first, and an arrival joins at the end.
 //
-// Regen: a hurt monster regains its HPRegen every regen tick — 30 s on Paradigm, 90 s
-// on Stock (GAME_MECHANICS "Monster HP regen"). The tick's phase isn't visible, so it's
+// Regen: a hurt monster regains its HPRegen every regen tick, the engine's fixed 30 s
+// slow tick on both realms (GAME_MECHANICS "Monster HP regen"). The tick's phase isn't visible, so it's
 // counted from when the monster was first hurt, and re-timed whenever a `look` shows a
 // tick fired: the band rose since the last look, or the damage we saw says the band
 // should have dropped and it didn't (user, 2026-09-29). A `look`'s wound band is the
@@ -24,12 +24,10 @@ public sealed class MonsterHpTracker
 {
     public const string LogCategory = "MonsterHp";
 
-    public static readonly TimeSpan ParadigmRegenInterval = TimeSpan.FromSeconds(30);
-    public static readonly TimeSpan StockRegenInterval = TimeSpan.FromSeconds(90);
+    public static readonly TimeSpan RegenInterval = TimeSpan.FromSeconds(30);
 
     private readonly Func<int, int?> _maxHp;
     private readonly Func<int, int> _regen;
-    private readonly Func<bool> _isParadigm;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
@@ -39,17 +37,14 @@ public sealed class MonsterHpTracker
     // bar re-reads the looked-at target.
     public event Action<string>? EstimateChanged;
 
-    public MonsterHpTracker(Func<int, int?> maxHp, Func<int, int> regen, Func<bool> isParadigm,
+    public MonsterHpTracker(Func<int, int?> maxHp, Func<int, int> regen,
         Func<DateTimeOffset>? clock = null, LogService? log = null)
     {
         _maxHp = maxHp;
         _regen = regen;
-        _isParadigm = isParadigm;
         _now = clock ?? (static () => DateTimeOffset.Now);
         _log = log;
     }
-
-    private TimeSpan RegenInterval => _isParadigm() ? ParadigmRegenInterval : StockRegenInterval;
 
     // The room's occupants changed. Carry each monster's state over by name and order:
     // a death drops the first of that name (the one we were hitting), anything else

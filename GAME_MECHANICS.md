@@ -846,20 +846,20 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 *Status: CONFIRMED 2026-09-06 (MMUD-Explorer `modMMudFunc.bas` `CalculateAttackDefense`) · Realm: differs*
 
 - **A physical hit chance never reaches 0%.** No matter how high a defender's AC/Dodge climbs, an attacker's chance to land a physical hit is **clamped to a floor**. The floor is realm-dependent, and on ParaMUD it also depends on the **defender's class armour type**.
-- **Stock: 8%.** Flat, regardless of armour type.
+- **Stock: 9%.** Flat, regardless of armour type, with a 98% ceiling (an earlier MMUD-Explorer figure of 8–99% is superseded 2026-09-30).
   - **The engine lands a hit on about 9–98%, not 8–99%** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_calculate_attack` @`0x42b928`–`0x42b9e9`)*.
     - It rolls `genrdn(1,100)` first, then clamps the chance to **10–99**.
     - It hits only when the roll is **under** the clamped chance (`cmp chance,roll; jle miss`). So the landing chance is `clamp(chance, 10, 99) − 1` in percent: a floor of **9%** and a ceiling of **98%**.
     - `genrdn` is the host's (`WGSERVER.EXE`) and isn't in the DLL. If its top bound is exclusive, the ends are 9/99 ≈ 9.1% and 98/99 ≈ 99.0% *([NEEDS CONFIRMATION]: is `genrdn`'s top bound inclusive?)*.
     - A dodge roll follows a hit: `genrdn(0,100) < dodge`, with dodge capped at 95. So a hit can still be dodged below the 9% floor.
     - The same routine serves every attacker and defender (user or monster).
-  - **Client policy (user, 2026-09-27):** keep the MMUD-Explorer 8% (and 99% ceiling) until there's data from a full Stock realm. The client doesn't apply the 9–98% reading yet.
+  - **The client uses the DLL's 9–98%** *(user, 2026-09-30; it had kept MMUD-Explorer's 8–99% since 2026-09-27)*: `CombatCalculator` clamps a Stock chance to 10–99 and subtracts 1.
 - **ParaMUD: 2% normally, dropping to 1% when the defender's class `ArmourType` is 1..6** — the light-armour tiers **Silk (1), Ninja (2), Leather (3–6)**. Heavier classes — **Chainmail (7), Scalemail (8), Platemail (9)** — and **Natural (0)** stay at the 2% floor.
 - **`ArmourType` is a per-class field (Classes table),** so it's the *character's* class armour tier that lowers the floor, not the gear currently worn. Value→name map (LookupEnums): 0 = Natural, 1 = Silk, 2 = Ninja, 3–6 = Leather, 7 = Chainmail, 8 = Scalemail, 9 = Platemail.
 - **Sibling dodge caps (also in `CombatCalculator`):** Stock hard-caps dodge at **95%**; ParaMUD applies a **soft cap at 55%** (diminishing returns above it) then a **hard cap at 98%**.
 
 **Client use:**
-- Mirrors `CombatCalculator.GetHitMin`: ParaMUD base `PARAMUD_HIT_MIN = 2`, minus 1 when `ArmourType` is in 1..6; Stock `STOCK_HIT_MIN = 8`.
+- Mirrors `CombatCalculator.GetHitMin`: ParaMUD base `PARAMUD_HIT_MIN = 2`, minus 1 when `ArmourType` is in 1..6; Stock `STOCK_HIT_MIN = 9` (the engine clamp of 10–99, less 1; `STOCK_HIT_CAP = 98`).
 - This is why Monster Intel's Hits-You-% column can read **1%** for a light-armour ParaMUD class and its filter dropdown grows a leading `≤1%` band there — the estimator threads the class `ArmourType` into the hit-chance calc so the shown number matches the engine's real minimum (PR #503, v3.52.7).
 
 ### Thorns / ShockShield reflect damage
@@ -1324,7 +1324,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 | **Accuracy** | `(Stealth + AGL)/2 + BSAccu/2`, **+5** with class stealth or **−15** with race-only stealth, + the accuracy-ability bonus (highest of abilities 22 / 105 / 106), **−10** if you fought last round | `Stealth/3 + ((AGL − 50) + Level)/2 + 15 + BSAccu` + all accuracy abilities, **−15** if the weapon is too heavy |
 | **Defence (vs a player)** | — | `(AC + prev + Perception·0.8 + ward)/2 + shadow` |
 | **Defence (vs a monster)** | `AC/4 + BSDefense` — built as `(AC/2 + 2·BSDefense)/2` in `_move_monster_to_fighter` | `AC/4 + BSDefense` *(MMUD-Explorer)* |
-| **Hit chance** | accuracy − defence, through the same clamp every attack goes through (`_calculate_attack`) — the client uses **8–99** (the DLL clamp reads 10–99, see the note below); a monster with negative dodge can jump it straight to 99 | `100 − defence² / (accuracy²/140)`, clamped **2–100** *(MMUD-Explorer)* — a monster has no class armour type, so it never gets the light-armour 1% floor |
+| **Hit chance** | accuracy − defence, through the same clamp every attack goes through (`_calculate_attack`) — the DLL clamps it to **10–99** and the roll must come in under it, so it lands **9–98%** (see the note below); a monster with negative dodge can jump it straight to the ceiling | `100 − defence² / (accuracy²/140)`, clamped **2–100** *(MMUD-Explorer)* — a monster has no class armour type, so it never gets the light-armour 1% floor |
 | **Monster's dodge** | its dodge chance (`dodge·10 / (accuracy/8)`, capped 95) **÷ 5** | full dodge *(MMUD-Explorer)* |
 | **Base range** | the weapon's min / max with strength and +max damage, as for a normal hit | the same, plus **+min damage on the min** |
 | **Backstab range** | min `= 2·min + 2·Level + Stealth/10 + BS min (117)`; max `= 2·max + 2·Level + Stealth/10 + BS max (118)` | same |
@@ -1336,7 +1336,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 
 - BSAccu is ability 116. All division truncates.
 - MMUD-Explorer also has a `AC + BSDefense` defence for a defender that sees hidden; the Stock DLL has no such branch. It doesn't arise against a monster anyway: a see-hidden monster spots the sneak, so there's no surprise opener at all (see *Backstab*).
-- **No Stock stab is ever certain** *([OBSERVED] `wccmmud.dll` 1.11p, 2026-09-28)*. `_cmd_backstab` only queues a type-4 attack; the round resolves it in `_calculate_attack`, whose type-4 branch feeds the same clamp as a normal swing (10–99 in the DLL), and the swing lands when the roll is under the chance, so a clamped 99 lands about 98% of the time (*Armour, defence & to-hit → To-hit floor — the minimum chance a monster can ever land, by realm and armour type*). **Client policy (user, 2026-09-28):** until the floor is confirmed, Stock stays at **8–99**, the same as every other attack (see *Armour, defence & to-hit → To-hit floor — the minimum chance a monster can ever land, by realm and armour type*). Paradigm's ceiling is **100%** *(MMUD-Explorer)*, so a Paradigm stab can land every time. Its floor against a monster is **2%**: MMUD-Explorer's attack code passes no defender class for a monster, and the 1% light-armour floor belongs to a player's class armour type (see the same *To-hit floor* topic). `CombatCalculator.GetHitMin` gives 2 for a monster (armour type 0).
+- **No Stock stab is ever certain** *([OBSERVED] `wccmmud.dll` 1.11p, 2026-09-28)*. `_cmd_backstab` only queues a type-4 attack; the round resolves it in `_calculate_attack`, whose type-4 branch feeds the same clamp as a normal swing (10–99 in the DLL), and the swing lands when the roll is under the chance, so a clamped 99 lands about 98% of the time (*Armour, defence & to-hit → To-hit floor — the minimum chance a monster can ever land, by realm and armour type*). The client uses that **9–98%**, the same as every other attack *(user, 2026-09-30; an earlier policy kept 8–99; superseded)*. Paradigm's ceiling is **100%** *(MMUD-Explorer)*, so a Paradigm stab can land every time. Its floor against a monster is **2%**: MMUD-Explorer's attack code passes no defender class for a monster, and the 1% light-armour floor belongs to a player's class armour type (see the same *To-hit floor* topic). `CombatCalculator.GetHitMin` gives 2 for a monster (armour type 0).
 
 **Client use:**
 - `LoopSimulator.Stab`: a sneaked-in fight opens with one stab judged by `BackstabMatchupCalculator` (the Backstab set's weapon in hand). A miss or a stab that doesn't kill is the whole surprise round, and the next round is the configured attack order *([CONFIRMED] 2026-09-30, user)*.
@@ -2801,11 +2801,11 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 - **Re-typing the summon keyword is *not* a known way to force a second monster** while one is already up.
 
 ### Monster HP regen
-*Status: amount CONFIRMED 2026-09-29 (user, MMUD-Explorer's monster panel); cycle per MMUD-Explorer by the user's call 2026-09-29, `[CONFLICT — ask the user]` with the Stock DLL · Realm: differs*
+*Status: amount CONFIRMED 2026-09-29 (user, MMUD-Explorer's monster panel); cycle per the Stock DLL by the user's call 2026-09-30 · Realm: both (Paradigm assumed the same as the DLL)*
 
 - **A hurt monster regains its `HPRegen` (Monsters table) every regen tick, for as long as it's alive and below max HP** *([CONFIRMED] 2026-09-29, user: a Newhaven giant rat has 12 HP and recovers 1 HP every 30 s while it's alive and hurt)*. Every monster has its own amount.
-- **The cycle, as the client uses it (MMUD-Explorer):** every **30 s / 6 rounds on Paradigm**, every **90 s / 18 rounds on Stock** — the same for every monster (`GMUD_MOB_HPREGEN_ROUNDS = 6`, `STOCK_MOB_HPREGEN_ROUNDS = 18`). *Client policy — the user chose MMUD-Explorer's figures for now (2026-09-29).*
-- **`[CONFLICT — ask the user]` The Stock 1.11p DLL regenerates every monster once per *slow tick*** — the same tick that pays player HP regen and bleeds a dropped player — not every 90 s *([OBSERVED] 2026-09-29, `wccmmud.dll` `_background_slow` → `_slow_update_monsters` / `_slow_update_monster` @0x421c06)*. The user also said every monster has its own cycle (2026-09-29), which neither source shows.
+- **The cycle is every 30 s on both realms** — the engine's slow tick, the same for every monster *(user's call 2026-09-30, following the DLL)*. (MMUD-Explorer has 30 s / 6 rounds on Paradigm but 90 s / 18 rounds on Stock — `GMUD_MOB_HPREGEN_ROUNDS = 6`, `STOCK_MOB_HPREGEN_ROUNDS = 18` — which the client used from 2026-09-29; superseded 2026-09-30.)
+- **The Stock 1.11p DLL regenerates every monster once per *slow tick*** — the same tick that pays player HP regen and bleeds a dropped player — not every 90 s *([OBSERVED] 2026-09-29, `wccmmud.dll` `_background_slow` → `_slow_update_monsters` / `_slow_update_monster` @0x421c06)*. The user also said every monster has its own cycle (2026-09-29), which neither source shows.
   - **The slow tick is a fixed 30 s** *([OBSERVED] 2026-09-30)*: `_background_slow` re-arms itself with the value at `0x482cbc` (30), which nothing writes, so it isn't a sysop setting (an earlier note here called it one; superseded 2026-09-30). The medium tick (`0x482cc0`) is a fixed 3 s.
   - **One tick, per monster:** first its poison (active record `+0x14`) comes off its HP; then, only if it's below max HP (`+0x104`, copied from the known-monster record's `+0x78`: 12 on the giant rat), its `HPRegen` (`+0x130`, copied from `+0x7c`: 1 on the giant rat) is added, capped at max. Poison, combat and HP at or below 0 don't stop the regen. The tick prints nothing and kills nothing: a monster left below 0 HP dies on the next 3 s medium pass (`_medium_update_monster` @0x421d46), with its normal death message. Monster poison is in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*.
   - **The pass is spread out:** the tick starts it with one monster slot, and the polling loop advances one slot every second poll (`_ljngame_user_polling_routine` @0x402b01). Each monster is stamped with the tick it was processed in, and attacking a monster the pass hasn't reached yet applies that tick to it at once (`_attack_user_monster` @0x42d148). So a monster gets exactly one poison-and-regen step per 30 s, at a moment that varies from monster to monster.
@@ -2814,7 +2814,7 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 
 **Client use:**
 - With Settings → Combat **Cap at monster HP** on, the round ledger caps each monster's damage taken, and the dealer's damage dealt, at the HP estimate the hit found it at (`RoundDamageTracker.Hits`). An estimate already at 0 that still takes a hit was wrong, so that hit counts in full. *Client policy (user, 2026-09-30, report `paradigm-20260930-104446`): the cap is opt-in, off by default; off, the ledger counts each line's printed number.*
-- `MonsterHpTracker` keeps a running estimate per monster in the room (max HP less the round ledger's damage, plus regen), re-times the regen cycle when a look shows a tick fired, and pulls the estimate into each look's band (see *Health, resting & recovery → Looking at a monster — coarse wound bands*).
+- `MonsterHpTracker` keeps a running estimate per monster in the room (max HP less the round ledger's damage, plus its regen every 30 s on both realms), re-times the regen cycle when a look shows a tick fired, and pulls the estimate into each look's band (see *Health, resting & recovery → Looking at a monster — coarse wound bands*).
 
 ### Monster movement lines
 

@@ -29,7 +29,7 @@ public sealed class BackstabMatchupCalculatorTests
         Assert.Equal(45, r.MaxDamage);
     }
 
-    // A sure kill needs the stab at the realm's ceiling: Stock clamps at 99.
+    // A sure kill needs the stab at the realm's ceiling: Stock lands at most 98%.
     [Fact]
     public void MinAfterDrKills_AtTheHitCeiling_IsSureKill()
     {
@@ -37,8 +37,8 @@ public sealed class BackstabMatchupCalculatorTests
             Stabber(accuracy: 150, min: 40, max: 50), Target(hp: 35, dr: 5),
             bsDefense: 0, seesHidden: false);
 
-        Assert.Equal(99, r.HitCap);
-        Assert.Equal(99, r.HitPercent);
+        Assert.Equal(98, r.HitCap);
+        Assert.Equal(98, r.HitPercent);
         Assert.Equal(BackstabVerdict.SureKill, r.Verdict);
         Assert.True(r.IsOneStabKill);
     }
@@ -47,17 +47,18 @@ public sealed class BackstabMatchupCalculatorTests
     [Fact]
     public void MinAfterDrKills_OneUnderCeiling_IsKillIfItLands()
     {
-        // 103 − (20/4 + 0) = 98, one under Stock's 99.
+        // 103 − (20/4 + 0) = 98, which lands 97%, one under Stock's 98.
         BackstabMatchup r = BackstabMatchupCalculator.Evaluate(
             Stabber(accuracy: 103, min: 40, max: 50), Target(hp: 35, ac: 20),
             bsDefense: 0, seesHidden: false);
 
-        Assert.Equal(98, r.HitPercent);
+        Assert.Equal(97, r.HitPercent);
         Assert.Equal(BackstabVerdict.KillIfItLands, r.Verdict);
     }
 
     // Stock backstab to-hit is accuracy − (AC/4 + BSDefense): a high backstab
-    // defence drops a stab that would kill below the realm's 99% ceiling.
+    // defence drops a stab that would kill below the realm's 98% ceiling. The stab
+    // lands one under the chance (a roll under it hits).
     [Fact]
     public void BsDefenseDragsHitBelowBar_IsKillIfItLands()
     {
@@ -65,7 +66,7 @@ public sealed class BackstabMatchupCalculatorTests
             Stabber(accuracy: 100, min: 40, max: 50), Target(hp: 35, ac: 20),
             bsDefense: 30, seesHidden: false);
 
-        Assert.Equal(100 - (20 / 4 + 30), r.HitPercent);
+        Assert.Equal(100 - (20 / 4 + 30) - 1, r.HitPercent);
         Assert.Equal(BackstabVerdict.KillIfItLands, r.Verdict);
         Assert.False(r.IsOneStabKill);
     }

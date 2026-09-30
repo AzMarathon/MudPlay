@@ -239,7 +239,7 @@ public sealed class RoundDamageTrackerTests
     private static (Harness H, MonsterHpTracker Hp) MuckRoom(bool capAtHp = true)
     {
         Harness h = new();
-        MonsterHpTracker hp = new(n => n == 1 ? 540 : 400, _ => 0, () => true);
+        MonsterHpTracker hp = new(n => n == 1 ? 540 : 400, _ => 0);
         h.Tracker.SetMonsterHp(hp.TargetOf, hp.RoomMonsters, () => capAtHp);
         h.Tracker.Attributed += line =>
         {
