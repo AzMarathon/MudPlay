@@ -80,16 +80,6 @@ public sealed class OtherSettings
     // gate check runs whenever this character leads a party. See
     // Game.Remote.PartyLevelTracker (always-on: IsInParty && SelfIsLeader).
 
-    // Leader-side @comeback backtrack budget — when a stranded follower sends a
-    // bare @comeback (no target room), the leader pauses its active movement
-    // engine and walks backwards along the path just taken, room by room, up to
-    // this many rooms looking for the follower. If not recovered within the
-    // budget the leader gives up and goes idle to let the player handle it.
-    // Default 10, range 1..50. Ignored when the follower supplies an explicit
-    // room (@comeback 9/1012) — that path walks straight to the named room
-    // instead. Surfaced in Settings → Other.
-    public int MaxComebackBacktrackRooms { get; set; } = 10;
-
     // Follower-side auto-@comeback. When true (default) and a movement-blocking
     // condition (prevents-movement gamedata flag or over-encumbrance) leaves us
     // behind as the party leader walks off, we automatically telepath @comeback

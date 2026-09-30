@@ -549,9 +549,7 @@ public sealed class AppServices
     // Leader-side @comeback party-pickup flow — pauses the
     // running movement engine, walks to recover a stranded follower
     // (explicit room or backtrack along the just-walked path), re-
-    // invites + awaits follow, then resumes the captured engine. The
-    // Game.Remote.PartyComebackManager.MaxBacktrackRooms
-    // budget is pushed from Settings → Other.
+    // invites + awaits follow, then resumes the captured engine.
     public Game.Remote.PartyComebackManager PartyComeback { get; private set; } = null!;
 
     // Recognises an @where reply telepath and flashes its room on the nav map.
@@ -7011,8 +7009,8 @@ public sealed class AppServices
         // a gate would block the recovery walk itself), walks to recover
         // the stranded follower (explicit room or backtrack along the
         // just-walked RoomTracker trail), re-invites + awaits follow,
-        // then resumes the captured engine. MaxBacktrackRooms is pushed
-        // from Settings → Other by ApplyOtherFromActiveProfile on load.
+        // then resumes the captured engine. Its reach (ReturnDistanceRooms)
+        // comes from Settings → Party.
         PartyComeback = new Game.Remote.PartyComebackManager(
             RemoteCommands, Party, RoomTracker, RoomClassifier, Walker, LoopRunner, AutoLair, Router, Bfs, Log);
         // A follower we backtracked for couldn't move — hold for their @ok as if
@@ -10995,8 +10993,6 @@ public sealed class AppServices
         RemoteCommands.MaxSuicideLivesThreshold = Math.Clamp(dto.MaxSuicideLivesThreshold, 0, 9);
         // @trap auto-disarm attempt caps.
         TrapDisarm.MaxDisarmAttempts = Math.Clamp(dto.MaxTrapDisarmAttempts, 1, 50);
-        // Leader-side @comeback backtrack budget.
-        PartyComeback.MaxBacktrackRooms = Math.Clamp(dto.MaxComebackBacktrackRooms, 1, 50);
         // Follower-side auto-@comeback toggle.
         ComebackRequest.Enabled = dto.AutoRequestComebackWhenLeftBehind;
         // Auto-discard offload verb: hide <item> vs drop <item>.
@@ -11009,7 +11005,6 @@ public sealed class AppServices
         Models.Profile.OtherSettings defaults = new();
         RemoteCommands.MaxSuicideLivesThreshold = defaults.MaxSuicideLivesThreshold;
         TrapDisarm.MaxDisarmAttempts = defaults.MaxTrapDisarmAttempts;
-        PartyComeback.MaxBacktrackRooms = defaults.MaxComebackBacktrackRooms;
         ComebackRequest.Enabled = defaults.AutoRequestComebackWhenLeftBehind;
         AutoDiscard.HideMode = defaults.HideWhenDiscarding;
         AutoParty.OnlyWhileNavigating = defaults.AutoInviteOnlyWhileNavigating;

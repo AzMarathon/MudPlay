@@ -518,6 +518,27 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal("Tank", h.Comeback.RecoveringMember);
     }
 
+    // Settings → Party "Return distance" caps the backtrack too: our path holds
+    // three rooms behind us: a reach of 2 walks back two of them, a reach of 30 all three.
+    [Theory]
+    [InlineData(2, 2)]
+    [InlineData(30, 3)]
+    public void Backtrack_IsCappedByReturnDistance(int reach, int rooms)
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Comeback.ReturnDistanceRooms = reach;
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        StartLair(h);                               // 1/1: three rooms behind us
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.True(Sent(h, $"/Tank {{backtracking up to {rooms} room(s)"));
+    }
+
     // User report (a token mid-walk split the party): the player set a new walk-to
     // over the backtrack, and every walk they finished afterwards sent them on to the
     // next backtrack room. Replacing our walk now calls the recovery off.

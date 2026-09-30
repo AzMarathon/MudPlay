@@ -834,7 +834,7 @@ A member's chip clears on the first of:
 
 If a member drops, the party can auto-re-invite and reform on reconnect, and a member left behind can `@comeback` to rejoin the leader.
 
-- **A follower who reconnects** within the *If leading, accept @comeback for* time (default 2 minutes) telepaths `@comeback <map/room>` to their leader, so the leader walks straight to them. After a longer drop the party has moved on, and no `@comeback` goes out. MudPlay waits up to 5 seconds after re-entering for your room to be confirmed, since the game can put you back somewhere other than where you dropped. Only if it can't confirm your room does a bare `@comeback` go out, and the leader backtracks along their own path instead.
+- **A follower who reconnects** within the *If leading, accept @comeback for* time (default 2 minutes) telepaths `@comeback <map/room>` to their leader, so the leader walks straight to them. After a longer drop the party has moved on, and no `@comeback` goes out. MudPlay waits up to 5 seconds after re-entering for your room to be confirmed, since the game can put you back somewhere other than where you dropped. Only if it can't confirm your room does a bare `@comeback` go out, and the leader backtracks along their own path instead, up to its *Return distance* in rooms.
 - **A leader** takes that `@comeback` for up to *If leading, accept @comeback for* minutes after the member dropped, even once they've re-entered the realm.
 - **If the leader is already backtracking** for that member and their `@comeback` names a room, the leader heads for that room instead.
 - **When a member drops, the leader holds in place** for their reconnect. That hold ends once the leader sets off to pick them up (or turns them down), so a leader waiting on a returning member still walks to them.
@@ -3117,7 +3117,7 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 ### Return distance (rooms)
 
 **Default:** `30`
-**What it does:** How far (in map rooms) the leader is willing to walk to go retrieve a reconnected party member. Beyond this, the leader gives up on walking over and tells them to catch up on their own.
+**What it does:** How far the leader will go to retrieve a party member. When the member names their room (`@comeback 9/1012`, or an `@where` answer), it's the farthest in map rooms the leader will walk there; beyond it the leader tells them to catch up on their own. When they send a bare `@comeback`, it's how many rooms the leader walks back along its own recent path looking for them (the client remembers the last 50) before going idle.
 
 ### If leading, accept @comeback for (min)
 
@@ -3551,11 +3551,6 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 **Default:** Off (plain drop)
 **What it does:** When auto-discard offloads an item from your pack, this makes it use `hide` instead of `drop` so the item lands concealed rather than in plain view on the ground.
-
-### @comeback backtrack up to N rooms
-
-**Default:** `10`
-**What it does:** If you're the leader and a stranded follower sends a bare `@comeback` with no room specified, this is how far back along your own recent path you'll walk searching for them before giving up.
 
 ### Auto-request @comeback when left behind
 
@@ -4017,7 +4012,7 @@ This section is a compact, technical lookup table for every setting documented a
 | @trap max disarms | 5 | 1–50 | `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |
 | Door max bash / pick / Pick over bash | 10/10/false | 1–100 / 1–100 / bool | `MaxBashAttempts`, `MaxPickAttempts`, `PicklocksOverBash` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
-| @comeback backtrack rooms / auto-request | 10 / true | 1–50 / bool | `MaxComebackBacktrackRooms` / `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |
+| Auto-request @comeback when left behind | true | bool | `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |
 | Pyramid / Asylum solver enabled | true / true | bool (Global) | `GlobalSettings.PyramidSolverEnabled` / `AsylumSolverEnabled` | Models/Settings/GlobalSettings.cs |
 | Token routes: offer / min rooms saved | true / 50 | bool + 1–300 (Global, Paradigm) | `GlobalSettings.EnableTokenRoutes` / `TokenRouteMinRoomsShorter` | Models/Settings/GlobalSettings.cs |
 | Navigation map: hold a browsed view | `15` s | 0–300 (Global) | `GlobalSettings.MapRecenterHoldSeconds` | Models/Settings/GlobalSettings.cs |
