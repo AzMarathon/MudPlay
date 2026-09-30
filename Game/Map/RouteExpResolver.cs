@@ -142,6 +142,27 @@ public sealed class RouteExpResolver : IDisposable
         return new Simulation.SimRoom(key, npc, lairMax, lairIds, respawn, bosses, summon, pause);
     }
 
+    // Hop count from a room to every room reachable from it (one search); viaBoats
+    // also crosses the sailings and gateway portals the filter allows.
+    public IReadOnlyDictionary<RoomKey, int> DistancesFrom(RoomKey from, IRoomFilter? filter = null, bool viaBoats = false) =>
+        _bfs.ComputeDistancesFrom(from, filter, viaBoats);
+
+    // Walking hop counts from a room, searching only until every target is reached.
+    public IReadOnlyDictionary<RoomKey, int> DistancesTo(RoomKey from, IReadOnlyCollection<RoomKey> targets, IRoomFilter? filter = null) =>
+        _bfs.ComputeDistancesTo(from, targets, filter);
+
+    // Every lair room in the active set with its non-boss lair monsters — the input
+    // AreaTours groups into hunting areas.
+    public IEnumerable<(RoomKey Room, IReadOnlyList<int> LairMonsters)> LairRooms()
+    {
+        foreach (Room room in _graph.Rooms)
+        {
+            if (!room.HasLair || ParseLair(room.RawLairTag) is not (int _, List<int> ids)) continue;
+            List<int> regular = ids.Where(id => Monsters().ContainsKey(id) && !Monster(id).IsBoss).ToList();
+            if (regular.Count > 0) yield return (room.Key, regular);
+        }
+    }
+
     // The monsters a monster's death spell summons (its Abil-12 slots), or null.
     public IReadOnlyList<int>? DeathSummonsOf(int monsterNumber) => SummonsOf(monsterNumber);
 

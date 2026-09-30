@@ -403,6 +403,28 @@ public sealed class BfsMapperTests : IDisposable
     }
 
     [Fact]
+    public void ComputeDistancesTo_StopsOnceEveryTargetIsReached()
+    {
+        var (bfs, _) = NewMapper();
+        var near = bfs.ComputeDistancesTo(new RoomKey(1, 1), new[] { new RoomKey(1, 2) });
+        Assert.Equal(1, near[new RoomKey(1, 2)]);
+        Assert.False(near.ContainsKey(new RoomKey(1, 3)));   // never searched past the target
+        Assert.False(near.ContainsKey(new RoomKey(1, 7)));
+
+        var far = bfs.ComputeDistancesTo(new RoomKey(1, 1), new[] { new RoomKey(1, 2), new RoomKey(1, 7) });
+        Assert.Equal(4, far[new RoomKey(1, 7)]);
+        Assert.Equal(1, far[new RoomKey(1, 2)]);
+    }
+
+    [Fact]
+    public void ComputeDistancesTo_LeavesAnUnreachableTargetOut()
+    {
+        var (bfs, _) = NewMapper(GatedOnlyJson);
+        var dist = bfs.ComputeDistancesTo(new RoomKey(1, 1), new[] { new RoomKey(1, 2) }, new LevelFilter(10));
+        Assert.False(dist.ContainsKey(new RoomKey(1, 2)));
+    }
+
+    [Fact]
     public void DistanceBetween_ReturnsHopCount()
     {
         var (bfs, _) = NewMapper();

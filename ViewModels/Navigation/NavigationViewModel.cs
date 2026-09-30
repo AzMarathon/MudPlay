@@ -151,7 +151,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.GameData.ActiveSetChanged += OnActiveSetDropSimulation;
     }
 
-    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _) => ExpEstimator?.ClearSimulation(alsoCheck: true);
+    // A ranking is for the character it started with, so a swap stops it too (a set
+    // switch already does, through the graph reload).
+    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _)
+    {
+        ExpEstimator?.CancelRanking();
+        ExpEstimator?.ClearSimulation(alsoCheck: true);
+    }
     private void OnActiveSetDropSimulation(string? _) => ExpEstimator?.ClearSimulation(alsoCheck: true);
 
     // Per-second pump for CURRENT NAV lair countdowns. Cheap to leave
@@ -176,6 +182,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        ExpEstimator?.CancelRanking();
         _lairTick.Stop();
         _sailingTick.Stop();
         _searchDebounce?.Stop();
@@ -2789,6 +2796,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (ExpEstimator is not null)
         {
             ExpEstimator.PropertyChanged -= OnExpEstimatorPropertyChanged;
+            ExpEstimator.CancelRanking();
             ExpEstimator.CancelSimulation();
         }
         ExpEstimator = null;
@@ -3493,7 +3501,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void OnGraphReloaded()
     {
         // RoomSearchService listens to GraphReloaded itself and flushes
-        // its monster + distance caches.
+        // its monster + distance caches. A ranking mid-way through mapping would mix
+        // the old graph's searches with the new one's.
+        ExpEstimator?.CancelRanking();
         RefreshLayout();
         RefreshTeleportRooms();
         RefreshTrainerRooms();   // trainer set is per game-data set

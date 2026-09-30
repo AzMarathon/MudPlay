@@ -383,6 +383,22 @@ It needs program logs, and those are only written while **Program Log (F4) → A
 
 Another level is simulated by moving **today's** character there: max HP, mana and Spellcasting shift by your class's per-level growth (a Mystic's kai is left as it is now), the level-scaled numbers (accuracy, swings, regen, spell damage) follow, and spells above that level are dropped — but your stats, gear and quest bonuses stay as they are now. So a session from before a gear upgrade or a stat train reads high for reasons the simulator can't see; the rows at your current level are the fair test.
 
+### Ranking hunting areas at a level
+
+**Rank areas at level** (with a level beside it — 0 means your current level, and follows you as you level) answers "where should I hunt?". It builds a lair tour for **every hunting area you can reach from the room you're standing in at that level** — each lair room goes to the area its monsters are filed under (the **Region / Area** labels on the Game Data Monsters tab; change a monster's area there and the ranking follows), and the tour walks from the area's first lair to the nearest unvisited one (a very large area is walked outward from the start instead) — then plays your character through each at that level and lists them:
+
+- **safe areas first, best exp/hr first**, with your lowest HP and the number of lairs;
+- **areas where you died** (or hung up) after them, however high their number — a run that dies only counts the minutes before it did.
+- **your own saved loops**, ranked right alongside the areas and marked ★, each simulated at that level too — with what **you actually made** on it from your program logs (your record at that level, and your biggest sample a few levels either side). A loop you've played for hours **at the ranked level or below** without dying counts as safe even if a simulated run died; a record from a higher level is shown but doesn't vouch for it.
+
+Each option gets the estimator's **Runs** and **Hours** settings (runs × hours of simulated play), so a ranking takes longer the higher those are. Mapping the areas and simulating them can take a while on a big map: the status line shows how far it has got, the client stays usable meanwhile, and **Cancel** beside the button stops it (leaving the estimator, or closing the Navigation window, stops it too).
+
+**Reach is judged at the chosen level.** A level-gated way in — a `(Level 50+)` exit, a boat or portal with a minimum level — only counts once the ranked level clears it, so ranking below that level leaves the areas behind it out and ranking at or above it brings them in. Reach is judged for you alone: a party's level window isn't considered. Every other gate (doors, keys and items, tolls and fares, class, alignment) and your avoided rooms count as they do for your walks right now. The status line says how many areas were left out as unreachable, and how many were skipped because they have only one lair you can reach or no walkable lap (the same for a saved loop that no longer walks). A few runs is few: an area on the edge (lowest HP in the teens) can land on either side of "died".
+
+Pick a row to load that area's tour (or your loop) on the map — it **replaces whatever you'd sketched**, without asking, so save a sketch you want to keep first. From there you can trim it and **Save as loop**, or **Simulate** it — but Simulate plays it at **your current level and today's gates**, not the level you ranked at (the status line reminds you when they differ).
+
+A whole-area tour walks *every* lair in the area, including the rooms a hand-built loop would skip — so a loop you've tuned inside a good area will usually beat its area's number (your loops in the list show it), and an area whose tour dies may still hold a safe corner. Use an area row to find where to look, then build the loop there. Another level moves today's character there, the same way **Check against my play** does.
+
 ## Auto-Lair
 
 **Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**; clicking a marked room again, or **Alt+clicking** it, unmarks it), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.

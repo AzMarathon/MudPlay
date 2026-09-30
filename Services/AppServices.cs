@@ -8225,7 +8225,7 @@ public sealed class AppServices
 
     public Game.Simulation.SimulationSource LoopSimulationSource =>
         _loopSimulationSource ??= new(BuildLoopSimulation, () => PlayerStats.Name, () => PlayerStats.Level,
-            LoopSimulationWalkSeconds, AppPaths.LogsDir);
+            LoopSimulationWalkSeconds, () => RoomTracker.State.CurrentRoom?.Key, AppPaths.LogsDir);
     private Game.Simulation.SimulationSource? _loopSimulationSource;
 
     // The live character and game data a loop simulation plays, read the same way the
