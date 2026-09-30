@@ -1,5 +1,13 @@
 # Version history
 
+## 3.128.8
+
+- A walk-to that turns auto-combat back on now fights the monster already in the room
+- A hand-typed move into an occupied room while sneaking opens with a backstab again
+- After training stats (the level-11 train moves you), the monster in the new room is attacked right away instead of seconds later
+- Spell Book double-click opens the item that actually teaches the spell (e.g. the scroll of arcane enchantment, not an unobtainable tome)
+- bug reports addressed: paradigm-20260930-084435, paradigm-20260930-084955, paradigm-20260930-085259
+
 ## 3.128.4
 
 - How did I Die? shows the death scene in its original colours
