@@ -1,5 +1,9 @@
 # Version history
 
+## 3.126.11
+
+- The Party window's title names your own character and HP (Party — Cidir (100%)) instead of the leader's
+
 ## 3.126.10
 
 - Party members who announce @held get your Cure Holds spell (curp) cast on them, first among party cures

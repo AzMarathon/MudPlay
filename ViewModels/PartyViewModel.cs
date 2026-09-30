@@ -30,32 +30,25 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
 
     public PartyState State { get; }
 
-    // Header text shown at the top of the PartyWindow. When a leader is
-    // known, shows their given name + current HP percent ("MudPlay (94%)");
-    // when there's no leader yet (mid-formation, solo, or par hasn't
-    // disclosed who leads), falls back to the "Party (N)" count. Recomputes
-    // on:
-    // - Members.CollectionChanged (membership churn).
-    // - State.PropertyChanged (LeaderName flip).
-    // - Any member's HpPercent or IsLeader change (per-member sub).
+    // The PartyWindow's title: the window's menu name, then this character — its
+    // given name and HP percent ("Party — Cidir (100%)") — so each client's window
+    // says whose it is. Every client in a party showed the leader's name (report:
+    // Cidir's window read "Nineteen (95%)"). Our own row is in the roster in a party
+    // and solo alike; until it arrives, the member count stands in ("Party (N)").
+    // Recomputes on membership churn, a party-state change, and a member's HP /
+    // name / self flag changing (per-member sub).
     public string HeaderText
     {
         get
         {
-            if (State.Members.Count == 0) return "No party active";
-            // In a party: the leader's name + HP. Solo (not in a party) we still
-            // keep a lone self row for the self-display, so fall back to it and show
-            // our own vitals in the same format rather than a misleading "Party (1)".
-            PartyMember? headerMember = State.Members.FirstOrDefault(m => m.IsLeader);
-            if ((headerMember is null || string.IsNullOrEmpty(headerMember.Name)) && !State.IsInParty)
-                headerMember = State.Members.FirstOrDefault(m => m.IsSelf);
-            if (headerMember is null || string.IsNullOrEmpty(headerMember.Name))
+            if (State.Members.Count == 0) return "Party — no party active";
+            PartyMember? self = State.Members.FirstOrDefault(m => m.IsSelf);
+            if (self is null || string.IsNullOrEmpty(self.Name))
                 return $"Party ({State.Members.Count})";
-            // Name to given only — matches the single-word display and is the form
-            // MajorMUD itself uses when addressing the player at most prompts.
-            int space = headerMember.Name.IndexOf(' ');
-            string given = space >= 0 ? headerMember.Name[..space] : headerMember.Name;
-            return $"{given} ({headerMember.HpPercent}%)";
+            // Given name only — the form MajorMUD itself uses when addressing a player.
+            int space = self.Name.IndexOf(' ');
+            string given = space >= 0 ? self.Name[..space] : self.Name;
+            return $"Party — {given} ({self.HpPercent}%)";
         }
     }
 
@@ -89,8 +82,8 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
         _profile = profile;
 
         // Membership churn → refresh HeaderText AND adjust per-member
-        // PropertyChanged subscriptions so leader-HP changes refresh
-        // the header live (header reads "{LeaderGiven} ({LeaderHpPercent}%)").
+        // PropertyChanged subscriptions so our own HP changes refresh
+        // the header live (header reads "Party — {SelfGiven} ({SelfHpPercent}%)").
         // Named handlers (not lambdas) so Dispose can detach them — PartyState
         // outlives this VM, so a lambda sub would pin the VM for the app's life.
         State.Members.CollectionChanged += OnMembersChanged;
@@ -148,7 +141,7 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
         // refresh — other PartyMember properties churn frequently
         // (HpDisplay, status flags) and don't affect the header.
         if (e.PropertyName is nameof(PartyMember.HpPercent)
-                          or nameof(PartyMember.IsLeader)
+                          or nameof(PartyMember.IsSelf)
                           or nameof(PartyMember.Name))
         {
             OnPropertyChanged(nameof(HeaderText));
