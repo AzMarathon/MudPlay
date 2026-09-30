@@ -2447,6 +2447,60 @@ public sealed class CombatManagerTests
         Assert.Empty(h.Swaps);
     }
 
+    // A typed move into an occupied room re-arms the opener: the fight in the last room
+    // spent it, and the new room's roster arrives with no RoomChange in between
+    // (report paradigm-20260930-084955).
+    [Fact]
+    public void Backstab_ReArmedByAnyMoveSent_IntoAnOccupiedRoom()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(2, "frost serpent", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("bs giant rat", h.LastSent);
+        h.Classifier.RemoveDeadEntity("giant rat");
+
+        h.Combat.NoteMoveSent();
+        h.Feed("Also here: frost serpent.");
+
+        Assert.Equal("bs frost serpent", h.LastSent);
+    }
+
+    // An attack decided while the engine send gate holds isn't sent and isn't taken
+    // as sent; the hold lifting re-decides it (report paradigm-20260930-085259).
+    [Fact]
+    public void Attack_HeldBySendGate_IsReDecidedWhenTheHoldLifts()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        bool held = true;
+        h.Combat.SetWireHoldProbe(() => held);
+
+        h.Feed("Also here: giant rat.");
+        Assert.Empty(h.Sent);
+
+        held = false;
+        h.Combat.OnWireReleased();
+
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    [Fact]
+    public void WireReleased_WithNothingHeld_SendsNothing()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        int sent = h.Sent.Count;
+
+        h.Combat.OnWireReleased();
+
+        Assert.Equal(sent, h.Sent.Count);
+    }
+
     [Fact]
     public void Backstab_FallsBackToNormal_WhenSeeHiddenPresent()
     {

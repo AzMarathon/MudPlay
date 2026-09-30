@@ -1414,6 +1414,7 @@ public sealed class AppServices
     // RoomTracker.IsInDarkRoom) and injects it into RoomClassifier so
     // CombatManager engages it as if it had been listed.
     public Game.Combat.DarkRoomCombatWatcher DarkRoomCombat { get; private set; } = null!;
+    public Game.Combat.MonsterSummonWatcher MonsterSummons { get; private set; } = null!;
 
     // Holds the movement stack for a short beat after each dead-reckoned dark-room
     // advance, so the game engine has time to reveal a hostile (its "strides in"
@@ -3850,6 +3851,21 @@ public sealed class AppServices
             currentTarget: () => Combat.CurrentTarget,
             log: Log);
 
+        // A monster's mid-fight summon ("The fat half-orc sentry shouts for aid!")
+        // re-displays the room so the summoned monster reaches the roster before its
+        // summoner dies. The wordings come from the Spells table + message catalogue,
+        // so a set switch or a message edit rebuilds them on next use.
+        MonsterSummons = new Game.Combat.MonsterSummonWatcher(Router, RoomClassifier,
+            build: () => new Game.Spells.SummonLineSet(
+                GameData.GetRawTable("Spells") is { } doc
+                    ? Game.Spells.SummonLineSet.SummonSpells(doc.RootElement)
+                    : Array.Empty<int>(),
+                Messages.Messages),
+            requestRoomRefresh: Combat.RequestRoomRefresh,
+            log: Log);
+        GameData.ActiveSetChanged += _ => MonsterSummons.Invalidate();
+        Messages.Messages.CollectionChanged += (_, _) => MonsterSummons.Invalidate();
+
         // Our own say echo ("You say \"…\"") only reaches the chat router — it's chat
         // by shape — so the combat engine hears about an attack the server read as a
         // say from here.
@@ -4745,7 +4761,9 @@ public sealed class AppServices
         SpellAttackType = new Game.Combat.SpellAttackTypeIndex(GameData);
         Combat.SetMagicEligibility(
             MonsterMagic, ItemMagic, SpellReqLevel, MonsterResist, SpellAttackType);
-        MonsterCatalog = new Game.Combat.MonsterCatalog(GameData);
+        MonsterCatalog = new Game.Combat.MonsterCatalog(GameData, RoomGraph.GetRoom);
+        // Room tooltips and room panels leave out what the Unobtainable list holds.
+        MonsterSpawns.OutOfPlay = MonsterCatalog.IsOutOfPlay;
 
         // Drain-life eligibility — a drain spell can only affect a living, non-undead
         // target; the index tells the chooser which mobs to skip (fall back to the
@@ -5882,7 +5900,8 @@ public sealed class AppServices
         // room-source subscriptions of its own — we wire the two hooks here.
         PlayerSightings = new Game.PlayerSightingTracker(
             () => RoomTracker.State.CurrentRoom, Profile,
-            selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
+            selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name,
+            isPartyMember: Party.State.HasMember);
         RoomClassifier.EntitiesObserved += PlayerSightings.NoteAlsoHere;
         RoomEntry.ArrivalObserved += PlayerSightings.NoteArrival;
         // Monster Intel's "Your Observations" — subscribes to the same fixed
@@ -6601,6 +6620,8 @@ public sealed class AppServices
             // tail, not a new one.
             restJustEnded: () => Health.RecoveredWithin(TimeSpan.FromSeconds(5)));
         OutboundMovement.MoveSent += AutoEquip.OnMoveSent;
+        // Every move re-opens the backstab surprise round, typed moves included.
+        OutboundMovement.MoveSent += Combat.NoteMoveSent;
 
         // Per-game-data-set loop catalogue. Loops live
         // under the active set's Loops/ folder, so the catalogue reloads

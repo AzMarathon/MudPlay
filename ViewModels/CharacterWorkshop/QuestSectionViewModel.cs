@@ -47,6 +47,9 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     // Class-resolved crawl bonuses per card, captured at build time so PublishBonuses
     // can fold a completed quest's reward without re-crawling.
     private readonly Dictionary<(int Flag, int Step), IReadOnlyList<QuestBonus>> _bonusesByCard = new();
+    // The ability a quest awards (its flag) and the level it can be done at, for the
+    // quests whose reward is the ability itself — captured like _bonusesByCard.
+    private readonly Dictionary<(int Flag, int Step), QuestAbilityAward> _abilityAwardByCard = new();
 
     public override string Id => "queststatus";
     public override string Title => "Quest Status";
@@ -145,6 +148,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
             QuestAlignEvil = _profile.Current?.QuestAlignEvil ?? false;
             _allCards.Clear();
             _bonusesByCard.Clear();
+            _abilityAwardByCard.Clear();
             LoadProgressFromProfile();
 
             // Where each quest-kill / quest-NPC monster stands, resolved once (this loop
@@ -179,6 +183,9 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
                 // completed quest's permanent bonus when it's out of the list (a quest's
                 // stat gain follows its completion, not its journal visibility).
                 _bonusesByCard[(q.Flag, q.Step)] = q.Bonuses;
+                if (q.AwardsAbility)
+                    _abilityAwardByCard[(q.Flag, q.Step)] =
+                        new QuestAbilityAward(q.Flag, def.RequiredLevel ?? q.RequiredLevel);
 
                 if (ineligible) { if (!ShowsWhenIneligible(q.Flag, q.Step)) continue; }
                 else if (!def.Visible) continue;
@@ -461,13 +468,16 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     private void PublishBonuses()
     {
         var bonuses = new List<QuestBonus>();
+        var awards = new List<QuestAbilityAward>();
         foreach (QuestProgress p in _progress.Values)
         {
             if (!p.Complete) continue;
             if (_bonusesByCard.TryGetValue((p.Flag, p.Step), out IReadOnlyList<QuestBonus>? b))
                 bonuses.AddRange(b);
+            if (_abilityAwardByCard.TryGetValue((p.Flag, p.Step), out QuestAbilityAward award))
+                awards.Add(award);
         }
-        _bonusState.Update(bonuses);
+        _bonusState.Update(bonuses, awards);
     }
 
     private void Persist()

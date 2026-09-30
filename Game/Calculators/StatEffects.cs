@@ -49,15 +49,51 @@ public readonly record struct StatContext(
     int MinHits, int MaxHits, int RaceHpPerLevel,
     int MageryType, int MageryLevel,
     bool HasThievery = false, bool HasTraps = false,
-    bool HasPicklocks = false, bool HasTracking = false);
+    bool HasPicklocks = false, bool HasTracking = false,
+    int ClassCombatLvl = 0)
+{
+    // The live character's context from its class and race game-data rows: hit dice,
+    // magery, race HP per level, Combat rating, and which thief skills the class or
+    // race grants. Missing rows leave those parts at 0 / false.
+    public static StatContext Resolve(MudPlay.Services.GameDataCache gameData, string? className,
+                                      string? raceName, RealmType realm)
+    {
+        int minHits = 0, maxHits = 0, mageryType = 0, mageryLevel = 0, raceHp = 0, combatLvl = 0;
+        System.Text.Json.JsonElement? classRow = null, raceRow = null;
+        if (gameData.FindRowByName("Classes", className ?? string.Empty) is System.Text.Json.JsonElement cls
+            && cls.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            classRow = cls;
+            minHits = Int(cls, "MinHits");
+            maxHits = Int(cls, "MaxHits");
+            mageryType = Int(cls, "MageryType");
+            mageryLevel = Int(cls, "MageryLVL");
+            combatLvl = Int(cls, "CombatLVL");
+        }
+        if (gameData.FindRowByName("Races", raceName ?? string.Empty) is System.Text.Json.JsonElement race
+            && race.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            raceRow = race;
+            raceHp = Int(race, "HPPerLVL");
+        }
+
+        (bool thievery, bool traps, bool picklocks, bool tracking) =
+            GameData.AbilityNames.GetThiefSkillGrants(classRow, raceRow);
+        return new StatContext(realm, minHits, maxHits, raceHp, mageryType, mageryLevel,
+            thievery, traps, picklocks, tracking, combatLvl);
+    }
+
+    private static int Int(System.Text.Json.JsonElement row, string property) =>
+        row.TryGetProperty(property, out System.Text.Json.JsonElement v)
+        && v.ValueKind == System.Text.Json.JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
+}
 
 // The stat-derived secondary numbers a combat profile / CP plan cares about — the
 // gear-independent, stat-and-level portion. All sourced from the existing verified
 // calculators (CombatCalculator / CharacterCalculator), so the CP-tab tooltips and
-// the Level Projection grid can never drift from what the combat engine uses. The
-// accuracy / dodge / damage branches are realm-verified; crit, encumbrance and
-// magic-resistance use the stock DLL formula for both realms and are flagged
-// unverified for Paradigm in the guide.
+// the Level Projection grid can never drift from what the combat engine uses.
+// Perception, Thievery, Traps and Tracking use the Stock formula on Paradigm too
+// and are flagged unverified there in the guide.
 public static class StatEffects
 {
     // ----- derived values (the projection columns) -------------------------
@@ -80,8 +116,9 @@ public static class StatEffects
     public static int BashAccuracyFromStats(StatBlock s)
         => (s.Strength - 50) / 3 + (s.Agility - 50) / 6;
 
-    public static int CritRating(StatBlock s)
-        => CharacterCalculator.CalcBaseCritRating(s.Level, s.Intellect, s.Agility, s.Charm);
+    // classCombatLvl is the class table's raw CombatLVL (Paradigm's low-Combat bonus).
+    public static int CritRating(StatBlock s, RealmType realm, int classCombatLvl = 0)
+        => CharacterCalculator.CalcBaseCritRating(s.Level, s.Intellect, s.Agility, s.Charm, realm, classCombatLvl);
 
     // Raw dodge value (before the vs-accuracy % conversion) — level/5 + CHM/5 + AGI/3.
     public static int DodgeValue(StatBlock s)
@@ -91,9 +128,9 @@ public static class StatEffects
         => CharacterCalculator.CalcStealthBase(s.Level, s.Intellect, s.Agility, s.Charm, realm);
 
     // STR's fold into weapon min / max damage (the bonus added to the weapon's own
-    // range): min (STR-100)/10, max (STR-50)/10, never negative (GreaterMUD floor).
-    public static int MinDamageBonus(StatBlock s) => Math.Max(0, (s.Strength - 100) / 10);
-    public static int MaxDamageBonus(StatBlock s) => Math.Max(0, (s.Strength - 50) / 10);
+    // range), realm-split the same way the combat engine applies it.
+    public static int MinDamageBonus(StatBlock s, RealmType realm) => CombatCalculator.StrMinDamageBonus(s.Strength, realm);
+    public static int MaxDamageBonus(StatBlock s, RealmType realm) => CombatCalculator.StrMaxDamageBonus(s.Strength, realm);
 
     public static int MaxEncumbrance(StatBlock s) => CharacterCalculator.CalcMaxEncumbrance(s.Strength);
     public static int MagicResistance(StatBlock s) => CharacterCalculator.CalcMagicResistance(s.Intellect, s.Willpower);
@@ -104,7 +141,7 @@ public static class StatEffects
     public static int Perception(StatBlock s) => CharacterCalculator.CalcPerception(s.Intellect, s.Willpower, s.Charm);
     public static int Thievery(StatBlock s) => CharacterCalculator.CalcThievery(s.Level, s.Intellect, s.Agility, s.Charm);
     public static int Traps(StatBlock s) => CharacterCalculator.CalcTraps(s.Level, s.Intellect, s.Agility, s.Charm);
-    public static int Picklocks(StatBlock s) => CharacterCalculator.CalcPicklocks(s.Level, s.Intellect, s.Agility);
+    public static int Picklocks(StatBlock s, RealmType realm) => CharacterCalculator.CalcPicklocks(s.Level, s.Intellect, s.Agility, s.Charm, realm);
     public static int Tracking(StatBlock s) => CharacterCalculator.CalcTracking(s.Level, s.Intellect, s.Willpower, s.Charm);
 
     // ----- per-stat effect lines (tooltips) --------------------------------
@@ -138,6 +175,10 @@ public static class StatEffects
         // Derived-value functions (stat-and-level portion; gear excluded).
         Func<StatBlock, int> accy = s => AccuracyFromStats(s, realm);
         Func<StatBlock, int> stealth = s => Stealth(s, realm);   // realm-split rounding
+        Func<StatBlock, int> crit = s => CritRating(s, realm, ctx.ClassCombatLvl);
+        Func<StatBlock, int> minDmg = s => MinDamageBonus(s, realm);
+        Func<StatBlock, int> maxDmg = s => MaxDamageBonus(s, realm);
+        Func<StatBlock, int> picks = s => Picklocks(s, realm);
         Func<StatBlock, int> maxHp = s => CharacterCalculator.CalcMaxHp(
             s.Health, s.Level, ctx.MinHits, ctx.MaxHits, ctx.RaceHpPerLevel, 0, HpRollMode.Average);
         Func<StatBlock, int> hpIdle = s => CharacterCalculator.CalcHpRegen(s.Level, s.Health, 0, false, realm);
@@ -168,8 +209,10 @@ public static class StatEffects
         switch (stat)
         {
             case BaseStat.Strength:
-                Line("Max melee dmg", $"+{MaxDamageBonus(current)}", $"~10 {ab} → +1 above 50", MaxDamageBonus);
-                Line("Min melee dmg", $"+{MinDamageBonus(current)}", $"~10 {ab} → +1 above 100", MinDamageBonus);
+                Line("Max melee dmg", maxDmg(current).ToString("+0;-0;+0"),
+                    para ? $"~10 {ab} → +1 above 50" : $"~10 {ab} → +1, negative below 50", maxDmg);
+                Line("Min melee dmg", minDmg(current).ToString("+0;-0;+0"),
+                    para ? $"~10 {ab} → +1 above 100" : $"~10 {ab} → +2 above 100", minDmg);
                 // Stock: STR feeds accuracy on ALL attacks. Paradigm: only bash/smash.
                 if (!para)
                     Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~3 {ab} → +1 (all attacks)", accy);
@@ -187,18 +230,18 @@ public static class StatEffects
                 Line("Accuracy", accy(current).ToString("+0;-0;0"),
                     para ? $"~3 {ab} → +1 (normal; ~6 bash/smash)" : $"~6 {ab} → +1 (all attacks)", accy);
                 Line("Dodge", $"{DodgeValue(current)}", $"~3 {ab} → +1", DodgeValue);
-                Line("Crit", $"{CritRating(current)}%", $"~20 {ab} → +1", CritRating);
+                Line("Crit", $"{crit(current)}%", $"~20 {ab} → +1", crit);
                 Line("Stealth", $"{stealth(current)}", $"~4 {ab} → +1", stealth);
                 if (ctx.HasThievery) Line("Thievery", $"{Thievery(current)}", $"~6 {ab} → +1", Thievery);
                 if (ctx.HasTraps) Line("Traps", $"{Traps(current)}", $"~7 {ab} → +1", Traps);
-                if (ctx.HasPicklocks) Line("Picklocks", $"{Picklocks(current)}", $"~4 {ab} → +1", Picklocks);
+                if (ctx.HasPicklocks) Line("Picklocks", $"{picks(current)}", para ? $"~7 {ab} → +1" : $"~4 {ab} → +1", picks);
                 break;
 
             case BaseStat.Intellect:
                 // INT feeds accuracy on Paradigm NORMAL attacks only — never Stock,
                 // never bash/smash.
                 if (para) Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~6 {ab} → +1 (normal attacks)", accy);
-                Line("Crit", $"{CritRating(current)}%", $"~10 {ab} → +1", CritRating);
+                Line("Crit", $"{crit(current)}%", $"~10 {ab} → +1", crit);
                 Line("Stealth", $"{stealth(current)}", $"~8 {ab} → +1", stealth);
                 Line("Magic resist", $"{MagicResistance(current)}", $"+1 per 4 {ab}", MagicResistance);
                 // INT is the widest-reaching stat — the only one that feeds every
@@ -206,7 +249,7 @@ public static class StatEffects
                 Line("Perception", $"{Perception(current)}", $"+5 per 8 {ab}", Perception);
                 if (ctx.HasThievery) Line("Thievery", $"{Thievery(current)}", $"~6 {ab} → +1", Thievery);
                 if (ctx.HasTraps) Line("Traps", $"{Traps(current)}", $"~7 {ab} → +1", Traps);
-                if (ctx.HasPicklocks) Line("Picklocks", $"{Picklocks(current)}", $"~4 {ab} → +1", Picklocks);
+                if (ctx.HasPicklocks) Line("Picklocks", $"{picks(current)}", para ? $"~7 {ab} → +1" : $"~4 {ab} → +1", picks);
                 if (ctx.HasTracking) Line("Tracking", $"{Tracking(current)}", $"~4 {ab} → +1", Tracking);
                 if (manaFromInt) Line("Mana regen", $"{manaRegen(current)}/tick", "", manaRegen);
                 if (manaFromInt) Line("Spellcasting", $"{spellcast(current)}", "", spellcast);
@@ -226,11 +269,13 @@ public static class StatEffects
                 // CHM feeds accuracy on Paradigm NORMAL attacks only.
                 if (para) Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~10 {ab} → +1 (normal attacks)", accy);
                 Line("Dodge", $"{DodgeValue(current)}", $"~5 {ab} → +1", DodgeValue);
-                Line("Crit", $"{CritRating(current)}%", $"~30 {ab} → +1", CritRating);
+                Line("Crit", $"{crit(current)}%", $"~30 {ab} → +1", crit);
                 Line("Stealth", $"{stealth(current)}", $"~6 {ab} → +1", stealth);
                 Line("Perception", $"{Perception(current)}", $"+1 per 8 {ab}", Perception);
                 // Traps weights CHM double — it's the skill CHM moves fastest.
                 if (ctx.HasTraps) Line("Traps", $"{Traps(current)}", $"~4 {ab} → +1", Traps);
+                // Paradigm picklocks weights CHM double too; Stock's takes no CHM.
+                if (ctx.HasPicklocks && para) Line("Picklocks", $"{picks(current)}", $"~4 {ab} → +1", picks);
                 if (ctx.HasThievery) Line("Thievery", $"{Thievery(current)}", $"~6 {ab} → +1", Thievery);
                 if (ctx.HasTracking) Line("Tracking", $"{Tracking(current)}", $"~8 {ab} → +1", Tracking);
                 if (manaFromChm) Line("Mana regen", $"{manaRegen(current)}/tick", "", manaRegen);

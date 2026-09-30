@@ -55,7 +55,10 @@ public sealed class LevelProjectionRow
     // True when this row is the live character's current level.
     public bool IsCurrentLevel { get; }
 
-    public LevelProjectionRow(LevelProjection p, long currentExp, bool isCurrentLevel, bool isCaster, long? trainCost)
+    // perfectStealth: a completed Perfect Stealth quest applies at this level, so a
+    // sneak always takes.
+    public LevelProjectionRow(LevelProjection p, long currentExp, bool isCurrentLevel, bool isCaster, long? trainCost,
+        bool perfectStealth = false)
     {
         Level = p.Level;
         TotalXp = FormatExp(p.TotalXp);
@@ -76,7 +79,10 @@ public sealed class LevelProjectionRow
         Accuracy = p.Accuracy.ToString(CultureInfo.InvariantCulture);
         Crit = string.Create(CultureInfo.InvariantCulture, $"{p.Crit}%");
         Dodge = p.Dodge.ToString(CultureInfo.InvariantCulture);
-        Stealth = p.Stealth.ToString(CultureInfo.InvariantCulture);
+        // "84 (84%)": the Stealth and the chance a `sn` takes at that Stealth (empty room,
+        // light load).
+        Stealth = string.Create(CultureInfo.InvariantCulture,
+            $"{p.Stealth} ({Game.Stealth.SneakChance.Percent(p.Stealth, perfectStealth)}%)");
         MeleeDmg = string.Create(CultureInfo.InvariantCulture, $"+{p.MinDmg}/+{p.MaxDmg}");
         MaxEnc = p.MaxEnc.ToString("N0", CultureInfo.InvariantCulture);
         MagicRes = p.MagicRes.ToString(CultureInfo.InvariantCulture);

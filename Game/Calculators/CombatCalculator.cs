@@ -264,6 +264,23 @@ public static class CombatCalculator
         return (intellect + (willpower * 3)) / 4 + modifiers;
     }
 
+    // ----- Strength onto weapon damage -------------------------------------
+
+    // GAME_MECHANICS "Melee damage bonus": Stock doubles the min term and lets the
+    // max term go negative below 50 STR; Paradigm never lets either drop below 0.
+    public static int StrMinDamageBonus(int strength, RealmType realmType)
+    {
+        int bonus = (strength - 100) / 10;
+        if (realmType == RealmType.Stock) bonus *= 2;
+        return Math.Max(bonus, 0);
+    }
+
+    public static int StrMaxDamageBonus(int strength, RealmType realmType)
+    {
+        int bonus = (strength - 50) / 10;
+        return realmType == RealmType.ParaMud ? Math.Max(bonus, 0) : bonus;
+    }
+
     // ----- Backstab damage -------------------------------------------------
 
     // Backstab damage range (GAME_MECHANICS "Backstab damage and accuracy").
@@ -295,14 +312,8 @@ public static class CombatCalculator
                                                          int maxDmgBonus, bool hasClassStealth,
                                                          RealmType realmType, int minDmgBonus = 0)
     {
-        int minStrBonus = (strength - 100) / 10;
-        if (realmType == RealmType.Stock)
-            minStrBonus *= 2;
-        minStrBonus = Math.Max(minStrBonus, 0);
-
-        int maxStrBonus = (strength - 50) / 10;
-        if (realmType == RealmType.ParaMud && maxStrBonus < 0)
-            maxStrBonus = 0;                  // GreaterMUD has no negative-strength penalty
+        int minStrBonus = StrMinDamageBonus(strength, realmType);
+        int maxStrBonus = StrMaxDamageBonus(strength, realmType);
 
         int minDamage = weaponMin + minStrBonus
             + (realmType == RealmType.ParaMud ? minDmgBonus : 0);
@@ -347,14 +358,8 @@ public static class CombatCalculator
                                                     int strength, int weaponMin, int weaponMax,
                                                     int plusMaxDamage, int plusMinDamage = 0)
     {
-        int strMaxBonus = (strength - 50) / 10;
-        if (realmType == RealmType.ParaMud && strMaxBonus < 0)
-            strMaxBonus = 0;                  // GreaterMUD has no negative-strength penalty
-
-        int strMinBonus = (strength - 100) / 10;
-        if (realmType == RealmType.Stock)
-            strMinBonus *= 2;
-        strMinBonus = Math.Max(strMinBonus, 0);
+        int strMaxBonus = StrMaxDamageBonus(strength, realmType);
+        int strMinBonus = StrMinDamageBonus(strength, realmType);
 
         int min = weaponMin + strMinBonus + plusMinDamage;
         int max = weaponMax + strMaxBonus + plusMaxDamage;
@@ -462,8 +467,8 @@ public static class CombatCalculator
         // has no strength term.
         if (realmType == RealmType.Stock)
         {
-            min += Math.Max((strength - 100) / 10 * 2, 0);
-            max += (strength - 50) / 10;
+            min += StrMinDamageBonus(strength, realmType);
+            max += StrMaxDamageBonus(strength, realmType);
         }
         max += plusMaxDamage;
         if (min > max) min = max;
@@ -818,10 +823,13 @@ public static class CombatCalculator
     // a Bash swing rate, or the Smash single-swing can't read differently on the
     // two surfaces. Accuracy is deliberately NOT computed here: the Calculators
     // tab folds martial-arts strikes into its accuracy path, which has no analogue
-    // on the weapon side, so each caller resolves accuracy itself.
+    // on the weapon side, so each caller resolves accuracy itself. combatLevel is
+    // the class table's raw CombatLVL; plusCrits is the +Crits from gear, race,
+    // class, quests and buffs, and the stat-and-level crit rating is added here.
     public static MeleeOffense ComputeMeleeOffense(
         MudAttackType type, RealmType realmType, int level, int combatLevel,
-        int strength, int agility, int weaponMin, int weaponMax, int weaponSpeed, int weaponStrReq,
+        int strength, int agility, int intellect, int charm,
+        int weaponMin, int weaponMax, int weaponSpeed, int weaponStrReq,
         int plusMaxDamage, int plusMinDamage, int plusCrits, int currentEncum, int maxEncum)
     {
         bool hasWeapon = weaponMax > 0;
@@ -846,7 +854,9 @@ public static class CombatCalculator
         if (type == MudAttackType.Normal && hasWeapon)
         {
             int qnd = (weaponStrReq <= 0 || strength >= weaponStrReq) ? swings.QnDCritBonus : 0;
-            critChance = CalcCritChance(plusCrits, qnd, realmType);
+            int critRating = CharacterCalculator.CalcBaseCritRating(
+                level, intellect, agility, charm, realmType, combatLevel) + plusCrits;
+            critChance = CalcCritChance(critRating, qnd, realmType);
             avgCritDamage = dmg.MaxDamage * 3;
         }
 

@@ -1373,7 +1373,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         {
             Directory.CreateDirectory(AppPaths.DeathLogsFolder(bbs, chr));
             File.WriteAllText(AppPaths.DeathLogFile(bbs, chr, fileName),
-                RenderDeathLog(record, lines, chr));
+                DeathLogFormat.Render(record, lines, chr));
             record.DeathLogFile = fileName;
             _profile.Save();
             _log?.Info(LogCategory, $"death log captured: {fileName} ({lines.Count} lines)");
@@ -1416,34 +1416,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (ResolveDeathLogPath(record) is not { } path) return;
         try { if (File.Exists(path)) File.Delete(path); }
         catch { /* best-effort; an orphaned log file is harmless clutter */ }
-    }
-
-    // Render a captured death log as plain text: a short header (who / when /
-    // where / lives / death line) followed by the backscroll tail, oldest →
-    // newest. Scrollback rows carry the wall-clock instant they scrolled off; the
-    // live-screen tail (the grid at death) has no per-row time. internal + static
-    // so the format can be pinned by a test without a live profile.
-    internal static string RenderDeathLog(
-        DeathRecord record, IReadOnlyList<TranscriptSnapshot.Line> lines, string characterName)
-    {
-        StringBuilder sb = new();
-        sb.Append("Death log — ").Append(characterName).Append('\n');
-        sb.Append("Died: ").Append(record.DiedText).Append('\n');
-        sb.Append("Room: ")
-          .Append(record.RoomName ?? "(unknown)").Append("  ").Append(record.RoomKeyText).Append('\n');
-        sb.Append("Lives remaining: ").Append(record.LivesRemaining).Append('\n');
-        if (!string.IsNullOrWhiteSpace(record.MessageText))
-            sb.Append("Death line: ").Append(record.MessageText).Append('\n');
-        sb.Append('\n')
-          .Append("Last ").Append(lines.Count)
-          .Append(" line(s) of backscroll before death (each content row prefixed with its write time):\n");
-        sb.Append(new string('-', 60)).Append('\n');
-        foreach (TranscriptSnapshot.Line line in lines)
-        {
-            sb.Append(line.Timestamp is { } t ? t.ToLocalTime().ToString("HH:mm:ss") : "        ")
-              .Append(' ').Append(line.Text).Append('\n');
-        }
-        return sb.ToString();
     }
 
     public void Dispose()

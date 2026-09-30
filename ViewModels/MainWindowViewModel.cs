@@ -1142,7 +1142,7 @@ public partial class MainWindowViewModel : ObservableObject
         // The Emulator lives here, so hand death-recovery a provider for the
         // backscroll tail it snapshots at each death ("How did I Die?").
         AppServices.Current.DeathRecovery.AttachTranscriptTail(
-            () => TranscriptSnapshot.Tail(Emulator, 200));
+            () => TranscriptSnapshot.Tail(Emulator, 200, withCells: true));
         // Every engine wire-sender is routed through EngineGate's
         // wrapper. The wrapper short-circuits while
         // EngineGate.IsLocked is true (today: while
@@ -1159,6 +1159,9 @@ public partial class MainWindowViewModel : ObservableObject
         // on so it doesn't sit forever with a route drawn and nothing sent (the
         // auto-train loop-resume stall, report paradigm-20260813-063517).
         AppServices.Current.EngineGate.Released += AppServices.Current.Walker.NudgeStalledStep;
+        // Likewise an attack decided while the gate held (a room shown the moment the
+        // train-stats screen closed): combat re-decides it once the hold lifts.
+        AppServices.Current.EngineGate.Released += AppServices.Current.Combat.OnWireReleased;
 
         // Combat-gated-entry handler sends `break` on refusal — needs the same
         // gate-wrapped wire path.
@@ -1281,6 +1284,7 @@ public partial class MainWindowViewModel : ObservableObject
         // the swing command from landing mid-password-entry on a stale
         // combat round.
         AppServices.Current.Combat.SetWireSender(engineSend);
+        AppServices.Current.Combat.SetWireHoldProbe(() => AppServices.Current.EngineGate.IsLocked);
         // CombatStateTracker sends `break` before releasing the walker when the
         // user toggles auto-attack off mid-fight (CombatSettings.BreakBeforeFleeing).
         AppServices.Current.CombatTracker.SetWireSender(engineSend);
@@ -5847,7 +5851,6 @@ public partial class MainWindowViewModel : ObservableObject
         // releases the walker (and clears InCombat if the room is clear)
         // instead of stalling until the next room re-display.
         if (_suppressAutoEngineWriteback > 0) return;
-        AppServices.Current.CombatTracker?.OnAutoAttackChanged();
         // OnAutoAttackChanged clears only the Combat gate. Sibling room-observation
         // gate-holders (the deferred-cash / get-items / search Acquisition holds) —
         // and CombatManager's own re-pick — re-evaluate solely on a fresh
@@ -5861,7 +5864,7 @@ public partial class MainWindowViewModel : ObservableObject
         // paradigm-20260827-203644: toggling AutoCombat off then back on mid-fight,
         // meant to un-stick a stalled fight, silently did nothing — the character
         // never resumed attacking the monster still sitting in the same room).
-        AppServices.Current.RoomClassifier?.ReemitCurrent();
+        ReevaluateCombatForCurrentRoom();
         MaybeEndSprintOnManualEngineEnable(value);
         // Anyone else changing it mid-detour (the user, Sprint, a base-mode reset)
         // takes it over, so the detour's end doesn't undo their choice.
@@ -6020,6 +6023,15 @@ public partial class MainWindowViewModel : ObservableObject
         if (IsSprintModeActive) IsSprintModeActive = false;
     }
 
+    // Re-decide combat for the room we're standing in: the Combat gate, then the room
+    // roster re-emitted so CombatManager picks a target from it now rather than on some
+    // later, unrelated room observation (see OnIsAutoCombatActiveChanged).
+    private static void ReevaluateCombatForCurrentRoom()
+    {
+        AppServices.Current.CombatTracker?.OnAutoAttackChanged();
+        AppServices.Current.RoomClassifier?.ReemitCurrent();
+    }
+
     // Reset the LIVE auto-engine state (AutoMode) to the character's BASE modes —
     // the Settings → General base-modes checkboxes (GeneralSettings.AutoModeBase).
     // Called at profile load and at the first start of a loop / auto-lair circuit,
@@ -6030,7 +6042,10 @@ public partial class MainWindowViewModel : ObservableObject
     // (base := live) for a pre-split character with no base yet, so base-apply then
     // drives every future load; otherwise live settles to the base. Engines read
     // their flag per-tick, so persisting the flip + reseeding the badges (only when
-    // live actually changed) is enough — no explicit per-engine re-eval here.
+    // live actually changed) is enough — except combat, which only decides on a room
+    // observation: a reset that turns it back on re-decides the room we're in, or a
+    // monster already here goes unfought (report paradigm-20260930-084435: a walk-to
+    // ended in a room with a large mummy, combat came back on, and nothing attacked).
     private void ReconcileAutoModeToBase(string reason)
     {
         if (AppServices.Current.Profile.Current is not { } profile) return;
@@ -6040,6 +6055,7 @@ public partial class MainWindowViewModel : ObservableObject
             Models.Profile.AutoActionDefaults.ReconcileToBase(dto.AutoModeBase, dto.AutoMode);
         if (!result.BaseSeeded && !result.LiveChanged) return;   // already settled — nothing to write
 
+        bool combatWas = dto.AutoMode.AutoCombat;
         dto.AutoModeBase = result.Base;
         dto.AutoMode = result.Live;
         profile.Settings ??= new();
@@ -6052,6 +6068,12 @@ public partial class MainWindowViewModel : ObservableObject
             SyncAutoEngineTogglesFromProfile();
             AppServices.Current.Log.Info("AutoMode",
                 $"Auto-engines reset to base modes ({reason}).");
+            if (result.Live.AutoCombat != combatWas)
+            {
+                ReevaluateCombatForCurrentRoom();
+                AppServices.Current.Log.Info("AutoMode",
+                    $"Auto-combat {(result.Live.AutoCombat ? "on" : "off")} after the reset — combat re-decided for the current room.");
+            }
         }
         else
         {
