@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.8**
-> - Combat round totals: same-named monsters either stack on one row with a count (muckworm x3, the default) or get a row each (muckworm #1, #2…)
-> - Combat round totals count a monster's damage taken, and the dealer's dealt, only up to the HP it had left
+> **Version 3.126.10**
+> - Party members who announce @held get your Cure Holds spell (curp) cast on them, first among party cures
+> - A weapon that has no effect no longer re-swings forever when the alternate weapon can't come to hand — it falls back to a spell or moves on
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

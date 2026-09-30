@@ -2045,9 +2045,11 @@ public sealed class CastingDirector : IDisposable
 
     // Walk live party members and cast the configured cure spell on the first member
     // whose ailment chip is set. The chip is mirrored from the member's inbound
-    // .@poisoned / .@diseased / .@blind announce by PartyAilmentTracker. Same
+    // @held / .@poisoned / .@diseased / .@blind announce by PartyAilmentTracker. Same
     // cure-spell config as self-cure; the target string routes the cast to the
-    // member. Internal order mirrors self-cure (poison → disease → blindness).
+    // member. Internal order mirrors self-cure (hold → poison → disease → blindness);
+    // a held member was left out, so a @held never got its cure (report
+    // paradigm-20260929-230346).
     // Confusion has no cure spell — a @confused chip is never picked up here (gap in
     // PartyAilmentTracker).
     private CastCandidate? PickPartyCure(SpellsSettings spells)
@@ -2058,6 +2060,8 @@ public sealed class CastingDirector : IDisposable
         foreach (PartyMember m in _party.Members)
         {
             if (m.IsSelf) continue;
+            if (m.Held && !string.IsNullOrWhiteSpace(spells.CureHoldsSpell))
+                return new CastCandidate(spells.CureHoldsSpell, MemberTarget(m));
             if (m.Poisoned && !string.IsNullOrWhiteSpace(spells.CurePoisonSpell))
                 return new CastCandidate(spells.CurePoisonSpell, MemberTarget(m));
             if (m.Diseased && !string.IsNullOrWhiteSpace(spells.CureDiseaseSpell))

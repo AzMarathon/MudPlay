@@ -727,6 +727,13 @@ public sealed partial class CombatManager : IDisposable
     private readonly HashSet<string> _normalWeaponFailedMonsters =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Swap-and-reswing tries per species after the normal weapon's no-effect, while
+    // live gear still shows the normal weapon. A couple can be answers to swings sent
+    // before the swap landed (report paradigm-20260910-214553); past the cap the swap
+    // isn't landing. Room-scoped like the fail-sets.
+    private readonly Dictionary<string, int> _normalNoEffectRetries = new(StringComparer.OrdinalIgnoreCase);
+    private const int MaxNormalNoEffectRetries = 3;
+
     // Canonical species that also produced a no-effect line against our ALTERNATE
     // weapon — the weapon path is then exhausted for that species. Room-scoped and
     // cleared alongside the normal fail-set. Feeds WeaponPathExhausted so a
@@ -954,6 +961,11 @@ public sealed partial class CombatManager : IDisposable
     // way). readWornWeapon reads back what the server has confirmed is on the hand,
     // so weapon-effectiveness evidence can be booked against the weapon that
     // actually swung rather than the one combat has already asked for.
+    // Whether we carry or wear an item by name (null while the inventory hasn't been
+    // read). An alternate weapon we don't have can't be swapped to.
+    private Func<string, bool?>? _hasItem;
+    public void SetCarriedCheck(Func<string, bool?> hasItem) => _hasItem = hasItem;
+
     public void SetWeaponActuator(
         Action<string?, string?, bool> swapWeapon, Action? prepBackstabArmor = null,
         Func<string?>? readWornWeapon = null)
@@ -2051,6 +2063,7 @@ public sealed partial class CombatManager : IDisposable
     {
         _normalWeaponFailedMonsters.Clear();
         _alternateWeaponFailedMonsters.Clear();
+        _normalNoEffectRetries.Clear();
         _speciesByNumber.Clear();
         _cannotAttackAnnounced.Clear();
         ClearBackstabResolution();
@@ -2359,10 +2372,35 @@ public sealed partial class CombatManager : IDisposable
         if (_normalWeaponFailedMonsters.Add(species))
             _log?.Combat(LogCategory, $"adding {species} to normal-weapon fail-set");
 
-        // Swap NOW and re-send the attack so we don't waste a round.
-        EquipForAttack(settings, wantAlternate: true);
-        if (_currentTarget is { } tgt)
-            SendAttack(settings.AlternateAttackCommand, tgt, priority: null);
+        // Swap NOW and re-send the attack so we don't waste a round — while the
+        // alternate can come to hand and the swap hasn't kept failing to land. An
+        // alternate we don't carry or wear (or none at all) can't, and re-sending the
+        // swing drew "no effect" as fast as the server could answer (report
+        // paradigm-20260929-230446: 1,100+ `a centaur outcast`, the alternate not in
+        // inventory).
+        bool alternateToHand = !string.IsNullOrWhiteSpace(settings.AlternateWeapon)
+            && _hasItem?.Invoke(settings.AlternateWeapon) != false;
+        int tries = _normalNoEffectRetries.GetValueOrDefault(species);
+        if (alternateToHand && tries < MaxNormalNoEffectRetries)
+        {
+            _normalNoEffectRetries[species] = tries + 1;
+            EquipForAttack(settings, wantAlternate: true);
+            if (_currentTarget is { } tgt)
+                SendAttack(settings.AlternateAttackCommand, tgt, priority: null);
+            return;
+        }
+
+        // The alternate won't come to hand: count it out against this species too and
+        // take the exhausted-weapon path — a spell if one can take the round, else drop
+        // the target and re-assess.
+        if (_alternateWeaponFailedMonsters.Add(species))
+            _log?.Combat(LogCategory, alternateToHand
+                ? $"weapon-no-effect vs {species} — the alternate never came to hand after {tries} swaps; counting it out too"
+                : $"weapon-no-effect vs {species} — no alternate weapon on hand; counting it out too");
+        if (TryFallBackToSpellAfterWeaponFail(settings)) return;
+        _log?.Combat(LogCategory, $"weapon-no-effect vs {species} — no weapon of ours hurts it, re-assessing");
+        _currentTarget = null;
+        TrySendRoomRefresh($"weapon exhausted vs {species} — re-pick / move on");
     }
 
     // Surface a "cannot attack <species>" line once per species this room — the
