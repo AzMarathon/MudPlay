@@ -13,6 +13,21 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
         </Style>
+        <!-- A base-stat label that opens its breakpoint table: reads as a label until hovered. -->
+        <Style Selector="Button.StatLink">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.StatLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
         <Style Selector="TextBlock.FieldValue">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
@@ -123,25 +138,37 @@
                             <TextBlock Grid.Row="5" Grid.Column="5" Classes="FieldValue" Text="{Binding Picklocks}" Margin="0,0,0,3"/>
 
                             <!-- Row 6: Strength | Agility | Tracking -->
-                            <TextBlock Grid.Row="6" Grid.Column="0" Classes="FieldLabel" Text="Strength" Margin="0,0,8,3"/>
+                            <Button Grid.Row="6" Grid.Column="0" Classes="StatLink" Content="Strength" Margin="0,0,8,3"
+                                    Command="{Binding OpenStatBreakpointsCommand}" CommandParameter="Strength"
+                                    ToolTip.Tip="Show what each point of Strength gives you"/>
                             <TextBlock Grid.Row="6" Grid.Column="1" Classes="FieldValue" Text="{Binding Strength}" Margin="0,0,20,3"/>
-                            <TextBlock Grid.Row="6" Grid.Column="2" Classes="FieldLabel" Text="Agility" Margin="0,0,8,3"/>
+                            <Button Grid.Row="6" Grid.Column="2" Classes="StatLink" Content="Agility" Margin="0,0,8,3"
+                                    Command="{Binding OpenStatBreakpointsCommand}" CommandParameter="Agility"
+                                    ToolTip.Tip="Show what each point of Agility gives you"/>
                             <TextBlock Grid.Row="6" Grid.Column="3" Classes="FieldValue" Text="{Binding Agility}" Margin="0,0,20,3"/>
                             <TextBlock Grid.Row="6" Grid.Column="4" Classes="FieldLabel" Text="Tracking" Margin="0,0,8,3"/>
                             <TextBlock Grid.Row="6" Grid.Column="5" Classes="FieldValue" Text="{Binding Tracking}" Margin="0,0,0,3"/>
 
                             <!-- Row 7: Intellect | Health | Martial Arts -->
-                            <TextBlock Grid.Row="7" Grid.Column="0" Classes="FieldLabel" Text="Intellect" Margin="0,0,8,3"/>
+                            <Button Grid.Row="7" Grid.Column="0" Classes="StatLink" Content="Intellect" Margin="0,0,8,3"
+                                    Command="{Binding OpenStatBreakpointsCommand}" CommandParameter="Intellect"
+                                    ToolTip.Tip="Show what each point of Intellect gives you"/>
                             <TextBlock Grid.Row="7" Grid.Column="1" Classes="FieldValue" Text="{Binding Intellect}" Margin="0,0,20,3"/>
-                            <TextBlock Grid.Row="7" Grid.Column="2" Classes="FieldLabel" Text="Health" Margin="0,0,8,3"/>
+                            <Button Grid.Row="7" Grid.Column="2" Classes="StatLink" Content="Health" Margin="0,0,8,3"
+                                    Command="{Binding OpenStatBreakpointsCommand}" CommandParameter="Health"
+                                    ToolTip.Tip="Show what each point of Health gives you"/>
                             <TextBlock Grid.Row="7" Grid.Column="3" Classes="FieldValue" Text="{Binding Health}" Margin="0,0,20,3"/>
                             <TextBlock Grid.Row="7" Grid.Column="4" Classes="FieldLabel" Text="Martial Arts" Margin="0,0,8,3"/>
                             <TextBlock Grid.Row="7" Grid.Column="5" Classes="FieldValue" Text="{Binding MartialArts}" Margin="0,0,0,3"/>
 
                             <!-- Row 8: Willpower | Charm | Magic Res -->
-                            <TextBlock Grid.Row="8" Grid.Column="0" Classes="FieldLabel" Text="Willpower" Margin="0,0,8,3"/>
+                            <Button Grid.Row="8" Grid.Column="0" Classes="StatLink" Content="Willpower" Margin="0,0,8,3"
+                                    Command="{Binding OpenStatBreakpointsCommand}" CommandParameter="Willpower"
+                                    ToolTip.Tip="Show what each point of Willpower gives you"/>
                             <TextBlock Grid.Row="8" Grid.Column="1" Classes="FieldValue" Text="{Binding Willpower}" Margin="0,0,20,3"/>
-                            <TextBlock Grid.Row="8" Grid.Column="2" Classes="FieldLabel" Text="Charm" Margin="0,0,8,3"/>
+                            <Button Grid.Row="8" Grid.Column="2" Classes="StatLink" Content="Charm" Margin="0,0,8,3"
+                                    Command="{Binding OpenStatBreakpointsCommand}" CommandParameter="Charm"
+                                    ToolTip.Tip="Show what each point of Charm gives you"/>
                             <TextBlock Grid.Row="8" Grid.Column="3" Classes="FieldValue" Text="{Binding Charm}" Margin="0,0,20,3"/>
                             <TextBlock Grid.Row="8" Grid.Column="4" Classes="FieldLabel" Text="Magic Res" Margin="0,0,8,3"/>
                             <TextBlock Grid.Row="8" Grid.Column="5" Classes="FieldValue" Text="{Binding MagicRes}" Margin="0,0,0,3"/>

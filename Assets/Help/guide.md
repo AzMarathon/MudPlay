@@ -1246,6 +1246,12 @@ Finally, if the only thing left un-recovered is **currency**, the death counts a
 
 On both realms these counts are **saved per character**, so they survive a restart — and a rechargeable item is assumed back to full once your BBS's cleanup time has passed, without needing to look at it again. The same figures back the `@uses` remote query.
 
+**Click a base stat's name** (Strength, Intellect, Willpower, Agility, Health, Charm) to open **Stat Breakpoints**. It shows every number that stat feeds, as one column each: dodge, accuracy, crit, stealth, damage, magic resistance, the skills, prices, HP regen and so on. Each column lists the stat values where that stat's share goes up or down a point, from 30 to 200, and **your row is highlighted**, with "You: +N" at the top.
+- The formulas are your realm's. Columns only confirmed on Stock are tagged **STOCK FORMULA** on Paradigm.
+- A **≈** column is one the game divides together with other stats, so the real step can land a point either side.
+- Thief skills show only if your class or race has them; spellcasting shows only under your casting stats.
+- The window follows your live stats and the loaded realm. The stat buttons along its top switch stats; clicking another stat name on Character Info switches it too, and clicking the same one again brings it forward, or closes it when it's already in front.
+
 Below the wealth block it shows an **AC / DR breakdown** in two lines: one for what your worn gear grants, and one for what your **configured self-buffs** add on top (assuming they're up) — the same buff figure the Equipment Manager and Monster Intel use.
 
 **Calculators** holds what-if tools: the Hit Calculator, Swing and Backstab calculators, Movement Speed, Mana Regen, Realm Rankings, and Monster Aggro. The **Hit Calculator** projects your hit% and damage against a monster with your current weapon; for the reverse — how often a monster hits *you*, and whether it's safe to fight — see **Monster Intel**.
