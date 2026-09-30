@@ -3211,6 +3211,24 @@ public sealed class CastingDirectorTests
         Assert.Equal("neutralize Tank", h.CastsSent[0]);
     }
 
+    // Report paradigm-20260929-230346: a member's @held lit their Held chip but the
+    // cure-holds spell was never cast at them; a hold goes first, as it does for us.
+    [Fact]
+    public void PartyCure_MemberHeld_CastsCureHoldsFirst()
+    {
+        using PartyHarness h = new();
+        h.Spells.CureHoldsSpell = "curp";
+        h.Spells.CurePoisonSpell = "neutralize";
+        PartyMember leader = h.AddMember("Nineteen", hpPercent: 100);
+        leader.Held = true;
+        leader.Poisoned = true;
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("curp Nineteen", h.CastsSent[0]);
+    }
+
     [Fact]
     public void PartyCure_MemberDiseased_CastsCureDisease()
     {

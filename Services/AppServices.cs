@@ -5575,6 +5575,10 @@ public sealed class AppServices
         // pre-move sequence, before the sn — equipping breaks sneak.
         Combat.SetWeaponActuator(Equipment.SwapWeapon, () => Equipment.ApplyBackstabArmor(),
             () => Equipment.WornWeapon);
+        // Carried or worn, by name — unknown until the inventory's first read.
+        Combat.SetCarriedCheck(name => Inventory.Snapshot.LastUpdated == default
+            ? null
+            : HeldItemNames().Any(n => n.Equals(name, StringComparison.OrdinalIgnoreCase)));
 
         // Let an auto-fire gear-set apply defer the weapon slot to combat while it
         // holds a per-monster alternate-weapon override, so the Default set's

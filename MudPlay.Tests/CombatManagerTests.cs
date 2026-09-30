@@ -2139,6 +2139,49 @@ public sealed class CombatManagerTests
         Assert.Equal("a big nexus hunter", h.LastSent);
     }
 
+    // Report paradigm-20260929-230446: the alternate wasn't in inventory, so the swap
+    // never landed and every "no effect" re-sent the swing — 1,100+ times. An alternate
+    // we don't have can't come to hand: the first no-effect takes the exhausted path.
+    [Fact]
+    public void WeaponNoEffect_AlternateNotCarried_DoesNotReswing()
+    {
+        using Harness h = new();
+        h.Settings.NormalWeapon = "platinum sceptre";
+        h.Settings.AlternateWeapon = "rune-etched sceptre";
+        h.Settings.AlternateAttackCommand = "a";
+        h.Combat.SetCarriedCheck(name => name == "platinum sceptre");
+        h.WornWeapon = "platinum sceptre";
+        h.AddMonster(1, "centaur outcast", killable: true);
+        h.Feed("Also here: centaur outcast.");
+        h.Sent.Clear();
+
+        h.Feed("Your weapon has no effect against this monster!");
+
+        Assert.DoesNotContain(h.Sent, b => System.Text.Encoding.Latin1.GetString(b).StartsWith("a centaur", StringComparison.Ordinal));
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.False(h.Combat.CanEngageMonster(1));
+    }
+
+    // Even with the alternate carried, a swap that never lands stops being retried.
+    [Fact]
+    public void WeaponNoEffect_SwapNeverLands_StopsAfterAFewTries()
+    {
+        using Harness h = new();
+        h.Settings.NormalWeapon = "platinum sceptre";
+        h.Settings.AlternateWeapon = "rune-etched sceptre";
+        h.Settings.AlternateAttackCommand = "a";
+        h.WornWeapon = "platinum sceptre";
+        h.AddMonster(1, "centaur outcast", killable: true);
+        h.Feed("Also here: centaur outcast.");
+        h.Sent.Clear();
+
+        for (int i = 0; i < 10; i++) h.Feed("Your weapon has no effect against this monster!");
+
+        int swings = h.Sent.Count(b => System.Text.Encoding.Latin1.GetString(b).StartsWith("a centaur", StringComparison.Ordinal));
+        Assert.Equal(3, swings);
+        Assert.False(h.Combat.CanEngageMonster(1));
+    }
+
     [Fact]
     public void LandedSwing_ClearsTheSpeciesFromTheWornWeaponsFailSet()
     {
