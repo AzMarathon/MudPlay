@@ -250,11 +250,15 @@ public sealed class BackscrollView : Control, ILogicalScrollable
             double y = i * _cellH - offY;
             ScrollbackBuffer.Row row = _rows[i];
 
-            // Gutter timestamp — fixed at the left edge, never scrolls sideways.
-            string ts = row.Timestamp.ToLocalTime().ToString("HH:mm:ss");
-            context.DrawText(
-                new FormattedText(ts, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, RenderFontSize, GutterBrush),
-                new Point(0, y));
+            // Gutter timestamp — fixed at the left edge, never scrolls sideways. A row
+            // with no write time (a blank row of a saved death log) leaves it empty.
+            if (row.Timestamp != default)
+            {
+                string ts = row.Timestamp.ToLocalTime().ToString("HH:mm:ss");
+                context.DrawText(
+                    new FormattedText(ts, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, RenderFontSize, GutterBrush),
+                    new Point(0, y));
+            }
 
             // Transcript region clipped so a long row / horizontal scroll can't
             // spill into the gutter.

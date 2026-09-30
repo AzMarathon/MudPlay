@@ -1,5 +1,9 @@
 # Version history
 
+## 3.128.4
+
+- How did I Die? shows the death scene in its original colours
+
 ## 3.128.3
 
 - A monster's mid-fight summon ("shouts for aid!") re-displays the room, so the summoned monster is fought instead of the client resting or looting once the summoner dies
