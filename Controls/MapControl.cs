@@ -1121,6 +1121,14 @@ public sealed class MapControl : Control
                 _chipDragPoint = now;
                 _chipDropTarget = TryHitTestRoom(now, out RoomKey over) ? over : null;
                 InvalidateVisual();
+                // No room tooltips while a chip is held — the room under the cursor
+                // changes constantly, same as a pan.
+                if (_hoverRoom is not null)
+                {
+                    _hoverRoom = null;
+                    RoomHovered?.Invoke(null, now);
+                }
+                _hoverTimer.Stop();
                 return;
             }
 
