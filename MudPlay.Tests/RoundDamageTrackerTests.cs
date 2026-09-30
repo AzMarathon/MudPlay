@@ -278,14 +278,15 @@ public sealed class RoundDamageTrackerTests
         }
     }
 
+    // Stacked (the default): a shared row says how many there were.
     [Fact]
-    public void Table_ShowCounts_LabelsSharedRows()
+    public void Table_Stacked_LabelsSharedRowsWithTheCount()
     {
         (Harness h, _) = MuckRoom();
         using (h)
         {
             h.Feed("A hellish storm of fire and brimstone scorches your foes for 812 damage!");
-            IReadOnlyList<string> table = RoundTotalsFormatter.Table(h.CloseRound(), Everyone, showCounts: true);
+            IReadOnlyList<string> table = RoundTotalsFormatter.Table(h.CloseRound(), Everyone);
 
             Assert.Contains(table, l => l.Contains("muckworm x3"));
             Assert.Contains(table, l => l.Contains("drowned dead x2"));

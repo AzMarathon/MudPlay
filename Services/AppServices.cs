@@ -3644,7 +3644,7 @@ public sealed class AppServices
             if (combat.ShowsRoundTotalsRow(combat.ShowCombatRoundTotalsPlayers)) shown.Add(Game.Combat.CombatantKind.Player);
             if (combat.ShowsRoundTotalsRow(combat.ShowCombatRoundTotalsMonsters)) shown.Add(Game.Combat.CombatantKind.Monster);
             IReadOnlyList<string> table = Game.Combat.RoundTotalsFormatter.Table(round, shown,
-                combat.ShowCombatRoundTotalsMonsterCount, combat.ShowCombatRoundTotalsEachMonster);
+                combat.ShowCombatRoundTotalsEachMonster);
             if (table.Count > 0) WriteTerminalNotice(string.Join("\r\n", table));
         };
         // Reset round counter + ring on BBS connect to match
