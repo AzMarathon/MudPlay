@@ -515,6 +515,11 @@ public sealed partial class CombatManager : IDisposable
     // spell-mode heartbeat permanently gated, so nothing ever retried the attack.
     public bool CombatOff => _combatOff;
 
+    // Diagnostics: whether this room's backstab surprise round is spent, and whether an
+    // attack is waiting on the engine send gate to lift (see OnWireReleased).
+    public bool BackstabOpenerSpent => _backstabOpenerConsumed;
+    public bool AttackHeldBySendGate => _attackHeldByGate;
+
     // Timestamp of the last interrupt-resume (see TryResumeEngage) — paces
     // re-engages to one per round so a non-sustaining attack (KAI pummel, which
     // emits *Combat Off* after every strike) can't spin.
@@ -759,12 +764,18 @@ public sealed partial class CombatManager : IDisposable
     // a freshly-approached room. Once ANY combat action fires here (bs, spell, or
     // swing) the surprise is spent, so re-picking `bs` on a re-engage (interrupt
     // resume, target re-pick) would whiff a wasted round. Set true after the first
-    // dispatch in a room; reset false on a genuine room change — both the pre-move
-    // hook (PrepBackstabForMove, when a movement engine drives) AND the classifier's
-    // RoomChange observation in OnEntitiesObserved (which fires on every confirmed
-    // transition, so manual hand-walking re-opens the surprise round too). Gates
-    // BackstabPending.
+    // dispatch in a room; reset false when we move: every move command sent, typed or
+    // engine-driven (NoteMoveSent), plus the pre-move hook (PrepBackstabForMove) and the
+    // classifier's RoomChange observation as backups. The classifier only emits
+    // RoomChange for an EMPTY new room — a populated one keeps and re-emits the roster
+    // it already parsed — so a hand-typed move into an occupied room relied on the move
+    // send alone. Gates BackstabPending.
     private bool _backstabOpenerConsumed;
+
+    // Engine send-gate probe and whether an attack was decided while it held (see
+    // SetWireHoldProbe / OnWireReleased).
+    private Func<bool>? _wireHeld;
+    private bool _attackHeldByGate;
 
     // AttackTiming re-fire coalescing. A combat round resolves the whole party's
     // auto-attacks at once, so several "moves to attack <our-target>" announces
@@ -878,6 +889,41 @@ public sealed partial class CombatManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(sender);
         _wireSender = sender;
+    }
+
+    // True while the engine send gate is holding (EngineSendGate.IsLocked): the
+    // wrapped sender drops whatever we send. An attack decided then isn't recorded as
+    // sent; it's re-decided when the hold lifts (OnWireReleased).
+    public void SetWireHoldProbe(Func<bool> isHeld)
+    {
+        ArgumentNullException.ThrowIfNull(isHeld);
+        _wireHeld = isHeld;
+    }
+
+    // The engine send gate's last hold cleared. An attack decided while it was up never
+    // reached the wire, so re-decide the room now rather than waiting on the 5 s engage
+    // check (report paradigm-20260930-085259: the train-stats screen's hold was still up
+    // when the room we were moved to listed a nasty zombie; the swing was dropped, combat
+    // believed it sent, and every re-display stopped at "already engaged").
+    public void OnWireReleased()
+    {
+        if (!_attackHeldByGate) return;
+        _attackHeldByGate = false;
+        if (_disposed || !_isEnabled()) return;
+        _log?.Combat(LogCategory, $"send hold lifted — re-deciding the attack on '{_currentTarget}' it held");
+        _currentTarget = null;
+        if (_classifier.Current is { } obs) OnEntitiesObserved(obs);
+    }
+
+    // An attack decided while the send gate holds: nothing goes out, so it isn't
+    // stamped as sent. A held backstab keeps the surprise round for the re-decide.
+    private bool HoldAttackIfGated(string verb, string target)
+    {
+        if (_wireHeld?.Invoke() != true) return false;
+        _attackHeldByGate = true;
+        if (verb.Equals("bs", StringComparison.OrdinalIgnoreCase)) _backstabOpenerConsumed = false;
+        _log?.Combat(LogCategory, $"attack on '{target}' held — the send gate is up; re-decided when it lifts");
+        return true;
     }
 
     // Test-only clock override for AlternationAdvanceMinGap — see _now.
@@ -1425,13 +1471,9 @@ public sealed partial class CombatManager : IDisposable
         if (!_arrivalSettleBypass && obs.Source != RoomObservationSource.Arrival)
             _arrivalSettleArmed = false;
 
-        // A confirmed room change re-opens the surprise round for the room we're
-        // entering. The pre-move hook (PrepBackstabForMove) already resets the
-        // opener when a movement engine drives the walk, but hand-walking leaves
-        // that hook silent — the classifier's synthetic RoomChange wipe is the one
-        // signal that fires on EVERY transition, so keying the reset off it makes
-        // manual moves re-arm the backstab too. Runs before the AlsoHere emit for
-        // the new room, so the opener is already false when that dispatch reads
+        // A confirmed move into an EMPTY room re-opens the surprise round (the
+        // classifier emits RoomChange only then). A move into an occupied room is
+        // re-armed by NoteMoveSent, before the new room's Also-here dispatch reads
         // BackstabPending. Flag-only; the stealth gate still decides whether bs fires.
         if (obs.Source == RoomObservationSource.RoomChange)
         {
@@ -2180,6 +2222,17 @@ public sealed partial class CombatManager : IDisposable
     // before the sn; the actuator sends both synchronously (SwapWeapon is
     // unpaced, ApplyBackstabArmor is a synchronous burst) so nothing trails into
     // the sneak. No-op unless backstab is enabled with a configured weapon.
+    // Every move command sent, typed or engine-driven, re-opens the surprise round for
+    // the room we're heading into. It lands before that room's "Also here:" is parsed,
+    // which is when the opener is decided (report paradigm-20260930-084955: a typed
+    // `se` sneaked into a frost serpent's room and opened with `a`, the opener still
+    // spent from the last fight). Flag-only: the stealth gate still decides whether a
+    // bs fires, so a move that doesn't go through can't backstab from a broken sneak.
+    public void NoteMoveSent()
+    {
+        if (_readSettings().DoBackstab) _backstabOpenerConsumed = false;
+    }
+
     public void PrepBackstabForMove()
     {
         CombatSettings settings = _readSettings();
@@ -4347,6 +4400,7 @@ public sealed partial class CombatManager : IDisposable
             _log?.Combat(LogCategory, $"attack target={target} cmd={verb}");
         _lastAttackCommand = line;
         if (_wireSender is null) return;
+        if (HoldAttackIfGated(verb, target)) return;
         _pendingAttackEchoVerb = verb;   // claim our own swing so the attack observer doesn't read it as manual
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         NoteAttackSent();
@@ -4365,6 +4419,7 @@ public sealed partial class CombatManager : IDisposable
             $"re-fire target={target} cmd={verb} timing={refireReason}");
         _lastAttackCommand = line;
         if (_wireSender is null) return;
+        if (HoldAttackIfGated(verb, target)) return;
         _pendingAttackEchoVerb = verb;   // claim our own swing so the attack observer doesn't read it as manual
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         NoteAttackSent();

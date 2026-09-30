@@ -307,6 +307,31 @@ public sealed class SpellBookViewModelTests : IDisposable
         Assert.Equal(0, book.GetTeachingItemNumber(999));   // unknown spell → none
     }
 
+    // Two items teach the spell: an out-of-play tome first in the table, then the
+    // shop scroll. The spell's own "Learned From" item wins, and without one an item in
+    // play still beats the out-of-play one (lesser arcane enchantment: tome #3656 vs
+    // scroll #3678).
+    [Fact]
+    public void GetTeachingItemNumber_PrefersLearnedFrom_ThenInPlay()
+    {
+        Dictionary<string, object> tome = TeachItemRow(300, "tome of starlight", teachesSpell: 100);
+        tome["In Game"] = 0;
+        Dictionary<string, object> scroll = TeachItemRow(301, "scroll of starlight", teachesSpell: 100);
+        scroll["In Game"] = 1;
+        object[] items = [tome, scroll];
+
+        SpellbookState plain = NewBook(classNumber: 12, level: 5, items: items);
+        Assert.Equal(301, plain.GetTeachingItemNumber(100));   // in play beats out of play
+
+        Dictionary<string, object> starlight = SpellRow(100, "starlight", "star", magery: 1, mageryLvl: 1, reqLevel: 2);
+        starlight["Learned From"] = "Item #301";
+        Dictionary<string, object> tome2 = TeachItemRow(300, "tome of starlight", teachesSpell: 100);
+        SpellbookState named = NewBook(classNumber: 12, level: 5,
+            items: [tome2, TeachItemRow(301, "scroll of starlight", teachesSpell: 100)],
+            spells: [starlight, _spells[1], _spells[2]]);
+        Assert.Equal(301, named.GetTeachingItemNumber(100));   // the spell's own Learned From
+    }
+
     // A trainer-taught spell (no teaching item) resolves the NPC that teaches it from
     // its "Learned From" annotation, so the Spell Book's double-click can open the
     // NPC's record instead of an item's.
