@@ -191,7 +191,7 @@
                             <Flyout Placement="Bottom">
                                 <StackPanel MinWidth="300" Spacing="6">
                                     <TextBlock Classes="FieldLabel" TextWrapping="Wrap" MaxWidth="320"
-                                               Text="Checkbox: show the attack in Your Matchup.   Radio: use it for Est. Rounds to Kill — or pick 'Fastest of all my attacks' to use whichever of your attacks (melee or spell) kills each monster soonest. Backstab reads 1 for a sure one-stab kill, — otherwise."/>
+                                               Text="Checkbox: show the attack in Your Matchup.   Radio: use it for Est. Rounds to Kill — or pick 'Fastest of all my attacks' to use whichever of your attacks (melee or spell) kills each monster soonest. Backstab counts round 1 as the stab and the rest as normal attacks (1 for a sure one-stab kill)."/>
                                     <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
                                         <ItemsControl ItemsSource="{Binding AttackOptions}">
                                             <ItemsControl.ItemTemplate>

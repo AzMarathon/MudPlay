@@ -1,8 +1,11 @@
 # Version history
 
-## 3.125.14
+## 3.125.16
 
 - Monster Intel: the working line under the highlighted Your Matchup row is readable (lighter grey on the highlight)
+- Monster Intel: with Backstab picked for Est. Rounds to Kill, round 1 is the stab and later rounds are normal attacks, so Max rounds to kill above 1 lists monsters that need a follow-up
+- Discarded coin drops what your inventory says you carry, one drop at a time; a refused drop re-reads your inventory
+- bug reports addressed: paradigm-20260929-183044, paradigm-20260929-183240
 
 ## 3.125.13
 

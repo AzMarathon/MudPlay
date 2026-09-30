@@ -69,6 +69,7 @@ public sealed class CashManager : IDisposable
     private readonly IDisposable _groundSub;
     private readonly IDisposable _pickedUpSub;
     private readonly IDisposable _droppedSub;
+    private readonly IDisposable _dropRefusedSub;
     private readonly IDisposable _hiddenSub;
     private readonly IDisposable _noticeSub;
     private readonly IDisposable _killDropSub;
@@ -252,6 +253,7 @@ public sealed class CashManager : IDisposable
         _groundSub   = router.Subscribe(KnownPatterns.CashOnGround,  OnCashOnGround);
         _pickedUpSub = router.Subscribe(KnownPatterns.CashPickedUp,  OnCashPickedUp);
         _droppedSub  = router.Subscribe(KnownPatterns.CashDropped,   OnCashDropped);
+        _dropRefusedSub = router.Subscribe(KnownPatterns.CashDropRefused, OnDropRefused);
         // `hide N <coin>` is the stash-room verb — same tally semantics
         // as drop. Without this subscription, stashing decrements only
         // via item-hide (UserHides) which isn't currency-aware; the
@@ -335,16 +337,24 @@ public sealed class CashManager : IDisposable
     // For any currency whose policy is Discard AND we hold > 0, emit
     // "drop <amount> <type>" (the MajorMUD syntax for currency drops).
     //
-    // Holdings come from the authoritative InventorySnapshot.Currency, NOT the
-    // local pickup tally (_held): the tally only counts coin observed via
-    // CashPickedUp / CashDropped this session, so a carried-over / starting
-    // balance it never saw (the exact case a retroactive Collect→Discard flip
-    // must handle) would read as zero and never drop. The snapshot is the
-    // 'i'-seeded, delta-tracked truth. We still max in the tally so a fresh
-    // pickup drops immediately even if the parser's snapshot hasn't yet applied
-    // the confirming line. The CashDropped subscription decrements state when
-    // the server confirms; we don't optimistically decrement so the audit
-    // retries on the next firing if the drop fails.
+    // Holdings come from the authoritative InventorySnapshot.Currency alone —
+    // the 'i'-seeded, delta-tracked truth. Not the local pickup tally (_held): it
+    // only counts coin observed via CashPickedUp / CashDropped this session, so it
+    // misses a carried-over balance and never learns of coin spent, banked or
+    // miscounted — maxing it in kept dropping 2182 copper after an `i` showed 671
+    // (report paradigm-20260929-183240). A fresh pickup still drops promptly: the
+    // inventory change it causes re-runs this audit (OnInventoryChanged).
+    //
+    // One drop per currency at a time: until the server answers it (dropped, or
+    // refused) or DropReplyWindow passes, a re-audit sends nothing more for it.
+    // We don't optimistically decrement, so a drop that fails is retried.
+    private static readonly TimeSpan DropReplyWindow = TimeSpan.FromSeconds(5);
+    private readonly Dictionary<string, DateTime> _dropSentAt = new(StringComparer.OrdinalIgnoreCase);
+    // A refused drop means our holdings are stale: re-read them with `i`, at most
+    // this often.
+    private static readonly TimeSpan RefreshCooldown = TimeSpan.FromSeconds(10);
+    private DateTime _lastRefreshAt;
+
     private void AuditHeldForDiscard()
     {
         if (!_isEnabled()) return;
@@ -362,10 +372,13 @@ public sealed class CashManager : IDisposable
     private void AuditDenominationForDiscard(CashSettings settings, string currency, long snapshotCount)
     {
         if (ResolvePolicy(settings, currency) != CashPolicy.Discard) return;
-        long count = Math.Max(snapshotCount, HeldCoin(currency));
-        if (count <= 0) return;
-        _log?.Info(LogCategory, $"discard drop currency={currency} count={count}");
-        Send($"drop {count} {_naming.WireNoun(currency)}");
+        if (snapshotCount <= 0) return;
+        DateTime now = DateTime.UtcNow;
+        string key = _naming.Canonicalize(currency);
+        if (_dropSentAt.TryGetValue(key, out DateTime sent) && now - sent < DropReplyWindow) return;
+        _dropSentAt[key] = now;
+        _log?.Info(LogCategory, $"discard drop currency={currency} count={snapshotCount}");
+        Send($"drop {snapshotCount} {_naming.WireNoun(currency)}");
     }
 
     // ----- handlers ----------------------------------------------------
@@ -470,9 +483,8 @@ public sealed class CashManager : IDisposable
         // to wait for.
         _gate?.NoteGetConfirmed();
         CheckAutoDeposit();
-        // Picked up a currency the user marked Discard (or settings
-        // changed since the last audit) — drop it.
-        AuditHeldForDiscard();
+        // A Discard currency picked up is dropped once the inventory snapshot has
+        // it (OnInventoryChanged re-audits) — auditing here too sent a second drop.
     }
 
     private void OnCashDropped(MatchResult m)
@@ -482,8 +494,25 @@ public sealed class CashManager : IDisposable
 
         AdjustHeld(currency, -count);
         DecayInFlight(currency, -count);
+        ClearDropSent(currency);
         CheckAutoDeposit();
     }
+
+    // "You don't have N <coin> to drop!" — the count we dropped from was stale.
+    // Re-read the inventory (`i`), whose fresh coin counts re-run the audit.
+    private void OnDropRefused(MatchResult m)
+    {
+        (string? currency, int count) = ParseCashLine(m);
+        if (currency is null) return;
+        ClearDropSent(currency);
+        DateTime now = DateTime.UtcNow;
+        if (now - _lastRefreshAt < RefreshCooldown) return;
+        _lastRefreshAt = now;
+        _log?.Warn(LogCategory, $"drop of {count} {currency} refused — coin counts are stale, re-reading inventory");
+        Send("i");
+    }
+
+    private void ClearDropSent(string currency) => _dropSentAt.Remove(_naming.Canonicalize(currency));
 
     // Stash-room confirmation handler — tally identically to drop. The hide wire
     // shape is what stash-room visits use to dump excess coin / items; without
@@ -1174,6 +1203,7 @@ public sealed class CashManager : IDisposable
         _groundSub.Dispose();
         _pickedUpSub.Dispose();
         _droppedSub.Dispose();
+        _dropRefusedSub.Dispose();
         _hiddenSub.Dispose();
         _noticeSub.Dispose();
         _killDropSub.Dispose();

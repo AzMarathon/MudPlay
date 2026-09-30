@@ -578,16 +578,53 @@ public sealed class CashManagerTests
 
     // ----- Discard auto-drop -----------------------------------------
 
+    // A Discard currency picked up drops once the inventory snapshot has it — the
+    // pickup line and the inventory change after it send one drop between them.
     [Fact]
-    public void Discard_PickedUpFlaggedCurrency_DropsImmediately()
+    public void Discard_PickedUpFlaggedCurrency_DropsOnce()
     {
         using Harness h = new();
         h.Settings.CopperPolicy = CashPolicy.Discard;
 
         h.Feed("You picked up 50 copper pieces.");
+        h.Snapshot = Wealth(50, copper: 50);
+        h.Cash.OnInventoryChanged();
+        h.Cash.OnInventoryChanged();
 
-        List<string> lines = h.Sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
-        Assert.Contains("drop 50 copper farthing", lines);
+        Assert.Equal(new[] { "drop 50 copper farthing" }, h.AllSent);
+    }
+
+    // Report paradigm-20260929-183240: the session pickup tally said 2182 copper,
+    // `i` said 671; the drop must follow the inventory, not the tally.
+    [Fact]
+    public void Discard_DropsWhatInventorySays_NotThePickupTally()
+    {
+        using Harness h = new();
+        h.Feed("You picked up 2182 copper pieces.");
+        h.Snapshot = Wealth(671, copper: 671);
+
+        h.Settings.CopperPolicy = CashPolicy.Discard;
+        h.Cash.OnSettingsChanged();
+
+        Assert.Equal(new[] { "drop 671 copper farthing" }, h.AllSent);
+    }
+
+    // A refused drop means our counts are stale: re-read the inventory, and let the
+    // next audit drop again (at most one `i` per cooldown).
+    [Fact]
+    public void Discard_RefusedDrop_ReReadsInventoryAndRetries()
+    {
+        using Harness h = new();
+        h.Snapshot = Wealth(2182, copper: 2182);
+        h.Settings.CopperPolicy = CashPolicy.Discard;
+        h.Cash.OnSettingsChanged();
+
+        h.Feed("You don't have 2182 copper farthing to drop!");
+        h.Feed("You don't have 2182 copper farthing to drop!");
+        h.Snapshot = Wealth(671, copper: 671);
+        h.Cash.OnInventoryChanged();
+
+        Assert.Equal(new[] { "drop 2182 copper farthing", "i", "drop 671 copper farthing" }, h.AllSent);
     }
 
     [Fact]
@@ -596,6 +633,7 @@ public sealed class CashManagerTests
         using Harness h = new();
         h.Settings.GoldPolicy = CashPolicy.Collect;
         h.Feed("You picked up 100 gold pieces.");
+        h.Snapshot = Wealth(100_000, gold: 100);
         Assert.Equal(100, h.Cash.HeldCoin("gold"));
         h.Sent.Clear();
 

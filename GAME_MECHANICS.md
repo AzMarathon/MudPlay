@@ -295,6 +295,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 | Action attempted while dropped (rejection) | `You may not do that while you are mortally wounded!` |
 | Coin pickup (no trailing period; see *Money, banks & shops → Coin wire wording*) | `You picked up N <coin>` (e.g. `6 silver nobles`) |
 | Coin drop | `You dropped N <coin>.` |
+| Coin drop refused (not carrying that many) | `You don't have N <coin> to drop!` |
 | Coin stash / hide | `You hid N <coin>.` |
 | Bank deposit (manual or auto; multi-currency, may wrap) | `You deposit 1 platinum piece, 93 gold crowns, ... copper farthings.` |
 | Corpse loot drop (bare keyword) | `N <keyword> drop to the ground.` |
@@ -4383,6 +4384,8 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   *Death & corpse recovery → Corpse recovery (`recover corpse`)* write `You picked up <N> <coin>.` with a period, and the code (`InventoryManager`) documents `You picked up a gold crown.`; the client's matcher accepts both forms, with or without a period.)*
 - **Drop / stash confirmations name the full coin with a trailing period:**
   `You dropped 5 gold crowns.` / `You hid 219 copper farthings.`
+- **A drop of more coin than you carry is refused, naming the amount and the singular coin noun** *([OBSERVED] Paradigm, report `paradigm-20260929-183240`)*:
+  `You don't have 2182 copper farthing to drop!` — nothing is dropped. **Client use:** `CashManager.OnDropRefused` (pattern `CashDropRefused`) reads it as stale coin counts and re-reads the inventory with `i`.
 - **Bank deposit confirmation names the full multi-currency amount** as one comma-separated list with a
   trailing period: `You deposit 1 platinum piece, 93 gold crowns, 4 silver nobles,
   12 copper farthings.` Emitted for **both** a manual `dep` and the client's auto-deposit `dep`, so it's

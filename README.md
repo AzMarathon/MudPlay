@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.125.14**
+> **Version 3.125.16**
 > - Monster Intel: the working line under the highlighted Your Matchup row is readable (lighter grey on the highlight)
+> - Monster Intel: with Backstab picked for Est. Rounds to Kill, round 1 is the stab and later rounds are normal attacks, so Max rounds to kill above 1 lists monsters that need a follow-up
+> - Discarded coin drops what your inventory says you carry, one drop at a time; a refused drop re-reads your inventory
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
