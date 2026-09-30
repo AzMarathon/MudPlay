@@ -1278,6 +1278,19 @@ public static class BugReportBuilder
         Kv(sb, "Auto-Lair paused", svc.AutoLair.IsPaused.ToString());
         Kv(sb, "Auto-Lair target",
             svc.AutoLair.CurrentTarget is { } lair ? $"{lair.Map}/{lair.Room}" : "(none)");
+        // Which anchor the target's respawn clock runs from (Stock: the room's last
+        // kill, else the entry; Paradigm: the entry) — a "Auto-Lair walked in early /
+        // waited too long" report needs both stamps and the ready-time they gave.
+        if (svc.AutoLair.CurrentTarget is { } clockLair)
+        {
+            Game.Map.LairTimerStore t = svc.LairTimers;
+            int? overrideSec = svc.AutoLair.GetOverride(clockLair);
+            static string At(DateTimeOffset? v, string none) => v?.ToLocalTime().ToString("HH:mm:ss") ?? none;
+            Kv(sb, "Auto-Lair target clock",
+                $"entered {At(t.LastEntered(clockLair), "—")}, last kill {At(t.LastKilled(clockLair), "—")}, "
+                + $"respawn {(overrideSec ?? t.DefaultRespawnSeconds(clockLair))?.ToString() ?? "?"} s, "
+                + $"ready {At(t.NextReadyAt(clockLair, overrideSec), "now")}");
+        }
         // The live-resolved travel-cost model + its current per-hop figure — a
         // "walk-to ETA / lair ranking looks wrong" report needs to know which
         // model got wired (realm-aware Auto vs Flat vs bucketed) and what it

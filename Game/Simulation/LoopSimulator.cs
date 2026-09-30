@@ -96,7 +96,7 @@ public static class LoopSimulator
     }
 
     // A lair's respawn clock: Stock keeps one for the whole room, restarted by every
-    // kill in it, and refills every empty slot together once it runs out. Paradigm is
+    // kill in it (the placed fixture's too), and refills every empty slot together once it runs out. Paradigm is
     // played with one clock per slot, started by that slot's kill — still unconfirmed
     // against a room clock like Stock's (GAME_MECHANICS "Lair respawn timers"). Only
     // the clock the realm uses is read.
@@ -520,13 +520,15 @@ public static class LoopSimulator
             _exp += mob.Entry.EffectiveExp;
             _kills++;
             RoomState room = Here();
+            double readyAt = Now + _lap[_pos].RespawnSeconds;
             if (mob.LairSlot >= 0)
             {
                 room.SlotMob[mob.LairSlot] = null;
-                double readyAt = Now + _lap[_pos].RespawnSeconds;
                 if (_perSlotClock) room.SlotReadyAt[mob.LairSlot] = readyAt;
-                else room.RoomReadyAt = readyAt;
             }
+            // Stock stamps the room's last kill on every death in it, the placed
+            // fixture's included (GAME_MECHANICS "Lair respawn timers").
+            if (!_perSlotClock) room.RoomReadyAt = readyAt;
             if (ReferenceEquals(mob, _target))
             {
                 _target = null;
@@ -852,11 +854,7 @@ public static class LoopSimulator
                 _ma += r.MaStanding(manaBonus);
             }
             if (resting && since > 0 && since % _restingSteps == 0)
-            {
-                long tick = since / _restingSteps;
-                double rest = r.HpResting(hpBonus);
-                _hp += tick % Math.Max(1, r.RestFullEvery) == 0 ? rest : rest * r.RestReducedShare;
-            }
+                _hp += r.RestTickHp(since / _restingSteps, hpBonus);
             if (_posture == Posture.Meditating && since > 0 && since % _meditatingSteps == 0)
                 _ma += r.MaMeditating;
             _hp = Math.Min(_hp, _ch.MaxHp);

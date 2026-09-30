@@ -170,7 +170,7 @@ public sealed partial class RoomInfoViewModel : ObservableObject
             AssignedMonsters.Add(MakeMonsterLink(m.Id, m.Name, note: null));
         foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Lair)
             LairMonsters.Add(MakeMonsterLink(m.Id, m.Name, note: null));
-        LairRegen = RoomTooltipBuilder.FormatLairRegen(rm.LairMax, room.Delay);
+        LairRegen = RoomTooltipBuilder.FormatLairRegen(rm.LairMax, room.Delay, _services.GameData.ActiveRealm);
 
         // Obvious exits — one clickable row per exit, same ordering + hint as the
         // map tooltip. Clicking re-roots the map on the neighbour and refreshes

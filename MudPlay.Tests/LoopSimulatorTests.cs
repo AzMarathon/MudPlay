@@ -14,11 +14,12 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // Pins the character loop simulation: a lair refills only on its respawn clock —
-// one per slot on Paradigm, one per room on Stock — (on entry, or on the spawn pass while standing in it; an unresolved clock
-// only on entry), a fight the character can't survive ends the run and counts
-// against the hours asked for, resting follows the Health-tab rest gates and the
-// realm's rest-tick cycle, lawful evil spares an Outlaw-or-worse character, and a
-// configured attack spell is cast by the chooser.
+// one per slot on Paradigm, one per room on Stock that every death in the room
+// restarts — on entry, or on the spawn pass while standing in it (an unresolved
+// clock only on entry). A fight the character can't survive ends the run and
+// counts against the hours asked for, resting follows the Health-tab rest gates
+// and the realm's rest-tick cycle, lawful evil spares an Outlaw-or-worse
+// character, and a configured attack spell is cast by the chooser.
 public sealed class LoopSimulatorTests
 {
     private static MonsterCatalogEntry Mob(int number, int hp, int exp, int align = 3,
@@ -374,15 +375,20 @@ public sealed class LoopSimulatorTests
     [Fact]
     public void ParadigmRestPaysFullOnlyOnEveryThirdTick()
     {
-        // Same seed, same fight, same damage taken: the rest cycle whose first two
-        // ticks are reduced takes longer to rest back up than one paying in full.
+        // Counted from lying down, each cycle pays a third, a third, then in full.
+        var cycle = new SimRegen(_ => 0, _ => 30, _ => 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true,
+            RestFullEvery: 3, RestReducedShare: 1.0 / 3);
+        Assert.Equal(new[] { 10.0, 10.0, 30.0, 10.0, 10.0, 30.0 },
+            Enumerable.Range(1, 6).Select(t => Math.Round(cycle.RestTickHp(t), 6)));
+
+        // Played out — same seed, same fight, same damage taken — that cycle takes
+        // longer to rest back up than one paying in full every tick.
         var health = new HealthSettings { RestIfBelowHp = 99, RestMaxHp = 100, UseMeditateAbility = false };
         LoopSimRun Rest(SimRegen regen) => LoopSimulator.Run(Character(maxHp: 200, health: health, regen: regen),
             new[] { Lair(1, 1, 7200, 7), Empty(2) },
             World(Mob(7, hp: 1500, exp: 100, align: 1, Hit(25, 25))), secondsPerStep: 1, hours: 0.5, seed: 1);
 
-        LoopSimRun cycled = Rest(new SimRegen(_ => 0, _ => 30, _ => 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true,
-            RestFullEvery: 3, RestReducedShare: 1.0 / 3));
+        LoopSimRun cycled = Rest(cycle);
         LoopSimRun full = Rest(new SimRegen(_ => 0, _ => 30, _ => 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true));
 
         Assert.True(full.RestingSeconds > 0);
@@ -431,23 +437,58 @@ public sealed class LoopSimulatorTests
         Assert.Null(outlaw.DiedAtSeconds);
     }
 
-    [Fact]
-    public void StockLairRunsOneRoomClockThatEveryKillRestarts()
+    // A one-cast-a-round attack spell that never misses, so every fight lasts a
+    // fixed number of rounds and a run's timing doesn't hang on the seed.
+    private static SimCharacter Caster(RealmType realm, int damagePerRound)
     {
-        // A 2-mob, 60 s lair whose mobs take ~60 s each to kill. Per slot (Paradigm)
-        // the first slot is back by the time the second dies, so the character is
-        // never kept waiting: one kill a minute. On Stock the second kill restarts the
-        // room's one clock for both slots, so the pair only returns 60 s after it: at
-        // most two kills per ~180 s.
-        SimRoom[] lap = { Lair(1, 2, 60, 7), Empty(2) };
-        var world = World(Mob(7, hp: 11500, exp: 100));
-        LoopSimRun stock = LoopSimulator.Run(Character(realm: RealmType.Stock), lap, world,
-            secondsPerStep: 1, hours: 1, seed: 1);
-        LoopSimRun paradigm = LoopSimulator.Run(Character(realm: RealmType.ParaMud), lap, world,
-            secondsPerStep: 1, hours: 1, seed: 1);
+        var combat = new CombatSettings();
+        combat.NormalAttackSpell.SpellName = "blst";
+        var spells = new Dictionary<string, SimSpell>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["blst"] = new SimSpell("blst", 1, ManaPerCast: 1, FiresPerRound: 1, CastChance: 100,
+                MinDamagePerRound: damagePerRound, MaxDamagePerRound: damagePerRound, UsesMagicResist: false,
+                TypeOfResists: 0, AttType: 0, MinHeal: 0, MaxHeal: 0),
+        };
+        return Character(damage: 0, combat: combat, spells: spells, maxMana: 100000, realm: realm);
+    }
 
-        Assert.InRange(stock.Kills, 30, 2 + 2 * 3600 / 180);
-        Assert.InRange(paradigm.Kills, 55, 61);
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    public void StockLairRunsOneRoomClockThatEveryKillRestarts(int seed)
+    {
+        // A 2-mob lair on a 62 s clock; each mob takes exactly 12 rounds (dies at
+        // 55 s and 115 s). Per slot (Paradigm) the first slot is ready at 117 s, back
+        // on the next entry and dead at 175 s: three kills in 200 s. On Stock the
+        // 115 s kill pushes the room's one clock to 177 s for both slots: two kills.
+        SimRoom[] lap = { Lair(1, 2, 62, 7), Empty(2) };
+        var world = World(Mob(7, hp: 1200, exp: 100));
+        const double hours = 200.0 / 3600;
+        LoopSimRun stock = LoopSimulator.Run(Caster(RealmType.Stock, 100), lap, world, 1, hours, seed);
+        LoopSimRun paradigm = LoopSimulator.Run(Caster(RealmType.ParaMud, 100), lap, world, 1, hours, seed);
+
+        Assert.Equal(2, stock.Kills);
+        Assert.Equal(3, paradigm.Kills);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    public void StockFixtureKillRestartsTheLairRoomClock(int seed)
+    {
+        // A lair room whose placed fixture is back on every entry and dies each visit,
+        // well inside the lair's 62 s clock. On Stock each fixture death restarts the
+        // room clock, so the lair mob never returns after its first kill; Paradigm's
+        // per-slot clock ignores the fixture and the lair keeps refilling.
+        SimRoom[] lap = { new(new RoomKey(1, 1), 8, 1, new[] { 7 }, 62), Empty(2) };
+        var world = World(Mob(7, hp: 10, exp: 1000), Mob(8, hp: 10, exp: 1));
+        LoopSimRun stock = LoopSimulator.Run(Caster(RealmType.Stock, 100), lap, world, 1, hours: 1, seed);
+        LoopSimRun paradigm = LoopSimulator.Run(Caster(RealmType.ParaMud, 100), lap, world, 1, hours: 1, seed);
+
+        static long LairKills(LoopSimRun r) => (r.Exp - r.Kills) / 999;   // 1,000 exp a lair kill, 1 a fixture
+        Assert.True(stock.Kills > 100);
+        Assert.Equal(1, LairKills(stock));
+        Assert.True(LairKills(paradigm) > 40);
     }
 
     [Fact]

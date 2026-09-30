@@ -6639,6 +6639,7 @@ public sealed class AppServices
         // in-session arrival tracker.
         Lairs = new Game.Map.LairManager(Log);
         LairTimers = new Game.Map.LairTimerStore(GameData, RoomGraph, RoomTracker, Log);
+        MonsterDeath.MonsterDied += evt => LairTimers.NoteKill(evt.At);
         ExpResolver = new Game.Map.RouteExpResolver(RoomGraph, Bfs, LairTimers, GameData);
 
         // Loops + lairs are per-game-data-set and share one on-disk tree,
