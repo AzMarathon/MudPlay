@@ -175,14 +175,18 @@ public sealed class RoundDamageTracker : IDisposable
     // The room's monsters as MonsterHpTracker has them: the one a hit on a name lands on
     // (the first of that name) and every one of them, each with a stable id and its HP
     // estimate before the hit. Unbound, or a monster with no HP data, and damage counts
-    // in full under the monster's name alone.
+    // in full under the monster's name alone. capAtHp is Settings → Combat "Cap at
+    // monster HP", read per line so a toggle applies at once; unbound, hits are capped.
     private Func<string, (int Id, int Hp)?>? _monsterTarget;
     private Func<IReadOnlyList<(int Id, string Name, int Hp)>>? _roomMonsters;
+    private Func<bool> _capAtHp = static () => true;
     public void SetMonsterHp(
-        Func<string, (int Id, int Hp)?> targetOf, Func<IReadOnlyList<(int Id, string Name, int Hp)>> roomMonsters)
+        Func<string, (int Id, int Hp)?> targetOf, Func<IReadOnlyList<(int Id, string Name, int Hp)>> roomMonsters,
+        Func<bool>? capAtHp = null)
     {
         _monsterTarget = targetOf;
         _roomMonsters = roomMonsters;
+        if (capAtHp is not null) _capAtHp = capAtHp;
     }
 
     // The room's occupants changed (a fresh "Also here:", an arrival, a death).
@@ -322,13 +326,15 @@ public sealed class RoundDamageTracker : IDisposable
 
     // Who took a line's damage, and how much. A monster can't take more than the HP it
     // has left: a hit past it (an 812 room spell on a 540-HP muckworm) counts only what
-    // killed it (user, 2026-09-29). HP it regained — regen, a heal — is in the estimate
-    // already. An estimate already at 0 that still takes a hit was wrong, so that hit
-    // counts in full. A room spell hits each monster once, matched to the tracker's
-    // monsters of each name in order.
+    // killed it (user, 2026-09-29) — when the user has the cap on; off, the line's own
+    // number counts, so a killing blow reads as big as the game printed it. HP it
+    // regained — regen, a heal — is in the estimate already. An estimate already at 0
+    // that still takes a hit was wrong, so that hit counts in full. A room spell hits
+    // each monster once, matched to the tracker's monsters of each name in order.
     private List<(string Row, int? Id, int Taken)> Hits(string? target, int amount, bool roomSpell)
     {
         List<(string, int?, int)> hits = new();
+        bool cap = _capAtHp();
         if (roomSpell)
         {
             Dictionary<string, Queue<(int Id, int Hp)>> tracked = new(StringComparer.OrdinalIgnoreCase);
@@ -339,13 +345,13 @@ public sealed class RoundDamageTracker : IDisposable
             }
             foreach (string foe in _foes)
                 hits.Add(tracked.TryGetValue(foe, out Queue<(int Id, int Hp)>? q) && q.Count > 0 && q.Dequeue() is var m
-                    ? (foe, m.Id, Capped(amount, m.Hp))
+                    ? (foe, m.Id, cap ? Capped(amount, m.Hp) : amount)
                     : (foe, null, amount));
         }
         else if (target is not null)
         {
             hits.Add(IsFoe(target) && _monsterTarget?.Invoke(target) is { } m
-                ? (target, m.Id, Capped(amount, m.Hp))
+                ? (target, m.Id, cap ? Capped(amount, m.Hp) : amount)
                 : (target, null, amount));
         }
         return hits;

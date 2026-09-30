@@ -1,5 +1,10 @@
 # Version history
 
+## 3.131.1
+
+- Combat round totals: new **Cap at monster HP** box; off (the default) counts every hit as printed again, so a killing blow reads in full
+- bug reports addressed: paradigm-20260930-104446
+
 ## 3.131.0
 
 - Exp/Hr Estimator: Rank areas at level plays your character through a lair tour of every hunting area you can reach from where you stand at that level (level-gated boats, portals and exits judged at that level), safe areas best first

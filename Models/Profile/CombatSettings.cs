@@ -263,6 +263,11 @@ public sealed class CombatSettings
     // ("muckworm #1", "#2"…).
     public bool ShowCombatRoundTotalsEachMonster { get; set; }
 
+    // Cap a monster's damage taken (and its dealer's damage dealt) at the HP it had left,
+    // so a killing blow counts only what killed it. Off (the default), every line counts
+    // the number the game printed.
+    public bool CapRoundTotalsAtMonsterHp { get; set; }
+
     // A box missing from settings saved before the boxes existed follows
     // ShowCombatRoundTotals: a table that was on keeps every row, one that was off
     // stays off (user, 2026-09-29).

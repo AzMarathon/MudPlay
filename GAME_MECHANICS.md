@@ -2787,7 +2787,7 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 - **A monster can't take more damage than the HP it has left** *([CONFIRMED] 2026-09-29, user)*. A hit past it kills the monster, and the rest of the number is lost: an `812` room spell on a 540-HP muckworm takes only 540 off it. It only takes more than its max over a fight by regaining HP mid-fight: a regen tick, or a heal spell it's assigned and uses.
 
 **Client use:**
-- The round ledger caps each monster's damage taken, and the dealer's damage dealt, at the HP estimate the hit found it at (`RoundDamageTracker.Hits`). An estimate already at 0 that still takes a hit was wrong, so that hit counts in full.
+- With Settings → Combat **Cap at monster HP** on, the round ledger caps each monster's damage taken, and the dealer's damage dealt, at the HP estimate the hit found it at (`RoundDamageTracker.Hits`). An estimate already at 0 that still takes a hit was wrong, so that hit counts in full. *Client policy (user, 2026-09-30, report `paradigm-20260930-104446`): the cap is opt-in, off by default; off, the ledger counts each line's printed number.*
 - `MonsterHpTracker` keeps a running estimate per monster in the room (max HP less the round ledger's damage, plus regen), re-times the regen cycle when a look shows a tick fired, and pulls the estimate into each look's band (see *Health, resting & recovery → Looking at a monster — coarse wound bands*).
 
 ### Monster movement lines
