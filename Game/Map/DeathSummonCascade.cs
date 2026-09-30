@@ -8,13 +8,14 @@ namespace MudPlay.Game.Map;
 // DeathSpell summons, those become the next tier, and so on until a tier summons
 // nothing.
 //
-// The engine caps a room at 20 living monsters. When a monster dies its DeathSpell
-// fires as a SINGLE atomic cast: the whole cast lands only if all its summoned
-// monsters fit under the cap — otherwise it fails outright and is permanently lost
-// (no partial spawn, no retry, it does NOT reappear on a later round). So a tier
-// fills with whole casts until the next one won't fit; the rest are dropped. That
-// keeps a fan-out room (say 15 mobs each summoning 2 → 30) from being scored as if
-// all 30 appeared. Casts are processed in a deterministic order (ascending monster
+// The engine caps a room's living monsters (GAME_MECHANICS "Death-summon
+// cascades"). On Paradigm the cap is 20 and a monster's DeathSpell fires as a SINGLE
+// atomic cast: the whole cast lands only if all its summoned monsters fit — otherwise
+// it fails outright and is permanently lost (no partial spawn, no retry). So a tier
+// fills with whole casts until the next one won't fit; the rest are dropped. On Stock
+// the room holds 15 and each summon is placed on its own, as many as fit. Either way
+// a fan-out room (say 15 mobs each summoning 2 → 30) isn't scored as if all 30
+// appeared. Casts are processed in a deterministic order (ascending monster
 // id) since the engine's real death order isn't knowable; the difference only shows
 // in a room that actually hits the cap, which is rare. Single-type rooms — the
 // common case, e.g. the Zombie Pen — never hit it and are exact.
@@ -25,9 +26,15 @@ namespace MudPlay.Game.Map;
 // estimator falls back to for an ordinary lair.
 public static class DeathSummonCascade
 {
-    // Engine hard limit on simultaneous monsters in a room. A summon cast that would
-    // exceed it fails whole. (Confirmed game mechanic.)
+    // Engine limit on simultaneous monsters in a room: Paradigm 20, Stock 15 (the
+    // room record's 15 monster slots).
     public const int RoomMonsterCap = 20;
+    public const int StockRoomMonsterCap = 15;
+
+    // The realm's room cap, and whether a death cast lands whole or not at all
+    // (Paradigm) or summon by summon (Stock).
+    public static (int Cap, bool WholeCasts) RulesFor(RealmType realm) =>
+        realm == RealmType.ParaMud ? (RoomMonsterCap, true) : (StockRoomMonsterCap, false);
 
     // Cycle / runaway guard: real chains are ≤3 tiers deep and terminate on their
     // own (a tier whose members have no DeathSpell). The cap only fires on malformed
@@ -37,7 +44,7 @@ public static class DeathSummonCascade
     public static CascadeResult Simulate(
         int seedType, int seedCount,
         Func<int, int> expOf, Func<int, IReadOnlyList<int>?> summonsOf,
-        int cap = RoomMonsterCap, int maxTiers = MaxTiers)
+        int cap = RoomMonsterCap, int maxTiers = MaxTiers, bool wholeCasts = true)
     {
         ArgumentNullException.ThrowIfNull(expOf);
         ArgumentNullException.ThrowIfNull(summonsOf);
@@ -66,6 +73,18 @@ public static class DeathSummonCascade
                 if (kids is null || kids.Count == 0) continue;
                 int castSize = kids.Count;
 
+                if (!wholeCasts)
+                {
+                    // Summon by summon: each of the `cnt` casts places what still fits.
+                    for (int c = 0; c < cnt && nextCount < cap; c++)
+                        foreach (int k in kids)
+                        {
+                            if (nextCount >= cap) break;
+                            next[k] = next.GetValueOrDefault(k) + 1;
+                            nextCount++;
+                        }
+                    continue;
+                }
                 // Whole casts only: how many of this type's `cnt` summon casts fit in
                 // the room's remaining slots. A cast that doesn't fit is lost, not
                 // trimmed — and further same-size casts can't fit either.

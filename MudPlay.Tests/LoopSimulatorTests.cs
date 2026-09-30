@@ -295,6 +295,22 @@ public sealed class LoopSimulatorTests
         Assert.InRange(run.DamageTaken, 7 * 9, 7 * 10);
     }
 
+    // A timed damage spell that doesn't burn (Stock Damage-MR) hits once on landing.
+    [Fact]
+    public void TimedHitSpellThatDoesNotBurnHitsOnLanding()
+    {
+        var slot = new MonsterAttackSlot("chomps", Type: 1, Percent: 100, TruePercent: 100, MinDamage: 0, MaxDamage: 0,
+            Accuracy: 9999, Energy: 1000, HitSpell: 884);
+        var mobs = new Dictionary<int, MonsterCatalogEntry> { [5] = Mob(5, hp: 1500, exp: 10, align: 1, slot) };
+        var hit = new SimProc(7, 7, 30, 0, 0, 0, Holds: false, Burns: false);
+        var world = new SimWorld(n => mobs.GetValueOrDefault(n), HitSpell: n => n == 884 ? hit : null);
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 5000), new[] { Lair(1, 1, 3600, 5), Empty(2) },
+            world, secondsPerStep: 1, hours: 0.1, seed: 1);
+
+        Assert.Equal(1, run.Kills);
+        Assert.Equal(7, run.DamageTaken);
+    }
+
     [Fact]
     public void BurnIsNotRefreshedByAnEqualRoll()
     {
@@ -343,6 +359,18 @@ public sealed class LoopSimulatorTests
         long parts = run.Exp - 20 * 100;
         Assert.Equal(20 + parts, run.Kills);
         Assert.True(parts > 0 && parts % 3 == 0 && parts < 20, $"{parts} parts");
+    }
+
+    // Stock: a room holds 15, and each death summon is placed on its own while a slot
+    // is free — every summoner's death places one part into the full room.
+    [Fact]
+    public void StockDeathSummonsFillTheRoomOneByOne()
+    {
+        var summons = new Dictionary<int, IReadOnlyList<int>> { [30] = new[] { 31, 31, 31 } };
+        LoopSimRun run = LoopSimulator.Run(Character(realm: RealmType.Stock), new[] { Lair(1, 15, 3600, 30), Empty(2) },
+            World(summons, Mob(30, hp: 10, exp: 100), Mob(31, hp: 10, exp: 1)), secondsPerStep: 1, hours: 0.25, seed: 1);
+
+        Assert.Equal(15 * 100 + 15, run.Exp);
     }
 
     [Fact]

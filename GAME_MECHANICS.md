@@ -847,7 +847,13 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 
 - **A physical hit chance never reaches 0%.** No matter how high a defender's AC/Dodge climbs, an attacker's chance to land a physical hit is **clamped to a floor**. The floor is realm-dependent, and on ParaMUD it also depends on the **defender's class armour type**.
 - **Stock: 8%.** Flat, regardless of armour type.
-  - *[NEEDS CONFIRMATION]* `wccmmud.dll` 1.11p `_calculate_attack` clamps the hit chance to **10–99** before the roll (`random(1,100) < chance`). Depending on how the random range is bounded, that's a floor of 9–10%, not 8%. **Client policy (user, 2026-09-27):** keep the MMUD-Explorer 8% until there's data from a full Stock realm.
+  - **The engine lands a hit on about 9–98%, not 8–99%** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_calculate_attack` @`0x42b928`–`0x42b9e9`)*.
+    - It rolls `genrdn(1,100)` first, then clamps the chance to **10–99**.
+    - It hits only when the roll is **under** the clamped chance (`cmp chance,roll; jle miss`). So the landing chance is `clamp(chance, 10, 99) − 1` in percent: a floor of **9%** and a ceiling of **98%**.
+    - `genrdn` is the host's (`WGSERVER.EXE`) and isn't in the DLL. If its top bound is exclusive, the ends are 9/99 ≈ 9.1% and 98/99 ≈ 99.0% *([NEEDS CONFIRMATION]: is `genrdn`'s top bound inclusive?)*.
+    - A dodge roll follows a hit: `genrdn(0,100) < dodge`, with dodge capped at 95. So a hit can still be dodged below the 9% floor.
+    - The same routine serves every attacker and defender (user or monster).
+  - **Client policy (user, 2026-09-27):** keep the MMUD-Explorer 8% (and 99% ceiling) until there's data from a full Stock realm. The client doesn't apply the 9–98% reading yet.
 - **ParaMUD: 2% normally, dropping to 1% when the defender's class `ArmourType` is 1..6** — the light-armour tiers **Silk (1), Ninja (2), Leather (3–6)**. Heavier classes — **Chainmail (7), Scalemail (8), Platemail (9)** — and **Natural (0)** stay at the 2% floor.
 - **`ArmourType` is a per-class field (Classes table),** so it's the *character's* class armour tier that lowers the floor, not the gear currently worn. Value→name map (LookupEnums): 0 = Natural, 1 = Silk, 2 = Ninja, 3–6 = Leather, 7 = Chainmail, 8 = Scalemail, 9 = Platemail.
 - **Sibling dodge caps (also in `CombatCalculator`):** Stock hard-caps dodge at **95%**; ParaMUD applies a **soft cap at 55%** (diminishing returns above it) then a **hard cap at 98%**.
@@ -902,15 +908,17 @@ How HP works from full health down through dropping and death, how monster healt
 
 - **Hitting 0 HP drops the character.** They can **no longer move on their own**, and can **no longer fight or cast spells**. A dropped character is out of the action entirely, not merely immobile.
 - **A drop means bleeding out.** Left unreversed, HP keeps trending toward the BBS death threshold (see *Death & corpse recovery → Death threshold & consequences*).
-- **Stock bleeds 1 HP every 30 s** *([OBSERVED] `wccmmud.dll` 1.11p `_slow_update_character`; [CONFIRMED] 2026-09-27, user)*. At HP ≤ 0 the 30 s tick takes 1 HP instead of paying regen, then checks the death threshold. So an un-aided character at `−n` dies after about `(|threshold| − n)·30 s` unless aided or healed. Paradigm's rate isn't recorded.
+- **Stock bleeds 1 HP every 30 s** *([OBSERVED] `wccmmud.dll` 1.11p `_slow_update_character`; [CONFIRMED] 2026-09-27, user)*. At HP ≤ 0 the 30 s tick takes 1 HP instead of paying regen, then checks the death threshold. So an un-aided character at `−n` dies after about `(|threshold| − n)·30 s` unless aided or healed. Paradigm is assumed the same *(**Client policy**, user 2026-09-30)*.
+  - **The tick is the fixed 30 s slow tick** that also pays regen, every character in one pass *([OBSERVED] 2026-09-30, `_slow_update_character` @0x4221ad; see *Monsters, lairs & spawns → Monster HP regen*)*.
+  - **Poison still runs first:** a poisoned character sees `You feel ill.` and loses the poison amount, then a dropped one also loses the 1 HP bleed in the same tick.
 - **Dropping removes you from the party** — see *Party → Dropping (0 HP) or instant death removes you from the party* and *Party → Dropped ally rescue*.
 - **The game rejects every action command while dropped / mortally wounded** — except `sys …` commands (see *Sysop commands → Sysop power gating*). Movement, casting, aiding and telepaths all bounce with `You may not do that while you are mortally wounded!`, `Your command had no effect.`, or (for remote / telepath commands) `{command invalid or not allowed}`.
 - **Two reversals bring a dropped character back into the positive:**
   - **another player** issues `aid <name>` on them, or
   - a **healing spell** lifts their HP above 0.
 - **`aid` stops the bleeding; it doesn't stand them up — on both realms** *([CONFIRMED] 2026-09-27, user; Stock mechanics [OBSERVED] `wccmmud.dll` 1.11p `aid` + `_slow_update_character`)*. They stay down until their HP is **positive** — 0 doesn't count.
-  - `aid` on a character at HP ≤ 0 marks them stabilised, and from then on the 30 s tick gives **+1 HP** instead of taking one, until HP is positive. The mark clears once HP is above 0.
-  - So without heals, an aided character at `−n` stands up after about `(n + 1)·30 s`. A heal can end that at any point. The deepest living HP is the death floor + 1, so the longest the climb can take is `|floor|·30 s`. *(The 30 s rate is from the Stock engine; the client assumes it on Paradigm too — [NEEDS CONFIRMATION] Paradigm's rate.)*
+  - `aid` on a character at HP ≤ 0 marks them stabilised, and from then on the 30 s tick gives **+1 HP** instead of taking one, and skips normal regen, until HP is positive. The mark clears once HP is above 0, by that tick or by resting *([OBSERVED] 2026-09-30: the aided flag is byte `+0x6a8`, set by `_cmd_aid` @0x458261, cleared @0x4223fe / @0x422d19)*.
+  - So without heals, an aided character at `−n` stands up after about `(n + 1)·30 s`. A heal can end that at any point. The deepest living HP is the death floor + 1, so the longest the climb can take is `|floor|·30 s`. *(The 30 s rate is from the Stock engine; Paradigm is assumed the same — **Client policy**, user 2026-09-30.)*
   - Wire text: the aider sees `You have aided <name>, <his/her> wounds are now healing.`; the target sees `<name> has aided you.`; `aid` on someone above 0 HP answers `<name> is in no need of assistance.`.
   - *(Earlier notes read "aid lifts them back above 0" as immediate; it's the slow climb on both realms. Superseded 2026-09-27.)*
 - **Any player can `drag <name>` a dropped character** *([CONFIRMED] 2026-09-26, user)*. The dropped character then **follows wherever the dragging player moves** — their only way out of the room until aided or healed. In a party the client leaves it to the leader (see *Party → Dropped ally rescue*).
@@ -1240,7 +1248,7 @@ Punch, kick and jumpkick damage are worked out differently on each realm.
 | **+max damage (ability 4)** | added to max | added to max |
 | **+min damage** | none | added to min |
 | **Strike damage bonus** (abilities 92 / 93 / 94) | added to min and max | added to min and max |
-| **Kick / jumpkick multiplier** | ×1.33 / ×1.66 (`(100 + 33)/100`, `(100 + 66)/100`) | ×1.33 / ×1.66 *([NEEDS CONFIRMATION] — MMUD-Explorer applies them; the developer's source doesn't show them. Settle against a Paradigm Mystic's `stat all`.)* |
+| **Kick / jumpkick multiplier** | ×1.33 / ×1.66 (`(100 + 33)/100`, `(100 + 66)/100`) on the min and the max separately, truncated, **before** the crit and the defender's DR *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_calculate_attack` @0x42b88d / 0x42b899 / 0x42b8fe; `_cmd_kick` sets attack type 2, `_cmd_jumpkick` type 3)*. A kick or jumpkick can crit | ×1.33 / ×1.66 — the same as Stock *(**Client policy**, user 2026-09-30: assume Paradigm matches Stock here. MMUD-Explorer applies them; the developer's source doesn't show them.)* |
 
 - **All division is integer (truncated)** on both realms.
 - **Strike accuracy** comes from abilities 89 / 90 / 91 (punch / kick / jumpkick) on Stock. On Paradigm, kick is −10 and jumpkick −15 accuracy (MMUD-Explorer's GreaterMUD branch).
@@ -1328,7 +1336,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 
 - BSAccu is ability 116. All division truncates.
 - MMUD-Explorer also has a `AC + BSDefense` defence for a defender that sees hidden; the Stock DLL has no such branch. It doesn't arise against a monster anyway: a see-hidden monster spots the sneak, so there's no surprise opener at all (see *Backstab*).
-- **No Stock stab is ever certain** *([OBSERVED] `wccmmud.dll` 1.11p, 2026-09-28)*. `_cmd_backstab` only queues a type-4 attack; the round resolves it in `_calculate_attack`, whose type-4 branch feeds the same clamp as a normal swing (10–99 in the DLL), and the swing lands when the chance beats `random(1,100)`. So 99 is the ceiling. **Client policy (user, 2026-09-28):** until the floor is confirmed, Stock stays at **8–99**, the same as every other attack (see *Armour, defence & to-hit → To-hit floor — the minimum chance a monster can ever land, by realm and armour type*). Paradigm's ceiling is **100%** *(MMUD-Explorer)*, so a Paradigm stab can land every time. Its floor against a monster is **2%**: MMUD-Explorer's attack code passes no defender class for a monster, and the 1% light-armour floor belongs to a player's class armour type (see the same *To-hit floor* topic). `CombatCalculator.GetHitMin` gives 2 for a monster (armour type 0).
+- **No Stock stab is ever certain** *([OBSERVED] `wccmmud.dll` 1.11p, 2026-09-28)*. `_cmd_backstab` only queues a type-4 attack; the round resolves it in `_calculate_attack`, whose type-4 branch feeds the same clamp as a normal swing (10–99 in the DLL), and the swing lands when the roll is under the chance, so a clamped 99 lands about 98% of the time (*Armour, defence & to-hit → To-hit floor — the minimum chance a monster can ever land, by realm and armour type*). **Client policy (user, 2026-09-28):** until the floor is confirmed, Stock stays at **8–99**, the same as every other attack (see *Armour, defence & to-hit → To-hit floor — the minimum chance a monster can ever land, by realm and armour type*). Paradigm's ceiling is **100%** *(MMUD-Explorer)*, so a Paradigm stab can land every time. Its floor against a monster is **2%**: MMUD-Explorer's attack code passes no defender class for a monster, and the 1% light-armour floor belongs to a player's class armour type (see the same *To-hit floor* topic). `CombatCalculator.GetHitMin` gives 2 for a monster (armour type 0).
 
 **Client use:**
 - `LoopSimulator.Stab`: a sneaked-in fight opens with one stab judged by `BackstabMatchupCalculator` (the Backstab set's weapon in hand). A miss or a stab that doesn't kill is the whole surprise round, and the next round is the configured attack order *([CONFIRMED] 2026-09-30, user)*.
@@ -1353,7 +1361,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 
 - **An `AttHitSpell-N` proc rides a physical attack slot.** It is **not** a spell cast, so it has no cast level of its own — there is no per-slot level field for it (`AttMax-N` is the physical attack's max damage).
 - **The hit spell fires whenever that physical attack lands** *([CONFIRMED] 2026-09-30, user)*. Each round the monster spends its energy on whichever attacks it picks (e.g. a grimhound: 2 savage bites + 1 trample, 4 bites, 2 tramples, or 1 chomp); any pick that lands and carries a hit spell fires that spell. A debuffing hit spell alters your defences for its duration, e.g. the grimhound's trample → `knockdown` (see *Spells, buffs & conditions → Knockdown — a movement-preventing hold*).
-- **A hit spell with damage AND a duration burns rather than hits** *([NEEDS CONFIRMATION] — generalised from one spell's capture: does every hit spell with damage and a duration deal nothing on the landing and burn instead, or only some?)*. `envelops` does *([OBSERVED] 2026-09-30, user capture of 2026-09-15)*: #884 (6–8, Dur 10, Damage(-MR); on the grimhound's chomp and nine other fire monsters' heaviest attacks) prints `The <monster> envelops you in flames!` with no damage number, then `You are on fire!`. How the burn then ticks and ends is in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*.
+- **Whether a hit spell with damage and a duration burns differs by realm.** On Stock it's decided by ability code: Damage (1) burns, Damage-MR (17) hits on landing and never ticks (*Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*; [OBSERVED] 2026-09-30, DLL). On Paradigm `envelops` burns *([OBSERVED] 2026-09-30, user capture of 2026-09-15)*: #884 (6–8, Dur 10, Damage(-MR); on the grimhound's chomp and nine other fire monsters' heaviest attacks) prints `The <monster> envelops you in flames!` with no damage number, then `You are on fire!`. How the burn then ticks and ends is in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*. *[NEEDS CONFIRMATION]: does every Paradigm hit spell with damage and a duration burn, or only some? The client assumes every one.*
 - **A hit spell landing again, or two different ones, follow the effect-slot rules** in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures* (**Client policy**, user 2026-09-30).
 - **The Monsters table has no monster-level column at all** (only `CharmLVL` and the per-mid-spell `MidSpellLVL-N`).
 - **A proc must not feed anything that needs a cast level.**
@@ -1362,8 +1370,8 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 **Client use:**
 - Witnessed-ailment chip durations (`AppServices.ResolveAilmentDurationSeconds` → `MonsterCatalogEntry.CastLevelFor`) count only real spell slots (`AttType-N == 2`) and between-rounds spells, and skip `AttHitSpell` entirely.
 - `RoomSpellAttributor` may still use the proc's spell record to attribute an unrecognized line.
-- `LoopSimulator` fires a landed physical attack's hit spell (`SimProc`): one cast's damage, or with a duration an effect slot (a burn's rolled value each 3 s tick, and its AC / Dodge / Accuracy change and hold) under the slot rules in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*.
-- With no cast level, `SimProc` reads a level-scaled hit spell at its own ReqLevel. That is the implementation's choice, not a user decision *([NEEDS CONFIRMATION]: which level should a proc's level-scaled damage and duration use?)*.
+- `LoopSimulator` fires a landed physical attack's hit spell (`SimProc`), at base values: a burn takes an effect slot (its rolled value each 3 s tick); anything else hits once on landing. A duration also puts its AC / Dodge / Accuracy change and hold on you for that long, under the slot rules in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*.
+- **A hit spell is cast with no level at all** *([OBSERVED] 2026-09-30, `_attack_monster_user` @0x42ee3f → `_monster_cast` with slot −1; Paradigm assumed the same, **Client policy**, user 2026-09-30)*. Slot −1 skips every per-level term (@0x42819a for damage, @0x428259 for duration), so the spell rolls its base Min–Max and lasts its base `Dur`. The cast also can't fail (chance forced to 100) and costs no energy. `SimProc.From` reads it that way (an earlier client choice read it at its ReqLevel; superseded 2026-09-30).
 
 ### Guarded monsters redirect attacks
 *Status: CONFIRMED 2026-07-14 (user + wire capture; report `paradigm-20260714-115526`)*
@@ -1632,7 +1640,7 @@ Recorded for future PvP settings; the client doesn't act on any of it yet.
     - it is the victim's **only** copy and they're wearing or wielding it;
     - you can't carry it (it goes back to the victim).
   - **Otherwise** it moves to your inventory and you see `You successfully stole <item> from <victim>.`
-  - **[NEEDS CONFIRMATION] — the inventory pick seems to favour Loyal items.** As read, an inventory pick survives only when the item **has** ability 100 (`LoyalItem`, the kept-on-death flag). Loyal items can't be `stock`ed, and they stay with you when you die. So an ordinary inventory item is never taken, and the keys are tried instead. Loyal items being the only ones you can steal from inventory seems backwards. Is that how rob behaves live, or is the Loyal test a disassembly misread?
+  - **A Loyal item (ability 100, `LoyalItem`) can never be stolen** *([CONFIRMED] 2026-09-30, user)*. (A 2026-09-29 reading of `_rob_user` had an inventory pick survive only when the item **has** ability 100; a 2026-09-30 re-read confirmed the branch, `_item_has_ability(100)` @0x41f7d8 → keep, and that only the last picked slot counts, but how the kept pick is then used isn't traced. The user's rule stands; superseded 2026-09-30.)
 - **The evil record.** Every rob that isn't refused, caught or not and even against a free Seedy-or-worse victim, stores a record of *you* against *the victim*. Each new rob replaces it.
   - **It lasts 11 of your 30-second slow-update ticks**, about 5½ minutes.
   - A rob the victim didn't notice (a quiet fail or a success) is flagged unnoticed; a bump isn't.
@@ -2026,7 +2034,7 @@ How one damage spell cast against a monster is worked out.
 - `SpellDamageCalculator.Element` treats poison as having no scalable resist, for spells cast at monsters. Incoming poison damage against the player doesn't apply the Stock ImmuPoison cut yet.
 
 ### Poison and damage over time — ticks, stacking and cures
-*Status: [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p (addresses per bullet), unless a bullet carries its own tag · Realm: Stock; Paradigm not recorded*
+*Status: [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p (addresses per bullet), unless a bullet carries its own tag · Realm: Stock; Paradigm assumed the same except the hit-spell burn (**Client policy**, user 2026-09-30)*
 
 - **A player's poison is one number, not a list.** The engine keeps a single poison amount per player (player record `+0xbe`).
   - **A new poison replaces it only if it's larger:** `amount = max(current, new)`. Poisons never add together. This applies to every source: monster casts (`_monster_cast` @ `0x428f5e`, `_monster_cast_area`), player casts (`_cast_user_target`) and melee-hit poison (`_attack_monster_user`, `_attack_user_user`).
@@ -2049,9 +2057,18 @@ How one damage spell cast against a monster is worked out.
   - these ticks print no text; only the prompt's HP changes;
   - `Dur` counts these 3-second ticks;
   - different damage-over-time spells run side by side, one slot each.
-- **A monster hit spell's burn looks like one of these slots** *([OBSERVED] 2026-09-30, user capture of 2026-09-15; realm not recorded)*. After `envelops` (#884, see *Combat → Monster on-hit procs (`AttHitSpell-N`) are physical attacks, not casts*) lands, HP drops 6–7 about once a spell round with **no damage line** until `The flames enveloping you die down!` ~30–38 s later. Across the capture's quiet Volcano moments, HP fell in 32% of them while on fire vs 1.6% otherwise.
+- **Which monster hit spells burn is decided by ability code, not by having a duration** *([OBSERVED] 2026-09-30, `_monster_cast` jump table @0x4282ca; Stock)*:
+  - **Damage (1)** with a duration takes one slot on landing and deals nothing then; the slot ticks every 3 s (upkeep @0x449d52). Without a duration it hits at once.
+  - **Damage-MR (17)** always hits on landing, MR-adjusted, and never ticks: the upkeep has no handler for 17 (@0x449ca2), so its slot (if it has a duration) carries only the spell's other effects.
+  - **DrainLife (8)** with a duration does nothing on landing; it ticks only if another ability of the spell made the slot.
+  - Any other ability takes a slot when the spell has a duration.
+- **A monster hit spell's burn looks like one of these slots on Paradigm** *([OBSERVED] 2026-09-30, user capture of 2026-09-15; the capture's character plays Paradigm, and on Stock `envelops` couldn't burn)*. After `envelops` (#884, see *Combat → Monster on-hit procs (`AttHitSpell-N`) are physical attacks, not casts*) lands, HP drops 6–7 about once a spell round with **no damage line** until `The flames enveloping you die down!` ~30–38 s later. Across the capture's quiet Volcano moments, HP fell in 32% of them while on fire vs 1.6% otherwise.
 - **Recasting the same spell on someone who has it:**
   - **Cast by a monster:** the slot is refreshed (new value, duration reset) only if the new roll is strictly higher. Otherwise the cast is dropped and the monster gets its energy back (@ `0x428fb5`).
+- **Monsters carry a poison number too** *([OBSERVED] 2026-09-30; active monster record `+0x14`, zeroed at spawn by `_generate_monster`)*:
+  - a player's Poison (ability 19) spell sets it to `max(current, value)` (`_cast_monster_target` @0x448d2e), skipped on a monster with Poison Immunity (ability 21); a poisoned melee hit does the same (`_attack_user_monster` @0x42d9b3, `_attack_monster_monster`);
+  - each 30 s slow tick takes it off the monster's HP, then regen still runs (*Monsters, lairs & spawns → Monster HP regen*); a monster left below 0 HP dies on the next 3 s pass;
+  - only a Cure Poison (20) cast on the monster, or the poison spell's slot expiring, lowers it (`_perform_spell_termination_monster_upkeep` @0x44a577); the tick never does.
   - **Cast by a player** (`_add_cast_spell_to_user` @ `0x43ec31`): some casts overwrite the slot, the rest fail with `You attempt to cast %s, but fail.`. Poison casts overwrite.
 - **Client policy (user, 2026-09-30): monster hit spells follow the Stock engine's slot rules, in both realms.** A hit spell landing while the same spell is on you refreshes it only with a strictly higher roll, else the landing is dropped; different hit spells stack, one slot each; a burn's slot takes its stored value every 3 s, not a fresh roll each tick. (An earlier note said the same effect landing again doesn't stack: Paradigm refreshes the duration so you're only ever affected once, and Stock can inflict it several times but you only take damage from one; superseded 2026-09-30.) *[NEEDS CONFIRMATION]: the Stock half of that earlier note was never confirmed ("if I remember right") — can the same hit spell sit on a Stock player more than once? And does Paradigm refresh the duration on every landing, or only on a higher roll?*
 - **Cures:**
@@ -2062,7 +2079,7 @@ How one damage spell cast against a monster is worked out.
 - **Resting and meditating are refused while poisoned** — see *Health, resting & recovery → Poison prevents resting*.
 
 **Client use:**
-- `LoopSimulator` (`LandProc`, `Burn`) applies the hit-spell policy above: one slot per spell, its stored value taken every 3 s, refreshed only by a strictly higher roll. It doesn't simulate poison (ability 19) hit spells.
+- `LoopSimulator` (`LandProc`, `Burn`) applies the hit-spell policy above: one slot per spell, its stored value taken every 3 s, refreshed only by a strictly higher roll. Which spells burn follows the realm (`SimProc.From`): on Stock only a Damage (1) spell with a duration, while Damage-MR (17) hits on landing; on Paradigm every damage spell with a duration, as the `envelops` capture shows. It doesn't simulate poison (ability 19) hit spells, or monster poison.
 
 ### Attack-spell mana efficiency
 *Status: Unrated (client formula as used by Monster Intel)*
@@ -2441,14 +2458,16 @@ How one damage spell cast against a monster is worked out.
   - Hand-typed casts arm the timer via `CastingDirector.NoteManualBuffCast`, fed by the `OutboundCastObserver`.
 
 ### The `stat` screen's buff readout is never a fresh cast
-*Status: CONFIRMED 2026-08-16 (user + report `paradigm-20260816-232454`) · Realm: Paradigm*
+*Status: Paradigm CONFIRMED 2026-08-16 (user + report `paradigm-20260816-232454`); Stock [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p · Realm: differs (the readout's form)*
 
 - **On Paradigm, `stat` lists each active effect as `You feel <effect>! (<remaining>s)`** (e.g. `You feel lucky! (411s)`, `You feel safe from evil! (12s)`).
 - **Ignore it for buff tracking — the effect text is shared across many records.** One `You feel lucky!` line matched **11** catalogue records (bless + chant + several weapons/items), so a readout can neither identify **which** buff is up nor legitimately "apply" one.
 - **A genuine fresh-cast effect line has no parenthetical.**
+- **On Stock, `stat` lists each active effect as its bare applied line, word for word the fresh-cast text** *([OBSERVED] 2026-09-30, `_show_status` @0x434448 → @0x434a81)*. For each of the 10 active-spell slots it prints line 3 of the spell's `DescMsg` (ability 115) message, `"%s\r"`, with no time value: mageshield's readout is the bare `You feel protected!`. Only its place inside the stat screen tells it from a cast.
+  - With sysop debug mode on (`SYSOP DEBUG on`), the list reads `You have the following spell cast upon you:` then `  <spell> (<a>,<b>)` per spell, two unidentified numbers each (*Sysop commands*).
 - **Client use:**
   - Treating the readout as a cast falsely marked buffs active on **login** (the post-entry `stat` refresh), and because the tracker only fires on a not-active→active transition, that stale "active" state then **suppressed the confirm on the real manual cast** (a repeat applied line is no transition).
-  - The client keys off the trailing **`(<remaining>s)`** parenthetical to skip these readouts entirely (`ConditionTracker`). *([NEEDS CONFIRMATION] Stock's stat list has no countdown suffix — does a Stock stat readout falsely arm buffs?)* (The Stock no-suffix form is in *Fear*.)
+  - The client skips these readouts entirely (`ConditionTracker`): Paradigm's by the trailing **`(<remaining>s)`** parenthetical, Stock's by the stat screen around it (`StatParser.InStatScreen`, open from the screen's header or an outbound `stat` until its closing prompt). Before 2026-09-30 only the suffix was checked, so a Stock `stat` on login marked every listed buff freshly cast and armed its timer at full duration. (The Stock no-suffix form is in *Fear*.)
 
 ### Party buff slot scope — whole-party vs single-target
 *Status: user 2026-08-17 / 2026-08-28, corrected 2026-09-06 (CONFIRMED, user; report `paradigm-20260906-150624`); master-enable note 2026-09-09 (report `paradigm-20260909-220212`) · Realm: both (scope classification confirmed against stock + Paradigm data)*
@@ -2706,14 +2725,16 @@ A monster's `Summoned By` field lists the rooms it appears in, each token tagged
 
 ### Death-summon cascades
 
-*Status: CONFIRMED 2026-08-03 (user + game-data trace, Paradigm 1.9.1) · Realm: Paradigm*
+*Status: CONFIRMED 2026-08-03 (user + game-data trace, Paradigm 1.9.1); Stock [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p · Realm: differs (the room cap and how a cast lands)*
 
 Some monsters spawn **more monsters when they die**, and those can summon in turn — the Zombie Pen (`17/2601`) is the canonical case, built for AoE ("rooming") crowds.
 
 - **The mechanic is `DeathSpell` → summon slots.** A monster's **`DeathSpell`** field names a spell (`0` = none). In the Spells table that spell has ten ability slots `Abil-0..Abil-9` with values in `AbilVal-0..AbilVal-9`; a slot whose **`Abil` value is `12`** ("summon monster") summons the monster **`Number`** in the matching `AbilVal`.
 - **Only `Abil == 12` slots summon.** A spell row carries unrelated payloads in its other `AbilVal` slots, so filtering on `Abil == 12` is required.
 - **It recurses, and the data terminates it.** Each summoned monster has its own `DeathSpell`, so the chain continues until a tier whose members have `DeathSpell 0`. Real chains are shallow (≤3 tiers); follow the data, don't assume a fixed tier count.
-- **A room holds at most 20 monsters at once, and a summon cast that would exceed it fails whole.** The engine caps a room at **20** living monsters. A dying monster's `DeathSpell` fires as **one atomic cast**: it lands only if *all* its summons fit under the cap — otherwise the whole cast **fails to cast, is never retried, and is permanently lost** (its summons do NOT appear on a later round when space frees up).
+- **A death spell targeting no one or a user never fires on death** *([OBSERVED] 2026-09-30, `_check_kill_monster` @0x425186 casts it with no user; Targets 0 / 8 route to @0x429c30, which returns without one; Paradigm assumed the same, **Client policy**, user 2026-09-30)*. So `calls for aid` #888 (Lady Sentara, Meia, Sarkhee, the townsfolk, Mayor Godfrey) and `crow` #996 (chicken) summon nothing when their monster dies. Targets 1 / 2 / 4 summon directly; the area targets go through `_monster_cast_area`, which summons too.
+- **Stock: a room holds at most 15 monsters, and each summon is placed on its own** *([OBSERVED] 2026-09-30, `_generate_monster` @0x424361 called per summon with force; the room's 15 monster slots, `_add_monster_to_room` @0x419805)*. A summon that finds no free slot is skipped and the rest still try, so as many as fit are placed. Force bypasses the lair's own max and regen gate, not the 15 slots or the monster's game limit. The cast's message prints before any summon is tried, so it shows even when none fit.
+- **Paradigm: a room holds at most 20 monsters at once, and a summon cast that would exceed it fails whole.** The engine caps a room at **20** living monsters. A dying monster's `DeathSpell` fires as **one atomic cast**: it lands only if *all* its summons fit under the cap — otherwise the whole cast **fails to cast, is never retried, and is permanently lost** (its summons do NOT appear on a later round when space frees up).
   - So a wave fills with whole casts until the next won't fit, then drops the rest: e.g. 15 monsters each summoning 2 want 30, but only 20 spawn (10 whole casts) — the other 5 casts fail outright.
   - A fan-out room is therefore worth far less than the raw tree would suggest. (The Zombie Pen peaks at 15 with `Max 3` zombies, so its cap never bites; a higher `Max` or a wider fan-out would.)
 - **Worked example — stitched zombie (`Number 1220`, `EXP 4000`, `DeathSpell 1032`):**
@@ -2721,14 +2742,15 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
   - Waist `881` (`DeathSpell 1034`) → 2× **severed leg `889`** (3500 each).
   - Torso `888` (`DeathSpell 1036`) → 2× **severed arm `890`** (3000) + **severed head `891`** (3500).
   - Legs/arms/head have `DeathSpell 0` → terminal. **One stitched zombie = 8 monsters, 28,500 exp** (not the 4,000 its own `EXP` shows). Note each part summons via a **different** spell.
-- **Exp/hr estimation of a summoner:** simulate the room tier by tier under the 20-cap and count the monsters that actually spawn.
+- **Exp/hr estimation of a summoner:** simulate the room tier by tier under the realm's cap and count the monsters that actually spawn.
   - Its effective yield is the **whole (capped) tree's exp** (base + every descendant — `28,500`, not `4,000`, for one stitched zombie).
   - The summons also cost combat time: **single-target** fights every monster the room becomes (kill count = tree size, `8` per zombie), while **AoE/rooming** clears one tier per pass (waves = tree depth, `3`).
   - So a death-summon room yields far more than its face value, but the extra kill/wave time — and the cap on huge fan-outs — keep it below the naive exp-ratio multiple.
   - Bosses are left on their base exp (their death-summon, if any, is not folded — a rare edge, and boss exp is already a flat amortised approximation).
 
 **Client use:**
-- `LoopSimulator` summons a dying monster's `DeathSpell` tier as one cast, all of it or none under the 20-monster cap, on both realms. *[NEEDS CONFIRMATION]: this topic is recorded for Paradigm only — does Stock also cap a room at 20 and fail an over-cap death cast whole?*
+- `DeathSummonCascade.RulesFor` holds each realm's cap and landing rule: Paradigm 20, whole casts; Stock 15, summon by summon. `LoopSimulator` (a dying monster's summons, and a room-spell summon) and the estimator's cascade (`RouteExpResolver.RoomCascadeOf`) both read it.
+- `RouteExpResolver.SummonSpells` leaves out Targets 0 / 8 spells, so neither counts a death summon that never fires.
 
 ### Mid-fight summons
 *Status: [OBSERVED] 2026-09-30 (user capture; game data v1.11p and Paradigm 1.9.1) · Realm: both (data); the capture's realm isn't recorded*
@@ -2765,7 +2787,7 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
   - Summon mobs are never *killed* by the estimator (a room-attached spell never kills NPCs, and no feedback is modeled) — `RoundsPerMob` (the clear-rate knob) stays realm-agnostic and the user sets it directly.
 - **Client use:**
   - Lives in `LoopExpSimulator.SummonFires`.
-  - `LoopSimulator` rolls the table on entry, then every combat round on Paradigm or every 6 s on Stock while present (`nomonsters:` only in an empty room); a summon that would take the room past the 20-monster cap in *Death-summon cascades* is dropped.
+  - `LoopSimulator` rolls the table on entry, then every combat round on Paradigm or every 6 s on Stock while present (`nomonsters:` only in an empty room); a summon that would take the room past the realm's monster cap in *Death-summon cascades* is dropped.
 
 ### Summoned monster key drop
 
@@ -2783,7 +2805,10 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 
 - **A hurt monster regains its `HPRegen` (Monsters table) every regen tick, for as long as it's alive and below max HP** *([CONFIRMED] 2026-09-29, user: a Newhaven giant rat has 12 HP and recovers 1 HP every 30 s while it's alive and hurt)*. Every monster has its own amount.
 - **The cycle, as the client uses it (MMUD-Explorer):** every **30 s / 6 rounds on Paradigm**, every **90 s / 18 rounds on Stock** — the same for every monster (`GMUD_MOB_HPREGEN_ROUNDS = 6`, `STOCK_MOB_HPREGEN_ROUNDS = 18`). *Client policy — the user chose MMUD-Explorer's figures for now (2026-09-29).*
-- **`[CONFLICT — ask the user]` The Stock 1.11p DLL regenerates every monster once per *slow tick*** — the same tick that pays player HP regen and bleeds a dropped player, 30 s by default and a sysop setting — not every 90 s *([OBSERVED] 2026-09-29, `wccmmud.dll` `_background_slow` → `_slow_update_monsters` / `_slow_update_monster`; the BBS polling loop steps through one monster per poll until the pass is done)*. `_slow_update_monster` adds the known-monster record's `+0x7c` (`HPRegen`: 1 on the giant rat) when HP is below max (`+0x78`: 12), capped at max; before that it subtracts a per-tick amount from another field (offset `0x14`, likely damage over time on the monster). The user also said every monster has its own cycle (2026-09-29), which neither source shows.
+- **`[CONFLICT — ask the user]` The Stock 1.11p DLL regenerates every monster once per *slow tick*** — the same tick that pays player HP regen and bleeds a dropped player — not every 90 s *([OBSERVED] 2026-09-29, `wccmmud.dll` `_background_slow` → `_slow_update_monsters` / `_slow_update_monster` @0x421c06)*. The user also said every monster has its own cycle (2026-09-29), which neither source shows.
+  - **The slow tick is a fixed 30 s** *([OBSERVED] 2026-09-30)*: `_background_slow` re-arms itself with the value at `0x482cbc` (30), which nothing writes, so it isn't a sysop setting (an earlier note here called it one; superseded 2026-09-30). The medium tick (`0x482cc0`) is a fixed 3 s.
+  - **One tick, per monster:** first its poison (active record `+0x14`) comes off its HP; then, only if it's below max HP (`+0x104`, copied from the known-monster record's `+0x78`: 12 on the giant rat), its `HPRegen` (`+0x130`, copied from `+0x7c`: 1 on the giant rat) is added, capped at max. Poison, combat and HP at or below 0 don't stop the regen. The tick prints nothing and kills nothing: a monster left below 0 HP dies on the next 3 s medium pass (`_medium_update_monster` @0x421d46), with its normal death message. Monster poison is in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*.
+  - **The pass is spread out:** the tick starts it with one monster slot, and the polling loop advances one slot every second poll (`_ljngame_user_polling_routine` @0x402b01). Each monster is stamped with the tick it was processed in, and attacking a monster the pass hasn't reached yet applies that tick to it at once (`_attack_user_monster` @0x42d148). So a monster gets exactly one poison-and-regen step per 30 s, at a moment that varies from monster to monster.
 - **A `look` shows a regen tick fired** *([CONFIRMED] 2026-09-29, user)* when the wound band improves between looks, or when the damage dealt says the band should have dropped and it didn't.
 - **A monster can't take more damage than the HP it has left** *([CONFIRMED] 2026-09-29, user)*. A hit past it kills the monster, and the rest of the number is lost: an `812` room spell on a 540-HP muckworm takes only 540 off it. It only takes more than its max over a fight by regaining HP mid-fight: a regen tick, or a heal spell it's assigned and uses.
 
@@ -3235,7 +3260,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     - `r < D`: `You successfully disarmed the trap to the <dir>.`, and the exit is marked disarmed.
     - `D ≤ r < D + 10`: `You failed to disarm any trap to the <dir>.`, a safe failure; nothing fires.
     - `r ≥ D + 10`: the trap fires. The exit's disarm-failure message goes to you and the room, and the damage is `_genrdn(dmg/2, dmg+1)` for the exit's damage `dmg`. An exit whose trap state is 3 instead moves you through it (`_move_user`).
-  - **So, as percentages:** success ≈ `D`%, a safe failure ≈ 10%, the trap fires ≈ `90 − D`%. `D` ≥ 90 never fires the trap; `D` ≥ 100 always succeeds. `[NEEDS CONFIRMATION]` whether `_genrdn`'s upper bound is inclusive (a ±1% shift). The damage call passes `dmg+1` as its maximum, which suggests the upper bound is exclusive.
+  - **So, as percentages:** success ≈ `D`%, a safe failure ≈ 10%, the trap fires ≈ `90 − D`%. `D` ≥ 90 never fires the trap; `D` ≥ 100 always succeeds. `[NEEDS CONFIRMATION]` whether `_genrdn`'s upper bound is inclusive (a ±1% shift: inclusive gives `D`/101, 10/101 and `(91 − D)`/101). `_genrdn` is the host's (`WGSERVER.EXE`), not in the DLL, and its call sites point both ways *(re-checked 2026-09-30)*: the damage call's `dmg+1` and `genrdn(0, max − min + 1) + min` read it as exclusive, while `genrdn(0x41, 0x5a)` for the letters A–Z reads it as inclusive.
+  - **The other trap kind (exit type 24) has no safe band** *([OBSERVED] 2026-09-30, `_cmd_disarm` @0x468c87)*: any roll at or above `D` prints `You failed to disarm any trap to the <dir>.` and then the exit's own message (slot `0x3d8`). What follows that message isn't traced.
   - **An exit already disarmed** (trap state 1 or 4, set by a success) answers `You failed to disarm any trap to the <dir>.` without a roll. Trap state 0 or 3 rolls.
   - **Searching first gives no bonus to the disarm.** *([OBSERVED] 2026-09-29.)* When a search finds a trap, `_search_for_hidden_exits` only prints the found line and writes nothing to the exit or the player. `_cmd_disarm` reads only the disarm skill, HP, location and the exit's own fields. A search just costs a command, and it ends a sneak (*Movement & navigation → Sneaking — commands, equip order, and the sneak state machine*).
   - **Cross-check:** MMUD-Explorer names 40 FindTraps, 41 DisarmTraps and 179 "FindTrapsValue", and folds only 40 and 179 into its Traps display, which agrees with the find / disarm split. It has no disarm odds and no Paradigm branch for traps.
@@ -5312,7 +5338,10 @@ Forms, from the game's own help:
   - `sys st 224 1` (no `room` keyword) → `Cannot find user 224` — falls through to the user-lookup form.
 - **`SYS LIST USERS`** — lists users and the room each is in.
 - **`MAP`** — generated map of the current area. The help warns it is recursive and has caused stack overflows; treat as unsafe to automate.
-- **[NEEDS CONFIRMATION]** **Denied wording is unknown** — the text emitted when the command is **denied** is believed to be a generic "Command not recognized". Nothing depends on it: the client gates on the user's own sysop-powers flag and falls back to a timeout, not a string match.
+- **Denied wording** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_cmd_sysop` @0x4626f9; Paradigm assumed the same, **Client policy**, user 2026-09-30)*:
+  - an unknown keyword, or a sub-command whose own power you lack, ends at `Command not recognized.` (@0x4664fd) — there's no specific denial line;
+  - with no sysop power at all, `_cmd_sysop` returns without printing, so the input probably falls through to ordinary input (`You say "…"` or `Your command had no effect.`) — not traced through every branch.
+  - Nothing depends on it: the client gates on the user's own sysop-powers flag and falls back to a timeout, not a string match.
 
 ### `SYSOP STATUS` — room dump format
 *Status: CONFIRMED 2026-09-02 (user + live capture); per-fact tags inline*
@@ -5339,9 +5368,9 @@ Hidden items: 1845(0) 14(0) 894(0) 223(0) 879(0) 870(0) 897(1) 876(1) 402(0) 430
 - **[CONFIRMED, live capture 2026-09-02]** **An entry is one object on the floor; the parenthesised value is that object's stack size minus one** — `(0)` is a single item, `(1)` a stack of two. **An id can repeat in one list.** Dropping two black star keys one at a time gives `172(0) 172(0)` (two objects of one each); dropping two diamonds gives `902(1)` (one object of two). The room's true count of an item is therefore the **sum** of (value + 1) over every entry with that id, never a single-entry lookup. The room display aggregates either shape identically ("You notice 2 black star key" / "You notice 2 diamond"), so it can't be used to tell the two apart.
 - **[CONFIRMED, live capture 2026-09-02]** **Player-dropped items DO appear** in `Items:`, immediately. An empty room prints `Items: None` and `Hidden items: None` rather than omitting the lines.
 - **[CONFIRMED, user]** **Non-gettable items DO appear** in these lists. The MDB `Items` table carries a `Gettable` column (0 = cannot be picked up; 453 of 2047 rows in `realm2`), so fixtures are filtered from data rather than by a refused `get`.
-- **[NEEDS CONFIRMATION, user's read]** **Container contents and carried items do not appear** — items inside a **container** in the room, and items **held by a monster or player**, are not listed.
+- **Container contents and carried items do not appear** *(user's read; [OBSERVED] 2026-09-30, `_display_debug_room_stats` @0x43c524)* — items inside a **container** in the room, and items **held by a monster or player**, are not listed. The dump prints only the room record's own arrays: `Monsters:` (15 slots), `Items:` (17), `Hidden items:` (15) and `Placed items:` (10).
 - **[CONFIRMED, live capture 2026-09-02]** **`Monsters:` values are NOT `Monsters.Number`.** The line carries space-separated bare numbers (`Monsters: 4510 8407`); 4510 / 8407 / 2951 exist in no Monsters row of the `realm2` set, though the same dumps' `Specific Monster: 784-Mayor Godfrey [1/1]` line does carry a real catalogue number. What the `Monsters:` values identify is **unknown** (spawn instances, most likely). **Do not treat them as monster ids.** For "is this specific monster here", read `Specific Monster:`.
-- **[CONFIRMED, live capture 2026-09-02]** **Further conditional lines the dump can print:** `Controlling Room: <room>` (vs `No controlling room.`), `Current Area: Max: N Current: N`, `Specific Monster: <number>-<name> [n/m]Last Killed: hh:mm:ss (RG: n)`, and `Placed items: <id> <id>` — bare ids, no parens, listing which of `Items:` are the room's **static placements**. Subtracting `Placed items` from `Items` isolates player drops.
+- **[CONFIRMED, live capture 2026-09-02]** **Further conditional lines the dump can print:** `Controlling Room: <room>` (vs `No controlling room.`), `Current Area: Max: N Current: N`, `Specific Monster: <number>-<name> [n/m]Last Killed: <date> <time> (RG: n)` (the format is `Last Killed: %s %s (RG: %d)`, date then time — [OBSERVED] 2026-09-30, DLL strings), and `Placed items: <id> <id>` — bare ids, no parens, listing which of `Items:` are the room's **static placements**. Subtracting `Placed items` from `Items` isolates player drops.
 - **[CONFIRMED, live capture 2026-09-02]** **The header often lands on the prompt row** — the server frequently prints the block's first line onto the row the prompt already occupies: `[HP=639/MA=268]:Room 3551  Map: 1`. Any parser that treats a prompt as the block terminator must ignore prompts seen **before** the room header, or it drops the entire dump.
 - **The lists wrap at the terminal margin mid-token** — `47` + `0(0)` is item `470`, `430` + `(0)` splits an id from its value. Rejoin the block before tokenizing.
 - **The dump carries no `Obvious exits:` line**, so it is not mistakable for a room display.
@@ -5375,7 +5404,14 @@ Hidden items: 1845(0) 14(0) 894(0) 223(0) 879(0) 870(0) 897(1) 876(1) 402(0) 430
 - **Hostiles merely PRESENT in the room do NOT block it.** You can `sys goto` out of a room full of hostile monsters. **Only ACTIVE combat blocks** — i.e. once an attack has been announced against a target. When actively engaged, you must send **`break`** first to stop combat, *then* `sys goto`.
 - **No confirmation, no messages on success** — a successful `sys goto` produces **only a statline redisplay**, no room display, no "you teleport" line. To learn the room you landed in you must send a **bare Enter** to force the room display.
 - **Works at any HP** — see *Sysop power gating*: `sys goto` is honoured while mortally wounded.
-- **[NEEDS CONFIRMATION]** **Denied / break-then-goto wording is not pinned down** — the exact wording of a *denied* `sys goto` (no power, or the game rejecting an unknown keyword) and of the `break`-then-goto success path. Nothing depends on it: the client gates on its own per-BBS power flag + the location table, and the landing resync is name-match-or-timeout, not a string match on any reply.
+- **The replies** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_cmd_sysop` @0x463401; Paradigm assumed the same, **Client policy**, user 2026-09-30 — though Paradigm's keyword list may differ)*:
+  - a bare `sys goto` (no keyword) and a lacking power answer `Command not recognized.`;
+  - an unknown keyword lists the choices: `Current GOTO locations: NEWHAVEN, SILVERMERE, SUPPORT, RHUDAUR,` then `                        KHAZARAD, LOSTCITY`;
+  - in autocombat or while being attacked: `You may not be in autocombat when you do that.`; during a PvP retaliation period: `You may not teleport during a PVP retaliation period.`;
+  - rhudaur, khazarad and lostcity can also refuse with `You must purchase the <name> before you may move through this exit.` (a gate not traced further);
+  - a success prints nothing, as above.
+  - Stock's keywords go to: newhaven 1/2150, silvermere a configured room on map 1, support 1/164 (full sysop only), rhudaur 2/2519, khazarad 6/1249, lostcity 16/426.
+  - Nothing depends on the wording: the client gates on its own per-BBS power flag + the location table, and the landing resync is name-match-or-timeout, not a string match on any reply.
 - **Client use:**
   - Modeled as a third per-BBS **Sysop goto** checkbox backed by an editable location table (keyword → map/room + optional min-level), stored per-character-per-BBS.
   - The stored map/room is only for the client's own landing resync + a human-readable "resolves to" preview; the optional min-level is a client-side courtesy gate (the game enforces its own).

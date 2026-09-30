@@ -128,7 +128,6 @@ public static class LoopSimulator
         private const int SpawnPassSteps = 100;
         private const int CancelCheckSteps = 20000;    // every 1000 simulated seconds
         private const int MaxSwingsPerRound = 20;
-        private const int RoomMonsterCap = 20;
 
         // Between-round cast categories in CastingDirector's tie-break order.
         private const int EmergencyOrder = 0, MinorOrder = 4, MajorOrder = 5, BuffOrder = 7, DebuffOrder = 8;
@@ -147,6 +146,10 @@ public static class LoopSimulator
         private readonly int _standingSteps, _restingSteps, _meditatingSteps;
         private readonly int _spawnPassPhase;
         private readonly bool _perSlotClock;
+        // The realm's room monster cap, and whether a death cast lands whole or not at
+        // all (Paradigm) or summon by summon (Stock) — DeathSummonCascade.RulesFor.
+        private readonly int _roomMonsterCap;
+        private readonly bool _wholeDeathCasts;
 
         private long _step;
         private double _hp, _ma;
@@ -186,6 +189,7 @@ public static class LoopSimulator
             // The spawn pass runs on the server's own clock, unrelated to the round.
             _spawnPassPhase = _rng.Next(SpawnPassSteps);
             _perSlotClock = ch.Realm == RealmType.ParaMud;
+            (_roomMonsterCap, _wholeDeathCasts) = DeathSummonCascade.RulesFor(ch.Realm);
             _sneaking = ch.Backstab is not null;
         }
 
@@ -287,7 +291,7 @@ public static class LoopSimulator
             {
                 roll -= e.Probability;
                 if (roll >= 0) continue;
-                if (state.Mobs.Count(m => m.Alive) < RoomMonsterCap) AddMob(state, e.Monster, lairSlot: -2);
+                if (state.Mobs.Count(m => m.Alive) < _roomMonsterCap) AddMob(state, e.Monster, lairSlot: -2);
                 return;
             }
         }
@@ -580,13 +584,16 @@ public static class LoopSimulator
                 _target = null;
                 _chooser.ResetForNewTarget();
             }
-            // Its death spell summons the next tier into the room as one cast: all of
-            // it if it fits under the room's monster cap, else none of it
-            // (GAME_MECHANICS "Death-summon cascades").
-            if (_world.DeathSummons?.Invoke(mob.Entry.Number) is { Count: > 0 } summons
-                && room.Mobs.Count(m => m.Alive) + summons.Count <= RoomMonsterCap)
-                foreach (int id in summons)
-                    AddMob(room, id, lairSlot: -2);
+            // Its death spell summons the next tier into the room under the room's
+            // monster cap: on Paradigm as one cast, all of it or none of it; on Stock
+            // summon by summon, as many as fit (GAME_MECHANICS "Death-summon cascades").
+            if (_world.DeathSummons?.Invoke(mob.Entry.Number) is { Count: > 0 } summons)
+            {
+                int alive = room.Mobs.Count(m => m.Alive);
+                if (!_wholeDeathCasts || alive + summons.Count <= _roomMonsterCap)
+                    foreach (int id in summons)
+                        if (room.Mobs.Count(m => m.Alive) < _roomMonsterCap) AddMob(room, id, lairSlot: -2);
+            }
         }
 
         // Each monster fighting us spends its round's energy (plus last round's
@@ -641,11 +648,9 @@ public static class LoopSimulator
         // dropped; different spells stack. A burn's roll is its per-tick damage.
         private void LandProc(int spell, SimProc proc)
         {
-            if (proc.DurationSeconds <= 0)
-            {
-                if (proc.DamageMax > 0) Hurt(Between(proc.DamageMin, proc.DamageMax));
-                return;
-            }
+            // One that doesn't burn hits now; its effect (if timed) still takes a slot.
+            if (!proc.DamageOverTime && proc.DamageMax > 0) Hurt(Between(proc.DamageMin, proc.DamageMax));
+            if (proc.DurationSeconds <= 0) return;
             int value = proc.DamageOverTime ? Between(proc.DamageMin, proc.DamageMax) : 0;
             if (_procs.TryGetValue(spell, out var on) && on.Until > Now && value <= on.Value) return;
             _procs[spell] = (Now, Now + proc.DurationSeconds, value, proc);

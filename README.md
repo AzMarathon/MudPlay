@@ -1,8 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.133.0**
-> - Combat → Backstab: **Clear hostiles when sneak fails** — running with combat off, a failed sneak into a room inside your Min/Max thresholds stops to clear it, then re-sneaks and walks on
+> **Version 3.133.5**
+> - Stock: a `stat` no longer marks every listed buff freshly cast (on login or any time), so buff timers aren't restarted
+> - A stat screen's capture closes on its own prompt every time, not just the session's first
+> - Simulator: monster hit spells use their base damage and duration (the game casts them with no level)
+> - Simulator: on Stock only plain damage hit spells burn; damage-ignoring-MR ones hit once on landing
+> - Simulator and estimate: Stock rooms hold 15 monsters with death summons placed one by one; death spells that target no one (calls for aid) summon nothing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

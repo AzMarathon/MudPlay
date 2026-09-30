@@ -837,6 +837,29 @@ public sealed class StatParserTests
         Assert.Equal(5,   stats.Cp);
     }
 
+    // Stock lists active effects inside the stat screen as bare applied lines; the
+    // screen reads as printing from its header (however `stat` was sent) until the
+    // closing prompt, so the condition tracker can tell them from casts.
+    [Fact]
+    public void InStatScreen_FromTheHeaderUntilTheClosingPrompt()
+    {
+        StatParser parser = new(new PlayerStats());   // un-armed: a stat the gate never saw
+        Assert.False(parser.InStatScreen);
+
+        parser.FeedTestLine("Name: Client Tester                    Lives/CP:      9/5");
+        parser.FeedTestLine("Willpower: 50     Charm:   31          MagicRes:       86");
+        Assert.True(parser.InStatScreen);
+
+        parser.FeedTestLine("[HP=219/MA=204]:", isPromptLine: true);
+        Assert.False(parser.InStatScreen);
+
+        // A later screen in the same session closes on its own prompt too.
+        parser.FeedTestLine("Name: Client Tester                    Lives/CP:      9/5");
+        Assert.True(parser.InStatScreen);
+        parser.FeedTestLine("[HP=219/MA=204]:", isPromptLine: true);
+        Assert.False(parser.InStatScreen);
+    }
+
     [Fact]
     public void ChatLineMimickingHeader_DoesNotSelfArm()
     {

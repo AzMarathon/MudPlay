@@ -371,7 +371,9 @@ public sealed class RouteExpResolver : IDisposable
 
     // Spell Number -> the monster ids it summons (its Abil==12 "summon monster"
     // slots). Only slots whose Abil is 12 count — a spell row also carries unrelated
-    // AbilVal payloads in its other slots. Built once, dropped on set change.
+    // AbilVal payloads in its other slots. A spell targeting no one or a user (Targets
+    // 0 / 8, e.g. "calls for aid") never fires as a death spell, which is cast with no
+    // user (GAME_MECHANICS "Death-summon cascades"). Built once, dropped on set change.
     private Dictionary<int, List<int>> SummonSpells()
     {
         if (_summonSpells is not null) return _summonSpells;
@@ -381,6 +383,7 @@ public sealed class RouteExpResolver : IDisposable
             foreach (JsonElement row in doc.RootElement.EnumerateArray())
             {
                 if (!row.TryGetProperty("Number", out JsonElement n) || !n.TryGetInt32(out int id)) continue;
+                if (row.TryGetProperty("Targets", out JsonElement t) && t.TryGetInt32(out int targets) && targets is 0 or 8) continue;
                 List<int>? ids = null;
                 // Slots are Abil-0..Abil-N / AbilVal-0..AbilVal-N; walk while the pair exists.
                 for (int i = 0; row.TryGetProperty($"Abil-{i}", out JsonElement ab); i++)
@@ -403,7 +406,8 @@ public sealed class RouteExpResolver : IDisposable
         var cache = _roomCascades ??= new Dictionary<(int, int), CascadeResult>();
         var key = (id, mobs);
         if (cache.TryGetValue(key, out CascadeResult c)) return c;
-        c = DeathSummonCascade.Simulate(id, mobs, ExpOf, SummonsOf);
+        (int cap, bool whole) = DeathSummonCascade.RulesFor(_cache.ActiveRealm);
+        c = DeathSummonCascade.Simulate(id, mobs, ExpOf, SummonsOf, cap, wholeCasts: whole);
         cache[key] = c;
         return c;
     }
