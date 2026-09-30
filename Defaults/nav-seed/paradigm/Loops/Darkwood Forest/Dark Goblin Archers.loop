@@ -1,0 +1,267 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark Goblin Archers",
+  "Waypoints": [
+    {
+      "Room": "1/1679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1640",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1642",
+      "Command": "go path",
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1318",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1319",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2737",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1662",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1661",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1659",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1659",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1661",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1662",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2737",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1319",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1320",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1321",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2778",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1799",
+      "Command": "go path",
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp by Winterhawk (Darkwood Forest/DFFP)."
+}

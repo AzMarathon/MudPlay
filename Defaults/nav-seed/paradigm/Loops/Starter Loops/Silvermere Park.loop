@@ -1,0 +1,32 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Silvermere Park",
+  "Waypoints": [
+    {
+      "Room": "1/92",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/86",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/140",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/119",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp"
+}

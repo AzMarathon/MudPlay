@@ -1,0 +1,892 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Volcano West Side Loop (110 str or picks)",
+  "Waypoints": [
+    {
+      "Room": "16/1980",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1971",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1967",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1959",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1958",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1959",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1960",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1935",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1936",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1937",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1939",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1940",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1941",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1947",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1948",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1949",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1950",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1951",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1952",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1951",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1953",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1979",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1979",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1978",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1977",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1976",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1975",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1974",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1973",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1972",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1973",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1974",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1975",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1976",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1977",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1978",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1979",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1955",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1956",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1957",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1956",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1955",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1953",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1951",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1950",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1949",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1948",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1947",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1941",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1942",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1943",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1944",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1945",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1946",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1924",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1922",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1920",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2097",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2095",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2091",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2086",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2085",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2084",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2085",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2086",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2091",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2099",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2098",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1917",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1911",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1908",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1907",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1906",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1900",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1901",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1902",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1903",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1904",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1905",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1906",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1907",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1908",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1911",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1920",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1922",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1924",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1932",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1927",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1928",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1930",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1928",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1927",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1933",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1934",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1935",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1960",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1959",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1967",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1971",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp by zarbo (Volcano/VSWL)."
+}

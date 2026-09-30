@@ -1,0 +1,182 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Strange Mansion Loop",
+  "Waypoints": [
+    {
+      "Room": "1/65",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/129",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/65",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/64",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/63",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/63",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/64",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/428",
+      "Command": "move rubble",
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/194",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/193",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/196",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/195",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/193",
+      "Command": "move rubble",
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/193",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp by Winterhawk (Slums/SSME)."
+}

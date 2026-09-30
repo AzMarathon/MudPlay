@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Gnaj Golems (2 and 3 spawns-2)",
+  "Waypoints": [
+    {
+      "Room": "15/1458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1465",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10157",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10158",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10159",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10158",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10159",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1459",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp by Winterhawk (Old Mines/OMGG)."
+}

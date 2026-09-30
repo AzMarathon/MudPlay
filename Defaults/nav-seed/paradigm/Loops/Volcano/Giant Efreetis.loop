@@ -1,0 +1,97 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Giant Efreetis",
+  "Waypoints": [
+    {
+      "Room": "16/2145",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2147",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2148",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2149",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2150",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2153",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2158",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2159",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2158",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2153",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2154",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2155",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2156",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2157",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2146",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp (Volcano/VLEF)."
+}

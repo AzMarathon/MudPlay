@@ -1,0 +1,152 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Wyverns (Full Wyverns Area)",
+  "Waypoints": [
+    {
+      "Room": "1/411",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/412",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/413",
+      "Command": "go path",
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/417",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/431",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/432",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/433",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/434",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3320",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3319",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3318",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3317",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3316",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3321",
+      "Command": "go path",
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3329",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3324",
+      "Command": "go path",
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3329",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3324",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3323",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3326",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/471",
+      "Command": "go path",
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp by Winterhawk (Darkwood Forest/DWFL)."
+}
