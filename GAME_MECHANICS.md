@@ -2016,7 +2016,7 @@ How one damage spell cast against a monster is worked out.
   - dropping below 0 prints `%s drops to the ground!` to the room, and the tick can kill (`_check_kill_user`), with no killer and no exp awarded;
   - the normal 30-second regen still runs after it, so the net change is regen minus poison.
 - **How long it lasts:** a poison spell with a duration also takes one of the player's affect slots (see *Stock "10 spelling" affect cap*).
-  - When that slot expires, the spell's amount is **subtracted** from the poison number, floored at 0 (`_perform_spell_termination_player_upkeep` @ `0x44a172`), and the spell's own wear-off message prints.
+  - When that slot expires, the spell's amount is **subtracted** from the poison number, floored at 0 (`_perform_spell_termination_player_upkeep` @ `0x44a172`), and the spell's own wear-off message prints *([OBSERVED] 2026-09-30, the spells' messages in both realm seeds)*. For most poison spells that's `The effects of the poison wear off` (25 spells in the Stock seed, 27 in Paradigm's). Stock has two one-offs: `The dizzying poison runs its course` and `You awaken, groggy and confused from the poison`.
   - Poison from a source with no duration has no slot, so it lasts until it's cured or you die. No Stock spell works that way.
   - **The poison amount never shrinks on its own.** Only slot expiry, cures, the healer and death lower it.
 - **Two poisons at once interact badly**, because of the max-then-subtract rule. With a 10 and a 30 on you, the poison number is 30:
