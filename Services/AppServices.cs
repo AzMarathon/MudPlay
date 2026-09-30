@@ -7652,6 +7652,7 @@ public sealed class AppServices
             Events, Bosses, BossTimers, GameData, () => GameData.ActiveRealm, () => EventScheduler.IsInGame, Log);
         EventScheduler.ClockTick += EventBoss.Evaluate;
         EventScheduler.BossNextFire = EventBoss.NextFire;
+        Events.SetBossStopCheck(EventBoss.StopReached);
         BossTimers.BossKilled += EventBoss.OnBossKilled;
 
         // DefaultTaskRunner. Starts the character's configured "Default task"

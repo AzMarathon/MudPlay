@@ -94,8 +94,13 @@ public sealed class ScheduledEvent
     // by hand, and Then never runs.
     public int? StopAfterLaps { get; set; }
     public int? StopAfterMinutes { get; set; }
-    // Stop when this boss (BossDef.Name) is killed.
-    public string? StopWhenBossKilled { get; set; }
+    // Stop at a moment on this boss's timer (BossDef.Name) — the same choices as a
+    // Boss trigger: a timer column hitting 0, the guaranteed spawn, the kill, a
+    // cleanup reset, optionally minutes early.
+    public string? StopBossName { get; set; }
+    public EventBossMoment? StopBossMoment { get; set; }
+    public double? StopBossWindowFraction { get; set; }
+    public int? StopBossLeadMinutes { get; set; }
     // Stop once all of these hold.
     public List<EventCondition>? StopConditions { get; set; }
 
@@ -110,6 +115,7 @@ public sealed class ScheduledEvent
     // Another event, by Name.
     public string? ThenEventName { get; set; }
 
+    [System.Text.Json.Serialization.JsonIgnore]
     public EventThenType ResolvedThen =>
         Then ?? (ActionType == EventActionType.WalkTo ? EventThenType.Resume : EventThenType.Nothing);
 

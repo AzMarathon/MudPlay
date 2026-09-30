@@ -201,6 +201,10 @@ public sealed class EventManager : IDisposable
         _evaluateRest = evaluate;
     }
 
+    // Whether a stop-after boss-timer moment has come (EventBossWatcher.StopReached).
+    private Func<ScheduledEvent, bool>? _bossStopReached;
+    public void SetBossStopCheck(Func<ScheduledEvent, bool> reached) => _bossStopReached = reached;
+
     // Live money / encumbrance / exp / level readings for a stop-after rule's
     // conditions.
     private Func<EventConditionEvaluator.Readings>? _readStats;
@@ -582,7 +586,8 @@ public sealed class EventManager : IDisposable
     public void NoteBossKilled(string bossName)
     {
         if (_run is { Event.ActionType: EventActionType.Loop or EventActionType.AutoLair } run
-            && string.Equals(run.Event.StopWhenBossKilled, bossName, StringComparison.OrdinalIgnoreCase))
+            && run.Event.StopBossMoment == EventBossMoment.Killed
+            && string.Equals(run.Event.StopBossName, bossName, StringComparison.OrdinalIgnoreCase))
             StopAndComplete(run, $"{bossName} was killed");
     }
 
@@ -640,6 +645,8 @@ public sealed class EventManager : IDisposable
                 else if (e.StopConditions is { Count: > 0 } conditions && _readStats is { } read
                          && EventConditionEvaluator.AllHold(conditions, read()))
                     StopAndComplete(run, EventConditionEvaluator.Describe(conditions));
+                else if (_bossStopReached?.Invoke(e) == true)
+                    StopAndComplete(run, $"{e.StopBossName}'s {e.StopBossMoment} moment came");
                 break;
         }
     }

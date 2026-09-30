@@ -237,25 +237,35 @@
                             <TextBlock Classes="SectionHeader" Text="STOP AFTER (whichever comes first)"/>
                             <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsActionLoop}">
                                 <CheckBox Content="after" IsChecked="{Binding StopAfterLapsOn, Mode=TwoWay}"/>
-                                <NumericUpDown Width="100" Minimum="1" Maximum="100000" FormatString="0"
+                                <NumericUpDown Width="130" Minimum="1" Maximum="100000" FormatString="0"
                                                Value="{Binding StopAfterLaps, Mode=TwoWay}"
                                                IsEnabled="{Binding StopAfterLapsOn}"/>
                                 <TextBlock Classes="FieldLabel" Text="laps"/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <CheckBox Content="after" IsChecked="{Binding StopAfterMinutesOn, Mode=TwoWay}"/>
-                                <NumericUpDown Width="100" Minimum="1" Maximum="100000" FormatString="0"
+                                <NumericUpDown Width="130" Minimum="1" Maximum="100000" FormatString="0"
                                                Value="{Binding StopAfterMinutes, Mode=TwoWay}"
                                                IsEnabled="{Binding StopAfterMinutesOn}"/>
                                 <TextBlock Classes="FieldLabel" Text="minutes"/>
                             </StackPanel>
+                            <!-- A boss-timer moment — the same choices as the Boss trigger. -->
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <CheckBox Content="when" IsChecked="{Binding StopWhenBossKilledOn, Mode=TwoWay}"/>
-                                <ComboBox Width="220" ItemsSource="{Binding AvailableBossNames}"
+                                <CheckBox Content="when" IsChecked="{Binding StopWhenBossOn, Mode=TwoWay}"/>
+                                <ComboBox Width="240" ItemsSource="{Binding AvailableBossNames}"
                                           SelectedItem="{Binding StopBossName, Mode=TwoWay}"
-                                          IsEnabled="{Binding StopWhenBossKilledOn}"
+                                          IsEnabled="{Binding StopWhenBossOn}"
                                           PlaceholderText="(a boss)"/>
-                                <TextBlock Classes="FieldLabel" Text="is killed"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="24,0,0,0"
+                                        IsEnabled="{Binding StopWhenBossOn}">
+                                <ComboBox Width="210" ItemsSource="{Binding BossMomentOptions}"
+                                          SelectedItem="{Binding SelectedStopBossMoment, Mode=TwoWay}"
+                                          ToolTip.Tip="Stop when that boss's timer column hits 0 (an early spawn window, or the guaranteed full timer), when it's killed, or when a cleanup boss resets. A timer moment already behind you stops the loop straight away."/>
+                                <NumericUpDown Width="100" Minimum="0" Maximum="1440" FormatString="0"
+                                               Value="{Binding StopBossLeadMinutes, Mode=TwoWay}"
+                                               IsVisible="{Binding StopBossLeadApplies}"/>
+                                <TextBlock Classes="Hint" Text="min early" IsVisible="{Binding StopBossLeadApplies}"/>
                             </StackPanel>
                             <TextBlock Classes="FieldLabel" Text="when all of these hold:"/>
                             <ItemsControl Margin="24,0,0,0" ItemsSource="{Binding StopConditions}"

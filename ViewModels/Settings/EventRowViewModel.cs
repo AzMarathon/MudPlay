@@ -93,7 +93,9 @@ public sealed partial class EventRowViewModel : ObservableObject
             if (Source.ActionType == EventActionType.Loop && Source.StopAfterLaps is > 0 and var laps)
                 rules.Add($"{laps} lap{(laps == 1 ? "" : "s")}");
             if (Source.StopAfterMinutes is > 0 and var minutes) rules.Add($"{minutes} min");
-            if (!string.IsNullOrWhiteSpace(Source.StopWhenBossKilled)) rules.Add($"{Source.StopWhenBossKilled} dies");
+            if (!string.IsNullOrWhiteSpace(Source.StopBossName))
+                rules.Add(BossMoment(Source.StopBossName, Source.StopBossMoment ?? EventBossMoment.Killed,
+                    Source.StopBossWindowFraction, Source.StopBossLeadMinutes));
             if (Source.StopConditions is { Count: > 0 } c)
                 rules.Add(Game.Events.EventConditionEvaluator.Describe(c));
             return rules.Count == 0 ? " (until stopped)" : $" (until {string.Join(" or ", rules)})";
@@ -116,17 +118,20 @@ public sealed partial class EventRowViewModel : ObservableObject
         ? Game.Map.BossTimerMath.WindowLabel(Math.Abs(f - 0.875) < 0.001 ? Game.RealmType.Stock : Game.RealmType.ParaMud, f)
         : "first early";
 
-    private string FormatBoss()
+    private string FormatBoss() => BossMoment(
+        string.IsNullOrWhiteSpace(Source.BossName) ? "(no boss)" : Source.BossName,
+        Source.BossMoment ?? EventBossMoment.EarlyWindow, Source.BossWindowFraction, Source.BossLeadMinutes);
+
+    // "<boss> <moment>" — the When column and a stop rule read alike.
+    private static string BossMoment(string boss, EventBossMoment moment, double? fraction, int? lead)
     {
-        string boss = string.IsNullOrWhiteSpace(Source.BossName) ? "(no boss)" : Source.BossName;
-        string lead = Source.BossLeadMinutes is > 0 and var m ? $" -{m}m" : string.Empty;
-        return Source.BossMoment switch
+        string early = lead is > 0 and var m ? $" -{m}m" : string.Empty;
+        return moment switch
         {
-            EventBossMoment.EarlyWindow  => $"{boss}: {WindowLabel(Source.BossWindowFraction)} window{lead}",
-            EventBossMoment.Guaranteed   => $"{boss}: guaranteed spawn{lead}",
-            EventBossMoment.Killed       => $"{boss}: killed",
-            EventBossMoment.CleanupReset => $"{boss}: cleanup reset{lead}",
-            _                            => $"{boss}: early window{lead}",
+            EventBossMoment.Guaranteed   => $"{boss} full timer hits 0{early}",
+            EventBossMoment.Killed       => $"{boss} is killed",
+            EventBossMoment.CleanupReset => $"{boss} cleanup reset{early}",
+            _                            => $"{boss} {WindowLabel(fraction)} column hits 0{early}",
         };
     }
 

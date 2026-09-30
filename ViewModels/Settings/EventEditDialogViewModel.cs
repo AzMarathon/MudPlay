@@ -99,11 +99,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         _bossMoments.Add(("Is killed", EventBossMoment.Killed, null));
         _bossMoments.Add(("Cleanup reset", EventBossMoment.CleanupReset, null));
         BossMomentOptions = _bossMoments.Select(m => m.Label).ToList();
-        EventBossMoment savedMoment = existing.BossMoment ?? EventBossMoment.EarlyWindow;
-        int pick = _bossMoments.FindIndex(m => m.Moment == savedMoment
-            && (savedMoment != EventBossMoment.EarlyWindow || existing.BossWindowFraction is not { } f
-                || Math.Abs(f - m.Fraction!.Value) < 0.001));
-        SelectedBossMoment = BossMomentOptions[Math.Max(0, pick)];
+        SelectedBossMoment = MomentLabel(existing.BossMoment ?? EventBossMoment.EarlyWindow, existing.BossWindowFraction);
         BossLeadMinutes = existing.BossLeadMinutes ?? 0;
 
         switch (existing.ActionType)
@@ -130,8 +126,10 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         StopAfterLaps = existing.StopAfterLaps is > 0 and var laps ? laps : 1;
         StopAfterMinutesOn = existing.StopAfterMinutes is > 0;
         StopAfterMinutes = existing.StopAfterMinutes is > 0 and var minutes ? minutes : 30;
-        StopWhenBossKilledOn = !string.IsNullOrWhiteSpace(existing.StopWhenBossKilled);
-        StopBossName = existing.StopWhenBossKilled;
+        StopWhenBossOn = !string.IsNullOrWhiteSpace(existing.StopBossName);
+        StopBossName = existing.StopBossName;
+        SelectedStopBossMoment = MomentLabel(existing.StopBossMoment ?? EventBossMoment.Killed, existing.StopBossWindowFraction);
+        StopBossLeadMinutes = existing.StopBossLeadMinutes ?? 0;
         foreach (EventCondition c in existing.StopConditions ?? new List<EventCondition>())
             StopConditions.Add(new EventConditionRowViewModel(c, RemoveStopCondition));
         StopConditions.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ThenNeverRuns));
@@ -259,8 +257,14 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     [ObservableProperty] private int _stopAfterLaps = 1;
     [ObservableProperty] private bool _stopAfterMinutesOn;
     [ObservableProperty] private int _stopAfterMinutes = 30;
-    [ObservableProperty] private bool _stopWhenBossKilledOn;
+    [ObservableProperty] private bool _stopWhenBossOn;
     [ObservableProperty] private string? _stopBossName;
+    // The same moments as the Boss trigger (BossMomentOptions).
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StopBossLeadApplies))]
+    private string _selectedStopBossMoment = string.Empty;
+    [ObservableProperty] private int _stopBossLeadMinutes;
+    public bool StopBossLeadApplies => MomentEntry(SelectedStopBossMoment).Moment != EventBossMoment.Killed;
 
     public ObservableCollection<EventConditionRowViewModel> StopConditions { get; } = new();
 
@@ -292,7 +296,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     // rule never is, so say so.
     public bool ThenNeverRuns =>
         ShowsStopAfter && !IsThenNothing
-        && !(StopAfterLapsOn && IsActionLoop) && !StopAfterMinutesOn && !StopWhenBossKilledOn
+        && !(StopAfterLapsOn && IsActionLoop) && !StopAfterMinutesOn && !StopWhenBossOn
         && StopConditions.Count == 0;
 
     // WHAT-side validation happens on Save (popup), not inline — fewer red labels
@@ -385,7 +389,14 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         {
             if (IsActionLoop && StopAfterLapsOn) result.StopAfterLaps = StopAfterLaps;
             if (StopAfterMinutesOn) result.StopAfterMinutes = StopAfterMinutes;
-            if (StopWhenBossKilledOn) result.StopWhenBossKilled = StopBossName;
+            if (StopWhenBossOn)
+            {
+                var stop = MomentEntry(SelectedStopBossMoment);
+                result.StopBossName = StopBossName;
+                result.StopBossMoment = stop.Moment;
+                result.StopBossWindowFraction = stop.Fraction;
+                result.StopBossLeadMinutes = StopBossLeadApplies && StopBossLeadMinutes > 0 ? StopBossLeadMinutes : null;
+            }
             if (StopConditions.Count > 0)
                 result.StopConditions = StopConditions.Select(static c => c.ToModel()).ToList();
         }
@@ -432,8 +443,8 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
             return "No auto-lair setup selected. Pick a saved setup from the dropdown.";
         if (IsActionWait && WaitSeconds <= 0)
             return "Wait needs a number of seconds.";
-        if (ShowsStopAfter && StopWhenBossKilledOn && string.IsNullOrWhiteSpace(StopBossName))
-            return "No boss selected for \"until this boss is killed\".";
+        if (ShowsStopAfter && StopWhenBossOn && string.IsNullOrWhiteSpace(StopBossName))
+            return "No boss selected for Stop after's boss timer.";
         if (IsThenLoop && string.IsNullOrWhiteSpace(ThenLoopName))
             return "No loop selected for Then.";
         if (IsThenAutoLair && string.IsNullOrWhiteSpace(ThenAutoLairSetupName))
@@ -530,7 +541,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     partial void OnEveryAmountChanged(int value)        => OnPropertyChanged(nameof(EveryError));
     partial void OnStopAfterLapsOnChanged(bool value)      => OnPropertyChanged(nameof(ThenNeverRuns));
     partial void OnStopAfterMinutesOnChanged(bool value)   => OnPropertyChanged(nameof(ThenNeverRuns));
-    partial void OnStopWhenBossKilledOnChanged(bool value)
+    partial void OnStopWhenBossOnChanged(bool value)
     {
         // A boss-triggered event most likely camps that same boss.
         if (value && string.IsNullOrWhiteSpace(StopBossName)) StopBossName = BossName;
@@ -585,10 +596,22 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
 
     private EventBossMoment SelectedBoss() => SelectedBossEntry().Moment;
 
-    private (string Label, EventBossMoment Moment, double? Fraction) SelectedBossEntry()
+    private (string Label, EventBossMoment Moment, double? Fraction) SelectedBossEntry() => MomentEntry(SelectedBossMoment);
+
+    private (string Label, EventBossMoment Moment, double? Fraction) MomentEntry(string label)
     {
-        int i = _bossMoments.FindIndex(m => m.Label == SelectedBossMoment);
+        int i = _bossMoments.FindIndex(m => m.Label == label);
         return _bossMoments[Math.Max(0, i)];
+    }
+
+    // The option for a saved moment — for an early window, the column with its
+    // fraction (the earliest when none was saved).
+    private string MomentLabel(EventBossMoment moment, double? fraction)
+    {
+        int i = _bossMoments.FindIndex(m => m.Moment == moment
+            && (moment != EventBossMoment.EarlyWindow || fraction is not { } f
+                || Math.Abs(f - m.Fraction!.Value) < 0.001));
+        return BossMomentOptions[Math.Max(0, i)];
     }
 
     // Three-state result of resolving a room box: resolved (Map+Room set, no

@@ -87,18 +87,30 @@ public sealed class EventBossWatcher
         return at > Now() ? at.LocalDateTime : null;
     }
 
-    // The moment on this kill's timer, less the lead.
+    // Whether a loop / auto-lair's stop-after boss moment has come (a timed one; a
+    // kill ends it through EventManager.NoteBossKilled). A moment already behind us
+    // counts — its column has hit 0 — so the run stops straight away.
+    public bool StopReached(ScheduledEvent e)
+        => e.StopBossMoment is { } moment && moment != EventBossMoment.Killed
+           && FindBoss(e.StopBossName) is { } def
+           && FireAt(def, moment, e.StopBossWindowFraction, e.StopBossLeadMinutes) is { } at
+           && Now() >= at;
+
     internal DateTimeOffset? FireAt(ScheduledEvent e, BossDef def)
+        => FireAt(def, e.BossMoment, e.BossWindowFraction, e.BossLeadMinutes);
+
+    // The moment on this kill's timer, less the lead.
+    private DateTimeOffset? FireAt(BossDef def, EventBossMoment? which, double? fraction, int? leadMinutes)
     {
         if (_timers.KilledAt(def.Name) is not { } killed) return null;
-        DateTimeOffset? moment = e.BossMoment switch
+        DateTimeOffset? moment = which switch
         {
             EventBossMoment.CleanupReset => def.RespawnType == BossRespawnType.Cleanup ? _timers.NextCleanupFor(def.Name) : null,
-            EventBossMoment.EarlyWindow => TimedMoment(def, killed, e.BossWindowFraction ?? BossTimerMath.SpawnFractions(_realm())[0]),
+            EventBossMoment.EarlyWindow => TimedMoment(def, killed, fraction ?? BossTimerMath.SpawnFractions(_realm())[0]),
             EventBossMoment.Guaranteed => TimedMoment(def, killed, 1.0),
             _ => null,
         };
-        return moment - TimeSpan.FromMinutes(Math.Max(0, e.BossLeadMinutes ?? 0));
+        return moment - TimeSpan.FromMinutes(Math.Max(0, leadMinutes ?? 0));
     }
 
     private DateTimeOffset? TimedMoment(BossDef def, DateTimeOffset killed, double fraction)

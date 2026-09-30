@@ -446,45 +446,45 @@ public static class BugReportBuilder
     // weapon-swap shadow (what we believe is equipped, without re-parsing `inv`).
     // These are the exact internals a triager otherwise has to reconstruct from
     // code + log timestamps.
+    // Compact, names over numbers, unset fields left out.
+    private static readonly System.Text.Json.JsonSerializerOptions EventDumpJson = new()
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
+
     private static string BuildEngineState(AppServices svc)
     {
         StringBuilder sb = new();
 
-        // "When" events: what they wait on and whether it holds right now, against
-        // the readings the watcher uses (an unread inventory / stat screen is unknown).
+        // Every event exactly as saved (all its set fields — trigger, action, stop
+        // rules, Then), with what the engine makes of it now: auto-disabled, next fire,
+        // whether a When event's conditions hold against the readings it uses. An
+        // "event misbehaved" report hinges on what was set; a JSON dump keeps new
+        // fields in it without this code changing.
         Game.Events.EventConditionEvaluator.Readings now = svc.ReadEventReadings();
-        List<Models.GameData.ScheduledEvent> stateEvents = svc.Events.Events
-            .Where(e => e.TriggerType == Models.GameData.EventTriggerType.State).ToList();
-        sb.Append("**When-triggered events** (").Append(stateEvents.Count).Append(") · readings: money=")
+        IReadOnlyList<Models.GameData.ScheduledEvent> events = svc.Events.Events;
+        sb.Append("**Events** (").Append(events.Count).Append(") · disable all=")
+          .Append(svc.Profile.Current?.EventsGloballyDisabled == true)
+          .Append(", in game=").Append(svc.EventScheduler.IsInGame)
+          .Append(" · readings: money=")
           .Append(now.Copper?.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) ?? "unknown")
           .Append(" copper, encumbrance=").Append(now.EncumbrancePercent is { } ep ? $"{ep}%" : "unknown")
           .Append(", exp=").Append(now.Experience?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown")
           .Append(", level=").Append(now.Level?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown")
-          .Append(", in game=").Append(svc.EventScheduler.IsInGame).Append("\n\n");
-        if (stateEvents.Count == 0) sb.Append("_(none)_\n");
-        else foreach (Models.GameData.ScheduledEvent e in stateEvents)
+          .Append("\n\n");
+        sb.Append("- **Running:** ").Append(svc.Events.RunSummary).Append('\n');
+        if (events.Count == 0) sb.Append("- _(no events)_\n");
+        else foreach (Models.GameData.ScheduledEvent e in events)
+        {
             sb.Append("- ").Append(string.IsNullOrWhiteSpace(e.Name) ? "(unnamed)" : e.Name)
-              .Append(e.Disabled ? " [disabled]" : string.Empty).Append(": ")
-              .Append(Game.Events.EventConditionEvaluator.Describe(e.Conditions))
-              .Append(" — holds now: ").Append(Game.Events.EventConditionEvaluator.AllHold(e.Conditions, now))
-              .Append('\n');
-        sb.Append('\n');
-
-        // The event running now (its action, laps, Then and what it goes back to), and
-        // each boss-timer event's next fire — a "didn't go back to the loop" report
-        // hinges on both.
-        sb.Append("**Running event:** ").Append(svc.Events.RunSummary).Append("\n\n");
-        List<Models.GameData.ScheduledEvent> bossEvents = svc.Events.Events
-            .Where(e => e.TriggerType == Models.GameData.EventTriggerType.Boss).ToList();
-        sb.Append("**Boss-timer events** (").Append(bossEvents.Count).Append(")\n\n");
-        if (bossEvents.Count == 0) sb.Append("_(none)_\n");
-        else foreach (Models.GameData.ScheduledEvent e in bossEvents)
-            sb.Append("- ").Append(string.IsNullOrWhiteSpace(e.Name) ? "(unnamed)" : e.Name)
-              .Append(e.Disabled ? " [disabled]" : string.Empty).Append(": ")
-              .Append(e.BossName ?? "(no boss)").Append(' ').Append(e.BossMoment)
-              .Append(e.BossLeadMinutes is > 0 ? $" -{e.BossLeadMinutes}m" : string.Empty)
-              .Append(" — next ").Append(svc.EventBoss.NextFire(e)?.ToString("MM-dd HH:mm") ?? "not scheduled")
-              .Append('\n');
+              .Append(e.Disabled ? (svc.Events.IsAutoDisabled(e) ? " [auto-disabled: target missing]" : " [disabled]") : string.Empty);
+            if (svc.EventScheduler.GetNextFire(e) is { } next)
+                sb.Append(" · next ").Append(next.ToString("MM-dd HH:mm:ss"));
+            if (e.TriggerType == Models.GameData.EventTriggerType.State)
+                sb.Append(" · holds now: ").Append(Game.Events.EventConditionEvaluator.AllHold(e.Conditions, now));
+            sb.Append("\n  `").Append(System.Text.Json.JsonSerializer.Serialize(e, EventDumpJson)).Append("`\n");
+        }
         sb.Append('\n');
 
         IReadOnlyList<AutoPartyManager.NagSnapshot> nags = svc.AutoParty.ActiveNagSnapshot();

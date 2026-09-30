@@ -122,7 +122,8 @@ public sealed class EventsSectionViewModelTests
             ActionType = EventActionType.Loop,
             LoopName = "Sewer farm",
             StopAfterLaps = 3,
-            StopWhenBossKilled = "Sarnak",
+            StopBossName = "Sarnak",
+            StopBossMoment = EventBossMoment.Killed,
             Then = EventThenType.Resume,
         });
 
@@ -131,8 +132,8 @@ public sealed class EventsSectionViewModelTests
         Assert.Equal("Loop \"Sewer farm\" (until stopped) → stop",       vm.Rows[0].EventText);
         Assert.Equal("Auto-lair \"Albion lairs\" (until stopped) → stop", vm.Rows[1].EventText);
         Assert.Equal("Walk to 1/297 → go back",                           vm.Rows[2].EventText);
-        Assert.Equal("Loop \"Sewer farm\" (until 3 laps or Sarnak dies) → go back", vm.Rows[3].EventText);
-        Assert.Equal("Sarnak: guaranteed spawn -5m", vm.Rows[3].TimeText);
+        Assert.Equal("Loop \"Sewer farm\" (until 3 laps or Sarnak is killed) → go back", vm.Rows[3].EventText);
+        Assert.Equal("Sarnak full timer hits 0 -5m", vm.Rows[3].TimeText);
     }
 
     // ----- CRUD commands -------------------------------------------

@@ -3657,7 +3657,7 @@ Every action except a plain command stops whatever walk, loop or Auto-Lair was r
 A loop or Auto-Lair never ends by itself, so its **Then** only runs once one of these ends it — whichever comes first:
 
 - **after N laps** (loops only), **after N minutes**,
-- **when a boss is killed** (the boss-timer table's kill — e.g. camp a boss's lair until it dies; it defaults to the event's own boss),
+- **when a boss's timer moment comes** — the same choices as the Boss trigger: one of its timer columns hitting 0, the kill, or a cleanup reset, optionally minutes early (e.g. camp a boss's lair until it dies, or loop elsewhere until its −10% column hits 0). It defaults to the event's own boss. A timer moment that's already behind you stops the loop straight away,
 - **when all of these hold** — money / encumbrance / experience / level conditions, e.g. encumbrance ≥ 80% to go sell.
 
 With none set, the loop runs until you stop it — and stopping it yourself skips Then. The editor warns when a Then can never run.
