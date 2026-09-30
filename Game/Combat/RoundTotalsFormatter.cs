@@ -23,14 +23,31 @@ public static class RoundTotalsFormatter
     // Longest combatant name the table shows in full; longer ones are cut.
     private const int MaxNameWidth = 24;
 
-    public static IReadOnlyList<string> Table(RoundSummary round, IReadOnlyCollection<CombatantKind> shown)
+    // showCounts labels a row several same-named monsters share "muckworm x3";
+    // eachMonster gives every monster with HP data its own numbered row instead.
+    public static IReadOnlyList<string> Table(RoundSummary round, IReadOnlyCollection<CombatantKind> shown,
+        bool showCounts = false, bool eachMonster = false)
     {
         if (shown.Count == 0) return Array.Empty<string>();
-        List<(string Name, int Dealt, int Taken)> rows = round.Combatants
+        IEnumerable<CombatantDamage> combatants = round.Combatants;
+        if (eachMonster && round.EachMonster is { Count: > 0 } each)
+        {
+            HashSet<string> split = new(each.Select(m => BaseName(m.Name)), StringComparer.OrdinalIgnoreCase);
+            combatants = combatants
+                .Where(c => c.Kind != CombatantKind.Monster || !split.Contains(c.Name))
+                .Concat(each);
+        }
+        else if (showCounts)
+        {
+            combatants = combatants.Select(c =>
+                c.Kind == CombatantKind.Monster && c.Count > 1 ? c with { Name = $"{c.Name} x{c.Count}" } : c);
+        }
+        List<(string Name, int Dealt, int Taken)> rows = combatants
             .Where(c => shown.Contains(c.Kind))
             .OrderBy(c => c.Kind)
             .ThenByDescending(c => c.Dealt)
             .ThenByDescending(c => c.Taken)
+            .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .Select(c => (c.Name, c.Dealt, c.Taken))
             .ToList();
         if (round.UnknownDealt > 0 || round.UnknownTaken > 0)
@@ -49,6 +66,13 @@ public static class RoundTotalsFormatter
         foreach ((string name, int dealt, int taken) in rows)
             lines.Add(Row(name, dealt.ToString(), taken.ToString()));
         return lines;
+    }
+
+    // "muckworm #2" → "muckworm".
+    private static string BaseName(string name)
+    {
+        int hash = name.LastIndexOf(" #", StringComparison.Ordinal);
+        return hash > 0 && int.TryParse(name[(hash + 2)..], out _) ? name[..hash] : name;
     }
 
     private static string Fit(string name, int width)

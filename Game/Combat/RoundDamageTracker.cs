@@ -172,6 +172,19 @@ public sealed class RoundDamageTracker : IDisposable
 
     public void SetOwnSpellLineCheck(Func<string, bool> isOwnSpellLine) => _isOwnSpellLine = isOwnSpellLine;
 
+    // The room's monsters as MonsterHpTracker has them: the one a hit on a name lands on
+    // (the first of that name) and every one of them, each with a stable id and its HP
+    // estimate before the hit. Unbound, or a monster with no HP data, and damage counts
+    // in full under the monster's name alone.
+    private Func<string, (int Id, int Hp)?>? _monsterTarget;
+    private Func<IReadOnlyList<(int Id, string Name, int Hp)>>? _roomMonsters;
+    public void SetMonsterHp(
+        Func<string, (int Id, int Hp)?> targetOf, Func<IReadOnlyList<(int Id, string Name, int Hp)>> roomMonsters)
+    {
+        _monsterTarget = targetOf;
+        _roomMonsters = roomMonsters;
+    }
+
     // The room's occupants changed (a fresh "Also here:", an arrival, a death).
     public void NoteRoomEntities(RoomEntitiesObservation obs)
     {
@@ -187,7 +200,11 @@ public sealed class RoundDamageTracker : IDisposable
         _rosterNames = names;
         _foes = foes;
         // Someone arriving mid-round is in the room for the rest of it.
-        _current?.Seed(Names().Values);
+        if (_current is { } round)
+        {
+            round.Seed(Names().Values);
+            SeedMonsters(round);
+        }
     }
 
     // We sent a cast (engine or typed), so a caster's-eye spell line in the next few
@@ -265,6 +282,12 @@ public sealed class RoundDamageTracker : IDisposable
             && _foes.Count > 0 && HitsTheRoom(text);
         IReadOnlyList<string> foesHit = roomSpell ? _foes : Array.Empty<string>();
 
+        // Worked out before Attributed, whose MonsterHpTracker takes the hit off the HP
+        // it caps against.
+        List<(string Row, int? Id, int Taken)> hits = Hits(target, a.Amount, foesHit.Count > 0);
+        int? dealerId = !a.NoDealer && source is not null && IsFoe(source)
+            ? _monsterTarget?.Invoke(source)?.Id : null;
+
         bool opens = _state.InCombat
             || source == DamageLineAttributor.Self
             || (source is not null && target is not null);
@@ -277,16 +300,69 @@ public sealed class RoundDamageTracker : IDisposable
 
         RoundAccumulator round = Current(now);
         NoteActivity();
-        // Damage nobody dealt (a poison tick) is only damage taken.
+        // Damage nobody dealt (a poison tick) is only damage taken. The dealer dealt what
+        // the victims could take.
+        int dealt = hits.Count > 0 ? hits.Sum(h => h.Taken) : a.Amount;
         if (!a.NoDealer)
         {
-            if (source is null) round.UnknownDealt += a.Amount;
-            else round.For(source).Dealt += a.Amount * Math.Max(1, foesHit.Count);
+            if (source is null) round.UnknownDealt += dealt;
+            else
+            {
+                round.For(source).Dealt += dealt;
+                if (dealerId is { } did) round.Monster(did, source).Dealt += dealt;
+            }
         }
-        if (foesHit.Count > 0)
-            foreach (string foe in foesHit) round.For(foe).Taken += a.Amount;
-        else if (target is null) round.UnknownTaken += a.Amount;
-        else round.For(target).Taken += a.Amount;
+        if (hits.Count == 0) round.UnknownTaken += a.Amount;
+        foreach ((string row, int? id, int taken) in hits)
+        {
+            round.For(row).Taken += taken;
+            if (id is { } mid) round.Monster(mid, row).Taken += taken;
+        }
+    }
+
+    // Who took a line's damage, and how much. A monster can't take more than the HP it
+    // has left: a hit past it (an 812 room spell on a 540-HP muckworm) counts only what
+    // killed it (user, 2026-09-29). HP it regained — regen, a heal — is in the estimate
+    // already. An estimate already at 0 that still takes a hit was wrong, so that hit
+    // counts in full. A room spell hits each monster once, matched to the tracker's
+    // monsters of each name in order.
+    private List<(string Row, int? Id, int Taken)> Hits(string? target, int amount, bool roomSpell)
+    {
+        List<(string, int?, int)> hits = new();
+        if (roomSpell)
+        {
+            Dictionary<string, Queue<(int Id, int Hp)>> tracked = new(StringComparer.OrdinalIgnoreCase);
+            foreach ((int id, string name, int hp) in _roomMonsters?.Invoke() ?? Array.Empty<(int, string, int)>())
+            {
+                if (!tracked.TryGetValue(name, out Queue<(int, int)>? q)) tracked[name] = q = new();
+                q.Enqueue((id, hp));
+            }
+            foreach (string foe in _foes)
+                hits.Add(tracked.TryGetValue(foe, out Queue<(int Id, int Hp)>? q) && q.Count > 0 && q.Dequeue() is var m
+                    ? (foe, m.Id, Capped(amount, m.Hp))
+                    : (foe, null, amount));
+        }
+        else if (target is not null)
+        {
+            hits.Add(IsFoe(target) && _monsterTarget?.Invoke(target) is { } m
+                ? (target, m.Id, Capped(amount, m.Hp))
+                : (target, null, amount));
+        }
+        return hits;
+    }
+
+    private static int Capped(int amount, int hpLeft) => hpLeft > 0 ? Math.Min(amount, hpLeft) : amount;
+
+    private bool IsFoe(string name)
+        => name != DamageLineAttributor.Self && _foes.Contains(name, StringComparer.OrdinalIgnoreCase);
+
+    // Every tracked monster in the room gets its own row in the round, even at zero,
+    // and each name its most-seen count.
+    private void SeedMonsters(RoundAccumulator round)
+    {
+        round.NoteCounts(_foes);
+        foreach ((int id, string name, _) in _roomMonsters?.Invoke() ?? Array.Empty<(int, string, int)>())
+            round.Monster(id, name);
     }
 
     // A room spell's line names the whole room, not a victim: "scorches your foes",
@@ -398,6 +474,7 @@ public sealed class RoundDamageTracker : IDisposable
         };
         _current.For(DamageLineAttributor.Self);
         _current.Seed(Names().Values);
+        SeedMonsters(_current);
         return _current;
     }
 
@@ -468,6 +545,7 @@ public sealed class RoundDamageTracker : IDisposable
             StartedAt:    _current.StartedAt,
             EndedAt:      endedAt,
             Combatants:   _current.Rows(KindOf),
+            EachMonster:  _current.MonsterRows(),
             UnknownDealt: _current.UnknownDealt,
             UnknownTaken: _current.UnknownTaken,
             HpBefore:     _current.HpStart,
@@ -545,8 +623,40 @@ public sealed class RoundDamageTracker : IDisposable
             foreach (string name in names) For(name);
         }
 
+        // Each monster on its own row, by id: stable while it's in the room.
+        private readonly SortedDictionary<int, Row> _monsters = new();
+        // The most of each name in the room at once this round.
+        private readonly Dictionary<string, int> _counts = new(StringComparer.OrdinalIgnoreCase);
+
+        public Row Monster(int id, string name)
+        {
+            if (!_monsters.TryGetValue(id, out Row? row)) _monsters[id] = row = new Row(name);
+            return row;
+        }
+
+        public void NoteCounts(IEnumerable<string> foes)
+        {
+            foreach (IGrouping<string, string> g in foes.GroupBy(f => f, StringComparer.OrdinalIgnoreCase))
+                _counts[g.Key] = Math.Max(_counts.GetValueOrDefault(g.Key), g.Count());
+        }
+
         public IReadOnlyList<CombatantDamage> Rows(Func<string, CombatantKind> kindOf)
-            => _rows.Values.Select(r => new CombatantDamage(r.Name, r.Dealt, r.Taken, kindOf(r.Name))).ToArray();
+            => _rows.Values.Select(r => new CombatantDamage(r.Name, r.Dealt, r.Taken, kindOf(r.Name),
+                Math.Max(1, _counts.GetValueOrDefault(r.Name)))).ToArray();
+
+        // Same-named monsters are numbered in the order they were seen: "muckworm #1",
+        // "muckworm #2"; a lone one keeps its plain name.
+        public IReadOnlyList<CombatantDamage> MonsterRows()
+        {
+            List<CombatantDamage> rows = new();
+            foreach (IGrouping<string, Row> g in _monsters.Values.GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                int n = 0, total = g.Count();
+                foreach (Row r in g)
+                    rows.Add(new CombatantDamage(total > 1 ? $"{r.Name} #{++n}" : r.Name, r.Dealt, r.Taken, CombatantKind.Monster));
+            }
+            return rows;
+        }
     }
 
     private sealed class Row(string name)

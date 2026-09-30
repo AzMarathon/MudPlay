@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.5**
-> - After a buff cast breaks sneak, the next move waits for the re-sneak instead of going out first
-> - Auto-engines reset to your base modes only when a walk-to actually arrives, not when a bank / sell detour replans it mid-route
+> **Version 3.126.8**
+> - Combat round totals: "Show how many" labels shared monster rows (muckworm x3); "One row per monster" splits them (muckworm #1, #2…)
+> - Combat round totals count a monster's damage taken, and the dealer's dealt, only up to the HP it had left
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

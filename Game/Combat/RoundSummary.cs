@@ -10,7 +10,8 @@ namespace MudPlay.Game.Combat;
 // Combatants holds one row per named combatant, the local player as
 // DamageLineAttributor.Self. UnknownDealt is damage whose dealer no line named;
 // UnknownTaken is damage whose victim none named (an area effect). HpBefore/HpAfter
-// and MaBefore/MaAfter snapshot PlayerState at StartedAt and EndedAt.
+// and MaBefore/MaAfter snapshot PlayerState at StartedAt and EndedAt. EachMonster
+// splits the monsters' rows per monster (those with HP data), numbered by name.
 public readonly record struct RoundSummary(
     int RoundNumber,
     int FightRound,
@@ -22,7 +23,8 @@ public readonly record struct RoundSummary(
     int HpBefore,
     int HpAfter,
     int MaBefore,
-    int MaAfter)
+    int MaAfter,
+    IReadOnlyList<CombatantDamage>? EachMonster = null)
 {
     // The local player's own row.
     public int DamageDealt => Self.Dealt;

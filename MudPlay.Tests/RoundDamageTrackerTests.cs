@@ -232,6 +232,105 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal(431, r.UnknownTaken);
     }
 
+    // ----- same-named monsters and the HP cap -------------------------------
+
+    // Three 540-HP muckworms and two 400-HP drowned dead, with the HP estimates wired in
+    // as the app does.
+    private static (Harness H, MonsterHpTracker Hp) MuckRoom()
+    {
+        Harness h = new();
+        MonsterHpTracker hp = new(n => n == 1 ? 540 : 400, _ => 0, () => true);
+        h.Tracker.SetMonsterHp(hp.TargetOf, hp.RoomMonsters);
+        h.Tracker.Attributed += line =>
+        {
+            if (line.Foes > 0) hp.NoteAreaDamage(line.Sides.Amount);
+            else hp.NoteDamage(line.Sides);
+        };
+        RoomEntitiesObservation room = new("Also here: muckworm, muckworm, muckworm, drowned dead, drowned dead.",
+            new[]
+            {
+                new RoomEntity("muckworm", "muckworm", EntityKind.Monster, 1),
+                new RoomEntity("muckworm", "muckworm", EntityKind.Monster, 1),
+                new RoomEntity("muckworm", "muckworm", EntityKind.Monster, 1),
+                new RoomEntity("drowned dead", "drowned dead", EntityKind.Monster, 2),
+                new RoomEntity("drowned dead", "drowned dead", EntityKind.Monster, 2),
+            }, DateTimeOffset.UtcNow);
+        hp.NoteRoomEntities(room);
+        h.Tracker.NoteRoomEntities(room);
+        h.State.InCombat = true;
+        return (h, hp);
+    }
+
+    // A monster can't take more than it has left: an 812 room spell on 540-HP
+    // muckworms counts 540 each, and we dealt what they took (user, 2026-09-29).
+    [Fact]
+    public void RoomSpell_PastAMonstersHp_CountsOnlyWhatKilledIt()
+    {
+        (Harness h, _) = MuckRoom();
+        using (h)
+        {
+            h.Feed("A hellish storm of fire and brimstone scorches your foes for 812 damage!");
+            RoundSummary r = h.CloseRound();
+
+            Assert.Equal(3 * 540, Row(r, "muckworm").Taken);
+            Assert.Equal(2 * 400, Row(r, "drowned dead").Taken);
+            Assert.Equal(3 * 540 + 2 * 400, Row(r, DamageLineAttributor.Self).Dealt);
+        }
+    }
+
+    [Fact]
+    public void Table_ShowCounts_LabelsSharedRows()
+    {
+        (Harness h, _) = MuckRoom();
+        using (h)
+        {
+            h.Feed("A hellish storm of fire and brimstone scorches your foes for 812 damage!");
+            IReadOnlyList<string> table = RoundTotalsFormatter.Table(h.CloseRound(), Everyone, showCounts: true);
+
+            Assert.Contains(table, l => l.Contains("muckworm x3"));
+            Assert.Contains(table, l => l.Contains("drowned dead x2"));
+        }
+    }
+
+    // One row per monster: a hit on a shared name lands on the first listed, a room
+    // spell on each.
+    [Fact]
+    public void Table_EachMonster_SplitsSharedNames()
+    {
+        (Harness h, _) = MuckRoom();
+        using (h)
+        {
+            h.Feed("You slash muckworm for 100 damage!");
+            h.Feed("A hellish storm of fire and brimstone scorches your foes for 300 damage!");
+            RoundSummary r = h.CloseRound();
+
+            Dictionary<string, int> taken = r.EachMonster!.ToDictionary(m => m.Name, m => m.Taken);
+            Assert.Equal(400, taken["muckworm #1"]);
+            Assert.Equal(300, taken["muckworm #2"]);
+            Assert.Equal(300, taken["muckworm #3"]);
+            Assert.Equal(300, taken["drowned dead #1"]);
+
+            IReadOnlyList<string> table = RoundTotalsFormatter.Table(r, Everyone, eachMonster: true);
+            Assert.Contains(table, l => l.Contains("muckworm #3"));
+            Assert.DoesNotContain(table, l => System.Text.RegularExpressions.Regex.IsMatch(l, @"^\[ muckworm\s+\d"));
+        }
+    }
+
+    // An estimate already at 0 that still takes a hit was wrong: that hit counts in full.
+    [Fact]
+    public void HitOnAMonsterEstimatedDead_CountsInFull()
+    {
+        (Harness h, _) = MuckRoom();
+        using (h)
+        {
+            h.Feed("You slash muckworm for 600 damage!");
+            h.Feed("You slash muckworm for 50 damage!");
+            RoundSummary r = h.CloseRound();
+
+            Assert.Equal(540 + 50, Row(r, "muckworm").Taken);
+        }
+    }
+
     // A damage shield's line names only whom it struck back at; the hit just before
     // says whose shield it was.
     [Theory]
