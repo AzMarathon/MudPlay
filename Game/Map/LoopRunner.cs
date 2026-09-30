@@ -512,6 +512,14 @@ public sealed class LoopRunner : IRecoverableEngine
             return;
         }
 
+        // A flee pulled us back from the step's room: walk back to it and carry on
+        // from there, rather than re-planning the lap from wherever the flee
+        // stopped. Re-planning restarted the loop at the nearest waypoint — for a
+        // hit-and-run that walked away from the monster it had just backstabbed
+        // instead of re-sneaking back in (report paradigm-20260929-221352).
+        if (_resumingAfterFlee && _expectedMoveTarget is { } fledFrom && StartFleeReturn(fledFrom, recoveredAnchor))
+            return;
+
         // Desync: the gate recovered us to a real room that isn't the step's
         // expected target. Rather than fail to Idle, reroute the loop from where we
         // actually ended up (the gate call is terminal — FinishTier3Success does
@@ -523,6 +531,63 @@ public sealed class LoopRunner : IRecoverableEngine
             _log?.Warn("LoopRunner",
                 $"ResumeAfterRecovery: desync at step {_index + 1} — recovered at {recoveredAnchor} but expected {_expectedMoveTarget}; rerouting from re-determined room");
         EnterRecovery($"step {_index + 1} desynced (recovered at {recoveredAnchor})");
+    }
+
+    // The room a flee is walking us back to, so the step it interrupted can count as
+    // arrived and the lap carries on from there. Null when no flee return is walking.
+    private RoomKey? _fleeReturnTarget;
+
+    // Walk back to the room the interrupted step was headed for. The walk goes
+    // through the walker like an approach — sneaking before each move, pausing for
+    // combat — and OnWalkerEvent hands off to ContinueAfterFleeReturn. False when
+    // there's no walker or no path back, leaving the caller to re-plan instead.
+    private bool StartFleeReturn(RoomKey target, RoomKey from)
+    {
+        if (_walker is null || _bfs is null || _bfs.FindPath(from, target, _filter) is null) return false;
+        _log?.Info("LoopRunner",
+            $"ResumeAfterFlee: landed at {from}; walking back to {target} to carry on at step {_index + 1}");
+        _recovery?.Detach();
+        _stepInFlight = false;
+        _fleeReturnTarget = target;
+        _approachTarget = target;
+        State = LoopState.Approaching;
+        Raise(new LoopEvent(LoopEventKind.Resumed, $"walking back to {target} after a flee"));
+        if (_walker.WalkTo(target)) return true;
+        _fleeReturnTarget = null;
+        _approachTarget = null;
+        State = LoopState.Paused;
+        return false;
+    }
+
+    // Back in the room the fled-from step was headed for: that step has landed, so
+    // advance from it exactly as a recovery landing on target does.
+    private void ContinueAfterFleeReturn()
+    {
+        RoomKey? target = _fleeReturnTarget;
+        _fleeReturnTarget = null;
+        State = LoopState.Running;
+        _recovery?.Attach(this);
+        _log?.Info("LoopRunner", $"flee return reached {target}; carrying on from step {_index + 1}");
+        if (_coordinator.IsPaused)
+        {
+            // Hold for the gate (a fight in the room we came back to). The step reads
+            // as in flight to its target, so the resume's arrived-during-pause check
+            // advances past it instead of re-sending it.
+            _stepInFlight = true;
+            _expectedMoveTarget = target;
+            State = LoopState.Paused;
+            Raise(new LoopEvent(LoopEventKind.Paused, "coordinator paused"));
+            return;
+        }
+        AdvanceStep();
+    }
+
+    // The approach walk's end: a flee return carries on mid-lap; a real approach
+    // starts the lap.
+    private void EnterCircleAfterApproach()
+    {
+        if (_fleeReturnTarget is not null) ContinueAfterFleeReturn();
+        else BeginCircle();
     }
 
     public void AbortFromRecoveryFailure(string detail)
@@ -1090,10 +1155,20 @@ public sealed class LoopRunner : IRecoverableEngine
                         return;
                     }
                     if (State != LoopState.Approaching) return;
-                    BeginCircle();
+                    EnterCircleAfterApproach();
                 });
                 break;
             case WalkEventKind.Failed:
+                // A walk back after a flee that can't finish re-plans the lap from
+                // where we are, as a flee did before the walk back existed.
+                if (_fleeReturnTarget is not null)
+                {
+                    _log?.Info("LoopRunner", $"flee return failed ({e.Detail}); re-planning from here");
+                    _fleeReturnTarget = null;
+                    _approachTarget = null;
+                    StartInternal(_loop!, isRecovery: true);
+                    break;
+                }
                 // Walker gave up (tier-3 abort, blocked, no path, etc.).
                 _log?.Warn("LoopRunner",
                     $"approach failed: {e.Detail}");
@@ -1975,6 +2050,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _expectedMoveTarget = null;
         _expectedMoveSource = null;
         _approachTarget = null;
+        _fleeReturnTarget = null;
         State = LoopState.Recovering;
         Raise(new LoopEvent(LoopEventKind.Paused, $"recovering: {reason}"));
 
@@ -2112,7 +2188,7 @@ public sealed class LoopRunner : IRecoverableEngine
                 _approachFinishedWhilePaused = false;
                 _log?.Info("LoopRunner",
                     "coordinator resumed; approach already finished, entering circle");
-                BeginCircle();
+                EnterCircleAfterApproach();
                 return;
             }
             // Walker is still mid-approach — put the runner back into Approaching
@@ -2381,6 +2457,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _expectedMoveTarget = null;
         _expectedMoveSource = null;
         _approachTarget = null;
+        _fleeReturnTarget = null;
         _circleStartRoom = null;
         _firstWaypointReached = false;
         _suppressFirstWaypointEvent = false;

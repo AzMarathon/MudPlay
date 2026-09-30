@@ -17,8 +17,8 @@ public readonly record struct TrapDisarmOdds(int Skill, int Disarm, int SafeMiss
         return new TrapDisarmOdds(skill, disarm, safeMiss, 100 - disarm - safeMiss);
     }
 
-    // "disarm ~71%, springs 19%" — the route-details and map-tooltip suffix.
-    public string Summary => Springs > 0
-        ? $"disarm ~{Disarm}%, springs {Springs}%"
-        : $"disarm ~{Disarm}%, never springs";
+    // "disarm ~71%, failure (no dmg) 10%, failure (dmg) 19%" — the route-details and
+    // map-tooltip suffix: the safe miss and the miss that sets the trap off.
+    public string Summary =>
+        $"disarm ~{Disarm}%, failure (no dmg) {SafeMiss}%, failure (dmg) {Springs}%";
 }

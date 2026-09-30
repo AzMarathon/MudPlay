@@ -229,7 +229,7 @@ public sealed class CurrentRouteDetailsTests : IDisposable
             _ => Array.Empty<RoomDetailLink>(), _ => { }, _ => null, ItemLink, maxHp: 300,
             disarmOdds: TrapDisarmOdds.For(71));
 
-        Assert.Equal("trap: 36 dmg (~12% of HP) · disarm ~71%, springs 19%", rows[1].TrapText);
+        Assert.Equal("trap: 36 dmg (~12% of HP) · disarm ~71%, failure (no dmg) 10%, failure (dmg) 19%", rows[1].TrapText);
     }
 
     [Fact]

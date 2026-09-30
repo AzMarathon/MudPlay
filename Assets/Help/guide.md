@@ -543,14 +543,19 @@ The requirement line names everything you'll need — and for a counter it can s
 
 Both cards show their trap count. Click either route to preview its line on the map, then **Go**. When no route crosses fewer traps than the shortest, there's nothing to weigh, so the walk just proceeds and disarms en route as before.
 
-When a route (the one you're walking, or a queued preview) crosses a trap, its **Details…** view flags that step in **red** with the trap's damage related to your HP — e.g. *trap: 36 dmg (~11% of HP)* — so you can see the hit each trapped step on the path would land. If you have the Traps skill, the step also shows your odds of disarming it: *trap: 36 dmg (~11% of HP) · disarm ~71%, springs 19%*. The map's room tooltip and the room info panel show the same odds on a trapped exit (*Trap: 40 dmg, disarm ~71%, springs 19%*).
+When a route (the one you're walking, or a queued preview) crosses a trap, its **Details…** view flags that step in **red** with the trap's damage related to your HP — e.g. *trap: 36 dmg (~11% of HP)* — so you can see the hit each trapped step on the path would land. If you have the Traps skill, the step also shows your odds of disarming it: *trap: 36 dmg (~11% of HP) · disarm ~71%, failure (no dmg) 10%, failure (dmg) 19%*. The map's room tooltip and the room info panel show the same odds on a trapped exit (*Trap: 40 dmg, disarm ~71%, failure (no dmg) 10%, failure (dmg) 19%*).
 
 **How Traps and disarming work.** Finding a trap and disarming it are two separate skills that start from the same number:
 
 - **The base** is `(INT + AGL + CHM×2 + level×28) ÷ 7`. Charm counts double, and past level 15 each level counts half. Only a class or race with the trap skill has it (Missionary, Ninja, Thief, Bard, Gypsy; Gnome on Paradigm).
 - **Traps**, the number `stat` shows, is your **find** skill: the base plus any +Traps gear. Searching an exit (`sea <dir>`) finds a trap if a roll of 0–100 comes in under it; otherwise you *notice nothing different*, even though the trap is there.
 - **Your disarm skill** is never shown. It's the base plus any +Disarm Traps gear. **+Traps gear (the thief's kit, dark onyx ring and similar) helps you find traps, not disarm them.** Without trap gear, the two are the same number.
-- **A disarm** (`disarm trap <dir>`) rolls 0–100 against your disarm skill: under it disarms the trap; the next 10 points above it is a safe miss (*You failed to disarm any trap…*), and you can try again; anything higher **springs the trap**, for half to all of its damage. So with a skill of 71: about 71% disarm, 10% safe miss, 19% springs. At 90 and up a trap never springs.
+- **A disarm** (`disarm trap <dir>`) rolls 0–100 against your disarm skill:
+  - **under it:** the trap is disarmed;
+  - **the next 10 points above it: failure (no dmg).** *You failed to disarm any trap…*, nothing happens, and you can try again;
+  - **anything higher: failure (dmg).** The trap goes off, for half to all of its damage.
+
+  So with a skill of 71: about 71% disarm, 10% failure (no dmg), 19% failure (dmg). At 90 and up, a failure never does damage.
 - **Searching first doesn't help.** A search only tells you the trap is there; it gives no bonus to the disarm, and it ends a sneak. MudPlay knows every trapped exit from the game data, so it never searches and goes straight to the disarm, retrying a safe miss up to **@trap max disarms** times.
 - **A disarm ends a sneak too**, so with auto-sneak on MudPlay re-sneaks before stepping through.
 
@@ -2652,6 +2657,8 @@ It runs the way *Run distance* and *Go backwards if running* set for any flee, o
 - **other monsters are in the room**, even if the backstab killed its target;
 - **your sneak broke on the way in:** `You make a sound as you enter the room!`, or no `Sneaking...` on arrival, so the backstab would fail;
 - **a fight would start without a backstab:** a monster walks in after the room is clear, or one chases you.
+
+**After a run, a loop walks straight back to the room it fled, sneaking, and carries on from there.** It doesn't restart the lap from the nearest waypoint. This applies to any flee on a loop, not just hit and run.
 
 It includes everything *Run if BS fails* does, which is why that box greys out while this is on. It runs the way *Run distance* and *Go backwards if running* set for any flee, and needs **Do BS attacks** and a running loop or walk.
 
