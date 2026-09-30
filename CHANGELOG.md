@@ -1,10 +1,11 @@
 # Version history
 
-## 3.126.20
+## 3.126.21
 
 - After a flee (hit and run or a low-health run), a loop walks back to the room it fled and carries on the lap, re-sneaking, instead of restarting from the nearest waypoint
 - Trap disarm odds read disarm / failure (no dmg) / failure (dmg)
-- bug reports addressed: paradigm-20260929-221352
+- "No combat during an auto-sell detour / auto-deposit trip" flips the Auto-Combat toggle itself, and only once the detour has left the loop's rooms
+- bug reports addressed: paradigm-20260929-221352, paradigm-20260929-224330
 
 ## 3.126.18
 

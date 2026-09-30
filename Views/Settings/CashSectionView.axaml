@@ -149,10 +149,10 @@
                 <TextBlock Classes="SectionHeader" Text="Detours"/>
                 <CheckBox Content="No combat during an auto-sell detour"
                           IsChecked="{Binding NoCombatOnSellDetour, Mode=TwoWay}"
-                          ToolTip.Tip="While a loop or Auto-Lair turns aside to sell an item (an item's 'Make detours to sell it'), don't start fights — walk past hostiles as if Auto-Combat were off — until the detour is back and the loop picks up again. A rest that triggers on the way still clears the room first. Your Auto-Combat toggle isn't changed."/>
+                          ToolTip.Tip="Turns Auto-Combat off while a loop or Auto-Lair turns aside to sell an item (an item's 'Make detours to sell it'), once the detour has left the loop's rooms, and back on when it's back or done. A rest on the way still clears the room first."/>
                 <CheckBox Content="No combat during an auto-deposit trip"
                           IsChecked="{Binding NoCombatOnDepositTrip, Mode=TwoWay}"
-                          ToolTip.Tip="While auto-deposit takes a loop or Auto-Lair to the bank (or an off-route stash room) and back, don't start fights — walk past hostiles as if Auto-Combat were off — until it's back and the loop picks up again. A rest that triggers on the way still clears the room first. Your Auto-Combat toggle isn't changed."/>
+                          ToolTip.Tip="Turns Auto-Combat off while auto-deposit takes a loop or Auto-Lair to the bank (or an off-route stash room), once the trip has left the loop's rooms, and back on when it's back or done. A rest on the way still clears the room first."/>
 
                 <!-- ============ Collection Rules ============ -->
                 <TextBlock Classes="SectionHeader" Text="Collection Rules"/>

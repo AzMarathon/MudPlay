@@ -108,6 +108,9 @@ public sealed class SellDetourManager : IDisposable
 
     public bool IsDetouring => _phase != Phase.Idle;
 
+    // The engine this detour will pick back up (meaningful while it runs).
+    public DetourResume ResumePlan => _resume;
+
     // One-line status for the bug report.
     public string Status
     {

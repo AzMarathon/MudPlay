@@ -1837,6 +1837,9 @@ public sealed class AppServices
     // loop or Auto-Lair aside to a shop that trades it (see SellDetourManager).
     public Game.Inventory.SellDetourManager SellDetour { get; private set; } = null!;
 
+    // Decides when a sell / deposit detour holds Auto-Combat off (outside the loop's rooms).
+    public Game.Cash.DetourCombatHold DetourCombat { get; private set; } = null!;
+
     // Active set's MonsterOverlay seed — Defaults-tier baseline for
     // per-monster automation behavior (relationship / priority /
     // DontBackstab). Realm flavor is auto-picked from
@@ -7339,6 +7342,17 @@ public sealed class AppServices
             log: Log);
         Tick.HeartbeatElapsed += SellDetour.Evaluate;
         Inventory.Changed += SellDetour.Evaluate;
+        // Settings → Cash + Items "No combat during a detour": holds the real Auto-Combat
+        // toggle off once a detour leaves its loop's rooms (the main window flips it).
+        DetourCombat = new Game.Cash.DetourCombatHold(
+            selling: () => SellDetour.IsDetouring, sellResume: () => SellDetour.ResumePlan,
+            depositing: () => AutoDeposit.IsRerouting, depositResume: () => AutoDeposit.ResumePlan,
+            readCash: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash"),
+            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement),
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
+            log: Log);
+        RoomTracker.StateChanged += _ => DetourCombat.Evaluate();
+        Tick.HeartbeatElapsed += DetourCombat.Evaluate;
         // Return-leg light provisioning: the reroute owns the walker end-to-end, so
         // the reactive shop router is suppressed (IsRerouting) — this manager runs
         // its own bank -> shop -> origin light detour and needs the `i` dump to
@@ -8101,19 +8115,6 @@ public sealed class AppServices
     // left untouched so it still shows the user's real ON/OFF.
     private bool CombatSuppressedInCurrentRoom()
     {
-        if (DetourSuppressesCombat() is { } detour)
-        {
-            if (detour != _lastDetourCombatOff)
-                Log.Combat("Combat", $"combat off for the {detour} (Settings → Cash + Items)");
-            _lastDetourCombatOff = detour;
-            return true;
-        }
-        if (_lastDetourCombatOff is not null)
-        {
-            Log.Combat("Combat", $"{_lastDetourCombatOff} over — combat back on");
-            _lastDetourCombatOff = null;
-        }
-
         (Game.Map.RoomKey? evalKey, bool suppressed, _) = CombatSuppressionVerdict();
 
         // Edge-trigger a Combat-log line on transition — the three gate Funcs
@@ -8131,23 +8132,6 @@ public sealed class AppServices
     }
     private bool _lastCombatSuppressed;
     private Game.Map.RoomKey? _lastCombatSuppressedRoom;
-    private string? _lastDetourCombatOff;
-
-    // The detour holding combat off, when its Settings → Cash + Items box is ticked:
-    // an auto-sell detour or an auto-deposit trip, from leaving the loop until it's
-    // back and resumed. Null when neither applies.
-    // The combat gates call this constantly, so the settings are read only while a
-    // detour runs; the managers are built after the gates are wired.
-    public string? DetourSuppressesCombat()
-    {
-        bool selling = SellDetour is not null && SellDetour.IsDetouring;
-        bool depositing = AutoDeposit is not null && AutoDeposit.IsRerouting;
-        if (!selling && !depositing) return null;
-        Models.Profile.CashSettings cash = ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
-        if (selling && cash.NoCombatOnSellDetour) return "auto-sell detour";
-        if (depositing && cash.NoCombatOnDepositTrip) return "auto-deposit trip";
-        return null;
-    }
 
     // The loop combat-suppression decision the engage gates act on: the room it was
     // judged against, whether combat is suppressed there, and whether that room is the

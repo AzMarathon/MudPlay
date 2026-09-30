@@ -3197,7 +3197,14 @@ Stashing isn't affected; it's governed by the coin-type filter below.
 ### No combat during an auto-sell detour / an auto-deposit trip
 
 **Default:** both Off
-**What it does:** While a loop or Auto-Lair is out on a detour — turning aside to sell an item (an item's *Make detours to sell it*), or auto-depositing at the bank or an off-route stash room — don't start fights: hostiles are walked past as if **Auto-Combat** were off, from leaving the loop until the detour is back and the loop picks up again. Your Auto-Combat toggle itself isn't changed. A rest that triggers on the way still clears the room first, the same as a loop room marked *do not attack*. The program log notes when combat goes off and back on, and the bug report shows it.
+**What it does:** Turns **Auto-Combat** off while a loop or Auto-Lair is out on a detour, and back on when it's done. A detour is turning aside to sell an item (an item's *Make detours to sell it*), or auto-depositing at the bank or an off-route stash room.
+
+- **From a loop:** combat stays on while you're still among the loop's rooms, since a trip can start mid-loop. It goes off once the detour leaves them, and back on when you're back among them or the detour ends.
+- **From Auto-Lair:** there's no fixed area, so it's off for the whole trip.
+- **It flips the real toolbar toggle,** so everything Auto-Combat off already does applies. For example, a rest that triggers on the way still clears the room first.
+- **Your own changes win.** It only turns back on a toggle it turned off, so if you change Auto-Combat yourself during the trip, that stays.
+
+The program log notes each flip, and the bug report shows whether a detour is holding combat off.
 
 ### Don't collect if it makes you Light / Medium / Heavy
 

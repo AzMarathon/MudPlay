@@ -64,10 +64,9 @@ public sealed class CashSettings
     // off. Banking (which needs its own walk to the bank) is unaffected.
     public bool StashAsFollower { get; set; }
 
-    // Hold combat off while a detour takes us out of the loop / auto-lair — an
-    // auto-sell detour, or an auto-deposit trip to the bank or stash — until it's
-    // back and the engine resumes. The room is treated as if Auto-Combat were off
-    // (a rest there still fights to clear it). Default off.
+    // Turn Auto-Combat off during a detour — an auto-sell detour, or an auto-deposit
+    // trip to the bank or stash — once it has left the loop's rooms, and back on when
+    // it's back or over (Game.Cash.DetourCombatHold). Default off.
     public bool NoCombatOnSellDetour { get; set; }
     public bool NoCombatOnDepositTrip { get; set; }
 
