@@ -4747,9 +4747,11 @@ public sealed class AppServices
             MonsterHp.MaxHp, MonsterHp.HpRegen,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud, log: Log);
         RoomClassifier.EntitiesObserved += MonsterHpEstimates.NoteRoomEntities;
-        // The round ledger caps a monster's damage taken at the HP it had left, and
-        // numbers same-named monsters, off these estimates.
-        RoundDamage.SetMonsterHp(MonsterHpEstimates.TargetOf, MonsterHpEstimates.RoomMonsters);
+        // The round ledger numbers same-named monsters off these estimates, and with
+        // Settings → Combat "Cap at monster HP" caps a monster's damage taken at the HP
+        // it had left.
+        RoundDamage.SetMonsterHp(MonsterHpEstimates.TargetOf, MonsterHpEstimates.RoomMonsters,
+            capAtHp: () => ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat").CapRoundTotalsAtMonsterHp);
         RoundDamage.Attributed += line =>
         {
             if (line.Foes > 0) MonsterHpEstimates.NoteAreaDamage(line.Sides.Amount);

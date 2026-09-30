@@ -236,11 +236,11 @@ public sealed class RoundDamageTrackerTests
 
     // Three 540-HP muckworms and two 400-HP drowned dead, with the HP estimates wired in
     // as the app does.
-    private static (Harness H, MonsterHpTracker Hp) MuckRoom()
+    private static (Harness H, MonsterHpTracker Hp) MuckRoom(bool capAtHp = true)
     {
         Harness h = new();
         MonsterHpTracker hp = new(n => n == 1 ? 540 : 400, _ => 0, () => true);
-        h.Tracker.SetMonsterHp(hp.TargetOf, hp.RoomMonsters);
+        h.Tracker.SetMonsterHp(hp.TargetOf, hp.RoomMonsters, () => capAtHp);
         h.Tracker.Attributed += line =>
         {
             if (line.Foes > 0) hp.NoteAreaDamage(line.Sides.Amount);
@@ -275,6 +275,24 @@ public sealed class RoundDamageTrackerTests
             Assert.Equal(3 * 540, Row(r, "muckworm").Taken);
             Assert.Equal(2 * 400, Row(r, "drowned dead").Taken);
             Assert.Equal(3 * 540 + 2 * 400, Row(r, DamageLineAttributor.Self).Dealt);
+        }
+    }
+
+    // With Cap at monster HP off, every line counts the number the game printed.
+    [Fact]
+    public void CapOff_KillingBlowCountsInFull()
+    {
+        (Harness h, _) = MuckRoom(capAtHp: false);
+        using (h)
+        {
+            h.Feed("You slash muckworm for 500 damage!");
+            h.Feed("You slash muckworm for 80 damage!");
+            h.Feed("A hellish storm of fire and brimstone scorches your foes for 812 damage!");
+            RoundSummary r = h.CloseRound();
+
+            Assert.Equal(580 + 3 * 812, Row(r, "muckworm").Taken);
+            Assert.Equal(2 * 812, Row(r, "drowned dead").Taken);
+            Assert.Equal(580 + 5 * 812, Row(r, DamageLineAttributor.Self).Dealt);
         }
     }
 

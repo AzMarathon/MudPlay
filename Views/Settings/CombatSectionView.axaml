@@ -696,6 +696,10 @@
                                  IsChecked="{Binding ShowCombatRoundTotalsEachMonster, Mode=TwoWay}"
                                  ToolTip.Tip="Give each monster its own row (muckworm #1, #2…). A hit on a shared name goes to the first one listed in Also here:, as the HP estimates do; a room spell hits each."/>
                 </WrapPanel>
+                <CheckBox Content="Cap at monster HP" Margin="24,0,0,0"
+                          IsEnabled="{Binding ShowCombatRoundTotals}"
+                          IsChecked="{Binding CapRoundTotalsAtMonsterHp, Mode=TwoWay}"
+                          ToolTip.Tip="Count a monster's damage taken, and its attacker's damage dealt, only up to the HP it had left, so a killing blow counts just what killed it. Off: every hit counts the number the game printed."/>
 
             </StackPanel>
         </Grid>

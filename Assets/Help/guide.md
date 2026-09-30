@@ -2897,7 +2897,7 @@ A choice below them sets how same-named monsters show — one or the other:
 - **Stack same-named monsters (muckworm x3)** (the default) puts them on one row labelled with how many there were, so a room spell's 2436 taken reads as three muckworms' worth.
 - **One row per monster** gives each monster its own row (`muckworm #1`, `#2`, …). A hit on a shared name goes to the first one listed in *Also here:* (the same rule the monster HP estimates use), and a room spell hits each. It needs the monster's HP from game data; one without it stays on a stacked row.
 
-A monster **can't take more damage than it has left**: an 812 room spell on a 540-HP muckworm counts as 540 taken, and 540 dealt by the caster, so Dealt and Taken agree. The HP used is the monster's running estimate, which includes regen and whatever your `look`s showed.
+**Cap at monster HP** (Off by default) counts a monster's damage only up to the HP it had left, the way the game applies it: a monster **can't take more damage than it has left**, so an 812 room spell on a 540-HP muckworm counts as 540 taken and 540 dealt by the caster, and a killing blow counts just what killed it (an 80 slash on a monster with 19 HP left reads 19). The HP used is the monster's running estimate, which includes regen and whatever your `look`s showed. With it **off**, every hit counts the number the game printed, so a killing blow reads in full and a monster's Taken can run past its max HP. The Player Statistics panel's per-round damage follows the same choice.
 
 **Important notes:**
 - **How damage is credited.** Each "… for N damage!" line is read against the room's occupants (from *Also here:*), your party and "you". "Bob slashes large orc for 30" credits Bob, and "The large orc claws you with its pincers for 12" is damage you took from the orc.
@@ -4089,6 +4089,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Drain (life-steal) spell + HP trigger + Drains override AOE | unset / 50% / off | spell code + MaxCastsPerRoom + MinManaPerCast; DrainHpTrigger(0-100); DrainsOverrideAoe(bool) | `DrainSpell`, `DrainHpTrigger`, `DrainsOverrideAoe` | Models/Profile/CombatSettings.cs |
 | Show combat round totals | `false` | bool | `ShowCombatRoundTotals` | Models/Profile/CombatSettings.cs |
 | Round totals rows: Me / Party / Other players / Monsters | `false` each | bool | `ShowCombatRoundTotalsSelf` / `…Party` / `…Players` / `…Monsters` | Models/Profile/CombatSettings.cs |
+| Round totals: Cap at monster HP | `false` | bool | `CapRoundTotalsAtMonsterHp` | Models/Profile/CombatSettings.cs |
 
 ### Spells / Health
 

@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.131.0**
-> - Exp/Hr Estimator: Rank areas at level plays your character through a lair tour of every hunting area you can reach from where you stand at that level (level-gated boats, portals and exits judged at that level), safe areas best first
-> - Your own saved loops rank alongside the areas (★), simulated at that level, with what you actually made on each from your logs
-> - Pick a ranked row to load its tour or loop on the map; options where you died are listed last
-> - Ranking shows its progress, keeps the client responsive and can be cancelled; each option gets your Runs × Hours
-> - The top of the ranking is in the bug report and the program log
+> **Version 3.131.1**
+> - Combat round totals: new **Cap at monster HP** box; off (the default) counts every hit as printed again, so a killing blow reads in full
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
