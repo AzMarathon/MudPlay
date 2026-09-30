@@ -4167,6 +4167,9 @@ public sealed class AppServices
         // lands in MainWindowViewModel alongside the other line
         // consumers.
         Conditions = new Game.Conditions.ConditionTracker(Messages, Log);
+        // Stock's `stat` lists each active effect as its bare applied line; the stat
+        // screen around it is what marks it a readout, not a cast.
+        Conditions.SetStatScreenProbe(() => Stats.InStatScreen);
         // Watches the same wire for lines neither the message catalogue above nor any
         // registered Router pattern recognizes, staging them as review candidates.
         // AttachLineExtractor lands in MainWindowViewModel alongside the other line
@@ -4748,8 +4751,7 @@ public sealed class AppServices
         // Running HP estimate per monster in the room: max HP less the damage the round
         // ledger saw, plus regen, pulled into the wound band by every `look`.
         MonsterHpEstimates = new Game.Combat.MonsterHpTracker(
-            MonsterHp.MaxHp, MonsterHp.HpRegen,
-            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud, log: Log);
+            MonsterHp.MaxHp, MonsterHp.HpRegen, log: Log);
         RoomClassifier.EntitiesObserved += MonsterHpEstimates.NoteRoomEntities;
         // The round ledger numbers same-named monsters off these estimates, and with
         // Settings → Combat "Cap at monster HP" caps a monster's damage taken at the HP
@@ -8305,7 +8307,7 @@ public sealed class AppServices
         var world = new Game.Simulation.SimWorld(
             MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife,
             ExpResolver.DeathSummonsOf,
-            n => SpellCatalog.GetFormulaByNumber(n) is { } f ? Game.Simulation.SimProc.From(f) : null);
+            n => SpellCatalog.GetFormulaByNumber(n) is { } f ? Game.Simulation.SimProc.From(f, GameData.ActiveRealm) : null);
         return (character, world);
     }
 

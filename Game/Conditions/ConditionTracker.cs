@@ -117,6 +117,14 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _messages.Messages.CollectionChanged += OnMessagesChanged;
     }
 
+    // Whether the line being read is part of a `stat` screen. Stock lists each active
+    // effect there as its bare applied line, word for word the fresh-cast text, so
+    // only the screen around it tells a readout from a cast (GAME_MECHANICS "The
+    // `stat` screen's buff readout is never a fresh cast"). Unbound, nothing counts
+    // as a readout but Paradigm's countdown form.
+    private Func<bool>? _inStatScreen;
+    public void SetStatScreenProbe(Func<bool> inStatScreen) => _inStatScreen = inStatScreen;
+
     // Bind to the per-session LineExtractor so every inbound line is scanned.
     // Idempotent — re-attaching to the same extractor is a no-op.
     public void AttachLineExtractor(LineExtractor lines)
@@ -334,14 +342,15 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             }
         }
 
-        // A "You feel X! (Ns)" line is Paradigm's `stat` status readout of an ALREADY-up
-        // effect (trailing remaining-time), NOT a fresh cast. Its effect text is shared
-        // across many records (one line names 11), so it can neither identify which buff
-        // is up nor legitimately "apply" one — matching it falsely latched buffs on login
-        // and suppressed the real cast's confirm. Buff timers anchor on the typed cast
-        // code instead; a genuine fresh-cast effect line carries no parenthetical.
+        // A `stat` status readout of an ALREADY-up effect is NOT a fresh cast: Paradigm's
+        // "You feel X! (Ns)" carries a remaining-time tail, Stock's is the bare applied
+        // line inside the stat screen. Its effect text is shared across many records
+        // (one line names 11), so it can neither identify which buff is up nor
+        // legitimately "apply" one — matching it falsely latched buffs on login, armed
+        // their timers at full duration, and suppressed the real cast's confirm. Buff
+        // timers anchor on the typed cast code instead.
         MessageRecord? actionFailed = null;
-        if (!StatusEffectReadout().IsMatch(text))
+        if (!StatusEffectReadout().IsMatch(text) && _inStatScreen?.Invoke() != true)
             foreach ((string pattern, MessageRecord r) in _appliedIndex)
             {
                 if (!text.Contains(pattern, StringComparison.Ordinal)) continue;

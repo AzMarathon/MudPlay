@@ -15,7 +15,7 @@ namespace MudPlay.Game.Spells;
 public static class SpellCalculator
 {
     // MajorMUD ability codes that carry a damage/heal magnitude.
-    private const int AbilDamage = 1;     // direct damage
+    public const int AbilDamage = 1;      // direct damage
     private const int AbilDrain = 8;      // life drain (damage, or heal when bHealsInstead)
     private const int AbilDamageMr = 17;  // damage ignoring magic resistance
     private const int AbilHeal = 18;      // healing

@@ -10,12 +10,15 @@ public static class CombatCalculator
 {
     // ----- Constants -------------------------------------------------------
 
-    // Stock hit-chance floor.
-    public const int STOCK_HIT_MIN = 8;
+    // Stock landing-chance floor and ceiling: the engine clamps the chance to 10–99
+    // and hits only on a d100 roll under it, so a hit lands on clamp − 1 percent
+    // (GAME_MECHANICS "To-hit floor — the minimum chance a monster can ever land, by
+    // realm and armour type").
+    private const int STOCK_ENGINE_CLAMP_MIN = 10, STOCK_ENGINE_CLAMP_MAX = 99;
+    public const int STOCK_HIT_MIN = STOCK_ENGINE_CLAMP_MIN - 1;
     // ParaMUD hit-chance floor (1 against light armour types <= 6).
     public const int PARAMUD_HIT_MIN = 2;
-    // Stock hit-chance ceiling.
-    public const int STOCK_HIT_CAP = 99;
+    public const int STOCK_HIT_CAP = STOCK_ENGINE_CLAMP_MAX - 1;
     // ParaMUD hit-chance ceiling.
     public const int PARAMUD_HIT_CAP = 100;
     // Stock dodge ceiling.
@@ -119,7 +122,9 @@ public static class CombatCalculator
 
         int hitMin = GetHitMin(defenderArmourType, realmType);
         int hitMax = realmType == RealmType.ParaMud ? PARAMUD_HIT_CAP : STOCK_HIT_CAP;
-        hitChance = Math.Clamp(hitChance, hitMin, hitMax);
+        hitChance = realmType == RealmType.ParaMud
+            ? Math.Clamp(hitChance, hitMin, hitMax)
+            : Math.Clamp(hitChance, STOCK_ENGINE_CLAMP_MIN, STOCK_ENGINE_CLAMP_MAX) - 1;
 
         int dodgePercent = 0;
         if (realmType == RealmType.ParaMud)
@@ -167,7 +172,7 @@ public static class CombatCalculator
         return vileWard / 10;
     }
 
-    // Hit-chance floor. ParaMUD: 2 (1 against light armour type <= 6). Stock: 8.
+    // Hit-chance floor. ParaMUD: 2 (1 against light armour type <= 6). Stock: 9.
     private static int GetHitMin(int defenderArmourType, RealmType realmType)
     {
         if (realmType == RealmType.ParaMud)

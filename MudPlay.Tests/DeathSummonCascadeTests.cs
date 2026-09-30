@@ -89,4 +89,19 @@ public sealed class DeathSummonCascadeTests
         CascadeResult r = Run(new() { [1] = 10 }, new(), seed: 1, count: 50);
         Assert.Equal(20, r.Kills, 3);
     }
+
+    // Stock: a 15-monster room, each summon placed on its own — 15 summoners of two
+    // fill the next tier to exactly 15, where whole casts would stop at 14.
+    [Fact]
+    public void Stock_PlacesSummonsOneByOneUnderA15Cap()
+    {
+        (int cap, bool whole) = DeathSummonCascade.RulesFor(MudPlay.Game.RealmType.Stock);
+        CascadeResult stock = DeathSummonCascade.Simulate(1, 15, id => id == 1 ? 100 : 10,
+            id => id == 1 ? new[] { 2, 2 } : null, cap, wholeCasts: whole);
+        CascadeResult para = DeathSummonCascade.Simulate(1, 15, id => id == 1 ? 100 : 10,
+            id => id == 1 ? new[] { 2, 2 } : null, 15, wholeCasts: true);
+
+        Assert.Equal(15 + 15, stock.Kills, 3);
+        Assert.Equal(15 + 14, para.Kills, 3);
+    }
 }

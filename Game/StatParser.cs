@@ -89,6 +89,11 @@ public sealed partial class StatParser : IDisposable
     // True once any stat-screen line has been parsed this session.
     public bool HasParsed { get; private set; }
 
+    // A stat screen is printing: its scan window is open and has captured a field, so
+    // the lines until its closing prompt (the active-effect list among them) belong
+    // to it.
+    public bool InStatScreen => _windowOpenedAt is not null && _capturedThisArm;
+
     // Fires once per scan window AFTER one or more fields commit and the gate
     // closes (whatever the close reason — prompt, expiry, etc.). Carries a
     // fresh LastKnownStats snapshot built from the current Stats values.
@@ -399,9 +404,8 @@ public sealed partial class StatParser : IDisposable
             CloseGate("window expired");
             return;
         }
-        bool hadParsed = HasParsed;
         ScanLine(text);
-        if (HasParsed && !hadParsed) _capturedThisArm = true;
+        if (_fieldsCapturedThisArm > 0) _capturedThisArm = true;
     }
 
     private void OnLine(LineExtractor.EmittedLine line)
@@ -446,10 +450,9 @@ public sealed partial class StatParser : IDisposable
             return;
         }
 
-        bool hadParsed = HasParsed;
         int capturedBefore = _fieldsCapturedThisArm;
         ScanLine(line.Text);
-        if (HasParsed && !hadParsed) _capturedThisArm = true;
+        if (_fieldsCapturedThisArm > 0) _capturedThisArm = true;
         // A field committed on this line — (re)arm the idle settle-close from the
         // latest capture, so a stat screen with no trailing prompt still closes.
         if (_fieldsCapturedThisArm > capturedBefore) RestartSettleClose();

@@ -11,7 +11,6 @@ public sealed class MonsterHpTrackerTests
     private sealed class Harness
     {
         public DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
-        public bool Paradigm = true;
         public MonsterHpTracker Tracker { get; }
 
         // #1 orc: 100 HP, regen 10. #2 rat: 12 HP, regen 1.
@@ -19,7 +18,7 @@ public sealed class MonsterHpTrackerTests
             => Tracker = new MonsterHpTracker(
                 n => n switch { 1 => 100, 2 => 12, _ => null },
                 n => n switch { 1 => 10, 2 => 1, _ => 0 },
-                () => Paradigm, () => Now);
+                () => Now);
 
         public void Room(RoomObservationSource source, params (string Name, int Number)[] monsters)
             => Tracker.NoteRoomEntities(new RoomEntitiesObservation("",
@@ -44,12 +43,12 @@ public sealed class MonsterHpTrackerTests
         Assert.Equal(70, h.Tracker.Estimate("orc"));
     }
 
-    [Theory]
-    [InlineData(true, 30)]    // Paradigm: every 30 s
-    [InlineData(false, 90)]   // Stock: every 90 s
-    public void Regen_PaysPerRealmInterval(bool paradigm, int seconds)
+    // Every 30 s on both realms (the engine's slow tick).
+    [Fact]
+    public void Regen_PaysEvery30Seconds()
     {
-        Harness h = new() { Paradigm = paradigm };
+        const int seconds = 30;
+        Harness h = new();
         h.Room(RoomObservationSource.AlsoHere, ("orc", 1));
         h.Hit("orc", 30);
 

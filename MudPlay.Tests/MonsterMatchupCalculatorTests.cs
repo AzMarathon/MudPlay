@@ -550,8 +550,8 @@ public sealed class MonsterMatchupCalculatorSpellsTests
         Assert.Equal(2, MonsterMatchupCalculatorSpells.AttackHitPercent(
             100, 3, 9999, 0, 0, 0, RealmType.ParaMud));
 
-        // Stock ignores ArmourType entirely — 8% floor for every class.
-        Assert.Equal(8, MonsterMatchupCalculatorSpells.AttackHitPercent(
+        // Stock ignores ArmourType entirely — 9% floor for every class.
+        Assert.Equal(9, MonsterMatchupCalculatorSpells.AttackHitPercent(
             100, 3, 9999, 0, 0, 0, RealmType.Stock, defenderArmourType: 3));
     }
 }

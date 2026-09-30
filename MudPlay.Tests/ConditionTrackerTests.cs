@@ -171,6 +171,27 @@ public sealed class ConditionTrackerTests
         Assert.Equal(MessageFlags.None, h.Tracker.ActiveFlags);
     }
 
+    // Stock's `stat` lists an active effect as its bare applied line; inside the stat
+    // screen it's a readout, not a cast. The same line outside it still applies.
+    [Fact]
+    public void StockStatReadout_InsideTheStatScreen_DoesNotApply()
+    {
+        using Harness h = new();
+        bool inStat = true;
+        h.Tracker.SetStatScreenProbe(() => inStat);
+        h.Messages.Messages.Add(MakeRecord("Mageshield",
+            MessageFlags.None,
+            applied: "You feel protected!",
+            endsWith: "Your mageshield shimmers and fades."));
+
+        h.Feed("You feel protected!");
+        Assert.Empty(h.Applied);
+
+        inStat = false;
+        h.Feed("You feel protected!");
+        Assert.Single(h.Applied);
+    }
+
     [Theory]
     [InlineData("You feel lucky! (411s)")]     // seconds readout (from report 232454)
     [InlineData("You feel lucky! (6m 51s)")]    // longer buff, minutes+seconds form
