@@ -29,13 +29,15 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     private readonly GameDataCache _gameData;
     private readonly IRoomFilter? _filter;
     private readonly Func<(SimCharacter Character, SimWorld World)?>? _simulation;
+    private readonly Func<double, double>? _walkSeconds;
     private readonly LogService? _log;
     private readonly List<RoomKey> _clicks = new();
 
     public ExpEstimatorSessionViewModel(
         RouteExpResolver resolver, LoopManager loops, RoomGraphManager graph,
         GameDataCache gameData, IRoomFilter? filter = null,
-        Func<(SimCharacter Character, SimWorld World)?>? simulation = null, LogService? log = null)
+        Func<(SimCharacter Character, SimWorld World)?>? simulation = null, LogService? log = null,
+        Func<double, double>? walkSeconds = null)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(loops);
@@ -47,14 +49,20 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         _gameData = gameData;
         _filter = filter;
         _simulation = simulation;
+        _walkSeconds = walkSeconds;
         _log = log;
         ProposedName = $"Loop {DateTime.Now:HH-mm}";
-        // Observed per-room pace while walking a loop: Paradigm sits at its 1.0 s
-        // movement floor plus lag (1.1–1.2 s), Stock around 0.6–0.7 s (GAME_MECHANICS
-        // "Global combat tick and exp accrual"). Combat is simulated separately, so
-        // this is the bare walk, unlike the estimate's all-in Seconds per room.
-        _simSecondsPerStep = Realm == RealmType.ParaMud ? 1.2 : 0.7;
     }
+
+    // The walk between rooms the simulation uses: the user's figure when set, else
+    // the character's own pace — on Paradigm the server's move timer from gear
+    // quickness and encumbrance plus SimLagMs of lag (a "1.0" mover really walks
+    // 1.08–1.15 s: 80–150 ms of lag, Tehshortbus 2026-09-30); on Stock the measured
+    // wall-clock pace by encumbrance, lag already in it. Combat is simulated
+    // separately, so this is the bare walk, unlike the estimate's Seconds per room.
+    public double SimWalkSeconds => SimSecondsPerStep > 0
+        ? SimSecondsPerStep
+        : _walkSeconds?.Invoke(Math.Max(0, SimLagMs) / 1000.0) ?? (Realm == RealmType.ParaMud ? 1.1 : 0.7);
 
     // Active realm drives only how often a room's summon spell re-rolls (Paradigm on
     // the combat round, Stock on the medium tick); the estimate otherwise uses the
@@ -98,7 +106,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
     // Character simulation — the live character played around this route by
     // LoopSimulator. Any route or pace change drops the result as stale.
-    [ObservableProperty] private double _simSecondsPerStep;
+    [ObservableProperty] private double _simSecondsPerStep;            // 0 = the character's own pace (SimWalkSeconds)
+    [ObservableProperty] private int _simLagMs = 100;
     [ObservableProperty] private double _simHours = 1.0;
     [ObservableProperty] private int _simRuns = 3;
     [ObservableProperty]
@@ -112,6 +121,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
     partial void OnSimResultChanged(LoopSimSummary? value) => OnPropertyChanged(nameof(HasSimResult));
     partial void OnSimSecondsPerStepChanged(double value) => ClearSimulation();
+    partial void OnSimLagMsChanged(int value) => ClearSimulation();
     partial void OnSimHoursChanged(double value) => ClearSimulation();
     partial void OnSimRunsChanged(int value) => ClearSimulation();
 
@@ -244,7 +254,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         return new ExpEstimatorSnapshot(
             ProposedName, rooms, SecondsPerStep, AreaCombat, RoundsPerMob, RealConditionsMultiplier,
             ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses, summonLines, RealmLabel,
-            SimResult is null ? null : SimLines.ToList(), SimSecondsPerStep);
+            SimResult is null ? null : SimLines.ToList(), SimWalkSeconds);
     }
 
     // Play the live character around the route for SimRuns seeded runs of SimHours
@@ -266,7 +276,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         }
 
         (SimCharacter character, SimWorld world) = SimFreeze.For(setup.Character, setup.World, lap);
-        double step = Math.Max(0.25, SimSecondsPerStep), hours = Math.Clamp(SimHours, 0.1, 24);
+        double step = Math.Max(0.1, SimWalkSeconds), hours = Math.Clamp(SimHours, 0.1, 24);
         int runs = Math.Clamp(SimRuns, 1, 20);
         IsSimulating = true;
         SimStatus = $"Simulating {runs} × {hours:0.#} h…";
@@ -275,7 +285,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             LoopSimSummary result = await Task.Run(() =>
                 LoopSimulator.RunMany(character, lap, world, step, hours, runs));
             SimResult = result;
-            FillSimLines(result);
+            FillSimLines(result, step);
             SimStatus = "";
             _log?.Info("ExpEstimator",
                 $"simulated '{ProposedName}' ({lap.Count} rooms, {runs}×{hours:0.#}h, {step:0.##}s/step, L{character.Level}): " +
@@ -290,11 +300,11 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
     private bool CanRunSimulation() => _simulation is not null && !IsSimulating && _clicks.Count >= 2;
 
-    private void FillSimLines(LoopSimSummary r)
+    private void FillSimLines(LoopSimSummary r, double walkSeconds)
     {
         SimLines.Clear();
         SimLines.Add($"≈ {r.ExpPerHour:N0} exp/hr  ({r.MinExpPerHour:N0} – {r.MaxExpPerHour:N0} over {r.Runs.Count} runs)");
-        SimLines.Add($"{r.KillsPerHour:0} kills/hr  ·  {r.Runs.Average(x => x.AvgLapSeconds):0}s/lap");
+        SimLines.Add($"{r.KillsPerHour:0} kills/hr  ·  {r.Runs.Average(x => x.AvgLapSeconds):0}s/lap  ·  walking {walkSeconds:0.00}s/room");
         SimLines.Add($"Attacking {r.Share(x => x.AttackingSeconds):P0} · moving {r.Share(x => x.MovingSeconds):P0} · " +
                      $"resting {r.Share(x => x.RestingSeconds):P0} · meditating {r.Share(x => x.MeditatingSeconds):P0} · " +
                      $"waiting {r.Share(x => x.WaitingSeconds):P0}");

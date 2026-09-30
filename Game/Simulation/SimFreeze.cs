@@ -4,7 +4,7 @@ using MudPlay.Models.GameData;
 namespace MudPlay.Game.Simulation;
 
 // Resolves everything a simulation of this lap will look up — each monster's
-// record, overlay and death summons, and the cast-codes its overrides name — into plain
+// record, overlay, death summons and attack hit spells, and the cast-codes its overrides name — into plain
 // dictionaries, and makes the game-data indexes build their tables, all on the
 // caller's (UI) thread. The run then happens on a worker thread without touching
 // the live settings resolver or a lazily-building index.
@@ -21,9 +21,12 @@ public static class SimFreeze
         var overlays = new Dictionary<int, MonsterOverlay>();
         var shorts = new Dictionary<int, string?>();
         var summons = new Dictionary<int, IReadOnlyList<int>?>();
+        var procs = new Dictionary<int, SimProc?>();
         foreach (int id in MonstersOn(lap, world, summons))
         {
             monsters[id] = world.Monster(id);
+            foreach (MonsterAttackSlot a in monsters[id]?.Attacks ?? Array.Empty<MonsterAttackSlot>())
+                if (a.HitSpell > 0 && !procs.ContainsKey(a.HitSpell)) procs[a.HitSpell] = world.HitSpell?.Invoke(a.HitSpell);
             MonsterOverlay o = character.Overlay(id);
             overlays[id] = o;
             foreach (int? spell in new[] { o.OverrideAttackSpellId, o.OverrideAltAttackSpellId, o.OverridePreAttackSpellId })
@@ -45,6 +48,7 @@ public static class SimFreeze
         {
             Monster = id => monsters.GetValueOrDefault(id),
             DeathSummons = id => summons.GetValueOrDefault(id),
+            HitSpell = n => procs.GetValueOrDefault(n),
         });
     }
 

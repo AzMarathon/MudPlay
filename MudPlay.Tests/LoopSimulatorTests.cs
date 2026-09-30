@@ -194,4 +194,23 @@ public sealed class LoopSimulatorTests
         Assert.Null(run.DiedAtSeconds);
         Assert.True(run.Kills >= 1);
     }
+
+    [Fact]
+    public void LandedHitFiresItsHitSpellAndHoldsTheCharacter()
+    {
+        // A hostile that always lands a 0-damage hit carrying a 20-damage, 12 s hold
+        // proc: every landed hit costs the proc's damage, and the hold keeps the
+        // character in the room after the kill until it wears off.
+        var slot = new MonsterAttackSlot("tramples", Type: 1, Percent: 100, TruePercent: 100, MinDamage: 0, MaxDamage: 0,
+            Accuracy: 9999, Energy: 1000, HitSpell: 318);
+        var mobs = new Dictionary<int, MonsterCatalogEntry> { [4] = Mob(4, hp: 2000, exp: 10, align: 1, slot) };
+        var proc = new SimProc(20, 20, 12, AcDelta: -10, DodgeDelta: -20, AccuracyDelta: -5, Holds: true);
+        var world = new SimWorld(n => mobs.GetValueOrDefault(n), HitSpell: n => n == 318 ? proc : null);
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 5000, damage: 200), new[] { Lair(1, 1, 3600, 4), Empty(2) },
+            world, secondsPerStep: 1, hours: 0.25, seed: 1);
+
+        Assert.Equal(1, run.Kills);
+        Assert.True(run.DamageTaken >= 20 * 9, $"took {run.DamageTaken}");   // ≥ 9 rounds of hits before the kill
+        Assert.True(run.WaitingSeconds >= 5, $"waited {run.WaitingSeconds}");  // held after the kill
+    }
 }
