@@ -2504,7 +2504,7 @@
                                                         IsVisible="{Binding ExpEstimator.IsRanking}"
                                                         Command="{Binding ExpEstimator.CancelRankingCommand}"
                                                         ToolTip.Tip="Stop the ranking."/>
-                                                <NumericUpDown Grid.Column="2" Width="90" FontSize="11"
+                                                <NumericUpDown Grid.Column="2" Width="120" FontSize="11"
                                                                Value="{Binding ExpEstimator.RankLevel, Mode=TwoWay}"
                                                                Minimum="0" Maximum="255" Increment="1"
                                                                FormatString="0" ShowButtonSpinner="True"
