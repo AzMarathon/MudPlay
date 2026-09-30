@@ -7719,9 +7719,11 @@ public sealed class AppServices
             }
             catch (Exception ex)
             {
-                Log.Info("Startup",
-                    $"--profile load of '{cli.Name}' on '{cli.Bbs}' failed " +
-                    $"({ex.GetType().Name}); loading the default profile instead.");
+                // Shown on the terminal too: coming up on the default profile with no
+                // word why reads as "my profile won't load".
+                StartupOptions.ProfileNotice =
+                    $"Couldn't load '{cli.Name}' on '{cli.Bbs}' ({ex.GetType().Name}: {ex.Message}); opened the default profile instead.";
+                Log.Warn("Startup", StartupOptions.ProfileNotice);
                 Profile.LoadDefaultProfile();
             }
         }
@@ -7744,9 +7746,9 @@ public sealed class AppServices
             }
             catch (Exception ex)
             {
-                Log.Info("Startup",
-                    $"Auto-load of last profile '{startup.Name}' on '{startup.Bbs}' failed " +
-                    $"({ex.GetType().Name}); loading the default profile instead.");
+                StartupOptions.ProfileNotice =
+                    $"Couldn't auto-load '{startup.Name}' on '{startup.Bbs}' ({ex.GetType().Name}: {ex.Message}); opened the default profile instead.";
+                Log.Warn("Startup", StartupOptions.ProfileNotice);
                 Profile.LoadDefaultProfile();
             }
         }

@@ -200,6 +200,43 @@ public sealed class UpdateServiceTests
         Assert.Contains("del \"%~f0\"", s);
     }
 
+    // A client still closing, or opened mid-update, holds MudPlay.exe; Windows can't
+    // overwrite it but can rename it. The mirror leaves the exe out, and the new one
+    // goes in by two renames, so no launch ever finds a half-written executable.
+    [Fact]
+    public void BuildWindows_SwapsTheExecutableByRename()
+    {
+        string s = SwapScriptBuilder.BuildWindows();
+        Assert.Contains("set \"EXENAME=%~nx4\"", s);
+        Assert.Contains("robocopy \"%NEW%\" \"%DST%\" /MIR /XF \"%EXENAME%\" \"%EXENAME%.old-*\"", s);
+        Assert.DoesNotContain("robocopy \"%NEW%\" \"%DST%\" /MIR /NFL", s);
+        Assert.Contains("copy /y \"%NEW%\\%EXENAME%\" \"%EXE%.new\"", s);
+        Assert.Contains("move /y \"%EXE%\" \"%OLD%\"", s);
+        Assert.Contains("move /y \"%EXE%.new\" \"%EXE%\"", s);
+        // Retries are bounded, and a failed swap rolls back and relaunches the old build.
+        Assert.Contains("/R:5 /W:1", s);
+        Assert.Contains(":rollback", s);
+        Assert.Contains("goto rollback", s);
+    }
+
+    [Fact]
+    public void DeleteReplacedExecutables_RemovesOnlyTheRenamedAsideCopies()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-oldexe-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            string exe = Path.Combine(dir, "MudPlay.exe");
+            foreach (string f in new[] { "MudPlay.exe", "MudPlay.exe.old-123", "MudPlay.exe.old-456", "MudPlay.exe.new", "notes.txt" })
+                File.WriteAllText(Path.Combine(dir, f), "x");
+
+            Assert.Equal(2, UpdatePlatform.DeleteReplacedExecutables(exe));
+            Assert.Equal(new[] { "MudPlay.exe", "MudPlay.exe.new", "notes.txt" },
+                Directory.GetFiles(dir).Select(Path.GetFileName).OrderBy(n => n, StringComparer.Ordinal));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     // ----- ChangelogExtractor --------------------------------------------------
 
     private const string SampleChangelog =

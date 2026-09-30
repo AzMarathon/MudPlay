@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.13**
-> - A party follower sends @ok only once its HP / mana hold at rest-max, and re-asks @wait at most every few seconds — no more @wait / @ok bursts when HP bounces across the rest floor
-> - The combat round-totals table is no longer mistaken for a `look` at another player
+> **Version 3.126.14**
+> - Windows updates swap the program in by renaming, so a client still closing or opened mid-update can't crash on a half-copied MudPlay.exe
+> - Profiles and shared realm files load reliably with two clients on one realm on Windows (a briefly-locked file no longer fails the load)
+> - A startup profile that fails to load says why on the terminal instead of silently opening the default profile
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

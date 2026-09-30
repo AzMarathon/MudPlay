@@ -67,6 +67,15 @@ public static class SwapScriptBuilder
     // cmd for Windows. Args at run time:
     // <pid> <newRoot> <installDir> <exe> <stagingDir> <profileToken> <reconnect>.
     // robocopy exit codes 0-7 are success, >=8 is failure.
+    //
+    // The executable is swapped by rename, never overwritten. Windows won't let a
+    // running .exe be written, but it will let one be renamed — so another client
+    // still closing, or one opened mid-update, keeps running the old file, and every
+    // launch finds either the old or the complete new MudPlay.exe. Overwriting it
+    // in place stalled on the lock and could hand a launch a half-written file,
+    // which dies before the crash reporter is up. The renamed-aside copy is deleted
+    // here when nothing holds it, else by the next startup
+    // (UpdatePlatform.DeleteReplacedExecutables).
     public static string BuildWindows() => """
         @echo off
         setlocal
@@ -74,10 +83,12 @@ public static class SwapScriptBuilder
         set "NEW=%~2"
         set "DST=%~3"
         set "EXE=%~4"
+        set "EXENAME=%~nx4"
         set "STAGE=%~5"
         set "PROFILE=%~6"
         set "RECONNECT=%~7"
         set "BAK=%DST%.bak"
+        set "OLD=%EXE%.old-%RANDOM%%RANDOM%"
 
         rem Carry the session across the restart — same character, and a reconnect
         rem when the client was mid-session. Built outside any parenthesised block so
@@ -96,17 +107,31 @@ public static class SwapScriptBuilder
 
         if exist "%BAK%" rmdir /s /q "%BAK%"
         robocopy "%DST%" "%BAK%" /MIR /NFL /NDL /NJH /NJS /NP >nul
-        robocopy "%NEW%" "%DST%" /MIR /NFL /NDL /NJH /NJS /NP >nul
-        if errorlevel 8 (
-          robocopy "%BAK%" "%DST%" /MIR /NFL /NDL /NJH /NJS /NP >nul
-          start "" "%EXE%" %ARGS%
-          exit /b 1
+        rem Everything but the executable mirrors over; the exe (and any old copy
+        rem still held by a running client) is left out of the copy and the purge.
+        robocopy "%NEW%" "%DST%" /MIR /XF "%EXENAME%" "%EXENAME%.old-*" /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >nul
+        if errorlevel 8 goto rollback
+        copy /y "%NEW%\%EXENAME%" "%EXE%.new" >nul
+        if errorlevel 1 goto rollback
+        move /y "%EXE%" "%OLD%" >nul
+        if errorlevel 1 goto rollback
+        move /y "%EXE%.new" "%EXE%" >nul
+        if errorlevel 1 (
+          move /y "%OLD%" "%EXE%" >nul
+          goto rollback
         )
         start "" "%EXE%" %ARGS%
         rmdir /s /q "%STAGE%"
         rmdir /s /q "%BAK%"
+        del /f /q "%OLD%" >nul 2>&1
         rem Pop the batch context so cmd stops reading this file, then delete it — a
         rem .cmd can't del itself while cmd is still line-reading it.
         (goto) 2>nul & del "%~f0"
+
+        :rollback
+        if exist "%EXE%.new" del /f /q "%EXE%.new" >nul 2>&1
+        robocopy "%BAK%" "%DST%" /MIR /XF "%EXENAME%" "%EXENAME%.old-*" /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >nul
+        start "" "%EXE%" %ARGS%
+        exit /b 1
         """;
 }

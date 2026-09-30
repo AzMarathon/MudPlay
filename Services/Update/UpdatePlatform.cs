@@ -72,6 +72,31 @@ public static class UpdatePlatform
         return string.IsNullOrEmpty(exe) ? null : System.IO.Path.GetDirectoryName(exe);
     }
 
+    // The Windows swap renames the replaced executable aside ("MudPlay.exe.old-<n>")
+    // because a client may still be running it. Delete the ones nothing runs any
+    // more; one still in use stays for a later startup. Returns how many went.
+    public static int DeleteReplacedExecutables(string? exePath = null)
+    {
+        exePath ??= Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exePath)) return 0;
+        string? dir = System.IO.Path.GetDirectoryName(exePath);
+        if (string.IsNullOrEmpty(dir) || !System.IO.Directory.Exists(dir)) return 0;
+        string[] olds;
+        // Runs before the app's crash net, so a folder we can't list must not stop startup.
+        try { olds = System.IO.Directory.GetFiles(dir, System.IO.Path.GetFileName(exePath) + ".old-*"); }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { return 0; }
+        int deleted = 0;
+        foreach (string old in olds)
+        {
+            try { System.IO.File.Delete(old); deleted++; }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+            {
+                // Another client is still running that copy; the next startup retries.
+            }
+        }
+        return deleted;
+    }
+
     // Whether this is a replaceable self-contained install rather than a dev run.
     // A `dotnet run` launches through the "dotnet" muxer or an apphost sitting under
     // a bin/Debug|Release tree — replacing either would be wrong (and pointless). We

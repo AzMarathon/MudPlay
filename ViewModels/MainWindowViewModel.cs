@@ -1547,7 +1547,8 @@ public partial class MainWindowViewModel : ObservableObject
         PropertyChanged += SyncToolbarStateFlags;
 
         // A --profile launch argument that didn't resolve (typo / ambiguous bare
-        // name) surfaces its reason on the terminal at startup — dismiss the splash
+        // name), or a startup profile that failed to load, surfaces its reason on
+        // the terminal at startup — dismiss the splash
         // so it's visible — instead of quietly coming up on a blank profile. Posted
         // so it lands after the ctor unwinds and the window is showing.
         if (StartupOptions.ProfileNotice is { } profileNotice)
