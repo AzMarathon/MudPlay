@@ -975,6 +975,39 @@ public sealed class AutoPartyManagerTests
         Assert.DoesNotContain(MovementCoordinator.PartyInviteGate, coord.AssertedGates);
     }
 
+    // Report paradigm-20260930-192042 (`go hole`, one follower): the split drops the
+    // follower AND disbands the party. The hold outlives both; once the leader has
+    // landed, the redisplay backstop's "Also here:" re-invites the follower.
+    [Fact]
+    public void SplitReform_OneFollowerDisband_StillHoldsAndReinvitesOnLanding()
+    {
+        var (engine, router, _, party) = Setup();
+        MovementCoordinator coord = new();
+        engine.InviteWaitWindow = TimeSpan.FromSeconds(20);
+        engine.SetMovementGate(coord, isLooping: () => false);
+        RoomKey here = new(16, 542);
+        engine.SetRoomProbe(() => here);
+
+        party.SelfIsLeader = true;
+        PartyMember self = new() { Name = "Tristian", IsSelf = true };
+        PartyMember eddie = new() { Name = "Eddie" };
+        party.Members.Add(self);
+        party.Members.Add(eddie);
+
+        engine.NotePartySplitTeleport();
+        here = new RoomKey(16, 543);
+        party.Members.Remove(eddie);          // "Eddie is no longer following you."
+        party.SelfIsLeader = false;           // "Your party has been disbanded."
+        party.Members.Remove(self);
+
+        Assert.Contains(MovementCoordinator.PartyInviteGate, coord.AssertedGates);
+        engine.FireReformRedisplayForTests();
+        Dispatch(router, "Also here: Eddie.");
+
+        Assert.Contains(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "invite Eddie\r");
+        Assert.Contains(MovementCoordinator.PartyInviteGate, coord.AssertedGates);
+    }
+
     // A delayed teleport (Darkwood's `go vortex`, `adddelay 5`) leaves everyone in the
     // origin room for seconds after the leader's keyword: members seen there haven't
     // crossed, so they're neither re-invited nor counted as arrived, and the redisplay

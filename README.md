@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.2**
-> - MegaMUD loop import: leave steps out, add rooms and move rows on the MudPlay side, with the map redrawing as you go
+> **Version 3.134.3**
+> - Leading through a party-splitting `go hole` with one follower (the party disbands) holds for the re-invite — fixed in 3.133.8, now pinned by a test
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
