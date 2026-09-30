@@ -62,6 +62,41 @@ public sealed class TrapDisarmManagerTests : IDisposable
     private static void Dispatch(MessageRouter router, string text) =>
         router.Dispatch(new LineExtractor.EmittedLine(text, new CellAttributes[text.Length], Now, IsPromptLine: false));
 
+    // ===== Disarm skill + odds (GAME_MECHANICS "Exit traps — search and disarm") =====
+
+    [Theory]
+    [InlineData(71,  71, 10, 19)]
+    [InlineData(0,    0, 10, 90)]
+    [InlineData(95,  95,  5,  0)]    // above 90 the trap never springs
+    [InlineData(120, 100, 0,  0)]
+    public void DisarmOdds_SplitOneRollIntoDisarmSafeMissAndSprings(int skill, int disarm, int safe, int springs)
+    {
+        TrapDisarmOdds odds = TrapDisarmOdds.For(skill);
+        Assert.Equal((disarm, safe, springs), (odds.Disarm, odds.SafeMiss, odds.Springs));
+    }
+
+    [Fact]
+    public void DisarmSkill_IsTheShownTrapsLessFindGearPlusDisarmGear()
+    {
+        var (mgr, _, _, _) = Setup(traps: 71);
+        Assert.Equal(71, mgr.DisarmSkill);                   // no gear wired: the Traps shown
+
+        mgr.SetWornTrapBonuses(() => (5, 0));               // a thief's kit: +5 find only
+        Assert.Equal(66, mgr.DisarmSkill);
+        Assert.Equal("disarm ~66%, springs 24%", mgr.DisarmOdds!.Value.Summary);
+
+        mgr.SetWornTrapBonuses(() => (0, 8));               // +8 DisarmTraps
+        Assert.Equal(79, mgr.DisarmSkill);
+    }
+
+    [Fact]
+    public void DisarmSkill_IsNull_WithoutAReadTrapsSkill()
+    {
+        var (mgr, _, _, _) = Setup(traps: 0);
+        Assert.Null(mgr.DisarmSkill);
+        Assert.Null(mgr.DisarmOdds);
+    }
+
     // ===== Direction normalisation =====
 
     [Theory]

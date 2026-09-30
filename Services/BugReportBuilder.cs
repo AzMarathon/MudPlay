@@ -1572,7 +1572,8 @@ public static class BugReportBuilder
             + (trap.CurrentDirection is { } td ? $", dir={td}" : string.Empty)
             + (trap.QueueDepth > 0 ? $", queued={trap.QueueDepth}" : string.Empty)
             + $", canDisarm={trap.CanDisarm}, trapsStat={svc.PlayerStats.Traps}"
-            + $", skillFromClassRace={trap.SkillInferredFromClassOrRace}");
+            + $", skillFromClassRace={trap.SkillInferredFromClassOrRace}"
+            + (trap.DisarmOdds is { } odds ? $", disarmSkill={odds.Skill} ({odds.Summary})" : string.Empty));
         if (trap.LastUnansweredReply is { } unanswered)
             Kv(sb, "Trap disarm, last unanswered reply", unanswered);
 

@@ -30,7 +30,8 @@ public static class CurrentRouteDetails
         Action<RoomKey> onRoomClick,
         Func<RoomKey, RouteStepWarning?> roomHazard,
         Func<int, RoomDetailLink> itemLink,
-        int maxHp = 0)
+        int maxHp = 0,
+        Game.TrapDisarmOdds? disarmOdds = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(itemName);
@@ -91,7 +92,7 @@ public static class CurrentRouteDetails
             RoomKey rk = row.Room;
             IReadOnlyList<int> gateIds = i < gateItemsByStep.Count ? gateItemsByStep[i] : Array.Empty<int>();
             RouteStepWarning? warning = MergeWarning(roomHazard(rk), gateIds, itemLink);
-            string? trapText = TrapTextFor(i < trapByStep.Count ? trapByStep[i] : null, maxHp);
+            string? trapText = TrapTextFor(i < trapByStep.Count ? trapByStep[i] : null, maxHp, disarmOdds);
             details.Add(new RouteDetailRow(
                 row, roomMonsterLinks(rk), new RelayCommand(() => onRoomClick(rk)), warning, trapText));
         }
@@ -114,14 +115,17 @@ public static class CurrentRouteDetails
     // The trap note for a step that crosses a trapped exit, related to the player's HP:
     // "trap: 36 dmg (~11% of HP)". Falls back to a plain damage figure when max HP is
     // unknown, and to "trap (damage unknown)" for a trapped exit whose export carried no
-    // damage figure. Null when the step crosses no trap.
-    private static string? TrapTextFor(int? damage, int maxHp)
+    // damage figure. With the Traps skill, our odds of disarming it follow
+    // ("· disarm ~71%, springs 19%"). Null when the step crosses no trap.
+    private static string? TrapTextFor(int? damage, int maxHp, Game.TrapDisarmOdds? odds)
     {
         if (damage is not { } d) return null;
-        if (d <= 0) return "trap (damage unknown)";
-        return maxHp > 0
-            ? $"trap: {d} dmg (~{(int)Math.Round(100.0 * d / maxHp)}% of HP)"
-            : $"trap: {d} dmg";
+        string text = d <= 0
+            ? "trap (damage unknown)"
+            : maxHp > 0
+                ? $"trap: {d} dmg (~{(int)Math.Round(100.0 * d / maxHp)}% of HP)"
+                : $"trap: {d} dmg";
+        return odds is { } o ? $"{text} · {o.Summary}" : text;
     }
 
     // "12/431 Tower" — the map/room key plus its name (name omitted when unknown),

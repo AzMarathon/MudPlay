@@ -77,6 +77,28 @@ public sealed class TrapDisarmManager : IDisposable
         _stats.Traps > 0
         || AbilityNames.ClassOrRaceGrantsTraps(_gameData, _stats.Class, _stats.Race);
 
+    // The disarm skill, which the game never shows: the Traps `stat` prints is the
+    // find skill, carrying worn +FindTraps / +Traps gear (abilities 40 / 179) that
+    // doesn't help a disarm, while +DisarmTraps gear (41) helps only the disarm.
+    // Class and race grants carry no value in any game-data set, so gear is the only
+    // difference. Null until a positive Traps has been read — no skill, no odds.
+    public int? DisarmSkill
+    {
+        get
+        {
+            if (_stats.Traps <= 0) return null;
+            (int find, int disarm) = _wornTrapBonuses?.Invoke() ?? (0, 0);
+            return Math.Max(0, _stats.Traps - find + disarm);
+        }
+    }
+
+    public TrapDisarmOdds? DisarmOdds => DisarmSkill is { } skill ? TrapDisarmOdds.For(skill) : null;
+
+    private Func<(int Find, int Disarm)>? _wornTrapBonuses;
+
+    // Worn gear's (FindTraps + Traps, DisarmTraps) ability totals.
+    public void SetWornTrapBonuses(Func<(int Find, int Disarm)> bonuses) => _wornTrapBonuses = bonuses;
+
     // Diagnostic: true when CanDisarm is satisfied ONLY by the class/race game-data
     // grant (no parsed Traps value). Surfaced in the bug report so a "walker walked
     // through a trap" capture shows whether capability came from stats or inference.

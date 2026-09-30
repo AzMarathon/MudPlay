@@ -724,6 +724,7 @@ public static class CharacterCalculator
             case 70: totals.PlusSpellcasting += abilVal; statKey = "Spellcasting"; break;
             case 96: totals.PlusEncumbrance += abilVal; statKey = "Encumbrance"; break;
             case 40: case 179: totals.PlusTraps += abilVal; statKey = "Traps"; break;
+            case 41: totals.PlusDisarmTraps += abilVal; statKey = "Disarm Traps"; break;
             case 37: case 180: totals.PlusPicklocks += abilVal; statKey = "Picklocks"; break;
             case 13: case 14: totals.PlusIlluminate += abilVal; statKey = "Illuminate"; break;
             case 67: totals.PlusQuickness += abilVal; statKey = "Quickness"; break;

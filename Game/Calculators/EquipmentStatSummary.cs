@@ -52,6 +52,7 @@ public sealed class EquipmentStatSummary
     public int PlusSpellcasting { get; set; }    // Abil 70
     public int PlusEncumbrance { get; set; }     // Abil 96
     public int PlusTraps { get; set; }           // Abil 40 + 179 (sum)
+    public int PlusDisarmTraps { get; set; }     // Abil 41 — the disarm skill only, not the Traps stat shows
     public int PlusPicklocks { get; set; }       // Abil 37 + 180 (sum)
     public int PlusIlluminate { get; set; }      // Abil 13 + 14 (sum)
     public int PlusQuickness { get; set; }       // Abil 67

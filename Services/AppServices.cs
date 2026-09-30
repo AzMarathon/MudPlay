@@ -6266,6 +6266,14 @@ public sealed class AppServices
         // Route walker over trapped exits (RoomExitHint.Trap) through the
         // TrapDisarmManager.
         Walker.SetTrapEnqueuer(TrapDisarm.Enqueue);
+        // Worn gear's trap abilities, which split the disarm skill from the Traps
+        // `stat` shows (the odds shown in route details and map tooltips).
+        TrapDisarm.SetWornTrapBonuses(() =>
+        {
+            Game.Calculators.EquipmentStatSummary t = Game.Calculators.CharacterCalculator
+                .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals;
+            return (t.PlusTraps, t.PlusDisarmTraps);
+        });
         // Settings → Other "Utilize disarm traps if able": gate the
         // walker's trap-disarm on the toggle AND a real local capability
         // (a positive Traps stat, or a class/race game-data trap-skill

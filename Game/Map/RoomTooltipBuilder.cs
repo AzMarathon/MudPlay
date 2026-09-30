@@ -36,7 +36,7 @@ public static class RoomTooltipBuilder
     public static string Build(Room room, RoomGraphManager graph, GameDataCache? data,
         TBInfoStore? tbinfo = null, MonsterSpawnIndex? spawnIndex = null,
         Game.Spells.KnownSpellCatalog? spellCatalog = null, int charIllu = 0,
-        RoomFloorItemIndex? floorItems = null)
+        RoomFloorItemIndex? floorItems = null, TrapDisarmOdds? disarmOdds = null)
     {
         ArgumentNullException.ThrowIfNull(room);
         ArgumentNullException.ThrowIfNull(graph);
@@ -72,7 +72,7 @@ public static class RoomTooltipBuilder
         }
 
         // 8. Exits — blank line above, per-direction with destination.
-        string exitsBlock = BuildExitsBlock(room, graph, data, tbinfo);
+        string exitsBlock = BuildExitsBlock(room, graph, data, tbinfo, disarmOdds);
         if (exitsBlock.Length > 0)
         {
             sb.Append('\n').Append('\n').Append(exitsBlock);
@@ -467,7 +467,8 @@ public static class RoomTooltipBuilder
         Direction.U, Direction.D,
     };
 
-    private static string BuildExitsBlock(Room room, RoomGraphManager graph, GameDataCache? data, TBInfoStore? tbinfo)
+    private static string BuildExitsBlock(Room room, RoomGraphManager graph, GameDataCache? data, TBInfoStore? tbinfo,
+        TrapDisarmOdds? disarmOdds)
     {
         if (room.Exits.Count == 0) return string.Empty;
 
@@ -483,7 +484,7 @@ public static class RoomTooltipBuilder
             sb.Append('\n').Append("  ").Append(DirectionLabel(dir)).Append(" → ");
             sb.Append(destName).Append(' ').Append('(').Append(exit.Target).Append(')');
 
-            string hintRender = FormatExitHint(exit, data);
+            string hintRender = FormatExitHint(exit, data, disarmOdds);
             if (hintRender.Length > 0) sb.Append(" (").Append(hintRender).Append(')');
 
             // Multi-line per-step breakdown for action-required exits.
@@ -587,8 +588,9 @@ public static class RoomTooltipBuilder
     // name when a hint carries a structured id. Item/Ticket → Items table.
     // KeyLocked → Items table (the key is itself an Item record per MDB
     // convention). Falls back to the raw hint string for unclassified modifiers
-    // so diagnostic info still shows.
-    public static string FormatExitHint(RoomExit exit, GameDataCache? data)
+    // so diagnostic info still shows. A trap carries our disarm odds when we have the
+    // Traps skill.
+    public static string FormatExitHint(RoomExit exit, GameDataCache? data, TrapDisarmOdds? disarmOdds = null)
     {
         switch (exit.Hint)
         {
@@ -646,7 +648,9 @@ public static class RoomTooltipBuilder
                 return $"Toll: {exit.TollGold} gold";
 
             case RoomExitHint.Trap when exit.TrapDamage > 0:
-                return $"Trap: {exit.TrapDamage} dmg";
+                return disarmOdds is { } odds
+                    ? $"Trap: {exit.TrapDamage} dmg, {odds.Summary}"
+                    : $"Trap: {exit.TrapDamage} dmg";
 
             case RoomExitHint.Text when exit.TextCommands is { Count: > 0 }:
                 return "Text: " + string.Join(", ", exit.TextCommands);

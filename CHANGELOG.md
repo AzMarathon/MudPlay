@@ -1,5 +1,10 @@
 # Version history
 
+## 3.126.18
+
+- Route details, the map tooltip and room info show your odds of disarming each trapped exit (disarm ~71%, springs 19%) when you have the Traps skill
+- Help explains how Traps (finding) and disarming work, and that +Traps gear helps finding, not disarming
+
 ## 3.126.17
 
 - Windows updates swap the program in by renaming, so a client still closing or opened mid-update can't crash on a half-copied MudPlay.exe
