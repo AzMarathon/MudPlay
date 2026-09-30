@@ -1158,10 +1158,10 @@ public sealed partial class CombatManager : IDisposable
         _hitAndRunInsteadOfFight = runInsteadOfFight;
     }
 
-    // Wire the combat-off "clear hostiles when seen Hidden" override:
-    // seeHiddenClearActive reports whether CombatStateTracker has latched a
-    // force-clear for the current room (stealth runner hit a SeeHidden monster
-    // with the toggle on). The tracker owns the decision + latch — it fires first
+    // Wire the combat-off stealth-runner clears: seeHiddenClearActive reports whether
+    // CombatStateTracker has latched a force-clear for the current room (a stealth
+    // runner hit a SeeHidden monster, or its sneak failed into a room inside the
+    // Min/Max window, with that toggle on). The tracker owns the decision + latch — it fires first
     // on the shared observation and also holds the walker gate so we actually
     // stop to fight. When it returns true and combat is OFF, the engine engages
     // anyway and bypasses the Min/Max gate to clear the whole room. Until set,

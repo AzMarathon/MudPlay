@@ -54,6 +54,7 @@ public static class CombatProfileGroupCopy
                 to.HitAndRunTactics = from.HitAndRunTactics;
                 to.HitAndRunMaxRuns = from.HitAndRunMaxRuns;
                 to.ClearHostilesWhenSeenHidden = from.ClearHostilesWhenSeenHidden;
+                to.ClearHostilesWhenSneakFails = from.ClearHostilesWhenSneakFails;
                 break;
             case CombatProfileGroup.RoomThresholds:
                 to.MinMonstersInRoom = from.MinMonstersInRoom;

@@ -99,6 +99,11 @@ public sealed class CombatStateTracker : IDisposable
     // engaged neutral is still alive, matching CombatManager's attack takeover.
     private Func<string, bool>? _isUserEngagedInstance;
     private bool _seeHiddenClearLatch;
+    private Func<bool>? _clearWhenSneakFails;
+    // Our sneak failed entering the room we're in (StealthManager.SneakEntry false);
+    // a move sent drops it, since the failure belonged to the room it left.
+    private bool _sneakFailedHere;
+    private bool _sneakFailClearLatch;
 
     private Action<byte[]>? _wireSender;
     private Func<bool>? _breakBeforeRunning;
@@ -168,6 +173,12 @@ public sealed class CombatStateTracker : IDisposable
     // walker actually stops) until every engageable hostile is gone.
     // CombatManager reads this to engage despite combat-off.
     public bool SeeHiddenClearActive => _seeHiddenClearLatch;
+
+    // True while a combat-off "clear hostiles when sneak fails" clear is latched for
+    // the current room: a stealth runner's sneaked move failed into a room inside
+    // the Min/Max monster window, so the walker holds and CombatManager engages
+    // until every engageable hostile is gone, then the route re-sneaks.
+    public bool SneakFailClearActive => _sneakFailClearLatch;
 
     // Fires when a confirmed room change happens while the combat gate is held —
     // an in-flight move carried us out of a room where we'd engaged an
@@ -279,6 +290,30 @@ public sealed class CombatStateTracker : IDisposable
         _isAutoSneakEnabled = isAutoSneakEnabled;
         _hasSeeHidden = hasSeeHidden;
     }
+
+    // Wire the combat-off "clear hostiles when sneak fails" override: it reads
+    // CombatSettings.ClearHostilesWhenSneakFails, and shares the Auto-Sneak reader
+    // SetSeeHiddenClearGate wires. Until set, the override stays dormant.
+    public void SetSneakFailClearGate(Func<bool> clearWhenSneakFails)
+    {
+        ArgumentNullException.ThrowIfNull(clearWhenSneakFails);
+        _clearWhenSneakFails = clearWhenSneakFails;
+    }
+
+    // A sneaked move arrived: held (`Sneaking...`) or not (the loud entry line, or a
+    // silent loss). The loud line lands before the room display, whose observation
+    // then reads the flag. A silent loss is only known after the display, so the
+    // room is re-run for it.
+    public void NoteSneakEntry(bool held) => _sneakFailedHere = !held;
+
+    public void NoteSilentSneakLoss()
+    {
+        _sneakFailedHere = true;
+        if (_clearWhenSneakFails?.Invoke() == true) _classifier.ReemitCurrent();
+    }
+
+    // A move went out: whatever happened to the sneak happened in the room we left.
+    public void NoteMoveSent() => _sneakFailedHere = false;
 
     // Wire the actionability gate: canEngage reports whether a monster Number is
     // one we can actually kill (a weapon can hit it OR an eligible attack spell
@@ -459,7 +494,7 @@ public sealed class CombatStateTracker : IDisposable
         // went up with nothing re-displaying the room: a reconnect judges the re-entry
         // room with the loop still stopped, and the loop resumes a moment later (report
         // paradigm-20260928-130856). Re-run the room so the gate lets go.
-        if (_gateAsserted && !_seeHiddenClearLatch && !_isAutoAttackEnabled() && _classifier.Current is { } room)
+        if (_gateAsserted && !_seeHiddenClearLatch && !_sneakFailClearLatch && !_isAutoAttackEnabled() && _classifier.Current is { } room)
         {
             _log?.Info(LogCategory, "combat gate held but auto-attack is off in this room now (loop 'do not attack' / 'only lair rooms') — releasing");
             OnEntitiesObserved(room);
@@ -570,6 +605,30 @@ public sealed class CombatStateTracker : IDisposable
                 return;
             }
             _seeHiddenClearLatch = false;   // room cleared / un-actionable — release.
+        }
+
+        // Sneak-fail clear for stealth runners (combat off): a sneaked move failed
+        // into this room, and the room is inside the Min/Max monster window, so we
+        // stop and clear it — a room outside the window is walked through unsneaked,
+        // as without the option. Latched like the see-hidden clear: held until
+        // nothing actionable is left, then the route re-sneaks
+        // (CombatSpentStealth) and walks on.
+        bool sneakFailArm = _sneakFailedHere
+                            && _clearWhenSneakFails?.Invoke() == true
+                            && _isAutoSneakEnabled?.Invoke() == true
+                            && !_isAutoAttackEnabled()
+                            && IsWithinMonsterCountWindow(targetable);
+        if (_sneakFailClearLatch || sneakFailArm)
+        {
+            if (actionable > 0)
+            {
+                if (!_sneakFailClearLatch)
+                    _log?.Info(LogCategory, $"sneak failed entering — clearing {actionable} hostile(s) here before sneaking on");
+                _sneakFailClearLatch = true;
+                AssertGate("sneak-fail clear (clear the room, then re-sneak)");
+                return;
+            }
+            _sneakFailClearLatch = false;
         }
 
         if (!_isAutoAttackEnabled())
@@ -808,6 +867,7 @@ public sealed class CombatStateTracker : IDisposable
     {
         ClearGate(reason);
         _seeHiddenClearLatch = false;
+        _sneakFailClearLatch = false;
         if (_state.InCombat) _state.InCombat = false;
         _log?.Info(LogCategory, $"combat state force-cleared — {reason}");
         CombatForceCleared?.Invoke();   // fired last: the gate is now down, so a deferred collect can flush

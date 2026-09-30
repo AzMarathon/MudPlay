@@ -4847,7 +4847,15 @@ public sealed class AppServices
                 Profile.Current, "Combat").ClearHostilesWhenSeenHidden,
             isAutoSneakEnabled:  () => ReadAutoModeFlag(d => d.AutoSneak),
             hasSeeHidden:        n => SeeHidden.Has(n));
-        Combat.SetSeeHiddenClearGate(() => CombatTracker.SeeHiddenClearActive);
+        // Clear hostiles when sneak fails: a failed sneaked entry into a room inside the
+        // Min/Max window latches the same kind of clear. The tracker hears each sneaked
+        // arrival, re-runs the room for a silent loss (known only after the display),
+        // and forgets the failure once the next move goes out.
+        CombatTracker.SetSneakFailClearGate(() => ReadSection<Models.Profile.CombatSettings>(
+            Profile.Current, "Combat").ClearHostilesWhenSneakFails);
+        Stealth.SneakEntry += CombatTracker.NoteSneakEntry;
+        Stealth.SilentSneakLost += CombatTracker.NoteSilentSneakLoss;
+        Combat.SetSeeHiddenClearGate(() => CombatTracker.SeeHiddenClearActive || CombatTracker.SneakFailClearActive);
 
         // Engage-to-clear a rest-blocker with Auto-Combat OFF (report
         // paradigm-20260901-093301): HealthManager owns the decision (it has the
@@ -6624,6 +6632,7 @@ public sealed class AppServices
         OutboundMovement.MoveSent += AutoEquip.OnMoveSent;
         // Every move re-opens the backstab surprise round, typed moves included.
         OutboundMovement.MoveSent += Combat.NoteMoveSent;
+        OutboundMovement.MoveSent += CombatTracker.NoteMoveSent;
 
         // Per-game-data-set loop catalogue. Loops live
         // under the active set's Loops/ folder, so the catalogue reloads

@@ -139,6 +139,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     public bool IsRunIfBackstabFailsEditable => !HitAndRunTactics;
     [ObservableProperty] private int _hitAndRunMaxRuns = 3;
     [ObservableProperty] private bool _clearHostilesWhenSeenHidden;
+    [ObservableProperty] private bool _clearHostilesWhenSneakFails;
 
     // ----- Targeting ------------------------------------------------
 
@@ -660,6 +661,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             HitAndRunTactics   = HitAndRunTactics,
             HitAndRunMaxRuns             = Math.Clamp(HitAndRunMaxRuns, 1, 20),
             ClearHostilesWhenSeenHidden  = ClearHostilesWhenSeenHidden,
+            ClearHostilesWhenSneakFails  = ClearHostilesWhenSneakFails,
 
             TargetOrder              = TargetOrderReverse ? TargetOrder.Reverse : TargetOrder.Normal,
             TargetPriority           = TargetPriority,
@@ -824,6 +826,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         HitAndRunTactics  = dto.HitAndRunTactics;
         HitAndRunMaxRuns            = dto.HitAndRunMaxRuns;
         ClearHostilesWhenSeenHidden = dto.ClearHostilesWhenSeenHidden;
+        ClearHostilesWhenSneakFails = dto.ClearHostilesWhenSneakFails;
 
         TargetOrderNormal  = dto.TargetOrder == TargetOrder.Normal;
         TargetOrderReverse = dto.TargetOrder == TargetOrder.Reverse;
@@ -943,6 +946,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     partial void OnHitAndRunTacticsChanged(bool value)    => MarkDirty();
     partial void OnHitAndRunMaxRunsChanged(int value)               => MarkDirty();
     partial void OnClearHostilesWhenSeenHiddenChanged(bool value)   => MarkDirty();
+    partial void OnClearHostilesWhenSneakFailsChanged(bool value)   => MarkDirty();
 
     // Targeting
     partial void OnTargetOrderNormalChanged(bool value)

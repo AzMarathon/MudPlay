@@ -967,6 +967,86 @@ public sealed class CombatStateTrackerTests
         Assert.False(h.Tracker.SeeHiddenClearActive);
     }
 
+    // ----- clear hostiles when sneak fails ------------------------------
+
+    private static Harness SneakFailHarness()
+    {
+        Harness h = new() { AutoAttackEnabled = false };
+        h.WireSeeHiddenGate();
+        h.Tracker.SetSneakFailClearGate(() => true);
+        h.AutoSneakEnabled = true;
+        h.WireMonsterCountWindow();
+        h.WireMovementActiveGate();
+        h.AddMonster(1, "orc", killable: true);
+        h.AddMonster(2, "goblin", killable: true);
+        return h;
+    }
+
+    [Fact]
+    public void SneakFail_LoudEntryIntoARoomInsideTheThresholds_HoldsToClearIt()
+    {
+        using Harness h = SneakFailHarness();
+        h.Tracker.NoteSneakEntry(held: false);
+
+        h.Feed("Also here: orc.");
+
+        Assert.True(h.Tracker.SneakFailClearActive);
+        Assert.True(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void SneakFail_RoomOutsideTheThresholds_IsWalkedThrough()
+    {
+        using Harness h = SneakFailHarness();
+        h.Settings.MaxMonstersInRoom = 1;
+        h.Tracker.NoteSneakEntry(held: false);
+
+        h.Feed("Also here: orc, goblin.");
+
+        Assert.False(h.Tracker.SneakFailClearActive);
+        Assert.False(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void SneakFail_HeldEntryOrALaterMove_DoesNotClear()
+    {
+        using Harness h = SneakFailHarness();
+        h.Tracker.NoteSneakEntry(held: true);
+        h.Feed("Also here: orc.");
+        Assert.False(h.CombatGateHeld);
+
+        h.Tracker.NoteSneakEntry(held: false);
+        h.Tracker.NoteMoveSent();
+        h.Feed("Also here: goblin.");
+        Assert.False(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void SneakFail_SilentLossReRunsTheRoomAlreadyShown()
+    {
+        using Harness h = SneakFailHarness();
+        h.Feed("Also here: orc.");
+        Assert.False(h.CombatGateHeld);
+
+        h.Tracker.NoteSilentSneakLoss();
+
+        Assert.True(h.Tracker.SneakFailClearActive);
+        Assert.True(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void SneakFail_WithCombatOn_LeavesItToTheNormalGate()
+    {
+        using Harness h = SneakFailHarness();
+        h.AutoAttackEnabled = true;
+        h.Tracker.NoteSneakEntry(held: false);
+
+        h.Feed("Also here: orc.");
+
+        Assert.False(h.Tracker.SneakFailClearActive);
+        Assert.True(h.CombatGateHeld);
+    }
+
     // ----- gate-history Asserter is set ------------------------------
 
     [Fact]

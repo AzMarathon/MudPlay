@@ -289,6 +289,9 @@
                             <CheckBox Content="Clear hostiles when sneak broken by see-hidden monster"
                                       IsChecked="{Binding ClearHostilesWhenSeenHidden, Mode=TwoWay}"
                                       ToolTip.Tip="Combat-off override for stealth runners. When sprinting a walk-to route with combat OFF and auto-sneak ON, a room holding a see-hidden monster breaks sneak. With this on, the engine force-clears every hostile in that room (bypassing the Min/Max gate) so the route can resume sneaking — preventing monsters from dragging and stacking across rooms. Off by default."/>
+                            <CheckBox Content="Clear hostiles when sneak fails"
+                                      IsChecked="{Binding ClearHostilesWhenSneakFails, Mode=TwoWay}"
+                                      ToolTip.Tip="Run through areas with combat OFF and auto-sneak ON, but when a sneaked move fails — 'You make a sound as you enter the room!', or a room shown without 'Sneaking...' — and the room's monster count is inside your Min/Max room thresholds, stop, clear every hostile there, then re-sneak and carry on. A room outside the thresholds is walked through as usual. Off by default."/>
                         </StackPanel>
                     </StackPanel>
                 </Panel>

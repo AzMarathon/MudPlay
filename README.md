@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.131.1**
-> - Combat round totals: new **Cap at monster HP** box; off (the default) counts every hit as printed again, so a killing blow reads in full
+> **Version 3.133.0**
+> - Combat → Backstab: **Clear hostiles when sneak fails** — running with combat off, a failed sneak into a room inside your Min/Max thresholds stops to clear it, then re-sneaks and walks on
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -65,6 +65,7 @@ public sealed class CombatSpellProfile
     public bool HitAndRunTactics { get; set; }
     public int HitAndRunMaxRuns { get; set; } = 3;
     public bool ClearHostilesWhenSeenHidden { get; set; }
+    public bool ClearHostilesWhenSneakFails { get; set; }
     public bool KillAllEngaged { get; set; }
 
     // When running away (the Room thresholds group, beside Run distance).
@@ -133,6 +134,7 @@ public sealed class CombatSpellProfile
             HitAndRunTactics = src.HitAndRunTactics,
             HitAndRunMaxRuns = src.HitAndRunMaxRuns,
             ClearHostilesWhenSeenHidden = src.ClearHostilesWhenSeenHidden,
+            ClearHostilesWhenSneakFails = src.ClearHostilesWhenSneakFails,
             KillAllEngaged = src.KillAllEngaged,
             RunDirection = src.RunDirection,
             BreakBeforeFleeing = src.BreakBeforeFleeing,
@@ -174,6 +176,7 @@ public sealed class CombatSpellProfile
         dst.HitAndRunTactics = HitAndRunTactics;
         dst.HitAndRunMaxRuns = HitAndRunMaxRuns;
         dst.ClearHostilesWhenSeenHidden = ClearHostilesWhenSeenHidden;
+        dst.ClearHostilesWhenSneakFails = ClearHostilesWhenSneakFails;
         dst.KillAllEngaged = KillAllEngaged;
         dst.RunDirection = RunDirection;
         dst.BreakBeforeFleeing = BreakBeforeFleeing;
@@ -214,6 +217,7 @@ public sealed class CombatSpellProfile
         HitAndRunTactics = src.HitAndRunTactics;
         HitAndRunMaxRuns = src.HitAndRunMaxRuns;
         ClearHostilesWhenSeenHidden = src.ClearHostilesWhenSeenHidden;
+        ClearHostilesWhenSneakFails = src.ClearHostilesWhenSneakFails;
         KillAllEngaged = src.KillAllEngaged;
         RunDirection = src.RunDirection;
         BreakBeforeFleeing = src.BreakBeforeFleeing;
@@ -252,6 +256,7 @@ public sealed class CombatSpellProfile
         HitAndRunTactics = HitAndRunTactics,
         HitAndRunMaxRuns = HitAndRunMaxRuns,
         ClearHostilesWhenSeenHidden = ClearHostilesWhenSeenHidden,
+        ClearHostilesWhenSneakFails = ClearHostilesWhenSneakFails,
         KillAllEngaged = KillAllEngaged,
         RunDirection = RunDirection,
         BreakBeforeFleeing = BreakBeforeFleeing,
