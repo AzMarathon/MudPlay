@@ -47,7 +47,7 @@ public sealed class AreaToursTests
     [Fact]
     public void SafeAreasRankAheadOfOnesWhereTheCharacterDied()
     {
-        LoopSimRun Run(long exp, double? died = null) => new(3600, exp, 1, 1, 0, 0, 0, 0, 0, 50, 50, died,
+        LoopSimRun Run(long exp, double? died = null) => new(3600, 3600, exp, 1, 1, 0, 0, 0, 0, 0, 50, 50, died,
             new Dictionary<string, int>());
         var ranked = AreaRank.Rank(new[]
         {
@@ -62,7 +62,7 @@ public sealed class AreaToursTests
     [Fact]
     public void AYourLoopPlayedLiveWithoutDyingCountsAsSafeEvenIfASimulatedRunDied()
     {
-        LoopSimRun Died() => new(600, 600_000, 1, 1, 0, 0, 0, 0, 0, 0, 50, 600, new Dictionary<string, int>());
+        LoopSimRun Died() => new(3600, 600, 600_000, 1, 1, 0, 0, 0, 0, 0, 0, 50, 600, new Dictionary<string, int>());
         var live = new[] { new LiveLoopRecord("Marshlands Loop", 47, 3, 25.2, 90_300_000, 8000, 0) };
         var loop = new AreaRank("Marshlands Loop", 47, new[] { R(1) }, 46, new LoopSimSummary(new[] { Died() }), IsLoop: true, Live: live);
 
@@ -74,7 +74,7 @@ public sealed class AreaToursTests
     [Fact]
     public void AHigherLevelLiveRecordIsShownButDoesNotMakeADeadlyLoopSafe()
     {
-        LoopSimRun Died() => new(600, 600_000, 1, 1, 0, 0, 0, 0, 0, 0, 50, 600, new Dictionary<string, int>());
+        LoopSimRun Died() => new(3600, 600, 600_000, 1, 1, 0, 0, 0, 0, 0, 0, 50, 600, new Dictionary<string, int>());
         var live = new[] { new LiveLoopRecord("Marshlands Loop", 49, 3, 25.2, 90_300_000, 8000, 0) };
         var loop = new AreaRank("Marshlands Loop", 47, new[] { R(1) }, 46, new LoopSimSummary(new[] { Died() }), IsLoop: true, Live: live);
 
