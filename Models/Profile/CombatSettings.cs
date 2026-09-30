@@ -96,6 +96,12 @@ public sealed class CombatSettings
     // false — combat-off means combat-off unless the user opts in.
     public bool ClearHostilesWhenSeenHidden { get; set; }
 
+    // The same stealth run, when a sneaked move fails (the loud entry line, or a room
+    // shown without "Sneaking..."): a room inside the Min/Max monster window is
+    // cleared of every engageable hostile before the route re-sneaks and walks on;
+    // one outside it is walked through unsneaked as usual. Default false.
+    public bool ClearHostilesWhenSneakFails { get; set; }
+
     // ----- Targeting ------------------------------------------------
 
     // Which monster in our own priority-ranked list to swing at when

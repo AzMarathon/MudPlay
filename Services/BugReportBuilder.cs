@@ -553,6 +553,8 @@ public static class BugReportBuilder
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).
         Kv(sb, "Engaging to clear a rest-blocker", svc.Health.ForceClearForRest.ToString());
+        Kv(sb, "Clearing a see-hidden room (combat off)", svc.CombatTracker.SeeHiddenClearActive.ToString());
+        Kv(sb, "Clearing after a failed sneak (combat off)", svc.CombatTracker.SneakFailClearActive.ToString());
         // Alternating action-order phase — pairs with the resolved Combat "ActionOrder"
         // setting below to explain why an alternate-order character is casting or
         // swinging this round (even rounds open on the mode's first phase).

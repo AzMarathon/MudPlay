@@ -1,5 +1,9 @@
 # Version history
 
+## 3.133.0
+
+- Combat → Backstab: **Clear hostiles when sneak fails** — running with combat off, a failed sneak into a room inside your Min/Max thresholds stops to clear it, then re-sneaks and walks on
+
 ## 3.132.0
 
 - Simulator window: **Start simulating** in the Exp/Hr Estimator section opens it, no estimating needed; simulate any saved loop or the estimator's sketch

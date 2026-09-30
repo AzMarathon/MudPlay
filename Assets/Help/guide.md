@@ -1385,7 +1385,7 @@ When **Auto-Sneak is on** it times those around your stealth. Commands you type 
 - **Rests you need still happen.** A rest your *rest if below* settings call for goes out even if it ends the sneak. On Paradigm, a race or class with **ShadowRest** sneaks first and then rests, so the rest keeps you hidden.
 - **Replies stay quiet.** While you're sneaking or hidden, a reply to an @-command someone said aloud goes back by telepath instead of a say.
 - **Gear before the sneak.** A boss / lair gear set or backstab gear for the next room goes on before the sneak, never after it.
-- **See-hidden fights.** If a see-hidden monster forces a fight (with *Clear hostiles when sneak broken by see-hidden monster* on), the now-cleared room becomes the place the held actions fire, you re-sneak, and the walk continues.
+- **See-hidden and failed-sneak fights.** If a see-hidden monster forces a fight (with *Clear hostiles when sneak broken by see-hidden monster* on), or a failed sneak stops you to clear a room (with *Clear hostiles when sneak fails* on), the now-cleared room becomes the place the held actions fire, you re-sneak, and the walk continues.
 
 A flee or an emergency hangup is never held. With **Use @panic while leading** on, a leader's hangup says `@panic` first (telling the party to hang up too), even though it ends the sneak; a follower just hangs up. Turn Auto-Sneak **off** and none of this applies: everything goes out on schedule, wherever you are.
 
@@ -2714,7 +2714,7 @@ Off (the default) is the current behavior: if you engage a room of 8 with Min se
 **What it does:** When on, attempts a backstab as the very first action when you enter a room with a sneakable target. Backstab only ever lands on that opening action — once anything else has happened in the room (a spell, a swing, another backstab attempt), the surprise is gone for that room until you leave and re-approach freshly.
 **Important notes:** A monster with the "see-hidden" ability reveals you before the opener, forcing a normal attack instead. A successful backstab is silent (no public "moves to attack" announcement) — you only know it worked from the "surprise" damage line.
 
-The backstab options that depend on it (*Don't BS if multi-attack room spell is firing*, *Run if BS fails*, *Hit and Run tactics*) sit indented beneath it and are greyed out while it's off. *Clear hostiles when sneak broken by see-hidden monster* is a separate combat-off stealth-running option, so it's listed on its own below them.
+The backstab options that depend on it (*Don't BS if multi-attack room spell is firing*, *Run if BS fails*, *Hit and Run tactics*) sit indented beneath it and are greyed out while it's off. *Clear hostiles when sneak broken by see-hidden monster* and *Clear hostiles when sneak fails* are separate combat-off stealth-running options, so they're listed on their own below them.
 
 ### Don't BS if multi-attack room spell is firing
 
@@ -2760,6 +2760,13 @@ It doesn't run where a backstab couldn't work anyway: a room with a see-hidden m
 **What it does:** A safety valve for stealth routes: while Auto-Sneak is on (you're trying to sneak through a route untouched) and you stumble into a room with a see-hidden monster, your stealth breaks. With this on, MudPlay fights and clears that one room instead of continuing to walk while exposed and dragging monsters behind you — bypassing the Min/Max room-skip gate for just that room, then re-sneaks and carries on. Because the room is now clear, any buff/cure the sneak-aware timing was holding fires there before you re-sneak.
 
 This works whether **Auto-Combat is on or off**: the whole point is to clear the room and get moving again, so it force-clears regardless of your combat toggle (with Auto-Combat off it engages just for that room; with it on, it overrides the Min/Max gate so the room can't be skipped and left to drag).
+
+### Clear hostiles when sneak fails
+
+**Default:** Off
+**What it does:** For running through an area with **Auto-Combat off** and **Auto-Sneak on**. When a sneaked move fails, MudPlay can stop and clear the room instead of walking on exposed. A failed move is `You make a sound as you enter the room!`, or a room that shows without `Sneaking...`. MudPlay stops only if the room's monster count is inside your **Min / Max monsters in room** thresholds. It then holds the walk, fights every monster in the room you'd normally engage, re-sneaks and carries on skipping. A room outside the thresholds is walked through unsneaked, as it would be without the option.
+
+It only acts while Auto-Combat is off. With it on, the room is fought or skipped by your thresholds as usual. The failure counts only for the room you failed into: once the next move goes out, it's forgotten.
 
 ### Run distance
 
@@ -4079,6 +4086,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Run if BS fails | `false` | bool | `RunIfBackstabFails` | Models/Profile/CombatSettings.cs |
 | Hit and Run tactics / Give up and fight after N runs | `false` / 3 | bool / 1–20 | `HitAndRunTactics` / `HitAndRunMaxRuns` | Models/Profile/CombatSettings.cs |
 | Clear hostiles when seen hidden | `false` | bool | `ClearHostilesWhenSeenHidden` | Models/Profile/CombatSettings.cs |
+| Clear hostiles when sneak fails | `false` | bool | `ClearHostilesWhenSneakFails` | Models/Profile/CombatSettings.cs |
 | Target order | `Normal` | Normal / Reverse | `TargetOrder` | Models/Profile/CombatSettings.cs |
 | Target Priority (+ member name) | `Default` / `null` | Default / FollowLeader / FollowMember | `TargetPriority` / `TargetPriorityMemberName` | Models/Profile/CombatSettings.cs |
 | Attack Order (+ after-player name) | `Default` / `null` | Default / AttackLastParty / AttackLastRoom / AttackAfter | `AttackTiming` / `AttackAfterPlayerName` | Models/Profile/CombatSettings.cs |
