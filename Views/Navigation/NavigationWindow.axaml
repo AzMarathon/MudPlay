@@ -639,16 +639,32 @@
                             IsVisible="{Binding EngineActionIsWalking}"
                             Command="{Binding PauseOrResumeCommand}"/>
 
-                    <!-- Run / Pause — loop running shows "Pause" (assert
+                    <!-- Go / Pause — loop running shows "Pause" (assert
                          user gate + open builder seeded from running loop);
-                         loop paused shows "Run" (resume); walker/auto-lair
-                         keep the legacy Run/Stop one-shot semantics. -->
+                         loop paused by the user shows "Go" (resume); walker
+                         keeps Go / Stop one-shot semantics. -->
                     <Button Classes="ActionChip"
-                            Classes.Run="{Binding !IsAnyExecuting}"
-                            Classes.Pause="{Binding IsAnyExecuting}"
+                            Classes.Run="{Binding RunChipIsGo}"
+                            Classes.Pause="{Binding !RunChipIsGo}"
                             Content="{Binding RunStopLabel}"
                             Command="{Binding RunStopCommand}"
                             IsEnabled="{Binding CanRun}"/>
+                    <!-- Go ▾ — the same start with Auto-Combat off (Run) or in Sprint
+                         Mode (Sprint) for the trip; shown while Go would start
+                         something new. -->
+                    <Button Classes="ActionChip Run"
+                            Content="▾" Padding="6,2"
+                            IsVisible="{Binding CanRunWithOptions}"
+                            ToolTip.Tip="Go with Auto-Combat off (Run), or in Sprint Mode (Sprint), until the walk-to arrives, the loop begins its circuit, or the Auto-Lair reaches its first lair.">
+                        <Button.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuItem Header="Run — Go with Auto-Combat off"
+                                          Command="{Binding RunCombatOffCommand}"/>
+                                <MenuItem Header="Sprint — Go in Sprint Mode"
+                                          Command="{Binding RunSprintCommand}"/>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
 
                     <!-- Loop mode chip — doubles as the full Stop when a
                          loop is running. The dispatcher
@@ -2089,9 +2105,10 @@
                                                             Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).LoadSetupCommand}"
                                                             CommandParameter="{Binding}"/>
                                                     <Button Grid.Column="2"
-                                                            Content="Run" FontSize="10"
+                                                            Content="Go" FontSize="10"
                                                             Padding="8,2"
                                                             Classes="Accent"
+                                                            ToolTip.Tip="Go: start this Auto-Lair setup. Right-click for Run (Auto-Combat off) or Sprint."
                                                             Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RunSetupCommand}"
                                                             CommandParameter="{Binding}"/>
                                                     <Grid.ContextMenu>
@@ -2099,8 +2116,14 @@
                                                             <MenuItem Header="Load"
                                                                       Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).LoadSetupCommand}"
                                                                       CommandParameter="{Binding}"/>
-                                                            <MenuItem Header="Run"
+                                                            <MenuItem Header="Go"
                                                                       Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RunSetupCommand}"
+                                                                      CommandParameter="{Binding}"/>
+                                                            <MenuItem Header="Run (Go with Auto-Combat off)"
+                                                                      Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RunSetupCombatOffCommand}"
+                                                                      CommandParameter="{Binding}"/>
+                                                            <MenuItem Header="Sprint (Go in Sprint Mode)"
+                                                                      Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RunSetupSprintCommand}"
                                                                       CommandParameter="{Binding}"/>
                                                             <MenuItem Header="Edit…"
                                                                       Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).EditSetupCommand}"
@@ -2142,8 +2165,9 @@
                                                             Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).LoadLoopCommand}"
                                                             CommandParameter="{Binding}"/>
                                                     <Button Grid.Column="2"
-                                                            Content="Run" FontSize="10"
+                                                            Content="Go" FontSize="10"
                                                             Padding="8,2"
+                                                            ToolTip.Tip="Go: start this loop. Right-click for Run (Auto-Combat off) or Sprint."
                                                             Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RunLoopCommand}"
                                                             CommandParameter="{Binding}"/>
                                                     <Grid.ContextMenu>
@@ -2151,8 +2175,14 @@
                                                             <MenuItem Header="Load"
                                                                       Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).LoadLoopCommand}"
                                                                       CommandParameter="{Binding}"/>
-                                                            <MenuItem Header="Run"
+                                                            <MenuItem Header="Go"
                                                                       Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RunLoopCommand}"
+                                                                      CommandParameter="{Binding}"/>
+                                                            <MenuItem Header="Run (Go with Auto-Combat off)"
+                                                                      Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RunLoopCombatOffCommand}"
+                                                                      CommandParameter="{Binding}"/>
+                                                            <MenuItem Header="Sprint (Go in Sprint Mode)"
+                                                                      Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RunLoopSprintCommand}"
                                                                       CommandParameter="{Binding}"/>
                                                             <MenuItem Header="Edit…"
                                                                       Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).EditLoopCommand}"

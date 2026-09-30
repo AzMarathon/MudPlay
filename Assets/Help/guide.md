@@ -261,7 +261,13 @@ It sends nothing to the game to do this — it's pure inference from what you're
 
 The status line is also **colour-coded**: **amber** while movement is held for a reason (resting, held, confused, party wait, Auto-All off…) and **red** when a nav action fails or the tracker loses your position — so a problem is glaring rather than buried in grey.
 
-A row of action chips — **Save**, **Run**, **Loop mode**, **Lair mode** — sits just above the map. While you're in Loop mode a **Clear all** chip appears to the left of **Save**; it wipes every step from the loop you're building so you can start fresh.
+A row of action chips — **Save**, **Go**, **Loop mode**, **Lair mode** — sits just above the map.
+
+**Go, Run and Sprint.** **Go** starts what's queued: a walk-to, the loop you built, or the lairs you marked. Whenever Go would start something new, a small **▾** beside it offers two other ways to set out:
+- **Run** — Go with **Auto-Combat off** for the trip.
+- **Sprint** — Go in **Sprint Mode** (no resting stops, no fighting or looting).
+
+Either lasts only for the trip there. Combat comes back on, or Sprint ends, the moment a walk-to arrives, a loop reaches its first waypoint and begins its circuit, or an Auto-Lair steps into its first lair. The same **Run** and **Sprint** choices sit beside **Go** in the route picker, on each loop, lair, Go To and the walk-to search in **Navigation Management**, and in the right-click menu of the rail's loops and lairs. While a loop runs, the chip reads **Pause**, and only turns back to **Go** when you pause it yourself — not every time a fight or a rest holds the loop. While you're in Loop mode a **Clear all** chip appears to the left of **Save**; it wipes every step from the loop you're building so you can start fresh.
 
 Any label too long for a narrow rail is trimmed with an ellipsis — **hover it to read the full text**. This covers the status line, the GOTO / loop / lair / favourite rows, the live CURRENT NAV step list, search results, folder names, and the EXP/HR estimator rows.
 
@@ -269,7 +275,7 @@ Any label too long for a narrow rail is trimmed with an ellipsis — **hover it 
 
 To send your character to a room:
 
-- **Search** — type a room name or a map/room key (e.g. `1/297`) in the top search box, pick the match, then click the green **Run** chip.
+- **Search** — type a room name or a map/room key (e.g. `1/297`) in the top search box, pick the match, then click the green **Go** chip (or **▾ → Run / Sprint**).
 - **Right-click a room** on the map → **Walk here**.
 - **Favourites** — save rooms you visit often (right-click a room → **Add to favorites**, or the Management dialog's **Go To** tab), then click one in the **GOTO** rail to walk there. In the Management dialog's **Go To** tab each saved room is listed as its label followed by its **(map/room)** number, so identically-named rooms are easy to tell apart. **Right-click a Go To** in the rail for **Walk here**, **Edit…**, **Move to folder…**, an **Add to / Remove from favourites** toggle (stars it — the ★ that promotes it to the terminal's right-click **Favorites** flyout — without deleting it), and **Delete this Go To** (removes the saved location entirely).
 Type **"favourite"** (or any 3+ character part of the word) into the GOTO or loop filter box to surface your starred Go Tos and favourited loops.
@@ -282,19 +288,19 @@ If you **type a movement command yourself** while a walk, loop, or auto-lair is 
 
 A **loop** is a saved circuit of rooms MudPlay walks over and over, fighting and looting as it goes. To build one the quick way:
 
-1. Click the **Loop mode** chip (it changes to **Building**). If you've run a loop this session, it's **pre-loaded** into the builder — with **all its settings intact** (per-room command / delay / no-rest / no-attack **and** the loop-wide Only-attack-in-lair flag), so you can **Run** it straight away or re-**Save** it — handy when a stop / `@stop` dropped you off one, or you ran an ad-hoc loop you never saved. Hit **Clear all** to wipe it and build a fresh one instead. (Turn the pre-load off under **Settings → General → "Load last ran loop"** if you'd rather always start empty.)
+1. Click the **Loop mode** chip (it changes to **Building**). If you've run a loop this session, it's **pre-loaded** into the builder — with **all its settings intact** (per-room command / delay / no-rest / no-attack **and** the loop-wide Only-attack-in-lair flag), so you can **Go** straight away or re-**Save** it — handy when a stop / `@stop` dropped you off one, or you ran an ad-hoc loop you never saved. Hit **Clear all** to wipe it and build a fresh one instead. (Turn the pre-load off under **Settings → General → "Load last ran loop"** if you'd rather always start empty.)
 2. **Left-click the rooms on the map, in order** — each becomes a waypoint. **Alt+click** a room to take it back out (a room you've added more than once loses its most recent click). To **move** a waypoint, press on its numbered chip and **drag it onto another room**. It keeps its number, command and flags, and the line re-plans through the new room. A drop on empty map, or on a room the loop can't reach, puts it back. Room tooltips stay hidden while you're holding a chip. Reorder or remove them in the **CURRENT NAV** rail too.
-3. Click **Run** to save and start it (you'll name it), or **Save** to keep it without running.
+3. Click **Go** to start it, or **Save** to keep it without running.
 
-You can start building a loop **while a walk-to is running** — building only collects rooms, it never moves you, so your walk continues uninterrupted. Clicking **Run** in the Navigation menu then hands movement over: it stops the walk and starts the loop. The **toolbar** Start / Stop / Pause buttons still control the *walk* itself, so reach for those to stop (or pause) the walk without starting the loop.
+You can start building a loop **while a walk-to is running** — building only collects rooms, it never moves you, so your walk continues uninterrupted. Clicking **Go** in the Navigation menu then hands movement over: it stops the walk and starts the loop. The **toolbar** Start / Stop / Pause buttons still control the *walk* itself, so reach for those to stop (or pause) the walk without starting the loop.
 
 To put yourself (or a party member) back on the **last loop run this session** without reopening the builder, use the **`@loop last`** remote command — it re-runs it even if it was an ad-hoc loop that was never saved. This works regardless of the "Load last ran loop" setting above.
 
 Or build it off the map: **Navigation Management → New Loop** opens an editor where you add rooms by name or key, name and annotate the loop, and set per-waypoint options. While that editor is open, you can also **left-click rooms on the Navigation map** to append them to the waypoint list — the same way the on-map builder works, without typing keys.
 
-**Run a saved loop** from the **LOOPS + AUTO-LAIRS** rail (or the Management dialog) — each has **Load** (stage it) and **Run** (start now). Queue one and, if you aren't already there, MudPlay walks you to the loop's start, then begins the circuit; combat, healing, and pickup keep running throughout. While it runs the badge reads **LOOPING** with "step X of Y on lap Z", and the **CURRENT NAV** rail shows the loop's rooms in **green** — click any room to tune it live without stopping (see *Live-editing a running loop* below). **Stop** ends the loop.
+**Run a saved loop** from the **LOOPS + AUTO-LAIRS** rail (or the Management dialog) — each has **Load** (stage it) and **Go** (start now; right-click, or the ▾ in Management, for **Run** / **Sprint**). Queue one and, if you aren't already there, MudPlay walks you to the loop's start, then begins the circuit; combat, healing, and pickup keep running throughout. While it runs the badge reads **LOOPING** with "step X of Y on lap Z", and the **CURRENT NAV** rail shows the loop's rooms in **green** — click any room to tune it live without stopping (see *Live-editing a running loop* below). **Stop** ends the loop.
 
-**Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Run**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to *both* right-click Favorites flyouts (the terminal's and the map's, green for loops, amber for lairs) alongside your starred GOTO rooms, so you can start it from anywhere.
+**Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Go**, **Run**, **Sprint**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to *both* right-click Favorites flyouts (the terminal's and the map's, green for loops, amber for lairs) alongside your starred GOTO rooms, so you can start it from anywhere.
 
 Each waypoint can carry its own per-room settings, edited **inline in the Edit Loop table**:
 
@@ -311,7 +317,7 @@ Chain several commands in one waypoint with `;` or `^M` — each is sent as its 
 
 ### Live-editing a running loop
 
-While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** rows — the running counterpart of the builder's red list. **Click any room** to change its **command**, **delay**, **No rest**, **No atk** or **Rest up here** right there, and use **⚙ Entire Loop Settings** to toggle **Only attack in lair rooms** — all applied **live**, with no stop/restart. The room the loop is currently in is **highlighted**, and the map draws matching **numbered green bubbles** on each waypoint (the running twin of the builder's red pins) so you can tell which rail row is which room. Flag changes take effect on the loop's next decision and a delay change on that step's next run; **adding or removing a command** re-plans the circuit on the **next lap**. You **can't add, remove, or reorder rooms** while running — for that, **Pause** in the Navigation window, which opens the builder (the red list) seeded from the loop; edit it, then press **Run** there to restart with your changes. Resuming any other way (the toolbar, a hotkey) closes an unedited builder and the loop's line turns green again; an edited one stays open so your changes aren't lost, while the running loop still shows green.
+While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** rows — the running counterpart of the builder's red list. **Click any room** to change its **command**, **delay**, **No rest**, **No atk** or **Rest up here** right there, and use **⚙ Entire Loop Settings** to toggle **Only attack in lair rooms** — all applied **live**, with no stop/restart. The room the loop is currently in is **highlighted**, and the map draws matching **numbered green bubbles** on each waypoint (the running twin of the builder's red pins) so you can tell which rail row is which room. Flag changes take effect on the loop's next decision and a delay change on that step's next run; **adding or removing a command** re-plans the circuit on the **next lap**. You **can't add, remove, or reorder rooms** while running — for that, **Pause** in the Navigation window, which opens the builder (the red list) seeded from the loop; edit it, then press **Go** there to restart with your changes. Resuming any other way (the toolbar, a hotkey) closes an unedited builder and the loop's line turns green again; an edited one stays open so your changes aren't lost, while the running loop still shows green.
 
 ### Importing a MegaMUD loop
 
@@ -405,7 +411,7 @@ A whole-area tour walks *every* lair in the area, including the rooms a hand-bui
 
 ## Auto-Lair
 
-**Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**; clicking a marked room again, or **Alt+clicking** it, unmarks it), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
+**Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**; clicking a marked room again, or **Alt+clicking** it, unmarks it), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Go** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
 
 **When a lair counts as ready.** Its respawn timer (from the room's **Max Regen** time — the middle of the window on Stock — or your override) runs on **Stock** from the **last kill** in the lair — the clock the game itself restarts on every kill, so a long fight pushes the next visit back by its length — and on **Paradigm** from when you **entered** it. A Stock lair you haven't seen a kill in yet times from your entry. The **CURRENT NAV** countdown for a marked lair follows the same clock.
 

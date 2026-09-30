@@ -472,12 +472,21 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // Walk to a favourite — stops background automation, closes the manager, then
     // hands off to the route picker (same terminal-walk shape as the footer search).
     [RelayCommand]
-    private async Task WalkToFavoriteAsync(FavoriteRowViewModel? row)
+    private Task WalkToFavoriteAsync(FavoriteRowViewModel? row) => WalkToFavorite(row, RunStartMode.Normal);
+
+    // Go ▾ → Run / Sprint: the same walk with Auto-Combat off, or in Sprint Mode.
+    [RelayCommand]
+    private Task WalkToFavoriteCombatOffAsync(FavoriteRowViewModel? row) => WalkToFavorite(row, RunStartMode.CombatOff);
+
+    [RelayCommand]
+    private Task WalkToFavoriteSprintAsync(FavoriteRowViewModel? row) => WalkToFavorite(row, RunStartMode.Sprint);
+
+    private async Task WalkToFavorite(FavoriteRowViewModel? row, RunStartMode mode)
     {
         if (row is null || _walker is null) return;
         _movement?.Stop();
         Close();
-        await RouteChoicePrompt.WalkAsync(AppServices.Current, row.Key);
+        await RouteChoicePrompt.WalkAsync(AppServices.Current, row.Key, startMode: mode);
     }
 
     // "Add" — pick a room by loose-match name search OR map/room number, then
@@ -512,10 +521,26 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // surfaces on the toolbar movement buttons + the Navigation window if
     // it's open. No-op when no runner is wired.
     [RelayCommand]
-    private void RunLoop(ManagerLoopRow? row)
+    private void RunLoop(ManagerLoopRow? row) => StartLoop(row, RunStartMode.Normal);
+
+    // Go ▾ → Run / Sprint: start the loop with Auto-Combat off, or in Sprint Mode, for
+    // the walk to its first waypoint.
+    [RelayCommand]
+    private void RunLoopCombatOff(ManagerLoopRow? row) => StartLoop(row, RunStartMode.CombatOff);
+
+    [RelayCommand]
+    private void RunLoopSprint(ManagerLoopRow? row) => StartLoop(row, RunStartMode.Sprint);
+
+    private void StartLoop(ManagerLoopRow? row, RunStartMode mode)
     {
-        if (row is null) return;
-        _runner?.Start(row.Source);
+        if (row is null || _runner is null) return;
+        ApplyStartMode(mode);
+        _runner.Start(row.Source);
+    }
+
+    private static void ApplyStartMode(RunStartMode mode)
+    {
+        if (mode != RunStartMode.Normal) AppServices.Current.ApplyRunStartMode?.Invoke(mode);
     }
 
     // Stage the selected loop as the active one without starting movement
@@ -712,10 +737,21 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // The map-mode transition the Navigation rail does on Run is window-only
     // sugar and deliberately skipped here — this dialog isn't the map.
     [RelayCommand]
-    private void RunLairSetup(ManagerLairSetupRow? row)
+    private void RunLairSetup(ManagerLairSetupRow? row) => StartLairSetup(row, RunStartMode.Normal);
+
+    // Go ▾ → Run / Sprint: start the setup with Auto-Combat off, or in Sprint Mode,
+    // for the trip to its first lair.
+    [RelayCommand]
+    private void RunLairSetupCombatOff(ManagerLairSetupRow? row) => StartLairSetup(row, RunStartMode.CombatOff);
+
+    [RelayCommand]
+    private void RunLairSetupSprint(ManagerLairSetupRow? row) => StartLairSetup(row, RunStartMode.Sprint);
+
+    private void StartLairSetup(ManagerLairSetupRow? row, RunStartMode mode)
     {
         if (row is null || _autoLair is null) return;
         LoadLairMarkers(row.Source);
+        ApplyStartMode(mode);
         _autoLair.Start();
     }
 
@@ -841,6 +877,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // instance leaves them null and the box stays hidden.
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RunSearchCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RunSearchCombatOffCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RunSearchSprintCommand))]
     private string _searchQuery = string.Empty;
 
     // Current dropdown matches for SearchQuery.
@@ -909,6 +947,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         SearchResults.Clear();
         OnPropertyChanged(nameof(HasSearchResults));
         RunSearchCommand.NotifyCanExecuteChanged();
+        RunSearchCombatOffCommand.NotifyCanExecuteChanged();
+        RunSearchSprintCommand.NotifyCanExecuteChanged();
     }
 
     private bool CanRunSearch => HasWalkToSearch && !string.IsNullOrWhiteSpace(SearchQuery);
@@ -918,7 +958,16 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // text. Stops any running loop / Auto-Lair first so the explicit walk-to
     // takes precedence over background automation.
     [RelayCommand(CanExecute = nameof(CanRunSearch))]
-    private async Task RunSearch()
+    private Task RunSearch() => WalkToSearch(RunStartMode.Normal);
+
+    // Go ▾ → Run / Sprint: the same walk with Auto-Combat off, or in Sprint Mode.
+    [RelayCommand(CanExecute = nameof(CanRunSearch))]
+    private Task RunSearchCombatOff() => WalkToSearch(RunStartMode.CombatOff);
+
+    [RelayCommand(CanExecute = nameof(CanRunSearch))]
+    private Task RunSearchSprint() => WalkToSearch(RunStartMode.Sprint);
+
+    private async Task WalkToSearch(RunStartMode mode)
     {
         if (_walker is null) return;
 
@@ -937,7 +986,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         // shorter gated shortcut exists) opens as its own modeless window rather
         // than stacking on the closing dialog.
         Close();
-        await RouteChoicePrompt.WalkAsync(AppServices.Current, target);
+        await RouteChoicePrompt.WalkAsync(AppServices.Current, target, startMode: mode);
     }
 
     // ----- close -----------------------------------------------------

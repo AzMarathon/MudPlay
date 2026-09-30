@@ -320,14 +320,27 @@
                                                         <Run Text=" wpt"/>
                                                     </TextBlock>
                                                 </StackPanel>
-                                                <Button Grid.Column="1"
-                                                        Content="Run"
-                                                        FontSize="10"
-                                                        Padding="8,2"
-                                                        Foreground="{StaticResource AccentGreenBrush}"
-                                                        ToolTip.Tip="Run this loop now (no map needed)"
-                                                        Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLoopCommand}"
-                                                        CommandParameter="{Binding}"/>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                                                    <Button Content="Go"
+                                                            FontSize="10"
+                                                            Padding="8,2"
+                                                            Foreground="{StaticResource AccentGreenBrush}"
+                                                            ToolTip.Tip="Go: run this loop now (no map needed)"
+                                                            Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLoopCommand}"
+                                                            CommandParameter="{Binding}"/>
+                                                    <Button Content="▾" FontSize="10" Padding="4,2"
+                                                            Foreground="{StaticResource AccentGreenBrush}"
+                                                            ToolTip.Tip="Run: Go with Auto-Combat off. Sprint: Go in Sprint Mode. Either ends when the loop's circuit begins.">
+                                                        <Button.Flyout>
+                                                            <MenuFlyout>
+                                                                <MenuItem Header="Run — Go with Auto-Combat off"
+                                                                          Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLoopCombatOffCommand}" CommandParameter="{Binding}"/>
+                                                                <MenuItem Header="Sprint — Go in Sprint Mode"
+                                                                          Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLoopSprintCommand}" CommandParameter="{Binding}"/>
+                                                            </MenuFlyout>
+                                                        </Button.Flyout>
+                                                    </Button>
+                                                </StackPanel>
                                                 <Button Grid.Column="2"
                                                         Content="Load"
                                                         FontSize="10"
@@ -352,8 +365,14 @@
                                             </Grid>
                                             <Border.ContextMenu>
                                                 <ContextMenu>
-                                                    <MenuItem Header="Run now"
+                                                    <MenuItem Header="Go now"
                                                               Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLoopCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="Run (Auto-Combat off)"
+                                                              Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLoopCombatOffCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="Sprint (Sprint Mode)"
+                                                              Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLoopSprintCommand}"
                                                               CommandParameter="{Binding}"/>
                                                     <MenuItem Header="Load (stage as active)"
                                                               Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).LoadLoopCommand}"
@@ -394,13 +413,26 @@
                                                      as the loop rows. Run loads this setup's
                                                      markers into the scheduler and starts it;
                                                      Load stages the markers without starting. -->
-                                                <Button Grid.Column="1"
-                                                        Content="Run" FontSize="10"
-                                                        Padding="8,2"
-                                                        Foreground="{StaticResource AccentGreenBrush}"
-                                                        ToolTip.Tip="Run this Auto-Lair setup now (no map needed)"
-                                                        Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLairSetupCommand}"
-                                                        CommandParameter="{Binding}"/>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                                                    <Button Content="Go" FontSize="10"
+                                                            Padding="8,2"
+                                                            Foreground="{StaticResource AccentGreenBrush}"
+                                                            ToolTip.Tip="Go: run this Auto-Lair setup now (no map needed)"
+                                                            Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLairSetupCommand}"
+                                                            CommandParameter="{Binding}"/>
+                                                    <Button Content="▾" FontSize="10" Padding="4,2"
+                                                            Foreground="{StaticResource AccentGreenBrush}"
+                                                            ToolTip.Tip="Run: Go with Auto-Combat off. Sprint: Go in Sprint Mode. Either ends when the first lair begins.">
+                                                        <Button.Flyout>
+                                                            <MenuFlyout>
+                                                                <MenuItem Header="Run — Go with Auto-Combat off"
+                                                                          Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLairSetupCombatOffCommand}" CommandParameter="{Binding}"/>
+                                                                <MenuItem Header="Sprint — Go in Sprint Mode"
+                                                                          Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLairSetupSprintCommand}" CommandParameter="{Binding}"/>
+                                                            </MenuFlyout>
+                                                        </Button.Flyout>
+                                                    </Button>
+                                                </StackPanel>
                                                 <Button Grid.Column="2"
                                                         Content="Load" FontSize="10"
                                                         Padding="8,2"
@@ -422,8 +454,14 @@
                                             </Grid>
                                             <Border.ContextMenu>
                                                 <ContextMenu>
-                                                    <MenuItem Header="Run now"
+                                                    <MenuItem Header="Go now"
                                                               Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLairSetupCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="Run (Auto-Combat off)"
+                                                              Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLairSetupCombatOffCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="Sprint (Sprint Mode)"
+                                                              Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).RunLairSetupSprintCommand}"
                                                               CommandParameter="{Binding}"/>
                                                     <MenuItem Header="Load (stage markers)"
                                                               Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).LoadLairSetupCommand}"
@@ -615,12 +653,25 @@
                                                                    VerticalAlignment="Center"
                                                                    Foreground="{StaticResource ChromeFgBrush}"
                                                                    TextTrimming="CharacterEllipsis"/>
-                                                        <Button Grid.Column="2"
-                                                                Content="Walk" FontSize="10" Padding="8,2"
-                                                                Foreground="{StaticResource AccentGreenBrush}"
-                                                                ToolTip.Tip="Walk to this favourite now (closes this window)"
-                                                                Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).WalkToFavoriteCommand}"
-                                                                CommandParameter="{Binding}"/>
+                                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                                                            <Button Content="Go" FontSize="10" Padding="8,2"
+                                                                    Foreground="{StaticResource AccentGreenBrush}"
+                                                                    ToolTip.Tip="Go: walk to this favourite now (closes this window)"
+                                                                    Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).WalkToFavoriteCommand}"
+                                                                    CommandParameter="{Binding}"/>
+                                                            <Button Content="▾" FontSize="10" Padding="4,2"
+                                                            Foreground="{StaticResource AccentGreenBrush}"
+                                                            ToolTip.Tip="Run: Go with Auto-Combat off. Sprint: Go in Sprint Mode. Either ends when you arrive begins.">
+                                                        <Button.Flyout>
+                                                            <MenuFlyout>
+                                                                <MenuItem Header="Run — Go with Auto-Combat off"
+                                                                          Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).WalkToFavoriteCombatOffCommand}" CommandParameter="{Binding}"/>
+                                                                <MenuItem Header="Sprint — Go in Sprint Mode"
+                                                                          Command="{Binding $parent[ListBox].((vm:NavigationManagerDialogViewModel)DataContext).WalkToFavoriteSprintCommand}" CommandParameter="{Binding}"/>
+                                                            </MenuFlyout>
+                                                        </Button.Flyout>
+                                                    </Button>
+                                                        </StackPanel>
                                                         <Button Grid.Column="3"
                                                                 Content="Edit" FontSize="10" Padding="8,2"
                                                                 ToolTip.Tip="Edit favourite (name / map / room)"
@@ -667,7 +718,7 @@
                  and the walker heads there. The dropdown floats above the
                  box (its own Grid.Row="1" overlay anchored bottom) so it
                  doesn't shove the footer around. -->
-            <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
                 <TextBox Grid.Column="0" Classes="clearable"
                          Name="WalkToBox"
                          Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -676,13 +727,25 @@
                          FontSize="11"
                          VerticalContentAlignment="Center"/>
                 <Button Grid.Column="1"
-                        Content="Run"
+                        Content="Go"
                         IsVisible="{Binding HasWalkToSearch}"
                         Foreground="{StaticResource AccentGreenBrush}"
                         Command="{Binding RunSearchCommand}"
-                        ToolTip.Tip="Walk to the searched room and close this window"
+                        ToolTip.Tip="Go: walk to the searched room and close this window"
                         MinWidth="70"/>
                 <Button Grid.Column="2"
+                        Content="▾"
+                        IsVisible="{Binding HasWalkToSearch}"
+                        Foreground="{StaticResource AccentGreenBrush}"
+                        ToolTip.Tip="Run: Go with Auto-Combat off. Sprint: Go in Sprint Mode. Either ends when you arrive.">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuItem Header="Run — Go with Auto-Combat off" Command="{Binding RunSearchCombatOffCommand}"/>
+                            <MenuItem Header="Sprint — Go in Sprint Mode" Command="{Binding RunSearchSprintCommand}"/>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+                <Button Grid.Column="3"
                         Content="Close"
                         Command="{Binding CloseCommand}"
                         IsCancel="True" MinWidth="80"/>

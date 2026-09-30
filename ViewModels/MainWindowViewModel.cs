@@ -372,6 +372,39 @@ public partial class MainWindowViewModel : ObservableObject
     // own writes as a manual re-enable and recurse.
     private bool _sprintDrivingEngines;
 
+    // Auto-Combat was on and a "Run + Combat off" start turned it off for the trip:
+    // it comes back on where Sprint would end (the walk-to arriving, the loop's
+    // first waypoint, the Auto-Lair's first lair). Turning combat on by hand before
+    // then drops the promise. Session-only.
+    private bool _tripTurnedOffCombat;
+
+    private void ApplyRunStartMode(Game.Map.RunStartMode mode)
+    {
+        switch (mode)
+        {
+            case Game.Map.RunStartMode.CombatOff:
+                if (!IsAutoCombatActive) return;
+                IsAutoCombatActive = false;
+                _tripTurnedOffCombat = true;
+                AppServices.Current.Log.Info("AutoMode", "Run + Combat off: Auto-Combat off until the run begins.");
+                break;
+            case Game.Map.RunStartMode.Sprint:
+                if (!IsSprintModeActive) IsSprintModeActive = true;
+                AppServices.Current.Log.Info("AutoMode", "Run + Sprint: Sprint Mode on until the run begins.");
+                break;
+        }
+    }
+
+    // The trip's over (walk-to arrived, loop circuit / Auto-Lair begun): give back the
+    // combat a "Run + Combat off" start took away.
+    private void EndTripCombatOff()
+    {
+        if (!_tripTurnedOffCombat) return;
+        _tripTurnedOffCombat = false;
+        if (!IsAutoCombatActive) IsAutoCombatActive = true;
+        AppServices.Current.Log.Info("AutoMode", "Run + Combat off: the run has begun — Auto-Combat back on.");
+    }
+
     // True when every wired auto-engine is off — drives the "Auto-All" master
     // toggle's depressed/checked state. Mirrors
     // Game.AutoModeController.AllWiredOff but computed from the live
@@ -480,6 +513,7 @@ public partial class MainWindowViewModel : ObservableObject
                 // End Sprint first (restoring the engines it silenced), then let the base
                 // modes get the final word — same ordering as the loop-start reconcile.
                 if (IsSprintModeActive) IsSprintModeActive = false;
+                EndTripCombatOff();
                 ReconcileAutoModeToBase("walk-to end");
             }
         });
@@ -502,6 +536,7 @@ public partial class MainWindowViewModel : ObservableObject
                  || e.Kind == Game.Map.LoopEventKind.RepeatStarted)
                 && IsSprintModeActive)
                 IsSprintModeActive = false;
+            if (e.Kind == Game.Map.LoopEventKind.ReachedFirstWaypoint) EndTripCombatOff();
             // Circuit reached its first waypoint (walk-to done, looping begins) —
             // settle the live auto-engines into the character's base modes. Fires
             // once per run (the event itself is one-shot), never on lap wraps.
@@ -531,6 +566,7 @@ public partial class MainWindowViewModel : ObservableObject
             // normally. Sprint got us here fast; it doesn't enter the lair.
             if (phase == Game.Map.AutoLairPhase.Entering && IsSprintModeActive)
                 IsSprintModeActive = false;
+            if (phase == Game.Map.AutoLairPhase.Entering) EndTripCombatOff();
 
             if (phase != Game.Map.AutoLairPhase.Engaging) return;
             if (_autoLairBaseReconciled) return;
@@ -1452,6 +1488,7 @@ public partial class MainWindowViewModel : ObservableObject
         // you." lines the split prints are that expected drop, not members left
         // behind — without the note the leader walked back through the teleport to
         // fetch them.
+        AppServices.Current.ApplyRunStartMode = ApplyRunStartMode;
         AppServices.Current.Walker.SetPartySplitHandler(OnLeaderPartySplitTeleport);
         AppServices.Current.LoopRunner.SetPartySplitHandler(OnLeaderPartySplitTeleport);
 
@@ -5869,6 +5906,8 @@ public partial class MainWindowViewModel : ObservableObject
         // Anyone else changing it mid-detour (the user, Sprint, a base-mode reset)
         // takes it over, so the detour's end doesn't undo their choice.
         if (!_detourDrivingCombat) _detourTurnedOffCombat = false;
+        // Combat turned back on before the run began: nothing left to give back.
+        if (value) _tripTurnedOffCombat = false;
     }
 
     // ----- Detour combat hold ------------------------------------------------

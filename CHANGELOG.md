@@ -1,5 +1,10 @@
 # Version history
 
+## 3.134.0
+
+- Navigation: a running loop's chip stays on Pause through fights and rests; it reads Go only when you pause it
+- Navigation: Run is now Go, with a ▾ for Run (Go with Auto-Combat off) and Sprint (Go in Sprint Mode) until the walk-to arrives, the loop begins, or the Auto-Lair reaches its first lair — also in the route picker, Navigation Management and the rail's right-click menus
+
 ## 3.133.8
 
 - Party-splitting teleports (Darkwood vortex, chimes): the leader holds and re-invites everyone on landing instead of walking on alone

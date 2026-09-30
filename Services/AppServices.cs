@@ -2203,6 +2203,12 @@ public sealed class AppServices
     // view-model that owns it; null until a Navigation window has opened.
     public Func<Game.Simulation.SimulatorSnapshot?>? SimulatorSnapshotProvider { get; set; }
 
+    // Sets a user-started run out in the chosen mode (Auto-Combat off, or Sprint Mode
+    // on, for the trip there). The auto-engine toggles live on the main window's
+    // view-model, which registers this; the Navigation window, the route picker and
+    // Navigation Management call it right before the run starts.
+    public Action<Game.Map.RunStartMode>? ApplyRunStartMode { get; set; }
+
     // Folder CRUD over the shared per-BBS Loops directory that holds
     // both Loops and Lairs. Create / rename
     // / delete folders; reloads both catalogues after a filesystem

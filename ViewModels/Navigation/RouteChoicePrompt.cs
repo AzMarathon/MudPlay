@@ -31,10 +31,14 @@ public static class RouteChoicePrompt
     // so the caller can draw it; called with null when the picker closes (the
     // committed walk then draws its own live path). Callers without a map (e.g.
     // the navigation-manager list) pass none and the picker just works Go-only.
+    // startMode sets the walk out with Auto-Combat off or in Sprint Mode — applied only
+    // once a walk actually commits (a cancelled picker changes nothing); the picker's
+    // own Run / Sprint buttons override it.
     public static async Task WalkAsync(
         AppServices services,
         RoomKey destination,
-        Action<IReadOnlyList<RoomKey>?>? previewSink = null)
+        Action<IReadOnlyList<RoomKey>?>? previewSink = null,
+        RunStartMode startMode = RunStartMode.Normal)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -71,6 +75,7 @@ public static class RouteChoicePrompt
             // No confident source room — let the walker plan and report the
             // "no known source" failure itself rather than second-guessing here.
             services.Log.Debug(LogCat, $"route pick to {destination}: no confident source room — plain walk");
+            ApplyStartMode(services, startMode);
             CommitWalk(services, destination, gated: false);
             return;
         }
@@ -134,10 +139,12 @@ public static class RouteChoicePrompt
         {
             case RoutePlanKind.PlainWalk:
                 calcVm?.Close();   // no picker to show — dismiss any "Calculating…" window
+                ApplyStartMode(services, startMode);
                 CommitWalk(services, destination, gated: false);
                 return;
             case RoutePlanKind.AutoObtainSole:
                 calcVm?.Close();
+                ApplyStartMode(services, startMode);
                 // Every gate here is already flagged AutoObtainForPath, but the
                 // DEMAND gate is a separate switch: with Settings → Other → "search
                 // rooms if item needed" off it stays shut, so this path's own
@@ -149,9 +156,14 @@ public static class RouteChoicePrompt
                 CommitWalk(services, destination, gated: true);
                 return;
             default:
-                await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask);
+                await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask, startMode);
                 return;
         }
+    }
+
+    private static void ApplyStartMode(AppServices services, RunStartMode mode)
+    {
+        if (mode != RunStartMode.Normal) services.ApplyRunStartMode?.Invoke(mode);
     }
 
     // The delay before a slow plan surfaces the "Calculating…" window. A fast plan
@@ -313,7 +325,8 @@ public static class RouteChoicePrompt
         // close-result task. Both null when planning was fast (or a walk was in
         // progress) — then this builds the fully-populated window and shows it.
         RouteChoiceDialogViewModel? calcVm = null,
-        Task<RouteChoiceResult?>? calcDialogTask = null)
+        Task<RouteChoiceResult?>? calcDialogTask = null,
+        RunStartMode startMode = RunStartMode.Normal)
     {
         // Approximate arrival ETA for each route — realm-aware per-hop travel plus,
         // when auto-combat is on, a dwell for each lair the walker will actually FIGHT
@@ -517,6 +530,8 @@ public static class RouteChoicePrompt
         {
             previewSink?.Invoke(null);
         }
+        if (result is not null)
+            ApplyStartMode(services, vm.StartMode != RunStartMode.Normal ? vm.StartMode : startMode);
 
         if (choice.Kind == RouteChoiceKind.Blocked)
         {

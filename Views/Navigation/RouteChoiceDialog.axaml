@@ -245,6 +245,14 @@
                     <Button Content="Cancel"
                             Command="{Binding CancelCommand}"
                             IsCancel="True" MinWidth="80"/>
+                    <Button Content="Run"
+                            Command="{Binding GoCombatOffCommand}"
+                            MinWidth="70"
+                            ToolTip.Tip="Go this route with Auto-Combat off; it comes back on when you arrive."/>
+                    <Button Content="Sprint"
+                            Command="{Binding GoSprintCommand}"
+                            MinWidth="70"
+                            ToolTip.Tip="Go this route in Sprint Mode (no resting stops, no fighting or looting); it ends when you arrive."/>
                     <Button Content="Go"
                             Command="{Binding GoCommand}"
                             IsDefault="True" MinWidth="80"
