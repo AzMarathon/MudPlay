@@ -12,8 +12,8 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// Pins the character loop simulation: a lair refills only on its per-slot respawn
-// clock (on entry, or on the spawn pass while standing in it; an unresolved clock
+// Pins the character loop simulation: a lair refills only on its respawn clock —
+// one per slot on Paradigm, one per room on Stock — (on entry, or on the spawn pass while standing in it; an unresolved clock
 // only on entry), a fight the character can't survive ends the run and counts
 // against the hours asked for, resting follows the Health-tab rest gates and the
 // realm's rest-tick cycle, lawful evil spares an Outlaw-or-worse character, and a
@@ -37,8 +37,8 @@ public sealed class LoopSimulatorTests
     private static SimCharacter Character(int maxHp = 200, int damage = 1000, double swings = 1,
         CombatSettings? combat = null, HealthSettings? health = null,
         IReadOnlyDictionary<string, SimSpell>? spells = null, int maxMana = 0, SimRegen? regen = null,
-        int alignment = 0) => new(
-        RealmType.ParaMud, Level: 30, MaxHp: maxHp, MaxMana: maxMana,
+        int alignment = 0, RealmType realm = RealmType.ParaMud) => new(
+        realm, Level: 30, MaxHp: maxHp, MaxMana: maxMana,
         Melee: new PlayerMatchupProfile(RealmType.ParaMud, NormalAccuracy: 9999, AvgWeaponDamage: damage,
             SwingsPerRound: swings, HasWeapon: true, ArmourClass: 0, Dodge: 0, ProtEvil: 0, ProtGood: 0,
             DamageResist: 0),
@@ -212,5 +212,24 @@ public sealed class LoopSimulatorTests
 
         Assert.NotNull(neutral.DiedAtSeconds);
         Assert.Null(outlaw.DiedAtSeconds);
+    }
+
+    [Fact]
+    public void StockLairRunsOneRoomClockThatEveryKillRestarts()
+    {
+        // A 2-mob, 60 s lair whose mobs take ~60 s each to kill. Per slot (Paradigm)
+        // the first slot is back by the time the second dies, so the character is
+        // never kept waiting: one kill a minute. On Stock the second kill restarts the
+        // room's one clock for both slots, so the pair only returns 60 s after it: at
+        // most two kills per ~180 s.
+        SimRoom[] lap = { Lair(1, 2, 60, 7), Empty(2) };
+        var world = World(Mob(7, hp: 11500, exp: 100));
+        LoopSimRun stock = LoopSimulator.Run(Character(realm: RealmType.Stock), lap, world,
+            secondsPerStep: 1, hours: 1, seed: 1);
+        LoopSimRun paradigm = LoopSimulator.Run(Character(realm: RealmType.ParaMud), lap, world,
+            secondsPerStep: 1, hours: 1, seed: 1);
+
+        Assert.InRange(stock.Kills, 30, 2 + 2 * 3600 / 180);
+        Assert.InRange(paradigm.Kills, 55, 61);
     }
 }

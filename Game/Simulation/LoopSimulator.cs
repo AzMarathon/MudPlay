@@ -60,9 +60,15 @@ public static class LoopSimulator
         public bool AttacksUs => Alive && (Hostile || Engaged);
     }
 
+    // A lair's respawn clock: Stock keeps one for the whole room, restarted by every
+    // kill in it, and refills every empty slot together once it runs out. Paradigm is
+    // played with one clock per slot, started by that slot's kill — still unconfirmed
+    // against a room clock like Stock's (GAME_MECHANICS "Lair respawn timers"). Only
+    // the clock the realm uses is read.
     private sealed class RoomState(int slots)
     {
         public double[] SlotReadyAt { get; } = new double[slots];
+        public double RoomReadyAt { get; set; }
         public Mob?[] SlotMob { get; } = new Mob?[slots];
         public List<Mob> Mobs { get; } = new();
     }
@@ -87,6 +93,7 @@ public static class LoopSimulator
         private readonly Dictionary<string, int> _casts = new(StringComparer.OrdinalIgnoreCase);
         private readonly int _standingSteps, _restingSteps, _meditatingSteps;
         private readonly int _spawnPassPhase;
+        private readonly bool _perSlotClock;
 
         private long _step;
         private double _hp, _ma;
@@ -118,6 +125,7 @@ public static class LoopSimulator
             _meditatingSteps = StepsOf(ch.Regen.Cadence.MeditatingInterval);
             // The spawn pass runs on the server's own clock, unrelated to the round.
             _spawnPassPhase = _rng.Next(SpawnPassSteps);
+            _perSlotClock = ch.Realm == RealmType.ParaMud;
         }
 
         private double Now => _step * Step;
@@ -166,7 +174,7 @@ public static class LoopSimulator
             Spawn(state, entering: true);
         }
 
-        // Fill every lair slot whose clock has run out. Walking in refills at once;
+        // Fill every empty lair slot whose clock has run out. Walking in refills at once;
         // standing in the room refills only when the spawn pass comes round, so a
         // lair comes back slower under a character who waits in it. A lair whose
         // timer couldn't be resolved (RespawnSeconds 0) refills on entry only — a
@@ -175,9 +183,10 @@ public static class LoopSimulator
         {
             SimRoom room = _lap[_pos];
             if (!room.HasLair || (!entering && room.RespawnSeconds <= 0)) return;
+            if (!_perSlotClock && state.RoomReadyAt > Now) return;
             for (int slot = 0; slot < state.SlotMob.Length; slot++)
             {
-                if (state.SlotMob[slot] is not null || state.SlotReadyAt[slot] > Now) continue;
+                if (state.SlotMob[slot] is not null || (_perSlotClock && state.SlotReadyAt[slot] > Now)) continue;
                 int id = room.LairMonsters[_rng.Next(room.LairMonsters.Count)];
                 state.SlotMob[slot] = AddMob(state, id, slot);
             }
@@ -399,7 +408,9 @@ public static class LoopSimulator
             if (mob.LairSlot >= 0)
             {
                 room.SlotMob[mob.LairSlot] = null;
-                room.SlotReadyAt[mob.LairSlot] = Now + _lap[_pos].RespawnSeconds;
+                double readyAt = Now + _lap[_pos].RespawnSeconds;
+                if (_perSlotClock) room.SlotReadyAt[mob.LairSlot] = readyAt;
+                else room.RoomReadyAt = readyAt;
             }
             if (ReferenceEquals(mob, _target))
             {

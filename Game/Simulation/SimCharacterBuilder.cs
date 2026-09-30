@@ -65,9 +65,8 @@ public static class SimCharacterBuilder
     // CalcManaRegen) with gear, race, class and quest regen percents folded in.
     // Paradigm splits each natural cycle into thirds on a 10 s grid; resting there
     // replaces it with 10 s ticks in cycles of three, the third paying the full rest
-    // amount and the two before it a reduced one — taken as a third of it, the size
-    // the live captures show, until the real figure is known. Stock adds a separate
-    // full rest tick (GAME_MECHANICS "Rest and meditate tick timing").
+    // amount and the two before it a third of that. Stock adds a separate full rest
+    // tick (GAME_MECHANICS "Rest and meditate tick timing").
     private static SimRegen BuildRegen(
         PlayerStats stats, IReadOnlyList<EquippedItem> worn, GameDataCache gameData,
         IReadOnlyList<QuestBonus>? questBonuses, RealmType realm)
