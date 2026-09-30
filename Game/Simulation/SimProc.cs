@@ -3,12 +3,14 @@ using MudPlay.Game.Spells;
 namespace MudPlay.Game.Simulation;
 
 // A monster attack's hit spell (AttHitSpell): it fires whenever that physical
-// attack lands (Tehshortbus, 2026-09-30). One without a duration hits once for a
-// cast of its damage; one with a duration and damage burns instead — no damage on
-// the hit, then a cast's damage every spell round until it wears off (envelops'
-// "You are on fire!", GAME_MECHANICS "Monster on-hit procs"). The stat changes
-// (knockdown's AC −10 / Dodge −20 / Accuracy −5) sit on the player for the
-// duration, and Holds pins them in place (can't walk off) until it ends.
+// attack lands (GAME_MECHANICS "Monster on-hit procs (`AttHitSpell-N`) are physical
+// attacks, not casts"). One without a duration hits once for a cast of its damage;
+// one with a duration and damage burns instead — no damage on the hit, then its
+// rolled value on every effect-slot tick until it wears off (envelops' "You are on
+// fire!", GAME_MECHANICS "Poison and damage over time — ticks, stacking and
+// cures"). The stat changes (knockdown's AC / Dodge / Accuracy loss) sit on the
+// player for the duration, and Holds pins them in place (can't walk off) until it
+// ends (GAME_MECHANICS "Knockdown — a movement-preventing hold").
 public sealed record SimProc(
     int DamageMin, int DamageMax, double DurationSeconds,
     int AcDelta, int DodgeDelta, int AccuracyDelta, bool Holds)
@@ -17,9 +19,11 @@ public sealed record SimProc(
 
     private const int AcCode = 2, AccuracyCode = 22, DodgeCode = 34, HoldPersonCode = 74;
 
-    // A proc carries no cast level of its own (GAME_MECHANICS "Monster on-hit
-    // procs"), so a level-scaled spell is read at its own ReqLevel — the bottom of
-    // its range. Signed ability values are kept as signed deltas (a debuff lowers).
+    // A proc carries no cast level of its own (GAME_MECHANICS "Monster on-hit procs
+    // (`AttHitSpell-N`) are physical attacks, not casts"), so a level-scaled spell is
+    // read at its own ReqLevel — the bottom of its range; which level to use is an
+    // open question there. Signed ability values are kept as signed deltas (a
+    // debuff lowers).
     public static SimProc? From(in SpellFormulaInput f)
     {
         int level = f.ReqLevel;

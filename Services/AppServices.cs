@@ -8214,13 +8214,13 @@ public sealed class AppServices
             MonsterOverlaySeed.GetOverlay(number));
 
     // Seconds per room the character walks right now, with lagSeconds of lag on
-    // Paradigm: the realm's Auto travel model — the server move timer from live
-    // encumbrance and gear quickness there, the measured encumbrance buckets (lag
-    // already in them) on Stock.
+    // Paradigm: the server move timer from live encumbrance and gear quickness there;
+    // on Stock, Auto-Lair's live travel model — the user's hop times by encumbrance
+    // (lag already in them) or their flat pace.
     public double LoopSimulationWalkSeconds(double lagSeconds) =>
         (GameData.ActiveRealm == Game.RealmType.ParaMud
             ? new Game.Map.ParadigmMovementCostModel(() => Inventory.Snapshot, GameData, lagSeconds)
-            : BuildTravelCostModel(new Models.Profile.AutoLairSettings())).EstimateTravel(1).TotalSeconds;
+            : AutoLair.TravelCostModel).EstimateTravel(1).TotalSeconds;
 
     public Game.Simulation.SimulationSource LoopSimulationSource =>
         _loopSimulationSource ??= new(BuildLoopSimulation, () => PlayerStats.Name, () => PlayerStats.Level,
@@ -8229,9 +8229,9 @@ public sealed class AppServices
 
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the
-    // shared monster-overlay resolve, worn gear, obtained spells) — moved to atLevel
-    // when one is given (SimLevelProjection). Null before a `stat` screen has told us
-    // the character's level and pools.
+    // shared monster-overlay resolve, worn gear, obtained spells, the Default-gear rest
+    // basis) — moved to atLevel when one is given (SimLevelProjection). Null before a
+    // `stat` screen has told us the character's level and pools.
     private (Game.Simulation.SimCharacter Character, Game.Simulation.SimWorld World)? BuildLoopSimulation(int? atLevel = null)
     {
         if (PlayerStats.Level <= 0 || PlayerStats.MaxHits <= 0) return null;
@@ -8246,6 +8246,15 @@ public sealed class AppServices
         IReadOnlyList<Game.Quests.QuestBonus> quests = Game.Quests.CompletedQuestBonuses.Resolve(
             GameData, Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class), profile?.QuestLog);
 
+        // The Default-gear rest basis is today's `stat`; at another level it moves by the
+        // same amount the projection moved max HP / mana, so thresholds keep their meaning.
+        int basisHp = DefaultBasisMaxHp(), basisMa = DefaultBasisMaxMa();
+        if (!ReferenceEquals(stats, PlayerStats))
+        {
+            if (basisHp > 0) basisHp = Math.Max(1, basisHp + stats.MaxHits - PlayerStats.MaxHits);
+            if (basisMa > 0) basisMa = Math.Max(0, basisMa + stats.MaxMana - PlayerStats.MaxMana);
+        }
+
         Game.Simulation.SimCharacter character = Game.Simulation.SimCharacterBuilder.Build(
             stats, inv.EquippedItems, inv.Encumbrance, obtained, GameData,
             string.IsNullOrEmpty(weapon) ? 0 : ItemMagic.HitMagic(weapon),
@@ -8253,7 +8262,11 @@ public sealed class AppServices
             ReadSection<Models.Profile.HealthSettings>(profile, "Health"),
             ReadSection<Models.Profile.SpellsSettings>(profile, "Spells"),
             profile?.PartyBuffs, quests, ResolveMonsterOverlay, SpellShort.ShortByNumber,
-            (int)(Alignment.EvilPoints ?? 0));
+            Game.Simulation.SimCharacterBuilder.AlignmentValue(Alignment.EvilPoints, Alignment.SelfAlignment),
+            basisHp, basisMa) with
+        {
+            HangupsDisabled = ReadSection<Models.Profile.GeneralSettings>(profile, "General").DisableHangups,
+        };
         var world = new Game.Simulation.SimWorld(
             MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife,
             ExpResolver.DeathSummonsOf,

@@ -100,6 +100,9 @@ public sealed class RouteExpResolver : IDisposable
         (IReadOnlyList<LoopStep> steps, var unreachable) = LoopExpander.Expand(waypoints, _bfs, filter);
         if (steps.Count == 0 || unreachable.Count > 0) return Array.Empty<Simulation.SimRoom>();
 
+        // Walks the steps itself rather than through LoopExpander.ResolveCycleRoomKeys:
+        // it needs each command's delay against the room it runs in, and must refuse a
+        // broken leg where the map overlay's walk just stops short.
         var lap = new List<Simulation.SimRoom>();
         RoomKey cursor = waypoints[0].Key;
         double pause = 0;
@@ -113,6 +116,9 @@ public sealed class RouteExpResolver : IDisposable
                 return Array.Empty<Simulation.SimRoom>();
             cursor = exit.Target;
         }
+        // A command after the last move runs back in the start room (a closing leg of
+        // zero length), before the next lap walks on from there.
+        if (pause > 0 && lap.Count > 0) lap[0] = lap[0] with { PauseSeconds = lap[0].PauseSeconds + pause };
         return lap;
     }
 

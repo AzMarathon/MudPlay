@@ -30,18 +30,27 @@ public sealed record SimBuff(
     bool BeforeRestingForMana, int? RerollBelow, int RerollCount, bool RerollInfinite);
 
 // Per-tick regen, as functions of the regen percent active buffs add (ManaRgn /
-// HPRegen), on the realm cadence they arrive on (RealmRegenProfile). HpResting
-// replaces the standing tick while resting on Paradigm (rest rides the same 10 s
-// grid at 3x) and adds its own tick on Stock; MaMeditating always adds on top of
-// the standing mana tick.
+// HPRegen), on the realm cadence they arrive on (RealmRegenProfile). Rest ticks
+// count from the moment the character lies down: every RestFullEvery-th tick pays
+// HpResting and the ones between pay HpResting × RestReducedShare. On Stock every
+// rest tick is full and adds to the standing tick; on Paradigm rest replaces the
+// standing tick and runs in cycles of three 10 s ticks, the third full
+// (GAME_MECHANICS "Rest and meditate tick timing"). MaMeditating always adds on top
+// of the standing mana tick.
 public sealed record SimRegen(
     Func<int, double> HpStanding, Func<int, double> HpResting,
     Func<int, double> MaStanding, double MaMeditating,
-    RealmRegenProfile Cadence, bool RestReplacesStanding);
+    RealmRegenProfile Cadence, bool RestReplacesStanding, int RestFullEvery = 1, double RestReducedShare = 1);
 
 // Everything the loop simulator plays by: the character's pools, offense, defense
 // and regen, their spellbook and buff list, and the live Combat / Health / Spells
 // settings the engines read — so a simulated round picks what the client would pick.
+// AlignmentValue is the character's alignment number (evil points, or the who
+// title's band when the points aren't known). HangupsDisabled is the General tab's
+// master switch that stops the Health hang-up. DefaultMaxHp / DefaultMaxMana are the
+// Default gear set's pools, the basis the live engines resolve rest and heal
+// thresholds against (GAME_MECHANICS "Rest basis — the Default-gear baseline");
+// 0 = unknown, the current max stands in.
 public sealed record SimCharacter(
     RealmType Realm,
     int Level,
@@ -57,5 +66,8 @@ public sealed record SimCharacter(
     SpellsSettings SpellSlots,
     Func<int, MonsterOverlay> Overlay,
     Func<int, string?> SpellShortByNumber,
-    int EvilPoints,
-    IReadOnlyList<SimBuff>? Buffs = null);
+    int AlignmentValue,
+    IReadOnlyList<SimBuff>? Buffs = null,
+    bool HangupsDisabled = false,
+    int DefaultMaxHp = 0,
+    int DefaultMaxMana = 0);
