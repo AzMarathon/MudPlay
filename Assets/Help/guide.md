@@ -625,7 +625,7 @@ MudPlay coordinates multi-character parties — following a leader, healing each
 
 ## The Party window
 
-Open it from **View → Party**, a toolbar button, or **right-click the terminal → Open Party** (it has no default hotkey — you can assign one in Settings → Toolbar + Shortcuts). It's your live roster: one row per member, updated as their health and status broadcasts arrive. Each row shows —
+Open it from **View → Party**, a toolbar button, or **right-click the terminal → Open Party** (it has no default hotkey — you can assign one in Settings → Toolbar + Shortcuts). It's your live roster: one row per member, updated as their health and status broadcasts arrive. Its title names your own character and HP (`Party — Cidir (100%)`), so with several clients open you can tell whose window is whose; the leader is the row with the ★. Each row shows —
 
 - a **★** on the party leader;
 - a colour-coded **rank chip** — **F** front, **M** mid, **B** back — the member's combat rank;

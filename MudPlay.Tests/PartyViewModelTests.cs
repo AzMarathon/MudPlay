@@ -17,15 +17,12 @@ public sealed class PartyViewModelTests
     {
         PartyState state = new();
         PartyViewModel vm = new(state, wireSender: null, profile: null);
-        Assert.Equal("No party active", vm.HeaderText);
+        Assert.Equal("Party — no party active", vm.HeaderText);
     }
 
     [Fact]
-    public void HeaderText_NoLeader_FallsBackToMemberCount()
+    public void HeaderText_NoSelfRow_FallsBackToMemberCount()
     {
-        // Mid-formation state — members exist but nobody's flagged
-        // IsLeader yet. Fall back to the legacy "Party (N)" form so
-        // the header still says something useful.
         PartyState state = new();
         PartyViewModel vm = new(state, wireSender: null, profile: null);
         state.Members.Add(new PartyMember { Name = "Forged" });
@@ -34,55 +31,49 @@ public sealed class PartyViewModelTests
         Assert.Equal("Party (2)", vm.HeaderText);
     }
 
+    // The menu's name, then this character — not the leader (report: Cidir's window
+    // read "Nineteen (95%)").
     [Fact]
-    public void HeaderText_LeaderKnown_ShowsLeaderGivenAndHp()
+    public void HeaderText_ShowsOurOwnGivenNameAndHp_NotTheLeaders()
     {
-        // Skeleton-design header: "{LeaderGiven} ({LeaderHpPercent}%)".
-        // Given-name only — MajorMUD addresses players that way at most
-        // prompts so the header reads consistently with in-game text.
         PartyState state = new();
         PartyViewModel vm = new(state, wireSender: null, profile: null);
-        PartyMember leader = new() { Name = "Thaurin Lastname", IsLeader = true, HpPercent = 94 };
-        state.Members.Add(leader);
-        Assert.Equal("Thaurin (94%)", vm.HeaderText);
+        state.Members.Add(new PartyMember { Name = "Nineteen ByNineteen", IsLeader = true, HpPercent = 95 });
+        state.Members.Add(new PartyMember { Name = "Cidir", IsSelf = true, HpPercent = 100 });
+        Assert.Equal("Party — Cidir (100%)", vm.HeaderText);
     }
 
     [Fact]
-    public void HeaderText_LeaderHpChanges_RefreshesLive()
+    public void HeaderText_OurHpChanges_RefreshesLive()
     {
-        // Per-member PropertyChanged subscription should fire a header
-        // refresh whenever the leader's HpPercent ticks — the skeleton
-        // header is a live readout, not a once-on-load value.
         PartyState state = new();
         PartyViewModel vm = new(state, wireSender: null, profile: null);
-        PartyMember leader = new() { Name = "Thaurin", IsLeader = true, HpPercent = 100 };
-        state.Members.Add(leader);
-        Assert.Equal("Thaurin (100%)", vm.HeaderText);
+        PartyMember self = new() { Name = "Cidir Priest", IsSelf = true, HpPercent = 100 };
+        state.Members.Add(self);
+        List<string?> changed = new();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 
-        leader.HpPercent = 75;
-        Assert.Equal("Thaurin (75%)", vm.HeaderText);
+        self.HpPercent = 75;
+
+        Assert.Contains(nameof(PartyViewModel.HeaderText), changed);
+        Assert.Equal("Party — Cidir (75%)", vm.HeaderText);
     }
 
     [Fact]
     public void HeaderText_RemovedMember_UnsubscribesCleanly()
     {
-        // Members removed from the collection shouldn't keep firing
-        // header refreshes — verified by removing the leader, then
-        // mutating their HpPercent and asserting the header reverts
-        // to the count fallback.
         PartyState state = new();
         PartyViewModel vm = new(state, wireSender: null, profile: null);
-        PartyMember leader = new() { Name = "Thaurin", IsLeader = true, HpPercent = 100 };
-        state.Members.Add(leader);
+        PartyMember self = new() { Name = "Cidir", IsSelf = true, HpPercent = 100 };
+        state.Members.Add(self);
         state.Members.Add(new PartyMember { Name = "Helper" });
-        Assert.Equal("Thaurin (100%)", vm.HeaderText);
+        state.Members.Remove(self);
+        List<string?> changed = new();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 
-        state.Members.Remove(leader);
-        // Helper has no IsLeader → falls back to count.
-        Assert.Equal("Party (1)", vm.HeaderText);
-        // Mutating the removed leader's HpPercent should NOT affect
-        // the header text now — the subscription has been removed.
-        leader.HpPercent = 50;
+        self.HpPercent = 50;
+
+        Assert.Empty(changed);
         Assert.Equal("Party (1)", vm.HeaderText);
     }
 
