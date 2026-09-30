@@ -301,7 +301,8 @@ public sealed class LoopRunnerTests : IDisposable
         // Save-current on a still-running loop persists a rename without
         // restarting the cycle; the runner must reflect the new name in place so
         // the nav header stops holding the old (builder-generated) one.
-        Harness h = NewHarness();
+        LogService log = new();
+        Harness h = NewHarness(log: log);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
         int sentBefore = h.Sent.Count;
@@ -312,6 +313,8 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("My Route", h.Runner.CurrentLoop?.Name);
         Assert.Contains(h.Events,
             e => e.Kind == LoopEventKind.Renamed && e.Detail == "My Route");
+        // The live-vs-simulated check follows the session across the rename by this line.
+        Assert.Single(log.Snapshot(), e => e.Source == "LoopRunner" && e.Message == "Renamed: loop='ab' → 'My Route'");
         // Rename must not disturb the lap: no extra step sent, same position,
         // still running.
         Assert.Equal(sentBefore, h.Sent.Count);

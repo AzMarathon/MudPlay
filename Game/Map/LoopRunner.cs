@@ -309,6 +309,9 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         if (_loop is null || string.IsNullOrWhiteSpace(newName)) return;
         if (string.Equals(_loop.Name, newName, StringComparison.Ordinal)) return;
+        // The live-vs-simulated check follows a running loop through the program log
+        // by name; without this line a loop renamed mid-run never closes its session.
+        _log?.Info("LoopRunner", $"Renamed: loop='{_loop.Name}' → '{newName}'");
         _loop.Name = newName;
         Raise(new LoopEvent(LoopEventKind.Renamed, newName));
     }

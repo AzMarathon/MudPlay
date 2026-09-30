@@ -6,8 +6,8 @@ namespace MudPlay.Game.Simulation;
 // Resolves everything a simulation of this lap will look up — each monster's
 // record, overlay, death summons and attack hit spells, and the cast-codes its
 // overrides name — into plain dictionaries, and makes the game-data indexes build
-// their tables, all on the caller's (UI) thread. The run then happens on a worker thread without touching
-// the live settings resolver or a lazily-building index.
+// their tables, all on the caller's (UI) thread. The run then happens on a worker
+// thread without touching the live settings resolver or a lazily-building index.
 public static class SimFreeze
 {
     public static (SimCharacter Character, SimWorld World) For(

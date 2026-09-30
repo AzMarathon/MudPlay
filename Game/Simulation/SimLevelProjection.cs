@@ -6,7 +6,7 @@ namespace MudPlay.Game.Simulation;
 
 // Moves the character to another level for a simulation — to check a loop you
 // played at L45 against what the simulator predicts at L45, or to ask what a loop
-// is worth ten levels on. Max HP, max mana and Spellcasting shift by the class /
+// is worth ten levels on. Max HP, max mana (not a Mystic's kai) and Spellcasting shift by the class /
 // race formulas' difference between the two levels (CharacterCalculator's average
 // HP roll, mana and Spellcasting), so the gear, quest and real-roll share of
 // today's numbers carries over unchanged; everything else

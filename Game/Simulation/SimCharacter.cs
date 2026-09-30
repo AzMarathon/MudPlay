@@ -40,7 +40,16 @@ public sealed record SimBuff(
 public sealed record SimRegen(
     Func<int, double> HpStanding, Func<int, double> HpResting,
     Func<int, double> MaStanding, double MaMeditating,
-    RealmRegenProfile Cadence, bool RestReplacesStanding, int RestFullEvery = 1, double RestReducedShare = 1);
+    RealmRegenProfile Cadence, bool RestReplacesStanding, int RestFullEvery = 1, double RestReducedShare = 1)
+{
+    // HP paid by the tick-th rest tick since lying down (1-based), with extra HP-regen
+    // percent from active buffs.
+    public double RestTickHp(long tick, int extra = 0)
+    {
+        double full = HpResting(extra);
+        return tick % Math.Max(1, RestFullEvery) == 0 ? full : full * RestReducedShare;
+    }
+}
 
 // Everything the loop simulator plays by: the character's pools, offense, defense
 // and regen, their spellbook and buff list, and the live Combat / Health / Spells

@@ -27,6 +27,10 @@ public static class LiveLoopSessions
     private static readonly Regex Begin = new(@"LoopRunner: BeginCircle: loop='(?<loop>[^']*)'", RegexOptions.Compiled);
     // Stop is a clean stop; Ended is every failure that resets the runner without one.
     private static readonly Regex End = new(@"LoopRunner: (?:Stop|Ended): loop='(?<loop>[^']*)'", RegexOptions.Compiled);
+    // A loop renamed mid-run keeps its session; its Stop / Ended carries the new name.
+    private static readonly Regex Renamed = new(@"LoopRunner: Renamed: loop='(?<old>[^']*)' → '(?<new>[^']*)'", RegexOptions.Compiled);
+    // "…-p<pid>-program.log": one process is one client instance.
+    private static readonly Regex Pid = new(@"-p(?<pid>\d+)-program\.log$", RegexOptions.Compiled);
     private static readonly Regex Exp = new(@"StatParser: Exp \+= (\d+)", RegexOptions.Compiled);
     // The stat screen's `Level =`, the exp screen's `Exp = N  Level = N`, and a train's `Level → N`.
     private static readonly Regex Level = new(@"StatParser: (?:Level = |Level → |Exp = \d+  Level = )(\d+)", RegexOptions.Compiled);
@@ -110,6 +114,10 @@ public static class LiveLoopSessions
                 {
                     Close();
                 }
+                else if (cur is { } r && Renamed.Match(line) is { Success: true } rm && rm.Groups["old"].Value == r.Loop)
+                {
+                    cur = r with { Loop = rm.Groups["new"].Value };
+                }
                 continue;
             }
             if (cur is { } d && line.Contains(Death, StringComparison.Ordinal)) cur = d with { Deaths = d.Deaths + 1 };
@@ -120,10 +128,12 @@ public static class LiveLoopSessions
     }
 
     // Every program log in the folder, oldest first. Level and character carry into
-    // a log only from the log that last wrote before it began: instances running
-    // side by side (a party on one machine) start in the same second, and one
-    // character's state must not leak into another's log. A log that can't be read
-    // (pruned mid-scan, locked) is skipped and reported through warn.
+    // a log from the same process's previous log (the pid in the file name) when
+    // there is one — that's the same client, whatever else ran meanwhile. Otherwise
+    // only from the log that last wrote before it began: instances running side by
+    // side (a party on one machine) start in the same second, and one character's
+    // state must not leak into another's log. A log that can't be read (pruned
+    // mid-scan, locked) is skipped and reported through warn.
     public static IReadOnlyList<LiveLoopSession> ReadFolder(string logsDir, Action<string>? warn = null)
     {
         if (!Directory.Exists(logsDir)) return Array.Empty<LiveLoopSession>();
@@ -133,17 +143,23 @@ public static class LiveLoopSessions
             .OrderBy(x => x.Start)
             .ToList();
         (int? Level, string? Character, DateTime End)? latest = null;
+        var byPid = new Dictionary<string, (int? Level, string? Character, DateTime End)>(StringComparer.Ordinal);
         var all = new List<LiveLoopSession>();
         foreach ((string path, DateTime? logStart) in logs)
         {
             DateTime start = logStart!.Value;
-            bool carry = latest is { } p && p.End < start;
-            int? level = carry ? latest!.Value.Level : null;
-            string? character = carry ? latest!.Value.Character : null;
+            string? pid = Pid.Match(Path.GetFileName(path)) is { Success: true } pm ? pm.Groups["pid"].Value : null;
+            (int? Level, string? Character, DateTime End)? from =
+                pid is not null && byPid.TryGetValue(pid, out var own) ? own
+                : latest is { } p && p.End < start ? p
+                : null;
+            int? level = from?.Level;
+            string? character = from?.Character;
             try
             {
                 all.AddRange(Parse(ReadShared(path), start, ref level, ref character, out DateTime end));
                 if (latest is not { } q || end > q.End) latest = (level, character, end);
+                if (pid is not null) byPid[pid] = (level, character, end);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

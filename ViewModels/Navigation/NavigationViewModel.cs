@@ -146,7 +146,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // lambda reads the current ExpEstimator (null when not estimating), so a
         // single registration covers every enter/exit without per-transition wiring.
         _services.ExpEstimatorSnapshotProvider = () => ExpEstimator?.ToSnapshot();
+        // A character simulation was played with the old character / game data.
+        _services.Profile.ProfileLoaded += OnProfileLoadedDropSimulation;
+        _services.GameData.ActiveSetChanged += OnActiveSetDropSimulation;
     }
+
+    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _) => ExpEstimator?.ClearSimulation(alsoCheck: true);
+    private void OnActiveSetDropSimulation(string? _) => ExpEstimator?.ClearSimulation(alsoCheck: true);
 
     // Per-second pump for CURRENT NAV lair countdowns. Cheap to leave
     // running, but explicitly gated so an idle Navigation window does no work.
@@ -211,6 +217,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Lairs.SetupsChanged    -= OnSetupsChanged;
         _services.NavFolders.FoldersChanged -= OnNavFoldersChanged;
         _services.Macros.Macros.CollectionChanged -= OnMacrosCollectionChanged;
+        _services.Profile.ProfileLoaded -= OnProfileLoadedDropSimulation;
+        _services.GameData.ActiveSetChanged -= OnActiveSetDropSimulation;
+        ExpEstimator?.CancelSimulation();
     }
 
     // Loops + lairs share the on-disk folder tree; a folder add / rename /
@@ -2730,7 +2739,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.LoopSimulationSource, _services.Log)
         { ProposedName = loop.Name };
         session.PropertyChanged += OnExpEstimatorPropertyChanged;
-        foreach (LoopWaypoint w in loop.Waypoints) session.AddClick(w.Key);
+        session.LoadWaypoints(loop.Waypoints);
         ExpEstimator = session;
         CurrentMode = NavigationMode.ExpEstimator;
         OnPropertyChanged(nameof(ExpEstimator));
@@ -4068,7 +4077,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return phase;
         }
 
-        // Visited this session → live countdown from LastEntered.
+        // Visited this session → live countdown from the lair's clock start.
         int? overrideSec = mgr.GetOverride(key);
         DateTimeOffset? ready = _services.LairTimers.NextReadyAt(key, overrideSec);
         if (ready is { } readyAt)

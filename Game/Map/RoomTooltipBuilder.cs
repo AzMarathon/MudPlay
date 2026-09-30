@@ -16,7 +16,7 @@ namespace MudPlay.Game.Map;
 //   1. Name (Map/Room)
 //   2. blank
 //   3. Room contents — monster groups (Placed / Assigned / Lair), then the lair
-//      "Max Regen: N @ (Delay-1)m 30s" line directly beneath the Lair line, then
+//      "Max Regen: N @ <respawn>" line directly beneath the Lair line, then
 //      "Floor items: …" (the room's Placed / roomitem items).
 //   4. blank
 //   5. Shop: …
@@ -302,7 +302,7 @@ public static class RoomTooltipBuilder
         // Lair regen sits directly beneath the Lair line (its simultaneous cap +
         // per-mob respawn time), where it annotates the mobs it describes, rather
         // than at the bottom of the tooltip.
-        string regen = FormatLairRegen(rm.LairMax, room.Delay);
+        string regen = FormatLairRegen(rm.LairMax, room.Delay, data?.ActiveRealm ?? RealmType.Stock);
         if (regen.Length > 0)
         {
             if (sb.Length > 0) sb.Append('\n');
@@ -311,15 +311,15 @@ public static class RoomTooltipBuilder
         return sb.ToString();
     }
 
-    // The "Max Regen: N @ (Delay-1)m 30s" line for a room's lair (N = the lair
-    // tag's simultaneous cap, the time = its respawn cadence), or empty when the
-    // room has no lair. Shared by the map tooltip and the Room Info panel so the
-    // two never drift.
-    public static string FormatLairRegen(int? lairMax, int delay)
+    // The "Max Regen: N @ <respawn>" line for a room's lair (N = the lair tag's
+    // simultaneous cap, the time = its respawn cadence), or empty when the room
+    // has no lair. Shared by the map tooltip and the Room Info panel so the two
+    // never drift.
+    public static string FormatLairRegen(int? lairMax, int delay, RealmType realm)
     {
         if (lairMax is not { } max) return string.Empty;
         string line = "Max Regen: " + max.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        string time = BuildRegenTime(delay);
+        string time = BuildRegenTime(delay, realm);
         return time.Length > 0 ? line + " @ " + time : line;
     }
 
@@ -442,7 +442,7 @@ public static class RoomTooltipBuilder
         {
             StringBuilder regen = new();
             regen.Append("Max Regen: ").Append(maxRegen);
-            string regenTime = BuildRegenTime(room.Delay);
+            string regenTime = BuildRegenTime(room.Delay, data?.ActiveRealm ?? RealmType.Stock);
             if (regenTime.Length > 0) regen.Append(" @ ").Append(regenTime);
             parts.Add(regen.ToString());
         }
@@ -1199,10 +1199,13 @@ public static class RoomTooltipBuilder
 
     // ----- Regen time ----------------------------------------------
 
-    private static string BuildRegenTime(int delay)
+    // Stock refills a lair Delay to Delay + 1 minutes after the room's last kill,
+    // so it shows that range; Paradigm is (Delay-1) minutes + 30 seconds. The
+    // same timer LairTimerStore.RespawnSecondsForDelay resolves.
+    private static string BuildRegenTime(int delay, RealmType realm)
     {
-        // GreaterMUD formula: (Delay-1) minutes + 30 seconds.
         if (delay <= 0) return string.Empty;
+        if (realm != RealmType.ParaMud) return $"{delay}-{delay + 1}m";
         int minutes = delay - 1;
         return minutes > 0 ? $"{minutes}m 30s" : "30s";
     }

@@ -12,11 +12,11 @@ namespace MudPlay.Game.Map;
 //     Monsters[id].RegenTime across the listed monsters) and return the
 //     canonical respawn time in seconds. Lookups are cached; the cache
 //     invalidates on GameDataCache.ActiveSetChanged.
-//   In-session arrivals — observes RoomTracker.StateChanged; whenever the
-//     player lands Confirmed in a known lair room, the arrival timestamp
-//     is stamped. The scheduler reads LastEntered + RespawnSeconds to
-//     compute "next-ready-at". Arrivals are session-only — they vanish on
-//     Stop and on profile swap; no persistence.
+//   In-session clock anchors — observes RoomTracker.StateChanged; whenever
+//     the player lands Confirmed in a known lair room, the arrival timestamp
+//     is stamped, and NoteKill stamps a kill in the lair the player stands
+//     in. The scheduler reads anchor + RespawnSeconds to compute
+//     "next-ready-at". Anchors are session-only — no persistence.
 public sealed class LairTimerStore : IDisposable
 {
     private readonly GameDataCache _cache;
@@ -28,7 +28,8 @@ public sealed class LairTimerStore : IDisposable
     private readonly Dictionary<string, int?> _groupDelaySecCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, int?> _monsterRegenSecCache = new();
     private readonly Dictionary<RoomKey, DateTimeOffset> _lastEntered = new();
-    private readonly object _arrivalLock = new();
+    private readonly Dictionary<RoomKey, DateTimeOffset> _lastKilled = new();
+    private readonly object _arrivalLock = new();   // guards _lastEntered + _lastKilled
 
     // Whole-set longest respawn, computed once per active set (a scan of every
     // lair room) then cached. The _computed flag distinguishes "no lair in set"
@@ -86,16 +87,49 @@ public sealed class LairTimerStore : IDisposable
             return _lastEntered.TryGetValue(key, out DateTimeOffset t) ? t : null;
     }
 
+    // Last kill the player saw in key this session, or null.
+    public DateTimeOffset? LastKilled(RoomKey key)
+    {
+        lock (_arrivalLock)
+            return _lastKilled.TryGetValue(key, out DateTimeOffset t) ? t : null;
+    }
+
+    // Where key's respawn clock is taken to start. Stock runs one clock per lair
+    // room, restarted by every kill in it — walking in doesn't touch it — so its
+    // last kill is the anchor; a lair entered without a kill seen falls back to
+    // the entry. Paradigm keeps timing from the entry until its clock is settled
+    // (issue #813). GAME_MECHANICS "Lair respawn timers".
+    public DateTimeOffset? ClockStart(RoomKey key)
+    {
+        bool roomClock = _cache.ActiveRealm != RealmType.ParaMud;
+        lock (_arrivalLock)
+        {
+            if (roomClock && _lastKilled.TryGetValue(key, out DateTimeOffset kill))
+                return kill;
+            return _lastEntered.TryGetValue(key, out DateTimeOffset entered) ? entered : null;
+        }
+    }
+
     // Computed time when key's spawn will next be ready, given its respawn
-    // timer + last arrival. Convenience for the scheduler. Returns null
-    // when respawn time isn't known OR the player has never entered this
-    // room (in which case the scheduler should treat it as "ready now").
+    // timer + clock start. Convenience for the scheduler. Returns null when
+    // respawn time isn't known OR the room has no clock start this session
+    // (in which case the scheduler should treat it as "ready now").
     public DateTimeOffset? NextReadyAt(RoomKey key, int? overrideRespawnSeconds = null)
     {
         int? respawn = overrideRespawnSeconds ?? DefaultRespawnSeconds(key);
         if (respawn is not int seconds) return null;
-        DateTimeOffset? last = LastEntered(key);
-        return last is null ? null : last.Value.AddSeconds(seconds);
+        DateTimeOffset? start = ClockStart(key);
+        return start is null ? null : start.Value.AddSeconds(seconds);
+    }
+
+    // A monster died while the player stood in the current room. Stamped only
+    // for a Confirmed lair room; read by ClockStart on Stock.
+    public void NoteKill(DateTimeOffset at)
+    {
+        if (_tracker.State.Confidence != RoomConfidence.Confirmed) return;
+        if (_tracker.State.CurrentRoom is not { HasLair: true } room) return;
+        lock (_arrivalLock) _lastKilled[room.Key] = at;
+        _log?.Debug("LairTimerStore", $"kill in {room.Key} ('{room.Name}') at {at:HH:mm:ss.fff}.");
     }
 
     // Longest default respawn (seconds) across every lair room in the active
@@ -121,11 +155,15 @@ public sealed class LairTimerStore : IDisposable
     // Force-clear per-room arrival history; used by the scheduler on Start.
     public void ResetArrivals()
     {
-        lock (_arrivalLock) _lastEntered.Clear();
+        lock (_arrivalLock)
+        {
+            _lastEntered.Clear();
+            _lastKilled.Clear();
+        }
         _log?.Debug("LairTimerStore", "arrival history cleared.");
     }
 
-    // Drop the recorded arrival for the supplied subset of rooms, leaving
+    // Drop the recorded arrival and kill for the supplied subset of rooms, leaving
     // any others intact. Used by AutoLairManager.Start so a Run begins with
     // every marked room treated as "ready" regardless of whether the player
     // happened to walk through it earlier in the session — the in-game
@@ -137,7 +175,11 @@ public sealed class LairTimerStore : IDisposable
         ArgumentNullException.ThrowIfNull(keys);
         lock (_arrivalLock)
         {
-            foreach (RoomKey k in keys) _lastEntered.Remove(k);
+            foreach (RoomKey k in keys)
+            {
+                _lastEntered.Remove(k);
+                _lastKilled.Remove(k);
+            }
         }
     }
 
@@ -171,14 +213,11 @@ public sealed class LairTimerStore : IDisposable
         if (_graph.GetRoom(key) is not { } room) return null;
         if (!room.HasLair) return null;
 
-        // Primary: the per-room MDB Delay field. GreaterMUD formula
-        // (D-1)m + 30s — same one RoomTooltipBuilder uses for its
-        // "Max Regen: N @ Xm 30s" line, so the user sees a consistent
-        // timer between the room tooltip + the CURRENT NAV row. Delay
-        // = 0 means "no respawn delay" (or unset); fall through to the
-        // lair-tag paths below.
+        // Primary: the per-room MDB Delay field, read by realm (see
+        // RespawnSecondsForDelay). Delay = 0 means unset; fall through to
+        // the lair-tag paths below.
         if (room.Delay > 0)
-            return (room.Delay - 1) * 60 + 30;
+            return RespawnSecondsForDelay(room.Delay, _cache.ActiveRealm);
 
         LairTagInfo? info = LairTagParser.TryParse(room.RawLairTag);
         if (info is null) return null;
@@ -206,6 +245,14 @@ public sealed class LairTimerStore : IDisposable
 
         return null;
     }
+
+    // A room's Delay as seconds from the kill that starts its lair clock. Stock
+    // refills once the clock minute is Delay past the last kill's minute, so the
+    // wait runs Delay to Delay + 1 minutes; the midpoint is used. Paradigm is
+    // (Delay − 1) min + 30 s. RoomTooltipBuilder's "Max Regen" line shows the
+    // same timer. GAME_MECHANICS "Lair respawn timers".
+    public static int RespawnSecondsForDelay(int delay, RealmType realm)
+        => realm == RealmType.ParaMud ? (delay - 1) * 60 + 30 : delay * 60 + 30;
 
     private int? ResolveGroupDelaySeconds(string groupIndex)
     {
