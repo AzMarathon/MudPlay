@@ -3486,7 +3486,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void OnGraphReloaded()
     {
         // RoomSearchService listens to GraphReloaded itself and flushes
-        // its monster + distance caches.
+        // its monster + distance caches. A ranking mid-way through mapping would mix
+        // the old graph's searches with the new one's.
+        ExpEstimator?.CancelRanking();
         RefreshLayout();
         RefreshTeleportRooms();
         RefreshTrainerRooms();   // trainer set is per game-data set

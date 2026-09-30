@@ -284,7 +284,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             SimResult is null ? null : SimLines.ToList(), SimResult is null ? SimWalkSeconds : _simWalkUsed, SimHours,
             CheckLines.Count == 0 ? null
                 : (string.IsNullOrEmpty(CheckStatus) ? CheckLines : CheckLines.Prepend(CheckStatus)).ToList(),
-            Rankings.Count == 0 ? null
+            // The status alone still reports a ranking that was cancelled, failed or found nothing.
+            Rankings.Count == 0 && string.IsNullOrEmpty(RankStatus) ? null
                 : (string.IsNullOrEmpty(RankStatus) ? Rankings.Take(15).Select(r => r.Label)
                     : Rankings.Take(15).Select(r => r.Label).Prepend(RankStatus)).ToList());
     }
@@ -446,10 +447,12 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     // Every hunting area's lair tour (AreaTours, grouped by the Monsters' Region /
     // Area labels) played by the character at RankLevel, safe areas first by
     // exp/hr. Tours are mapped here on the UI thread — the room graph is rebuilt on
-    // it (a set switch) and game data is read there — so every search is followed by
-    // a yield that lets input and rendering through; then the areas simulate in
-    // parallel on workers. CancelRanking (the Cancel button, or the session's
-    // teardown) stops it between searches or simulations.
+    // it (a set switch) and game data is read there — so a yield that lets input and
+    // rendering through comes before each piece of that work (the reach search, each
+    // area grouping, each tour search, each lap resolve, area and saved loop alike);
+    // then the areas simulate in parallel on workers. CancelRanking (the Cancel
+    // button, the session's teardown, or a room-graph reload) stops it at the next
+    // yield or between simulations.
     [RelayCommand(CanExecute = nameof(CanRunCheck))]
     private async Task RankAreasAsync()
     {
@@ -484,8 +487,10 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             await YieldToUi(cancel);
             var lairs = _resolver.LairRooms().ToList();
             var reachable = lairs.Where(l => reach.ContainsKey(l.Room)).ToList();
+            await YieldToUi(cancel);
             IReadOnlyList<(string Area, IReadOnlyList<RoomKey> Rooms)> groups = AreaTours.Group(
                 reachable, n => AreaLabel(setup.Character.Overlay(n)));
+            await YieldToUi(cancel);
             int gatedAreas = AreaTours.Group(lairs, n => AreaLabel(setup.Character.Overlay(n))).Count - groups.Count;
             var jobs = new List<(AreaTour Tour, SimCharacter Character, SimWorld World, IReadOnlyList<SimRoom> Lap, bool IsLoop)>();
             int skippedAreas = 0, skippedLoops = 0;
@@ -565,12 +570,20 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
                 $"{skippedAreas} areas and {skippedLoops} loops skipped): " +
                 string.Join(" | ", ranked.Take(10).Select(r => r.Label)));
         }
-        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        catch (Exception ex) when (cancel.IsCancellationRequested && IsCancellation(ex))
         {
             Rankings.Clear();
             OnPropertyChanged(nameof(HasRankings));
             RankStatus = "Ranking cancelled.";
             _log?.Info("ExpEstimator", $"area ranking at L{level} cancelled");
+        }
+        catch (Exception ex)
+        {
+            // A ranking fault must never take the client down with it.
+            _log?.Warn("ExpEstimator", $"area ranking at L{level} failed: {ex.GetType().Name}: {ex.Message}");
+            Rankings.Clear();
+            OnPropertyChanged(nameof(HasRankings));
+            RankStatus = "Ranking failed — see the program log.";
         }
         finally
         {
@@ -581,9 +594,14 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     }
 
     // Stops a running RankAreas; the Cancel button, and the Navigation window when
-    // it tears this session down.
+    // it tears this session down or the room graph reloads.
     [RelayCommand(CanExecute = nameof(IsRanking))]
     public void CancelRanking() => _rankCts?.Cancel();
+
+    // PLINQ can hand a worker's cancel back wrapped in an AggregateException.
+    private static bool IsCancellation(Exception ex) =>
+        ex is OperationCanceledException
+        || ex is AggregateException agg && agg.Flatten().InnerExceptions.All(e => e is OperationCanceledException);
 
     // Let queued input and rendering run before the next search on the UI thread.
     private static async Task YieldToUi(CancellationToken cancel)
@@ -615,7 +633,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     partial void OnSelectedRankingChanged(AreaRank? value)
     {
         if (value is null) return;
-        LoadRooms(value.Tour, value.Area);
+        LoadRooms(value.Tour, value.Area);   // clears SimStatus, so the reminder goes after it
         // Simulate plays the sketch as the character stands now, not as ranked.
         if (_simulation?.Level() is int now && now != value.Level)
             SimStatus = $"Loaded from the L{value.Level} ranking — Simulate plays it at your current level (L{now}) and today's gates.";
@@ -635,6 +653,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         }
         ProposedName = name;
         OnPropertyChanged(nameof(HasClicks));
+        ClearSimulation();
         Recompute();
     }
 
