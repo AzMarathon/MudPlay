@@ -653,7 +653,8 @@
                          Mode (Sprint) for the trip; shown while Go would start
                          something new. -->
                     <Button Classes="ActionChip Run"
-                            Content="▾" Padding="6,2"
+                            Content="▾" Padding="4,4" MinWidth="0" Width="22"
+                            Margin="-4,0,0,0"
                             IsVisible="{Binding CanRunWithOptions}"
                             ToolTip.Tip="Go with Auto-Combat off (Run), or in Sprint Mode (Sprint), until the walk-to arrives, the loop begins its circuit, or the Auto-Lair reaches its first lair.">
                         <Button.Flyout>
