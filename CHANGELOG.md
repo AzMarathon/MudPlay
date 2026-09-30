@@ -4,7 +4,8 @@
 
 - Events: every event now has a Then step — go back to what was running, start a loop / Auto-Lair, walk somewhere, or fire another event
 - Events: loops and Auto-Lairs started by an event can stop after N laps, N minutes, a boss kill, or conditions holding
-- Events: new Boss trigger (early window, guaranteed spawn, kill, cleanup reset, N minutes early) and Wait, Rest up and Bank trip actions
+- Events: new Boss trigger (any Bosses-tab timer column hitting 0, a kill, a cleanup reset, N minutes early) and Wait, Rest up and Bank trip actions
+- Events: existing events convert on first load, keeping what they did (a walk-to goes back, anything else stops)
 
 ## 3.125.16
 

@@ -6,8 +6,8 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Events;
 
-// Fires Boss-triggered events off the Bosses tab's timer table: when a boss's
-// first early spawn window opens, its guaranteed spawn comes, a cleanup boss
+// Fires Boss-triggered events off the Bosses tab's timer table: when one of a boss's
+// early spawn-window columns counts down to 0, its guaranteed spawn comes, a cleanup boss
 // resets (each optionally BossLeadMinutes early), or it's killed. Once per kill —
 // the kill time keys it — and only while in-game. A moment first seen more than
 // StaleAfter late (the client wasn't running or connected then) doesn't fire.
@@ -94,7 +94,7 @@ public sealed class EventBossWatcher
         DateTimeOffset? moment = e.BossMoment switch
         {
             EventBossMoment.CleanupReset => def.RespawnType == BossRespawnType.Cleanup ? _timers.NextCleanupFor(def.Name) : null,
-            EventBossMoment.EarlyWindow => TimedMoment(def, killed, BossTimerMath.SpawnFractions(_realm())[0]),
+            EventBossMoment.EarlyWindow => TimedMoment(def, killed, e.BossWindowFraction ?? BossTimerMath.SpawnFractions(_realm())[0]),
             EventBossMoment.Guaranteed => TimedMoment(def, killed, 1.0),
             _ => null,
         };

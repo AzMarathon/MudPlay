@@ -110,12 +110,19 @@ public sealed partial class EventRowViewModel : ObservableObject
         _ => "stop",
     };
 
+    // The Bosses tab's column label: Stock's lone early point is 87.5%, Paradigm's
+    // are named by their discount off the full timer.
+    private static string WindowLabel(double? fraction) => fraction is { } f
+        ? Game.Map.BossTimerMath.WindowLabel(Math.Abs(f - 0.875) < 0.001 ? Game.RealmType.Stock : Game.RealmType.ParaMud, f)
+        : "first early";
+
     private string FormatBoss()
     {
         string boss = string.IsNullOrWhiteSpace(Source.BossName) ? "(no boss)" : Source.BossName;
         string lead = Source.BossLeadMinutes is > 0 and var m ? $" -{m}m" : string.Empty;
         return Source.BossMoment switch
         {
+            EventBossMoment.EarlyWindow  => $"{boss}: {WindowLabel(Source.BossWindowFraction)} window{lead}",
             EventBossMoment.Guaranteed   => $"{boss}: guaranteed spawn{lead}",
             EventBossMoment.Killed       => $"{boss}: killed",
             EventBossMoment.CleanupReset => $"{boss}: cleanup reset{lead}",

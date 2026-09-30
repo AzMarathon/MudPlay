@@ -263,4 +263,20 @@ public sealed class EventManagerTests
         Assert.Equal("logon greet", round.Events[1].Name);
         Assert.Equal(EventTriggerType.Logon, round.Events[1].TriggerType);
     }
+
+    // Events saved before Then existed keep the behavior they had: a walk-to goes
+    // back to what was running, anything else stops.
+    [Fact]
+    public void ConvertToThen_WritesTheOldBehaviorIn()
+    {
+        ScheduledEvent walk = new() { ActionType = EventActionType.WalkTo, WalkToTarget = new RoomRef(1, 2) };
+        ScheduledEvent loop = new() { ActionType = EventActionType.Loop, LoopName = "farm" };
+        ScheduledEvent current = new() { ActionType = EventActionType.Command, Then = EventThenType.Event, ThenEventName = "x" };
+
+        Assert.True(EventManager.ConvertToThen(new[] { walk, loop, current }));
+        Assert.Equal(EventThenType.Resume, walk.Then);
+        Assert.Equal(EventThenType.Nothing, loop.Then);
+        Assert.Equal(EventThenType.Event, current.Then);
+        Assert.False(EventManager.ConvertToThen(new[] { walk, loop, current }));
+    }
 }

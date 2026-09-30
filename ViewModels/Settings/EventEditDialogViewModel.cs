@@ -51,7 +51,8 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         LairManager? lairs = null,
         RoomSearchService? search = null,
         IReadOnlyList<string>? bossNames = null,
-        IReadOnlyList<string>? eventNames = null)
+        IReadOnlyList<string>? eventNames = null,
+        IReadOnlyList<(string Label, double Fraction)>? bossWindows = null)
     {
         ArgumentNullException.ThrowIfNull(existing);
         _isNew = isNew;
@@ -90,7 +91,19 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         EveryAmount = existing.EveryAmount ?? 30;
         EveryUnit = existing.EveryUnit ?? EventTimeUnit.Seconds;
         BossName = existing.BossName;
-        SelectedBossMoment = BossMomentOptions[(int)(existing.BossMoment ?? EventBossMoment.EarlyWindow)];
+        // One option per Bosses-tab column (its early windows, then the full timer),
+        // then the kill and a cleanup reset.
+        foreach ((string label, double fraction) in bossWindows ?? new[] { ("87.5%", 0.875) })
+            _bossMoments.Add(($"{label} column hits 0", EventBossMoment.EarlyWindow, fraction));
+        _bossMoments.Add(("Guaranteed (full) hits 0", EventBossMoment.Guaranteed, null));
+        _bossMoments.Add(("Is killed", EventBossMoment.Killed, null));
+        _bossMoments.Add(("Cleanup reset", EventBossMoment.CleanupReset, null));
+        BossMomentOptions = _bossMoments.Select(m => m.Label).ToList();
+        EventBossMoment savedMoment = existing.BossMoment ?? EventBossMoment.EarlyWindow;
+        int pick = _bossMoments.FindIndex(m => m.Moment == savedMoment
+            && (savedMoment != EventBossMoment.EarlyWindow || existing.BossWindowFraction is not { } f
+                || Math.Abs(f - m.Fraction!.Value) < 0.001));
+        SelectedBossMoment = BossMomentOptions[Math.Max(0, pick)];
         BossLeadMinutes = existing.BossLeadMinutes ?? 0;
 
         switch (existing.ActionType)
@@ -189,12 +202,11 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     [ObservableProperty] private string? _bossName;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BossLeadApplies))]
-    private string _selectedBossMoment = "Early window opens";
+    private string _selectedBossMoment = string.Empty;
     [ObservableProperty] private int _bossLeadMinutes;
 
-    // Same order as EventBossMoment.
-    public IReadOnlyList<string> BossMomentOptions { get; } =
-        new[] { "Early window opens", "Guaranteed spawn", "Is killed", "Cleanup reset" };
+    private readonly List<(string Label, EventBossMoment Moment, double? Fraction)> _bossMoments = new();
+    public IReadOnlyList<string> BossMomentOptions { get; }
     public ObservableCollection<string> AvailableBossNames { get; } = new();
     // "N minutes early" means nothing for a kill.
     public bool BossLeadApplies => SelectedBoss() != EventBossMoment.Killed;
@@ -339,6 +351,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
             case EventTriggerType.Boss:
                 result.BossName = BossName;
                 result.BossMoment = SelectedBoss();
+                result.BossWindowFraction = SelectedBossEntry().Fraction;
                 result.BossLeadMinutes = BossLeadApplies && BossLeadMinutes > 0 ? BossLeadMinutes : null;
                 break;
         }
@@ -570,10 +583,12 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         return EventThenType.Nothing;
     }
 
-    private EventBossMoment SelectedBoss()
+    private EventBossMoment SelectedBoss() => SelectedBossEntry().Moment;
+
+    private (string Label, EventBossMoment Moment, double? Fraction) SelectedBossEntry()
     {
-        int i = BossMomentOptions.ToList().IndexOf(SelectedBossMoment);
-        return i < 0 ? EventBossMoment.EarlyWindow : (EventBossMoment)i;
+        int i = _bossMoments.FindIndex(m => m.Label == SelectedBossMoment);
+        return _bossMoments[Math.Max(0, i)];
     }
 
     // Three-state result of resolving a room box: resolved (Map+Room set, no

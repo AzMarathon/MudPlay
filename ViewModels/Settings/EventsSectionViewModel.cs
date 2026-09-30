@@ -164,7 +164,14 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
             bossNames: AppServices.Current.Bosses.ResolveForRealm(AppServices.Current.GameData.ActiveRealm)
                 .Select(b => b.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(),
             eventNames: _events.Events.Select(e => e.Name).Where(n => !string.IsNullOrWhiteSpace(n))
-                .Distinct(StringComparer.OrdinalIgnoreCase).ToList());
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            bossWindows: BossWindowColumns(AppServices.Current.GameData.ActiveRealm));
+
+    // The Bosses tab's early-window columns for the realm, in the tab's order.
+    private static IReadOnlyList<(string, double)> BossWindowColumns(Game.RealmType realm)
+        => Game.Map.BossTimerMath.EarlyColumnLabels(realm)
+            .Zip(Game.Map.BossTimerMath.EarlyFractionsInDisplayOrder(realm), (label, f) => (label, f))
+            .ToList();
 
     [RelayCommand(CanExecute = nameof(CanModifyOrRemove))]
     private void Remove()

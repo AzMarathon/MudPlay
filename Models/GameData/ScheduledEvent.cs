@@ -77,6 +77,10 @@ public sealed class ScheduledEvent
     public string? BossName { get; set; }
     public EventBossMoment? BossMoment { get; set; }
     public int? BossLeadMinutes { get; set; }
+    // Which early spawn window (a Bosses tab column) an EarlyWindow moment watches,
+    // as its fraction of the full timer — Paradigm 0.80 / 0.90 / 0.95 (-20% / -10% /
+    // -5%), Stock 0.875. Null = the earliest.
+    public double? BossWindowFraction { get; set; }
 
     // ----- Action parameters -----------------------------------------
 

@@ -3,11 +3,11 @@
         xmlns:vm="using:MudPlay.ViewModels.Settings"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="620"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="620"
         x:Class="MudPlay.Views.Settings.EventEditDialog"
         x:DataType="vm:EventEditDialogViewModel"
         Title="{Binding DialogTitle}"
-        Width="1000"
+        Width="1100"
         SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
@@ -49,13 +49,13 @@
     <Window.Resources>
         <DataTemplate x:Key="ConditionRow" x:DataType="vm:EventConditionRowViewModel">
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
-                <ComboBox Width="130" ItemsSource="{Binding StatOptions}"
+                <ComboBox Width="124" ItemsSource="{Binding StatOptions}"
                           SelectedItem="{Binding SelectedStat, Mode=TwoWay}"/>
                 <ComboBox Width="56" ItemsSource="{Binding ComparisonOptions}"
                           SelectedItem="{Binding SelectedComparison, Mode=TwoWay}"/>
-                <NumericUpDown Width="120" Minimum="0" Maximum="999999999999"
+                <NumericUpDown Width="112" Minimum="0" Maximum="999999999999"
                                FormatString="0" Value="{Binding Value, Mode=TwoWay}"/>
-                <ComboBox Width="104" ItemsSource="{Binding DenominationOptions}"
+                <ComboBox Width="100" ItemsSource="{Binding DenominationOptions}"
                           SelectedItem="{Binding Denomination, Mode=TwoWay}"
                           IsVisible="{Binding IsMoney}"/>
                 <Button Content="✕" Width="28" Padding="0"
@@ -79,10 +79,10 @@
                           IsChecked="{Binding DisabledFlag, Mode=TwoWay}"/>
             </Grid>
 
-            <Grid Grid.Row="1" ColumnDefinitions="440,12,*">
+            <Grid Grid.Row="1" ColumnDefinitions="*,12,*" RowDefinitions="Auto,10,Auto">
 
                 <!-- WHEN: what starts the event. -->
-                <Border Grid.Column="0" Classes="Section" VerticalAlignment="Top">
+                <Border Grid.Row="0" Grid.Column="0" Classes="Section">
                     <Grid ColumnDefinitions="100,*" RowSpacing="4"
                           RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="SectionHeader" Text="WHEN"/>
@@ -133,9 +133,9 @@
                                   PlaceholderText="(a boss from the Bosses tab)"/>
                         <StackPanel Grid.Row="9" Grid.Column="1" Orientation="Horizontal" Spacing="6"
                                     IsEnabled="{Binding IsTriggerBoss}">
-                            <ComboBox Width="160" ItemsSource="{Binding BossMomentOptions}"
+                            <ComboBox Width="210" ItemsSource="{Binding BossMomentOptions}"
                                       SelectedItem="{Binding SelectedBossMoment, Mode=TwoWay}"
-                                      ToolTip.Tip="Early window: its first early spawn window (Paradigm -20%, Stock 87.5%). Guaranteed: its full respawn time. Is killed: when the timer table records its kill. Cleanup reset: a cleanup boss coming back at nightly cleanup. Fires once per kill."/>
+                                      ToolTip.Tip="Which of the Bosses tab's timer columns to watch count down to 0 — an early spawn window, or the guaranteed (full) respawn — or the moment it's killed, or a cleanup boss's reset at nightly cleanup. Fires once per kill."/>
                             <NumericUpDown Width="100" Minimum="0" Maximum="1440" FormatString="0"
                                            Value="{Binding BossLeadMinutes, Mode=TwoWay}"
                                            IsVisible="{Binding BossLeadApplies}"
@@ -162,10 +162,8 @@
                     </Grid>
                 </Border>
 
-                <StackPanel Grid.Column="2" Spacing="10">
-
                     <!-- DO: the action. Targets are validated on Save (popup). -->
-                    <Border Classes="Section">
+                    <Border Grid.Row="0" Grid.Column="2" Classes="Section">
                         <Grid ColumnDefinitions="110,*" RowSpacing="4"
                               RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                             <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="SectionHeader" Text="DO"/>
@@ -233,7 +231,8 @@
                     </Border>
 
                     <!-- STOP AFTER: a loop / auto-lair never ends by itself. -->
-                    <Border Classes="Section" IsVisible="{Binding ShowsStopAfter}">
+                    <Border Grid.Row="2" Grid.Column="0" Classes="Section" VerticalAlignment="Top"
+                            IsVisible="{Binding ShowsStopAfter}">
                         <StackPanel Spacing="4">
                             <TextBlock Classes="SectionHeader" Text="STOP AFTER (whichever comes first)"/>
                             <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsActionLoop}">
@@ -268,7 +267,7 @@
                     </Border>
 
                     <!-- THEN: once the action is done. -->
-                    <Border Classes="Section">
+                    <Border Grid.Row="2" Grid.Column="2" Classes="Section">
                         <Grid ColumnDefinitions="110,*" RowSpacing="4"
                               RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                             <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="SectionHeader" Text="THEN (once it's done)"/>
@@ -319,7 +318,6 @@
                                        Text="A loop or auto-lair never finishes on its own — set a STOP AFTER rule, or Then never runs."/>
                         </Grid>
                     </Border>
-                </StackPanel>
             </Grid>
 
             <!-- Save / Cancel -->

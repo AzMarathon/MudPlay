@@ -3634,8 +3634,7 @@ Settings → Events. Lets you define per-character events. Each has three parts,
   - **Only in the game.** Like the timed triggers, it only fires while you're in the game.
   - **Needs readings first.** Money and encumbrance aren't known until MudPlay has read your inventory, and experience / level until it has read your stats. A condition on something not read yet doesn't count as true.
 - **Boss** — fires off a boss on the **Bosses** tab's timer table. Pick the boss and the moment:
-  - **Early window opens** — its first early spawn window (Paradigm −20%, Stock 87.5%).
-  - **Guaranteed spawn** — its full respawn time is up.
+  - **A timer column hits 0** — pick which of the Bosses tab's columns to watch: an early spawn window (Paradigm **−20%**, **−10%**, **−5%**; Stock **87.5%**), or **Guaranteed (full)** — its full respawn time.
   - **Is killed** — the moment the timer table records its kill.
   - **Cleanup reset** — a cleanup boss comes back at nightly cleanup.
   - **min early** fires that many minutes before the moment (time to walk there); it doesn't apply to *Is killed*. Each fires once per kill, only while you're in the game, and not at all if the moment passed more than 10 minutes before MudPlay saw it (you weren't connected).
@@ -3673,7 +3672,7 @@ What happens once the action is done:
 - **Fire event** — run another event by name; its own Then carries on from there, and its **Go back** still returns to what the first event interrupted. A chain of more than 10 events in a row is stopped as a loop.
 - **Nothing** — stop there.
 
-A walk or trip that can't be finished (no path, a leg fails) still runs its Then, so you aren't left standing. If **you** take over — stop the event's walk / loop / Auto-Lair, or start one of your own while it waits or rests — the event ends without its Then. A second event firing while one runs takes over (the first one's Then is dropped), but its **Go back** still means what the first event interrupted. Events saved before this existed keep their behaviour: a walk-to goes back, anything else does nothing after.
+A walk or trip that can't be finished (no path, a leg fails) still runs its Then, so you aren't left standing. If **you** take over — stop the event's walk / loop / Auto-Lair, or start one of your own while it waits or rests — the event ends without its Then. A second event firing while one runs takes over (the first one's Then is dropped), but its **Go back** still means what the first event interrupted. Events you made before Then existed are converted the first time the character loads: a walk-to gets **Go back**, anything else **Nothing** — what they did before — so edit them to choose something else.
 
 ---
 

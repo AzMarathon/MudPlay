@@ -764,9 +764,30 @@ public sealed class EventManager : IDisposable
         EndRun();
         Events.Clear();
         _autoDisabled.Clear();
+        bool converted = p.Events is not null && ConvertToThen(p.Events);
         if (p.Events is not null)
             foreach (ScheduledEvent e in p.Events) Events.Add(e);
+        if (converted)
+        {
+            _log?.Info("Events", "Converted this character's events to the Then format (a walk-to goes back, anything else stops).");
+            _profile?.Save();
+        }
         ReconcileTargets();
+    }
+
+    // Events saved before they had a Then get the behavior they always had written
+    // in (a walk-to went back, anything else stopped), so the editor shows it and
+    // the profile saves in the current shape. True when any changed.
+    internal static bool ConvertToThen(IEnumerable<ScheduledEvent> events)
+    {
+        bool converted = false;
+        foreach (ScheduledEvent e in events)
+        {
+            if (e.Then is not null) continue;
+            e.Then = e.ResolvedThen;
+            converted = true;
+        }
+        return converted;
     }
 
     private void Clear()
