@@ -1232,7 +1232,7 @@ A helper for cashing in boss chests (on the Bosses tab). It snapshots your carri
 
 ### Death Recovery
 
-Your death history. **How did I Die?** replays the backscroll from the moment of death, and **Recover Now** walks to the death room and grabs the pile (or toggle **Auto-Recover Deathpiles** to do it automatically).
+Your death history. **How did I Die?** replays the backscroll from the moment of death, in the colours you saw it in and in your terminal font (select and copy with the mouse or Ctrl+C). Deaths recorded before colours were kept show in plain text. The saved log file keeps the colours as ANSI codes, so it also reads in colour in `less -R`. **Recover Now** walks to the death room and grabs the pile (or toggle **Auto-Recover Deathpiles** to do it automatically).
 
 Recovery matches your realm: on **Paradigm** it recovers your `corpse` in one command; on **Stock**, where death scatters your items loose on the floor (and can overflow into adjacent rooms), it `get`s each item back.
 

@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.128.3**
-> - A monster's mid-fight summon ("shouts for aid!") re-displays the room, so the summoned monster is fought instead of the client resting or looting once the summoner dies
+> **Version 3.128.4**
+> - How did I Die? shows the death scene in its original colours
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
