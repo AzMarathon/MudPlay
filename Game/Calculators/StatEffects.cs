@@ -50,7 +50,43 @@ public readonly record struct StatContext(
     int MageryType, int MageryLevel,
     bool HasThievery = false, bool HasTraps = false,
     bool HasPicklocks = false, bool HasTracking = false,
-    int ClassCombatLvl = 0);
+    int ClassCombatLvl = 0)
+{
+    // The live character's context from its class and race game-data rows: hit dice,
+    // magery, race HP per level, Combat rating, and which thief skills the class or
+    // race grants. Missing rows leave those parts at 0 / false.
+    public static StatContext Resolve(MudPlay.Services.GameDataCache gameData, string? className,
+                                      string? raceName, RealmType realm)
+    {
+        int minHits = 0, maxHits = 0, mageryType = 0, mageryLevel = 0, raceHp = 0, combatLvl = 0;
+        System.Text.Json.JsonElement? classRow = null, raceRow = null;
+        if (gameData.FindRowByName("Classes", className ?? string.Empty) is System.Text.Json.JsonElement cls
+            && cls.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            classRow = cls;
+            minHits = Int(cls, "MinHits");
+            maxHits = Int(cls, "MaxHits");
+            mageryType = Int(cls, "MageryType");
+            mageryLevel = Int(cls, "MageryLVL");
+            combatLvl = Int(cls, "CombatLVL");
+        }
+        if (gameData.FindRowByName("Races", raceName ?? string.Empty) is System.Text.Json.JsonElement race
+            && race.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            raceRow = race;
+            raceHp = Int(race, "HPPerLVL");
+        }
+
+        (bool thievery, bool traps, bool picklocks, bool tracking) =
+            GameData.AbilityNames.GetThiefSkillGrants(classRow, raceRow);
+        return new StatContext(realm, minHits, maxHits, raceHp, mageryType, mageryLevel,
+            thievery, traps, picklocks, tracking, combatLvl);
+    }
+
+    private static int Int(System.Text.Json.JsonElement row, string property) =>
+        row.TryGetProperty(property, out System.Text.Json.JsonElement v)
+        && v.ValueKind == System.Text.Json.JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
+}
 
 // The stat-derived secondary numbers a combat profile / CP plan cares about — the
 // gear-independent, stat-and-level portion. All sourced from the existing verified

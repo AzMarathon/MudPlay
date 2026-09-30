@@ -429,7 +429,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         var block = new StatBlock(
             _stats.Level, _baseline.Strength, _baseline.Intellect, _baseline.Willpower,
             _baseline.Agility, _baseline.Health, _baseline.Charm);
-        StatContext ctx = ResolveStatContext();
+        StatContext ctx = StatContext.Resolve(_gameData, _stats.Class, _stats.Race, _realm);
         StrStatTip = StatEffects.Tooltip(BaseStat.Strength, block, ctx);
         IntStatTip = StatEffects.Tooltip(BaseStat.Intellect, block, ctx);
         WilStatTip = StatEffects.Tooltip(BaseStat.Willpower, block, ctx);
@@ -437,41 +437,6 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         HeaStatTip = StatEffects.Tooltip(BaseStat.Health, block, ctx);
         ChmStatTip = StatEffects.Tooltip(BaseStat.Charm, block, ctx);
     }
-
-    // Resolve the class hit-dice + magery and race per-level HP the HP / mana-regen
-    // tooltip effects need, plus which thief skills the class/race grants (those
-    // tooltip lines only show for a character that actually has the skill), from
-    // the live character's class/race game-data rows.
-    private StatContext ResolveStatContext()
-    {
-        int minHits = 0, maxHits = 0, mageryType = 0, mageryLevel = 0, raceHp = 0, combatLvl = 0;
-        System.Text.Json.JsonElement? classRow = null, raceRow = null;
-        if (_gameData.FindRowByName("Classes", _stats.Class) is System.Text.Json.JsonElement cls
-            && cls.ValueKind == System.Text.Json.JsonValueKind.Object)
-        {
-            classRow = cls;
-            minHits = TipInt(cls, "MinHits");
-            maxHits = TipInt(cls, "MaxHits");
-            mageryType = TipInt(cls, "MageryType");
-            mageryLevel = TipInt(cls, "MageryLVL");
-            combatLvl = TipInt(cls, "CombatLVL");
-        }
-        if (_gameData.FindRowByName("Races", _stats.Race) is System.Text.Json.JsonElement race
-            && race.ValueKind == System.Text.Json.JsonValueKind.Object)
-        {
-            raceRow = race;
-            raceHp = TipInt(race, "HPPerLVL");
-        }
-
-        (bool thievery, bool traps, bool picklocks, bool tracking) =
-            Game.GameData.AbilityNames.GetThiefSkillGrants(classRow, raceRow);
-        return new StatContext(_realm, minHits, maxHits, raceHp, mageryType, mageryLevel,
-            thievery, traps, picklocks, tracking, combatLvl);
-    }
-
-    private static int TipInt(System.Text.Json.JsonElement row, string property) =>
-        row.TryGetProperty(property, out System.Text.Json.JsonElement v)
-        && v.ValueKind == System.Text.Json.JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
 
     private void RecalcGrid()
     {

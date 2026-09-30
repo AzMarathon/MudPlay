@@ -1,5 +1,9 @@
 # Version history
 
+## 3.128.0
+
+- Click a base stat's name on Character Info to see every number it feeds and the stat values where each goes up, with your row highlighted, in your realm's formulas
+
 ## 3.127.8
 
 - Level Projection's Stealth column shows your sneak chance beside it: 84 (84%), or 100% from the level of a completed Perfect Stealth quest
