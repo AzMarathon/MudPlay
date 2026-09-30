@@ -380,10 +380,12 @@ Another level is simulated by moving **today's** character there: max HP, mana a
 
 ### Ranking hunting areas at a level
 
-**Rank areas at level** (with a level beside it — 0 means your current level) answers "where should I hunt?". It builds a lair tour for **every hunting area** — each lair room goes to the area its monsters are filed under (the **Region / Area** labels on the Game Data Monsters tab; change a monster's area there and the ranking follows), and the tour walks from the area's first lair to the nearest unvisited one (a very large area is walked outward from the start instead) — then plays your character through each at that level and lists them:
+**Rank areas at level** (with a level beside it — 0 means your current level) answers "where should I hunt?". It builds a lair tour for **every hunting area you can reach from the room you're standing in at that level** — each lair room goes to the area its monsters are filed under (the **Region / Area** labels on the Game Data Monsters tab; change a monster's area there and the ranking follows), and the tour walks from the area's first lair to the nearest unvisited one (a very large area is walked outward from the start instead) — then plays your character through each at that level and lists them:
 
 - **safe areas first, best exp/hr first**, with your lowest HP and the number of lairs;
 - **areas where you died** (or hung up) after them, however high their number — a run that dies only counts the minutes before it did.
+
+**Reach is judged at the chosen level.** A level-gated way in — a `(Level 50+)` exit, the Port Blackwater boat to Albion (50+), the Bloodwood Weald portal to Shadowmere (75+) — only counts once the ranked level clears it, so ranking at 48 leaves Tagesh and Shadowmere out and ranking at 50 or 75 brings them in. Every other gate (doors, keys and items, tolls and fares, class, alignment) and your avoided rooms count as they do for your walks right now. The status line says how many areas were left out as unreachable. Three runs is few: an area on the edge (lowest HP in the teens) can land on either side of "died".
 
 Pick a row to load that area's tour on the map: from there you can simulate it, trim it and **Save as loop**.
 

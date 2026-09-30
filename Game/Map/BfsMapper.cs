@@ -288,8 +288,12 @@ public sealed class BfsMapper
     // once vs O((rooms + edges) × matches). The Navigation search box uses
     // this to score 50+ matches per keystroke without re-scanning the
     // graph for each.
+    //
+    // viaBoats also crosses the sailings the filter lets through (a boat hop counts
+    // as one), for a "can I get there at all?" reach — the walk-only default is what
+    // a loop or a step count can actually use.
     public IReadOnlyDictionary<RoomKey, int> ComputeDistancesFrom(
-        RoomKey source, IRoomFilter? filter = null)
+        RoomKey source, IRoomFilter? filter = null, bool viaBoats = false)
     {
         Dictionary<RoomKey, int> dist = new();
         if (_graph.GetRoom(source) is null) return dist;
@@ -319,6 +323,15 @@ public sealed class BfsMapper
                 if (filter is not null && filter.IsAvoided(next)) continue;
                 if (filter is not null && filter.IsExitBlocked(exit)) continue;
                 if (_graph.GetRoom(next) is null) continue;
+                dist[next] = here_d + 1;
+                queue.Enqueue(next);
+            }
+            if (!viaBoats) continue;
+            foreach (BoatPassage passage in _graph.BoatPassagesAt(here))
+            {
+                RoomKey next = passage.ArrivalRoom;
+                if (dist.ContainsKey(next) || _graph.GetRoom(next) is null) continue;
+                if (filter is not null && (!filter.IsBoatPassable(in passage) || filter.IsAvoided(next))) continue;
                 dist[next] = here_d + 1;
                 queue.Enqueue(next);
             }

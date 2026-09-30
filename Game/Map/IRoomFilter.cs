@@ -93,7 +93,7 @@ public interface IRoomFilter
     IDisposable SuspendAcquirableGates() => NoGateSuspension.Instance;
 
     // The default-implementation's inert scope — disposing it does nothing.
-    private sealed class NoGateSuspension : IDisposable
+    internal sealed class NoGateSuspension : IDisposable
     {
         public static readonly NoGateSuspension Instance = new();
         public void Dispose() { }

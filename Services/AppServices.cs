@@ -8208,7 +8208,7 @@ public sealed class AppServices
     // the character's level and pools.
     public Game.Simulation.SimulationSource LoopSimulationSource =>
         _loopSimulationSource ??= new(BuildLoopSimulation, () => PlayerStats.Name, () => PlayerStats.Level,
-            LoopSimulationWalkSeconds, AppPaths.LogsDir);
+            LoopSimulationWalkSeconds, () => RoomTracker.State.CurrentRoom?.Key, Movement, AppPaths.LogsDir);
     private Game.Simulation.SimulationSource? _loopSimulationSource;
 
     public (Game.Simulation.SimCharacter Character, Game.Simulation.SimWorld World)? BuildLoopSimulation(int? atLevel = null)

@@ -399,22 +399,35 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             RankStatus = "No character yet — log in and type `stat` first.";
             return;
         }
+        if (_simulation.Room() is not { } here)
+        {
+            RankStatus = "MudPlay doesn't know which room you're in yet — step into a room so it can tell which areas you can reach.";
+            return;
+        }
         RankLevel = level;
         IsSimulating = true;
         Rankings.Clear();
         OnPropertyChanged(nameof(HasRankings));
         try
         {
+            // Only what the character could reach from here at that level: level gates
+            // (a (Level 50+) exit, a minimum-level sailing) judged at `level`, every
+            // other gate as the live movement filter has it, boats included.
+            IRoomFilter gates = new LevelAtFilter(_simulation.Filter ?? _filter, level);
+            IReadOnlyDictionary<RoomKey, int> reach = _resolver.DistancesFrom(here, gates, viaBoats: true);
+            var lairs = _resolver.LairRooms().ToList();
+            var reachable = lairs.Where(l => reach.ContainsKey(l.Room)).ToList();
             IReadOnlyList<(string Area, IReadOnlyList<RoomKey> Rooms)> groups = AreaTours.Group(
-                _resolver.LairRooms().ToList(), n => AreaLabel(setup.Character.Overlay(n)));
+                reachable, n => AreaLabel(setup.Character.Overlay(n)));
+            int gatedAreas = AreaTours.Group(lairs, n => AreaLabel(setup.Character.Overlay(n))).Count - groups.Count;
             var jobs = new List<(AreaTour Tour, SimCharacter Character, SimWorld World, IReadOnlyList<SimRoom> Lap)>();
             for (int i = 0; i < groups.Count; i++)
             {
                 RankStatus = $"Mapping area {i + 1} of {groups.Count}…";
                 await Task.Delay(1);
-                AreaTour tour = AreaTours.Order(groups[i].Area, groups[i].Rooms, k => _resolver.DistancesFrom(k, _filter));
+                AreaTour tour = AreaTours.Order(groups[i].Area, groups[i].Rooms, k => _resolver.DistancesFrom(k, gates));
                 if (tour.Rooms.Count < 2) continue;
-                IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(tour.Rooms.Select(k => new LoopWaypoint(k)).ToList(), _filter);
+                IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(tour.Rooms.Select(k => new LoopWaypoint(k)).ToList(), gates);
                 if (lap.Count == 0) continue;
                 (SimCharacter ch, SimWorld world) = SimFreeze.For(setup.Character, setup.World, lap);
                 jobs.Add((tour, ch, world, lap));
@@ -431,7 +444,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             foreach (AreaRank r in ranked) Rankings.Add(r);
             OnPropertyChanged(nameof(HasRankings));
             int safe = ranked.Count(r => r.Safe);
-            RankStatus = $"L{level}: {safe} safe area(s), best first; {ranked.Count - safe} where you died listed last. Pick one to load its tour.";
+            RankStatus = $"L{level} from {here.Map}/{here.Room}: {safe} safe area(s), best first; {ranked.Count - safe} where you died listed last"
+                + (gatedAreas > 0 ? $"; {gatedAreas} area(s) you can't reach at L{level} left out" : "") + ". Pick one to load its tour.";
             _log?.Info("ExpEstimator", $"ranked {ranked.Count} areas at L{level}: " +
                 string.Join(" | ", ranked.Take(10).Select(r => r.Label)));
         }

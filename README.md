@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.130.0**
-> - Exp/Hr Estimator: Rank areas at level plays your character through a lair tour of every hunting area (by the monsters' Region / Area labels) and lists them, safe areas best first
+> - Exp/Hr Estimator: Rank areas at level plays your character through a lair tour of every hunting area you can reach from where you stand at that level (level-gated boats, portals and exits judged at that level), safe areas best first
 > - Pick a ranked area to load its tour on the map; areas where you died are listed last
 > - The top of the ranking is in the bug report and the program log
 >
