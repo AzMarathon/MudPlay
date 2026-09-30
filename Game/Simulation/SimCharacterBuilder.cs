@@ -31,7 +31,9 @@ public static class SimCharacterBuilder
         IReadOnlyList<QuestBonus>? questBonuses,
         Func<int, MonsterOverlay> overlay,
         Func<int, string?> spellShortByNumber,
-        int evilPoints)
+        int alignmentValue,
+        int defaultMaxHp,
+        int defaultMaxMana)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(worn);
@@ -50,14 +52,22 @@ public static class SimCharacterBuilder
             BuildSpells(stats, worn, obtainedSpells, gameData, realm),
             combat, health, spells, overlay,
             number => number > 0 ? spellShortByNumber(number) : null,
-            evilPoints);
+            alignmentValue, defaultMaxHp, defaultMaxMana);
     }
+
+    // The character's alignment number: the exact evil points when Paradigm's `pro`
+    // has shown them, else the value of the who title's band (Stock never shows the
+    // points), else Neutral.
+    public static int AlignmentValue(double? evilPoints, string? alignmentTitle) =>
+        evilPoints is { } ep ? (int)ep : AlignmentBands.ValueOf(alignmentTitle) ?? 0;
 
     // Per-tick regen from the stat formulas (CharacterCalculator.CalcHpRegen /
     // CalcManaRegen) with gear, race, class and quest regen percents folded in.
-    // Paradigm splits each natural cycle into thirds on a 10 s grid and rests on the
-    // same grid at 3x, in place of the standing tick; Stock adds a separate rest tick
-    // (GAME_MECHANICS "Rest and meditate tick timing").
+    // Paradigm splits each natural cycle into thirds on a 10 s grid; resting there
+    // replaces it with 10 s ticks in cycles of three, the third paying the full rest
+    // amount and the two before it a reduced one — taken as a third of it, the size
+    // the live captures show, until the real figure is known. Stock adds a separate
+    // full rest tick (GAME_MECHANICS "Rest and meditate tick timing").
     private static SimRegen BuildRegen(
         PlayerStats stats, IReadOnlyList<EquippedItem> worn, GameDataCache gameData,
         IReadOnlyList<QuestBonus>? questBonuses, RealmType realm)
@@ -84,8 +94,8 @@ public static class SimCharacterBuilder
 
         bool paradigm = realm == RealmType.ParaMud;
         return paradigm
-            ? new SimRegen(hpStanding / 3, hpResting / 3, maStanding / 3, maMeditating,
-                RealmRegenProfile.For(realm), RestReplacesStanding: true)
+            ? new SimRegen(hpStanding / 3, hpResting, maStanding / 3, maMeditating,
+                RealmRegenProfile.For(realm), RestReplacesStanding: true, RestFullEvery: 3, RestReducedShare: 1.0 / 3)
             : new SimRegen(hpStanding, hpResting, maStanding, maMeditating,
                 RealmRegenProfile.For(realm), RestReplacesStanding: false);
     }

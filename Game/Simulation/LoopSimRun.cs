@@ -3,7 +3,11 @@ namespace MudPlay.Game.Simulation;
 // One simulated run of a loop: what the character earned and where the time went,
 // the same measures Session Stats keeps live. A run that dies stops there
 // (DiedAtSeconds) — the gear is on the corpse, so nothing after it would count.
+// Per-hour rates divide by the hours the run was asked to play, not the hours it
+// lasted: a death earns nothing for the rest of the session, so a run that dies
+// early pulls the average down instead of reporting its pre-death pace.
 public sealed record LoopSimRun(
+    double RequestedSeconds,
     double Seconds,
     long Exp,
     int Kills,
@@ -18,9 +22,9 @@ public sealed record LoopSimRun(
     double? DiedAtSeconds,
     IReadOnlyDictionary<string, int> Casts)
 {
-    public double Hours => Seconds / 3600.0;
-    public double ExpPerHour => Hours > 0 ? Exp / Hours : 0;
-    public double KillsPerHour => Hours > 0 ? Kills / Hours : 0;
+    public double RequestedHours => RequestedSeconds / 3600.0;
+    public double ExpPerHour => RequestedHours > 0 ? Exp / RequestedHours : 0;
+    public double KillsPerHour => RequestedHours > 0 ? Kills / RequestedHours : 0;
     public double AvgLapSeconds => Laps > 0 ? Seconds / Laps : 0;
 }
 
@@ -46,7 +50,7 @@ public sealed record LoopSimSummary(IReadOnlyList<LoopSimRun> Runs)
     // Casts per hour by cast-code, over every run, most-cast first.
     public IReadOnlyList<(string Spell, double PerHour)> CastsPerHour()
     {
-        double hours = Runs.Sum(r => r.Hours);
+        double hours = Runs.Sum(r => r.RequestedHours);
         if (hours <= 0) return Array.Empty<(string, double)>();
         return Runs.SelectMany(r => r.Casts)
             .GroupBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)

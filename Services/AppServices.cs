@@ -8215,8 +8215,8 @@ public sealed class AppServices
 
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the
-    // shared monster-overlay resolve, worn gear, obtained spells). Null before a `stat`
-    // screen has told us the character's level and pools.
+    // shared monster-overlay resolve, worn gear, obtained spells, the Default-gear rest
+    // basis). Null before a `stat` screen has told us the character's level and pools.
     public (Game.Simulation.SimCharacter Character, Game.Simulation.SimWorld World)? BuildLoopSimulation()
     {
         if (PlayerStats.Level <= 0 || PlayerStats.MaxHits <= 0) return null;
@@ -8235,7 +8235,8 @@ public sealed class AppServices
             ReadSection<Models.Profile.HealthSettings>(profile, "Health"),
             ReadSection<Models.Profile.SpellsSettings>(profile, "Spells"),
             profile?.PartyBuffs, quests, ResolveMonsterOverlay, SpellShort.ShortByNumber,
-            (int)(Alignment.EvilPoints ?? 0));
+            Game.Simulation.SimCharacterBuilder.AlignmentValue(Alignment.EvilPoints, Alignment.SelfAlignment),
+            DefaultBasisMaxHp(), DefaultBasisMaxMa());
         var world = new Game.Simulation.SimWorld(
             MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife);
         return (character, world);

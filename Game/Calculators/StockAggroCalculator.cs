@@ -17,7 +17,7 @@ namespace MudPlay.Game.Calculators;
 // ParadigmAggroCalculator; the two never share a formula.
 public static class StockAggroCalculator
 {
-    private static readonly int OutlawValue = AlignmentBands.ValueOf("Outlaw") ?? 40;   // guard / lawful-evil floor
+    internal static readonly int OutlawValue = AlignmentBands.ValueOf("Outlaw") ?? 40;   // guard / lawful-evil floor
 
     // align         — Monsters-table Align: 0 Good, 1 Evil, 2 Chaotic Evil,
     //                 3 Neutral, 4 Lawful Good, 5 Neutral Evil, 6 Lawful Evil.
