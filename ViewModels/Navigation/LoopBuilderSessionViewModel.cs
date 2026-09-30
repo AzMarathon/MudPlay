@@ -106,6 +106,28 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         return true;
     }
 
+    // Map drag: move the room's most recent waypoint to another room, keeping its
+    // number, command, delay and flags. A move that leaves the loop with no route
+    // is undone. False when nothing moved.
+    public bool MoveLastClickOf(RoomKey from, RoomKey to)
+    {
+        int index = _clicks.LastIndexOf(from);
+        if (index < 0 || from.Equals(to) || _graph.GetRoom(to) is not { } room) return false;
+        bool wasRoutable = string.IsNullOrEmpty(UnreachableSummary);
+        LoopBuilderRow old = Clicks[index];
+        _clicks[index] = to;
+        Clicks[index] = old with { Key = to, Name = room.DisplayName };
+        Reexpand();
+        if (wasRoutable && !string.IsNullOrEmpty(UnreachableSummary))
+        {
+            _clicks[index] = from;
+            Clicks[index] = old;
+            Reexpand();
+            return false;
+        }
+        return true;
+    }
+
     // Attach (or clear) a per-waypoint command + delay on the click at index —
     // driven by clicking the row in the loop-builder strip, which opens the same
     // WaypointActionEditDialog the loop editor uses. Commands don't change the
