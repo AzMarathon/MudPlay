@@ -1,5 +1,11 @@
 # Version history
 
+## 3.126.5
+
+- After a buff cast breaks sneak, the next move waits for the re-sneak instead of going out first
+- Auto-engines reset to your base modes only when a walk-to actually arrives, not when a bank / sell detour replans it mid-route
+- bug reports addressed: paradigm-20260929-185544, paradigm-20260929-191106, paradigm-20260929-191251
+
 ## 3.126.2
 
 - Settings → Cash + Items: "No combat during an auto-sell detour" and "…during an auto-deposit trip" walk past hostiles until the detour is back on the loop

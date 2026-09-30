@@ -680,6 +680,33 @@ public sealed class StealthManagerTests
         Assert.Equal(StealthState.AttemptingSneak, h.Stealth.State);
     }
 
+    // Reports paradigm-20260929-185544 / -191106: releasing the cast hold resumed the
+    // walker, and the next move went out before the post-cast re-sneak held it. The
+    // re-sneak's hold is up before the cast hold comes off, so movement never frees up
+    // in between.
+    [Fact]
+    public void ReSneakAfterCast_KeepsMovementHeldThroughTheHandOff()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+        h.Feed("Sneaking...");
+        bool castDue = true;
+        h.Stealth.SetHeldCastCheck(() => castDue);
+        Assert.False(h.Stealth.ReadyToMoveSneaking());      // the walker asks; the buff goes first
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCastGate));
+
+        bool freedMidHandOff = false;
+        coord.PauseStateChanged += paused => { if (!paused) freedMidHandOff = true; };
+        castDue = false;
+        h.Stealth.ReSneakAfterCast();
+
+        Assert.False(freedMidHandOff);
+        Assert.Equal("sn", h.LastSent());
+        Assert.True(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakSettleGate));
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCastGate));
+    }
+
     [Fact]
     public void ReSneakAfterCast_AutoSneakOff_NoSend()
     {

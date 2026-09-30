@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.2**
-> - Settings → Cash + Items: "No combat during an auto-sell detour" and "…during an auto-deposit trip" walk past hostiles until the detour is back on the loop
+> **Version 3.126.5**
+> - After a buff cast breaks sneak, the next move waits for the re-sneak instead of going out first
+> - Auto-engines reset to your base modes only when a walk-to actually arrives, not when a bank / sell detour replans it mid-route
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
