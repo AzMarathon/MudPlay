@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.11**
-> - The Party window's title names your own character and HP (Party — Cidir (100%)) instead of the leader's
+> **Version 3.126.13**
+> - A party follower sends @ok only once its HP / mana hold at rest-max, and re-asks @wait at most every few seconds — no more @wait / @ok bursts when HP bounces across the rest floor
+> - The combat round-totals table is no longer mistaken for a `look` at another player
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -125,6 +125,17 @@ public sealed class HealthManagerTests
         public Queue<Action> Posted { get; } = new();
         public void DrainPost() { while (Posted.Count > 0) Posted.Dequeue()(); }
 
+        // Delayed re-evaluations HealthManager asked for (the party @ok settle).
+        // SettleOk moves the clock past the window and runs them.
+        public List<Action> Scheduled { get; } = new();
+        public void SettleOk()
+        {
+            Clock += TimeSpan.FromSeconds(1);
+            List<Action> due = new(Scheduled);
+            Scheduled.Clear();
+            foreach (Action a in due) a();
+        }
+
         /// <summary>Char-tier Party settings — drives the @panic send gate
         /// (UsePanicWhileLeading) read by HealthManager. Default instance has
         /// both panic flags off.</summary>
@@ -167,6 +178,7 @@ public sealed class HealthManagerTests
             Health.SetDoNotRestSelector(() => SkipRestHere);
             Health.SetRestHereSelector(() => RestHere);
             Health.SetEquipmentApplyingProbe(() => EquipmentApplying);
+            Health.SetScheduler((_, a) => Scheduled.Add(a));
             Health.SetPartyRoleSync(
                 isPartyFollower: () => false,
                 requestPartyWait: () => { },
@@ -1788,8 +1800,41 @@ public sealed class HealthManagerTests
         Assert.Equal(0, oks);             // ...but the leader is NOT told to resume yet
 
         h.State.Ma = 95;                  // full rest-max ceiling reached
+        Assert.Equal(0, oks);             // held a moment to be sure it stays there
+        h.SettleOk();
         Assert.Equal(1, oks);             // @ok fires exactly once, now that we're rested
         Assert.Equal(1, waits);           // and @wait never re-fired mid-recovery
+    }
+
+    // Report paradigm-20260929-233636: HP bounced 199→203→199 in one burst with the
+    // floor at 201 and rest-max at 203. The blip at rest-max must not send @ok between
+    // two @waits; the @ok goes out only once the pools hold at rest-max.
+    [Fact]
+    public void Follower_PartyOk_BlipToRestMax_DoesNotFlap()
+    {
+        using Harness h = new();
+        h.Settings.RestIfBelowHp = 79;
+        h.Settings.RestMaxHp = 80;
+        int waits = 0, oks = 0;
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => oks++);
+        h.SetPrompt(hp: 254, maxHp: 254);
+
+        h.State.Hp = 199;                 // under the floor → @wait
+        h.State.Hp = 200;
+        h.State.Hp = 203;                 // rest-max, for one prompt
+        h.State.Hp = 199;                 // back under
+        h.SettleOk();                     // the settle check finds it still low
+        Assert.Equal(1, waits);
+        Assert.Equal(0, oks);
+
+        h.State.Hp = 240;                 // healed, and it holds
+        Assert.Equal(0, oks);
+        h.SettleOk();
+        Assert.Equal(1, oks);
+        Assert.Equal(1, waits);
     }
 
     // Report paradigm-20260928-223148: a Pre-rest Mana set put our believed max at 448,
@@ -1815,6 +1860,7 @@ public sealed class HealthManagerTests
         h.Health.NoteMeditateNotNeeded();
         h.State.Hp = 99;                  // any prompt re-evaluates
         h.State.Hp = 100;
+        h.SettleOk();
 
         Assert.False(h.ManaGateHeld);
         Assert.Equal(1, oks);
@@ -1837,6 +1883,7 @@ public sealed class HealthManagerTests
         h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);
         h.State.Ma = 20;                  // @wait
         h.State.Ma = 95;                  // rested — but the Pre-rest set is still on
+        h.SettleOk();
         Assert.Equal(0, oks);
         Assert.True(h.Health.IsPartyOkHeldForGear);
 
@@ -3584,6 +3631,7 @@ public sealed class HealthManagerTests
         Assert.Equal(0, oks);        // leader NOT released yet (report 222618)
 
         h.State.Hp = 190;            // rest-max ceiling → @ok
+        h.SettleOk();
         Assert.Equal(1, waits);
         Assert.Equal(1, oks);
     }
@@ -3609,6 +3657,7 @@ public sealed class HealthManagerTests
         Assert.Equal(0, oks);        // @ok held until rest-max (report 222618)
 
         h.State.Hp = 190;            // rest-max → @ok
+        h.SettleOk();
         h.State.Hp = 195;            // still above — no second @ok
         Assert.Equal(1, oks);
     }
@@ -3631,8 +3680,29 @@ public sealed class HealthManagerTests
 
         h.State.Hp = 50;             // below floor → @wait
         h.State.Hp = 121;            // trigger+1: gate clears, still signaled (not at rest-max)
+        h.Clock += TimeSpan.FromMinutes(1);
         h.State.Hp = 60;             // dropped again → fresh drop re-asks
         Assert.Equal(2, waits);
+    }
+
+    // Report paradigm-20260929-233636: HP bouncing across the floor within a second
+    // is one dip — the re-ask waits out the resend interval.
+    [Fact]
+    public void Follower_ReDropWithinSeconds_DoesNotReAsk()
+    {
+        int waits = 0;
+        using Harness h = new();
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => { });
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+
+        h.State.Hp = 50;             // @wait
+        h.State.Hp = 121;            // gate clears
+        h.State.Hp = 60;             // straight back under
+        Assert.Equal(1, waits);
     }
 
     [Fact]
@@ -3650,6 +3720,7 @@ public sealed class HealthManagerTests
 
         h.State.Ma = 20;             // mana floor → @wait
         Assert.True(h.ManaGateHeld);
+        h.Clock += TimeSpan.FromMinutes(1);
         h.State.Hp = 30;             // HP floor while mana still held → re-ask
         Assert.Equal(2, waits);
     }

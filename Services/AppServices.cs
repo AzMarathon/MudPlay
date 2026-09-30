@@ -5505,6 +5505,7 @@ public sealed class AppServices
         // swap back to Default lands, a CR re-reads the pools (after the max-pool settle
         // window) and the re-evaluation sends it.
         Health.SetPartyOkHold(() => CurrentEquippedIsPreRestSet() || Equipment.IsApplyingSet);
+        Health.SetScheduler(pacedReplyScheduler);
         Equipment.ApplyingChanged += applying =>
         {
             if (applying || !Health.IsPartyOkHeldForGear) return;

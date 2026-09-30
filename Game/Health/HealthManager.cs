@@ -194,6 +194,18 @@ public sealed class HealthManager : IDisposable
     public bool IsPartyOkHeldForGear => _partyOkHeldSince is not null;
 
     public void SetPartyOkHold(Func<bool> hold) => _holdPartyOk = hold;
+
+    // A follower's @ok also waits for the pools to STAY at rest-max for a moment. HP
+    // can read a few points over rest-max on one prompt and back under the rest floor
+    // on the next — report paradigm-20260929-233636: 199→200→203→199 in one burst with
+    // the floor at 201 and rest-max at 203 — and an @ok on that blip went out between
+    // two @waits. The scheduler re-evaluates once the window passes, since a rested
+    // character's prompt can go quiet.
+    private DateTimeOffset? _partyOkRestedSince;
+    private static readonly TimeSpan PartyOkSettle = TimeSpan.FromSeconds(1);
+    private Action<TimeSpan, Action>? _schedule;
+
+    public void SetScheduler(Action<TimeSpan, Action> schedule) => _schedule = schedule;
     // The idle-stall watchdog force-clears combat OPTIMISTICALLY and sends a resync
     // CR; the re-display that re-confirms a still-present monster lands a beat later.
     // Resting the instant InCombat flips false fires in that gap — a blinded / slow
@@ -1080,9 +1092,14 @@ public sealed class HealthManager : IDisposable
         // @wait, the leader moved on).
         bool droppedBelowFloor = _hpGateAsserted || _maGateAsserted;
         // Per pool: an HP re-drop while the mana gate is already held is still fresh.
-        bool freshDrop = (_hpGateAsserted && !_wasHpBelowFloor) || (_maGateAsserted && !_wasMaBelowFloor);
+        // A re-drop seconds after the last @wait is the same dip, not a new one — HP
+        // bouncing across the floor re-asked within a second (report
+        // paradigm-20260929-233636); the leader's wait window is far longer than that.
+        bool freshDrop = ((_hpGateAsserted && !_wasHpBelowFloor) || (_maGateAsserted && !_wasMaBelowFloor))
+            && _now() - _lastWaitResentAt >= WaitResendInterval;
         _wasHpBelowFloor = _hpGateAsserted;
         _wasMaBelowFloor = _maGateAsserted;
+        if (droppedBelowFloor || !_partyWaitSignaled) _partyOkRestedSince = null;
         if (droppedBelowFloor && (!_partyWaitSignaled || freshDrop))
         {
             _partyWaitSignaled = true;
@@ -1102,7 +1119,12 @@ public sealed class HealthManager : IDisposable
         {
             bool hpRested = _state.MaxHp <= 0 || _state.Hp >= hpRestMax;
             bool maRested = _state.MaxMa <= 0 || _state.Ma >= maRestMax || ManaAtGameFull();
-            if (hpRested && maRested)
+            if (hpRested && maRested && _partyOkRestedSince is null)
+            {
+                _partyOkRestedSince = _now();
+                _schedule?.Invoke(PartyOkSettle, Evaluate);
+            }
+            if (hpRested && maRested && _now() - _partyOkRestedSince >= PartyOkSettle)
             {
                 bool gearHeld = _holdPartyOk?.Invoke() == true;
                 if (gearHeld && _partyOkHeldSince is null)
@@ -1115,13 +1137,15 @@ public sealed class HealthManager : IDisposable
                     if (gearHeld)
                         _log?.Info(LogCategory, $"Default gear not back after {PartyOkHoldCap.TotalSeconds:0}s — sending @ok anyway");
                     _partyOkHeldSince = null;
+                    _partyOkRestedSince = null;
                     _partyWaitSignaled = false;
                     _requestPartyOk?.Invoke();
                 }
             }
-            else
+            else if (!(hpRested && maRested))
             {
                 _partyOkHeldSince = null;
+                _partyOkRestedSince = null;
             }
         }
 

@@ -3118,7 +3118,7 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 
 **Too heavy to move.** A debuff such as *frail* lowers how much you can carry, so a follower near the limit can suddenly see `You are too heavy to move`. That isn't a hold: freedom and cure paralysis don't help. Your client telepaths the leader `@wait (too heavy to move)` and reads `i` every 15 seconds. It sends `@ok` once you're back under your (lowered) max, either because you dropped something or because the debuff wore off.
 
-**As a follower:** your client sends the leader `@wait` when you drop below a rest floor, and asks again whenever you drop below one afresh (HP or mana) or get walked on while still recovering — so if the leader's wait window runs out while you're resting, the next drop or the next room you're pulled into re-asks instead of leaving you dragged along. `@ok` goes once you're back to full rest-max.
+**As a follower:** your client sends the leader `@wait` when you drop below a rest floor, and asks again whenever you drop below one afresh (HP or mana) or get walked on while still recovering — so if the leader's wait window runs out while you're resting, the next drop or the next room you're pulled into re-asks instead of leaving you dragged along. A re-ask waits at least 5 seconds after the last `@wait`, so HP bouncing across the rest floor doesn't send a burst of them. `@ok` goes once you're back to full rest-max and stay there for a second, so a one-prompt blip up to rest-max doesn't release the leader.
 
 ### Return distance (rooms)
 
