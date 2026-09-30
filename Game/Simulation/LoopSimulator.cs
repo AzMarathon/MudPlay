@@ -17,7 +17,7 @@ namespace MudPlay.Game.Simulation;
 // energy, debuff deltas). Rolls are seeded, so a run is repeatable; several seeds
 // give the spread.
 //
-// Time runs in quarter-second steps. Combat resolves on the global 5 s round, one
+// Time runs in 50 ms steps. Combat resolves on the global 5 s round, one
 // between-round cast per round (GAME_MECHANICS "Combat round (5s) and the
 // between-round cast cycle"); regen ticks on the realm's cadence (RealmRegenProfile).
 // Reaching 0 HP ends the run as a death; the Health tab's hang-up trigger ends it
@@ -90,9 +90,10 @@ public static class LoopSimulator
 
     private sealed class Session
     {
-        private const double Step = 0.25;
-        private const int RoundSteps = 20;             // 5 s combat round
-        private const int StockRoomSpellSteps = 24;    // Stock's 6 s medium tick
+        // Fine enough that a 1.1 s walk isn't rounded up to the next step.
+        private const double Step = 0.05;
+        private const int RoundSteps = 100;            // 5 s combat round
+        private const int StockRoomSpellSteps = 120;   // Stock's 6 s medium tick
         private const int MaxSwingsPerRound = 20;
         private const int RoomMonsterCap = 20;
 
@@ -124,6 +125,7 @@ public static class LoopSimulator
         private Mob? _target;
         private double _swingCarry;
         private int _mobSerial;
+        private readonly Dictionary<int, (double Until, SimProc Proc)> _procs = new();
         private string? _pendingReroll;
         private int _rerollsThisCycle;
         private long _exp;
@@ -448,7 +450,7 @@ public static class LoopSimulator
             int swings = (int)_swingCarry;
             _swingCarry -= swings;
             MonsterDebuffEffect d = target.Debuff;
-            int hit = CombatCalculator.CalculateHitChance(melee.NormalAccuracy, target.Entry.ArmourClass - d.AcDelta,
+            int hit = CombatCalculator.CalculateHitChance(melee.NormalAccuracy + ProcSum(p => p.AccuracyDelta), target.Entry.ArmourClass - d.AcDelta,
                 target.Entry.Dodge - d.DodgeDelta, realmType: _ch.Realm).OverallHitPercent;
             int dr = (int)Math.Max(0, (target.Entry.DamageResist - d.DrDelta) * melee.MonsterDrMultiplier);
             for (int i = 0; i < swings && target.Alive; i++)
@@ -508,9 +510,17 @@ public static class LoopSimulator
                     mob.Energy -= cost;
                     if (a.Type == 1)
                     {
-                        int hit = MonsterMatchupCalculatorSpells.AttackHitPercent(a.Accuracy - d.AccDelta, e.Align, def.Ac,
-                            def.Dodge, def.ProtEvil, def.ProtGood, _ch.Realm, def.Shadow, def.VileWard, def.Evil, def.ArmourType);
-                        if (Roll(hit)) Hurt(Math.Max(0, Between(a.MinDamage, a.MaxDamage) - _ch.Melee.DamageResist));
+                        int hit = MonsterMatchupCalculatorSpells.AttackHitPercent(a.Accuracy - d.AccDelta, e.Align,
+                            def.Ac + ProcSum(p => p.AcDelta), def.Dodge + ProcSum(p => p.DodgeDelta),
+                            def.ProtEvil, def.ProtGood, _ch.Realm, def.Shadow, def.VileWard, def.Evil, def.ArmourType);
+                        if (!Roll(hit)) continue;
+                        Hurt(Math.Max(0, Between(a.MinDamage, a.MaxDamage) - _ch.Melee.DamageResist));
+                        // A landed attack fires its hit spell (Tehshortbus, 2026-09-30).
+                        if (a.HitSpell > 0 && _world.HitSpell?.Invoke(a.HitSpell) is { } proc)
+                        {
+                            if (proc.DamageMax > 0) Hurt(Between(proc.DamageMin, proc.DamageMax));
+                            if (proc.DurationSeconds > 0) _procs[a.HitSpell] = (Now + proc.DurationSeconds, proc);
+                        }
                     }
                     else if (a.SpellDmgMax > 0 && Roll(a.MinDamage))
                     {
@@ -522,6 +532,17 @@ public static class LoopSimulator
                     if (m.DmgMax > 0 && Roll(m.Percent)) Hurt(Between(m.DmgMin, m.DmgMax));
             }
         }
+
+        // The summed stat change of the hit-spell effects still on us.
+        private int ProcSum(Func<SimProc, int> part)
+        {
+            int sum = 0;
+            foreach ((double until, SimProc p) in _procs.Values)
+                if (until > Now) sum += part(p);
+            return sum;
+        }
+
+        private bool Held => _procs.Values.Any(x => x.Until > Now && x.Proc.Holds);
 
         private void Hurt(int amount)
         {
@@ -726,6 +747,7 @@ public static class LoopSimulator
                 return;
             }
             _posture = Posture.Standing;
+            if (Held) return;      // knocked down / held: can't walk off until it wears off
             if (_isAway) StartWalk(Walk.Return, Math.Max(1, _ch.Combat.RunDistance) * _secondsPerStep);
             else StartWalk(Walk.Next, _secondsPerStep + _lap[_pos].PauseSeconds);
         }
