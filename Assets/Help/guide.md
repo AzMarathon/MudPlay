@@ -1100,18 +1100,18 @@ A caution worth knowing: all four thief skills grow on a level term whose **slop
 
 Each of the six base stats feeds several derived numbers. The ratios below are the marginal rate (how many points buy one more of the derived stat); the exact breakpoints for *your* character are on the CP Allocation column tooltips.
 
-- **Strength (STR)** — melee **damage** (adds to your weapon's own range: roughly +1 min damage per 10 STR above 100, +1 max per 10 above 50) and **carry weight** (+48 per point, steeper past 100). STR also feeds **accuracy** (~3/pt): on **Stock** for **all** attacks, on **Paradigm** for **bash / smash only** (normal Paradigm attacks get no STR accuracy).
+- **Strength (STR)** — melee **damage** (adds to your weapon's own range: +1 max per 10 STR above 50, and +1 min per 10 above 100 on Paradigm or +2 on Stock; on Stock, STR below 50 also takes max damage away) and **carry weight** (+48 per point, steeper past 100). STR also feeds **accuracy** (~3/pt): on **Stock** for **all** attacks, on **Paradigm** for **bash / smash only** (normal Paradigm attacks get no STR accuracy).
 - **Intellect (INT)** — **crit** rating (~10/pt), **stealth** (~8/pt), **magic resistance** (+1 per 4 INT), **perception** (+5 per 8 INT — the heaviest term in it), **all four thief skills**, and, for **Mages and Druids**, **mana regen + spellcasting**. On **Paradigm**, INT also feeds normal-attack **accuracy** (~6/pt); on **Stock** it does not. INT is the widest-reaching stat in the game — it's the only one that touches every utility skill as well as magic resistance, crit and mana.
 - **Willpower (WIL)** — **magic resistance** (the heaviest term — resistance is `(INT + 3×WIL) / 4`, so +3 per 4 WIL), **perception** (+2 per 8 WIL), **tracking** (~8/pt), and, for **Priests and Druids**, **mana regen + spellcasting**. WIL does **not** raise your *maximum* mana (that's level × magery level); it scales how fast mana comes back. It feeds **no combat term at all** — not accuracy, damage, dodge or HP — so for a non-caster it buys only resistance, perception and tracking.
 - **Agility (AGI)** — normal-attack **accuracy** (~6/pt on Stock, ~3/pt on Paradigm), **dodge** (~3/pt), **crit** (~20/pt), **stealth** (~4/pt), and **thievery / traps / picklocks**. Generally the most broadly useful combat stat.
 - **Health (HEA)** — **max HP** (rises nearly every point, more per point the higher your level) and **HP regeneration** (idle, tripled while resting). Both scale with level. It feeds nothing else — no skill and no combat term.
-- **Charm (CHM)** — **dodge** (~5/pt), **crit** (~30/pt), **stealth** (~6/pt), **perception** (+1 per 8), **traps** (~4/pt — CHM is weighted double there, the skill it moves fastest), **thievery** (~6/pt), **tracking** (~8/pt), and, for **Bards**, **mana regen**. On **Paradigm** it also feeds normal-attack **accuracy** (~10/pt).
+- **Charm (CHM)** — **dodge** (~5/pt), **crit** (~30/pt), **stealth** (~6/pt), **perception** (+1 per 8), **traps** (~4/pt — CHM is weighted double there, the skill it moves fastest), **picklocks** on Paradigm only (~4/pt, also weighted double), **thievery** (~6/pt), **tracking** (~8/pt), and, for **Bards**, **mana regen**. On **Paradigm** it also feeds normal-attack **accuracy** (~10/pt).
 
 **Mana regen scales off one stat per class.** Mage = INT, Priest = WIL, Druid = the average of INT and WIL, Bard = CHM (Mystics use a fixed Kai rate). Maximum mana is level × magery level regardless of stats.
 
 **Realm accuracy differs, and by attack type.** On **Stock**, accuracy is driven by **STR + AGI** for every attack (INT and CHM don't affect accuracy at all). On **Paradigm** it splits by attack: a **normal** attack uses **AGI + INT + CHM**, while a **bash / smash** uses **STR + AGI** (INT and CHM don't help bash/smash). The tooltips label each accuracy line with the attacks it applies to, and the client uses the correct set for your realm automatically.
 
-**Paradigm caveat.** The accuracy, dodge, stealth and damage ratios are verified for both realms. Crit's AGI term, carry-weight (encumbrance), and magic-resistance use the reverse-engineered **Stock** formula for both realms — they are **not independently verified for Paradigm**, so treat those three as close-but-unconfirmed there.
+**Paradigm caveat.** Accuracy, dodge, stealth, damage, crit, carry weight, magic resistance and picklocks are verified for both realms. Perception, Thievery, Traps and Tracking use the **Stock** formula on Paradigm too and aren't confirmed there.
 
 ### The exact formulas
 
@@ -1138,7 +1138,7 @@ For the curious, here are the actual equations behind the numbers above, with ev
 
 Encumbrance isn't applied on top — the Stealth value already carries it.
 
-**Crit rating** = `clamp( Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30, 1, 75 )`. *(AGI term unverified on Paradigm.)*
+**Crit rating** = `Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30`, at least 1. **Stock** also caps it at 75; **Paradigm** has no cap there, and a class with a Combat rating below 5 gets `5 − Combat` more on Paradigm (not yet shown in the projection). In a fight, Stock counts crit above 40 one point in three, and Paradigm caps crit at 65.
 
 **Dodge** (raw value, before the vs-accuracy % conversion) = `Level/5 + (CHM−50)/5 + (AGI−50)/3` (+ gear `+Dodge`, + a light-load bonus below 33% encumbrance; on Paradigm, exactly 33% still counts). Accuracy has the same light-load bonus with the same cutoff.
 
@@ -1146,18 +1146,21 @@ Encumbrance isn't applied on top — the Stealth value already carries it.
 - **Stock**: `trunc(AGI/4) + trunc(INT/8) + trunc(CHM/6)` (each term truncated)
 - **Paradigm**: `round(AGI/4 + INT/8 + CHM/6)` (summed, then rounded once)
 
-**Max encumbrance** (carry weight) = `STR×48`, plus `STR×36 − 3600` once STR is above 100. *(Unverified on Paradigm.)*
+**Max encumbrance** (carry weight) = `STR×48`, plus `STR×36 − 3600` once STR is above 100.
 
-**Magic resistance** = `(INT + 3×WIL) / 4`. *(Unverified on Paradigm.)*
+**Magic resistance** = `(INT + 3×WIL) / 4`.
 
-**Melee damage bonus** (STR added onto the weapon's own min/max) = min `(STR−100)/10`, max `(STR−50)/10`, neither below 0.
+**Melee damage bonus** (STR added onto the weapon's own min/max):
+- **Stock**: min `2 × ((STR−100)/10)`, never below 0; max `(STR−50)/10`, which goes negative below 50 STR
+- **Paradigm**: min `(STR−100)/10`, max `(STR−50)/10`, neither below 0
 
 **Perception** = `(INT×5 + WIL×2 + CHM) / 8` (+ gear `+Perception`). The only utility skill with **no level term** — it's pure stats, and every class has it. *(Unverified on Paradigm.)*
 
-**The four thief skills** all share one level term, `LevelTerm = Level` below 16, else `15 + (Level−15)/2` — so **the level slope halves at 16**, and past that point stats are what move them. Each is a grant: a class or race that was never given the skill has no score for it. *(All unverified on Paradigm.)*
+**The four thief skills** all share one level term, `LevelTerm = Level` below 16, else `15 + (Level−15)/2` — so **the level slope halves at 16**, and past that point stats are what move them. Each is a grant: a class or race that was never given the skill has no score for it. *(Thievery, Traps and Tracking are unverified on Paradigm.)*
 - **Thievery** = `(AGI + INT + CHM + LevelTerm×24) / 6`
 - **Traps** = `(INT + AGI + CHM×2 + LevelTerm×28) / 7` — CHM counts double here
-- **Picklocks** = `((AGI + INT + LevelTerm×10) × 2) / 7` — the doubling happens *before* the divide, so the effective divisor is 3.5
+- **Picklocks**, **Stock** = `((AGI + INT + LevelTerm×10) × 2) / 7` — the doubling happens *before* the divide, so the effective divisor is 3.5
+- **Picklocks**, **Paradigm** = `(INT + AGI + CHM×2 + LevelTerm×28) / 7` — the Traps formula, so CHM counts double
 - **Tracking** = `(INT×2 + WIL + CHM + LevelTerm×40) / 8` — the heaviest level term of the four, so it grows mostly by levelling
 
 ## Quests, Bosses, and Deaths

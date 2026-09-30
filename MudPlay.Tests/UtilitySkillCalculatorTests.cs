@@ -77,9 +77,20 @@ public sealed class UtilitySkillCalculatorTests
         // (agl + int + lvlTerm*10) * 2 / 7 — doubling AFTER the divide would
         // truncate first and land up to a point low.
         Assert.Equal((70 + 80 + lvlTerm * 10) * 2 / 7,
-            CharacterCalculator.CalcPicklocks(30, intellect: 80, agility: 70));
+            CharacterCalculator.CalcPicklocks(30, intellect: 80, agility: 70, charm: 60, RealmType.Stock));
         Assert.NotEqual((70 + 80 + lvlTerm * 10) / 7 * 2,
-            CharacterCalculator.CalcPicklocks(30, intellect: 80, agility: 70));
+            CharacterCalculator.CalcPicklocks(30, intellect: 80, agility: 70, charm: 60, RealmType.Stock));
+    }
+
+    // Paradigm's picklocks takes CHM, weighted double, and a heavier level term.
+    [Fact]
+    public void Picklocks_Paradigm_WeightsCharmDouble()
+    {
+        int lvlTerm = CharacterCalculator.CalcThiefSkillLevelTerm(30);
+        Assert.Equal((80 + 70 + 60 * 2 + lvlTerm * 28) / 7,
+            CharacterCalculator.CalcPicklocks(30, intellect: 80, agility: 70, charm: 60, RealmType.ParaMud));
+        Assert.Equal(CharacterCalculator.CalcPicklocks(30, 80, 70, 60, RealmType.Stock),
+            CharacterCalculator.CalcPicklocks(30, 80, 70, 120, RealmType.Stock));
     }
 
     [Fact]
@@ -182,7 +193,7 @@ public sealed class UtilitySkillCalculatorTests
         Assert.Equal(CharacterCalculator.CalcPerception(85, 55, 64), StatEffects.Perception(b));
         Assert.Equal(CharacterCalculator.CalcThievery(28, 85, 72, 64), StatEffects.Thievery(b));
         Assert.Equal(CharacterCalculator.CalcTraps(28, 85, 72, 64), StatEffects.Traps(b));
-        Assert.Equal(CharacterCalculator.CalcPicklocks(28, 85, 72), StatEffects.Picklocks(b));
+        Assert.Equal(CharacterCalculator.CalcPicklocks(28, 85, 72, 64, RealmType.ParaMud), StatEffects.Picklocks(b, RealmType.ParaMud));
         Assert.Equal(CharacterCalculator.CalcTracking(28, 85, 55, 64), StatEffects.Tracking(b));
     }
 }

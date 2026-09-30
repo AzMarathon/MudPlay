@@ -596,22 +596,34 @@ How a character earns and spends character points (CP), how exp needed per level
 - `CalcStealthBase` is realm-split.
 
 ### Crit rating (base)
-*Status: CONFIRMED Stock (via `dll-stats-map.md` (`0x710`)); **AGL term NOT verified for Paradigm** — stock formula used for both, flagged for confirmation*
+*Status: mixed (per-bullet tags) · Realm: differs*
 
-- **Formula:** `clamp(level/10 + (INT-50)/10 + (AGL-50)/20 + (CHM-50)/30, 1, 75)`. So INT ~10/pt, AGL ~20/pt, CHM ~30/pt.
+- **Formula:** `level/10 + (INT-50)/10 + (AGL-50)/20 + (CHM-50)/30`, at least 1. So INT ~10/pt, AGL ~20/pt, CHM ~30/pt. Each term truncates toward zero.
+- **Stock: the terms add as signed values, so a stat below 50 lowers crit, and the total is clamped to 1–75** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_calculate_secondary_stats` @ `0x41ac60`–`0x41acc5`, stored at `0x710`)*.
+- **Paradigm uses the same four terms, AGL included, but has no 75 cap** *([OBSERVED] 2026-09-30, MMUD-Explorer's GreaterMUD branch, frmMain crit calculation)*. (An earlier note said the AGL term was unverified on Paradigm; superseded 2026-09-30.)
+- **Paradigm adds `5 − Combat` for a class whose Combat rating is below 5** *([OBSERVED] 2026-09-30, MMUD-Explorer GreaterMUD branch)*. The client doesn't model it yet: the stat projection has no class Combat rating.
+- **Whether a stat below 50 lowers crit on Paradigm** *[NEEDS CONFIRMATION]*. MMUD-Explorer drops any term that isn't positive, but it does so on both realms, and the Stock DLL doesn't. So that looks like MMUD-Explorer's own shortcut, not a Paradigm rule. The client keeps the signed terms on both realms. Question: on Paradigm, does a character with CHA 30 get one less crit than the same character at CHA 50?
+- **The in-fight curve differs** — see *Combat → Bash and smash damage vs DR* for the crit row (Stock compresses above 40, Paradigm caps at 65).
+
+**Client use:**
+- `CharacterCalculator.CalcBaseCritRating` (realm-split: the 75 cap is Stock only).
 
 ### Melee damage bonus (STR onto the weapon's own range)
-*Status: CONFIRMED (GreaterMUD)*
+*Status: [OBSERVED] 2026-09-30 · Realm: differs*
 
-- **Floored at 0:** min `(STR-100)/10`, max `(STR-50)/10`, never negative. So ~+1 min per 10 STR above 100, ~+1 max per 10 above 50.
+- **Paradigm floors both at 0:** min `(STR-100)/10`, max `(STR-50)/10`, never negative. So ~+1 min per 10 STR above 100, ~+1 max per 10 above 50 *(MMUD-Explorer GreaterMUD branch: "no negative strength in greatermud")*.
+- **Stock doubles the min term and lets the max term go negative:** min `2 × ((STR-100)/10)`, only when positive; max `(STR-50)/10`, so STR 40 is −1 max *([OBSERVED] `wccmmud.dll` 1.11p @ `0x42ad26`–`0x42ad65`; MMUD-Explorer's Stock branch agrees)*. So ~+2 min per 10 STR above 100.
+
+**Client use:**
+- `CombatCalculator.StrMinDamageBonus` / `StrMaxDamageBonus`, shared by melee, backstab and martial-arts damage and by the stat projection (`StatEffects`). (Until 2026-09-30 the Level Projection and CP tooltips used the Paradigm floor on Stock too; the combat engine already split them.)
 
 ### Max encumbrance (carry weight)
-*Status: CONFIRMED Stock (via `dll-stats-map.md` (`0xb2`)); **NOT verified for Paradigm** — stock formula used for both, flagged for confirmation*
+*Status: CONFIRMED Stock (via `dll-stats-map.md` (`0xb2`)); Paradigm [OBSERVED] 2026-09-30, MMUD-Explorer `CalcEncum` (no realm branch) · Realm: both*
 
 - **Formula:** `STR*48`, plus `STR*36 - 3600` once STR > 100 (steeper past 100). So +48/pt (more above 100).
 
 ### Magic resistance
-*Status: CONFIRMED Stock (via `dll-stats-map.md`); **NOT verified for Paradigm** — stock formula used for both, flagged for confirmation*
+*Status: CONFIRMED Stock (via `dll-stats-map.md`); Paradigm [OBSERVED] 2026-09-30, MMUD-Explorer `CalcMR` (no realm branch) · Realm: both*
 
 - **Formula:** `(INT + 3*WIL)/4`. WIL is the heaviest term (~0.75/pt vs INT ~0.25/pt).
 
@@ -653,7 +665,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - `CharacterCalculator.CalcSpellcasting`; the CP tooltip shows it under the casting stat(s) with the exact next breakpoint.
 
 ### Utility skills — Perception + the thief four
-*Status: CONFIRMED Stock (RE'd DLL `calculate_secondary_stats` @ `0x41a424`, offsets `0x5f8` / `0x5fe` / `0x606` / `0x60a` / `0x60c`); Paradigm unverified*
+*Status: CONFIRMED Stock (RE'd DLL `calculate_secondary_stats` @ `0x41a424`, offsets `0x5f8` / `0x5fe` / `0x606` / `0x60a` / `0x60c`); Paradigm Picklocks [OBSERVED] 2026-09-30 (MMUD-Explorer quoting the Paradigm server source); the other four unverified on Paradigm*
 
 - **All five are pure integer divisions of stats plus a shared level term**, so points that don't complete a division buy nothing:
 
@@ -662,7 +674,7 @@ How a character earns and spends character points (CP), how exp needed per level
 | Perception (`0x5f8`) | `(INT*5 + WIL*2 + CHM)/8` | INT ~1.6/pt, WIL ~0.6, CHM ~0.3 — **no level term** |
 | Thievery (`0x5fe`) | `(AGL + INT + CHM + lvlTerm*24)/6` | AGL / INT / CHM ~6/pt each |
 | Traps (`0x606`) | `(INT + AGL + CHM*2 + lvlTerm*28)/7` | CHM ~4/pt (weighted **double**), INT / AGL ~7/pt |
-| Picklocks (`0x60a`) | `((AGL + INT + lvlTerm*10)*2)/7` | AGL / INT ~4/pt (÷3.5 effective) |
+| Picklocks (`0x60a`) | Stock `((AGL + INT + lvlTerm*10)*2)/7`; Paradigm `(INT + AGL + CHM*2 + lvlTerm*28)/7` | Stock AGL / INT ~4/pt (÷3.5 effective), no CHM; Paradigm CHM ~4/pt, INT / AGL ~7/pt |
 | Tracking (`0x60c`) | `(INT*2 + WIL + CHM + lvlTerm*40)/8` | INT ~4/pt, WIL / CHM ~8/pt |
 
 - **`lvlTerm = level<16 ? level : 15 + (level-15)/2` — the level slope halves at 16** for all four thief skills (Stealth halves at the same level via its own `stealthLvl`). So they grow fast to 16 and half as fast after; past the knee the CP case for INT / AGL / CHM on these is what carries them.
@@ -679,20 +691,28 @@ How a character earns and spends character points (CP), how exp needed per level
 - `CharacterCalculator.CalcPerception` / `…Thievery` / `…Traps` / `…Picklocks` / `…Tracking`.
 
 ### Formulas deliberately NOT adopted
-*Status: 2026-09-13, user decision*
+*Status: 2026-09-13, user decision; min melee damage superseded 2026-09-30 (user)*
 
-- **A second reverse-engineering write-up of `wccmmud.dll` v1.11p** corroborated stealth, magic resist, crit, max HP, mana, carry capacity and the five skills above exactly, but disagreed on three points. All three were reviewed and **left as shipped** — don't re-open them without a live capture:
-  - **Min melee damage.** That write-up reads `((STR-100)/10)*2` (citing `ADD EAX,EAX` @ `0x42AD4D`); we ship `(STR-100)/10`, matching the community chart and GreaterMUD.
+- **A second reverse-engineering write-up of `wccmmud.dll` v1.11p** corroborated stealth, magic resist, crit, max HP, mana, carry capacity and the five skills above exactly, but disagreed on three points. All three were reviewed and **left as shipped** — don't re-open them without a live capture (the min-damage point was since settled in the write-up's favour for Stock):
+  - **Min melee damage.** That write-up reads `((STR-100)/10)*2` (citing `ADD EAX,EAX` @ `0x42AD4D`). It is right for Stock: the doubling is in the DLL and MMUD-Explorer's Stock branch, and the combat engine applies it on Stock. The un-doubled form is Paradigm's. (Re-opened and settled 2026-09-30, user; the stat projection now splits it by realm — *Melee damage bonus (STR onto the weapon's own range)*.)
   - **Dodge.** It gives `(AGL-50)/3 + (CHM-50)/5` with no level term; we keep `level/5` as well.
   - **Spellcasting.** It reads a trailing `+= mageryLevel` (so `mageryLevel*6`); we keep `mageryLevel*5`.
 
 ### Realm differences in stat derivation & Paradigm-verification summary
 *Status: CONFIRMED 2026-09-10 (inspected syntax53/MMUD-Explorer `modMMudFunc.bas`) for the realm-difference note*
 
-- **MMUD-Explorer reads, not derives, most derived stats:** it reads crit / encumbrance / magic-resist / spellcasting / mana-regen / HP straight from the pasted character (`tCharStats.nCrit`, `.nEncumMax`, `.nMagicRes`, `.nSpellcasting`, …) — it does NOT derive them from primary stats, so it provides no independent Paradigm derivation to compare against. Most of the stat→derived formulas here are the RE'd stock ones.
-- **Known realm differences live in how these get *applied* in combat** (MMUD-Explorer's `bGreaterMUD` branches: accuracy weighting, dodge-vs-accuracy curve, spell-damage multiplier, resist application) and in the three stat derivations that already realm-split in code — **normal-attack accuracy** (Stock STR+AGL vs Paradigm AGL+INT+CHM), **stealth rounding** (Stock truncates each term, Paradigm rounds once — see *Stealth base*, `CalcStealthBase`) and **HP-regen divisor** (750 stock / 500 Paradigm). Those three the CP tooltip already reflects per realm; the rest use the stock derivation for both, flagged for confirmation.
-- **Realm-verified:** accuracy (both realms, incl. the MMUD-Explorer Paradigm branch), dodge, stealth (MMUD-Explorer-verified — realms differ by a rounding step, not identical), and melee damage.
-- **Unverified on Paradigm:** **crit's AGL term, encumbrance, and magic resistance use the stock formula for Paradigm as well and are unverified there** — treat as close-but-unconfirmed until a Paradigm source or capture pins them.
+- **MMUD-Explorer derives the stat-driven values itself, per realm** *([OBSERVED] 2026-09-30)*: crit (frmMain crit calculation), carry weight (`CalcEncum`), magic resistance (`CalcMR`), stealth (`CalculateStealth`), picklocks (`CalcPicklocks`), HP (`CalcMaxHP`), HP regen (`CalcRestingRate`), spellcasting and mana regen. Its `bGreaterMUD` branches are the Paradigm source for these. It doesn't derive Perception, Thievery, Traps or Tracking. (An earlier note said it only read these values off the pasted character, so offered no Paradigm derivation; superseded 2026-09-30.)
+- **Known realm differences live in how these get *applied* in combat** (MMUD-Explorer's `bGreaterMUD` branches: accuracy weighting, dodge-vs-accuracy curve, spell-damage multiplier, resist application) and in the stat derivations that realm-split in code:
+  - **normal-attack accuracy** (Stock STR+AGL vs Paradigm AGL+INT+CHM);
+  - **stealth rounding** (Stock truncates each term, Paradigm rounds once — see *Stealth base*, `CalcStealthBase`);
+  - **HP-regen divisor** (750 stock / 500 Paradigm);
+  - **STR melee damage** (Stock doubles the min term and allows a negative max — *Melee damage bonus (STR onto the weapon's own range)*);
+  - **crit's 75 cap** (Stock only — *Crit rating (base)*);
+  - **Picklocks** (Paradigm adds CHM — *Utility skills — Perception + the thief four*).
+
+  The CP tooltip and Level Projection reflect all of these per realm.
+- **Realm-verified:** accuracy, dodge, stealth, melee damage, crit (AGL term included), carry weight, magic resistance, HP, HP regen, spellcasting, mana regen and picklocks.
+- **Unverified on Paradigm:** Perception, Thievery, Traps and Tracking use the Stock formula on Paradigm. Also open: whether a stat below 50 lowers crit on Paradigm (*Crit rating (base)*).
 
 ### How your alignment moves during play
 *Status: CONFIRMED 2026-09-27 (user) and [OBSERVED] `wccmmud.dll` 1.11p (Stock), tagged per bullet · Realm: differs*

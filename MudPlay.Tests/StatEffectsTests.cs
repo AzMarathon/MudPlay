@@ -48,7 +48,7 @@ public sealed class StatEffectsTests
     public void DerivedValues_MatchUnderlyingCalculators()
     {
         var b = Block(str: 130, intel: 88, wil: 66, agi: 77, chm: 55, level: 30);
-        Assert.Equal(CharacterCalculator.CalcBaseCritRating(30, 88, 77, 55), StatEffects.CritRating(b));
+        Assert.Equal(CharacterCalculator.CalcBaseCritRating(30, 88, 77, 55, RealmType.Stock), StatEffects.CritRating(b, RealmType.Stock));
         Assert.Equal(CombatCalculator.CalcDodge(30, 77, 55, 0), StatEffects.DodgeValue(b));
         Assert.Equal(CharacterCalculator.CalcStealthBase(30, 88, 77, 55, RealmType.Stock), StatEffects.Stealth(b, RealmType.Stock));
         Assert.Equal(CharacterCalculator.CalcMaxEncumbrance(130), StatEffects.MaxEncumbrance(b));
@@ -67,16 +67,33 @@ public sealed class StatEffectsTests
         Assert.Equal(stock + 1, para);
     }
 
+    // Paradigm never lets STR take damage away; Stock's max term goes negative
+    // below 50 STR and its min term is doubled.
     [Fact]
-    public void MeleeDamageBonus_FloorsAtZero_BelowThreshold()
+    public void MeleeDamageBonus_RealmSplit()
     {
         var weak = Block(str: 40);
-        Assert.Equal(0, StatEffects.MinDamageBonus(weak));   // (40-100)/10 would be negative
-        Assert.Equal(0, StatEffects.MaxDamageBonus(weak));   // (40-50)/10 would be negative
+        Assert.Equal(0, StatEffects.MinDamageBonus(weak, RealmType.ParaMud));
+        Assert.Equal(0, StatEffects.MaxDamageBonus(weak, RealmType.ParaMud));
+        Assert.Equal(0, StatEffects.MinDamageBonus(weak, RealmType.Stock));
+        Assert.Equal(-1, StatEffects.MaxDamageBonus(weak, RealmType.Stock));
 
         var strong = Block(str: 130);
-        Assert.Equal((130 - 100) / 10, StatEffects.MinDamageBonus(strong));
-        Assert.Equal((130 - 50) / 10, StatEffects.MaxDamageBonus(strong));
+        Assert.Equal(3, StatEffects.MinDamageBonus(strong, RealmType.ParaMud));
+        Assert.Equal(6, StatEffects.MinDamageBonus(strong, RealmType.Stock));
+        Assert.Equal(8, StatEffects.MaxDamageBonus(strong, RealmType.ParaMud));
+        Assert.Equal(8, StatEffects.MaxDamageBonus(strong, RealmType.Stock));
+    }
+
+    // Stock caps the base crit rating at 75; Paradigm doesn't.
+    [Fact]
+    public void CritRating_OnlyStockCapsAt75()
+    {
+        int stock = CharacterCalculator.CalcBaseCritRating(200, 400, 400, 400, RealmType.Stock);
+        int para = CharacterCalculator.CalcBaseCritRating(200, 400, 400, 400, RealmType.ParaMud);
+        Assert.Equal(75, stock);
+        Assert.True(para > 75);
+        Assert.Equal(1, CharacterCalculator.CalcBaseCritRating(1, 10, 10, 10, RealmType.ParaMud));
     }
 
     // ----- tooltip content ----------------------------------------------------
@@ -213,11 +230,11 @@ public sealed class StatEffectsTests
     public void NextBreakpoint_CharmCrit_ActuallyTicksUp()
     {
         var b = Block(chm: 60, level: 20);
-        int before = StatEffects.CritRating(b);
+        int before = StatEffects.CritRating(b, RealmType.Stock);
         int hit = 0;
         for (int v = 61; v <= 60 + 60; v++)
         {
-            if (StatEffects.CritRating(b with { Charm = v }) > before) { hit = v; break; }
+            if (StatEffects.CritRating(b with { Charm = v }, RealmType.Stock) > before) { hit = v; break; }
         }
         Assert.True(hit > 60);
         string tip = StatEffects.Tooltip(BaseStat.Charm, b, Ctx(RealmType.Stock));

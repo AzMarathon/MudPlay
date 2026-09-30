@@ -60,11 +60,11 @@ public static class LevelProjectionCalculator
         // projected to future levels, so it's not folded here. The other derived
         // columns take the aggregate's flat direct bonuses on top of the stat base.
         int accuracy = StatEffects.AccuracyFromStats(stats, realm);
-        int crit = StatEffects.CritRating(stats) + (gear?.PlusCrits ?? 0);
+        int crit = StatEffects.CritRating(stats, realm) + (gear?.PlusCrits ?? 0);
         int dodge = StatEffects.DodgeValue(stats) + (gear?.PlusDodge ?? 0);
         int stealth = StatEffects.Stealth(stats, realm) + (gear?.PlusStealth ?? 0);
-        int minDmg = StatEffects.MinDamageBonus(stats) + (gear?.PlusMinDamage ?? 0);
-        int maxDmg = StatEffects.MaxDamageBonus(stats) + (gear?.PlusMaxDamage ?? 0);
+        int minDmg = StatEffects.MinDamageBonus(stats, realm) + (gear?.PlusMinDamage ?? 0);
+        int maxDmg = StatEffects.MaxDamageBonus(stats, realm) + (gear?.PlusMaxDamage ?? 0);
         int maxEnc = StatEffects.MaxEncumbrance(stats) + (gear?.PlusEncumbrance ?? 0);
         int magicRes = StatEffects.MagicResistance(stats) + (gear?.PlusMagicResist ?? 0);
 
@@ -75,7 +75,7 @@ public static class LevelProjectionCalculator
         int perception = StatEffects.Perception(stats) + (gear?.PlusPerception ?? 0);
         int thievery = StatEffects.Thievery(stats) + (gear?.PlusThievery ?? 0);
         int traps = StatEffects.Traps(stats) + (gear?.PlusTraps ?? 0);
-        int picklocks = StatEffects.Picklocks(stats) + (gear?.PlusPicklocks ?? 0);
+        int picklocks = StatEffects.Picklocks(stats, realm) + (gear?.PlusPicklocks ?? 0);
         int tracking = StatEffects.Tracking(stats) + (gear?.PlusTracking ?? 0);
         int spellcasting = CharacterCalculator.CalcSpellcasting(
             level, intellect, willpower, charm, mageryType, mageryLevel, gear?.PlusSpellcasting ?? 0);
