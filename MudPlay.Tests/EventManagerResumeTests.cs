@@ -181,42 +181,34 @@ public sealed class EventManagerResumeTests : IDisposable
         Assert.Contains(new RoomKey(1, 3), lairPlan.Markers.Keys);
     }
 
-    // ----- Walker-event handler outcomes -----------------------------
+    // ----- Going back -------------------------------------------------
 
     [Fact]
-    public void OnResume_Finished_DispatchesWalkerResume()
+    public void ExecuteResume_Walker_WalksThereAgain()
     {
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
-        h.Events.PendingResumeForTests =
-            new EventManager.EventResumePlan.Walker(new RoomKey(1, 3));
 
-        h.Events.OnResumeWalkEvent(new WalkEvent(WalkEventKind.Finished, "done", null));
+        h.Events.ExecuteResume(new EventManager.EventResumePlan.Walker(new RoomKey(1, 3)));
 
-        // The resume should have called walker.WalkTo(1/3); the walker
-        // accepts it (current room is 1/1, valid path), so its state
-        // moves to Walking with Destination=1/3.
-        Assert.Null(h.Events.PendingResumeForTests);  // plan cleared.
         Assert.Equal(WalkState.Walking, h.Walker.State);
         Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
     }
 
     [Fact]
-    public void OnResume_Finished_DispatchesLoopResume()
+    public void ExecuteResume_Loop_RestartsIt()
     {
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Loop loop = new("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
-        h.Events.PendingResumeForTests = new EventManager.EventResumePlan.Loop(loop);
 
-        h.Events.OnResumeWalkEvent(new WalkEvent(WalkEventKind.Finished, "done", null));
+        h.Events.ExecuteResume(new EventManager.EventResumePlan.Loop(loop));
 
-        Assert.Null(h.Events.PendingResumeForTests);
         Assert.NotEqual(LoopState.Idle, h.Runner.State);
     }
 
     [Fact]
-    public void OnResume_Finished_DispatchesAutoLairResume()
+    public void ExecuteResume_AutoLair_RestartsItWithItsMarkers()
     {
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
@@ -225,171 +217,229 @@ public sealed class EventManagerResumeTests : IDisposable
             [new RoomKey(1, 2)] = null,
             [new RoomKey(1, 3)] = 120,
         };
-        h.Events.PendingResumeForTests = new EventManager.EventResumePlan.AutoLair(markers);
 
-        h.Events.OnResumeWalkEvent(new WalkEvent(WalkEventKind.Finished, "done", null));
+        h.Events.ExecuteResume(new EventManager.EventResumePlan.AutoLair(markers));
 
-        Assert.Null(h.Events.PendingResumeForTests);
         Assert.True(h.AutoLair.IsActive);
         Assert.Equal(2, h.AutoLair.Marked.Count);
     }
 
+    // ----- Walk-to runs --------------------------------------------------
+
+    private static Loop RunLoop(Harness h)
+    {
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Loop loop = new("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
+        h.Runner.Start(loop);
+        return loop;
+    }
+
+    // The reported gap: an event that isn't a walk-to never went back to the loop.
+    // Every event now runs its Then once its action is done; a walk-to is done on
+    // arrival.
     [Fact]
-    public void OnResume_Failed_DropsPlanWithoutDispatch()
+    public void WalkTo_OnArrival_GoesBackToTheLoop()
+    {
+        using Harness h = NewHarness();
+        Loop loop = RunLoop(h);
+
+        h.Events.Fire(WalkToEvent(1, 3));
+        Assert.Equal(LoopState.Idle, h.Runner.State);            // the walk took over
+        Assert.Contains("resume target loop 'ab'", h.Events.RunSummary);
+
+        h.Events.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "arrived", new RoomKey(1, 3)));
+
+        Assert.Same(loop, h.Runner.CurrentLoop);
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
+        Assert.Equal("(none)", h.Events.RunSummary);
+    }
+
+    // Standing in the room already: the walk is done at once and Then runs.
+    [Fact]
+    public void WalkTo_AlreadyThere_IsDoneAtOnce()
     {
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
-        h.Events.PendingResumeForTests =
-            new EventManager.EventResumePlan.Walker(new RoomKey(1, 3));
+        ScheduledEvent e = WalkToEvent(1, 1);
+        e.Then = EventThenType.WalkTo;
+        e.ThenWalkTo = new RoomRef(1, 3);
 
-        h.Events.OnResumeWalkEvent(new WalkEvent(WalkEventKind.Failed, "no path", null));
+        h.Events.Fire(e);
 
-        Assert.Null(h.Events.PendingResumeForTests);
-        Assert.Equal(WalkState.Idle, h.Walker.State);  // resume did NOT run.
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+        Assert.Equal("(none)", h.Events.RunSummary);
+    }
+
+    // A walk that fails still runs Then — going back beats standing there.
+    [Fact]
+    public void WalkTo_Failed_StillGoesBack()
+    {
+        using Harness h = NewHarness();
+        RunLoop(h);
+        h.Events.Fire(WalkToEvent(1, 3));
+
+        h.Events.OnWalkEvent(new WalkEvent(WalkEventKind.Failed, "no path", new RoomKey(1, 3)));
+
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
+    }
+
+    // The user stopping the walk takes the run over: no Then.
+    [Fact]
+    public void WalkTo_StoppedByTheUser_SkipsThen()
+    {
+        using Harness h = NewHarness();
+        RunLoop(h);
+        h.Events.Fire(WalkToEvent(1, 3));
+
+        h.Events.OnWalkEvent(new WalkEvent(WalkEventKind.Stopped, "user stop", new RoomKey(1, 3)));
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Equal("(none)", h.Events.RunSummary);
+    }
+
+    // A second event mid-run takes over but keeps the first one's resume target.
+    [Fact]
+    public void SecondEvent_KeepsWhatTheFirstInterrupted()
+    {
+        using Harness h = NewHarness();
+        Loop loop = RunLoop(h);
+
+        h.Events.Fire(WalkToEvent(1, 3));
+        h.Events.Fire(WalkToEvent(1, 2));
+        Assert.Contains("resume target loop 'ab'", h.Events.RunSummary);
+
+        h.Events.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "arrived", new RoomKey(1, 2)));
+        Assert.Same(loop, h.Runner.CurrentLoop);
+    }
+
+    // ----- Other actions ---------------------------------------------------
+
+    // A plain command leaves the running loop (and any run) alone.
+    [Fact]
+    public void Command_WithNothingAfter_DoesntTouchTheLoop()
+    {
+        using Harness h = NewHarness();
+        Loop loop = RunLoop(h);
+
+        h.Events.Fire(new ScheduledEvent { Name = "stat", ActionType = EventActionType.Command, CommandText = "stat" });
+
+        Assert.Same(loop, h.Runner.CurrentLoop);
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
+        Assert.Equal("(none)", h.Events.RunSummary);
     }
 
     [Fact]
-    public void OnResume_Stopped_DropsPlanWithoutDispatch()
+    public void Wait_StandsStill_ThenGoesBack()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 9, 29, 20, 0, 0, TimeSpan.Zero);
+        h.Events.Now = () => now;
+        Loop loop = RunLoop(h);
+
+        h.Events.Fire(new ScheduledEvent
+        {
+            Name = "hold", ActionType = EventActionType.Wait, WaitSeconds = 30, Then = EventThenType.Resume,
+        });
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+
+        now = now.AddSeconds(10);
+        h.Events.Tick();
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+
+        now = now.AddSeconds(25);
+        h.Events.Tick();
+        Assert.Same(loop, h.Runner.CurrentLoop);
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
+    }
+
+    // A loop with a lap limit stops itself and runs Then.
+    [Fact]
+    public void Loop_StopsAfterItsLaps_ThenWalks()
     {
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
-        h.Events.PendingResumeForTests =
-            new EventManager.EventResumePlan.Walker(new RoomKey(1, 3));
+        h.Loops.Save(new Loop("xy", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
 
-        h.Events.OnResumeWalkEvent(new WalkEvent(WalkEventKind.Stopped, "superseded", null));
+        h.Events.Fire(new ScheduledEvent
+        {
+            Name = "two laps", ActionType = EventActionType.Loop, LoopName = "xy", StopAfterLaps = 2,
+            Then = EventThenType.WalkTo, ThenWalkTo = new RoomRef(1, 3),
+        });
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
 
-        Assert.Null(h.Events.PendingResumeForTests);
+        h.Events.OnLoopEvent(new LoopEvent(LoopEventKind.RepeatStarted, "xy"));
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
+        h.Events.OnLoopEvent(new LoopEvent(LoopEventKind.RepeatStarted, "xy"));
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+    }
+
+    // A loop without a stop rule never finishes: stopping it by hand skips Then.
+    [Fact]
+    public void Loop_StoppedByHand_SkipsThen()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Loops.Save(new Loop("xy", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        h.Events.Fire(new ScheduledEvent
+        {
+            Name = "farm", ActionType = EventActionType.Loop, LoopName = "xy",
+            Then = EventThenType.WalkTo, ThenWalkTo = new RoomRef(1, 3),
+        });
+
+        h.Runner.Stop("user stop");
+
+        Assert.Equal("(none)", h.Events.RunSummary);
         Assert.Equal(WalkState.Idle, h.Walker.State);
     }
 
+    // ----- Chains ------------------------------------------------------------
+
+    // Then → another event: the chained event's Go back returns to what the first
+    // one interrupted.
     [Fact]
-    public void OnResume_OtherKinds_DoNotTouchPlan()
+    public void ThenEvent_ChainsAndStillGoesBack()
     {
         using Harness h = NewHarness();
-        EventManager.EventResumePlan.Walker plan =
-            new(new RoomKey(1, 3));
-        h.Events.PendingResumeForTests = plan;
-
-        h.Events.OnResumeWalkEvent(new WalkEvent(WalkEventKind.Paused,  "user", null));
-        h.Events.OnResumeWalkEvent(new WalkEvent(WalkEventKind.Resumed, "user", null));
-        h.Events.OnResumeWalkEvent(new WalkEvent(WalkEventKind.Started, "user", null));
-
-        Assert.Same(plan, h.Events.PendingResumeForTests);  // untouched.
-    }
-
-    // ----- ExecuteWalkTo end-to-end ----------------------------------
-
-    [Fact]
-    public void Fire_WalkToEvent_NothingRunning_NoResumePlanQueued()
-    {
-        using Harness h = NewHarness();
-        h.Tracker.SetLocated(new RoomKey(1, 1));
-
-        h.Events.Fire(WalkToEvent(1, 3));
-
-        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
-        Assert.Null(h.Events.PendingResumeForTests);
-    }
-
-    [Fact]
-    public void Fire_WalkToEvent_WithRunningLoop_QueuesLoopResume()
-    {
-        using Harness h = NewHarness();
-        h.Tracker.SetLocated(new RoomKey(1, 1));
-        Loop loop = new("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
-        h.Runner.Start(loop);
-
-        h.Events.Fire(WalkToEvent(1, 3));
-
-        // Loop was stopped (event-walk supersede) and its plan is queued.
-        EventManager.EventResumePlan? plan = h.Events.PendingResumeForTests;
-        EventManager.EventResumePlan.Loop loopPlan =
-            Assert.IsType<EventManager.EventResumePlan.Loop>(plan);
-        Assert.Same(loop, loopPlan.SavedLoop);
-        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
-    }
-
-    [Fact]
-    public void Fire_WalkToEvent_WithActiveAutoLair_QueuesLairResume()
-    {
-        using Harness h = NewHarness();
-        h.Tracker.SetLocated(new RoomKey(1, 1));
-        h.AutoLair.Mark(new RoomKey(1, 2));
-        h.AutoLair.Mark(new RoomKey(1, 3));
-        h.AutoLair.Start();
-
-        h.Events.Fire(WalkToEvent(1, 2));
-
-        EventManager.EventResumePlan? plan = h.Events.PendingResumeForTests;
-        EventManager.EventResumePlan.AutoLair lairPlan =
-            Assert.IsType<EventManager.EventResumePlan.AutoLair>(plan);
-        Assert.Equal(2, lairPlan.Markers.Count);
-    }
-
-    [Fact]
-    public void Fire_CascadingWalkToEvents_PreservesOriginalPlan()
-    {
-        using Harness h = NewHarness();
-        h.Tracker.SetLocated(new RoomKey(1, 1));
-        Loop loop = new("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
-        h.Runner.Start(loop);
-
-        // First event-walk while loop is running.
-        h.Events.Fire(WalkToEvent(1, 3));
-        EventManager.EventResumePlan? after1 = h.Events.PendingResumeForTests;
-        Assert.IsType<EventManager.EventResumePlan.Loop>(after1);
-
-        // Second event-walk while the first is in flight. The plan
-        // must STILL point at the loop, not the intermediate walk-to
-        // 1/3 destination.
-        h.Events.Fire(WalkToEvent(1, 2));
-        EventManager.EventResumePlan? after2 = h.Events.PendingResumeForTests;
-        EventManager.EventResumePlan.Loop preserved =
-            Assert.IsType<EventManager.EventResumePlan.Loop>(after2);
-        Assert.Same(loop, preserved.SavedLoop);
-    }
-
-    [Fact]
-    public void OnResume_Stopped_DirectFire_DropsPlan()
-    {
-        // Synthesised Stopped — pure watcher-contract test.
-        using Harness h = NewHarness();
-        h.Events.PendingResumeForTests =
-            new EventManager.EventResumePlan.Loop(
-                new Loop("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
-
-        h.Events.OnResumeWalkEvent(new WalkEvent(WalkEventKind.Stopped, "event supersede", null));
-
-        Assert.Null(h.Events.PendingResumeForTests);
-    }
-
-    [Fact]
-    public void Fire_LoopEvent_AfterWalkToInFlight_DropsResumePlan()
-    {
-        // End-to-end: the Loop event's walker.Stop("event supersede")
-        // call should raise Stopped to our resume watcher, which then
-        // drops the plan. This catches breakage in the inter-engine
-        // call graph (ExecuteLoop's Stop ordering, walker event
-        // subscription, etc.) that the direct-fire test above can't.
-        using Harness h = NewHarness();
-        h.Tracker.SetLocated(new RoomKey(1, 1));
-        Loop loop = new("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
-        h.Runner.Start(loop);
-        h.Loops.Save(new Loop("xy", new[] { new RoomKey(1, 2), new RoomKey(1, 3) }));
-
-        h.Events.Fire(WalkToEvent(1, 3));
-        Assert.NotNull(h.Events.PendingResumeForTests);
-        Assert.Equal(WalkState.Walking, h.Walker.State);  // event-walk in flight.
-
-        ScheduledEvent loopEvent = new()
+        DateTimeOffset now = new(2026, 9, 29, 20, 0, 0, TimeSpan.Zero);
+        h.Events.Now = () => now;
+        h.Events.Events.Add(new ScheduledEvent
         {
-            Name = "switch",
-            TriggerType = EventTriggerType.Logon,
-            ActionType = EventActionType.Loop,
-            LoopName = "xy",
-        };
-        h.Events.Fire(loopEvent);
+            Name = "pause", ActionType = EventActionType.Wait, WaitSeconds = 5, Then = EventThenType.Resume,
+        });
+        Loop loop = RunLoop(h);
 
-        Assert.Null(h.Events.PendingResumeForTests);
+        h.Events.Fire(new ScheduledEvent
+        {
+            Name = "look", ActionType = EventActionType.Command, CommandText = "look",
+            Then = EventThenType.Event, ThenEventName = "pause",
+        });
+        Assert.Contains("'pause'", h.Events.RunSummary);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+
+        now = now.AddSeconds(6);
+        h.Events.Tick();
+        Assert.Same(loop, h.Runner.CurrentLoop);
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
+    }
+
+    // Two events firing each other forever stop after the chain limit.
+    [Fact]
+    public void ThenEvent_Cycle_Stops()
+    {
+        using Harness h = NewHarness();
+        h.Events.Events.Add(new ScheduledEvent
+        {
+            Name = "ping", ActionType = EventActionType.Command, Then = EventThenType.Event, ThenEventName = "pong",
+        });
+        h.Events.Events.Add(new ScheduledEvent
+        {
+            Name = "pong", ActionType = EventActionType.Command, Then = EventThenType.Event, ThenEventName = "ping",
+        });
+
+        h.Events.Fire(h.Events.Events[0]);
+
+        Assert.Equal("(none)", h.Events.RunSummary);
     }
 }

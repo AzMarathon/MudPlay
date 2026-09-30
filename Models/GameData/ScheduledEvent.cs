@@ -70,6 +70,55 @@ public sealed class ScheduledEvent
     // Sweep mode for EventActionType.Roomba. Null for other action types.
     public EventRoombaMode? RoombaMode { get; set; }
 
+    // ----- Boss trigger ----------------------------------------------
+
+    // The boss (BossDef.Name) and moment a Boss trigger watches, and how many
+    // minutes before an early window / guaranteed spawn / cleanup it fires.
+    public string? BossName { get; set; }
+    public EventBossMoment? BossMoment { get; set; }
+    public int? BossLeadMinutes { get; set; }
+    // Which early spawn window (a Bosses tab column) an EarlyWindow moment watches,
+    // as its fraction of the full timer — Paradigm 0.80 / 0.90 / 0.95 (-20% / -10% /
+    // -5%), Stock 0.875. Null = the earliest.
+    public double? BossWindowFraction { get; set; }
+
+    // ----- Action parameters -----------------------------------------
+
+    // How long EventActionType.Wait stands still.
+    public int? WaitSeconds { get; set; }
+
+    // ----- Stop after (Loop / AutoLair) ------------------------------
+
+    // A loop or auto-lair never ends by itself; these end it so the Then step
+    // runs. Whichever is reached first wins; none set = it runs until stopped
+    // by hand, and Then never runs.
+    public int? StopAfterLaps { get; set; }
+    public int? StopAfterMinutes { get; set; }
+    // Stop at a moment on this boss's timer (BossDef.Name) — the same choices as a
+    // Boss trigger: a timer column hitting 0, the guaranteed spawn, the kill, a
+    // cleanup reset, optionally minutes early.
+    public string? StopBossName { get; set; }
+    public EventBossMoment? StopBossMoment { get; set; }
+    public double? StopBossWindowFraction { get; set; }
+    public int? StopBossLeadMinutes { get; set; }
+    // Stop once all of these hold.
+    public List<EventCondition>? StopConditions { get; set; }
+
+    // ----- Then (after the action is done) ---------------------------
+
+    // Null on events saved before Then existed: a walk-to resumes what it
+    // interrupted (the old behavior), anything else does nothing (ResolvedThen).
+    public EventThenType? Then { get; set; }
+    public string? ThenLoopName { get; set; }
+    public string? ThenAutoLairSetupName { get; set; }
+    public RoomRef? ThenWalkTo { get; set; }
+    // Another event, by Name.
+    public string? ThenEventName { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public EventThenType ResolvedThen =>
+        Then ?? (ActionType == EventActionType.WalkTo ? EventThenType.Resume : EventThenType.Nothing);
+
     // Tries to parse AtTime as 24-hour HH:mm into a TimeOnly. Returns null
     // when the field is blank or malformed. Centralised here so the editor
     // + engine agree on the format.

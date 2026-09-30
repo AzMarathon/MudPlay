@@ -3604,7 +3604,7 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 ## Events
 
-Settings → Events. Lets you define per-character scheduled actions that fire on a timer or on connection events (logon, logoff, reconnect).
+Settings → Events. Lets you define per-character events. Each has three parts, set in the editor top to bottom: **When** it fires (a clock, a connection event, your stats, or a boss timer), what it **Does**, and **Then** what happens once that's done — go back to the loop you were running, start another, walk somewhere, or fire another event.
 
 ### Disable all events
 
@@ -3614,8 +3614,8 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 
 ### Event list (New… / Modify… / Remove)
 
-**What it does:** Shows every scheduled event you've defined, with its **Name**, its trigger (**When**), a live countdown to its next fire (**Next**), and its action (**What**). **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
-**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time** and **Every** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
+**What it does:** Shows every scheduled event you've defined, with its **Name**, its trigger (**When**), a live countdown to its next fire (**Next**), and its action, its stop rule and its Then step (**What**, e.g. `Loop "Sewer" (until 3 laps) → go back`). **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
+**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time**, **Every** and timed **Boss** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
 
 ### Event editor — trigger types
 
@@ -3633,14 +3633,46 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
   - **Login counts.** If the conditions are already true when you log in, it fires once.
   - **Only in the game.** Like the timed triggers, it only fires while you're in the game.
   - **Needs readings first.** Money and encumbrance aren't known until MudPlay has read your inventory, and experience / level until it has read your stats. A condition on something not read yet doesn't count as true.
+- **Boss** — fires off a boss on the **Bosses** tab's timer table. Pick the boss and the moment:
+  - **A timer column hits 0** — pick which of the Bosses tab's columns to watch: an early spawn window (Paradigm **−20%**, **−10%**, **−5%**; Stock **87.5%**), or **Guaranteed (full)** — its full respawn time.
+  - **Is killed** — the moment the timer table records its kill.
+  - **Cleanup reset** — a cleanup boss comes back at nightly cleanup.
+  - **min early** fires that many minutes before the moment (time to walk there); it doesn't apply to *Is killed*. Each fires once per kill, only while you're in the game, and not at all if the moment passed more than 10 minutes before MudPlay saw it (you weren't connected).
 
-### Event editor — action types
+### Event editor — action types (Do)
 
-- **Walk to** — navigate to a coordinate or room name. Stops any other running Loop/Auto-Lair first, and automatically resumes whatever was running before once the event-walk finishes successfully.
-- **Start loop** — starts a saved Loop by name.
-- **Auto-lair** — starts a saved Auto-Lair setup by name.
-- **Command** — sends free-form text to the game; an empty command is valid (useful for paging through a prompt).
-- **Roomba** — starts a Roomba sweep of your actively-managed rooms: **Sort** (a full sweep) or **Inventory only** (walks the circuit and refreshes the item log without moving anything). It stops any running walk, loop or Auto-Lair first. If the sweep can't start (fewer than 2 rooms set to Actively Manage, or a sweep already running), the reason is written to the Program Log.
+- **Walk to** — navigate to a coordinate or room name. Done when you arrive.
+- **Start loop** — starts a saved Loop by name. Done only by a **Stop after** rule (below).
+- **Auto-lair** — starts a saved Auto-Lair setup by name. Done only by a **Stop after** rule.
+- **Command** — sends free-form text to the game; an empty command is valid (useful for paging through a prompt). Done as soon as it's sent. A command with **Nothing** after it doesn't interrupt anything — handy for a periodic `stat`.
+- **Roomba** — starts a Roomba sweep of your actively-managed rooms: **Sort** (a full sweep) or **Inventory only** (walks the circuit and refreshes the item log without moving anything). Done when the sweep finishes. If the sweep can't start (fewer than 2 rooms set to Actively Manage, or a sweep already running), the reason is written to the Program Log.
+- **Wait** — stand still for that many seconds.
+- **Rest up** — stand still and rest / meditate to your rest max (Settings → Health), as a loop room flagged *rest up here* does. Done once resting stops.
+- **Bank trip** — walk to your Settings → Cash bank or stash room and deposit / stash there, then stop (the Then step decides where to go next).
+
+Every action except a plain command stops whatever walk, loop or Auto-Lair was running first.
+
+### Event editor — Stop after (loop / Auto-Lair)
+
+A loop or Auto-Lair never ends by itself, so its **Then** only runs once one of these ends it — whichever comes first:
+
+- **after N laps** (loops only), **after N minutes**,
+- **when a boss's timer moment comes** — the same choices as the Boss trigger: one of its timer columns hitting 0, the kill, or a cleanup reset, optionally minutes early (e.g. camp a boss's lair until it dies, or loop elsewhere until its −10% column hits 0). It defaults to the event's own boss. A timer moment that's already behind you stops the loop straight away,
+- **when all of these hold** — money / encumbrance / experience / level conditions, e.g. encumbrance ≥ 80% to go sell.
+
+With none set, the loop runs until you stop it — and stopping it yourself skips Then. The editor warns when a Then can never run.
+
+### Event editor — Then
+
+What happens once the action is done:
+
+- **Go back** — to the loop, Auto-Lair or walk that was running when the event fired. A new event defaults to this (a command defaults to Nothing).
+- **Start loop** / **Auto-lair** — start a saved one.
+- **Walk to** — a coordinate or room name.
+- **Fire event** — run another event by name; its own Then carries on from there, and its **Go back** still returns to what the first event interrupted. A chain of more than 10 events in a row is stopped as a loop.
+- **Nothing** — stop there.
+
+A walk or trip that can't be finished (no path, a leg fails) still runs its Then, so you aren't left standing. If **you** take over — stop the event's walk / loop / Auto-Lair, or start one of your own while it waits or rests — the event ends without its Then. A second event firing while one runs takes over (the first one's Then is dropped), but its **Go back** still means what the first event interrupted. Events you made before Then existed are converted the first time the character loads: a walk-to gets **Go back**, anything else **Nothing** — what they did before — so edit them to choose something else.
 
 ---
 

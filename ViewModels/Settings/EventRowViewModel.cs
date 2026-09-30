@@ -54,10 +54,14 @@ public sealed partial class EventRowViewModel : ObservableObject
                                       : $"At {Source.AtTime}",
         EventTriggerType.Every  => FormatEvery(),
         EventTriggerType.State  => "When " + Game.Events.EventConditionEvaluator.Describe(Source.Conditions),
+        EventTriggerType.Boss   => FormatBoss(),
         _ => "—",
     };
 
-    public string EventText => Source.ActionType switch
+    // The action, its stop-after rule (loop / auto-lair), then what comes after.
+    public string EventText => ActionText + StopText + " → " + ThenText;
+
+    private string ActionText => Source.ActionType switch
     {
         EventActionType.WalkTo  => Source.WalkToTarget is { } t
                                        ? $"Walk to {t.Map}/{t.Room}"
@@ -74,8 +78,62 @@ public sealed partial class EventRowViewModel : ObservableObject
         EventActionType.Roomba  => Source.RoombaMode == EventRoombaMode.InventoryOnly
             ? "Roomba (inventory only)"
             : "Roomba sort",
+        EventActionType.Wait     => $"Wait {Source.WaitSeconds ?? 0}s",
+        EventActionType.RestUp   => "Rest up",
+        EventActionType.BankTrip => "Bank / stash trip",
         _ => "—",
     };
+
+    private string StopText
+    {
+        get
+        {
+            if (Source.ActionType is not (EventActionType.Loop or EventActionType.AutoLair)) return string.Empty;
+            List<string> rules = new();
+            if (Source.ActionType == EventActionType.Loop && Source.StopAfterLaps is > 0 and var laps)
+                rules.Add($"{laps} lap{(laps == 1 ? "" : "s")}");
+            if (Source.StopAfterMinutes is > 0 and var minutes) rules.Add($"{minutes} min");
+            if (!string.IsNullOrWhiteSpace(Source.StopBossName))
+                rules.Add(BossMoment(Source.StopBossName, Source.StopBossMoment ?? EventBossMoment.Killed,
+                    Source.StopBossWindowFraction, Source.StopBossLeadMinutes));
+            if (Source.StopConditions is { Count: > 0 } c)
+                rules.Add(Game.Events.EventConditionEvaluator.Describe(c));
+            return rules.Count == 0 ? " (until stopped)" : $" (until {string.Join(" or ", rules)})";
+        }
+    }
+
+    private string ThenText => Source.ResolvedThen switch
+    {
+        EventThenType.Resume   => "go back",
+        EventThenType.Loop     => $"loop \"{Source.ThenLoopName}\"",
+        EventThenType.AutoLair => $"auto-lair \"{Source.ThenAutoLairSetupName}\"",
+        EventThenType.WalkTo   => Source.ThenWalkTo is { } t ? $"walk to {t.Map}/{t.Room}" : "walk to —",
+        EventThenType.Event    => $"event \"{Source.ThenEventName}\"",
+        _ => "stop",
+    };
+
+    // The Bosses tab's column label: Stock's lone early point is 87.5%, Paradigm's
+    // are named by their discount off the full timer.
+    private static string WindowLabel(double? fraction) => fraction is { } f
+        ? Game.Map.BossTimerMath.WindowLabel(Math.Abs(f - 0.875) < 0.001 ? Game.RealmType.Stock : Game.RealmType.ParaMud, f)
+        : "first early";
+
+    private string FormatBoss() => BossMoment(
+        string.IsNullOrWhiteSpace(Source.BossName) ? "(no boss)" : Source.BossName,
+        Source.BossMoment ?? EventBossMoment.EarlyWindow, Source.BossWindowFraction, Source.BossLeadMinutes);
+
+    // "<boss> <moment>" — the When column and a stop rule read alike.
+    private static string BossMoment(string boss, EventBossMoment moment, double? fraction, int? lead)
+    {
+        string early = lead is > 0 and var m ? $" -{m}m" : string.Empty;
+        return moment switch
+        {
+            EventBossMoment.Guaranteed   => $"{boss} full timer hits 0{early}",
+            EventBossMoment.Killed       => $"{boss} is killed",
+            EventBossMoment.CleanupReset => $"{boss} cleanup reset{early}",
+            _                            => $"{boss} {WindowLabel(fraction)} column hits 0{early}",
+        };
+    }
 
     // True when the event's Disabled flag is set (manually or by the reconciler).
     public bool IsDisabled => Source.Disabled;

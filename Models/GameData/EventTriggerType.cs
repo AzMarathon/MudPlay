@@ -18,6 +18,10 @@ namespace MudPlay.Models.GameData;
 //     (money / encumbrance / experience / level against a value). Once per
 //     crossing: it re-arms only after the conditions stop holding. Only fires
 //     while in-game.
+//   Boss — a moment on a boss's timer (ScheduledEvent.BossName +
+//     BossMoment, optionally BossLeadMinutes early): its first early spawn
+//     window, its guaranteed spawn, its kill, or a cleanup boss's reset. Once
+//     per kill. Only fires while in-game.
 public enum EventTriggerType
 {
     Logon = 0,
@@ -26,4 +30,5 @@ public enum EventTriggerType
     AtTime = 3,
     Every = 4,
     State = 5,
+    Boss = 6,
 }

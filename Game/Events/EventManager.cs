@@ -12,14 +12,23 @@ namespace MudPlay.Game.Events;
 // In-memory store + dispatcher for the loaded character's ScheduledEvent
 // entries. Owns the merge / save path against CharacterProfile.Events, exposes
 // CRUD for the settings editor, reconciles saved-target references against
-// LoopManager + LairManager, and dispatches fired actions into the existing
-// movement / command stack.
+// LoopManager + LairManager, and runs fired events.
 //
-// The dispatcher is end-to-end executable — Fire can be called and the four
-// action types route correctly into AutoWalkManager, LoopRunner,
-// AutoLairManager, and the bound wire sender. The trigger sources (At time /
-// Every / Logon / Logoff / Re-log) subscribe the appropriate sources to call
-// Fire.
+// A fired event is a RUN: its action goes until it's done, then its Then step
+// (ScheduledEvent.ResolvedThen) decides what's next — nothing, go back to what
+// was running, start a loop / auto-lair, walk somewhere, or fire another event.
+// When an action is done depends on the action: a walk arrives, a command is
+// sent, a wait / rest-up / Roomba sweep / bank trip ends, and a loop or
+// auto-lair meets one of its stop-after rules (laps, minutes, a boss killed,
+// conditions holding) — with none set it runs until stopped by hand.
+//
+// One run at a time. An event fired mid-run takes over (the earlier run's Then
+// is dropped) but inherits the earlier run's Resume target, so "go back to what
+// was running" always means what the first event interrupted; a Then that fires
+// another event carries it down the chain too. A run the user takes over — they
+// stop its walk / loop / auto-lair, or start one of their own while it waits or
+// rests — ends without its Then. A command event with nothing after it isn't a
+// run: it's sent and leaves whatever run is going alone.
 //
 // Saved-target reconciliation: subscribes to LoopManager.LoopsChanged +
 // LairManager.SetupsChanged. On either, walks every event whose ActionType is
@@ -28,9 +37,9 @@ namespace MudPlay.Game.Events;
 // same-named target later doesn't auto-restore — the user re-enables manually
 // after confirming the new target matches their intent.
 //
-// Threading: profile lifecycle + manager-change events fire on the UI thread
-// (the producers marshal upstream). Fire is called from the trigger sources on
-// the UI thread too, so no internal locking is needed on the events list.
+// Threading: profile lifecycle, manager-change and engine events fire on the UI
+// thread (the producers marshal upstream), as do the trigger sources that call
+// Fire and the run ticker (a DispatcherTimer), so no internal locking is needed.
 public sealed class EventManager : IDisposable
 {
     private readonly ProfileService? _profile;
@@ -46,24 +55,6 @@ public sealed class EventManager : IDisposable
     // flipping Disabled). The Settings.Events row badge renders "↻ target missing"
     // only for keys in this set. Cleared on profile load.
     private readonly HashSet<ScheduledEvent> _autoDisabled = new();
-
-    // Snapshot of "what was happening" when an event-walk took over. Set in
-    // ExecuteWalkTo, consumed in OnResumeWalkEvent when the walker reaches the
-    // event's target. Null when no resume is queued. Internal-set so tests can
-    // assert on it; production callers use the public surface.
-    internal EventResumePlan? PendingResumeForTests
-    {
-        get => _pendingResume;
-        set => _pendingResume = value;
-    }
-    private EventResumePlan? _pendingResume;
-
-    // Reset States: forget the engine an event-walk would have resumed.
-    public void CancelPendingResume() => _pendingResume = null;
-
-    // Live delegate reference so we can unsubscribe symmetrically. Null when no
-    // resume watcher is attached.
-    private Action<WalkEvent>? _resumeWatcher;
 
     // The loaded character's events — empty when no profile is active.
     public ObservableCollection<ScheduledEvent> Events { get; } = new();
@@ -104,6 +95,9 @@ public sealed class EventManager : IDisposable
         profile.ProfileSaving += SnapshotForSave;
         loops.LoopsChanged += ReconcileTargets;
         lairs.SetupsChanged += ReconcileTargets;
+        walker.Event += OnWalkEvent;
+        loopRunner.Event += OnLoopEvent;
+        autoLair.ActiveChanged += OnAutoLairActiveChanged;
         if (profile.Current is { } current) LoadFrom(current);
     }
 
@@ -119,7 +113,10 @@ public sealed class EventManager : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        DetachResumeWatcher();
+        StopTicker();
+        if (_walker is not null) _walker.Event -= OnWalkEvent;
+        if (_loopRunner is not null) _loopRunner.Event -= OnLoopEvent;
+        if (_autoLair is not null) _autoLair.ActiveChanged -= OnAutoLairActiveChanged;
         if (_profile is not null)
         {
             _profile.ProfileLoaded -= LoadFrom;
@@ -185,13 +182,81 @@ public sealed class EventManager : IDisposable
         return true;
     }
 
+    // ----- Run hooks ---------------------------------------------------
+
+    // A bank / stash trip for EventActionType.BankTrip; false when it couldn't
+    // start. Bound by AppServices to AutoDepositManager.StartEventTrip, which
+    // reports the end through NoteBankTripEnded.
+    private Func<bool>? _startBankTrip;
+    public void SetBankTripStarter(Func<bool> start) => _startBankTrip = start;
+
+    // Whether the character is resting (the health manager's rest gate is up or a
+    // rest is in flight), and a nudge to re-check now — a RestUp run holds
+    // RestUpRequested (which counts as a "rest up here" room) until resting stops.
+    private Func<bool>? _isResting;
+    private Action? _evaluateRest;
+    public void SetRestHooks(Func<bool> isResting, Action evaluate)
+    {
+        _isResting = isResting;
+        _evaluateRest = evaluate;
+    }
+
+    // Whether a stop-after boss-timer moment has come (EventBossWatcher.StopReached).
+    private Func<ScheduledEvent, bool>? _bossStopReached;
+    public void SetBossStopCheck(Func<ScheduledEvent, bool> reached) => _bossStopReached = reached;
+
+    // Live money / encumbrance / exp / level readings for a stop-after rule's
+    // conditions.
+    private Func<EventConditionEvaluator.Readings>? _readStats;
+    public void SetStatsReader(Func<EventConditionEvaluator.Readings> read) => _readStats = read;
+
+    // True while a RestUp event is resting: the health manager treats the room as
+    // a "rest up here" room, resting to rest max.
+    public bool RestUpRequested => _run is { Event.ActionType: EventActionType.RestUp };
+
+    // Clock seam for tests.
+    internal Func<DateTimeOffset> Now { get; set; } = () => DateTimeOffset.UtcNow;
+
     // ----- Dispatch --------------------------------------------------
 
-    // Execute the event's action. Skips when Disabled is true OR when the
-    // fire-time safety net detects a missing saved target (Loop / AutoLair name no
-    // longer in the manager's collection). The safety net mirrors what
-    // ReconcileTargets does on LoopsChanged / SetupsChanged — defense in depth for
-    // races and direct-disk profile edits.
+    // A chain of Then → event hand-offs longer than this is taken to be a cycle.
+    private const int MaxChainDepth = 10;
+    private static readonly TimeSpan RunTickInterval = TimeSpan.FromSeconds(1);
+    // A rest-up is done once resting stops, but the rest gate only rises on the
+    // next prompt; give it this long before reading "not resting" as done.
+    private static readonly TimeSpan RestStartGrace = TimeSpan.FromSeconds(3);
+
+    private sealed class EventRun(ScheduledEvent e, EventResumePlan? resume, int depth, DateTimeOffset startedAt)
+    {
+        public ScheduledEvent Event { get; } = e;
+        public EventResumePlan? Resume { get; } = resume;
+        public int Depth { get; } = depth;
+        public DateTimeOffset StartedAt { get; } = startedAt;
+        public int Laps;
+        public RoomKey? WalkTarget;
+    }
+
+    private EventRun? _run;
+    private Avalonia.Threading.DispatcherTimer? _ticker;
+    // Set while this manager stops or starts an engine, so the Stopped / Started
+    // that raises isn't read as the user taking over.
+    private bool _driving;
+
+    // One line for the bug report: the running event, how far along it is, and
+    // what it goes back to.
+    public string RunSummary => _run is not { } r
+        ? "(none)"
+        : $"'{Label(r.Event)}' {r.Event.ActionType} for {(Now() - r.StartedAt).TotalSeconds:0}s"
+          + (r.Laps > 0 ? $", {r.Laps} lap(s)" : "")
+          + $"; then {r.Event.ResolvedThen}"
+          + (r.Resume is { } plan ? $"; resume target {plan.Describe()}" : "")
+          + (r.Depth > 0 ? $"; chain depth {r.Depth}" : "");
+
+    // Run the event (see the header). Skips when Disabled is true, when "Disable
+    // all events" is on, or when the fire-time safety net finds a missing saved
+    // target (Loop / AutoLair name no longer in the manager's collection) — the
+    // safety net mirrors what ReconcileTargets does on LoopsChanged / SetupsChanged,
+    // defense in depth for races and direct-disk profile edits.
     public void Fire(ScheduledEvent e)
     {
         ArgumentNullException.ThrowIfNull(e);
@@ -202,14 +267,12 @@ public sealed class EventManager : IDisposable
         // profile) keep firing.
         if (_profile?.Current?.EventsGloballyDisabled == true) return;
 
-        switch (e.ActionType)
+        if (e.ActionType == EventActionType.Command && e.ResolvedThen == EventThenType.Nothing)
         {
-            case EventActionType.WalkTo: ExecuteWalkTo(e); break;
-            case EventActionType.Loop: ExecuteLoop(e); break;
-            case EventActionType.AutoLair: ExecuteAutoLair(e); break;
-            case EventActionType.Command: ExecuteCommand(e); break;
-            case EventActionType.Roomba: ExecuteRoomba(e); break;
+            ExecuteCommand(e);
+            return;
         }
+        StartRun(e, _run is { } current ? current.Resume : SnapshotCurrentActivity(), depth: 0);
     }
 
     // Synchronously fires every EventTriggerType.Logoff event in the list. Called
@@ -232,108 +295,225 @@ public sealed class EventManager : IDisposable
         return snapshot.Count;
     }
 
-    private void ExecuteWalkTo(ScheduledEvent e)
+    private void StartRun(ScheduledEvent e, EventResumePlan? resume, int depth)
     {
-        if (_walker is null) return;
-        if (e.WalkToTarget is not { } target)
+        if (_run is { } prior)
         {
-            _log?.Warn("Events", $"Event '{Label(e)}' has no walk-to target; skipping.");
-            return;
+            _log?.Info("Events", $"Event '{Label(e)}' takes over from '{Label(prior.Event)}' (its Then is dropped).");
+            EndRun();
         }
+        EventRun run = new(e, resume, depth, Now());
+        _run = run;
+        _log?.Info("Events",
+            $"Event '{Label(e)}' started: {e.ActionType}; then {e.ResolvedThen}"
+            + (resume is { } plan ? $" (resume target {plan.Describe()})." : "."));
 
-        // Snapshot the current activity BEFORE stopping engines so the
-        // resume hook can pick up where we left off when the walk
-        // completes. If there's already a pending plan (i.e. a prior
-        // event-walk is in flight when this one fires), keep the
-        // ORIGINAL plan — we want to resume the user's actual activity,
-        // not the previous event-walk's destination.
-        EventResumePlan? plan = _pendingResume ?? SnapshotCurrentActivity();
-
-        // Supersede any running engine so the walk owns the wire.
-        EngineSupersede.StopOthers(
-            _walker, _loopRunner, _autoLair,
-            SupersedeKeep.Walker, "event walk-to");
-
-        // Detach any prior watcher first — the cascade case means the
-        // previous walk-to is being replaced by this one. The plan
-        // we just snapshotted (which is the previous walk's plan in
-        // the cascade case) gets re-attached below.
-        DetachResumeWatcher();
-
-        RoomKey key = new(target.Map, target.Room);
-        if (!_walker.WalkTo(key))
+        switch (StartAction(run))
         {
-            _log?.Warn("Events", $"Event '{Label(e)}' walk-to {key.Map}/{key.Room} failed.");
-            return;
-        }
-
-        // Walk to event-target unlike @goto's monster-room special case:
-        // events specify the destination as a RoomRef coord, no neighbour
-        // wait-room logic. Walker drops us at the exact room.
-
-        // Attach the resume watcher AFTER WalkTo returns so the
-        // Started / Stopped events that WalkTo itself raises (for
-        // any walk it superseded) don't reach our handler.
-        if (plan is not null)
-        {
-            _pendingResume = plan;
-            AttachResumeWatcher();
-            _log?.Info("Events",
-                $"Event '{Label(e)}' walking to {key.Map}/{key.Room}; will resume {plan.Describe()} on arrival.");
+            case ActionStart.Running:
+                StartTicker();
+                break;
+            case ActionStart.Done:
+                Complete(run, finished: true);
+                break;
+            case ActionStart.Failed:
+                Complete(run, finished: false);
+                break;
         }
     }
 
-    private void ExecuteLoop(ScheduledEvent e)
+    private enum ActionStart { Running, Done, Failed }
+
+    private ActionStart StartAction(EventRun run)
     {
-        if (_loopRunner is null || _loops is null) return;
-        if (string.IsNullOrWhiteSpace(e.LoopName)) return;
-        Loop? saved = FindLoop(e.LoopName);
-        if (saved is null)
+        ScheduledEvent e = run.Event;
+        switch (e.ActionType)
         {
-            AutoDisable(e, $"referenced loop '{e.LoopName}' was deleted or renamed");
-            return;
+            case EventActionType.WalkTo:
+                if (e.WalkToTarget is not { } target)
+                {
+                    _log?.Warn("Events", $"Event '{Label(e)}' has no walk-to target.");
+                    return ActionStart.Failed;
+                }
+                RoomKey key = new(target.Map, target.Room);
+                run.WalkTarget = key;
+                if (!StartWalk(key, "event walk-to")) return ActionStart.Failed;
+                // Already standing there: the walker finished inside WalkTo, while
+                // _driving hid its Finished from us.
+                return _walker!.State == WalkState.Idle ? ActionStart.Done : ActionStart.Running;
+
+            case EventActionType.Loop:
+                if (FindLoop(e.LoopName) is null)
+                {
+                    if (!string.IsNullOrWhiteSpace(e.LoopName))
+                        AutoDisable(e, $"referenced loop '{e.LoopName}' was deleted or renamed");
+                    return ActionStart.Failed;
+                }
+                return StartLoop(e.LoopName, "event supersede") ? ActionStart.Running : ActionStart.Failed;
+
+            case EventActionType.AutoLair:
+                if (FindSetup(e.AutoLairSetupName) is null)
+                {
+                    if (!string.IsNullOrWhiteSpace(e.AutoLairSetupName))
+                        AutoDisable(e, $"referenced auto-lair setup '{e.AutoLairSetupName}' was deleted or renamed");
+                    return ActionStart.Failed;
+                }
+                return StartAutoLair(e.AutoLairSetupName, "event supersede") ? ActionStart.Running : ActionStart.Failed;
+
+            case EventActionType.Command:
+                ExecuteCommand(e);
+                return ActionStart.Done;
+
+            case EventActionType.Roomba:
+                if (_startRoomba is null) return ActionStart.Failed;
+                EventRoombaMode mode = e.RoombaMode ?? EventRoombaMode.Sort;
+                // The sweep refuses to start over a running walk / loop / auto-lair.
+                StopEngines("event Roomba");
+                if (_startRoomba(mode) is { } refused)
+                {
+                    _log?.Warn("Events", $"Event '{Label(e)}' Roomba ({mode}) didn't start: {refused}");
+                    return ActionStart.Failed;
+                }
+                return ActionStart.Running;
+
+            case EventActionType.Wait:
+                StopEngines("event wait");
+                return ActionStart.Running;
+
+            case EventActionType.RestUp:
+                // Stand still to rest: a running engine would walk off mid-rest.
+                StopEngines("event rest-up");
+                _evaluateRest?.Invoke();
+                return ActionStart.Running;
+
+            case EventActionType.BankTrip:
+                if (_startBankTrip is null) return ActionStart.Failed;
+                StopEngines("event bank trip");
+                if (_startBankTrip()) return ActionStart.Running;
+                _log?.Warn("Events", $"Event '{Label(e)}' bank / stash trip didn't start (see the AutoDeposit log line).");
+                return ActionStart.Failed;
         }
-        // Supersede other engines.
-        EngineSupersede.StopOthers(
-            _walker, _loopRunner, _autoLair,
-            SupersedeKeep.Loop, "event supersede");
-        if (!_loopRunner.Start(saved))
-            _log?.Warn("Events", $"Event '{Label(e)}' loop '{saved.Name}' failed to start.");
+        return ActionStart.Failed;
     }
 
-    private void ExecuteAutoLair(ScheduledEvent e)
+    // The action is done (finished) or couldn't be done (not finished): either
+    // way the Then step runs — "go back to the loop" should still happen when the
+    // walk or trip fails.
+    private void Complete(EventRun run, bool finished)
     {
-        if (_autoLair is null || _lairs is null) return;
-        if (string.IsNullOrWhiteSpace(e.AutoLairSetupName)) return;
-        LairSetup? setup = FindSetup(e.AutoLairSetupName);
-        if (setup is null)
-        {
-            AutoDisable(e, $"referenced auto-lair setup '{e.AutoLairSetupName}' was deleted or renamed");
-            return;
-        }
-        EngineSupersede.StopOthers(
-            _walker, _loopRunner, _autoLair,
-            SupersedeKeep.Lair, "event supersede");
-
-        _autoLair.Clear();
-        foreach (LairMarker m in setup.Markers)
-            _autoLair.Mark(new RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
-        if (!_autoLair.Start())
-            _log?.Warn("Events", $"Event '{Label(e)}' auto-lair '{setup.Name}' failed to start.");
+        if (!ReferenceEquals(_run, run)) return;
+        EndRun();
+        _log?.Info("Events", finished
+            ? $"Event '{Label(run.Event)}' done; then {run.Event.ResolvedThen}."
+            : $"Event '{Label(run.Event)}': its {run.Event.ActionType} didn't get done; then {run.Event.ResolvedThen} anyway.");
+        RunThen(run);
     }
 
-    private void ExecuteRoomba(ScheduledEvent e)
+    // The user took the run over: end it without its Then.
+    private void Abort(EventRun run, string why)
     {
-        if (_startRoomba is null) return;
-        EventRoombaMode mode = e.RoombaMode ?? EventRoombaMode.Sort;
-        // The sweep refuses to start over a running walk / loop / auto-lair.
-        EngineSupersede.StopOthers(
-            _walker, _loopRunner, _autoLair,
-            SupersedeKeep.None, "event Roomba");
-        if (_startRoomba(mode) is { } refused)
-            _log?.Warn("Events", $"Event '{Label(e)}' Roomba ({mode}) didn't start: {refused}");
-        else
-            _log?.Info("Events", $"Event '{Label(e)}' started a Roomba sweep ({mode}).");
+        if (!ReferenceEquals(_run, run)) return;
+        EndRun();
+        _log?.Info("Events", $"Event '{Label(run.Event)}' ended — {why}; its Then is skipped.");
+    }
+
+    private void EndRun()
+    {
+        _run = null;
+        StopTicker();
+    }
+
+    // Reset States: end the running event without its Then.
+    public void CancelRun()
+    {
+        if (_run is { } run) Abort(run, "states reset");
+    }
+
+    private void RunThen(EventRun run)
+    {
+        ScheduledEvent e = run.Event;
+        switch (e.ResolvedThen)
+        {
+            case EventThenType.Resume:
+                if (run.Resume is { } plan) ExecuteResume(plan);
+                else _log?.Info("Events", $"Event '{Label(e)}': nothing was running to go back to.");
+                break;
+            case EventThenType.Loop:
+                if (!StartLoop(e.ThenLoopName, "event then"))
+                    _log?.Warn("Events", $"Event '{Label(e)}': Then loop '{e.ThenLoopName}' didn't start.");
+                break;
+            case EventThenType.AutoLair:
+                if (!StartAutoLair(e.ThenAutoLairSetupName, "event then"))
+                    _log?.Warn("Events", $"Event '{Label(e)}': Then auto-lair '{e.ThenAutoLairSetupName}' didn't start.");
+                break;
+            case EventThenType.WalkTo:
+                if (e.ThenWalkTo is not { } to
+                    || !StartWalk(new RoomKey(to.Map, to.Room), "event then"))
+                    _log?.Warn("Events", $"Event '{Label(e)}': Then walk-to didn't start.");
+                break;
+            case EventThenType.Event:
+                ScheduledEvent? next = FindEvent(e.ThenEventName);
+                if (next is null)
+                    _log?.Warn("Events", $"Event '{Label(e)}': Then event '{e.ThenEventName}' doesn't exist.");
+                else if (next.Disabled || _profile?.Current?.EventsGloballyDisabled == true)
+                    _log?.Info("Events", $"Event '{Label(e)}': Then event '{Label(next)}' is disabled.");
+                else if (run.Depth + 1 > MaxChainDepth)
+                    _log?.Warn("Events",
+                        $"Event '{Label(e)}': not firing '{Label(next)}' — {MaxChainDepth} events in a row, the chain looks like a cycle.");
+                else
+                    StartRun(next, run.Resume, run.Depth + 1);
+                break;
+        }
+    }
+
+    // ----- Engine starts ----------------------------------------------
+
+    private bool StartWalk(RoomKey key, string reason)
+    {
+        if (_walker is null) return false;
+        _driving = true;
+        try
+        {
+            EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Walker, reason);
+            if (_walker.WalkTo(key)) return true;
+        }
+        finally { _driving = false; }
+        _log?.Warn("Events", $"Walk to {key.Map}/{key.Room} failed to start.");
+        return false;
+    }
+
+    private bool StartLoop(string? name, string reason)
+    {
+        if (_loopRunner is null || FindLoop(name) is not { } saved) return false;
+        _driving = true;
+        try
+        {
+            EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Loop, reason);
+            return _loopRunner.Start(saved);
+        }
+        finally { _driving = false; }
+    }
+
+    private bool StartAutoLair(string? name, string reason)
+    {
+        if (_autoLair is null || FindSetup(name) is not { } setup) return false;
+        _driving = true;
+        try
+        {
+            EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Lair, reason);
+            _autoLair.Clear();
+            foreach (LairMarker m in setup.Markers)
+                _autoLair.Mark(new RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
+            return _autoLair.Start();
+        }
+        finally { _driving = false; }
+    }
+
+    private void StopEngines(string reason)
+    {
+        _driving = true;
+        try { EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.None, reason); }
+        finally { _driving = false; }
     }
 
     private void ExecuteCommand(ScheduledEvent e)
@@ -351,6 +531,140 @@ public sealed class EventManager : IDisposable
             if (chunk.Length == 0) continue;
             _wire.Send(chunk);
         }
+    }
+
+    // ----- Completion signals ------------------------------------------
+
+    internal void OnWalkEvent(WalkEvent w)
+    {
+        if (_run is not { } run || _driving) return;
+        switch (run.Event.ActionType)
+        {
+            case EventActionType.WalkTo:
+                if (w.Kind == WalkEventKind.Finished && Equals(w.Destination, run.WalkTarget)) Complete(run, finished: true);
+                else if (w.Kind == WalkEventKind.Failed) Complete(run, finished: false);
+                else if (w.Kind == WalkEventKind.Stopped) Abort(run, "its walk was stopped");
+                break;
+            case EventActionType.Wait:
+            case EventActionType.RestUp:
+                if (w.Kind == WalkEventKind.Started) Abort(run, "a walk started");
+                break;
+        }
+    }
+
+    internal void OnLoopEvent(LoopEvent l)
+    {
+        if (_run is not { } run || _driving) return;
+        switch (run.Event.ActionType)
+        {
+            case EventActionType.Loop:
+                if (l.Kind == LoopEventKind.RepeatStarted)
+                {
+                    run.Laps++;
+                    if (run.Event.StopAfterLaps is { } laps && laps > 0 && run.Laps >= laps)
+                        StopAndComplete(run, $"{run.Laps} lap(s)");
+                }
+                else if (l.Kind == LoopEventKind.Stopped) Abort(run, "its loop was stopped");
+                else if (l.Kind == LoopEventKind.Failed) Complete(run, finished: false);
+                break;
+            case EventActionType.Wait:
+            case EventActionType.RestUp:
+                if (l.Kind == LoopEventKind.Started) Abort(run, "a loop started");
+                break;
+        }
+    }
+
+    private void OnAutoLairActiveChanged(bool active)
+    {
+        if (_run is not { } run || _driving) return;
+        if (run.Event.ActionType == EventActionType.AutoLair && !active) Abort(run, "its auto-lair was stopped");
+        else if (run.Event.ActionType is EventActionType.Wait or EventActionType.RestUp && active)
+            Abort(run, "an auto-lair started");
+    }
+
+    // A tracked boss died (BossTimerStore.BossKilled).
+    public void NoteBossKilled(string bossName)
+    {
+        if (_run is { Event.ActionType: EventActionType.Loop or EventActionType.AutoLair } run
+            && run.Event.StopBossMoment == EventBossMoment.Killed
+            && string.Equals(run.Event.StopBossName, bossName, StringComparison.OrdinalIgnoreCase))
+            StopAndComplete(run, $"{bossName} was killed");
+    }
+
+    // A Roomba sweep ended (GhSweepManager.SweepCompleted).
+    public void NoteRoombaFinished()
+    {
+        if (_run is { Event.ActionType: EventActionType.Roomba } run) Complete(run, finished: true);
+    }
+
+    // A bank / stash trip ended (AutoDepositManager.EventTripEnded).
+    public void NoteBankTripEnded(Game.Cash.AutoDepositManager.EventTripOutcome outcome)
+    {
+        if (_run is not { Event.ActionType: EventActionType.BankTrip } run) return;
+        switch (outcome)
+        {
+            case Game.Cash.AutoDepositManager.EventTripOutcome.Done: Complete(run, finished: true); break;
+            case Game.Cash.AutoDepositManager.EventTripOutcome.Failed: Complete(run, finished: false); break;
+            default: Abort(run, "its trip was stopped"); break;
+        }
+    }
+
+    // A stop-after rule ended the loop / auto-lair: stop it ourselves, then Then.
+    private void StopAndComplete(EventRun run, string why)
+    {
+        _log?.Info("Events", $"Event '{Label(run.Event)}': stopping its {run.Event.ActionType} — {why}.");
+        _driving = true;
+        try
+        {
+            if (run.Event.ActionType == EventActionType.Loop) _loopRunner?.Stop("event stop-after");
+            else _autoLair?.Stop("event stop-after");
+        }
+        finally { _driving = false; }
+        Complete(run, finished: true);
+    }
+
+    // The once-a-second check for what no engine event reports: a wait's time, a
+    // rest-up ending, and the minutes / conditions stop-after rules.
+    internal void Tick()
+    {
+        if (_run is not { } run) return;
+        ScheduledEvent e = run.Event;
+        TimeSpan elapsed = Now() - run.StartedAt;
+        switch (e.ActionType)
+        {
+            case EventActionType.Wait:
+                if (elapsed.TotalSeconds >= Math.Max(0, e.WaitSeconds ?? 0)) Complete(run, finished: true);
+                break;
+            case EventActionType.RestUp:
+                if (elapsed >= RestStartGrace && _isResting?.Invoke() != true) Complete(run, finished: true);
+                break;
+            case EventActionType.Loop:
+            case EventActionType.AutoLair:
+                if (e.StopAfterMinutes is { } minutes && minutes > 0 && elapsed.TotalMinutes >= minutes)
+                    StopAndComplete(run, $"{minutes} minute(s) up");
+                else if (e.StopConditions is { Count: > 0 } conditions && _readStats is { } read
+                         && EventConditionEvaluator.AllHold(conditions, read()))
+                    StopAndComplete(run, EventConditionEvaluator.Describe(conditions));
+                else if (_bossStopReached?.Invoke(e) == true)
+                    StopAndComplete(run, $"{e.StopBossName}'s {e.StopBossMoment} moment came");
+                break;
+        }
+    }
+
+    private void StartTicker()
+    {
+        if (_ticker is not null) return;
+        // No UI dispatcher (unit tests): tests call Tick themselves.
+        if (Avalonia.Application.Current is null) return;
+        _ticker = new Avalonia.Threading.DispatcherTimer { Interval = RunTickInterval };
+        _ticker.Tick += (_, _) => Tick();
+        _ticker.Start();
+    }
+
+    private void StopTicker()
+    {
+        _ticker?.Stop();
+        _ticker = null;
     }
 
     // Split a Command action's text on ^M AND ';' boundaries — both denote a CR
@@ -442,6 +756,11 @@ public sealed class EventManager : IDisposable
             : _lairs.Setups.FirstOrDefault(s =>
                 string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
 
+    private ScheduledEvent? FindEvent(string? name) =>
+        string.IsNullOrWhiteSpace(name)
+            ? null
+            : Events.FirstOrDefault(e => string.Equals(e.Name, name.Trim(), StringComparison.OrdinalIgnoreCase));
+
     private static string Label(ScheduledEvent e) =>
         string.IsNullOrWhiteSpace(e.Name) ? "(unnamed)" : e.Name;
 
@@ -449,15 +768,38 @@ public sealed class EventManager : IDisposable
 
     private void LoadFrom(CharacterProfile p)
     {
+        EndRun();
         Events.Clear();
         _autoDisabled.Clear();
+        bool converted = p.Events is not null && ConvertToThen(p.Events);
         if (p.Events is not null)
             foreach (ScheduledEvent e in p.Events) Events.Add(e);
+        if (converted)
+        {
+            _log?.Info("Events", "Converted this character's events to the Then format (a walk-to goes back, anything else stops).");
+            _profile?.Save();
+        }
         ReconcileTargets();
+    }
+
+    // Events saved before they had a Then get the behavior they always had written
+    // in (a walk-to went back, anything else stopped), so the editor shows it and
+    // the profile saves in the current shape. True when any changed.
+    internal static bool ConvertToThen(IEnumerable<ScheduledEvent> events)
+    {
+        bool converted = false;
+        foreach (ScheduledEvent e in events)
+        {
+            if (e.Then is not null) continue;
+            e.Then = e.ResolvedThen;
+            converted = true;
+        }
+        return converted;
     }
 
     private void Clear()
     {
+        EndRun();
         Events.Clear();
         _autoDisabled.Clear();
     }
@@ -467,13 +809,13 @@ public sealed class EventManager : IDisposable
         p.Events = Events.Count == 0 ? null : Events.ToList();
     }
 
-    // ----- Walk-to auto-resume ---------------------------------------
+    // ----- Resume ------------------------------------------------------
 
-    // Snapshot the engine that was actively driving movement before an event-walk
+    // Snapshot the engine that was actively driving movement before an event
     // takes over. Precedence — AutoLair beats LoopRunner beats the one-shot
     // walker, because the higher engines drive the lower ones (a Loop's approach
     // walk is "really" the loop). Returns null when nothing was running, in which
-    // case the event-walk just runs and ends — no resume.
+    // case a Then of Resume has nothing to go back to.
     internal EventResumePlan? SnapshotCurrentActivity()
     {
         if (_autoLair is { IsActive: true } al && al.Marked.Count > 0)
@@ -496,76 +838,46 @@ public sealed class EventManager : IDisposable
         return null;
     }
 
-    private void AttachResumeWatcher()
+    // Go back to what was running before the event took over — unless it's still
+    // running (a command or chained event never stopped it).
+    internal void ExecuteResume(EventResumePlan plan)
     {
-        if (_walker is null || _resumeWatcher is not null) return;
-        _resumeWatcher = OnResumeWalkEvent;
-        _walker.Event += _resumeWatcher;
-    }
-
-    private void DetachResumeWatcher()
-    {
-        if (_walker is null || _resumeWatcher is null) return;
-        _walker.Event -= _resumeWatcher;
-        _resumeWatcher = null;
-    }
-
-    // Watch the walker for the outcome of an in-flight event-walk. Finished →
-    // execute the resume plan. Failed / Stopped → drop the plan (user can
-    // intervene). Pause / Resume / Started are not interesting — the walk is still
-    // in progress.
-    internal void OnResumeWalkEvent(WalkEvent e)
-    {
-        switch (e.Kind)
+        _driving = true;
+        try
         {
-            case WalkEventKind.Finished:
-                EventResumePlan? plan = _pendingResume;
-                _pendingResume = null;
-                DetachResumeWatcher();
-                if (plan is not null) ExecuteResume(plan);
-                break;
-            case WalkEventKind.Failed:
-            case WalkEventKind.Stopped:
-                _log?.Info("Events",
-                    $"Event walk-to interrupted ({e.Kind}); dropping resume plan.");
-                _pendingResume = null;
-                DetachResumeWatcher();
-                break;
+            switch (plan)
+            {
+                case EventResumePlan.Loop l:
+                    if (_loopRunner is null) return;
+                    if (_loopRunner.State is not LoopState.Idle && ReferenceEquals(_loopRunner.CurrentLoop, l.SavedLoop)) return;
+                    _log?.Info("Events", $"Resuming loop '{l.SavedLoop.Name}'.");
+                    EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Loop, "event resume");
+                    _loopRunner.Start(l.SavedLoop);
+                    break;
+                case EventResumePlan.AutoLair al:
+                    if (_autoLair is null || _autoLair.IsActive) return;
+                    _log?.Info("Events", $"Resuming auto-lair ({al.Markers.Count} markers).");
+                    EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Lair, "event resume");
+                    _autoLair.Clear();
+                    foreach (KeyValuePair<RoomKey, int?> kv in al.Markers)
+                        _autoLair.Mark(kv.Key, kv.Value);
+                    _autoLair.Start();
+                    break;
+                case EventResumePlan.Walker w:
+                    if (_walker is null) return;
+                    if (_walker.State == WalkState.Walking && Equals(_walker.Destination, w.Destination)) return;
+                    _log?.Info("Events", $"Resuming walk to {w.Destination.Map}/{w.Destination.Room}.");
+                    EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Walker, "event resume");
+                    _walker.WalkTo(w.Destination);
+                    break;
+            }
         }
+        finally { _driving = false; }
     }
 
-    // Re-dispatch the activity that was running before the event-walk took over.
-    // Stops nothing first — the walker is Idle by now (we just hit Finished), and
-    // the other engines were stopped at the start of the event-walk so they're
-    // already inactive.
-    private void ExecuteResume(EventResumePlan plan)
-    {
-        switch (plan)
-        {
-            case EventResumePlan.Loop l:
-                if (_loopRunner is null) return;
-                _log?.Info("Events", $"Resuming loop '{l.SavedLoop.Name}' after event-walk.");
-                _loopRunner.Start(l.SavedLoop);
-                break;
-            case EventResumePlan.AutoLair al:
-                if (_autoLair is null) return;
-                _log?.Info("Events", $"Resuming auto-lair ({al.Markers.Count} markers) after event-walk.");
-                _autoLair.Clear();
-                foreach (KeyValuePair<RoomKey, int?> kv in al.Markers)
-                    _autoLair.Mark(kv.Key, kv.Value);
-                _autoLair.Start();
-                break;
-            case EventResumePlan.Walker w:
-                if (_walker is null) return;
-                _log?.Info("Events", $"Resuming walk to {w.Destination.Map}/{w.Destination.Room} after event-walk.");
-                _walker.WalkTo(w.Destination);
-                break;
-        }
-    }
-
-    // What to do after the event-walk reaches its target. Discriminated across the
-    // three engine types SnapshotCurrentActivity distinguishes. Internal so tests
-    // can pattern-match the snapshot.
+    // What was running when an event took over — the Resume target. Discriminated
+    // across the three engine types SnapshotCurrentActivity distinguishes. Internal
+    // so tests can pattern-match the snapshot.
     internal abstract record EventResumePlan
     {
         public abstract string Describe();

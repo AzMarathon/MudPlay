@@ -16,6 +16,11 @@ namespace MudPlay.Models.GameData;
 //   Roomba — start a Roomba sweep in ScheduledEvent.RoombaMode (Sort or
 //     Inventory only). Stops any walk / loop / auto-lair first; the sweep
 //     drives the loop runner itself.
+//   Wait — stop moving and stand still for ScheduledEvent.WaitSeconds.
+//   RestUp — rest / meditate to the Health tab's rest max, as a loop room
+//     flagged "rest up here" does.
+//   BankTrip — walk to the Settings → Cash bank or stash room and deposit /
+//     stash there (AutoDepositManager.StartEventTrip).
 public enum EventActionType
 {
     WalkTo = 0,
@@ -23,4 +28,7 @@ public enum EventActionType
     AutoLair = 2,
     Command = 3,
     Roomba = 4,
+    Wait = 5,
+    RestUp = 6,
+    BankTrip = 7,
 }

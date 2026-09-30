@@ -1040,6 +1040,7 @@ public sealed class AppServices
 
     // Fires State-triggered events (money / encumbrance / exp / level conditions).
     public Game.Events.EventStateWatcher EventStateWatcher { get; private set; } = null!;
+    public Game.Events.EventBossWatcher EventBoss { get; private set; } = null!;
 
     // The watcher is UI-thread-confined like the rest of the events stack; stat and
     // inventory changes can be raised off it.
@@ -4079,8 +4080,10 @@ public sealed class AppServices
                 && LoopRunner.CurrentLoop?.Waypoints is { } wps
                 && wps.Any(w => w.DoNotRest && w.Key.Equals(here.Key))));
         // The loop's "rest up here" rooms: rest to rest-max there before moving on.
+        // A Rest-up event makes wherever we stand one (Events is built later).
         Health.SetRestHereSelector(() =>
         {
+            if (Events is not null && Events.RestUpRequested) return (true, true);
             if (LoopRunner.State == Game.Map.LoopState.Idle
                 || RoomTracker.State.CurrentRoom is not { } here
                 || LoopRunner.CurrentLoop?.Waypoints is not { } wps) return default;
@@ -7636,6 +7639,21 @@ public sealed class AppServices
                 : Game.Map.GhSweepManager.SweepMode.Sort)
                 ? null
                 : GhSweep.LastStartError ?? "the sweep refused to start");
+        // What the other event actions start, and the signals that say they're done.
+        Events.SetBankTripStarter(AutoDeposit.StartEventTrip);
+        AutoDeposit.EventTripEnded += Events.NoteBankTripEnded;
+        Events.SetRestHooks(() => Health.IsRecoveringRest || Health.RestInFlight, () => Health.Evaluate());
+        Events.SetStatsReader(ReadEventReadings);
+        GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
+        BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);
+        // Boss-timer triggers: timed moments on the scheduler's 30 s clock, kills as
+        // they're recorded.
+        EventBoss = new Game.Events.EventBossWatcher(
+            Events, Bosses, BossTimers, GameData, () => GameData.ActiveRealm, () => EventScheduler.IsInGame, Log);
+        EventScheduler.ClockTick += EventBoss.Evaluate;
+        EventScheduler.BossNextFire = EventBoss.NextFire;
+        Events.SetBossStopCheck(EventBoss.StopReached);
+        BossTimers.BossKilled += EventBoss.OnBossKilled;
 
         // DefaultTaskRunner. Starts the character's configured "Default task"
         // (loop / Auto-Lair) on the first in-game prompt with a known room,
@@ -10711,7 +10729,7 @@ public sealed class AppServices
         TrainerWalk.Cancel(reason);
         TrainFunding.Cancel(reason);
         TrainerMenu.ForceExit(reason);
-        Events.CancelPendingResume();
+        Events.CancelRun();
         PartyComeback.Cancel(reason);
         DeathRecovery.CancelTrip();
 

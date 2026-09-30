@@ -1,5 +1,13 @@
 # Version history
 
+## 3.126.0
+
+- Events: every event now has a Then step — go back to what was running, start a loop / Auto-Lair, walk somewhere, or fire another event
+- Events: loops and Auto-Lairs started by an event can stop after N laps, N minutes, a boss-timer moment (any column hitting 0, a kill, a cleanup reset), or conditions holding
+- Events: new Boss trigger (any Bosses-tab timer column hitting 0, a kill, a cleanup reset, N minutes early) and Wait, Rest up and Bank trip actions
+- Events: existing events convert on first load, keeping what they did (a walk-to goes back, anything else stops)
+- Bug report lists every event's full settings, whether it's disabled or auto-disabled, its next fire, and the event running now
+
 ## 3.125.16
 
 - Monster Intel: the working line under the highlighted Your Matchup row is readable (lighter grey on the highlight)

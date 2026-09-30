@@ -132,6 +132,8 @@ public sealed class AutoDepositManager : IDisposable
     private RoomKey _destination;
     private RoomKey _origin;
     private bool _destinationIsStash;
+    // The reroute is an event's trip (StartEventTrip): it ends at the bank / stash.
+    private bool _eventTrip;
 
     public AutoDepositManager(
         CashManager cash,
@@ -245,10 +247,8 @@ public sealed class AutoDepositManager : IDisposable
             return;
         }
 
-        CashSettings cash = _readCash();
-        if (!RoomKey.TryParseWire(cash.BankRoomKey, out RoomKey destination))
+        if (!TryResolveDestination(out RoomKey destination, out bool destinationIsStash))
         {
-            _log?.Warn(LogCategory, $"gate fired but BankRoomKey '{cash.BankRoomKey}' is unparseable — ignoring");
             _cash.NotifyAutoDepositAborted();
             return;
         }
@@ -259,25 +259,6 @@ public sealed class AutoDepositManager : IDisposable
         if (_tracker.State.CurrentRoom is not { } current)
         {
             _log?.Warn(LogCategory, "gate fired but current room is unknown — can't reroute");
-            _cash.NotifyAutoDepositAborted();
-            return;
-        }
-
-        bool destinationIsStash = IsStashRoom(destination);
-
-        // Destination-validity gate. A persisted BankRoomKey can go stale — the
-        // active game-data set changed, or a room was un-marked as a stash —
-        // leaving a key that resolves to neither a bank (Shops ShopType == 7)
-        // nor a marked stash room. The Settings → Cash picker shows its
-        // placeholder in that case (no valid selection), but the raw key
-        // survives on disk. Honouring it would detour to a non-bank room and,
-        // when the route crosses a toll, probe the party's @wealth for a
-        // deposit that can never land. No valid destination → no-op.
-        if (!destinationIsStash && !_isBankRoom(destination))
-        {
-            _log?.Info(LogCategory,
-                $"BankRoomKey '{cash.BankRoomKey}' is neither a bank nor a marked stash "
-                + "room in the active set — no deposit destination, ignoring");
             _cash.NotifyAutoDepositAborted();
             return;
         }
@@ -320,6 +301,72 @@ public sealed class AutoDepositManager : IDisposable
             _cash.NotifyAutoDepositAborted();
             Resume();
         }
+    }
+
+    // The Settings → Cash bank / stash room, when it's a real destination.
+    // Destination-validity gate: a persisted BankRoomKey can go stale — the active
+    // game-data set changed, or a room was un-marked as a stash — leaving a key that
+    // resolves to neither a bank (Shops ShopType == 7) nor a marked stash room. The
+    // Settings → Cash picker shows its placeholder in that case (no valid
+    // selection), but the raw key survives on disk. Honouring it would detour to a
+    // non-bank room and, when the route crosses a toll, probe the party's @wealth
+    // for a deposit that can never land.
+    private bool TryResolveDestination(out RoomKey destination, out bool isStash)
+    {
+        CashSettings cash = _readCash();
+        isStash = false;
+        if (!RoomKey.TryParseWire(cash.BankRoomKey, out destination))
+        {
+            _log?.Warn(LogCategory, $"BankRoomKey '{cash.BankRoomKey}' is unparseable — no deposit destination");
+            return false;
+        }
+        isStash = IsStashRoom(destination);
+        if (isStash || _isBankRoom(destination)) return true;
+        _log?.Info(LogCategory,
+            $"BankRoomKey '{cash.BankRoomKey}' is neither a bank nor a marked stash "
+            + "room in the active set — no deposit destination");
+        return false;
+    }
+
+    // ----- Event trip ------------------------------------------------
+
+    // An event's bank / stash trip: walk to the Settings → Cash bank or stash room,
+    // deposit or stash there, and stop — the event's Then step decides what comes
+    // next, so there's no walk back and nothing to resume. The caller has already
+    // stopped any running engine. False when there's no destination, no known room,
+    // no route, or a reroute is already running; otherwise EventTripEnded reports
+    // how it ended.
+    public bool StartEventTrip()
+    {
+        if (_busy) return false;
+        if (!TryResolveDestination(out RoomKey destination, out bool isStash)) return false;
+        if (_tracker.State.CurrentRoom is not { } current)
+        {
+            _log?.Warn(LogCategory, "event trip: current room is unknown — can't go");
+            return false;
+        }
+        _busy = true;
+        _eventTrip = true;
+        _resume = default;
+        _destination = destination;
+        _origin = current.Key;
+        _destinationIsStash = isStash;
+        _phase = DepositPhase.WalkingToDestination;
+        _log?.Info(LogCategory, $"event trip to {(isStash ? "stash" : "bank")} {destination}");
+        if (RerouteWalkTo(destination)) return true;
+        _log?.Warn(LogCategory, $"event trip: can't reach {destination}");
+        GoIdle();
+        return false;
+    }
+
+    // How an event trip ended: deposited / stashed, gave up (no route, a leg
+    // failed), or stopped from outside (a user or remote halt, Reset States).
+    public event Action<EventTripOutcome>? EventTripEnded;
+
+    private void EndEventTrip(EventTripOutcome outcome)
+    {
+        GoIdle();
+        EventTripEnded?.Invoke(outcome);
     }
 
     // Every reroute-initiated WalkTo goes through here so the Stopped event that
@@ -386,8 +433,10 @@ public sealed class AutoDepositManager : IDisposable
         {
             if (_drivingWalker) return;
             _log?.Info(LogCategory, $"reroute aborted — movement stopped externally ({e.Detail})");
+            bool eventTrip = _eventTrip;
             GoIdle();
             _cash.NotifyAutoDepositAborted();
+            if (eventTrip) EventTripEnded?.Invoke(EventTripOutcome.Stopped);
             return;
         }
 
@@ -486,6 +535,12 @@ public sealed class AutoDepositManager : IDisposable
     // the AutoLight master toggle (PlanRouteBuy returns null when it's off).
     private void BeginReturnLeg()
     {
+        if (_eventTrip)
+        {
+            _log?.Info(LogCategory, "event trip done");
+            EndEventTrip(EventTripOutcome.Done);
+            return;
+        }
         if (TryPlanLightDetour(out RoomKey shop, out AutoLightBuyRequest buy))
         {
             _lightBuy = buy;
@@ -675,6 +730,11 @@ public sealed class AutoDepositManager : IDisposable
         // retry cooldown this sets, so the extra call is harmless there.
         _cash.NotifyAutoDepositAborted();
 
+        if (_eventTrip)
+        {
+            EndEventTrip(EventTripOutcome.Failed);
+            return;
+        }
         DetourResume r = _resume;
         GoIdle();
         r.Resume(_walker, _loopRunner, _autoLair);
@@ -683,7 +743,9 @@ public sealed class AutoDepositManager : IDisposable
     // Reset States: stand down without resuming the walk it was part of.
     public void Cancel()
     {
-        if (_busy) GoIdle();
+        if (!_busy) return;
+        if (_eventTrip) EndEventTrip(EventTripOutcome.Stopped);
+        else GoIdle();
     }
 
     private void GoIdle()
@@ -692,6 +754,7 @@ public sealed class AutoDepositManager : IDisposable
         _depositSyncTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _lightBuy = null;
         _busy = false;
+        _eventTrip = false;
         _phase = DepositPhase.Idle;
     }
 
@@ -711,6 +774,8 @@ public sealed class AutoDepositManager : IDisposable
         _buyTimer.Dispose();
         _depositSyncTimer.Dispose();
     }
+
+    public enum EventTripOutcome { Done, Failed, Stopped }
 
     private enum DepositPhase
     {

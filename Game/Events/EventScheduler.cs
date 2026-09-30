@@ -27,6 +27,8 @@ namespace MudPlay.Game.Events;
 //   * AtTime events check on a 30 s ticker; an event matching the current HH:mm
 //     wall-clock local fires (deduped via _atTimeFiredAt so a single matched
 //     minute fires each event at most once). Only fires while in-game.
+//   * Boss events ride the same 30 s ticker (ClockTick → EventBossWatcher), plus
+//     the boss-kill event for a Killed moment.
 //   * Every events get a dedicated DispatcherTimer per event. Timers start fresh
 //     at each first-prompt-after-connect (no anchor preservation across
 //     disconnect). Stop on disconnect.
@@ -71,6 +73,13 @@ public sealed class EventScheduler : IDisposable
     // Raised on game entry, after the Logon / Re-log events: the moment state
     // triggers first have live readings to check.
     public event Action? EnteredGame;
+
+    // Raised on every in-game tick of the 30 s clock — the boss-timer triggers'
+    // cadence (EventBossWatcher.Evaluate).
+    public event Action? ClockTick;
+
+    // A Boss event's next fire time (EventBossWatcher.NextFire), for the countdown.
+    public Func<ScheduledEvent, DateTime?>? BossNextFire { get; set; }
     private bool _hadInSessionDisconnect;
     // Latched true after the first cleanup-warning observation fires Logoff
     // events. The BBS warns repeatedly during a cleanup cycle ("5 min", "4 min",
@@ -235,6 +244,7 @@ public sealed class EventScheduler : IDisposable
             _atTimeFiredAt[ev] = nowKey;
             _events.Fire(ev);
         }
+        ClockTick?.Invoke();
     }
 
     // ----- Every-timer management ------------------------------------
@@ -300,6 +310,8 @@ public sealed class EventScheduler : IDisposable
                 DateTime now = DateTime.Now;
                 DateTime todayAt = now.Date + target.ToTimeSpan();
                 return todayAt > now ? todayAt : todayAt.AddDays(1);
+            case EventTriggerType.Boss:
+                return BossNextFire?.Invoke(ev);
             default:
                 return null;
         }

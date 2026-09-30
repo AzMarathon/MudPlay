@@ -3,11 +3,11 @@
         xmlns:vm="using:MudPlay.ViewModels.Settings"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="520"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="620"
         x:Class="MudPlay.Views.Settings.EventEditDialog"
         x:DataType="vm:EventEditDialogViewModel"
         Title="{Binding DialogTitle}"
-        Width="540"
+        Width="1100"
         SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
@@ -17,12 +17,13 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,8,0,4"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
         </Style>
         <Style Selector="TextBlock.Hint">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
             <Setter Property="FontSize" Value="10"/>
             <Setter Property="FontStyle" Value="Italic"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <Style Selector="TextBlock.Error">
             <Setter Property="Foreground" Value="#E55353"/>
@@ -34,199 +35,303 @@
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
-        <Style Selector="RadioButton.Row">
+        <Style Selector="RadioButton, CheckBox">
             <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Border.Section">
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="10,8"/>
         </Style>
     </Window.Styles>
 
+    <Window.Resources>
+        <DataTemplate x:Key="ConditionRow" x:DataType="vm:EventConditionRowViewModel">
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <ComboBox Width="124" ItemsSource="{Binding StatOptions}"
+                          SelectedItem="{Binding SelectedStat, Mode=TwoWay}"/>
+                <ComboBox Width="56" ItemsSource="{Binding ComparisonOptions}"
+                          SelectedItem="{Binding SelectedComparison, Mode=TwoWay}"/>
+                <NumericUpDown Width="112" Minimum="0" Maximum="999999999999"
+                               FormatString="0" Value="{Binding Value, Mode=TwoWay}"/>
+                <ComboBox Width="100" ItemsSource="{Binding DenominationOptions}"
+                          SelectedItem="{Binding Denomination, Mode=TwoWay}"
+                          IsVisible="{Binding IsMoney}"/>
+                <Button Content="✕" Width="28" Padding="0"
+                        HorizontalContentAlignment="Center"
+                        Command="{Binding RemoveCommand}"
+                        ToolTip.Tip="Remove this condition"/>
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
 
             <!-- Header: Name + Disabled flag. -->
-            <Grid Grid.Row="0" ColumnDefinitions="60,*,Auto" ColumnSpacing="8">
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,300,Auto" ColumnSpacing="8">
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Name"/>
                 <TextBox Grid.Column="1"
-                         Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                         Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip.Tip="Also how another event's Then finds this one."/>
                 <CheckBox Grid.Column="2" Content="Disabled" Margin="14,0,0,0"
                           IsChecked="{Binding DisabledFlag, Mode=TwoWay}"/>
             </Grid>
 
-            <!-- WHEN section: single grid so the time / numeric / unit
-                 columns line up across rows. Errors collapse when empty. -->
-            <Grid Grid.Row="1" Margin="0,8,0,0"
-                  ColumnDefinitions="100,140,140,*"
-                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
-                  RowSpacing="4">
-                <TextBlock Grid.Row="0" Grid.ColumnSpan="4"
-                           Classes="SectionHeader" Text="WHEN (trigger)"/>
+            <Grid Grid.Row="1" ColumnDefinitions="*,12,*" RowDefinitions="Auto,10,Auto">
 
-                <RadioButton Grid.Row="1" Grid.Column="0" Classes="Row"
-                             GroupName="When" Content="Logon"
-                             IsChecked="{Binding IsTriggerLogon, Mode=TwoWay}"/>
-                <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
-                           Classes="Hint" Text="(every game entry)"
-                           VerticalAlignment="Center"/>
+                <!-- WHEN: what starts the event. -->
+                <Border Grid.Row="0" Grid.Column="0" Classes="Section">
+                    <Grid ColumnDefinitions="100,*" RowSpacing="4"
+                          RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="SectionHeader" Text="WHEN"/>
 
-                <RadioButton Grid.Row="2" Grid.Column="0" Classes="Row"
-                             GroupName="When" Content="Logoff"
-                             IsChecked="{Binding IsTriggerLogoff, Mode=TwoWay}"/>
-                <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3"
-                           Classes="Hint" Text="(when BBS announces shutdown)"
-                           VerticalAlignment="Center"/>
+                        <RadioButton Grid.Row="1" GroupName="When" Content="Logon"
+                                     IsChecked="{Binding IsTriggerLogon, Mode=TwoWay}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Classes="Hint" Text="every game entry"/>
 
-                <RadioButton Grid.Row="3" Grid.Column="0" Classes="Row"
-                             GroupName="When" Content="Re-log"
-                             IsChecked="{Binding IsTriggerRelog, Mode=TwoWay}"/>
-                <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3"
-                           Classes="Hint" Text="(reconnects only, never first connect)"
-                           VerticalAlignment="Center"/>
+                        <RadioButton Grid.Row="2" GroupName="When" Content="Logoff"
+                                     IsChecked="{Binding IsTriggerLogoff, Mode=TwoWay}"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Classes="Hint" Text="when the BBS announces shutdown"/>
 
-                <RadioButton Grid.Row="4" Grid.Column="0" Classes="Row"
-                             GroupName="When" Content="At time"
-                             IsChecked="{Binding IsTriggerAtTime, Mode=TwoWay}"/>
-                <TextBox Grid.Row="4" Grid.Column="1"
-                         Text="{Binding AtTime, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         IsEnabled="{Binding IsTriggerAtTime}"
-                         PlaceholderText="HH:mm"
-                         HorizontalAlignment="Stretch"
-                         Margin="0,0,8,0"/>
-                <TextBlock Grid.Row="4" Grid.Column="2" Classes="Hint"
-                           Text="system time"
-                           VerticalAlignment="Center"/>
-                <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3"
-                           Classes="Error"
-                           Text="{Binding AtTimeError}"
-                           IsVisible="{Binding HasAtTimeError}"/>
+                        <RadioButton Grid.Row="3" GroupName="When" Content="Re-log"
+                                     IsChecked="{Binding IsTriggerRelog, Mode=TwoWay}"/>
+                        <TextBlock Grid.Row="3" Grid.Column="1" Classes="Hint" Text="reconnects only, never the first connect"/>
 
-                <RadioButton Grid.Row="6" Grid.Column="0" Classes="Row"
-                             GroupName="When" Content="Every"
-                             IsChecked="{Binding IsTriggerEvery, Mode=TwoWay}"/>
-                <NumericUpDown Grid.Row="6" Grid.Column="1"
-                               Value="{Binding EveryAmount, Mode=TwoWay}"
-                               Minimum="1" Maximum="86400"
-                               IsEnabled="{Binding IsTriggerEvery}"
-                               FormatString="0"
-                               HorizontalAlignment="Stretch"
-                               Margin="0,0,8,0"/>
-                <ComboBox Grid.Row="6" Grid.Column="2"
-                          ItemsSource="{Binding EveryUnits}"
-                          SelectedItem="{Binding EveryUnit, Mode=TwoWay}"
-                          IsEnabled="{Binding IsTriggerEvery}"
-                          HorizontalAlignment="Stretch"/>
-                <TextBlock Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="3"
-                           Classes="Error"
-                           Text="{Binding EveryError}"
-                           IsVisible="{Binding HasEveryError}"/>
+                        <RadioButton Grid.Row="4" GroupName="When" Content="At time"
+                                     IsChecked="{Binding IsTriggerAtTime, Mode=TwoWay}"/>
+                        <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <TextBox Width="90"
+                                     Text="{Binding AtTime, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     IsEnabled="{Binding IsTriggerAtTime}" PlaceholderText="HH:mm"/>
+                            <TextBlock Classes="Hint" Text="system time"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="5" Grid.Column="1" Classes="Error"
+                                   Text="{Binding AtTimeError}" IsVisible="{Binding HasAtTimeError}"/>
 
-                <!-- When: fires once every listed condition holds, then re-arms
-                     only after they stop holding. -->
-                <RadioButton Grid.Row="8" Grid.Column="0" Classes="Row"
-                             GroupName="When" Content="When"
-                             IsChecked="{Binding IsTriggerState, Mode=TwoWay}"/>
-                <TextBlock Grid.Row="8" Grid.Column="1" Grid.ColumnSpan="3"
-                           Classes="Hint" VerticalAlignment="Center"
-                           Text="(all of these are true — fires once, again after they stop being true)"/>
-                <ItemsControl Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="4"
-                              Margin="24,0,0,0"
-                              ItemsSource="{Binding Conditions}"
-                              IsEnabled="{Binding IsTriggerState}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:EventConditionRowViewModel">
-                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
-                                <ComboBox Width="130" ItemsSource="{Binding StatOptions}"
-                                          SelectedItem="{Binding SelectedStat, Mode=TwoWay}"/>
-                                <ComboBox Width="56" ItemsSource="{Binding ComparisonOptions}"
-                                          SelectedItem="{Binding SelectedComparison, Mode=TwoWay}"/>
-                                <NumericUpDown Width="120" Minimum="0" Maximum="999999999999"
-                                               FormatString="0" Value="{Binding Value, Mode=TwoWay}"/>
-                                <ComboBox Width="104" ItemsSource="{Binding DenominationOptions}"
-                                          SelectedItem="{Binding Denomination, Mode=TwoWay}"
-                                          IsVisible="{Binding IsMoney}"/>
-                                <Button Content="✕" Width="28" Padding="0"
-                                        HorizontalContentAlignment="Center"
-                                        Command="{Binding RemoveCommand}"
-                                        ToolTip.Tip="Remove this condition"/>
+                        <RadioButton Grid.Row="6" GroupName="When" Content="Every"
+                                     IsChecked="{Binding IsTriggerEvery, Mode=TwoWay}"/>
+                        <StackPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <NumericUpDown Width="110" Value="{Binding EveryAmount, Mode=TwoWay}"
+                                           Minimum="1" Maximum="86400" FormatString="0"
+                                           IsEnabled="{Binding IsTriggerEvery}"/>
+                            <ComboBox Width="110" ItemsSource="{Binding EveryUnits}"
+                                      SelectedItem="{Binding EveryUnit, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsTriggerEvery}"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="7" Grid.Column="1" Classes="Error"
+                                   Text="{Binding EveryError}" IsVisible="{Binding HasEveryError}"/>
+
+                        <!-- Boss timer: a moment on one boss's timer (the Bosses tab). -->
+                        <RadioButton Grid.Row="8" GroupName="When" Content="Boss"
+                                     IsChecked="{Binding IsTriggerBoss, Mode=TwoWay}"/>
+                        <ComboBox Grid.Row="8" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding AvailableBossNames}"
+                                  SelectedItem="{Binding BossName, Mode=TwoWay}"
+                                  IsEnabled="{Binding IsTriggerBoss}"
+                                  PlaceholderText="(a boss from the Bosses tab)"/>
+                        <StackPanel Grid.Row="9" Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                    IsEnabled="{Binding IsTriggerBoss}">
+                            <ComboBox Width="210" ItemsSource="{Binding BossMomentOptions}"
+                                      SelectedItem="{Binding SelectedBossMoment, Mode=TwoWay}"
+                                      ToolTip.Tip="Which of the Bosses tab's timer columns to watch count down to 0 — an early spawn window, or the guaranteed (full) respawn — or the moment it's killed, or a cleanup boss's reset at nightly cleanup. Fires once per kill."/>
+                            <NumericUpDown Width="100" Minimum="0" Maximum="1440" FormatString="0"
+                                           Value="{Binding BossLeadMinutes, Mode=TwoWay}"
+                                           IsVisible="{Binding BossLeadApplies}"
+                                           ToolTip.Tip="Fire this many minutes before the moment — time to walk there."/>
+                            <TextBlock Classes="Hint" Text="min early" IsVisible="{Binding BossLeadApplies}"/>
+                        </StackPanel>
+
+                        <!-- When: fires once every listed condition holds, then re-arms
+                             only after they stop holding. -->
+                        <RadioButton Grid.Row="10" GroupName="When" Content="When"
+                                     IsChecked="{Binding IsTriggerState, Mode=TwoWay}"/>
+                        <TextBlock Grid.Row="10" Grid.Column="1" Classes="Hint" TextWrapping="Wrap"
+                                   Text="all of these are true — fires once, again after they stop being true"/>
+                        <ItemsControl Grid.Row="11" Grid.ColumnSpan="2" Margin="24,0,0,0"
+                                      ItemsSource="{Binding Conditions}"
+                                      ItemTemplate="{StaticResource ConditionRow}"
+                                      IsEnabled="{Binding IsTriggerState}"/>
+                        <StackPanel Grid.Row="12" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8" Margin="24,0,0,0">
+                            <Button Content="+ Add condition" Command="{Binding AddConditionCommand}"
+                                    ToolTip.Tip="Money (carried coin), encumbrance (% of max carry), experience, or level — compared with a value. All conditions must hold."/>
+                            <TextBlock Classes="Error" VerticalAlignment="Center"
+                                       Text="{Binding ConditionsError}" IsVisible="{Binding HasConditionsError}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                    <!-- DO: the action. Targets are validated on Save (popup). -->
+                    <Border Grid.Row="0" Grid.Column="2" Classes="Section">
+                        <Grid ColumnDefinitions="110,*" RowSpacing="4"
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="SectionHeader" Text="DO"/>
+
+                            <RadioButton Grid.Row="1" GroupName="What" Content="Walk to"
+                                         IsChecked="{Binding IsActionWalkTo, Mode=TwoWay}"/>
+                            <TextBox Grid.Row="1" Grid.Column="1"
+                                     Text="{Binding WalkToText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     IsEnabled="{Binding IsActionWalkTo}"
+                                     PlaceholderText="coord (1/297) or room name"/>
+
+                            <RadioButton Grid.Row="2" GroupName="What" Content="Start loop"
+                                         IsChecked="{Binding IsActionLoop, Mode=TwoWay}"/>
+                            <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding AvailableLoopNames}"
+                                      SelectedItem="{Binding LoopName, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsActionLoop}"
+                                      PlaceholderText="(select a saved loop)"/>
+
+                            <RadioButton Grid.Row="3" GroupName="What" Content="Auto-lair"
+                                         IsChecked="{Binding IsActionAutoLair, Mode=TwoWay}"/>
+                            <ComboBox Grid.Row="3" Grid.Column="1" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding AvailableAutoLairNames}"
+                                      SelectedItem="{Binding AutoLairSetupName, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsActionAutoLair}"
+                                      PlaceholderText="(select a saved auto-lair setup)"/>
+
+                            <RadioButton Grid.Row="4" GroupName="What" Content="Command"
+                                         VerticalAlignment="Top" Margin="0,4,0,0"
+                                         IsChecked="{Binding IsActionCommand, Mode=TwoWay}"/>
+                            <StackPanel Grid.Row="4" Grid.Column="1" Spacing="2">
+                                <TextBox Text="{Binding CommandText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         IsEnabled="{Binding IsActionCommand}"
+                                         PlaceholderText="stat; who; abil 145^M (empty = bare CR)"/>
+                                <TextBlock Classes="Hint" Text="^M and ; send several lines; empty = carriage return"/>
                             </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <StackPanel Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="4"
-                            Orientation="Horizontal" Spacing="8" Margin="24,0,0,0">
-                    <Button Content="+ Add condition" Command="{Binding AddConditionCommand}"
-                            ToolTip.Tip="Money (carried coin), encumbrance (% of max carry), experience, or level — compared with a value. All conditions must hold."/>
-                    <TextBlock Classes="Error" VerticalAlignment="Center"
-                               Text="{Binding ConditionsError}"
-                               IsVisible="{Binding HasConditionsError}"/>
-                </StackPanel>
+
+                            <RadioButton Grid.Row="5" GroupName="What" Content="Roomba"
+                                         IsChecked="{Binding IsActionRoomba, Mode=TwoWay}"/>
+                            <ComboBox Grid.Row="5" Grid.Column="1" Width="200" HorizontalAlignment="Left"
+                                      ItemsSource="{Binding RoombaModeOptions}"
+                                      SelectedItem="{Binding SelectedRoombaMode, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsActionRoomba}"
+                                      ToolTip.Tip="A Roomba sweep of your actively-managed rooms (stops any walk, loop or auto-lair first). Inventory only walks the circuit and refreshes the item log without moving anything. Done when the sweep finishes."/>
+
+                            <RadioButton Grid.Row="6" GroupName="What" Content="Wait"
+                                         IsChecked="{Binding IsActionWait, Mode=TwoWay}"/>
+                            <StackPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <NumericUpDown Width="110" Minimum="1" Maximum="86400" FormatString="0"
+                                               Value="{Binding WaitSeconds, Mode=TwoWay}"
+                                               IsEnabled="{Binding IsActionWait}"/>
+                                <TextBlock Classes="Hint" Text="seconds, standing still"/>
+                            </StackPanel>
+
+                            <RadioButton Grid.Row="7" GroupName="What" Content="Rest up"
+                                         IsChecked="{Binding IsActionRestUp, Mode=TwoWay}"/>
+                            <TextBlock Grid.Row="7" Grid.Column="1" Classes="Hint"
+                                       Text="stand still and rest / meditate to your Health rest max"/>
+
+                            <RadioButton Grid.Row="8" GroupName="What" Content="Bank trip"
+                                         IsChecked="{Binding IsActionBankTrip, Mode=TwoWay}"/>
+                            <TextBlock Grid.Row="8" Grid.Column="1" Classes="Hint" TextWrapping="Wrap"
+                                       Text="walk to your Settings → Cash bank or stash room and deposit / stash there"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- STOP AFTER: a loop / auto-lair never ends by itself. -->
+                    <Border Grid.Row="2" Grid.Column="0" Classes="Section" VerticalAlignment="Top"
+                            IsVisible="{Binding ShowsStopAfter}">
+                        <StackPanel Spacing="4">
+                            <TextBlock Classes="SectionHeader" Text="STOP AFTER (whichever comes first)"/>
+                            <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsActionLoop}">
+                                <CheckBox Content="after" IsChecked="{Binding StopAfterLapsOn, Mode=TwoWay}"/>
+                                <NumericUpDown Width="130" Minimum="1" Maximum="100000" FormatString="0"
+                                               Value="{Binding StopAfterLaps, Mode=TwoWay}"
+                                               IsEnabled="{Binding StopAfterLapsOn}"/>
+                                <TextBlock Classes="FieldLabel" Text="laps"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <CheckBox Content="after" IsChecked="{Binding StopAfterMinutesOn, Mode=TwoWay}"/>
+                                <NumericUpDown Width="130" Minimum="1" Maximum="100000" FormatString="0"
+                                               Value="{Binding StopAfterMinutes, Mode=TwoWay}"
+                                               IsEnabled="{Binding StopAfterMinutesOn}"/>
+                                <TextBlock Classes="FieldLabel" Text="minutes"/>
+                            </StackPanel>
+                            <!-- A boss-timer moment — the same choices as the Boss trigger. -->
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <CheckBox Content="when" IsChecked="{Binding StopWhenBossOn, Mode=TwoWay}"/>
+                                <ComboBox Width="240" ItemsSource="{Binding AvailableBossNames}"
+                                          SelectedItem="{Binding StopBossName, Mode=TwoWay}"
+                                          IsEnabled="{Binding StopWhenBossOn}"
+                                          PlaceholderText="(a boss)"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="24,0,0,0"
+                                        IsEnabled="{Binding StopWhenBossOn}">
+                                <ComboBox Width="210" ItemsSource="{Binding BossMomentOptions}"
+                                          SelectedItem="{Binding SelectedStopBossMoment, Mode=TwoWay}"
+                                          ToolTip.Tip="Stop when that boss's timer column hits 0 (an early spawn window, or the guaranteed full timer), when it's killed, or when a cleanup boss resets. A timer moment already behind you stops the loop straight away."/>
+                                <NumericUpDown Width="100" Minimum="0" Maximum="1440" FormatString="0"
+                                               Value="{Binding StopBossLeadMinutes, Mode=TwoWay}"
+                                               IsVisible="{Binding StopBossLeadApplies}"/>
+                                <TextBlock Classes="Hint" Text="min early" IsVisible="{Binding StopBossLeadApplies}"/>
+                            </StackPanel>
+                            <TextBlock Classes="FieldLabel" Text="when all of these hold:"/>
+                            <ItemsControl Margin="24,0,0,0" ItemsSource="{Binding StopConditions}"
+                                          ItemTemplate="{StaticResource ConditionRow}"/>
+                            <Button Content="+ Add condition" Margin="24,0,0,0"
+                                    Command="{Binding AddStopConditionCommand}"
+                                    ToolTip.Tip="e.g. encumbrance at least 80% — stop the loop to go sell or stash."/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- THEN: once the action is done. -->
+                    <Border Grid.Row="2" Grid.Column="2" Classes="Section">
+                        <Grid ColumnDefinitions="110,*" RowSpacing="4"
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="SectionHeader" Text="THEN (once it's done)"/>
+
+                            <RadioButton Grid.Row="1" GroupName="Then" Content="Go back"
+                                         IsChecked="{Binding IsThenResume, Mode=TwoWay}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Classes="Hint"
+                                       Text="to the loop / auto-lair / walk that was running when the event fired"/>
+
+                            <RadioButton Grid.Row="2" GroupName="Then" Content="Start loop"
+                                         IsChecked="{Binding IsThenLoop, Mode=TwoWay}"/>
+                            <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding AvailableLoopNames}"
+                                      SelectedItem="{Binding ThenLoopName, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsThenLoop}"
+                                      PlaceholderText="(select a saved loop)"/>
+
+                            <RadioButton Grid.Row="3" GroupName="Then" Content="Auto-lair"
+                                         IsChecked="{Binding IsThenAutoLair, Mode=TwoWay}"/>
+                            <ComboBox Grid.Row="3" Grid.Column="1" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding AvailableAutoLairNames}"
+                                      SelectedItem="{Binding ThenAutoLairSetupName, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsThenAutoLair}"
+                                      PlaceholderText="(select a saved auto-lair setup)"/>
+
+                            <RadioButton Grid.Row="4" GroupName="Then" Content="Walk to"
+                                         IsChecked="{Binding IsThenWalkTo, Mode=TwoWay}"/>
+                            <TextBox Grid.Row="4" Grid.Column="1"
+                                     Text="{Binding ThenWalkToText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     IsEnabled="{Binding IsThenWalkTo}"
+                                     PlaceholderText="coord (1/297) or room name"/>
+
+                            <RadioButton Grid.Row="5" GroupName="Then" Content="Fire event"
+                                         IsChecked="{Binding IsThenEvent, Mode=TwoWay}"/>
+                            <ComboBox Grid.Row="5" Grid.Column="1" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding AvailableEventNames}"
+                                      SelectedItem="{Binding ThenEventName, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsThenEvent}"
+                                      PlaceholderText="(another event, by name)"
+                                      ToolTip.Tip="Runs that event next; its own Then carries on from there, and its Go back returns to what this event interrupted."/>
+
+                            <RadioButton Grid.Row="6" GroupName="Then" Content="Nothing"
+                                         IsChecked="{Binding IsThenNothing, Mode=TwoWay}"/>
+                            <TextBlock Grid.Row="6" Grid.Column="1" Classes="Hint" Text="stop there"/>
+
+                            <TextBlock Grid.Row="7" Grid.ColumnSpan="2" Classes="Error" TextWrapping="Wrap"
+                                       IsVisible="{Binding ThenNeverRuns}"
+                                       Text="A loop or auto-lair never finishes on its own — set a STOP AFTER rule, or Then never runs."/>
+                        </Grid>
+                    </Border>
             </Grid>
 
-            <!-- WHAT section: shared two-column layout so every action
-                 input starts at the same x. WHAT-side targets are
-                 validated on Save (popup) rather than inline. -->
-            <Grid Grid.Row="2" Margin="0,12,0,0"
-                  ColumnDefinitions="100,*"
-                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
-                  RowSpacing="4">
-                <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
-                           Classes="SectionHeader" Text="WHAT (action)"/>
-
-                <RadioButton Grid.Row="1" Grid.Column="0" Classes="Row"
-                             GroupName="What" Content="Walk to"
-                             IsChecked="{Binding IsActionWalkTo, Mode=TwoWay}"/>
-                <TextBox Grid.Row="1" Grid.Column="1"
-                         Text="{Binding WalkToText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         IsEnabled="{Binding IsActionWalkTo}"
-                         PlaceholderText="coord (1/297) or room name"
-                         HorizontalAlignment="Left" Width="320"/>
-
-                <RadioButton Grid.Row="2" Grid.Column="0" Classes="Row"
-                             GroupName="What" Content="Start loop"
-                             IsChecked="{Binding IsActionLoop, Mode=TwoWay}"/>
-                <ComboBox Grid.Row="2" Grid.Column="1"
-                          ItemsSource="{Binding AvailableLoopNames}"
-                          SelectedItem="{Binding LoopName, Mode=TwoWay}"
-                          IsEnabled="{Binding IsActionLoop}"
-                          PlaceholderText="(select a saved loop)"
-                          HorizontalAlignment="Left" Width="320"/>
-
-                <RadioButton Grid.Row="3" Grid.Column="0" Classes="Row"
-                             GroupName="What" Content="Auto-lair"
-                             IsChecked="{Binding IsActionAutoLair, Mode=TwoWay}"/>
-                <ComboBox Grid.Row="3" Grid.Column="1"
-                          ItemsSource="{Binding AvailableAutoLairNames}"
-                          SelectedItem="{Binding AutoLairSetupName, Mode=TwoWay}"
-                          IsEnabled="{Binding IsActionAutoLair}"
-                          PlaceholderText="(select a saved auto-lair setup)"
-                          HorizontalAlignment="Left" Width="320"/>
-
-                <RadioButton Grid.Row="4" Grid.Column="0"
-                             VerticalAlignment="Top" Margin="0,4,0,0"
-                             GroupName="What" Content="Command"
-                             IsChecked="{Binding IsActionCommand, Mode=TwoWay}"/>
-                <StackPanel Grid.Row="4" Grid.Column="1" Spacing="2"
-                            HorizontalAlignment="Left" Width="320">
-                    <TextBox Text="{Binding CommandText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             IsEnabled="{Binding IsActionCommand}"
-                             AcceptsReturn="False"
-                             PlaceholderText="stat; who; abil 145^M (empty = bare CR)" />
-                    <TextBlock Classes="Hint"
-                               Text="Supports ^M and ; for multi-fire; empty = carriage return"/>
-                </StackPanel>
-
-                <RadioButton Grid.Row="5" Grid.Column="0" Classes="Row"
-                             GroupName="What" Content="Roomba"
-                             IsChecked="{Binding IsActionRoomba, Mode=TwoWay}"/>
-                <ComboBox Grid.Row="5" Grid.Column="1"
-                          ItemsSource="{Binding RoombaModeOptions}"
-                          SelectedItem="{Binding SelectedRoombaMode, Mode=TwoWay}"
-                          IsEnabled="{Binding IsActionRoomba}"
-                          HorizontalAlignment="Left" Width="320"
-                          ToolTip.Tip="Start a Roomba sweep of your actively-managed rooms (stops any walk, loop or auto-lair first). Inventory only walks the circuit and refreshes the item log without moving anything."/>
-            </Grid>
-
-            <!-- Save / Cancel — centered, snug under the WHAT section. -->
-            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8"
-                        HorizontalAlignment="Center" Margin="0,12,0,0">
+            <!-- Save / Cancel -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                 <Button Content="Save" Width="100"
                         IsEnabled="{Binding CanSave}"
                         Command="{Binding SaveCommand}"
