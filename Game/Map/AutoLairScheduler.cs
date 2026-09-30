@@ -13,11 +13,12 @@ namespace MudPlay.Game.Map;
 // wastes that information. This scheduler picks the lair whose entry
 // timing minimises a configurable cost (wasted respawn vs idle wait).
 //
-// Entry-triggered respawn: in MajorMUD the lair's respawn counter
-// doesn't tick until the player enters. The scheduler treats
-// LairCandidate.ReadyAt as "earliest time the room repopulates when
-// re-entered" — i.e. LastEntered + RespawnSeconds. Never-entered lairs
-// report ReadyAt = null and are treated as ready immediately.
+// A lair repopulates when the player enters it after its clock has run
+// out. The scheduler treats LairCandidate.ReadyAt as "earliest time the
+// room repopulates when re-entered" — LairTimerStore.ClockStart (the
+// room's last kill on Stock, the entry on Paradigm) + RespawnSeconds.
+// Lairs with no clock start this session report ReadyAt = null and are
+// treated as ready immediately.
 //
 // Scoring: per candidate, the scheduler computes slack = entryArrival -
 // readyAt.
@@ -150,9 +151,9 @@ public enum AutoLairHeuristic
 // trivial to unit-test against fixtures.
 //   Lair: the marked lair room key.
 //   ReadyAt: wall-clock instant at which the lair's spawn check will be
-//     ready on next entry, i.e. LastEntered + RespawnSeconds. null when
-//     the player hasn't entered the lair this session — treated as
-//     "ready now" by the scheduler.
+//     ready on next entry, i.e. LairTimerStore.NextReadyAt. null when
+//     the lair has no clock start this session — treated as "ready now"
+//     by the scheduler.
 //   ApproachHops: BFS hop count from the current room to WaitRoom. null
 //     when unreachable; the scheduler skips the candidate.
 //   WaitRoom: the neighbour of Lair the walker should stop in while

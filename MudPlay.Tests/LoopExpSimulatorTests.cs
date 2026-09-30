@@ -23,8 +23,9 @@ public sealed class LoopExpSimulatorTests
     private static ExpTarget Boss(int id, double exp, int regenHours, string name = "boss")
         => new(1, exp, regenHours * 3600, MonsterId: id, IsBoss: true, MonsterName: name);
 
-    private static ExpSimSettings Single(double secPerStep, double roundsPerMob = 1)
-        => new(secPerStep, ExpCombatMode.SingleTarget, roundsPerMob, RealConditionsMultiplier: 1);
+    private static ExpSimSettings Single(double secPerStep, double roundsPerMob = 1,
+        RealmType realm = RealmType.Stock)
+        => new(secPerStep, ExpCombatMode.SingleTarget, roundsPerMob, RealConditionsMultiplier: 1, Realm: realm);
 
     [Fact]
     public void PureInstantMob_CapsAt720Rounds()
@@ -35,17 +36,49 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
-    public void InstantMobPlusSlowLair_MatchesHandCalc()
+    public void Paradigm_InstantMobPlusSlowLair_MatchesHandCalc()
     {
         // The cave-worm room: worm (100, instant) + a 150s lair (13 avg). The
-        // lair fires 3600/150 = 24×, displacing 24 of the 720 worm kills:
-        // 696×100 + 24×13 = 69,912.
+        // lair's own clock runs from its own kill, so it fires 3600/150 = 24×,
+        // displacing 24 of the 720 worm kills: 696×100 + 24×13 = 69,912.
         ExpSimResult e = LoopExpSimulator.Simulate(
-            Route(Room(1, 866, Instant(100), Lair(1, 13, 150))), Single(secPerStep: 0));
+            Route(Room(1, 866, Instant(100), Lair(1, 13, 150))), Single(secPerStep: 0, realm: RealmType.ParaMud));
 
         Assert.InRange(e.ExpPerHour, 69_000, 70_500);
         ExpLairStat lair = Assert.Single(e.Lairs);
         Assert.InRange(lair.FiresPerHour, 22, 26);            // its 24/hr respawn cap
+    }
+
+    [Fact]
+    public void Stock_FixtureKilledEveryRound_HoldsTheRoomsLairEmpty()
+    {
+        // Stock's one room clock restarts on every kill in the room, a placed
+        // fixture's included, so a worm killed every round never lets the 150s
+        // lair beside it come back: the pure 72k worm cap, the lair all misses.
+        ExpSimResult e = LoopExpSimulator.Simulate(
+            Route(Room(1, 866, Instant(100), Lair(1, 13, 150))), Single(secPerStep: 0));
+
+        Assert.Equal(72000.0, e.ExpPerHour, 3);
+        ExpLairStat lair = Assert.Single(e.Lairs);
+        Assert.Equal(0, lair.FiresPerHour);
+        Assert.True(lair.MissesPerHour > 0);
+    }
+
+    [Fact]
+    public void Stock_LairRefillsTogether_AfterTheRoomsLastKill()
+    {
+        // A 3-mob, 60s lair, stood on (no travel), one 5s round per kill. Stock:
+        // all three come back together 60s after the THIRD kill — a 15s fight plus
+        // a 60s wait per clear → 48 clears × 3 = 144 kills/hr. Paradigm times each
+        // slot from its own kill, so the first two are back sooner and it out-earns
+        // Stock.
+        ExpRoute route = Route(Room(1, 100, Lair(3, 100, 60)));
+        ExpSimResult stock = LoopExpSimulator.Simulate(route, Single(secPerStep: 0));
+        ExpSimResult para = LoopExpSimulator.Simulate(route, Single(secPerStep: 0, realm: RealmType.ParaMud));
+
+        Assert.InRange(stock.ExpPerHour, 14_000, 14_800);
+        Assert.True(para.ExpPerHour > stock.ExpPerHour,
+            $"per-slot clocks should out-earn one room clock; stock {stock.ExpPerHour:N0}, para {para.ExpPerHour:N0}");
     }
 
     [Fact]
