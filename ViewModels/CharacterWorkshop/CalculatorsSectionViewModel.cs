@@ -1074,7 +1074,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         // this and Monster Intel's rounds-to-kill read identically (it carries the
         // +MinDamage add — abil 1 — the old inline call here silently dropped).
         MeleeOffense off = CombatCalculator.ComputeMeleeOffense(
-            type, _realm, _level, _nCombatLevel, _str, _agi, wMin, wMax, wSpeed, wStrReq,
+            type, _realm, _level, _nCombatLevel, _str, _agi, _intel, _chm, wMin, wMax, wSpeed, wStrReq,
             _plusMaxDamage, _plusMinDamage, _plusCrits, _encumCur, _encumMax);
         _hasWeapon = off.HasWeapon;
         _avgWeaponDamage = off.AvgDamage;

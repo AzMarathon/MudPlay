@@ -606,7 +606,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - **The in-fight curve differs** — see *Combat → Bash and smash damage vs DR* for the crit row (Stock compresses above 40, Paradigm caps at 65).
 
 **Client use:**
-- `CharacterCalculator.CalcBaseCritRating` (realm-split: the 75 cap is Stock only; the class Combat bonus is Paradigm only, fed from the class row's `CombatLVL` by Level Projection and the CP tooltips).
+- `CharacterCalculator.CalcBaseCritRating` (realm-split: the 75 cap is Stock only; the class Combat bonus is Paradigm only, fed from the class row's `CombatLVL`). Level Projection and the CP tooltips use it, and so does `CombatCalculator.ComputeMeleeOffense`, which adds it to the +Crits (ability 58) sum before `CalcCritChance`. So the Workshop Calculators tab, Monster Intel's rounds-to-kill and the Item Finder's damage per round all count it. (Until 2026-09-30 those three used +Crits alone.)
 
 ### Melee damage bonus (STR onto the weapon's own range)
 *Status: [OBSERVED] 2026-09-30 · Realm: differs*
@@ -928,6 +928,7 @@ How HP works from full health down through dropping and death, how monster healt
 ### Poison prevents resting
 *Status: CONFIRMED 2026-08-17 (user; report `paradigm-20260817-092945`); meditate split by realm 2026-09-28 · Realm: differs*
 
+- **How the poison itself ticks and stacks** is in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*.
 - **While poisoned you cannot rest.** A `rest` issued while poisoned does **not** put you into the `(Resting)` state — poison refuses / breaks it — so the position never becomes Resting and the resting recovery doesn't happen; you only get the slow standing regen.
 - **Meditating while poisoned differs by realm.**
   - **Stock refuses it too** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p)*: both commands check the character's poison amount and refuse while it's above 0.
@@ -1769,7 +1770,7 @@ How one damage spell cast against a monster is worked out.
   2. **Spell targeting restriction (e.g. living-only)** — see *Spell targeting: monster type tags* and
      *"Your spell has no effect" — immunity spends no round*.
   3. **Damage-type resistance** — see *Elemental resistance — flat, deterministic, pre-emptable*,
-     *Magic Resist (M.R.) and `TypeOfResists`* and *Poison (`AttType 6`) — binary immunity*.
+     *Magic Resist (M.R.) and `TypeOfResists`* and *Poison (`AttType 6`) — immunity and damage resist*.
 - **`SpellImmu +N` blocks any spell whose base learnable level (the Spells table `ReqLevel`) is below
   N; such a spell deals no damage.** A spell learnable at level ≥ N still lands.
 - **Example:** monster **#184** has `SpellImmu +10`, so every spell learnable at level 9 or lower can't
@@ -1987,16 +1988,55 @@ How one damage spell cast against a monster is worked out.
   - So correcting the code-1↔17 gating changed **no combat decision** — the old reversed note was never
     implemented in engine code; it drove only the (now-fixed) doc and this display calculator.
 
-### Poison (`AttType 6`) — binary immunity
-*Status: CONFIRMED*
+### Poison (`AttType 6`) — immunity and damage resist
+*Status: mixed (per-bullet tags)*
 
-- **Poison is not resistible.** It has **no** resist value and **no** `Resist-Poison` code — a target is
-  either affected or immune, never "partially resisted."
-- **Immunity is sourced from race / items, not a resist stat:**
+- **Being poisoned is all-or-nothing.** A target either picks up the poisoned condition or is immune to it; there is no partial chance *(CONFIRMED, user; [OBSERVED] Stock 2026-09-30, `wccmmud.dll` 1.11p `_monster_cast` @ `0x428f43`: ImmuPoison (ability 21) from any source skips the poison entirely)*.
+- **On Stock, the damage part of a poison spell cast on a player is cut by the target's ImmuPoison value**, like any other resist: `damage × (100 − ImmuPoison) / 100` *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p resist switch @ `0x4280c1`, case 6 @ `0x428126` reads ability 21; applied @ `0x428230`)*. An earlier note said poison has no resist value at all and is never partially resisted; superseded 2026-09-30 for this Stock path. Not recorded: Paradigm, and poison spells a player casts on a monster.
+- **A player's poison spell with a duration is resisted outright by a target player with ImmuPoison** *([OBSERVED] 2026-09-30, Stock `_cast_user_target` @ `0x444d89`)*.
+- **Immunity is sourced from race / items, not a resist stat** *(CONFIRMED, user)*:
   - The **Kang** race is poison-immune.
   - The **golden headdress** item grants poison immunity.
   - **Swamp boots** / **snakeskin boots** negate certain room-cast "swamp poison" effects — snakeskin also
     grants immunity to certain poisons, varying by game-data set.
+- **The ticking, stacking and cures** are in *Poison and damage over time — ticks, stacking and cures*.
+
+**Client use:**
+- `SpellDamageCalculator.Element` treats poison as having no scalable resist, for spells cast at monsters. Incoming poison damage against the player doesn't apply the Stock ImmuPoison cut yet.
+
+### Poison and damage over time — ticks, stacking and cures
+*Status: [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p (addresses per bullet) · Realm: Stock; Paradigm not recorded*
+
+- **A player's poison is one number, not a list.** The engine keeps a single poison amount per player (player record `+0xbe`).
+  - **A new poison replaces it only if it's larger:** `amount = max(current, new)`. Poisons never add together. This applies to every source: monster casts (`_monster_cast` @ `0x428f5e`, `_monster_cast_area`), player casts (`_cast_user_target`) and melee-hit poison (`_attack_monster_user`, `_attack_user_user`).
+  - **The amount is the poison ability's value.** When that's 0, which is true of every Stock poison spell, it's the spell's rolled Min–Max damage.
+- **The poison tick comes every 30 seconds** on the slow update (`_slow_update_character` @ `0x4221fa`):
+  - it prints `You feel ill.` to the poisoned player only;
+  - it takes the whole poison amount off HP; the amount isn't re-rolled per tick;
+  - dropping below 0 prints `%s drops to the ground!` to the room, and the tick can kill (`_check_kill_user`), with no killer and no exp awarded;
+  - the normal 30-second regen still runs after it, so the net change is regen minus poison.
+- **How long it lasts:** a poison spell with a duration also takes one of the player's affect slots (see *Stock "10 spelling" affect cap*).
+  - When that slot expires, the spell's amount is **subtracted** from the poison number, floored at 0 (`_perform_spell_termination_player_upkeep` @ `0x44a172`), and the spell's own wear-off message prints.
+  - Poison from a source with no duration has no slot, so it lasts until it's cured or you die. No Stock spell works that way.
+  - **The poison amount never shrinks on its own.** Only slot expiry, cures, the healer and death lower it.
+- **Two poisons at once interact badly**, because of the max-then-subtract rule. With a 10 and a 30 on you, the poison number is 30:
+  - if the 10 wears off first, the number drops to 20 for the rest of the 30's duration;
+  - if the 30 wears off first, the number drops to 0 while the 10 is still on you.
+  So a second poison never adds damage and can cut the first one short.
+- **Other damage-over-time spells stack.** They live in the affect slots and tick every 3 seconds on the medium update (`_medium_update_character` @ `0x422aeb`; slot upkeep `_perform_routine_spell_player_upkeep` @ `0x449bf0`):
+  - `Damage` (ability 1) and `DrainLife` (8) take the slot's stored value off HP each tick, can drop the player and can kill;
+  - these ticks print no text; only the prompt's HP changes;
+  - `Dur` counts these 3-second ticks;
+  - different damage-over-time spells run side by side, one slot each.
+- **Recasting the same spell on someone who has it:**
+  - **Cast by a monster:** the slot is refreshed (new value, duration reset) only if the new roll is strictly higher. Otherwise the cast is dropped and the monster gets its energy back (@ `0x428fb5`).
+  - **Cast by a player** (`_add_cast_spell_to_user` @ `0x43ec31`): some casts overwrite the slot, the rest fail with `You attempt to cast %s, but fail.`. Poison casts overwrite.
+- **Cures:**
+  - **A CurePoison (ability 20) spell ends one poison spell**, the first poison slot it finds, running its wear-off. It then lowers the poison number by the cure's own value, floored at 0 (Stock cure poison: 8) (`_cast_user_target` @ `0x44683f`). So one cast can leave a player with two poisons still poisoned.
+  - **The healer's `buy cure poison`** (`_buy_item` @ `0x41b9e6`) zeroes the poison number and ends every poison slot, for 25 silver: `... and your poisoning is cured.`. If you weren't poisoned it costs 15 silver: `... and find that you were not poisoned!`.
+  - **Death** ends every slot and zeroes the poison number.
+- **Where it shows:** `You are Poisoned!` in the status display, a `P` flag in `par`, and `%s is poisoned!` when someone looks at you.
+- **Resting and meditating are refused while poisoned** — see *Health, resting & recovery → Poison prevents resting*.
 
 ### Attack-spell mana efficiency
 *Status: Unrated (client formula as used by Monster Intel)*

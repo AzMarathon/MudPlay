@@ -590,7 +590,8 @@ public static class CharacterCalculator
                 // Smash to a single swing, so no per-type special-casing is needed.
                 MeleeOffense offense = CombatCalculator.ComputeMeleeOffense(
                     type, realm, stats.Level, nCombatLevel,
-                    stats.Strength, stats.Agility, t.WeaponMin, t.WeaponMax, t.WeaponSpeed, t.WeaponStrReq,
+                    stats.Strength, stats.Agility, stats.Intellect, stats.Charm,
+                    t.WeaponMin, t.WeaponMax, t.WeaponSpeed, t.WeaponStrReq,
                     t.PlusMaxDamage, t.PlusMinDamage, t.PlusCrits, encum.CurrentWeight, encum.MaxWeight);
 
                 avgDamage = offense.AvgDamage;

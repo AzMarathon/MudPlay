@@ -993,7 +993,7 @@ The **Item Finder** button (in Equipment Manager) opens a searchable catalog of 
 
 **Attack type and damage columns.** The **Attack type** dropdown (Attack, Backstab, Bash, Smash, Punch, Kick, Jumpkick) sets which attack the weapon columns model, using your current stats and the rest of the gear you're wearing:
 - **Swings (W. Spd)**: swings per round with that weapon. Under **Backstab** it reads 1 on backstab-capable weapons, since a backstab is one strike, and blank on the rest.
-- **Dmg/Rnd**: average damage per round with that weapon for the selected attack, crits included. It assumes every swing lands: there's no monster to roll against, so treat it as a comparison figure. Monster Intel does the per-monster version.
+- **Dmg/Rnd**: average damage per round with that weapon for the selected attack, crits included. The crit chance is your crit rating from level and stats (see *The exact formulas*) plus +Crits gear and Quick & Deadly; the Calculators tab and Monster Intel count crit the same way. It assumes every swing lands: there's no monster to roll against, so treat it as a comparison figure. Monster Intel does the per-monster version.
 - **Est. BS Dmg**: your backstab damage range and average with that weapon (e.g. `62-118 (90)`), shown on every backstab-capable weapon whatever the attack type. It uses the same backstab formula as Monster Intel and the Calculators tab. It's different from **BS Min-Max**, which is only the item's own +BS bonus.
 
 A weapon's own +Strength / +Agility / +Stealth replaces your current weapon's in these numbers rather than adding to it.

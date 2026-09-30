@@ -823,10 +823,13 @@ public static class CombatCalculator
     // a Bash swing rate, or the Smash single-swing can't read differently on the
     // two surfaces. Accuracy is deliberately NOT computed here: the Calculators
     // tab folds martial-arts strikes into its accuracy path, which has no analogue
-    // on the weapon side, so each caller resolves accuracy itself.
+    // on the weapon side, so each caller resolves accuracy itself. combatLevel is
+    // the class table's raw CombatLVL; plusCrits is the +Crits from gear, race,
+    // class, quests and buffs, and the stat-and-level crit rating is added here.
     public static MeleeOffense ComputeMeleeOffense(
         MudAttackType type, RealmType realmType, int level, int combatLevel,
-        int strength, int agility, int weaponMin, int weaponMax, int weaponSpeed, int weaponStrReq,
+        int strength, int agility, int intellect, int charm,
+        int weaponMin, int weaponMax, int weaponSpeed, int weaponStrReq,
         int plusMaxDamage, int plusMinDamage, int plusCrits, int currentEncum, int maxEncum)
     {
         bool hasWeapon = weaponMax > 0;
@@ -851,7 +854,9 @@ public static class CombatCalculator
         if (type == MudAttackType.Normal && hasWeapon)
         {
             int qnd = (weaponStrReq <= 0 || strength >= weaponStrReq) ? swings.QnDCritBonus : 0;
-            critChance = CalcCritChance(plusCrits, qnd, realmType);
+            int critRating = CharacterCalculator.CalcBaseCritRating(
+                level, intellect, agility, charm, realmType, combatLevel) + plusCrits;
+            critChance = CalcCritChance(critRating, qnd, realmType);
             avgCritDamage = dmg.MaxDamage * 3;
         }
 

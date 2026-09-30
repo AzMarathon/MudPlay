@@ -755,6 +755,26 @@ public sealed class CombatCalculatorTests
         Assert.True(bonus <= 20);
     }
 
+    // A normal attack's crit starts from the stat-and-level crit rating, not just
+    // the +Crits from gear: INT 100 is +5 over INT 50 with everything else equal.
+    [Fact]
+    public void ComputeMeleeOffense_CritIncludesStatRating()
+    {
+        MeleeOffense avg = CombatCalculator.ComputeMeleeOffense(
+            MudAttackType.Normal, RealmType.Stock, level: 30, combatLevel: 5,
+            strength: 100, agility: 50, intellect: 50, charm: 50, weaponMin: 10, weaponMax: 20,
+            weaponSpeed: 3000, weaponStrReq: 0, plusMaxDamage: 0, plusMinDamage: 0, plusCrits: 2,
+            currentEncum: 0, maxEncum: 1000);
+        MeleeOffense smart = CombatCalculator.ComputeMeleeOffense(
+            MudAttackType.Normal, RealmType.Stock, level: 30, combatLevel: 5,
+            strength: 100, agility: 50, intellect: 100, charm: 50, weaponMin: 10, weaponMax: 20,
+            weaponSpeed: 3000, weaponStrReq: 0, plusMaxDamage: 0, plusMinDamage: 0, plusCrits: 2,
+            currentEncum: 0, maxEncum: 1000);
+
+        Assert.Equal(CharacterCalculator.CalcBaseCritRating(30, 50, 50, 50, RealmType.Stock) + 2, avg.CritChance);
+        Assert.Equal(avg.CritChance + 5, smart.CritChance);
+    }
+
     // Ability-1 "Damage" gear raises the low end of a weapon's damage, so it must
     // lift the average — the shared ComputeMeleeOffense (used by both the
     // Calculators tab and Monster Intel) carries plusMinDamage, where the tab's
@@ -764,11 +784,11 @@ public sealed class CombatCalculatorTests
     {
         MeleeOffense without = CombatCalculator.ComputeMeleeOffense(
             MudAttackType.Normal, RealmType.ParaMud, level: 20, combatLevel: 20,
-            strength: 100, agility: 50, weaponMin: 10, weaponMax: 20, weaponSpeed: 30, weaponStrReq: 0,
+            strength: 100, agility: 50, intellect: 50, charm: 50, weaponMin: 10, weaponMax: 20, weaponSpeed: 30, weaponStrReq: 0,
             plusMaxDamage: 0, plusMinDamage: 0, plusCrits: 0, currentEncum: 0, maxEncum: 1000);
         MeleeOffense with = CombatCalculator.ComputeMeleeOffense(
             MudAttackType.Normal, RealmType.ParaMud, level: 20, combatLevel: 20,
-            strength: 100, agility: 50, weaponMin: 10, weaponMax: 20, weaponSpeed: 30, weaponStrReq: 0,
+            strength: 100, agility: 50, intellect: 50, charm: 50, weaponMin: 10, weaponMax: 20, weaponSpeed: 30, weaponStrReq: 0,
             plusMaxDamage: 0, plusMinDamage: 6, plusCrits: 0, currentEncum: 0, maxEncum: 1000);
 
         Assert.True(with.HasWeapon);
