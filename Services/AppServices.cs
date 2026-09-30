@@ -1414,6 +1414,7 @@ public sealed class AppServices
     // RoomTracker.IsInDarkRoom) and injects it into RoomClassifier so
     // CombatManager engages it as if it had been listed.
     public Game.Combat.DarkRoomCombatWatcher DarkRoomCombat { get; private set; } = null!;
+    public Game.Combat.MonsterSummonWatcher MonsterSummons { get; private set; } = null!;
 
     // Holds the movement stack for a short beat after each dead-reckoned dark-room
     // advance, so the game engine has time to reveal a hostile (its "strides in"
@@ -3849,6 +3850,21 @@ public sealed class AppServices
             Router, RoomTracker, RoomClassifier,
             currentTarget: () => Combat.CurrentTarget,
             log: Log);
+
+        // A monster's mid-fight summon ("The fat half-orc sentry shouts for aid!")
+        // re-displays the room so the summoned monster reaches the roster before its
+        // summoner dies. The wordings come from the Spells table + message catalogue,
+        // so a set switch or a message edit rebuilds them on next use.
+        MonsterSummons = new Game.Combat.MonsterSummonWatcher(Router, RoomClassifier,
+            build: () => new Game.Spells.SummonLineSet(
+                GameData.GetRawTable("Spells") is { } doc
+                    ? Game.Spells.SummonLineSet.SummonSpells(doc.RootElement)
+                    : Array.Empty<int>(),
+                Messages.Messages),
+            requestRoomRefresh: Combat.RequestRoomRefresh,
+            log: Log);
+        GameData.ActiveSetChanged += _ => MonsterSummons.Invalidate();
+        Messages.Messages.CollectionChanged += (_, _) => MonsterSummons.Invalidate();
 
         // Our own say echo ("You say \"…\"") only reaches the chat router — it's chat
         // by shape — so the combat engine hears about an attack the server read as a

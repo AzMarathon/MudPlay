@@ -2679,6 +2679,18 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
   - So a death-summon room yields far more than its face value, but the extra kill/wave time — and the cap on huge fan-outs — keep it below the naive exp-ratio multiple.
   - Bosses are left on their base exp (their death-summon, if any, is not folded — a rare edge, and boss exp is already a flat amortised approximation).
 
+### Mid-fight summons
+*Status: [OBSERVED] 2026-09-30 (user capture; game data v1.11p and Paradigm 1.9.1) · Realm: both (data); the capture's realm isn't recorded*
+
+- **A monster's between-round spell can be a summon.** Half-orc sentry #479 carries `MidSpell-0` 593 *summon orc warrior* at 10%. Spell 593 is `Abil-0` 12 (summon) with `AbilVal-0` 480 (*orc warrior*).
+- **The cast prints `The <monster> shouts for aid!`**, e.g. `The fat half-orc sentry shouts for aid!`. That's the Casting-on-you and witness wording of spells 510, 528 and 593 in both message seeds, so the line alone doesn't say which of the three was cast.
+- **The summoned monster is in the room at once and joins the fight**, with no arrival line and no fresh `Also here:`. In the capture, `The thin orc warrior all-out slashes you for 16 damage!` came the next round, while the sentry was still alive.
+- **The summoner's death line reuses the wording but isn't a cast:** `The half-orc sentry shouts for aid, and falls dead!`.
+- **Not recorded:** whether the shout still prints when the summon fails at the room cap. The cap is described in *Death-summon cascades*.
+
+**Client use:**
+- `MonsterSummonWatcher` (built from `SummonLineSet`, the Target / witness wordings of every spell with ability 12) asks `CombatManager.RequestRoomRefresh` for the debounced bare-CR room re-display when the named caster is a monster on the roster. The summoned monster then reaches the roster before its summoner dies. Until 2026-09-30 the summoner's death emptied the roster, dropped combat, and the client rested or looted while the summoned monster attacked.
+
 ### Room-spell monster summons
 
 *Status: CONFIRMED 2026-08-06 (user + game-data trace, Paradigm 1.9.1); cadence CONFIRMED 2026-09-08 (user); estimator model = user design, revised 2026-09-08 · Realm: both (cadence differs)*

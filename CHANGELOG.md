@@ -1,5 +1,9 @@
 # Version history
 
+## 3.128.3
+
+- A monster's mid-fight summon ("shouts for aid!") re-displays the room, so the summoned monster is fought instead of the client resting or looting once the summoner dies
+
 ## 3.128.2
 
 - Unobtainable now also lists monsters that can never spawn despite being marked in game (Cygani), and says why each row is there

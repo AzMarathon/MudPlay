@@ -403,6 +403,17 @@ someone hiding) or an item doesn't count.
 This only runs while the room is dark. In a lit room **Also here:** is
 authoritative and is used instead.
 
+**A monster that summons help mid-fight.** Some monsters cast a summon between
+rounds. The half-orc sentry's `The fat half-orc sentry shouts for aid!` brings in
+an orc warrior. The new monster arrives with no line of its own, so MudPlay
+re-displays the room (a bare Enter) as soon as it reads the summon line. The
+summoned monster joins the room list and gets fought next, so killing the
+summoner no longer ends the fight while its helper is still swinging at you. The
+summon wordings come from the Spells table and the message catalogue, so an
+edited or new summon message is picked up too. Nothing is sent while the combat
+engine is off or the room is dark, and at most one re-display goes out every
+few seconds.
+
 ## The map and obstacles
 
 **Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target), then **Walk here**, **I am here** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list), **Use Teleport**, **Center on Player**, **Center on Destination** (only while a walk is under way — jumps the view to where the walk ends: the walk-to target, or the loop's start room / the next lair when a loop or Auto-Lair is walking there first), **Center on…**, and toggles to mark a room **Avoid** or **Stash**. Like a manual pan, a re-centre holds the view for a while before it follows you again — 15 seconds by default, set in **Settings → Other → Navigation map: hold a browsed view for N seconds**.
