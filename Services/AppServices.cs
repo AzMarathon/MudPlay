@@ -8222,17 +8222,17 @@ public sealed class AppServices
             ? new Game.Map.ParadigmMovementCostModel(() => Inventory.Snapshot, GameData, lagSeconds)
             : BuildTravelCostModel(new Models.Profile.AutoLairSettings())).EstimateTravel(1).TotalSeconds;
 
-    // The live character and game data a loop simulation plays, read the same way the
-    // combat and casting engines read them (the Combat / Health / Spells sections, the
-    // shared monster-overlay resolve, worn gear, obtained spells) — moved to atLevel
-    // when one is given (SimLevelProjection). Null before a `stat` screen has told us
-    // the character's level and pools.
     public Game.Simulation.SimulationSource LoopSimulationSource =>
         _loopSimulationSource ??= new(BuildLoopSimulation, () => PlayerStats.Name, () => PlayerStats.Level,
             LoopSimulationWalkSeconds, AppPaths.LogsDir);
     private Game.Simulation.SimulationSource? _loopSimulationSource;
 
-    public (Game.Simulation.SimCharacter Character, Game.Simulation.SimWorld World)? BuildLoopSimulation(int? atLevel = null)
+    // The live character and game data a loop simulation plays, read the same way the
+    // combat and casting engines read them (the Combat / Health / Spells sections, the
+    // shared monster-overlay resolve, worn gear, obtained spells) — moved to atLevel
+    // when one is given (SimLevelProjection). Null before a `stat` screen has told us
+    // the character's level and pools.
+    private (Game.Simulation.SimCharacter Character, Game.Simulation.SimWorld World)? BuildLoopSimulation(int? atLevel = null)
     {
         if (PlayerStats.Level <= 0 || PlayerStats.MaxHits <= 0) return null;
         int level = atLevel is > 0 ? atLevel.Value : PlayerStats.Level;

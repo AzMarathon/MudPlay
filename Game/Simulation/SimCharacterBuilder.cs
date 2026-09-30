@@ -172,6 +172,6 @@ public static class SimCharacterBuilder
         return (0, 0);
     }
 
-    internal static int ReadInt(JsonElement row, string name) =>
+    private static int ReadInt(JsonElement row, string name) =>
         row.TryGetProperty(name, out JsonElement v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int i) ? i : 0;
 }

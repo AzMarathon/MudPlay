@@ -2480,8 +2480,11 @@ public sealed class LoopRunner : IRecoverableEngine
     // follow-up event to clear it. Mirrors Stop's reset-then-raise ordering.
     // Callers build the LoopEvent as the argument, so its Detail (which reads
     // live step state like _index) is frozen before Reset() wipes that state.
+    // Every terminal failure passes here (Stop logs its own line), so this is the
+    // program log's end-of-run marker for a loop that didn't stop cleanly.
     private void RaiseAfterReset(LoopEvent evt)
     {
+        _log?.Info("LoopRunner", $"Ended: loop='{_loop?.Name ?? "?"}' reason={evt.Detail}");
         Reset();
         Raise(evt);
     }

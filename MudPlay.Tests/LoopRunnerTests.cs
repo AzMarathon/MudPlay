@@ -101,7 +101,7 @@ public sealed class LoopRunnerTests : IDisposable
     // to capture them in Harness.Posted for manual Drain() — needed to interleave
     // a same-burst gate assert between a resume and its deferred send.
     private Harness NewHarness(string json = GraphJson, bool deferResume = false,
-        bool wireRecovery = false, bool withWalker = false)
+        bool wireRecovery = false, bool withWalker = false, LogService? log = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
@@ -133,7 +133,7 @@ public sealed class LoopRunnerTests : IDisposable
         // (Walker before LoopRunner) and reproducing the same-burst reentrancy that order
         // depends on.
         AutoWalkManager? walker = withWalker ? new AutoWalkManager(graph, bfs, tracker, coord) : null;
-        LoopRunner runner = new(tracker, coord, graph: graph, recovery: gate, bfs: bfs,
+        LoopRunner runner = new(tracker, coord, log: log, graph: graph, recovery: gate, bfs: bfs,
             walker: walker, filter: filter, postToUi: deferResume ? posted.Add : a => a());
         Harness h = new()
         {
@@ -568,6 +568,26 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.True(sawFail);
         Assert.Equal(LoopState.Idle, stateAtFail);
         Assert.Null(loopAtFail);
+    }
+
+    [Fact]
+    public void Failed_LogsOneEndedLine_AndACleanStopDoesNot()
+    {
+        // The live-vs-simulated check closes a logged loop session on Stop or Ended;
+        // a failure never passes through Stop, so it must leave its own line.
+        LogService log = new();
+        Harness h = NewHarness(log: log);
+        h.Tracker.SetLocated(new RoomKey(1, 3));   // C: only S exit; AbCycle's first step is N
+        h.Runner.Start(AbCycle());
+        Assert.Single(log.Snapshot(), e => e.Source == "LoopRunner" && e.Message.StartsWith("Ended: loop='ab' reason=", StringComparison.Ordinal));
+
+        LogService stopLog = new();
+        Harness s = NewHarness(log: stopLog);
+        s.Tracker.SetLocated(new RoomKey(1, 1));
+        s.Runner.Start(AbCycle());
+        s.Runner.Stop();
+        Assert.Contains(stopLog.Snapshot(), e => e.Message.StartsWith("Stop: loop='ab'", StringComparison.Ordinal));
+        Assert.DoesNotContain(stopLog.Snapshot(), e => e.Message.StartsWith("Ended:", StringComparison.Ordinal));
     }
 
     // ----- auto-recovery: blocked-at-source reroute --------------------

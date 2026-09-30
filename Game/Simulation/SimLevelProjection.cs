@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Spells;
 using MudPlay.Services;
@@ -8,9 +7,9 @@ namespace MudPlay.Game.Simulation;
 // Moves the character to another level for a simulation — to check a loop you
 // played at L45 against what the simulator predicts at L45, or to ask what a loop
 // is worth ten levels on. Max HP, max mana and Spellcasting shift by the class /
-// race formulas' difference between the two levels (LevelProjectionCalculator's
-// average HP roll, CharacterCalculator's mana and Spellcasting), so the gear, quest
-// and real-roll share of today's numbers carries over unchanged; everything else
+// race formulas' difference between the two levels (CharacterCalculator's average
+// HP roll, mana and Spellcasting), so the gear, quest and real-roll share of
+// today's numbers carries over unchanged; everything else
 // the builder derives from the level (accuracy, swings, regen, spell scaling) moves
 // with it. Stats and gear stay as they are now. A spell that needs a higher level
 // than the target is dropped.
@@ -23,20 +22,19 @@ public static class SimLevelProjection
         ArgumentNullException.ThrowIfNull(now);
         ArgumentNullException.ThrowIfNull(gameData);
         int maxHits = now.MaxHits, maxMana = now.MaxMana, spellcasting = now.Spellcasting;
-        if (targetLevel != now.Level
-            && gameData.FindRowByName("Classes", now.Class) is JsonElement cls
-            && gameData.FindRowByName("Races", now.Race) is JsonElement race)
+        StatContext ctx = StatContext.Resolve(gameData, now.Class, now.Race, gameData.ActiveRealm);
+        // No class row (hit dice 0) leaves nothing to shift by, so today's pools stand.
+        if (targetLevel != now.Level && ctx.MinHits + ctx.MaxHits > 0)
         {
-            int mageryType = SimCharacterBuilder.ReadInt(cls, "MageryType"), mageryLevel = SimCharacterBuilder.ReadInt(cls, "MageryLVL");
-            LevelProjection Project(int level) => LevelProjectionCalculator.ProjectLevel(
-                level, chart: 0, now.Strength, now.Intellect, now.Willpower, now.Agility, now.Health, now.Charm,
-                SimCharacterBuilder.ReadInt(cls, "MinHits"), SimCharacterBuilder.ReadInt(cls, "MaxHits"), SimCharacterBuilder.ReadInt(race, "HPPerLVL"),
-                mageryType, mageryLevel, gameData.ActiveRealm);
-            LevelProjection from = Project(now.Level), to = Project(targetLevel);
-            maxHits = Math.Max(1, maxHits + (to.HpMin + to.HpMax) / 2 - (from.HpMin + from.HpMax) / 2);
-            maxMana = Math.Max(0, maxMana + to.Mana - from.Mana);
-            spellcasting += CharacterCalculator.CalcSpellcasting(targetLevel, now.Intellect, now.Willpower, now.Charm, mageryType, mageryLevel, 0)
-                          - CharacterCalculator.CalcSpellcasting(now.Level, now.Intellect, now.Willpower, now.Charm, mageryType, mageryLevel, 0);
+            int Hp(int level) => CharacterCalculator.CalcMaxHp(now.Health, level, ctx.MinHits, ctx.MaxHits,
+                ctx.RaceHpPerLevel, plusMaxHp: 0, HpRollMode.Average);
+            maxHits = Math.Max(1, maxHits + Hp(targetLevel) - Hp(now.Level));
+            // A Mystic's pool is kai, which the mana formula doesn't describe.
+            if (ctx.MageryType != 5)
+                maxMana = Math.Max(0, maxMana + CharacterCalculator.CalcMaxMana(ctx.MageryLevel, targetLevel, 0)
+                                              - CharacterCalculator.CalcMaxMana(ctx.MageryLevel, now.Level, 0));
+            spellcasting += CharacterCalculator.CalcSpellcasting(targetLevel, now.Intellect, now.Willpower, now.Charm, ctx.MageryType, ctx.MageryLevel, 0)
+                          - CharacterCalculator.CalcSpellcasting(now.Level, now.Intellect, now.Willpower, now.Charm, ctx.MageryType, ctx.MageryLevel, 0);
         }
         return new PlayerStats
         {

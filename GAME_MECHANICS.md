@@ -480,7 +480,13 @@ How the game's talk modes and chat channels behave: say forms, the gang channel'
 
 ## Character stats & progression
 
-How a character earns and spends character points (CP), how exp needed per level is computed, where and how training works, and what each base stat contributes to derived combat/utility stats.
+How a character is named, how it earns and spends character points (CP), how exp needed per level is computed, where and how training works, and what each base stat contributes to derived combat/utility stats.
+
+### Character names — the first name is unique
+*Status: CONFIRMED 2026-09-30 (user) · Realm: both (stated for MajorMUD as a whole)*
+
+- **No two characters share a first name** *[CONFIRMED]*. The first name alone identifies a character, even though some screens print the full name (first + last) and others only the first.
+- **Client use:** `LiveLoopSessions.Pool` matches logged loop sessions to the character by first name, and `LiveLoopSessions.Parse` drops the carried level when a log names a different first name (Exp/Hr Estimator's *Check against my play*).
 
 ### Where CP comes from (CP gain per level)
 *Status: CONFIRMED (user rule, verified against a live level-10 build)*

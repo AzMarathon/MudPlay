@@ -9,7 +9,18 @@ public sealed record SimLiveCheckRow(LiveLoopRecord Live, LoopSimSummary? Simula
     public double? DiffPercent => Simulated is { ExpPerHour: > 0 } s && Live.ExpPerHour > 0
         ? (s.ExpPerHour / Live.ExpPerHour - 1) * 100 : null;
 
-    public string Label => Problem is not null
-        ? $"{Live.Loop} L{Live.Level} · {Live.Hours:0.#} h live {Live.ExpPerHour:N0}/hr — {Problem}"
-        : $"{Live.Loop} L{Live.Level} · {Live.Hours:0.#} h live {Live.ExpPerHour:N0}/hr → simulated {Simulated!.ExpPerHour:N0} ({DiffPercent:+0.0;-0.0}%)";
+    public string Label
+    {
+        get
+        {
+            string live = $"{Live.Loop} L{Live.Level} · {Live.Hours:0.#} h live {Live.ExpPerHour:N0}/hr, " +
+                          $"{Live.KillsPerHour:0} kills/hr, {Deaths(Live.Deaths)}";
+            if (Problem is not null || Simulated is not { } s) return $"{live} — {Problem ?? "not simulated"}";
+            string diff = DiffPercent is { } d ? $" ({d:+0.0;-0.0}%)" : "";
+            return $"{live} → simulated {s.ExpPerHour:N0}/hr, {s.KillsPerHour:0} kills/hr, " +
+                   $"died in {s.Deaths} of {s.Runs.Count} runs{diff}";
+        }
+    }
+
+    private static string Deaths(int n) => n == 1 ? "1 death" : $"{n} deaths";
 }
