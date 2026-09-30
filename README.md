@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.18**
-> - Route details, the map tooltip and room info show your odds of disarming each trapped exit (disarm ~71%, springs 19%) when you have the Traps skill
-> - Help explains how Traps (finding) and disarming work, and that +Traps gear helps finding, not disarming
+> **Version 3.126.21**
+> - After a flee (hit and run or a low-health run), a loop walks back to the room it fled and carries on the lap, re-sneaking, instead of restarting from the nearest waypoint
+> - Trap disarm odds read disarm / failure (no dmg) / failure (dmg)
+> - "No combat during an auto-sell detour / auto-deposit trip" flips the Auto-Combat toggle itself, and only once the detour has left the loop's rooms
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

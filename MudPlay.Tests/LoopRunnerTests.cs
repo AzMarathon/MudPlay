@@ -949,6 +949,38 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    // Report paradigm-20260929-221352: a hit-and-run fled out of the step's room, then
+    // the loop re-planned from where the flee stopped — walking off to the nearest
+    // waypoint and restarting the lap instead of going back in. It now walks back to
+    // the room the step was headed for and carries on from the next step.
+    [Fact]
+    public void FleeResume_WalksBackToTheStepsRoom_AndCarriesOn()
+    {
+        Harness h = NewHarness(withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+        Assert.Equal(new[] { "n\r", "n\r" }, h.Sent.Select(b => Encoding.Latin1.GetString(b)));
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);   // a fight in C
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+        h.Runner.PauseForFlee("hit and run");
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        h.Tracker.SetLocated(new RoomKey(1, 2));                     // the flee ran south
+        h.Runner.ResumeAfterFlee(new RoomKey(1, 2));
+
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[^1]));   // walking back into C
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+        h.Drain();
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));   // step 3, not a new lap
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
     [Fact]
     public void RepeatedGenuineDesyncs_StillExhaustTheRecoveryBudget()
     {

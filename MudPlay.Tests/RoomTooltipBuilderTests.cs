@@ -1260,7 +1260,7 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     {
         Assert.True(RoomExit.TryParseWire("9/470 (Trap, 40 damage)", out RoomExit exit));
         Assert.Equal("Trap: 40 dmg", RoomTooltipBuilder.FormatExitHint(exit, data: null));
-        Assert.Equal("Trap: 40 dmg, disarm ~71%, springs 19%",
+        Assert.Equal("Trap: 40 dmg, disarm ~71%, failure (no dmg) 10%, failure (dmg) 19%",
             RoomTooltipBuilder.FormatExitHint(exit, data: null, TrapDisarmOdds.For(71)));
     }
 

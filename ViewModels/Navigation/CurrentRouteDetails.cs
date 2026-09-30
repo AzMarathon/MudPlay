@@ -116,7 +116,7 @@ public static class CurrentRouteDetails
     // "trap: 36 dmg (~11% of HP)". Falls back to a plain damage figure when max HP is
     // unknown, and to "trap (damage unknown)" for a trapped exit whose export carried no
     // damage figure. With the Traps skill, our odds of disarming it follow
-    // ("· disarm ~71%, springs 19%"). Null when the step crosses no trap.
+    // ("· disarm ~71%, failure (no dmg) 10%, failure (dmg) 19%"). Null when the step crosses no trap.
     private static string? TrapTextFor(int? damage, int maxHp, Game.TrapDisarmOdds? odds)
     {
         if (damage is not { } d) return null;

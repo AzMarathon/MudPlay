@@ -1261,7 +1261,7 @@ public static class BugReportBuilder
             Kv(sb, "Loop waiting on a trap disarm", svc.LoopRunner.IsAwaitingTrapDisarm.ToString());
         }
         // Settings → Cash + Items "No combat during an auto-sell detour / auto-deposit trip".
-        Kv(sb, "Combat off for a detour", svc.DetourSuppressesCombat() ?? "(no)");
+        Kv(sb, "Auto-Combat held off for a detour", svc.DetourCombat.HeldFor ?? "(no)");
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
         // Last loop / auto-lair run this session, retained past a stop/death —
         // what @path reports when idle so a party member can help the player

@@ -211,6 +211,9 @@ public sealed class AutoDepositManager : IDisposable
     // reroute single-controller.
     public bool IsRerouting => _busy;
 
+    // The engine this detour will pick back up (meaningful while it runs).
+    public DetourResume ResumePlan => _resume;
+
     // One-line reroute status for the bug report — the current phase, plus the
     // light being bought while a return-leg light detour is in flight. "idle" when
     // no reroute is running. Diagnoses a walker stuck mid-errand (the original

@@ -83,7 +83,7 @@ public sealed class TrapDisarmManagerTests : IDisposable
 
         mgr.SetWornTrapBonuses(() => (5, 0));               // a thief's kit: +5 find only
         Assert.Equal(66, mgr.DisarmSkill);
-        Assert.Equal("disarm ~66%, springs 24%", mgr.DisarmOdds!.Value.Summary);
+        Assert.Equal("disarm ~66%, failure (no dmg) 10%, failure (dmg) 24%", mgr.DisarmOdds!.Value.Summary);
 
         mgr.SetWornTrapBonuses(() => (0, 8));               // +8 DisarmTraps
         Assert.Equal(79, mgr.DisarmSkill);

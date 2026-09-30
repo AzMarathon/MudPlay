@@ -1393,6 +1393,7 @@ public partial class MainWindowViewModel : ObservableObject
         // LeaderDoorAssistManager — same gate-wrapped sender so helping the
         // leader force a door can't fire mid-password-prompt.
         AppServices.Current.LeaderDoorAssist.SetWireSender(engineSend);
+        AppServices.Current.DetourCombat.HoldChanged += OnDetourCombatHold;
         AppServices.Current.Walker.SetDoorEnqueuer(AppServices.Current.Door.Enqueue);
         AppServices.Current.Walker.SetDoorStopper(AppServices.Current.Door.StopAll);
         // Loop runner shares the same door FSM so a closed door mid-circuit is
@@ -5862,7 +5863,39 @@ public partial class MainWindowViewModel : ObservableObject
         // never resumed attacking the monster still sitting in the same room).
         AppServices.Current.RoomClassifier?.ReemitCurrent();
         MaybeEndSprintOnManualEngineEnable(value);
+        // Anyone else changing it mid-detour (the user, Sprint, a base-mode reset)
+        // takes it over, so the detour's end doesn't undo their choice.
+        if (!_detourDrivingCombat) _detourTurnedOffCombat = false;
     }
+
+    // ----- Detour combat hold ------------------------------------------------
+    // A sell / deposit detour with its "No combat" box ticked turns the real
+    // Auto-Combat toggle off once it leaves the loop's rooms, and back on when it's
+    // back or over (DetourCombatHold decides) — so a rest still fights to clear the
+    // room and the toolbar shows the state. Only a toggle the detour turned off is
+    // turned back on.
+    private bool _detourTurnedOffCombat;
+    private bool _detourDrivingCombat;
+
+    private void OnDetourCombatHold(bool hold) => Dispatcher.UIThread.Post(() =>
+    {
+        _detourDrivingCombat = true;
+        try
+        {
+            if (hold)
+            {
+                if (!IsAutoCombatActive) return;
+                IsAutoCombatActive = false;
+                _detourTurnedOffCombat = true;
+            }
+            else if (_detourTurnedOffCombat)
+            {
+                _detourTurnedOffCombat = false;
+                IsAutoCombatActive = true;
+            }
+        }
+        finally { _detourDrivingCombat = false; }
+    });
 
     partial void OnIsAutoNukeActiveChanged(bool value)
         => PersistAutoModeFlag("AutoNuke", value, d => d.AutoNuke = value);
