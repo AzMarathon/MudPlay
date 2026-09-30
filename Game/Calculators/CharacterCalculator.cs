@@ -181,21 +181,26 @@ public static class CharacterCalculator
     // ----- stat-derived secondary stats (CP-planning surface) --------------
     // These four are the stat→derived formulas the score screen / DLL expose that
     // don't already live as combat helpers. Ground truth is the RE'd stock DLL
-    // (dll-stats-map.md); the PNG breakpoint reference confirms Stealth is identical
-    // on Paradigm, so it takes no realm. Crit's AGI term, Encumbrance, and Magic
-    // Resistance are NOT verified for Paradigm — the stock formula is used for both
-    // and flagged in the guide / GAME_MECHANICS until a Paradigm source confirms them.
+    // (dll-stats-map.md); Paradigm's derivations come from the GreaterMUD branch of
+    // the engine math (GAME_MECHANICS "Realm differences in stat derivation").
 
     // Base critical rating from stats (0x710): Level/10 + (Int-50)/10 + (Agl-50)/20
-    // + (Chm-50)/30, clamped 1..75. Combat crit % = this + gear crit bonus, then
+    // + (Chm-50)/30, floored at 1. Stock also caps it at 75; Paradigm has no cap
+    // here, and gives a class whose Combat rating (the class table's CombatLVL − 2)
+    // is 1–4 another 5 − Combat. Combat crit % = this + gear crit bonus, then
     // CombatCalculator.CalcCritChance applies the realm's diminishing-returns curve.
-    public static int CalcBaseCritRating(int level, int intellect, int agility, int charm)
+    public static int CalcBaseCritRating(int level, int intellect, int agility, int charm,
+                                         RealmType realm, int classCombatLvl = 0)
     {
         int rating = level / 10
                    + (intellect - 50) / 10
                    + (agility - 50) / 20
                    + (charm - 50) / 30;
-        return Math.Clamp(rating, 1, 75);
+        if (realm == RealmType.Stock && rating > 75) rating = 75;
+        rating = Math.Max(rating, 1);
+        int combat = classCombatLvl - 2;
+        if (realm == RealmType.ParaMud && combat is > 0 and < 5) rating += 5 - combat;
+        return rating;
     }
 
     // Base stealth skill (0x5fa) from stats + level: stat terms + stealthLvl + 20,
@@ -219,7 +224,7 @@ public static class CharacterCalculator
     }
 
     // Max encumbrance / carry weight (0xb2): Str*48, with a steeper term above 100
-    // (Str*36 - 3600 added). Stock DLL; Paradigm unverified.
+    // (Str*36 - 3600 added). The same on both realms.
     public static int CalcMaxEncumbrance(int strength)
     {
         int enc = strength * 48;
@@ -227,8 +232,8 @@ public static class CharacterCalculator
         return enc;
     }
 
-    // Magic resistance (0xc0) from stats: (Int + 3*Wil)/4. Stock DLL; Paradigm
-    // unverified. Excludes the +magic-resist ability (0x24), a gear/innate grant.
+    // Magic resistance (0xc0) from stats: (Int + 3*Wil)/4, the same on both realms.
+    // Excludes the +magic-resist ability (0x24), a gear/innate grant.
     public static int CalcMagicResistance(int intellect, int willpower)
         => (intellect + 3 * willpower) / 4;
 
@@ -237,8 +242,8 @@ public static class CharacterCalculator
     // Ground truth is the RE'd stock DLL (calculate_secondary_stats @ 0x41a424);
     // each is an integer division, so points that don't complete a division buy
     // nothing — the CP tooltips surface the next value that ticks each one up.
-    // Paradigm is unverified for all five, same caveat as Crit / Encumbrance /
-    // Magic Resistance above. The +skill abilities (Perception 77, Thievery 39,
+    // Paradigm has its own Picklocks formula; the other four are unverified there
+    // and use Stock's. The +skill abilities (Perception 77, Thievery 39,
     // Traps 40/179, Picklocks 37/180, Tracking 38) are gear / innate grants and
     // stack on top of these bases.
 
@@ -262,10 +267,13 @@ public static class CharacterCalculator
     public static int CalcTraps(int level, int intellect, int agility, int charm)
         => (intellect + agility + charm * 2 + CalcThiefSkillLevelTerm(level) * 28) / 7;
 
-    // Picklocks (0x60a): ((Agl + Int + lvlTerm*10)*2)/7. The doubling happens
-    // BEFORE the divide, so the effective divisor is 3.5 — keep the order.
-    public static int CalcPicklocks(int level, int intellect, int agility)
-        => (agility + intellect + CalcThiefSkillLevelTerm(level) * 10) * 2 / 7;
+    // Picklocks (0x60a): ((Agl + Int + lvlTerm*10)*2)/7 on Stock. The doubling
+    // happens BEFORE the divide, so the effective divisor is 3.5 — keep the order.
+    // Paradigm takes CHM as well, weighted double: (Int + Agl + Chm*2 + lvlTerm*28)/7.
+    public static int CalcPicklocks(int level, int intellect, int agility, int charm, RealmType realm)
+        => realm == RealmType.ParaMud
+            ? (intellect + agility + charm * 2 + CalcThiefSkillLevelTerm(level) * 28) / 7
+            : (agility + intellect + CalcThiefSkillLevelTerm(level) * 10) * 2 / 7;
 
     // Tracking (0x60c): (Int*2 + Wil + Chm + lvlTerm*40)/8 — the heaviest level
     // term of the four, so it grows mostly by levelling rather than by CP.
@@ -582,7 +590,8 @@ public static class CharacterCalculator
                 // Smash to a single swing, so no per-type special-casing is needed.
                 MeleeOffense offense = CombatCalculator.ComputeMeleeOffense(
                     type, realm, stats.Level, nCombatLevel,
-                    stats.Strength, stats.Agility, t.WeaponMin, t.WeaponMax, t.WeaponSpeed, t.WeaponStrReq,
+                    stats.Strength, stats.Agility, stats.Intellect, stats.Charm,
+                    t.WeaponMin, t.WeaponMax, t.WeaponSpeed, t.WeaponStrReq,
                     t.PlusMaxDamage, t.PlusMinDamage, t.PlusCrits, encum.CurrentWeight, encum.MaxWeight);
 
                 avgDamage = offense.AvgDamage;

@@ -12,28 +12,36 @@ public static class TranscriptSnapshot
     // content was written — the same per-row write stamp whether the row has since
     // scrolled off into the ring or is still on screen, so the timestamps stay in
     // order across the boundary. Null only for a blank row (no content was ever
-    // written, so there is no meaningful time).
-    public readonly record struct Line(DateTimeOffset? Timestamp, string Text);
+    // written, so there is no meaningful time). Cells is the row's coloured cells,
+    // trimmed like Text, when the caller asked for them; null otherwise.
+    public readonly record struct Line(DateTimeOffset? Timestamp, string Text, Cell[]? Cells = null);
 
     // The last maxLines transcript lines, oldest → newest: every scrolled-off
     // scrollback row followed by the current live screen, with trailing blank
     // padding rows trimmed. A non-positive maxLines returns the whole transcript.
-    public static IReadOnlyList<Line> Tail(TerminalEmulator emulator, int maxLines)
+    // withCells also copies each row's cells, for a capture that keeps its colours
+    // (the death log); the text-only callers skip the copy.
+    public static IReadOnlyList<Line> Tail(TerminalEmulator emulator, int maxLines, bool withCells = false)
     {
         ArgumentNullException.ThrowIfNull(emulator);
 
         List<Line> lines = new();
         foreach (ScrollbackBuffer.Row row in emulator.Screen.Scrollback.Enumerate())
-            lines.Add(new Line(row.Timestamp, RowText(row.Cells)));
+        {
+            string text = RowText(row.Cells);
+            lines.Add(new Line(row.Timestamp, text, withCells ? row.Cells[..text.Length] : null));
+        }
 
         TerminalScreen screen = emulator.Screen;
         for (int y = 0; y < screen.Rows; y++)
         {
-            string text = RowText(screen.Row(y));
+            ReadOnlySpan<Cell> cells = screen.Row(y);
+            string text = RowText(cells);
             // A blank live row has no meaningful write time — keep it null so the
             // snapshot doesn't stamp empty spacing rows. Content rows carry their
             // per-row write stamp.
-            lines.Add(new Line(text.Length == 0 ? null : screen.RowTimestamp(y), text));
+            lines.Add(new Line(text.Length == 0 ? null : screen.RowTimestamp(y), text,
+                withCells ? cells[..text.Length].ToArray() : null));
         }
 
         // Trim only trailing blank padding from the live screen; interior blanks

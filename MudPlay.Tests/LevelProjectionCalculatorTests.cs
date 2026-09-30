@@ -57,6 +57,22 @@ public sealed class LevelProjectionCalculatorTests
         Assert.Equal("10,000", row.TotalXp);
     }
 
+    // The Stealth cell shows the sneak chance beside the stat: Stealth capped at 95%,
+    // or 100% once a completed Perfect Stealth quest applies at that level.
+    [Theory]
+    [InlineData(84, false, "84 (84%)")]
+    [InlineData(120, false, "120 (95%)")]
+    [InlineData(84, true, "84 (100%)")]
+    public void Row_Stealth_ShowsTheSneakChance(int stealth, bool perfectStealth, string expected)
+    {
+        var p = new LevelProjection(Level: 4, TotalXp: 10000, HpMin: 1, HpMax: 1, HpRegen: 1, Mana: 0, MpRegen: 0)
+            { Stealth = stealth };
+        var row = new MudPlay.ViewModels.CharacterWorkshop.LevelProjectionRow(
+            p, currentExp: 0, isCurrentLevel: false, isCaster: false, trainCost: null, perfectStealth: perfectStealth);
+
+        Assert.Equal(expected, row.Stealth);
+    }
+
     [Fact]
     public void Row_ExpToLevel_ZeroWhenAlreadyReached()
     {

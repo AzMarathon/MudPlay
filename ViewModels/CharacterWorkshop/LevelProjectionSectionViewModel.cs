@@ -70,6 +70,9 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         LevelProjectionColumn.Resolve(null);
     public event Action? ColumnsChanged;
 
+    // The loaded set's realm, which picks each column's tooltip (Paradigm's formulas differ).
+    public Game.RealmType Realm => _gameData.ActiveRealm;
+
     // Guards the bulk re-check in ResetColumns so N toggles persist once.
     private bool _bulkColumnUpdate;
 
@@ -251,6 +254,7 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
     private void OnActiveSetChanged(string? setName)
     {
         _trainers = null;
+        ColumnsChanged?.Invoke();   // a new realm may change the column tooltips
         _suppress = true;
         try
         {
@@ -339,6 +343,7 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         // Enumerate once; the resolver picks min markup and the price formula
         // turns (level, markup) into copper.
         int classNumber = GetInt(classRow, "Number");
+        int classCombatLvl = GetInt(classRow, "CombatLVL");
         IReadOnlyList<TrainerShop> trainers = _trainers ??= TrainerCatalog.Enumerate(_gameData);
 
         // Floor at level 2 — level 1 is the 0-exp starting point, not a row.
@@ -359,6 +364,13 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         // effective), so only the aggregate's direct derived/HP/mana abilities are
         // added — its attribute fields would double-count.
         EquipmentStatSummary bonuses = BuildLiveBonuses();
+
+        // A completed Perfect Stealth quest makes every sneak take, from the level it
+        // can be done at.
+        int? perfectStealthFrom = _questBonuses.AbilityAwards
+            .Where(a => a.AbilityId == Game.Stealth.SneakChance.PerfectStealthAbility)
+            .Select(a => (int?)a.FromLevel)
+            .Min();
 
         for (int lvl = from; lvl <= to; lvl++)
         {
@@ -383,10 +395,11 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
             LevelProjection p = LevelProjectionCalculator.ProjectLevel(
                 lvl, chart, str, intel, wil, agi, hea, chm,
                 minHits, maxHits, raceHpPerLevel, mageryType, mageryLevel, realm, bonuses,
-                hasClassStealth, hasRaceStealth);
+                hasClassStealth, hasRaceStealth, classCombatLvl);
             int? markup = TrainerCatalog.CheapestMarkup(trainers, lvl, classNumber);
             long? trainCost = markup is { } m ? (long)ShopPriceCalculator.TrainCopper(lvl - 1, m) : null;
-            Rows.Add(new LevelProjectionRow(p, currentExp, lvl == currentLevel, isCaster, trainCost));
+            Rows.Add(new LevelProjectionRow(p, currentExp, lvl == currentLevel, isCaster, trainCost,
+                perfectStealth: perfectStealthFrom is { } psFrom && lvl >= psFrom));
         }
 
         HasProjection = Rows.Count > 0;

@@ -1,10 +1,50 @@
 # Version history
 
-## 3.128.0
+## 3.129.0
 
 - Exp/Hr Estimator: Simulate my character plays your real character around the sketched loop (stats, gear, spells, per-monster overrides, heal and rest settings vs the monsters' real attacks and lair timers)
 - Reports exp/hr with its range over several runs, kills/hr, the attack / move / rest / meditate split, lowest HP and mana, deaths and spells cast per hour
 - Simulation result is in the bug report and the program log
+
+## 3.128.8
+
+- A walk-to that turns auto-combat back on now fights the monster already in the room
+- A hand-typed move into an occupied room while sneaking opens with a backstab again
+- After training stats (the level-11 train moves you), the monster in the new room is attacked right away instead of seconds later
+- Spell Book double-click opens the item that actually teaches the spell (e.g. the scroll of arcane enchantment, not an unobtainable tome)
+- bug reports addressed: paradigm-20260930-084435, paradigm-20260930-084955, paradigm-20260930-085259
+
+## 3.128.4
+
+- How did I Die? shows the death scene in its original colours
+
+## 3.128.3
+
+- A monster's mid-fight summon ("shouts for aid!") re-displays the room, so the summoned monster is fought instead of the client resting or looting once the summoner dies
+
+## 3.128.2
+
+- Unobtainable now also lists monsters that can never spawn despite being marked in game (Cygani), and says why each row is there
+- Room tooltips and room panels no longer show monsters on the Unobtainable list
+
+## 3.128.1
+
+- Players Seen no longer counts the players in your party
+
+## 3.128.0
+
+- Click a base stat's name on Character Info to see every number it feeds and the stat values where each goes up, with your row highlighted, in your realm's formulas
+
+## 3.127.8
+
+- Level Projection's Stealth column shows your sneak chance beside it: 84 (84%), or 100% from the level of a completed Perfect Stealth quest
+- Every Level Projection column header explains its figure on hover, with the Paradigm formula when a Paradigm realm is loaded
+- Session Statistics is grouped like the other panels (kills & experience, coin, items), with room below its last row
+- Stock min melee damage from STR is doubled and max damage drops below 50 STR in Level Projection and the stat tooltips, as the combat math already did
+- Paradigm Picklocks counts CHM (weighted double); Paradigm crit has no 75 cap and adds the low-Combat class bonus (+4 for a Mage down to 0 for a Witchunter)
+- Carry weight, magic resistance and crit's AGI term are marked confirmed for Paradigm
+- Crit chance in the Workshop Calculators, Monster Intel and the Item Finder now includes the crit your level and stats give, not just +Crits gear
+- Settings → General's recent-profiles count box is wide enough to show its number
 
 ## 3.127.0
 

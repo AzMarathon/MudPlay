@@ -284,7 +284,7 @@ public sealed class TrialGearFinderTests
     [Fact]
     public void FindBestOfPasses_BackstabMax_FindsTheSwapThatPerItemScoringMisses()
     {
-        var model = new ItemDamageModel(RealmType.ParaMud, Level: 10, CombatLevel: 3, Strength: 50, Agility: 50,
+        var model = new ItemDamageModel(RealmType.ParaMud, Level: 10, CombatLevel: 3, Strength: 50, Agility: 50, Intellect: 50, Charm: 50,
             Stealth: 0, HasClassStealth: true, CurrentEncum: 0, MaxEncum: 1000, Rest: default,
             CurrentWeapon: new ItemDamageModel.WeaponInputs(5, 10, 1000, 0, 0, 0, 0, 0, 0, CanBackstab: true));
         ItemFinderEntry Gear(string name, EquipmentSlot slot, int bsMin, int bsMax)

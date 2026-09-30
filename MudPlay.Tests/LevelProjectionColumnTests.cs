@@ -101,4 +101,20 @@ public sealed class LevelProjectionColumnTests
             Assert.Single(LevelProjectionColumn.All.Where(c => c.Key == LevelProjectionColumn.PinnedKey));
         Assert.True(pinned.DefaultVisible);
     }
+
+    // Every column explains itself; where Paradigm's formula differs, a Paradigm set
+    // shows that version and Stock keeps the Stock one.
+    [Fact]
+    public void EveryColumnHasATooltip_AndParadigmGetsItsOwnWhereItDiffers()
+    {
+        Assert.All(LevelProjectionColumn.All, c => Assert.False(string.IsNullOrWhiteSpace(c.Tip), c.Key));
+
+        LevelProjectionColumn accy = LevelProjectionColumn.All.Single(c => c.Key == "accuracy");
+        Assert.Contains("STR", accy.TipFor(MudPlay.Game.RealmType.Stock));
+        Assert.Contains("INT", accy.TipFor(MudPlay.Game.RealmType.ParaMud));
+        Assert.NotEqual(accy.TipFor(MudPlay.Game.RealmType.Stock), accy.TipFor(MudPlay.Game.RealmType.ParaMud));
+
+        LevelProjectionColumn dodge = LevelProjectionColumn.All.Single(c => c.Key == "dodge");
+        Assert.Equal(dodge.TipFor(MudPlay.Game.RealmType.Stock), dodge.TipFor(MudPlay.Game.RealmType.ParaMud));
+    }
 }

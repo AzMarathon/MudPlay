@@ -35,7 +35,7 @@ public sealed class ItemDamageModelTests : IDisposable
         PlusMin: 1, PlusMax: 3, Crits: 0, BsMin: 2, BsMax: 4, PunchDmg: 0, KickDmg: 0, JumpKickDmg: 0);
 
     private static ItemDamageModel Model(ItemDamageModel.WeaponInputs? current = null) => new(
-        RealmType.ParaMud, Level: 20, CombatLevel: 3, Strength: 70, Agility: 60, Stealth: 80,
+        RealmType.ParaMud, Level: 20, CombatLevel: 3, Strength: 70, Agility: 60, Intellect: 50, Charm: 50, Stealth: 80,
         HasClassStealth: true, CurrentEncum: 0, MaxEncum: 1000, Rest, current);
 
     private static readonly ItemDamageModel.WeaponInputs Stiletto = new(
@@ -84,7 +84,7 @@ public sealed class ItemDamageModelTests : IDisposable
     public void DamagePerRound_Normal_IsSwingsTimesCritBlendedHit()
     {
         MeleeOffense o = CombatCalculator.ComputeMeleeOffense(
-            MudAttackType.Normal, RealmType.ParaMud, 20, 3, 70, 60, 4, 12, 1100, 10,
+            MudAttackType.Normal, RealmType.ParaMud, 20, 3, 70, 60, 50, 50, 4, 12, 1100, 10,
             plusMaxDamage: 3 + 1, plusMinDamage: 1, plusCrits: 0, currentEncum: 0, maxEncum: 1000);
         double crit = o.CritChance / 100.0;
         double expected = o.SwingsPerRound * ((1 - crit) * o.AvgDamage + crit * o.AvgCritDamage);

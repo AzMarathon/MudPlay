@@ -59,6 +59,13 @@ public sealed class MonsterSpawnIndex
     private static readonly Regex s_roomTokenRegex
         = new(@"(\d+)/(\d+)", RegexOptions.Compiled);
 
+    // Monsters on the Unobtainable list, which the room readouts leave out. Checked at
+    // query time rather than folded into the build: the rule needs the room graph, which
+    // a set switch rebuilds on the UI thread while this index warms on a worker.
+    public Func<int, bool>? OutOfPlay { get; set; }
+
+    public bool IsOutOfPlay(int id) => OutOfPlay?.Invoke(id) == true;
+
     public MonsterSpawnIndex(GameDataCache cache, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(cache);

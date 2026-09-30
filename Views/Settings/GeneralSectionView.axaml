@@ -443,7 +443,7 @@
                                VerticalAlignment="Center"/>
                     <NumericUpDown Value="{Binding RecentProfilesShown, Mode=TwoWay}"
                                    Minimum="0" Maximum="{Binding MaxRecentProfilesShown}"
-                                   Increment="1" FormatString="0" Width="90"/>
+                                   Increment="1" FormatString="0" Width="120"/>
                 </StackPanel>
 
                 <TextBlock Classes="SectionHeader" Text="Navigation line appearance"/>

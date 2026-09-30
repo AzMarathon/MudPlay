@@ -1,0 +1,123 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
+        x:Class="MudPlay.Views.CharacterWorkshop.StatBreakpointsWindow"
+        x:DataType="vm:StatBreakpointsViewModel"
+        Title="Stat Breakpoints"
+        Width="900" Height="620"
+        MinWidth="420" MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.Muted">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+        </Style>
+        <Style Selector="Border.Column">
+            <Setter Property="Background" Value="{StaticResource ChromeBgElevBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="MinWidth" Value="130"/>
+        </Style>
+        <Style Selector="Border.Row">
+            <Setter Property="Padding" Value="8,0"/>
+        </Style>
+        <Style Selector="Border.Row.zero">
+            <Setter Property="Background" Value="{StaticResource ChromeBgSunkenBrush}"/>
+        </Style>
+        <Style Selector="Border.Row.current">
+            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
+        </Style>
+        <Style Selector="Border.Row TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+        </Style>
+        <Style Selector="Border.Row.current TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style Selector="Border.Tag">
+            <Setter Property="BorderBrush" Value="{StaticResource SeverityWarnBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12">
+        <!-- Stat picker: switching here is the same as clicking another label. -->
+        <ListBox Grid.Row="0" ItemsSource="{Binding StatChoices}" SelectedItem="{Binding SelectedStat}"
+                 Background="Transparent">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:StatBreakpointsViewModel+StatChoice">
+                    <TextBlock Text="{Binding Name}" Margin="4,0"/>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <StackPanel Grid.Row="1" Margin="0,8,0,8" Spacing="2">
+            <TextBlock Text="{Binding Heading}" FontWeight="SemiBold"
+                       FontSize="{StaticResource FontSizeMd}" Foreground="{StaticResource ChromeFgBrush}"/>
+            <TextBlock Classes="Muted" TextWrapping="Wrap"
+                       Text="Each column lists the stat values where this stat's share of that number changes. Your row is highlighted; shaded rows are where the share is 0. ≈ marks a share the game divides together with other stats, so the step can land a point either side."/>
+            <TextBlock Classes="Muted" TextWrapping="Wrap" IsVisible="{Binding IsParadigm}"
+                       Text="Columns tagged STOCK FORMULA aren't confirmed for Paradigm and show Stock's formula."/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="2" x:Name="ColumnScroller"
+                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Columns}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:StatBreakpointColumnViewModel">
+                        <Border Classes="Column">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Top" Margin="8,6,8,6" Spacing="2" MaxWidth="170">
+                                    <TextBlock Text="{Binding Label}" FontWeight="Bold"
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
+                                    <TextBlock Classes="Muted" Text="{Binding Formula}" TextWrapping="Wrap"
+                                               FontFamily="{StaticResource FontMono}"/>
+                                    <Border Classes="Tag" IsVisible="{Binding IsStockFormula}">
+                                        <TextBlock Text="STOCK FORMULA" FontSize="10"
+                                                   Foreground="{StaticResource SeverityWarnBrush}"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding YouText}" Foreground="{StaticResource AccentAmberBrush}"/>
+                                </StackPanel>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Classes="ColumnRows">
+                                    <ItemsControl ItemsSource="{Binding Rows}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:StatBreakpointRowViewModel">
+                                                <Border Classes="Row" Classes.current="{Binding IsCurrent}"
+                                                        Classes.zero="{Binding IsZero}">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Grid.Column="0" Text="{Binding StatText}"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding ValueText}"
+                                                                   Margin="16,0,0,0"/>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <TextBlock Grid.Row="3" Classes="Muted" Margin="0,8,0,0" TextWrapping="Wrap"
+                   Text="{Binding EveryPointNote}"/>
+    </Grid>
+</Window>
