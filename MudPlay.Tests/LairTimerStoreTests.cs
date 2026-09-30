@@ -1,4 +1,5 @@
 using System.IO;
+using MudPlay.Game;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 using Xunit;
@@ -75,14 +76,20 @@ public sealed class LairTimerStoreTests : IDisposable
         ]
         """;
 
+    // Info.Legit 2 marks a Paradigm set; no Info table reads as Stock.
+    private const string ParadigmInfoJson = """[ { "Legit": 2 } ]""";
+
     private (GameDataCache cache, RoomGraphManager graph, RoomTracker tracker)
-        BuildFixture(string? lairsOverride = null, string? monstersOverride = null)
+        BuildFixture(string? lairsOverride = null, string? monstersOverride = null,
+            RealmType realm = RealmType.Stock)
     {
         string setRoot = Path.Combine(AppPaths.GameDataRoot, _setName);
         Directory.CreateDirectory(setRoot);
         File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),    RoomsJson);
         File.WriteAllText(Path.Combine(setRoot, "Lairs.json"),    lairsOverride    ?? LairsJson);
         File.WriteAllText(Path.Combine(setRoot, "Monsters.json"), monstersOverride ?? MonstersJson);
+        if (realm == RealmType.ParaMud)
+            File.WriteAllText(Path.Combine(setRoot, "Info.json"), ParadigmInfoJson);
 
         GameDataCache cache = new();
         cache.SwitchSet(_setName);
@@ -94,13 +101,15 @@ public sealed class LairTimerStoreTests : IDisposable
 
     // ----- DefaultRespawnSeconds — per-room Delay (primary) -------
 
-    [Fact]
-    public void DefaultRespawnSeconds_PerRoomDelay_TakesPrecedence()
+    [Theory]
+    [InlineData(RealmType.ParaMud, 270)]   // (5-1)*60 + 30
+    [InlineData(RealmType.Stock, 330)]     // 5 to 6 min after the last kill → 5*60 + 30
+    public void DefaultRespawnSeconds_PerRoomDelay_TakesPrecedence(RealmType realm, int expected)
     {
-        // Rooms.json with Delay=5 → GreaterMUD formula (D-1)*60+30
-        // = 270s. Lairs.json says 30 min (1800s) for the same group
-        // index — the per-room Delay must win because that's the
-        // tooltip's source of truth + the actual server behaviour.
+        // Rooms.json with Delay=5, read by realm. Lairs.json says 30 min
+        // (1800s) for the same group index — the per-room Delay must win
+        // because that's the tooltip's source of truth + the actual
+        // server behaviour.
         const string roomsWithDelay = """
             [
               { "Map Number": 1, "Room Number": 35, "Name": "Intersection",
@@ -114,6 +123,8 @@ public sealed class LairTimerStoreTests : IDisposable
         File.WriteAllText(Path.Combine(setRoot, "Rooms.json"), roomsWithDelay);
         File.WriteAllText(Path.Combine(setRoot, "Lairs.json"),
             """[ { "GroupIndex": "1-1-1", "AvgDelay": 30 } ]""");
+        if (realm == RealmType.ParaMud)
+            File.WriteAllText(Path.Combine(setRoot, "Info.json"), ParadigmInfoJson);
 
         GameDataCache cache = new();
         cache.SwitchSet(_setName);
@@ -122,13 +133,15 @@ public sealed class LairTimerStoreTests : IDisposable
         RoomTracker tracker = new(graph);
         using LairTimerStore store = new(cache, graph, tracker);
 
-        Assert.Equal(270, store.DefaultRespawnSeconds(new RoomKey(1, 35)));
+        Assert.Equal(expected, store.DefaultRespawnSeconds(new RoomKey(1, 35)));
     }
 
-    [Fact]
-    public void DefaultRespawnSeconds_PerRoomDelayOne_ReturnsThirtySeconds()
+    [Theory]
+    [InlineData(RealmType.ParaMud, 30)]   // (1-1)*60 + 30
+    [InlineData(RealmType.Stock, 90)]     // 1 to 2 min → 1*60 + 30
+    public void DefaultRespawnSeconds_PerRoomDelayOne(RealmType realm, int expected)
     {
-        // Edge of the formula: Delay=1 → (1-1)*60 + 30 = 30 s.
+        // Edge of the formula: Delay=1.
         const string roomsJson = """
             [
               { "Map Number": 1, "Room Number": 1, "Name": "FastRespawn",
@@ -142,6 +155,8 @@ public sealed class LairTimerStoreTests : IDisposable
         File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),    roomsJson);
         File.WriteAllText(Path.Combine(setRoot, "Lairs.json"),    "[]");
         File.WriteAllText(Path.Combine(setRoot, "Monsters.json"), "[]");
+        if (realm == RealmType.ParaMud)
+            File.WriteAllText(Path.Combine(setRoot, "Info.json"), ParadigmInfoJson);
 
         GameDataCache cache = new();
         cache.SwitchSet(_setName);
@@ -150,7 +165,7 @@ public sealed class LairTimerStoreTests : IDisposable
         RoomTracker tracker = new(graph);
         using LairTimerStore store = new(cache, graph, tracker);
 
-        Assert.Equal(30, store.DefaultRespawnSeconds(new RoomKey(1, 1)));
+        Assert.Equal(expected, store.DefaultRespawnSeconds(new RoomKey(1, 1)));
     }
 
     // ----- DefaultRespawnSeconds — NMR 1.83+ path -------------------
@@ -300,6 +315,85 @@ public sealed class LairTimerStoreTests : IDisposable
 
         // Non-lair room — no respawn timer available at all.
         Assert.Null(store.NextReadyAt(new RoomKey(1, 1)));
+    }
+
+    // ----- Clock start — Stock last kill vs Paradigm entry ----------
+
+    [Fact]
+    public void Stock_ClockRunsFromTheLastKill_NotTheEntry()
+    {
+        // Stock restarts one room clock on every kill, so a fight that ran after
+        // the entry pushes the ready-time out by the fight's length.
+        var (cache, graph, tracker) = BuildFixture();
+        using LairTimerStore store = new(cache, graph, tracker);
+        RoomKey lair = new(5, 100);
+        tracker.SetLocated(lair);
+        DateTimeOffset entered = store.LastEntered(lair)!.Value;
+
+        DateTimeOffset firstKill = entered.AddSeconds(10);
+        DateTimeOffset lastKill = entered.AddSeconds(25);
+        store.NoteKill(firstKill);
+        store.NoteKill(lastKill);
+
+        Assert.Equal(lastKill, store.ClockStart(lair));
+        Assert.Equal(lastKill.AddSeconds(1800), store.NextReadyAt(lair));
+        Assert.Equal(lastKill.AddSeconds(60), store.NextReadyAt(lair, overrideRespawnSeconds: 60));
+    }
+
+    [Fact]
+    public void Stock_NoKillSeen_FallsBackToTheEntry()
+    {
+        var (cache, graph, tracker) = BuildFixture();
+        using LairTimerStore store = new(cache, graph, tracker);
+        RoomKey lair = new(5, 100);
+        tracker.SetLocated(lair);
+
+        Assert.Equal(store.LastEntered(lair), store.ClockStart(lair));
+    }
+
+    [Fact]
+    public void Paradigm_ClockStillRunsFromTheEntry()
+    {
+        // Paradigm's clock is unsettled (issue #813); it keeps timing from the entry.
+        var (cache, graph, tracker) = BuildFixture(realm: RealmType.ParaMud);
+        using LairTimerStore store = new(cache, graph, tracker);
+        RoomKey lair = new(5, 100);
+        tracker.SetLocated(lair);
+        DateTimeOffset entered = store.LastEntered(lair)!.Value;
+
+        store.NoteKill(entered.AddSeconds(25));
+
+        Assert.Equal(entered, store.ClockStart(lair));
+        Assert.Equal(entered.AddSeconds(1800), store.NextReadyAt(lair));
+    }
+
+    [Fact]
+    public void NoteKill_OutsideALairRoom_IsIgnored()
+    {
+        var (cache, graph, tracker) = BuildFixture();
+        using LairTimerStore store = new(cache, graph, tracker);
+        tracker.SetLocated(new RoomKey(1, 1));   // the non-lair lobby
+
+        store.NoteKill(DateTimeOffset.UtcNow);
+
+        Assert.Null(store.LastKilled(new RoomKey(1, 1)));
+        Assert.Null(store.LastKilled(new RoomKey(5, 100)));
+    }
+
+    [Fact]
+    public void ResetArrivalsFor_DropsKillsToo()
+    {
+        var (cache, graph, tracker) = BuildFixture();
+        using LairTimerStore store = new(cache, graph, tracker);
+        RoomKey lair = new(5, 100);
+        tracker.SetLocated(lair);
+        store.NoteKill(DateTimeOffset.UtcNow);
+
+        store.ResetArrivalsFor(new[] { lair });
+
+        Assert.Null(store.LastKilled(lair));
+        Assert.Null(store.ClockStart(lair));
+        Assert.Null(store.NextReadyAt(lair));
     }
 
     [Fact]
