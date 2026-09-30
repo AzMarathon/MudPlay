@@ -373,7 +373,7 @@ The **⚙** beside the button sets:
 - **Walk pace (seconds per room)** — your bare walking pace between rooms, lag included. Fighting is simulated separately, so this is *not* the all-in **Seconds per room** the estimate uses. Paradigm defaults to 1.2, Stock to 0.7.
 - **Hours per run** and **Runs** — each run rolls different luck; more runs narrow the range.
 
-What it doesn't simulate yet: keeping buffs up (their cost and their bonuses — a mana-regen roll spell, for one), debuffs, backstab openers, fleeing, room-spell summons, death-summon chains and bosses (they're left out of the lairs). Results are cleared (and a run still going is stopped) whenever you change the route or a simulation setting; the estimate's own knobs above leave them alone. The last result is included in a bug report.
+What it doesn't simulate yet: keeping buffs up (their cost and their bonuses — a mana-regen roll spell, for one), debuffs, backstab openers, fleeing, room-spell summons, death-summon chains and bosses (they're left out of the lairs). Results are cleared (and a run still going is stopped) whenever you change the route or a simulation setting, switch character or game-data set; closing the Navigation window stops a run too. The estimate's own knobs above leave them alone. The last result is included in a bug report.
 
 ## Auto-Lair
 

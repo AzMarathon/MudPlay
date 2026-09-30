@@ -23,7 +23,12 @@ public sealed record SimSpell(
 // on top of the standing mana tick.
 public readonly record struct SimRegen(
     double HpStanding, double HpResting, double MaStanding, double MaMeditating,
-    RealmRegenProfile Cadence, bool RestReplacesStanding, int RestFullEvery = 1, double RestReducedShare = 1);
+    RealmRegenProfile Cadence, bool RestReplacesStanding, int RestFullEvery = 1, double RestReducedShare = 1)
+{
+    // HP paid by the tick-th rest tick since lying down (1-based).
+    public double RestTickHp(long tick) =>
+        tick % Math.Max(1, RestFullEvery) == 0 ? HpResting : HpResting * RestReducedShare;
+}
 
 // Everything the loop simulator plays by: the character's pools, offense, defense
 // and regen, their spellbook, and the live Combat / Health / Spells settings the

@@ -321,7 +321,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     {
         SimLines.Clear();
         SimLines.Add($"≈ {r.ExpPerHour:N0} exp/hr  ({r.MinExpPerHour:N0} – {r.MaxExpPerHour:N0} over {r.Runs.Count} runs)");
-        SimLines.Add($"{r.KillsPerHour:0} kills/hr  ·  {r.Runs.Average(x => x.AvgLapSeconds):0}s/lap");
+        string lap = r.AvgLapSeconds > 0 ? $"{r.AvgLapSeconds:0}s/lap" : "no lap finished";
+        SimLines.Add($"{r.KillsPerHour:0} kills/hr  ·  {lap}");
         SimLines.Add($"Attacking {r.Share(x => x.AttackingSeconds):P0} · moving {r.Share(x => x.MovingSeconds):P0} · " +
                      $"resting {r.Share(x => x.RestingSeconds):P0} · meditating {r.Share(x => x.MeditatingSeconds):P0} · " +
                      $"waiting {r.Share(x => x.WaitingSeconds):P0}");
@@ -332,7 +333,9 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             SimLines.Add("Per hour: " + string.Join(", ", casts.Take(6).Select(c => $"{c.Spell} {c.PerHour:0}")));
     }
 
-    private void ClearSimulation()
+    // Drop the result (and stop a run still going) — the route, a simulation
+    // setting, the character or the game-data set changed under it.
+    public void ClearSimulation()
     {
         CancelSimulation();
         SimResult = null;

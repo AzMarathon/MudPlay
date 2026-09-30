@@ -929,7 +929,7 @@ How HP works from full health down through dropping and death, how monster healt
 
 **Client use:**
 - `RealmRegenProfile` / `RegenConstants`: Stock 30 / 21 / 15 s, Paradigm 10 / 10 / 10 s for natural / rest / meditate. `RegenTracker` learns the per-tick amounts live.
-- `SimCharacterBuilder.BuildRegen` (the Exp/Hr Estimator's character simulation) plays Paradigm rest as the three-tick cycle, the two reduced ticks a third of the full one, counted from lying down (that start is the unconfirmed part) (review of PR #802).
+- `SimCharacterBuilder.BuildRegen` (the Exp/Hr Estimator's character simulation) plays Paradigm rest as the three-tick cycle, the two reduced ticks a third of the full one, counted from lying down (that start is the unconfirmed part).
 
 ### Poison prevents resting
 *Status: CONFIRMED 2026-08-17 (user; report `paradigm-20260817-092945`); meditate split by realm 2026-09-28 · Realm: differs*
@@ -2608,7 +2608,7 @@ Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in *NPC-pla
   - `RoomTooltipBuilder`'s `Max Regen: N @ …` line (map tooltip, Room Info panel) shows `Delay-Delay+1m` on Stock and `(Delay − 1)m 30s` on Paradigm.
   - `LairTimerStore.ClockStart` times a Stock lair from the room's last kill (`NoteKill`, fed by `MonsterDeathWatcher.MonsterDied` while the player stands in a Confirmed lair room, a placed NPC's kill included), falling back to the entry when no kill was seen; Paradigm times it from the entry until issue #813 settles its clock. Auto-Lair's ready-times (`NextReadyAt`) and the CURRENT NAV countdown read it.
   - `LoopExpSimulator` (the Exp/Hr estimate) keeps one clock per lair room on Stock — the room's last death this visit, fixture kills included, restarts every lair slot in it — and one per mob on Paradigm.
-  - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) keeps one clock per lair room on Stock and one per slot on Paradigm (`RoomState`, by the frozen character's realm). `Spawn` refills a lair at once on entry, and while the character stands in the room only on a 5 s spawn pass at a random phase (the Stock pass rate, used for both realms). A lair whose timer didn't resolve (respawn 0) refills on entry only (review of PR #802).
+  - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) keeps one clock per lair room on Stock — every death in the room restarts it, the placed fixture's included — and one per slot on Paradigm (`RoomState`, by the frozen character's realm). `Spawn` refills a lair at once on entry, and while the character stands in the room only on a 5 s spawn pass at a random phase (the Stock pass rate, used for both realms). A lair whose timer didn't resolve (respawn 0) refills on entry only.
 
 ### NPC-placed monsters
 

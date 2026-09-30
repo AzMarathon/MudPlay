@@ -25,7 +25,6 @@ public sealed record LoopSimRun(
     public double RequestedHours => RequestedSeconds / 3600.0;
     public double ExpPerHour => RequestedHours > 0 ? Exp / RequestedHours : 0;
     public double KillsPerHour => RequestedHours > 0 ? Kills / RequestedHours : 0;
-    public double AvgLapSeconds => Laps > 0 ? Seconds / Laps : 0;
 }
 
 // Several seeded runs of the same loop, summarised: the spread is the answer to
@@ -37,6 +36,17 @@ public sealed record LoopSimSummary(IReadOnlyList<LoopSimRun> Runs)
     public double MaxExpPerHour => Runs.Count > 0 ? Runs.Max(r => r.ExpPerHour) : 0;
     public double KillsPerHour => Runs.Count > 0 ? Runs.Average(r => r.KillsPerHour) : 0;
     public int Deaths => Runs.Count(r => r.DiedAtSeconds is not null);
+
+    // Pooled over the runs that finished a lap, so one that died before its first
+    // doesn't pull the figure toward 0. 0 when no run finished one.
+    public double AvgLapSeconds
+    {
+        get
+        {
+            int laps = Runs.Sum(r => r.Laps);
+            return laps > 0 ? Runs.Where(r => r.Laps > 0).Sum(r => r.Seconds) / laps : 0;
+        }
+    }
     public int LowestHpPercent => Runs.Count > 0 ? Runs.Min(r => r.LowestHpPercent) : 100;
     public int LowestManaPercent => Runs.Count > 0 ? Runs.Min(r => r.LowestManaPercent) : 100;
 

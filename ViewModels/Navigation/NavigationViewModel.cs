@@ -146,7 +146,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // lambda reads the current ExpEstimator (null when not estimating), so a
         // single registration covers every enter/exit without per-transition wiring.
         _services.ExpEstimatorSnapshotProvider = () => ExpEstimator?.ToSnapshot();
+        // A character simulation was played with the old character / game data.
+        _services.Profile.ProfileLoaded += OnProfileLoadedDropSimulation;
+        _services.GameData.ActiveSetChanged += OnActiveSetDropSimulation;
     }
+
+    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _) => ExpEstimator?.ClearSimulation();
+    private void OnActiveSetDropSimulation(string? _) => ExpEstimator?.ClearSimulation();
 
     // Per-second pump for CURRENT NAV lair countdowns. Cheap to leave
     // running, but explicitly gated so an idle Navigation window does no work.
@@ -210,6 +216,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Lairs.SetupsChanged    -= OnSetupsChanged;
         _services.NavFolders.FoldersChanged -= OnNavFoldersChanged;
         _services.Macros.Macros.CollectionChanged -= OnMacrosCollectionChanged;
+        _services.Profile.ProfileLoaded -= OnProfileLoadedDropSimulation;
+        _services.GameData.ActiveSetChanged -= OnActiveSetDropSimulation;
+        ExpEstimator?.CancelSimulation();
     }
 
     // Loops + lairs share the on-disk folder tree; a folder add / rename /
