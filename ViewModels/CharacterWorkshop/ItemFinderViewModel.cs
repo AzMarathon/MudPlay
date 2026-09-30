@@ -417,12 +417,13 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
             current = new ItemDamageModel.WeaponInputs(
                 w.WeaponMin, w.WeaponMax, w.WeaponSpeed, w.WeaponStrReq, w.PlusMinDamage, w.PlusMaxDamage,
                 w.PlusCrits, w.PlusBSMin, w.PlusBSMax, CanBackstab: false,
-                w.PlusStrength, w.PlusAgility, w.PlusStealth);
+                w.PlusStrength, w.PlusAgility, w.PlusStealth, w.PlusIntellect, w.PlusCharm);
         }
 
         EncumbranceReading encum = inventory.Snapshot.Encumbrance;
         return new ItemDamageModel(
-            gameData.ActiveRealm, stats.Level, combatLevel, stats.Strength, stats.Agility, stats.Stealth,
+            gameData.ActiveRealm, stats.Level, combatLevel, stats.Strength, stats.Agility,
+            stats.Intellect, stats.Charm, stats.Stealth,
             ClassCapabilities.ClassHasStealth(classRow), encum.CurrentWeight, encum.MaxWeight,
             new ItemDamageModel.RestBonuses(
                 o.PlusMinDamage, o.PlusMaxDamage, o.PlusCrits, o.PlusBSMin, o.PlusBSMax,

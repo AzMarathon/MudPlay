@@ -444,7 +444,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     // the live character's class/race game-data rows.
     private StatContext ResolveStatContext()
     {
-        int minHits = 0, maxHits = 0, mageryType = 0, mageryLevel = 0, raceHp = 0;
+        int minHits = 0, maxHits = 0, mageryType = 0, mageryLevel = 0, raceHp = 0, combatLvl = 0;
         System.Text.Json.JsonElement? classRow = null, raceRow = null;
         if (_gameData.FindRowByName("Classes", _stats.Class) is System.Text.Json.JsonElement cls
             && cls.ValueKind == System.Text.Json.JsonValueKind.Object)
@@ -454,6 +454,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
             maxHits = TipInt(cls, "MaxHits");
             mageryType = TipInt(cls, "MageryType");
             mageryLevel = TipInt(cls, "MageryLVL");
+            combatLvl = TipInt(cls, "CombatLVL");
         }
         if (_gameData.FindRowByName("Races", _stats.Race) is System.Text.Json.JsonElement race
             && race.ValueKind == System.Text.Json.JsonValueKind.Object)
@@ -465,7 +466,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         (bool thievery, bool traps, bool picklocks, bool tracking) =
             Game.GameData.AbilityNames.GetThiefSkillGrants(classRow, raceRow);
         return new StatContext(_realm, minHits, maxHits, raceHp, mageryType, mageryLevel,
-            thievery, traps, picklocks, tracking);
+            thievery, traps, picklocks, tracking, combatLvl);
     }
 
     private static int TipInt(System.Text.Json.JsonElement row, string property) =>
