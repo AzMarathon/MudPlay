@@ -1313,6 +1313,8 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 
 - **An `AttHitSpell-N` proc rides a physical attack slot.** It is **not** a spell cast, so it has no cast level of its own — there is no per-slot level field for it (`AttMax-N` is the physical attack's max damage).
 - **The hit spell fires whenever that physical attack lands** *([CONFIRMED] 2026-09-30, Tehshortbus via user)*. Each round the monster spends its energy on whichever attacks it picks (e.g. a grimhound: 2 savage bites + 1 trample, 4 bites, 2 tramples, or 1 chomp); any pick that lands and carries a hit spell fires that spell. A debuffing hit spell alters your defences for its duration — the grimhound's trample → `knockdown` (#318: AC −10, Dodge −20, Accuracy −5, HoldPerson, 12 s) makes you take more damage while it lasts (roughly a 1–2% effect, Tehshortbus).
+- **A hit spell with damage AND a duration burns rather than hits** *([OBSERVED] 2026-09-30, capture `backscroll-20260915-205411`)*. `envelops` (#884: 6–8, Dur 10, Damage(-MR); on the grimhound's chomp and nine other fire monsters' heaviest attacks) prints `The <monster> envelops you in flames!` with no damage number, then `You are on fire!`; HP then drops 6–7 about once a spell round with **no damage line** until `The flames enveloping you die down!` ~30–38 s later. Across the capture's quiet Volcano moments, HP fell in 32% of them while on fire vs 1.6% otherwise.
+- **The same effect landing again doesn't stack** *([CONFIRMED] 2026-09-30, Tehshortbus via user)*. **Paradigm** refreshes the duration — you're only ever affected once. **Stock** can inflict it several times, but you only take damage from one ("if I remember right").
 - **The Monsters table has no monster-level column at all** (only `CharmLVL` and the per-mid-spell `MidSpellLVL-N`).
 - **A proc must not feed anything that needs a cast level.**
 - **Recognizing the message and timing a duration are different questions.** The proc's spell record still *has* messages, so it remains a legitimate candidate for attributing an unrecognized line.
@@ -1320,7 +1322,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 **Client use:**
 - Witnessed-ailment chip durations (`AppServices.ResolveAilmentDurationSeconds` → `MonsterCatalogEntry.CastLevelFor`) count only real spell slots (`AttType-N == 2`) and between-rounds spells, and skip `AttHitSpell` entirely.
 - `RoomSpellAttributor` may still use the proc's spell record to attribute an unrecognized line.
-- `LoopSimulator` fires a landed physical attack's hit spell (`SimProc`): one cast's damage, and its AC / Dodge / Accuracy change and hold for its duration. With no cast level, a level-scaled hit spell is read at its own ReqLevel (**Client policy**).
+- `LoopSimulator` fires a landed physical attack's hit spell (`SimProc`): one cast's damage (or, with a duration, a burn of one cast's damage per spell round, refreshed rather than stacked by another landing), and its AC / Dodge / Accuracy change and hold for its duration. With no cast level, a level-scaled hit spell is read at its own ReqLevel (**Client policy**).
 
 ### Guarded monsters redirect attacks
 *Status: CONFIRMED 2026-07-14 (user + wire capture; report `paradigm-20260714-115526`)*

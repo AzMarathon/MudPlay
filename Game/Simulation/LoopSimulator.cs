@@ -125,7 +125,7 @@ public static class LoopSimulator
         private Mob? _target;
         private double _swingCarry;
         private int _mobSerial;
-        private readonly Dictionary<int, (double Until, SimProc Proc)> _procs = new();
+        private readonly Dictionary<int, (double Until, double NextTick, SimProc Proc)> _procs = new();
         private string? _pendingReroll;
         private int _rerollsThisCycle;
         private long _exp;
@@ -166,6 +166,8 @@ public static class LoopSimulator
                 if (Ended) break;
                 if (_moveDoneAt is null && !_isAway && _ch.Realm != RealmType.ParaMud && _step % StockRoomSpellSteps == 0)
                     RoomSummon();
+                Burn();
+                if (Ended) break;
                 Regen();
                 Decide();
                 Account();
@@ -518,8 +520,15 @@ public static class LoopSimulator
                         // A landed attack fires its hit spell (Tehshortbus, 2026-09-30).
                         if (a.HitSpell > 0 && _world.HitSpell?.Invoke(a.HitSpell) is { } proc)
                         {
-                            if (proc.DamageMax > 0) Hurt(Between(proc.DamageMin, proc.DamageMax));
-                            if (proc.DurationSeconds > 0) _procs[a.HitSpell] = (Now + proc.DurationSeconds, proc);
+                            if (proc.DamageMax > 0 && !proc.DamageOverTime) Hurt(Between(proc.DamageMin, proc.DamageMax));
+                            if (proc.DurationSeconds > 0)
+                            {
+                                // Landing again while it's still on you refreshes it — one
+                                // effect at a time, never a second burn.
+                                double next = _procs.TryGetValue(a.HitSpell, out var on) && on.Until > Now
+                                    ? on.NextTick : Now + SpellCalculator.SpellRoundSecondsWallClock;
+                                _procs[a.HitSpell] = (Now + proc.DurationSeconds, next, proc);
+                            }
                         }
                     }
                     else if (a.SpellDmgMax > 0 && Roll(a.MinDamage))
@@ -537,12 +546,25 @@ public static class LoopSimulator
         private int ProcSum(Func<SimProc, int> part)
         {
             int sum = 0;
-            foreach ((double until, SimProc p) in _procs.Values)
+            foreach ((double until, double _, SimProc p) in _procs.Values)
                 if (until > Now) sum += part(p);
             return sum;
         }
 
         private bool Held => _procs.Values.Any(x => x.Until > Now && x.Proc.Holds);
+
+        // A burning hit spell (envelops' "You are on fire!") deals its damage once a
+        // spell round until it dies down, round or no round.
+        private void Burn()
+        {
+            foreach ((int spell, (double until, double next, SimProc p)) in _procs.ToList())
+            {
+                if (!p.DamageOverTime || until <= Now || Now < next) continue;
+                Hurt(Between(p.DamageMin, p.DamageMax));
+                _procs[spell] = (until, next + SpellCalculator.SpellRoundSecondsWallClock, p);
+            }
+            if (_hp <= 0 && _diedAt is null) { Track(); _diedAt = Now; }
+        }
 
         private void Hurt(int amount)
         {
