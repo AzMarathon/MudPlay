@@ -14,8 +14,10 @@ public readonly record struct SelfHealInputs(
     Func<string, bool> HpRegenRecastDue);
 
 // Which self-heal tier is due, and with which spell — the Emergency / Major / Minor
-// picks CastingDirector ranks against the rest of the between-round queue. Pure, so
-// the loop simulator heals at exactly the thresholds the live client does.
+// picks CastingDirector ranks against the rest of the between-round queue. Pure:
+// the HP triggers come resolved through SelfHealInputs.HealHpTrigger, so a caller
+// gets the live thresholds only by resolving them on the same Default-gear basis
+// (RestThresholds.ResolveValue).
 public static class SelfHealPicker
 {
     // Last-resort self-save. Deliberately does NOT gate on ManaClearsHealFloor

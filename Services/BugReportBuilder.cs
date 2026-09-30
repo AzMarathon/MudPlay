@@ -1724,7 +1724,8 @@ public static class BugReportBuilder
         if (snap.Simulation is null) sb.Append("_(not run)_\n");
         else
         {
-            sb.Append("- Walk pace: ").Append(snap.SimSecondsPerStep.ToString("0.00")).Append(" s/room\n");
+            sb.Append("- Walk pace: ").Append(snap.SimSecondsPerStep.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))
+              .Append(" s/room, ").Append(snap.SimHours.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)).Append(" h per run\n");
             foreach (string line in snap.Simulation) sb.Append("- ").Append(line).Append('\n');
         }
 

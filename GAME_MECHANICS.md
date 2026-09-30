@@ -222,6 +222,9 @@ how many swings or spell fires a player or monster gets inside one round.
 - **Monster path:** applied to a MONSTER (a slowness debuff landed on it), it raises the monster's
   effective per-attack energy the same ×1.5, thinning its attacks/round.
 
+**Client use:**
+- `LoopSimulator` raises a slowed simulated monster's per-attack energy ×1.5.
+
 ---
 
 ## Wire, prompt & command output
@@ -480,7 +483,13 @@ How the game's talk modes and chat channels behave: say forms, the gang channel'
 
 ## Character stats & progression
 
-How a character earns and spends character points (CP), how exp needed per level is computed, where and how training works, and what each base stat contributes to derived combat/utility stats.
+How a character is named, how it earns and spends character points (CP), how exp needed per level is computed, where and how training works, and what each base stat contributes to derived combat/utility stats.
+
+### Character names — the first name is unique
+*Status: CONFIRMED 2026-09-30 (user) · Realm: both (stated for MajorMUD as a whole)*
+
+- **No two characters share a first name** *[CONFIRMED]*. The first name alone identifies a character, even though some screens print the full name (first + last) and others only the first.
+- **Client use:** `LiveLoopSessions.Pool` matches logged loop sessions to the character by first name, and `LiveLoopSessions.Parse` drops the carried level when a log names a different first name (Exp/Hr Estimator's *Check against my play*).
 
 ### Where CP comes from (CP gain per level)
 *Status: CONFIRMED (user rule, verified against a live level-10 build)*
@@ -639,7 +648,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Raising the Health stat raises max Hits, and so does a direct +HP bonus** *([CONFIRMED] 2026-09-28, user)*. Raw +Health is very rare on gear: no Stock spell or item carries it (ability 47), and on Paradigm only the platinum tiara does (+10) *([OBSERVED] 2026-09-28, imported game data)*. Items usually give +HP directly (ability 88). No player buff raises HP; one that did would raise max Hits too. (An earlier note read the DLL as computing max HP from the trained Health only, so a Health bonus wouldn't count; superseded 2026-09-28 by the user — the engine code that applies stat bonuses was never traced.)
 - **HP regen idle is `max(1, (level+20)*HEA/divisor)`, scaled by `HPregen%`** (750 Stock *([OBSERVED] `wccmmud.dll` 1.11p `_slow_update_character`)*; 500 Paradigm *([OBSERVED] MMUD-Explorer's GreaterMUD/Paradigm branch, `CalcRestingRate`; settled 2026-09-28 by the user's rule that MMUD-Explorer is the Paradigm formula source)*).
 - **Resting on Stock adds a second tick rather than tripling the first** *([OBSERVED] `wccmmud.dll` 1.11p; [CONFIRMED] 2026-09-27, user)*. The 30 s tick keeps paying the idle amount, and resting adds `3 × max(1, (level+20)*HEA/750)` every 21 s on top, scaled by `HPregen%`. See *Health, resting & recovery → Rest and meditate tick timing*.
-- **Paradigm resting works differently** *([NEEDS CONFIRMATION] user 2026-09-27: MMUD-Explorer has the Paradigm details)*. The client measures it on a 10 s grid at 3× the idle amount.
+- **Paradigm resting works differently: a 10 s tick in cycles of three, the third full** *([CONFIRMED] 2026-09-30, user; the two reduced ticks pay a third each)*. See *Health, resting & recovery → Rest and meditate tick timing*. (The 2026-09-27 note pointed to MMUD-Explorer for the details, which it turned out not to have; the client measures rest on a 10 s grid at 3× the idle amount.)
 
 **Client use:**
 - The CP tooltip shows the current-value max-HP marginal and the next HEA that ticks regen up.
@@ -922,11 +931,14 @@ How HP works from full health down through dropping and death, how monster healt
   - a 30 s tick (passive regen and bleeding out).
 - **Passive regen: every 30 s, both realms' base** — see *Character stats & progression → Health (HEA) — max HP and HP regen* and *Mana regeneration & the ManaRgn breakpoints*.
 - **Resting on Stock: an extra HP tick every 21 s** *([OBSERVED] DLL; [CONFIRMED] 2026-09-27, user)*. It pays `3 × max(1, (level+20)·HEA/750)`, then the HP-regen percent bonus, **in addition to** the 30 s tick.
-- **Resting on Paradigm: different** *([NEEDS CONFIRMATION] user 2026-09-27: MMUD-Explorer has the Paradigm details)*. Live captures show natural and rest both paying on a 10 s grid, rest at 3× the natural amount.
+- **Resting on Paradigm: a 10 s tick in cycles of three, the third tick full** *([CONFIRMED] 2026-09-30, user)*. While resting, HP ticks every 10 s instead of every 30 s. The first two ticks of each cycle pay a reduced amount and the third pays the full amount.
+  - **Each of the two reduced ticks pays one third of the full rest tick** *([CONFIRMED] 2026-09-30, user)*. MMUD-Explorer's source (checked 2026-09-30) has no Paradigm rest cycle: `CalcRestingRate` only switches the divisor (500 on GreaterMUD, 750 on Stock) and triples the amount when resting, and its exp/hr model uses one rest tick every 20 s on both realms (`SEC_PER_REST_TICK`). An earlier live capture (2026-09-27) showed natural and rest both paying on a 10 s grid, rest at 3× the natural amount (a druid: +3 standing, +9 resting). (Tagged [NEEDS CONFIRMATION] until the user answered, 2026-09-30.)
+  - `[NEEDS CONFIRMATION]` **Where a cycle starts.** Question: does the three-tick cycle count from the moment you lie down, or run on a fixed server grid?
 - **Meditating: every 15 s on Stock, every 10 s on Paradigm** *([CONFIRMED] 2026-09-27, user; Stock also [OBSERVED] DLL)*. On Stock the meditate tick pays the base mana formula **without** the `ManaRgn%` modifier, and the 30 s passive tick keeps running alongside it.
 
 **Client use:**
 - `RealmRegenProfile` / `RegenConstants`: Stock 30 / 21 / 15 s, Paradigm 10 / 10 / 10 s for natural / rest / meditate. `RegenTracker` learns the per-tick amounts live.
+- `SimCharacterBuilder.BuildRegen` (the Exp/Hr Estimator's character simulation) plays Paradigm rest as the three-tick cycle, the two reduced ticks a third of the full one, counted from lying down (that start is the unconfirmed part) (review of PR #802).
 
 ### Poison prevents resting
 *Status: CONFIRMED 2026-08-17 (user; report `paradigm-20260817-092945`); meditate split by realm 2026-09-28 · Realm: differs*
@@ -1339,9 +1351,9 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 *Status: CONFIRMED 2026-09-12 (user)*
 
 - **An `AttHitSpell-N` proc rides a physical attack slot.** It is **not** a spell cast, so it has no cast level of its own — there is no per-slot level field for it (`AttMax-N` is the physical attack's max damage).
-- **The hit spell fires whenever that physical attack lands** *([CONFIRMED] 2026-09-30, Tehshortbus via user)*. Each round the monster spends its energy on whichever attacks it picks (e.g. a grimhound: 2 savage bites + 1 trample, 4 bites, 2 tramples, or 1 chomp); any pick that lands and carries a hit spell fires that spell. A debuffing hit spell alters your defences for its duration — the grimhound's trample → `knockdown` (#318: AC −10, Dodge −20, Accuracy −5, HoldPerson, 12 s) makes you take more damage while it lasts (roughly a 1–2% effect, Tehshortbus).
-- **A hit spell with damage AND a duration burns rather than hits** *([OBSERVED] 2026-09-30, capture `backscroll-20260915-205411`)*. `envelops` (#884: 6–8, Dur 10, Damage(-MR); on the grimhound's chomp and nine other fire monsters' heaviest attacks) prints `The <monster> envelops you in flames!` with no damage number, then `You are on fire!`; HP then drops 6–7 about once a spell round with **no damage line** until `The flames enveloping you die down!` ~30–38 s later. Across the capture's quiet Volcano moments, HP fell in 32% of them while on fire vs 1.6% otherwise.
-- **The same effect landing again doesn't stack** *([CONFIRMED] 2026-09-30, Tehshortbus via user)*. **Paradigm** refreshes the duration — you're only ever affected once. **Stock** can inflict it several times, but you only take damage from one ("if I remember right").
+- **The hit spell fires whenever that physical attack lands** *([CONFIRMED] 2026-09-30, user)*. Each round the monster spends its energy on whichever attacks it picks (e.g. a grimhound: 2 savage bites + 1 trample, 4 bites, 2 tramples, or 1 chomp); any pick that lands and carries a hit spell fires that spell. A debuffing hit spell alters your defences for its duration, e.g. the grimhound's trample → `knockdown` (see *Spells, buffs & conditions → Knockdown — a movement-preventing hold*).
+- **A hit spell with damage AND a duration burns rather than hits** *([NEEDS CONFIRMATION] — generalised from one spell's capture: does every hit spell with damage and a duration deal nothing on the landing and burn instead, or only some?)*. `envelops` does *([OBSERVED] 2026-09-30, user capture of 2026-09-15)*: #884 (6–8, Dur 10, Damage(-MR); on the grimhound's chomp and nine other fire monsters' heaviest attacks) prints `The <monster> envelops you in flames!` with no damage number, then `You are on fire!`. How the burn then ticks and ends is in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*.
+- **A hit spell landing again, or two different ones, follow the effect-slot rules** in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures* (**Client policy**, user 2026-09-30).
 - **The Monsters table has no monster-level column at all** (only `CharmLVL` and the per-mid-spell `MidSpellLVL-N`).
 - **A proc must not feed anything that needs a cast level.**
 - **Recognizing the message and timing a duration are different questions.** The proc's spell record still *has* messages, so it remains a legitimate candidate for attributing an unrecognized line.
@@ -1349,7 +1361,8 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 **Client use:**
 - Witnessed-ailment chip durations (`AppServices.ResolveAilmentDurationSeconds` → `MonsterCatalogEntry.CastLevelFor`) count only real spell slots (`AttType-N == 2`) and between-rounds spells, and skip `AttHitSpell` entirely.
 - `RoomSpellAttributor` may still use the proc's spell record to attribute an unrecognized line.
-- `LoopSimulator` fires a landed physical attack's hit spell (`SimProc`): one cast's damage (or, with a duration, a burn of one cast's damage per spell round, refreshed rather than stacked by another landing), and its AC / Dodge / Accuracy change and hold for its duration. With no cast level, a level-scaled hit spell is read at its own ReqLevel (**Client policy**).
+- `LoopSimulator` fires a landed physical attack's hit spell (`SimProc`): one cast's damage, or with a duration an effect slot (a burn's rolled value each 3 s tick, and its AC / Dodge / Accuracy change and hold) under the slot rules in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*.
+- With no cast level, `SimProc` reads a level-scaled hit spell at its own ReqLevel. That is the implementation's choice, not a user decision *([NEEDS CONFIRMATION]: which level should a proc's level-scaled damage and duration use?)*.
 
 ### Guarded monsters redirect attacks
 *Status: CONFIRMED 2026-07-14 (user + wire capture; report `paradigm-20260714-115526`)*
@@ -2012,7 +2025,7 @@ How one damage spell cast against a monster is worked out.
 - `SpellDamageCalculator.Element` treats poison as having no scalable resist, for spells cast at monsters. Incoming poison damage against the player doesn't apply the Stock ImmuPoison cut yet.
 
 ### Poison and damage over time — ticks, stacking and cures
-*Status: [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p (addresses per bullet) · Realm: Stock; Paradigm not recorded*
+*Status: [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p (addresses per bullet), unless a bullet carries its own tag · Realm: Stock; Paradigm not recorded*
 
 - **A player's poison is one number, not a list.** The engine keeps a single poison amount per player (player record `+0xbe`).
   - **A new poison replaces it only if it's larger:** `amount = max(current, new)`. Poisons never add together. This applies to every source: monster casts (`_monster_cast` @ `0x428f5e`, `_monster_cast_area`), player casts (`_cast_user_target`) and melee-hit poison (`_attack_monster_user`, `_attack_user_user`).
@@ -2035,15 +2048,20 @@ How one damage spell cast against a monster is worked out.
   - these ticks print no text; only the prompt's HP changes;
   - `Dur` counts these 3-second ticks;
   - different damage-over-time spells run side by side, one slot each.
+- **A monster hit spell's burn looks like one of these slots** *([OBSERVED] 2026-09-30, user capture of 2026-09-15; realm not recorded)*. After `envelops` (#884, see *Combat → Monster on-hit procs (`AttHitSpell-N`) are physical attacks, not casts*) lands, HP drops 6–7 about once a spell round with **no damage line** until `The flames enveloping you die down!` ~30–38 s later. Across the capture's quiet Volcano moments, HP fell in 32% of them while on fire vs 1.6% otherwise.
 - **Recasting the same spell on someone who has it:**
   - **Cast by a monster:** the slot is refreshed (new value, duration reset) only if the new roll is strictly higher. Otherwise the cast is dropped and the monster gets its energy back (@ `0x428fb5`).
   - **Cast by a player** (`_add_cast_spell_to_user` @ `0x43ec31`): some casts overwrite the slot, the rest fail with `You attempt to cast %s, but fail.`. Poison casts overwrite.
+- **Client policy (user, 2026-09-30): monster hit spells follow the Stock engine's slot rules, in both realms.** A hit spell landing while the same spell is on you refreshes it only with a strictly higher roll, else the landing is dropped; different hit spells stack, one slot each; a burn's slot takes its stored value every 3 s, not a fresh roll each tick. (An earlier note said the same effect landing again doesn't stack: Paradigm refreshes the duration so you're only ever affected once, and Stock can inflict it several times but you only take damage from one; superseded 2026-09-30.) *[NEEDS CONFIRMATION]: the Stock half of that earlier note was never confirmed ("if I remember right") — can the same hit spell sit on a Stock player more than once? And does Paradigm refresh the duration on every landing, or only on a higher roll?*
 - **Cures:**
   - **A CurePoison (ability 20) spell ends one poison spell**, the first poison slot it finds, running its wear-off. It then lowers the poison number by the cure's own value, floored at 0 (Stock cure poison: 8) (`_cast_user_target` @ `0x44683f`). So one cast can leave a player with two poisons still poisoned.
   - **The healer's `buy cure poison`** (`_buy_item` @ `0x41b9e6`) zeroes the poison number and ends every poison slot, for 25 silver: `... and your poisoning is cured.`. If you weren't poisoned it costs 15 silver: `... and find that you were not poisoned!`.
   - **Death** ends every slot and zeroes the poison number.
 - **Where it shows:** `You are Poisoned!` in the status display, a `P` flag in `par`, and `%s is poisoned!` when someone looks at you.
 - **Resting and meditating are refused while poisoned** — see *Health, resting & recovery → Poison prevents resting*.
+
+**Client use:**
+- `LoopSimulator` (`LandProc`, `Burn`) applies the hit-spell policy above: one slot per spell, its stored value taken every 3 s, refreshed only by a strictly higher roll. It doesn't simulate poison (ability 19) hit spells.
 
 ### Attack-spell mana efficiency
 *Status: Unrated (client formula as used by Monster Intel)*
@@ -2471,7 +2489,8 @@ How one damage spell cast against a monster is worked out.
 - **Below-zero values matter:** a monster pushed below zero accuracy can't land a hit; below-zero AC makes it trivially hit (your to-hit benefits a lot).
 - **Same ability codes as the equip/buff resolvers:** AC 2/10, DR 7 [stored ×10], Dodge 34, Accuracy 22/105/106. Debuff values are stored signed ("-20"), so the fold takes the magnitude.
 - **Client use:**
-  - Modelled only in Monster Intel's "Apply Debuffs" WHAT-IF (`MonsterDebuffCalculator` + the `MonsterMatchupCalculator` monster-swing model) — the app does NOT apply debuff stat effects during live combat; this is a preview.
+  - Modelled in Monster Intel's "Apply Debuffs" WHAT-IF (`MonsterDebuffCalculator` + the `MonsterMatchupCalculator` monster-swing model) — the app does NOT apply debuff stat effects during live combat; this is a preview.
+  - `LoopSimulator` lands a combat debuff's `MonsterDebuffCalculator` strip on the simulated monster, once per spell per monster, for the rest of the fight (no wear-off or resist roll).
 
 ### Shadowform (spell 130) and buffs in the `stat` numbers
 *Status: mixed — per-fact tags inline · Realm: differs*
@@ -2571,8 +2590,10 @@ How one damage spell cast against a monster is worked out.
 - **A knockdown is a movement-preventing (held) status.** The hit lands as `You are knocked off your feet, and land with a heavy thump!` (third-person `{s} is knocked flat!`).
 - **While down, the standing status is `You are flat on your back!`** — which is also what the server prints as the **move refusal** when you try to walk while knocked down (a bonk, no room redisplay).
 - **It clears with `You get back on your feet.`**.
+- **`knockdown` (#318) is AC −10, Dodge −20, Accuracy −5 and HoldPerson for 12 s, so you take more damage while it lasts — roughly a 1–2% effect** *([CONFIRMED] 2026-09-30, user)*. The grimhound's trample carries it as a hit spell (see *Combat → Monster on-hit procs (`AttHitSpell-N`) are physical attacks, not casts*).
 - **Client use:**
   - `MovementRefusalDetector` matches the `You are flat on your back!` move refusal.
+  - `LoopSimulator` applies a hit spell's AC / Dodge / Accuracy change for its duration, and neither walks on nor flees (the Health run trigger waits) while a HoldPerson hit spell is on (`Held`).
   - The applied/clear pair maps to the `MovementPrevented` flag, so the local hold (`SelfHeldResponder` → `HeldGate`) holds our own loop for the duration exactly as a confused leader's does. A held leader or solo character has no leader to send `.@held` to, so the local `HeldGate` alone pauses the loop.
 
 ---
@@ -2583,14 +2604,29 @@ How monsters come into a room (lair groups, `NPC` placements, bosses, death-summ
 
 ### Lair respawn timers
 
-*Status: CONFIRMED 2026-08-02 (user)*
+*Status: per-bullet tags (originally CONFIRMED 2026-08-02, user) · Realm: differs*
 
 Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in *NPC-placed monsters*), and they respawn on completely different rules. This matters directly for exp/hr estimation of a loop (how fast a lair refills vs how fast you can lap it).
 
-- **Respawn time `T`.** A room's `Lair` group spawns N monsters with a respawn time `T`. **Lair timers are calculated differently from other timers** *([CONFIRMED] 2026-09-26, user)*: `T` comes from the room's `Delay` field, in set 30-second steps — `(Delay − 1)` minutes + 30 s — and the map's lair timer shows it correctly; that is the value to use for how long a lair takes to respawn. When a room has no `Delay`, `LairTimerStore` falls back to the lair's `AvgDelay` (stock exports it in **minutes**, Paradigm/GreaterMUD differs), else the slowest member's `RegenTime`. (A monster's own `RegenTime` works the same way for every monster — hours, as *Boss monsters* records — but it isn't the lair clock.)
-- **The clock is per monster slot, keyed to each kill.** Each monster slot in a lair carries its own independent respawn clock of length `T`, started at the moment *that* monster was last killed — not a shared lair clock, and separate from every other lair, even lairs with the same monster type and size. In a 3-mob, 60 s lair: a mob killed at t=0 is killable again at t=60; one killed at t=10 is back at t=70. They come back **staggered**. So a dense multi-lair loop desynchronises: with enough slots there's almost always one ready, and a single-target loop runs pinned at the 720/hr tick cap (the *single-target* ceiling — rooming runs above it; see *Timing & rounds → Exp/hour ceiling and loop geometry*) rather than clearing everything then idling for a synchronised repop.
-- **Being early does not make it spawn.** To re-kill a mob you must be in the room at or after `(its last kill + T)`. Arriving earlier, it simply isn't there yet.
+- **Respawn time `T`.** A room's `Lair` group spawns N monsters with a respawn time `T` that comes from the room's `Delay` field. **Lair timers are calculated differently from other timers.** When a room has no `Delay`, `LairTimerStore` falls back to the lair's `AvgDelay` (stock exports it in **minutes**, Paradigm/GreaterMUD differs), else the slowest member's `RegenTime`. (A monster's own `RegenTime` works the same way for every monster — hours, as *Boss monsters* records — but it isn't the lair clock.)
+  - **Paradigm: `T` = `(Delay − 1)` minutes + 30 s**, in set 30-second steps, and the map's lair timer shows it correctly *([CONFIRMED] 2026-09-26, user; placed on Paradigm by the user 2026-09-30)*.
+  - **Stock: `Delay` to `Delay + 1` minutes after the room's last kill**, in whole clock minutes *([OBSERVED] 2026-09-30, DLL — see How the Stock engine refills a lair; [CONFIRMED] 2026-09-30, user)*.
+- **Paradigm: the clock is per monster slot, keyed to each kill** *([NEEDS CONFIRMATION] — per-slot or one room clock like Stock? Tracked in issue [#813](https://github.com/Tehshortbus/MudPlay/issues/813). Originally [CONFIRMED] 2026-08-02, user, with no realm; the user placed it on Paradigm 2026-09-30)*. Each monster slot in a lair carries its own independent respawn clock of length `T`, started at the moment *that* monster was last killed — not a shared lair clock, and separate from every other lair, even lairs with the same monster type and size. In a 3-mob, 60 s lair: a mob killed at t=0 is killable again at t=60; one killed at t=10 is back at t=70. They come back **staggered**. So a dense multi-lair loop desynchronises: with enough slots there's almost always one ready, and a single-target loop runs pinned at the 720/hr tick cap (the *single-target* ceiling — rooming runs above it; see *Timing & rounds → Exp/hour ceiling and loop geometry*) rather than clearing everything then idling for a synchronised repop.
+- **Stock: one clock for the whole lair room, restarted by every kill in it** *([OBSERVED] 2026-09-30, DLL; [CONFIRMED] 2026-09-30, user)*. Once it runs out, every missing spawn comes back together, `Delay` to `Delay + 1` minutes after the last kill. Killing one mob of a partly refilled room restarts the wait for all the empty slots.
+- **Being early does not make it spawn.** To re-kill a mob you must be in the room at or after its clock's start + `T` (that slot's last kill on Paradigm, the room's last kill on Stock). Arriving earlier, it simply isn't there yet.
 - **Loop consequence.** A lap that returns to a lair with period `P ≥ T` finds it fully respawned (full mobs that lap); `P < T` laps into a partial/empty room. So a lair's sustainable exp rate is capped at `mobs × exp ÷ T` regardless of how fast you loop — the "respawn-limited" regime — while a loop long enough that `P ≥ T` is "travel/kill-limited." The real rate per lair ≈ `min(the two)`.
+- **A lair also refills under a character standing in it, but slower than walking in once its timer has run out** *([CONFIRMED] 2026-09-30, user)*.
+- **How the Stock engine refills a lair** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p and `wccmp002.dat`; Stock only, Paradigm not recorded)*. In-memory room offsets (disk record minus 2):
+  - **Every lair-tagged room is room type 3** (`+0x43c`; all 3,102 of them in `wccmp002.dat`). Its `(Max N)` is `+0x55c`, its `Delay` is `+0x5bc` (0 falls back to the global default at `0x482d0c`, 5), and its live spawn count is `+0x606`.
+  - **A kill stamps one last-kill time for the whole room.** `_check_kill_monster` @ `0x424eb7` lowers the spawn count and writes the current clock minute (hour × 60 + minute) to `+0x562` (@ `0x424f1a`–`0x424f3d`), and again on the room the monster died in (@ `0x424fc5`–`0x424fe8`).
+  - **`_generate_monster` @ `0x424361` refuses while the count is at `Max`** (@ `0x4243a5`) **and until the clock minute minus `Delay` is past the last-kill minute** (@ `0x42440b`–`0x424466`). So the room is ready `Delay` to `Delay + 1` minutes after its last kill, in whole clock minutes, and then every missing spawn comes back together.
+  - **Walking in refills at once.** `_user_allowed_in_room` @ `0x4172ff`, which `_move_user` calls before the move, generates into a type-3 room until a generate fails, when no other player is in it (@ `0x4173bd`–`0x417450`).
+  - **Standing in it, the refill waits for the monster-create pass.** `_background_monster_create` @ `0x4218b7` calls `0x4232d3`, which walks every player's room and generates into a type-3 room until one fails, with no random roll (@ `0x42353e`–`0x423585`). The pass runs every 5 fast ticks, 5 s by default (`0x482ca8`; the sysop can change it @ `0x465b1a`). On Stock that pass is the whole of "slower in the room": up to 5 s after the room is ready.
+  - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) keeps a clock per lair slot. `Spawn` refills a lair at once on entry, and while the character stands in the room only on a 5 s spawn pass at a random phase (the Stock pass rate, used for both realms). A lair whose timer didn't resolve (respawn 0) refills on entry only (review of PR #802).
+- (A 2026-09-30 `[CONFLICT — ask the user]` note said the DLL's room-wide clock and `Delay`–`Delay + 1` minute wait disagreed with the per-slot clock and `(Delay − 1)` min + 30 s rules, which then carried no realm; settled 2026-09-30 by the user: the DLL is right for Stock, and the per-slot rule is Paradigm's.)
+- **Client use:**
+  - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) keeps one clock per lair room on Stock and one per slot on Paradigm (`RoomState`, by the frozen character's realm). `Spawn` refills a lair at once on entry, and while the character stands in the room only on a 5 s spawn pass at a random phase (the Stock pass rate, used for both realms). A lair whose timer didn't resolve (respawn 0) refills on entry only (review of PR #802).
+  - Still on the Paradigm rule for both realms: `LoopExpSimulator` (the estimate's per-mob clocks) and `LairTimerStore.DefaultRespawnSeconds` (`(Delay − 1)` min + 30 s), which also feeds the simulator's `T`.
 
 ### NPC-placed monsters
 
@@ -2686,6 +2722,9 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
   - So a death-summon room yields far more than its face value, but the extra kill/wave time — and the cap on huge fan-outs — keep it below the naive exp-ratio multiple.
   - Bosses are left on their base exp (their death-summon, if any, is not folded — a rare edge, and boss exp is already a flat amortised approximation).
 
+**Client use:**
+- `LoopSimulator` summons a dying monster's `DeathSpell` tier as one cast, all of it or none under the 20-monster cap, on both realms. *[NEEDS CONFIRMATION]: this topic is recorded for Paradigm only — does Stock also cap a room at 20 and fail an over-cap death cast whole?*
+
 ### Mid-fight summons
 *Status: [OBSERVED] 2026-09-30 (user capture; game data v1.11p and Paradigm 1.9.1) · Realm: both (data); the capture's realm isn't recorded*
 
@@ -2721,6 +2760,7 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
   - Summon mobs are never *killed* by the estimator (a room-attached spell never kills NPCs, and no feedback is modeled) — `RoundsPerMob` (the clear-rate knob) stays realm-agnostic and the user sets it directly.
 - **Client use:**
   - Lives in `LoopExpSimulator.SummonFires`.
+  - `LoopSimulator` rolls the table on entry, then every combat round on Paradigm or every 6 s on Stock while present (`nomonsters:` only in an empty room); a summon that would take the room past the 20-monster cap in *Death-summon cascades* is dropped.
 
 ### Summoned monster key drop
 
@@ -2859,17 +2899,19 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 *Status: CONFIRMED 2026-07-22 (user) · Realm: both (realm-specific)*
 
 - **Per-hop movement speed is realm-specific, and the two realms differ enough that no single fixed movement timer can be right for both.**
-- **Paradigm paces each hop by a deterministic server formula (no lag term):**
-  `hop_ms = max(1000, 1100 + enc² · 2000 − quickness · 10)`, where `enc` is the encumbrance fraction (0–1 of max carry) and `quickness` is total quickness.
+- **Paradigm paces each hop by a deterministic server timer.** The formula itself has no lag term; the lag a player sees is added on top of it (see the lag bullet in this topic):
+  `hop_ms = max(1000, 1100 + enc² · 2000 − quickness · 10)`, where `enc` is the encumbrance fraction (0–1 of max carry) and `quickness` is the +Quickness total, the value `ParadigmMovementCostModel` reads off worn gear *([OBSERVED] 2026-09-30: the priest datum in this topic fits only this reading. An earlier note said "total quickness"; superseded 2026-09-30. [NEEDS CONFIRMATION]: does a buff's +Quickness count too?)*.
   - There is a hard **1.0s cap — the fastest any hop can be.**
   - Time rises quadratically with encumbrance and falls linearly with quickness: a light, high-quickness build sits pinned at the 1.0s floor (quickness 100 stays capped until ~67% enc), while a heavy or low-quickness build ranges up toward ~3.1s/hop.
   - The server will not process a hop faster than this, so back-to-back move commands are throttled to it rather than executing instantly.
   - Cross-checked against the falls-below-cap points: quickness 15 → 16% enc, 100 → 67%, 200 → 97%.
-- **Lag rides on top of that timer** *([CONFIRMED] 2026-09-30, Tehshortbus via user)*: a character at the 1.0s cap really walks **~1.08–1.15s** a room — 80–150 ms of lag. *([OBSERVED] 2026-09-30: a quickness-0, 32%-encumbrance priest's formula timer is 1.305s; its program log shows a 1.37s median over 5,454 back-to-back moves.)*
-  - **Client use:** `LoopSimulator`'s default walk pace is `ParadigmMovementCostModel` with a 100 ms lag (the Exp/Hr Estimator's *Lag per move*).
+- **Lag rides on top of that timer** *([CONFIRMED] 2026-09-30, user)*: a character at the 1.0s cap really walks **~1.08–1.15s** a room — 80–150 ms of lag. *([OBSERVED] 2026-09-30, a contributor's program log: a priest with gear quickness 0 at 32% encumbrance has a formula timer of 1.305s, and the log shows a 1.37s median over 5,454 back-to-back moves.)*
 - **Stock has no such floor.** Empirical captures (8 sessions, 199 moves) show a true-speed floor around **0.25s** unencumbered, medians ~0.6–0.7s at light/medium loads rising to ~1.65s when Heavy (≈67%+ enc), with wide lag-driven variance per hop. A comparable character therefore moves roughly **2–4× faster per hop on stock** than the Paradigm 1.0s cap.
 - **Design consequence — the dark-room settle window (and any fixed inter-move timer) is realm-coupled.** At 1.0s it ≈ the Paradigm server cadence, so on Paradigm it costs almost nothing on an empty room; on stock the same 1.0s nearly doubles the natural ~0.6s hop — a heavy tax.
 - **Overshoot (stepping before a dark pursuer reveals) is a fast-mover problem:** it only bites a character near the Paradigm cap or a quick stock character; a slow/heavy mover has ample reveal margin. This argues for making dark-room room-clear detection **event-driven** (step once the room is confirmed clear via the attack→"no effect" + combat-line-silence signals) rather than a single global duration.
+
+**Client use:**
+- `LoopSimulator`'s default walk pace is `ParadigmMovementCostModel` with a 100 ms lag on Paradigm (the Exp/Hr Estimator's *Lag per move*), and Auto-Lair's travel model on Stock (the user's hop times by encumbrance).
 
 ### `rm` — authoritative position (Paradigm only)
 *Status: CONFIRMED (capture 2026-07-12; reliability: user 2026-09-02, report paradigm-20260902-223159) · Realm: Paradigm*

@@ -31,7 +31,9 @@ public static class SimCharacterBuilder
         IReadOnlyList<QuestBonus>? questBonuses,
         Func<int, MonsterOverlay> overlay,
         Func<int, string?> spellShortByNumber,
-        int evilPoints)
+        int alignmentValue,
+        int defaultMaxHp,
+        int defaultMaxMana)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(worn);
@@ -51,8 +53,9 @@ public static class SimCharacterBuilder
             spellMap,
             combat, health, spells, overlay,
             number => number > 0 ? spellShortByNumber(number) : null,
-            evilPoints,
-            BuildBuffs(buffs, obtainedSpells, spellMap, realm));
+            alignmentValue,
+            BuildBuffs(buffs, obtainedSpells, spellMap, realm),
+            DefaultMaxHp: defaultMaxHp, DefaultMaxMana: defaultMaxMana);
     }
 
     // The solo self-buffs of the Buffs list, in the order the casting engine walks
@@ -85,11 +88,18 @@ public static class SimCharacterBuilder
         return list;
     }
 
+    // The character's alignment number: the exact evil points when Paradigm's `pro`
+    // has shown them, else the value of the who title's band (Stock never shows the
+    // points), else Neutral.
+    public static int AlignmentValue(double? evilPoints, string? alignmentTitle) =>
+        evilPoints is { } ep ? (int)ep : AlignmentBands.ValueOf(alignmentTitle) ?? 0;
+
     // Per-tick regen from the stat formulas (CharacterCalculator.CalcHpRegen /
     // CalcManaRegen) with gear, race, class and quest regen percents folded in.
-    // Paradigm splits each natural cycle into thirds on a 10 s grid and rests on the
-    // same grid at 3x, in place of the standing tick; Stock adds a separate rest tick
-    // (GAME_MECHANICS "Rest and meditate tick timing").
+    // Paradigm splits each natural cycle into thirds on a 10 s grid; resting there
+    // replaces it with 10 s ticks in cycles of three, the third paying the full rest
+    // amount and the two before it a third of that. Stock adds a separate full rest
+    // tick (GAME_MECHANICS "Rest and meditate tick timing").
     private static SimRegen BuildRegen(
         PlayerStats stats, IReadOnlyList<EquippedItem> worn, GameDataCache gameData,
         IReadOnlyList<QuestBonus>? questBonuses, RealmType realm)
@@ -110,15 +120,17 @@ public static class SimCharacterBuilder
         int hpPct = t.HpRegenPercent, mpPct = t.MpRegenPercent;
         int level = stats.Level, health = stats.Health, intel = stats.Intellect, wil = stats.Willpower, cha = stats.Charm;
         // Paradigm pays each natural cycle in thirds on its 10 s grid.
-        double share = realm == RealmType.ParaMud ? 1.0 / 3 : 1.0;
+        bool paradigm = realm == RealmType.ParaMud;
+        double share = paradigm ? 1.0 / 3 : 1.0;
         return new SimRegen(
             HpStanding: extra => share * CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, false, realm),
-            HpResting: extra => share * CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, true, realm),
+            HpResting: extra => CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, true, realm),
             MaStanding: extra => share * CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
                 mageryType, mageryLevel, mpPct + extra, false, realm),
             MaMeditating: CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
                 mageryType, mageryLevel, mpPct, true, realm),
-            RealmRegenProfile.For(realm), RestReplacesStanding: realm == RealmType.ParaMud);
+            RealmRegenProfile.For(realm), RestReplacesStanding: paradigm,
+            RestFullEvery: paradigm ? 3 : 1, RestReducedShare: paradigm ? 1.0 / 3 : 1);
     }
 
     private static IReadOnlyDictionary<string, SimSpell> BuildSpells(
@@ -158,8 +170,8 @@ public static class SimCharacterBuilder
 
     // The regen percent a spell adds while it's up: a stored value is fixed, a 0 is
     // rolled from the spell's level-scaled range each cast (GAME_MECHANICS "Mana
-    // regeneration & the ManaRgn breakpoints"). Only a positive HP-regen value is a
-    // buff (a negative one is chaos surge's drain), so that side keeps positives.
+    // regeneration & the ManaRgn breakpoints"). A negative stored HP-regen value is
+    // left out rather than guessed at, so the HP side only ever adds regen.
     private static (int Min, int Max) RegenRange(in SpellFormulaInput f, int level, int code)
     {
         foreach (SpellAbility a in f.Abilities)
@@ -172,6 +184,6 @@ public static class SimCharacterBuilder
         return (0, 0);
     }
 
-    internal static int ReadInt(JsonElement row, string name) =>
+    private static int ReadInt(JsonElement row, string name) =>
         row.TryGetProperty(name, out JsonElement v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int i) ? i : 0;
 }

@@ -2782,6 +2782,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         {
             ExpEstimator.PropertyChanged -= OnExpEstimatorPropertyChanged;
             ExpEstimator.CancelRanking();
+            ExpEstimator.CancelSimulation();
         }
         ExpEstimator = null;
         LoopBuilderPath = null;
