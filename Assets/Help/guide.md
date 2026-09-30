@@ -1062,7 +1062,16 @@ Alongside HP and mana it also projects the **derived combat/utility stats** your
 - **Melee dmg** (STR's bonus onto your weapon's own damage range, shown as `+min/+max`);
 - **Max enc** (carry weight), and **Magic res**.
 
+**Hover any column header** to see how its figure is worked out and what goes into it. Where Paradigm's formula differs from Stock's (Total XP, HP/tick, Accuracy, Stealth, BS Accy), the tooltip shows the one for the realm you have loaded. For a column that's only confirmed on Stock, the Paradigm tooltip says so.
+
 The **HP/tick** column shows both rates as `idle / resting` (resting regen is 3× idle).
+
+The **Stealth (sneak %)** column shows your Stealth and, in brackets, the chance a sneak (`sn`) takes at it, e.g. `84 (84%)`. That's the figure for an empty room with a light load, and it tops out at 95%.
+
+- **Each monster** in the room takes **1%** off, and so does each other player.
+- **Carrying over a third** of your weight limit takes **5%** off, over two thirds **10%**.
+- **Once your sneak is broken, you can't re-sneak** while monsters are in the room, whatever the chance.
+- **If you've marked the Perfect Stealth quest complete** on the Quest Status tab, the column reads **100%** from the level you can do that quest at.
 
 These figures reflect **your current character**: the base attributes carry your equipment's and completed quests' stat bonuses (the `stat` screen is already gear-inclusive), and the table folds your gear's and completed quests' **direct** bonuses on top too — extra max HP / max mana, HP- and MP-regen %, and flat +dodge / +crit / +stealth / +magic-resist / +damage / +carry / **+skill** from items. (Accuracy stays the stat-and-level contribution — a weapon's own accuracy is situational and can't be projected to future levels.)
 

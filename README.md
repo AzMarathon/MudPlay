@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.127.0**
-> - Drag a numbered waypoint chip onto another room to move it, while building a loop or an exp/hr sketch
+> **Version 3.127.2**
+> - Level Projection's Stealth column shows your sneak chance beside it: 84 (84%), or 100% from the level of a completed Perfect Stealth quest
+> - Every Level Projection column header explains its figure on hover, with the Paradigm formula when a Paradigm realm is loaded
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

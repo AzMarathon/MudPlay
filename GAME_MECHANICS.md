@@ -3029,6 +3029,12 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     - others in the room see `You see %s bash the %s to the %s.` / `…attempt to bash the %s to the %s.` (and `…above you.` / `…below you.` forms).
     - The engine also has `You bash the door open and walk through` followed by `The door slams shut behind you!`, which moves the basher through the exit. **No exit in the game uses it** *([CONFIRMED] 2026-09-28, user: never seen in play)*.
   - **`pick <dir>`:** `You successfully unlocked the %s.` / `Your skill fails you this time.`; others see `You see %s pick the lock on the %s to the %s.` (and above / below forms). The picklock command has no "not locked" line of its own.
+- **How a pick succeeds** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_cmd_picklock`, with the exit layout in `tools/1.11p source/exit_fields.md`; Stock only, Paradigm not recorded)*:
+  - **One roll: 0–100 under your Picklocks plus the lock's modifier.** The modifier is stored negated: the game data's `[N picklocks]` is a modifier of `−(N − 1)`. So the chance is about **Picklocks − N + 1** percent: a `[101 picklocks]` door needs Picklocks over 100, and at 150 it opens about half the time.
+  - **0 Picklocks always fails**, with no roll.
+  - **A door marked "any"** carries a positive modifier, which adds to the chance.
+  - **The same field is the bash modifier** (exit types 2, 7 and 11).
+  - **Picking costs a 2-unit action delay** and ends a sneak and a hide.
   - **`use <key> <dir>`:** `You successfully unlocked the door.` / `…the %s.`; `The door was not locked.` / `The %s was not locked.`; a wrong key `The %s doesn't seem to fit that lock.`
   - **`open <dir>`:** `The door is now open.` / `The %s is now open.`; `The door was already open.` / `The %s was already open.`; `The door is locked.` / `The %s is locked.`; `That is not a door or a gate!`
   - **`close` / `lock <dir>`** (the client never sends these): `The door is now closed.`, `The door is now locked.`, `The gate is now locked.`, `That %s is not open. Closing it will do nothing!`, `You must close the door before you may lock it.` (gate form too), `There is no benefit to locking in that direction.`, `You may not close doors or gates while attacking or being attacked!` (lock form too).
