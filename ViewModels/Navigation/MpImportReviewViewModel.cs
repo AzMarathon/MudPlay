@@ -21,6 +21,9 @@ namespace MudPlay.ViewModels.Navigation;
 // rooms typed in, re-translates from them, and checks our navigation can walk the
 // result all the way round as a loop. Accept saves it, adding the rooms ticked
 // "Stash" to the character's stash rooms; Reject closes without saving.
+// The MudPlay side can be reshaped too: a step's row left out of the loop, a room
+// inserted below any row, and rows moved up or down. The shape (_layout) survives
+// every re-translation, and the map comparison redraws after each change.
 public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogViewModel<Loop?>
 {
     private readonly string _path;
@@ -37,6 +40,12 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     // Rooms the user has set by hand, by step, held across every verify. Clearing a
     // row's box releases it.
     private readonly Dictionary<int, RoomKey> _fixedRooms = new();
+
+    // The rows in the user's order: a step's index, or a row they inserted. Steps
+    // left out of the loop are in _removed. Built once; a re-translation rebuilds each
+    // step's row but keeps this shape.
+    private readonly List<object> _layout = new();
+    private readonly HashSet<int> _removed = new();
 
     public event Action<Loop?>? CloseRequested;
 
@@ -72,6 +81,8 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
             $"Use: {Or(file.Use)}",
         };
         Problems = file.Problems;
+
+        for (int i = 0; i < file.Steps.Count; i++) _layout.Add(i);
 
         LoopName = MpFileImporter.StripMapRoomSuffix(file.Label) is { Length: > 0 } clean
             ? clean
@@ -218,10 +229,13 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
 
         Loop loop = new(name, waypoints) { Notes = Notes.Trim() };
         _loops.Save(loop);
-        int blanks = Rows.Count(r => r.IsBlank && r.EffectiveRoom is null);
+        int blanks = Rows.Count(r => r.IsBlank && !r.IsRemoved && r.EffectiveRoom is null);
+        int removed = Rows.Count(r => r.IsRemoved), added = Rows.Count(r => r.IsInserted && r.EffectiveRoom is not null);
         _log?.Info("MpImporter",
             $"accepted {FileName} as '{name}': {waypoints.Count} waypoint(s)"
             + (blanks > 0 ? $", {blanks} step(s) left blank" : "")
+            + (removed > 0 ? $", {removed} step(s) left out" : "")
+            + (added > 0 ? $", {added} room(s) added" : "")
             + $", {stashed} stash room(s) added");
         CloseRequested?.Invoke(loop);
     }
@@ -232,7 +246,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     private int AddStashRooms()
     {
         if (_filter is null) return 0;
-        List<RoomKey> toAdd = Rows.Where(r => r.MarkStash).Select(r => r.EffectiveRoom).OfType<RoomKey>()
+        List<RoomKey> toAdd = Rows.Where(r => r.MarkStash && !r.IsRemoved).Select(r => r.EffectiveRoom).OfType<RoomKey>()
             .Distinct().Where(k => !_filter.IsStash(k)).ToList();
         foreach (RoomKey k in toAdd) _filter.MarkStash(k);
         return toAdd.Count;
@@ -252,12 +266,22 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         Dictionary<int, RoomKey> updated = new(_fixedRooms);
         foreach (MpTranslatedRowViewModel row in Rows)
         {
+            if (row.IsInserted)
+            {
+                string typed = row.RoomText.Trim();
+                if (typed.Length > 0 && (!RoomKey.TryParseWire(typed, out RoomKey added) || _graph.GetRoom(added) is null))
+                {
+                    SetStatus($"An added row: '{row.RoomText}' isn't a room in the map data (use map/room, e.g. 1/2150).", good: false);
+                    return false;
+                }
+                continue;
+            }
             if (!row.RoomEdited) continue;
             string text = row.RoomText.Trim();
             if (text.Length == 0) { updated.Remove(row.Index); continue; }
             if (!RoomKey.TryParseWire(text, out RoomKey k) || _graph.GetRoom(k) is null)
             {
-                SetStatus($"Step {row.Number}: '{row.RoomText}' isn't a room in the map data (use map/room, e.g. 1/2150).", good: false);
+                SetStatus($"Step {row.NumberText}: '{row.RoomText}' isn't a room in the map data (use map/room, e.g. 1/2150).", good: false);
                 return false;
             }
             updated[row.Index] = k;
@@ -293,7 +317,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
 
         (IReadOnlyList<LoopStep> steps, IReadOnlyList<(RoomKey From, RoomKey To)> unreachable) =
             _loops.ExpandWaypoints(waypoints, _filter);
-        int blanks = Rows.Count(r => r.IsBlank && string.IsNullOrWhiteSpace(r.RoomText));
+        int blanks = Rows.Count(r => r.IsBlank && !r.IsRemoved && string.IsNullOrWhiteSpace(r.RoomText));
         if (unreachable.Count == 0)
         {
             int moves = steps.Count(s => s is MoveLoopStep);
@@ -356,20 +380,91 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     // ticked on a row (by step) when its room didn't change.
     private void BuildRows(MpTranslation? t, bool preserveEdits)
     {
-        Dictionary<int, MpTranslatedRowViewModel> old = preserveEdits ? Rows.ToDictionary(r => r.Index) : new();
-        Rows.Clear();
+        Dictionary<int, MpTranslatedRowViewModel> old = preserveEdits
+            ? Rows.Where(r => !r.IsInserted).ToDictionary(r => r.Index) : new();
+        var steps = new MpTranslatedRowViewModel[_file.Steps.Count];
         for (int i = 0; i < _file.Steps.Count; i++)
         {
             MpTranslatedRow row = t?.Rows[i] ?? new MpTranslatedRow(i, null, MpRowStatus.Blank, "no start room yet", false);
-            MpTranslatedRowViewModel vm = new(row, _file.Steps[i], _sourceRows[i], _graph);
+            MpTranslatedRowViewModel vm = new(row, _file.Steps[i], _sourceRows[i], _graph) { IsRemoved = _removed.Contains(i) };
             if (old.TryGetValue(i, out MpTranslatedRowViewModel? prev) && Equals(prev.Room, vm.Room))
                 vm.CopyEditsFrom(prev);
-            Rows.Add(vm);
+            steps[i] = vm;
         }
+        Rows.Clear();
+        foreach (object slot in _layout)
+            Rows.Add(slot is int i ? steps[i] : (MpTranslatedRowViewModel)slot);
 
         TranslationSummary = t is null ? "Nothing translated yet." : $"Start {t.Anchor}: {t.Summary}.";
         SetStatus(string.Empty, good: false);
         RefreshMapComparison();
+    }
+
+    // ----- reshaping the MudPlay side ---------------------------
+
+    // ✕ / ↺: an inserted row goes; a step's row is left out of the loop (or put back),
+    // staying on screen beside its step.
+    [RelayCommand]
+    private void RemoveRow(MpTranslatedRowViewModel? row)
+    {
+        if (row is null) return;
+        if (row.IsInserted)
+        {
+            _layout.Remove(row);
+            Rows.Remove(row);
+            Reshaped("removed an added room");
+            return;
+        }
+        row.IsRemoved = !row.IsRemoved;
+        if (row.IsRemoved) _removed.Add(row.Index);
+        else _removed.Remove(row.Index);
+        Reshaped(row.IsRemoved ? $"left step {row.NumberText} out" : $"put step {row.NumberText} back");
+    }
+
+    // +: a new row below, for a room of the user's to walk through. It takes the
+    // room typed into its box.
+    [RelayCommand]
+    private void InsertBelow(MpTranslatedRowViewModel? row)
+    {
+        if (row is null) return;
+        int at = Rows.IndexOf(row);
+        if (at < 0) return;
+        MpTranslatedRowViewModel added = new(_graph);
+        // A typed room that names a real room goes on the map as soon as it's typed.
+        added.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MpTranslatedRowViewModel.RoomText)
+                && added.EffectiveRoom is { } k && _graph.GetRoom(k) is not null)
+                RefreshMapComparison();
+        };
+        _layout.Insert(at + 1, added);
+        Rows.Insert(at + 1, added);
+        Reshaped($"added a room below row {at + 1}");
+    }
+
+    [RelayCommand]
+    private void MoveUp(MpTranslatedRowViewModel? row) => Move(row, -1);
+
+    [RelayCommand]
+    private void MoveDown(MpTranslatedRowViewModel? row) => Move(row, +1);
+
+    private void Move(MpTranslatedRowViewModel? row, int by)
+    {
+        if (row is null) return;
+        int from = Rows.IndexOf(row), to = from + by;
+        if (from < 0 || to < 0 || to >= Rows.Count) return;
+        (_layout[from], _layout[to]) = (_layout[to], _layout[from]);
+        Rows.Move(from, to);
+        Reshaped($"moved row {from + 1} {(by < 0 ? "up" : "down")}");
+    }
+
+    // The loop changed shape: redraw the map comparison and ask for a fresh verify.
+    private void Reshaped(string what)
+    {
+        foreach (MpTranslatedRowViewModel r in Rows) r.Unreachable = false;
+        SetStatus("Loop edited — press Verify to check MudPlay can walk it.", good: false);
+        RefreshMapComparison();
+        _log?.Info("MpImporter", $"{FileName}: {what}");
     }
 
     private void SetStatus(string text, bool good)

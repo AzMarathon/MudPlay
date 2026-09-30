@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.1**
-> - Starter loops: the last MegaMUD loops converted — 15 new Stock loops and 23 new Paradigm loops (Strange Mansion, White Forest, Darkwood wyverns / bugbears, Mithril Mines complete, Misty Swamp and more); loop conversion is complete for both realms
+> **Version 3.134.2**
+> - MegaMUD loop import: leave steps out, add rooms and move rows on the MudPlay side, with the map redrawing as you go
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

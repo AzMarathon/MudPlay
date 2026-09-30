@@ -334,6 +334,12 @@ While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** r
 - **The step table** below lines up the two, one line per step: the MegaMUD step on the left (room hash, its Rooms.md name, the move, extra commands in brackets like `s[search s]`, and the step's options) and the MudPlay room on the right (its name and map/room).
   - ✓ matches the recording; ≈ we walked there but the room's name or exits differ; ↺ found again after a gap; ✎ set by you; ✗ **untranslated** — the step couldn't be followed (a missing exit, a passage our map doesn't have), so its line is **left blank** rather than failing the whole import.
   - Type a map/room into a step's **Set room** box (left of the room) to put a different room there (clear it to go back to the translation).
+  - **Reshape the MudPlay side** with the buttons at the end of each line:
+    - **✕** leaves a step out of the loop. It stays in the table, greyed, beside its MegaMUD step, and **↺** puts it back.
+    - **+** adds a room below the line. Type its map/room into the new line's **Set room** box; the new line has an empty MegaMUD side.
+    - **▲ ▼** move a line up or down.
+
+    The map redraws after each change (when **Display on map** is on), and your changes stay through **Verify** and a change of start room. Press **Verify** to check the reshaped loop still walks.
   - **Stash** adds that step's room to your stash rooms when you accept — stash rooms are a character setting, not part of the loop. It's ticked already on the steps MegaMUD marked as stash points; untick to skip, tick any other room to add it.
   - Each step's **command**, **delay** (ms to wait after the command) and **NR / NA / RH / RM** (no rest, no attack, rest up here HP / mana) can be edited. *Don't rest*, *don't attack* and *rest up here* carry over from the file; dark rooms, traps, locked doors and searches are handled from the map data as you walk, so they don't — ⓘ shows what wasn't carried over.
 - **Verify loop in MudPlay** puts in the rooms you typed, translates the steps after them again, and checks MudPlay's navigation can walk the result as a loop — every leg planned the way the loop runner would, back round to the start. A leg it can't route is marked ⚠ on the step it leaves from.

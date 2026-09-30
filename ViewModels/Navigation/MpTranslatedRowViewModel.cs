@@ -9,20 +9,24 @@ namespace MudPlay.ViewModels.Navigation;
 // One line of the review table: a .mp step (Source) and our translation of it,
 // editable. The room shows as its name and map/room; the "set room" box is empty
 // unless the user has set one, and typing a map/room there overrides the
-// translation on the next verify.
+// translation on the next verify. A row can also be one the user inserted (no .mp
+// step, its room typed in), and a step's row can be removed from the loop while it
+// stays on screen beside its step.
 public sealed partial class MpTranslatedRowViewModel : ObservableObject
 {
     private readonly string _originalRoomText;
+    private readonly RoomGraphManager _graph;
 
     public MpTranslatedRowViewModel(MpTranslatedRow row, MpStep step, MpSourceRow source, RoomGraphManager graph)
     {
+        _graph = graph;
         Source = source;
         Index = row.Index;
         Step = step;
         Room = row.Room;
         _originalRoomText = row.Status == MpRowStatus.UserSet ? row.Room?.ToString() ?? string.Empty : string.Empty;
         _roomText = _originalRoomText;
-        RoomName = row.Room is { } k ? $"{graph.GetRoom(k)?.Name ?? "(not in map data)"}  ·  {k}" : "— untranslated —";
+        _roomName = row.Room is { } k ? $"{graph.GetRoom(k)?.Name ?? "(not in map data)"}  ·  {k}" : "— untranslated —";
         IsBlank = row.Status == MpRowStatus.Blank;
         StatusText = row.Status switch
         {
@@ -55,16 +59,52 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
         }
     }
 
+    // A row the user inserted: no .mp step on its left, its room whatever is typed in.
+    public MpTranslatedRowViewModel(RoomGraphManager graph)
+    {
+        _graph = graph;
+        Source = MpSourceRow.None;
+        Index = -1;
+        IsInserted = true;
+        _originalRoomText = string.Empty;
+        _roomText = string.Empty;
+        RoomName = "— type a map/room —";
+        StatusText = "+";
+        StatusTip = "Added by you";
+        Note = string.Empty;
+        Dropped = string.Empty;
+    }
+
     // The step this row translates, shown on the same line of the review table.
     public MpSourceRow Source { get; }
     public int Index { get; }
-    public int Number => Index + 1;
-    public MpStep Step { get; }
+    public string NumberText => IsInserted ? "+" : (Index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    public MpStep? Step { get; }
     public RoomKey? Room { get; }
-    public string RoomName { get; }
+    [ObservableProperty] private string _roomName;
     public bool IsBlank { get; }
+    public bool IsInserted { get; }
     public string StatusText { get; }
     public string StatusTip { get; }
+
+    // Left out of the loop by the user; the row stays beside its step, greyed.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RemoveGlyph))]
+    [NotifyPropertyChangedFor(nameof(RemoveTip))]
+    private bool _isRemoved;
+
+    public string RemoveGlyph => IsRemoved ? "↺" : "✕";
+    public string RemoveTip => IsInserted ? "Remove this room from the loop"
+        : IsRemoved ? "Put this step back in the loop" : "Leave this step out of the loop";
+
+    // An inserted row names the room typed into it as it's typed.
+    partial void OnRoomTextChanged(string value)
+    {
+        if (!IsInserted) return;
+        RoomName = RoomKey.TryParseWire(value.Trim(), out RoomKey k)
+            ? $"{_graph.GetRoom(k)?.Name ?? "(not in map data)"}  ·  {k}"
+            : "— type a map/room —";
+    }
     public string Note { get; }
     public string Dropped { get; }
     public bool HasDropped => Dropped.Length > 0;
@@ -88,7 +128,7 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
     [ObservableProperty] private bool _restHereHp;
     [ObservableProperty] private bool _restHereMana;
 
-    public bool RoomEdited => RoomText.Trim() != _originalRoomText;
+    public bool RoomEdited => !IsInserted && RoomText.Trim() != _originalRoomText;
 
     public void CopyEditsFrom(MpTranslatedRowViewModel other)
     {
@@ -101,10 +141,11 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
         RestHereMana = other.RestHereMana;
     }
 
-    // Null for a row with no room — blanks are left out of the loop.
+    // Null for a row with no room — blanks are left out of the loop — and for a
+    // removed one.
     public LoopWaypoint? ToWaypoint()
     {
-        if (EffectiveRoom is not { } k) return null;
+        if (IsRemoved || EffectiveRoom is not { } k) return null;
         string? cmd = string.IsNullOrWhiteSpace(Command) ? null : Command.Trim();
         // A delay only runs around a command, as in the loop editor.
         int delay = cmd is null ? 0 : Math.Max(0, DelayMs);
