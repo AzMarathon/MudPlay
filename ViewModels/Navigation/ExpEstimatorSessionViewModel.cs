@@ -30,14 +30,22 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     private readonly GameDataCache _gameData;
     private readonly IRoomFilter? _filter;
     private readonly Func<(SimCharacter Character, SimWorld World)?>? _simulation;
+    private readonly Func<double, double>? _walkSeconds;
     private readonly LogService? _log;
     private readonly List<RoomKey> _clicks = new();
+    // A loaded loop's own waypoints, so the simulation counts its in-room commands'
+    // delays; dropped by any edit to the route, which then runs as bare clicks.
+    private IReadOnlyList<LoopWaypoint>? _loadedWaypoints;
+    // The walk pace the shown SimResult was run at — the bug report quotes this, not
+    // a pace recomputed from gear that may have changed since.
+    private double _simWalkUsed;
     private CancellationTokenSource? _simCancel;
 
     public ExpEstimatorSessionViewModel(
         RouteExpResolver resolver, LoopManager loops, RoomGraphManager graph,
         GameDataCache gameData, IRoomFilter? filter = null,
-        Func<(SimCharacter Character, SimWorld World)?>? simulation = null, LogService? log = null)
+        Func<(SimCharacter Character, SimWorld World)?>? simulation = null, LogService? log = null,
+        Func<double, double>? walkSeconds = null)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(loops);
@@ -49,14 +57,20 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         _gameData = gameData;
         _filter = filter;
         _simulation = simulation;
+        _walkSeconds = walkSeconds;
         _log = log;
         ProposedName = $"Loop {DateTime.Now:HH-mm}";
-        // Observed per-room pace while walking a loop: Paradigm sits at its 1.0 s
-        // movement floor plus lag (1.1–1.2 s), Stock around 0.6–0.7 s (GAME_MECHANICS
-        // "Global combat tick and exp accrual"). Combat is simulated separately, so
-        // this is the bare walk, unlike the estimate's all-in Seconds per room.
-        _simSecondsPerStep = Realm == RealmType.ParaMud ? 1.2 : 0.7;
     }
+
+    // The walk between rooms the simulation uses: the user's figure when set, else
+    // the character's own pace — on Paradigm the server's move timer from gear
+    // quickness and encumbrance plus SimLagMs of lag (GAME_MECHANICS "Per-hop
+    // movement speed"); on Stock Auto-Lair's wall-clock pace by encumbrance, lag
+    // already in it. Combat is simulated separately, so this is the bare walk,
+    // unlike the estimate's Seconds per room.
+    public double SimWalkSeconds => SimSecondsPerStep > 0
+        ? SimSecondsPerStep
+        : _walkSeconds?.Invoke(Math.Max(0, SimLagMs) / 1000.0) ?? (Realm == RealmType.ParaMud ? 1.1 : 0.7);
 
     // Active realm drives only how often a room's summon spell re-rolls (Paradigm on
     // the combat round, Stock on the medium tick); the estimate otherwise uses the
@@ -101,7 +115,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     // Character simulation — the live character played around this route by
     // LoopSimulator. A route or simulation-setting change drops the result as stale
     // and cancels a run still in flight; the estimate-only knobs leave it be.
-    [ObservableProperty] private double _simSecondsPerStep;
+    [ObservableProperty] private double _simSecondsPerStep;            // 0 = the character's own pace (SimWalkSeconds)
+    [ObservableProperty] private int _simLagMs = 100;
     [ObservableProperty] private double _simHours = 1.0;
     [ObservableProperty] private int _simRuns = 3;
     [ObservableProperty]
@@ -115,6 +130,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
     partial void OnSimResultChanged(LoopSimSummary? value) => OnPropertyChanged(nameof(HasSimResult));
     partial void OnSimSecondsPerStepChanged(double value) => ClearSimulation();
+    partial void OnSimLagMsChanged(int value) => ClearSimulation();
     partial void OnSimHoursChanged(double value) => ClearSimulation();
     partial void OnSimRunsChanged(int value) => ClearSimulation();
 
@@ -131,16 +147,36 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         if (_graph.GetRoom(key) is not { } room) return;
         if (_clicks.Count > 0 && _clicks[^1].Equals(key)) return;   // adjacent dupe gap-fills to nothing
         _clicks.Add(key);
+        _loadedWaypoints = null;
         Clicks.Add(new LoopBuilderRow(Clicks.Count + 1, key, room.DisplayName));
         OnPropertyChanged(nameof(HasClicks));
         ClearSimulation();
         Recompute();
     }
 
+    // Seed the session from a saved loop. Its waypoints are kept for the simulation
+    // only when every one made it in as a click — a room missing from the map would
+    // leave them describing a different route.
+    public void LoadWaypoints(IReadOnlyList<LoopWaypoint> waypoints)
+    {
+        ArgumentNullException.ThrowIfNull(waypoints);
+        foreach (LoopWaypoint w in waypoints) AddClick(w.Key);
+        var keys = new List<RoomKey>(waypoints.Count);
+        foreach (LoopWaypoint w in waypoints)
+            if (keys.Count == 0 || !keys[^1].Equals(w.Key)) keys.Add(w.Key);
+        _loadedWaypoints = keys.SequenceEqual(_clicks) ? waypoints : null;
+    }
+
+    // The route the simulation walks: the loaded loop's waypoints while unedited,
+    // else the bare clicks.
+    internal IReadOnlyList<LoopWaypoint> SimWaypoints() =>
+        _loadedWaypoints ?? _clicks.Select(k => new LoopWaypoint(k)).ToList();
+
     public void RemoveClickAt(int index)
     {
         if (index < 0 || index >= _clicks.Count) return;
         _clicks.RemoveAt(index);
+        _loadedWaypoints = null;
         Clicks.RemoveAt(index);
         Renumber();
         OnPropertyChanged(nameof(HasClicks));
@@ -176,6 +212,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             Recompute();
             return false;
         }
+        _loadedWaypoints = null;
         ClearSimulation();
         return true;
     }
@@ -188,6 +225,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         RoomKey key = _clicks[fromIndex];
         _clicks.RemoveAt(fromIndex);
         _clicks.Insert(toIndex, key);
+        _loadedWaypoints = null;
         Clicks.Move(fromIndex, toIndex);
         Renumber();
         ClearSimulation();
@@ -198,6 +236,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     {
         ClearSimulation();
         _clicks.Clear();
+        _loadedWaypoints = null;
         Clicks.Clear();
         Lairs.Clear();
         ExpPerHour = 0;
@@ -251,7 +290,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         return new ExpEstimatorSnapshot(
             ProposedName, rooms, SecondsPerStep, AreaCombat, RoundsPerMob, RealConditionsMultiplier,
             ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses, summonLines, RealmLabel,
-            SimResult is null ? null : SimLines.ToList(), SimSecondsPerStep, SimHours);
+            SimResult is null ? null : SimLines.ToList(), SimResult is null ? 0 : _simWalkUsed, SimHours);
     }
 
     // Play the live character around the route for SimRuns seeded runs of SimHours
@@ -270,8 +309,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
                 SimStatus = "No character yet — log in and type stat so the client knows your level and pools.";
                 return;
             }
-            var waypoints = _clicks.Select(k => new LoopWaypoint(k)).ToList();
-            IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(waypoints, _filter);
+            IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(SimWaypoints(), _filter);
             if (lap.Count == 0)
             {
                 SimStatus = "The route has no walkable lap — fix the loop first.";
@@ -279,7 +317,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             }
 
             (SimCharacter character, SimWorld world) = SimFreeze.For(setup.Character, setup.World, lap);
-            double step = Math.Max(0.25, SimSecondsPerStep), hours = Math.Clamp(SimHours, 0.1, 24);
+            double step = Math.Max(0.1, SimWalkSeconds), hours = Math.Clamp(SimHours, 0.1, 24);
             int runs = Math.Clamp(SimRuns, 1, 20);
             IsSimulating = true;
             SimStatus = $"Simulating {runs} × {hours:0.#} h…";
@@ -287,13 +325,16 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             LoopSimSummary result = await Task.Run(() =>
                 LoopSimulator.RunMany(character, lap, world, step, hours, runs, token), token);
             if (token.IsCancellationRequested) return;
+            _simWalkUsed = step;
             SimResult = result;
-            FillSimLines(result);
+            FillSimLines(result, step);
             SimStatus = "";
             _log?.Info("ExpEstimator",
                 $"simulated '{ProposedName}' ({lap.Count} rooms, {runs}×{hours:0.#}h, {step:0.##}s/step, L{character.Level}): " +
-                $"{result.ExpPerHour:N0} exp/hr ({result.MinExpPerHour:N0}–{result.MaxExpPerHour:N0}), " +
-                $"{result.KillsPerHour:0} kills/hr, {result.Deaths} death(s), low HP {result.LowestHpPercent}%");
+                $"{result.ExpPerHour:N0} exp/hr ({result.MinExpPerHour:N0}–{result.MaxExpPerHour:N0}, " +
+                $"bosses +{result.BossExpPerHour:N0}), {result.KillsPerHour:0} kills/hr, " +
+                $"{result.DamageTakenPerHour:N0} dmg taken/hr, {result.FleesPerHour:0.#} flees/hr, " +
+                $"{result.Deaths} death(s), {result.HangUps} hang-up(s), low HP {result.LowestHpPercent}%");
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)
         {
@@ -317,17 +358,21 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
     private bool CanRunSimulation() => _simulation is not null && !IsSimulating && _clicks.Count >= 2;
 
-    private void FillSimLines(LoopSimSummary r)
+    private void FillSimLines(LoopSimSummary r, double walkSeconds)
     {
         SimLines.Clear();
         SimLines.Add($"≈ {r.ExpPerHour:N0} exp/hr  ({r.MinExpPerHour:N0} – {r.MaxExpPerHour:N0} over {r.Runs.Count} runs)");
         string lap = r.AvgLapSeconds > 0 ? $"{r.AvgLapSeconds:0}s/lap" : "no lap finished";
-        SimLines.Add($"{r.KillsPerHour:0} kills/hr  ·  {lap}");
+        SimLines.Add($"{r.KillsPerHour:0} kills/hr  ·  {lap}  ·  walking {walkSeconds:0.00}s/room");
         SimLines.Add($"Attacking {r.Share(x => x.AttackingSeconds):P0} · moving {r.Share(x => x.MovingSeconds):P0} · " +
                      $"resting {r.Share(x => x.RestingSeconds):P0} · meditating {r.Share(x => x.MeditatingSeconds):P0} · " +
                      $"waiting {r.Share(x => x.WaitingSeconds):P0}");
-        SimLines.Add($"Lowest HP {r.LowestHpPercent}% · lowest mana {r.LowestManaPercent}%");
+        SimLines.Add($"Lowest HP {r.LowestHpPercent}% · lowest mana {r.LowestManaPercent}% · {r.DamageTakenPerHour:N0} damage taken/hr");
         SimLines.Add(r.Deaths == 0 ? "No deaths" : $"Died in {r.Deaths} of {r.Runs.Count} runs");
+        if (r.HangUps > 0) SimLines.Add($"Hung up in {r.HangUps} of {r.Runs.Count} runs");
+        if (r.FleesPerHour > 0) SimLines.Add($"Fled {r.FleesPerHour:0.#} times an hour");
+        foreach (ExpBossStat b in r.Bosses ?? Array.Empty<ExpBossStat>())
+            SimLines.Add($"Boss {b.Name}: +{b.ExpPerHour:N0}/hr (once per {b.RegenHours:0.#}h, not fought in the runs)");
         var casts = r.CastsPerHour();
         if (casts.Count > 0)
             SimLines.Add("Per hour: " + string.Join(", ", casts.Take(6).Select(c => $"{c.Spell} {c.PerHour:0}")));

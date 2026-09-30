@@ -22,8 +22,11 @@ namespace MudPlay.Game.Spells;
 // thinning its swings/round by ~a third.
 public static class MonsterDebuffCalculator
 {
-    private const int AcCode = 2, AcBlurCode = 10, DrCode = 7, DodgeCode = 34,
-                      SlownessCode = 68;
+    public const int AcCode = 2, AcBlurCode = 10, DrCode = 7, DodgeCode = 34,
+                     SlownessCode = 68;
+
+    // Accuracy rides on three codes, summed alike (CharacterCalculator.MapAbilityToStat).
+    public static bool IsAccuracyCode(int code) => code is 22 or 105 or 106;
 
     // A debuff worth listing in the picker is one that moves a number in the
     // matchup sim — it carries at least one AC / DR / Dodge / Accuracy / Slowness
@@ -37,8 +40,7 @@ public static class MonsterDebuffCalculator
     }
 
     private static bool IsStatCode(int code) =>
-        code is AcCode or AcBlurCode or DrCode or DodgeCode or SlownessCode
-             or 22 or 105 or 106;
+        code is AcCode or AcBlurCode or DrCode or DodgeCode or SlownessCode || IsAccuracyCode(code);
 
     // Sum the selected debuffs' stat magnitudes. level scales any ability whose
     // stored value is 0 (its magnitude then comes from the spell's level-scaled
@@ -56,12 +58,12 @@ public static class MonsterDebuffCalculator
             foreach (SpellAbility a in spell.Formula.Abilities)
             {
                 int mag = a.Value != 0 ? Math.Abs(a.Value) : (int)Math.Abs(affMax);
+                if (IsAccuracyCode(a.Code)) { acc += mag; continue; }
                 switch (a.Code)
                 {
                     case AcCode or AcBlurCode: ac += mag; break;
                     case DrCode: dr += mag / 10.0; break;   // DR is stored at 10x
                     case DodgeCode: dodge += mag; break;
-                    case 22 or 105 or 106: acc += mag; break;
                     case SlownessCode: slowed = true; break;
                 }
             }

@@ -8214,6 +8214,15 @@ public sealed class AppServices
             number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             MonsterOverlaySeed.GetOverlay(number));
 
+    // Seconds per room the character walks right now, with lagSeconds of lag on
+    // Paradigm: the server move timer from live encumbrance and gear quickness there;
+    // on Stock, Auto-Lair's live travel model — the user's hop times by encumbrance
+    // (lag already in them) or their flat pace.
+    public double LoopSimulationWalkSeconds(double lagSeconds) =>
+        (GameData.ActiveRealm == Game.RealmType.ParaMud
+            ? new Game.Map.ParadigmMovementCostModel(() => Inventory.Snapshot, GameData, lagSeconds)
+            : AutoLair.TravelCostModel).EstimateTravel(1).TotalSeconds;
+
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the
     // shared monster-overlay resolve, worn gear, obtained spells, the Default-gear rest
@@ -8237,9 +8246,14 @@ public sealed class AppServices
             ReadSection<Models.Profile.SpellsSettings>(profile, "Spells"),
             profile?.PartyBuffs, quests, ResolveMonsterOverlay, SpellShort.ShortByNumber,
             Game.Simulation.SimCharacterBuilder.AlignmentValue(Alignment.EvilPoints, Alignment.SelfAlignment),
-            DefaultBasisMaxHp(), DefaultBasisMaxMa());
+            DefaultBasisMaxHp(), DefaultBasisMaxMa()) with
+        {
+            HangupsDisabled = ReadSection<Models.Profile.GeneralSettings>(profile, "General").DisableHangups,
+        };
         var world = new Game.Simulation.SimWorld(
-            MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife);
+            MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife,
+            ExpResolver.DeathSummonsOf,
+            n => SpellCatalog.GetFormulaByNumber(n) is { } f ? Game.Simulation.SimProc.From(f) : null);
         return (character, world);
     }
 

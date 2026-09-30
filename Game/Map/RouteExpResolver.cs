@@ -30,6 +30,7 @@ public sealed class RouteExpResolver : IDisposable
     private Dictionary<int, (int TextBlock, string Name)>? _spellTextBlocks; // spell Number -> its TextBlock action + name
     private Dictionary<int, string>? _tbActions;           // TBInfo Number -> raw Action string
     private Dictionary<int, RoomSummon?>? _roomSummons;    // room-entry spell Number -> resolved summon (null cached)
+    private Dictionary<int, RoomSummonTable?>? _summonTables; // room-entry spell Number -> its summon roll table (null cached)
 
     // Abil slot value 12 marks a "summon monster" ability; AbilVal holds the summoned
     // monster Number. A monster's DeathSpell fires this spell on death.
@@ -69,6 +70,7 @@ public sealed class RouteExpResolver : IDisposable
         _spellTextBlocks = null;
         _tbActions = null;
         _roomSummons = null;
+        _summonTables = null;
     }
 
     public ExpRoute Resolve(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
@@ -87,34 +89,61 @@ public sealed class RouteExpResolver : IDisposable
     }
 
     // The loop as the simulator walks it: every room in step order with its placed
-    // fixture and its lair — spawn count, respawn and the monsters it refills from.
-    // Unlike Resolve, nothing is averaged and 0-exp monsters stay in (they still spawn
-    // and cost fight time); only bosses are dropped, as their once-per-regen kill
-    // can't show up in an hour's run.
+    // fixture, its lair (spawn count, respawn, the monsters it refills from), its
+    // bosses, its summon table and the delay of a waypoint command run there. Unlike
+    // Resolve, nothing is averaged and 0-exp monsters stay in (they still spawn and
+    // cost fight time); bosses are split out, as their once-per-regen kill can't show
+    // up in an hour's run.
     public IReadOnlyList<Simulation.SimRoom> ResolveSimLap(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
     {
         ArgumentNullException.ThrowIfNull(waypoints);
-        IReadOnlyList<RoomKey> keys = LoopExpander.ResolveCycleRoomKeys(waypoints, _bfs, _graph, filter);
-        if (keys.Count < 2) return Array.Empty<Simulation.SimRoom>();
+        (IReadOnlyList<LoopStep> steps, var unreachable) = LoopExpander.Expand(waypoints, _bfs, filter);
+        if (steps.Count == 0 || unreachable.Count > 0) return Array.Empty<Simulation.SimRoom>();
 
-        var lap = new List<Simulation.SimRoom>(keys.Count - 1);
-        for (int i = 0; i < keys.Count - 1; i++)
+        // Walks the steps itself rather than through LoopExpander.ResolveCycleRoomKeys:
+        // it needs each command's delay against the room it runs in, and must refuse a
+        // broken leg where the map overlay's walk just stops short.
+        var lap = new List<Simulation.SimRoom>();
+        RoomKey cursor = waypoints[0].Key;
+        double pause = 0;
+        foreach (LoopStep step in steps)
         {
-            RoomKey key = keys[i];
-            Room? room = _graph.GetRoom(key);
-            int npc = room is { Npc: > 0 } && Monsters().ContainsKey(room.Npc) && !Monster(room.Npc).IsBoss ? room.Npc : 0;
-            int lairMax = 0, respawn = 0;
-            IReadOnlyList<int> lairIds = Array.Empty<int>();
-            if (room is { HasLair: true } && ParseLair(room.RawLairTag) is (int mobs, List<int> ids))
-            {
-                lairIds = ids.Where(id => Monsters().ContainsKey(id) && !Monster(id).IsBoss).ToList();
-                lairMax = mobs;
-                respawn = _timers.DefaultRespawnSeconds(key) ?? 0;
-            }
-            lap.Add(new Simulation.SimRoom(key, npc, lairMax, lairIds, respawn));
+            if (step is CommandLoopStep cmd) { pause += cmd.DelayMs / 1000.0; continue; }
+            if (step is not MoveLoopStep move) continue;
+            lap.Add(SimRoomAt(cursor, pause));
+            pause = 0;
+            if (_graph.GetRoom(cursor) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit))
+                return Array.Empty<Simulation.SimRoom>();
+            cursor = exit.Target;
         }
+        // A command after the last move runs back in the start room (a closing leg of
+        // zero length), before the next lap walks on from there.
+        if (pause > 0 && lap.Count > 0) lap[0] = lap[0] with { PauseSeconds = lap[0].PauseSeconds + pause };
         return lap;
     }
+
+    private Simulation.SimRoom SimRoomAt(RoomKey key, double pause)
+    {
+        Room? room = _graph.GetRoom(key);
+        bool Known(int id) => Monsters().ContainsKey(id);
+        int npc = room is { Npc: > 0 } && Known(room.Npc) && !Monster(room.Npc).IsBoss ? room.Npc : 0;
+        var bosses = new List<int>();
+        if (room is { Npc: > 0 } && Known(room.Npc) && Monster(room.Npc).IsBoss) bosses.Add(room.Npc);
+        int lairMax = 0, respawn = 0;
+        IReadOnlyList<int> lairIds = Array.Empty<int>();
+        if (room is { HasLair: true } && ParseLair(room.RawLairTag) is (int mobs, List<int> ids))
+        {
+            lairIds = ids.Where(id => Known(id) && !Monster(id).IsBoss).ToList();
+            bosses.AddRange(ids.Where(id => Known(id) && Monster(id).IsBoss));
+            lairMax = mobs;
+            respawn = _timers.DefaultRespawnSeconds(key) ?? 0;
+        }
+        RoomSummonTable? summon = room is { Spell: > 0 } ? SummonTableForSpell(room.Spell) : null;
+        return new Simulation.SimRoom(key, npc, lairMax, lairIds, respawn, bosses, summon, pause);
+    }
+
+    // The monsters a monster's death spell summons (its Abil-12 slots), or null.
+    public IReadOnlyList<int>? DeathSummonsOf(int monsterNumber) => SummonsOf(monsterNumber);
 
     // The monster-summoning entry spell in a room, or null. A room's Spell that carries
     // a TextBlock ability (148) whose roll table summons monsters yields expected exp
@@ -127,17 +156,30 @@ public sealed class RouteExpResolver : IDisposable
         if (cache.TryGetValue(room.Spell, out RoomSummon? cached)) return cached;
 
         RoomSummon? result = null;
-        if (SpellTextBlocks().TryGetValue(room.Spell, out (int TextBlock, string Name) tb))
+        if (SummonTableForSpell(room.Spell) is { } table
+            && SpellTextBlocks().TryGetValue(room.Spell, out (int TextBlock, string Name) tb))
+            result = new RoomSummon(tb.Name, table.ExpPerRoll, table.SummonChance, table.NoMonstersGate);
+        cache[room.Spell] = result;
+        return result;
+    }
+
+    // The d100 summon table behind a room-entry spell, or null when the spell
+    // summons nothing worth exp. Memoised per spell (null cached too).
+    private RoomSummonTable? SummonTableForSpell(int spell)
+    {
+        var cache = _summonTables ??= new Dictionary<int, RoomSummonTable?>();
+        if (cache.TryGetValue(spell, out RoomSummonTable? cached)) return cached;
+        RoomSummonTable? table = null;
+        if (SpellTextBlocks().TryGetValue(spell, out (int TextBlock, string Name) tb))
         {
-            RoomSummonTable? table = RoomSummonParser.Resolve(
+            table = RoomSummonParser.Resolve(
                 tb.TextBlock,
                 n => TbActions().TryGetValue(n, out string? a) ? a : null,
                 id => (Math.Max(0, Monster(id).Exp), Monster(id).Name));
-            if (table is { ExpPerRoll: > 0 })
-                result = new RoomSummon(tb.Name, table.ExpPerRoll, table.SummonChance, table.NoMonstersGate);
+            if (table is not { ExpPerRoll: > 0 }) table = null;
         }
-        cache[room.Spell] = result;
-        return result;
+        cache[spell] = table;
+        return table;
     }
 
     // Spell Number -> (its first TextBlock-ability TBInfo number, spell Name), for the
