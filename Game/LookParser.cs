@@ -112,7 +112,7 @@ public sealed partial class LookParser : IDisposable
         {
             case State.Idle:
                 Match nameMatch = NameHeaderPattern().Match(text);
-                if (nameMatch.Success)
+                if (nameMatch.Success && !Combat.RoundTotalsFormatter.IsHeaderRow(text))
                 {
                     _currentName = nameMatch.Groups["name"].Value.Trim();
                     // Absent group, or a "( )" with nothing in it, both mean

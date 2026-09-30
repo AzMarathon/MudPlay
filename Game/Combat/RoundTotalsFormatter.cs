@@ -75,6 +75,15 @@ public static class RoundTotalsFormatter
         return hash > 0 && int.TryParse(name[(hash + 2)..], out _) ? name[..hash] : name;
     }
 
+    // The table's header row reads like a `look` header ("[ First Last ]") — no
+    // digits in it — so the look parser asks here before starting a block on it.
+    public static bool IsHeaderRow(string line)
+    {
+        string t = line.Trim();
+        return t.StartsWith("[ Combatant ", StringComparison.Ordinal)
+            && t.EndsWith(" Dealt  Taken ]", StringComparison.Ordinal);
+    }
+
     private static string Fit(string name, int width)
         => name.Length > width ? name[..width] : name.PadRight(width);
 

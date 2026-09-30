@@ -62,6 +62,25 @@ public sealed class LookParserTests
         Assert.Equal(gang,       r.Gang);
     }
 
+    // The round-totals table's header row reads like a look header; report
+    // paradigm-20260929-233636 logged a look block started on it every round.
+    [Fact]
+    public void RoundTotalsTable_IsNotALookResponse()
+    {
+        LookParser p = Build(out PlayerDatabase db);
+        p.FeedTestLines(new[]
+        {
+            "[Round 1 ----------------------------]",
+            "[ Combatant             Dealt  Taken ]",
+            "[ You                     147     51 ]",
+            "[ Thresh                   55      0 ]",
+            "A Mage stands here.",
+        }, Now);
+        p.FeedPromptLine("[HP=199/MA=230]:", Now);
+
+        Assert.Empty(db.Players);
+    }
+
     /// <summary>
     /// A look that carries no gang must not erase one a WHO row already
     /// taught us — the suffix being absent means "not seen", not "none".
