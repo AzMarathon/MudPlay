@@ -42,6 +42,7 @@ public sealed record SimRegen(
 // Everything the loop simulator plays by: the character's pools, offense, defense
 // and regen, their spellbook and buff list, and the live Combat / Health / Spells
 // settings the engines read — so a simulated round picks what the client would pick.
+// HangupsDisabled is the General tab's master switch that stops the Health hang-up.
 public sealed record SimCharacter(
     RealmType Realm,
     int Level,
@@ -58,4 +59,5 @@ public sealed record SimCharacter(
     Func<int, MonsterOverlay> Overlay,
     Func<int, string?> SpellShortByNumber,
     int EvilPoints,
-    IReadOnlyList<SimBuff>? Buffs = null);
+    IReadOnlyList<SimBuff>? Buffs = null,
+    bool HangupsDisabled = false);

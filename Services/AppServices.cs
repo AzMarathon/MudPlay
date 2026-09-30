@@ -8214,13 +8214,13 @@ public sealed class AppServices
             MonsterOverlaySeed.GetOverlay(number));
 
     // Seconds per room the character walks right now, with lagSeconds of lag on
-    // Paradigm: the realm's Auto travel model — the server move timer from live
-    // encumbrance and gear quickness there, the measured encumbrance buckets (lag
-    // already in them) on Stock.
+    // Paradigm: the server move timer from live encumbrance and gear quickness there;
+    // on Stock, Auto-Lair's live travel model — the user's hop times by encumbrance
+    // (lag already in them) or their flat pace.
     public double LoopSimulationWalkSeconds(double lagSeconds) =>
         (GameData.ActiveRealm == Game.RealmType.ParaMud
             ? new Game.Map.ParadigmMovementCostModel(() => Inventory.Snapshot, GameData, lagSeconds)
-            : BuildTravelCostModel(new Models.Profile.AutoLairSettings())).EstimateTravel(1).TotalSeconds;
+            : AutoLair.TravelCostModel).EstimateTravel(1).TotalSeconds;
 
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the
@@ -8244,7 +8244,10 @@ public sealed class AppServices
             ReadSection<Models.Profile.HealthSettings>(profile, "Health"),
             ReadSection<Models.Profile.SpellsSettings>(profile, "Spells"),
             profile?.PartyBuffs, quests, ResolveMonsterOverlay, SpellShort.ShortByNumber,
-            (int)(Alignment.EvilPoints ?? 0));
+            (int)(Alignment.EvilPoints ?? 0)) with
+        {
+            HangupsDisabled = ReadSection<Models.Profile.GeneralSettings>(profile, "General").DisableHangups,
+        };
         var world = new Game.Simulation.SimWorld(
             MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife,
             ExpResolver.DeathSummonsOf,

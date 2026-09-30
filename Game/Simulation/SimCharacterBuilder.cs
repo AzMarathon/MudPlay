@@ -158,8 +158,8 @@ public static class SimCharacterBuilder
 
     // The regen percent a spell adds while it's up: a stored value is fixed, a 0 is
     // rolled from the spell's level-scaled range each cast (GAME_MECHANICS "Mana
-    // regeneration & the ManaRgn breakpoints"). Only a positive HP-regen value is a
-    // buff (a negative one is chaos surge's drain), so that side keeps positives.
+    // regeneration & the ManaRgn breakpoints"). A negative stored HP-regen value is
+    // left out rather than guessed at, so the HP side only ever adds regen.
     private static (int Min, int Max) RegenRange(in SpellFormulaInput f, int level, int code)
     {
         foreach (SpellAbility a in f.Abilities)

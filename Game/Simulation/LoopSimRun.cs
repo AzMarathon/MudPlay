@@ -1,3 +1,5 @@
+using MudPlay.Game.Map;
+
 namespace MudPlay.Game.Simulation;
 
 // One simulated run of a loop: what the character earned and where the time went,
@@ -28,13 +30,10 @@ public sealed record LoopSimRun(
     public double DamageTakenPerHour => Hours > 0 ? DamageTaken / Hours : 0;
 }
 
-// A boss on the loop, credited at its exp ÷ regen hours rather than simulated.
-public sealed record SimBossCredit(string Name, double ExpPerHour, double RegenHours);
-
 // Several seeded runs of the same loop, summarised: the spread is the answer to
 // "how much of that number is luck". Bosses' amortised exp rides on top of every
 // run's figure.
-public sealed record LoopSimSummary(IReadOnlyList<LoopSimRun> Runs, IReadOnlyList<SimBossCredit>? Bosses = null)
+public sealed record LoopSimSummary(IReadOnlyList<LoopSimRun> Runs, IReadOnlyList<ExpBossStat>? Bosses = null)
 {
     public double BossExpPerHour => Bosses?.Sum(b => b.ExpPerHour) ?? 0;
     public double ExpPerHour => Runs.Count > 0 ? Runs.Average(r => r.ExpPerHour) + BossExpPerHour : 0;

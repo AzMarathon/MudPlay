@@ -198,13 +198,14 @@ public sealed class LoopSimulatorTests
     [Fact]
     public void LandedHitFiresItsHitSpellAndHoldsTheCharacter()
     {
-        // A hostile that always lands a 0-damage hit carrying a 20-damage, 12 s hold
-        // proc: every landed hit costs the proc's damage, and the hold keeps the
-        // character in the room after the kill until it wears off.
-        var slot = new MonsterAttackSlot("tramples", Type: 1, Percent: 100, TruePercent: 100, MinDamage: 0, MaxDamage: 0,
+        // A hostile that always lands a 20-damage hit carrying a 60 s hold proc: the
+        // first landing holds the character, the later ones (no higher roll) don't
+        // extend it, and the hold keeps the character in the room after the ~50 s
+        // fight until it wears off.
+        var slot = new MonsterAttackSlot("tramples", Type: 1, Percent: 100, TruePercent: 100, MinDamage: 20, MaxDamage: 20,
             Accuracy: 9999, Energy: 1000, HitSpell: 318);
         var mobs = new Dictionary<int, MonsterCatalogEntry> { [4] = Mob(4, hp: 2000, exp: 10, align: 1, slot) };
-        var proc = new SimProc(20, 20, 12, AcDelta: -10, DodgeDelta: -20, AccuracyDelta: -5, Holds: true);
+        var proc = new SimProc(0, 0, 60, AcDelta: -10, DodgeDelta: -20, AccuracyDelta: -5, Holds: true);
         var world = new SimWorld(n => mobs.GetValueOrDefault(n), HitSpell: n => n == 318 ? proc : null);
         LoopSimRun run = LoopSimulator.Run(Character(maxHp: 5000, damage: 200), new[] { Lair(1, 1, 3600, 4), Empty(2) },
             world, secondsPerStep: 1, hours: 0.25, seed: 1);
@@ -230,5 +231,110 @@ public sealed class LoopSimulatorTests
 
         Assert.Equal(1, run.Kills);
         Assert.InRange(run.DamageTaken, 7 * 9, 7 * 10);
+    }
+
+    [Fact]
+    public void BurnIsNotRefreshedByAnEqualRoll()
+    {
+        // A 30 s burn of a fixed 7 lands on the first round and again on the next two
+        // before the kill. An equal roll doesn't refresh a slot, so the burn still
+        // dies down 30 s after the FIRST landing: ~10 ticks, not the ~13 a refresh
+        // on the last landing would give.
+        var slot = new MonsterAttackSlot("chomps", Type: 1, Percent: 100, TruePercent: 100, MinDamage: 0, MaxDamage: 0,
+            Accuracy: 9999, Energy: 1000, HitSpell: 884);
+        var mobs = new Dictionary<int, MonsterCatalogEntry> { [5] = Mob(5, hp: 3500, exp: 10, align: 1, slot) };
+        var burn = new SimProc(7, 7, 30, 0, 0, 0, Holds: false);
+        var world = new SimWorld(n => mobs.GetValueOrDefault(n), HitSpell: n => n == 884 ? burn : null);
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 5000), new[] { Lair(1, 1, 3600, 5), Empty(2) },
+            world, secondsPerStep: 1, hours: 0.1, seed: 1);
+
+        Assert.Equal(1, run.Kills);
+        Assert.InRange(run.DamageTaken, 7 * 9, 7 * 10);
+    }
+
+    [Fact]
+    public void DifferentBurnsStack()
+    {
+        // Two attacks, each carrying its own 30 s burn of 7: both slots tick side by side.
+        var bite = new MonsterAttackSlot("bites", Type: 1, Percent: 50, TruePercent: 50, MinDamage: 0, MaxDamage: 0,
+            Accuracy: 9999, Energy: 500, HitSpell: 884);
+        var claw = bite with { Name = "claws", HitSpell = 885 };
+        var mobs = new Dictionary<int, MonsterCatalogEntry> { [5] = Mob(5, hp: 3500, exp: 10, align: 1, bite, claw) };
+        var burn = new SimProc(7, 7, 30, 0, 0, 0, Holds: false);
+        var world = new SimWorld(n => mobs.GetValueOrDefault(n), HitSpell: n => n is 884 or 885 ? burn : null);
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 5000), new[] { Lair(1, 1, 3600, 5), Empty(2) },
+            world, secondsPerStep: 1, hours: 0.1, seed: 1);
+
+        Assert.True(run.DamageTaken > 7 * 10, $"took {run.DamageTaken}");
+    }
+
+    [Fact]
+    public void DeathSummonThatDoesNotFitUnderTheCapFailsWhole()
+    {
+        // A full room of 20 summoners, each summoning three parts on death. A cast
+        // lands only when all three fit under the 20-monster cap (every third kill),
+        // never one or two of it: the parts come in whole threes, fewer than 20.
+        var summons = new Dictionary<int, IReadOnlyList<int>> { [30] = new[] { 31, 31, 31 } };
+        LoopSimRun run = LoopSimulator.Run(Character(), new[] { Lair(1, 20, 3600, 30), Empty(2) },
+            World(summons, Mob(30, hp: 10, exp: 100), Mob(31, hp: 10, exp: 1)), secondsPerStep: 1, hours: 0.25, seed: 1);
+
+        long parts = run.Exp - 20 * 100;
+        Assert.Equal(20 + parts, run.Kills);
+        Assert.True(parts > 0 && parts % 3 == 0 && parts < 20, $"{parts} parts");
+    }
+
+    [Fact]
+    public void HeldCharacterCannotFlee()
+    {
+        // Every landed hit holds the character for the whole run: however low HP gets,
+        // the run trigger can't walk it out.
+        var slot = new MonsterAttackSlot("tramples", Type: 1, Percent: 100, TruePercent: 100, MinDamage: 10, MaxDamage: 10,
+            Accuracy: 9999, Energy: 1000, HitSpell: 318);
+        var mobs = new Dictionary<int, MonsterCatalogEntry> { [4] = Mob(4, hp: 100000, exp: 10, align: 1, slot) };
+        var hold = new SimProc(0, 0, 100000, 0, 0, 0, Holds: true);
+        var world = new SimWorld(n => mobs.GetValueOrDefault(n), HitSpell: n => n == 318 ? hold : null);
+        var health = new HealthSettings { RunIfBelowHp = 50, UseMeditateAbility = false };
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 100, damage: 1, health: health, combat: new CombatSettings { RunDistance = 1 }),
+            new[] { Lair(1, 1, 3600, 4), Empty(2) }, world, secondsPerStep: 1, hours: 0.25, seed: 1);
+
+        Assert.Equal(0, run.Flees);
+    }
+
+    [Fact]
+    public void RunTriggerFiresAtTheThreshold()
+    {
+        // HealthManager runs at or below the trigger: one 50-damage hit on a 100-HP
+        // character sits exactly on a 50% run trigger and flees rather than taking a
+        // second hit to 0.
+        var health = new HealthSettings { RunIfBelowHp = 50, RestIfBelowHp = 60, RestMaxHp = 100, UseMeditateAbility = false };
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 100, damage: 1, health: health, combat: new CombatSettings { RunDistance = 1 }),
+            new[] { Lair(1, 1, 3600, 8), Empty(2) }, World(Mob(8, hp: 100000, exp: 10, align: 1, Hit(50, 50, accuracy: 9999))),
+            secondsPerStep: 1, hours: 0.25, seed: 1);
+
+        Assert.True(run.Flees > 0);
+    }
+
+    [Fact]
+    public void RecastDebuffDoesNotStackOnTheSameMonster()
+    {
+        // A 50-DR monster wears down a 100-HP character in two rounds, so it flees and
+        // comes back again and again; each return re-casts the single-target debuff
+        // (the chooser starts the room afresh). The debuff strips 25 DR once: 50-damage
+        // hits deal 25 each, a slow kill with many flees. Stacked, the second cast
+        // would strip the DR to 0 and end the fight in a few more hits.
+        var combat = new CombatSettings { RunDistance = 1 };
+        combat.SingleTargetDebuffSpell.SpellName = "curs";
+        var spells = new Dictionary<string, SimSpell>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["curs"] = Spell("curs", mana: 1, duration: 600, debuff: new MonsterDebuffEffect(0, 25, 0, 0, false)),
+        };
+        var health = new HealthSettings { RunIfBelowHp = 50, RestIfBelowHp = 60, RestMaxHp = 100, UseMeditateAbility = false };
+        MonsterCatalogEntry tank = Mob(8, hp: 500, exp: 10, align: 1, Hit(30, 30, accuracy: 9999)) with { DamageResist = 50 };
+        LoopSimRun run = LoopSimulator.Run(
+            Character(maxHp: 100, damage: 50, health: health, combat: combat, spells: spells, maxMana: 1000),
+            new[] { Lair(1, 1, 3600, 8), Empty(2) }, World(tank), secondsPerStep: 1, hours: 0.5, seed: 1);
+
+        Assert.True(run.Casts.GetValueOrDefault("curs") >= 2, $"cast {run.Casts.GetValueOrDefault("curs")} times");
+        Assert.True(run.Flees >= 8, $"fled {run.Flees} times");
     }
 }

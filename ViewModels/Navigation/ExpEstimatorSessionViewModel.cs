@@ -32,6 +32,9 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     private readonly Func<double, double>? _walkSeconds;
     private readonly LogService? _log;
     private readonly List<RoomKey> _clicks = new();
+    // The walk pace the shown SimResult was run at — the bug report quotes this, not
+    // a pace recomputed from gear that may have changed since.
+    private double _simWalkUsed;
 
     public ExpEstimatorSessionViewModel(
         RouteExpResolver resolver, LoopManager loops, RoomGraphManager graph,
@@ -56,10 +59,10 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
     // The walk between rooms the simulation uses: the user's figure when set, else
     // the character's own pace — on Paradigm the server's move timer from gear
-    // quickness and encumbrance plus SimLagMs of lag (a "1.0" mover really walks
-    // 1.08–1.15 s: 80–150 ms of lag, Tehshortbus 2026-09-30); on Stock the measured
-    // wall-clock pace by encumbrance, lag already in it. Combat is simulated
-    // separately, so this is the bare walk, unlike the estimate's Seconds per room.
+    // quickness and encumbrance plus SimLagMs of lag (GAME_MECHANICS "Per-hop
+    // movement speed"); on Stock Auto-Lair's wall-clock pace by encumbrance, lag
+    // already in it. Combat is simulated separately, so this is the bare walk,
+    // unlike the estimate's Seconds per room.
     public double SimWalkSeconds => SimSecondsPerStep > 0
         ? SimSecondsPerStep
         : _walkSeconds?.Invoke(Math.Max(0, SimLagMs) / 1000.0) ?? (Realm == RealmType.ParaMud ? 1.1 : 0.7);
@@ -254,7 +257,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         return new ExpEstimatorSnapshot(
             ProposedName, rooms, SecondsPerStep, AreaCombat, RoundsPerMob, RealConditionsMultiplier,
             ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses, summonLines, RealmLabel,
-            SimResult is null ? null : SimLines.ToList(), SimWalkSeconds);
+            SimResult is null ? null : SimLines.ToList(), SimResult is null ? SimWalkSeconds : _simWalkUsed);
     }
 
     // Play the live character around the route for SimRuns seeded runs of SimHours
@@ -284,13 +287,16 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         {
             LoopSimSummary result = await Task.Run(() =>
                 LoopSimulator.RunMany(character, lap, world, step, hours, runs));
+            _simWalkUsed = step;
             SimResult = result;
             FillSimLines(result, step);
             SimStatus = "";
             _log?.Info("ExpEstimator",
                 $"simulated '{ProposedName}' ({lap.Count} rooms, {runs}×{hours:0.#}h, {step:0.##}s/step, L{character.Level}): " +
-                $"{result.ExpPerHour:N0} exp/hr ({result.MinExpPerHour:N0}–{result.MaxExpPerHour:N0}), " +
-                $"{result.KillsPerHour:0} kills/hr, {result.Deaths} death(s), low HP {result.LowestHpPercent}%");
+                $"{result.ExpPerHour:N0} exp/hr ({result.MinExpPerHour:N0}–{result.MaxExpPerHour:N0}, " +
+                $"bosses +{result.BossExpPerHour:N0}), {result.KillsPerHour:0} kills/hr, " +
+                $"{result.DamageTakenPerHour:N0} dmg taken/hr, {result.FleesPerHour:0.#} flees/hr, " +
+                $"{result.Deaths} death(s), {result.HangUps} hang-up(s), low HP {result.LowestHpPercent}%");
         }
         finally
         {
@@ -312,7 +318,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         SimLines.Add(r.Deaths == 0 ? "No deaths" : $"Died in {r.Deaths} of {r.Runs.Count} runs");
         if (r.HangUps > 0) SimLines.Add($"Hung up in {r.HangUps} of {r.Runs.Count} runs");
         if (r.FleesPerHour > 0) SimLines.Add($"Fled {r.FleesPerHour:0.#} times an hour");
-        foreach (SimBossCredit b in r.Bosses ?? Array.Empty<SimBossCredit>())
+        foreach (ExpBossStat b in r.Bosses ?? Array.Empty<ExpBossStat>())
             SimLines.Add($"Boss {b.Name}: +{b.ExpPerHour:N0}/hr (once per {b.RegenHours:0.#}h, not fought in the runs)");
         var casts = r.CastsPerHour();
         if (casts.Count > 0)
