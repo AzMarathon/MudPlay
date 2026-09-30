@@ -9,7 +9,8 @@ namespace MudPlay.Tests;
 
 // Pins the area ranking's building blocks: a lair room joins the area most of its
 // monsters are filed under, a tour walks to the nearest unvisited lair, an
-// unreachable lair is dropped, and safe areas rank ahead of any area that died.
+// unreachable lair is dropped, and safe areas rank ahead of any area that died —
+// a live record only vouches for a loop at the ranked level or below.
 public sealed class AreaToursTests
 {
     private static RoomKey R(int room) => new(1, room);
@@ -50,9 +51,9 @@ public sealed class AreaToursTests
             new Dictionary<string, int>());
         var ranked = AreaRank.Rank(new[]
         {
-            new AreaRank("Deadly", new[] { R(1) }, 1, new LoopSimSummary(new[] { Run(9_000_000, died: 600) })),
-            new AreaRank("Slow", new[] { R(2) }, 1, new LoopSimSummary(new[] { Run(1_000_000) })),
-            new AreaRank("Fast", new[] { R(3) }, 1, new LoopSimSummary(new[] { Run(3_000_000) })),
+            new AreaRank("Deadly", 40, new[] { R(1) }, 1, new LoopSimSummary(new[] { Run(9_000_000, died: 600) })),
+            new AreaRank("Slow", 40, new[] { R(2) }, 1, new LoopSimSummary(new[] { Run(1_000_000) })),
+            new AreaRank("Fast", 40, new[] { R(3) }, 1, new LoopSimSummary(new[] { Run(3_000_000) })),
         });
 
         Assert.Equal(new[] { "Fast", "Slow", "Deadly" }, ranked.Select(r => r.Area));
@@ -63,10 +64,31 @@ public sealed class AreaToursTests
     {
         LoopSimRun Died() => new(600, 600_000, 1, 1, 0, 0, 0, 0, 0, 0, 50, 600, new Dictionary<string, int>());
         var live = new[] { new LiveLoopRecord("Marshlands Loop", 47, 3, 25.2, 90_300_000, 8000, 0) };
-        var loop = new AreaRank("Marshlands Loop", new[] { R(1) }, 46, new LoopSimSummary(new[] { Died() }), IsLoop: true, Live: live);
+        var loop = new AreaRank("Marshlands Loop", 47, new[] { R(1) }, 46, new LoopSimSummary(new[] { Died() }), IsLoop: true, Live: live);
 
         Assert.True(loop.Safe);
         Assert.Contains("your loop", loop.Label);
         Assert.Contains("25.2 h at L47", loop.Label);
+    }
+
+    [Fact]
+    public void AHigherLevelLiveRecordIsShownButDoesNotMakeADeadlyLoopSafe()
+    {
+        LoopSimRun Died() => new(600, 600_000, 1, 1, 0, 0, 0, 0, 0, 0, 50, 600, new Dictionary<string, int>());
+        var live = new[] { new LiveLoopRecord("Marshlands Loop", 49, 3, 25.2, 90_300_000, 8000, 0) };
+        var loop = new AreaRank("Marshlands Loop", 47, new[] { R(1) }, 46, new LoopSimSummary(new[] { Died() }), IsLoop: true, Live: live);
+
+        Assert.False(loop.Safe);
+        Assert.Contains("25.2 h at L49", loop.Label);
+    }
+
+    [Fact]
+    public void ASmallAreaSearchesFromEveryLairALargeOneOnlyFromItsStart()
+    {
+        var small = Enumerable.Range(1, AreaTours.NearestNeighbourMaxLairs).Select(R).ToList();
+        var large = Enumerable.Range(1, AreaTours.NearestNeighbourMaxLairs + 1).Select(R).ToList();
+
+        Assert.Equal(small, AreaTours.SearchSources(small));
+        Assert.Equal(new[] { R(1) }, AreaTours.SearchSources(large));
     }
 }

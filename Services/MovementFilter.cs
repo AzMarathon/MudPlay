@@ -450,9 +450,7 @@ public sealed class MovementFilter : IRoomFilter
         }
 
         if (LevelProvider?.Invoke() is not { } level) return false;  // level unknown → don't gate
-        if (minLevel > 0 && level < minLevel) return true;
-        if (maxLevel > 0 && level > maxLevel) return true;
-        return false;
+        return LevelIgnoringFilter.OutsideLevelWindow(level, minLevel, maxLevel);
     }
 
     // A (Toll: N) exit needs N*100 copper-value on hand to cross. Only gate

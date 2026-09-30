@@ -15,9 +15,17 @@ public sealed record AreaTour(string Name, IReadOnlyList<RoomKey> Rooms);
 public static class AreaTours
 {
     // Areas with more lairs than this are ordered by distance from the start rather
-    // than nearest-neighbour — the full distance table costs one whole-map search
-    // per lair.
+    // than nearest-neighbour — the full distance table costs one search per lair.
     public const int NearestNeighbourMaxLairs = 15;
+
+    // The rooms Order needs a distance map from: every lair of a small area, only
+    // the start of a large one. Lets a caller run (and yield between) the searches
+    // itself, then hand Order a lookup.
+    public static IReadOnlyList<RoomKey> SearchSources(IReadOnlyList<RoomKey> rooms)
+    {
+        ArgumentNullException.ThrowIfNull(rooms);
+        return rooms.Count <= NearestNeighbourMaxLairs ? rooms : rooms.Take(1).ToList();
+    }
 
     // Each area's lair rooms, sorted by map / room (the first is the tour's start).
     // Cheap — no route search — so a caller can then Order the areas one at a time.

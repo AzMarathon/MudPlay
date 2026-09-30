@@ -137,9 +137,13 @@ public sealed class RouteExpResolver : IDisposable
     }
 
     // Hop count from a room to every room reachable from it (one search); viaBoats
-    // also crosses the sailings the filter allows.
+    // also crosses the sailings and gateway portals the filter allows.
     public IReadOnlyDictionary<RoomKey, int> DistancesFrom(RoomKey from, IRoomFilter? filter = null, bool viaBoats = false) =>
         _bfs.ComputeDistancesFrom(from, filter, viaBoats);
+
+    // Walking hop counts from a room, searching only until every target is reached.
+    public IReadOnlyDictionary<RoomKey, int> DistancesTo(RoomKey from, IReadOnlyCollection<RoomKey> targets, IRoomFilter? filter = null) =>
+        _bfs.ComputeDistancesTo(from, targets, filter);
 
     // Every lair room in the active set with its non-boss lair monsters — the input
     // AreaTours groups into hunting areas.

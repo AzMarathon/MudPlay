@@ -289,11 +289,27 @@ public sealed class BfsMapper
     // this to score 50+ matches per keystroke without re-scanning the
     // graph for each.
     //
-    // viaBoats also crosses the sailings the filter lets through (a boat hop counts
-    // as one), for a "can I get there at all?" reach — the walk-only default is what
-    // a loop or a step count can actually use.
+    // viaBoats is a "can I get there at all?" reach: it also crosses the sailings
+    // the filter lets through (a boat hop counts as one) and the gateway portals
+    // FindPath only takes as a last resort. The walk-only default is what a loop or
+    // a step count can actually use.
     public IReadOnlyDictionary<RoomKey, int> ComputeDistancesFrom(
-        RoomKey source, IRoomFilter? filter = null, bool viaBoats = false)
+        RoomKey source, IRoomFilter? filter = null, bool viaBoats = false) =>
+        Distances(source, filter, viaBoats, targets: null);
+
+    // Walk-only hop counts from source, stopping as soon as every room in targets
+    // has been reached — a clustered target set (one area's lairs) is answered
+    // without flooding the whole map. A target missing from the result is
+    // unreachable; other rooms in it are whatever the search passed on the way.
+    public IReadOnlyDictionary<RoomKey, int> ComputeDistancesTo(
+        RoomKey source, IReadOnlyCollection<RoomKey> targets, IRoomFilter? filter = null)
+    {
+        ArgumentNullException.ThrowIfNull(targets);
+        return Distances(source, filter, viaBoats: false, new HashSet<RoomKey>(targets));
+    }
+
+    private Dictionary<RoomKey, int> Distances(
+        RoomKey source, IRoomFilter? filter, bool viaBoats, HashSet<RoomKey>? targets)
     {
         Dictionary<RoomKey, int> dist = new();
         if (_graph.GetRoom(source) is null) return dist;
@@ -302,7 +318,17 @@ public sealed class BfsMapper
         Queue<RoomKey> queue = new();
         queue.Enqueue(source);
         dist[source] = 0;
+        targets?.Remove(source);
 
+        // True once the last outstanding target has been reached.
+        bool Reach(RoomKey next, int d)
+        {
+            dist[next] = d;
+            queue.Enqueue(next);
+            return targets is not null && targets.Remove(next) && targets.Count == 0;
+        }
+
+        if (targets is { Count: 0 }) return dist;
         while (queue.Count > 0)
         {
             RoomKey here = queue.Dequeue();
@@ -315,7 +341,8 @@ public sealed class BfsMapper
                 RoomKey next = exit.Target;
                 if (dist.ContainsKey(next)) continue;
                 if (exit.CastTeleportRandom) continue; // unpredictable landing — not routable
-                if (exit.GatewayTeleport) continue;    // last-resort crossing — keep badge distances deterministic
+                // Last-resort crossing — keep walk distances deterministic.
+                if (exit.GatewayTeleport && !viaBoats) continue;
                 // Un-openable hidden action exit (no / insufficient action data) —
                 // not routable (see FindPathCore).
                 if (exit.Hint == RoomExitHint.MultiActionHidden
@@ -323,8 +350,7 @@ public sealed class BfsMapper
                 if (filter is not null && filter.IsAvoided(next)) continue;
                 if (filter is not null && filter.IsExitBlocked(exit)) continue;
                 if (_graph.GetRoom(next) is null) continue;
-                dist[next] = here_d + 1;
-                queue.Enqueue(next);
+                if (Reach(next, here_d + 1)) return dist;
             }
             if (!viaBoats) continue;
             foreach (BoatPassage passage in _graph.BoatPassagesAt(here))
@@ -332,8 +358,7 @@ public sealed class BfsMapper
                 RoomKey next = passage.ArrivalRoom;
                 if (dist.ContainsKey(next) || _graph.GetRoom(next) is null) continue;
                 if (filter is not null && (!filter.IsBoatPassable(in passage) || filter.IsAvoided(next))) continue;
-                dist[next] = here_d + 1;
-                queue.Enqueue(next);
+                if (Reach(next, here_d + 1)) return dist;
             }
         }
         return dist;

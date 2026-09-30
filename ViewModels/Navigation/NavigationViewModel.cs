@@ -170,6 +170,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        ExpEstimator?.CancelRanking();
         _lairTick.Stop();
         _sailingTick.Stop();
         _searchDebounce?.Stop();
@@ -2778,7 +2779,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void TearDownExpEstimator()
     {
         if (ExpEstimator is not null)
+        {
             ExpEstimator.PropertyChanged -= OnExpEstimatorPropertyChanged;
+            ExpEstimator.CancelRanking();
+        }
         ExpEstimator = null;
         LoopBuilderPath = null;
         LoopBuilderWaypoints = null;

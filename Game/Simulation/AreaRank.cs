@@ -2,18 +2,22 @@ using MudPlay.Game.Map;
 
 namespace MudPlay.Game.Simulation;
 
-// One ranked hunting option at a level: an area's whole lair tour, or one of the
+// One ranked hunting option at Level: an area's whole lair tour, or one of the
 // user's saved loops (IsLoop), with Live — what the user actually earned on that
-// loop, from the program logs, at the ranked level and their biggest sample near it —
-// beside the simulation. An option where a simulated
-// run died or hung up is unsafe (its exp/hr only counts the minutes before the run
-// ended) and ranks after every safe one — unless the user has played it for hours
-// without dying, which outweighs the simulation.
+// loop, from the program logs, at the ranked level and their biggest sample near
+// it — beside the simulation. An option where a simulated run died or hung up is
+// unsafe (its exp/hr only counts the minutes before the run ended) and ranks after
+// every safe one — unless the user has played it for hours at the ranked level or
+// below without dying, which outweighs the simulation. A record from a higher
+// level is shown but proves nothing about surviving at this one.
 public sealed record AreaRank(
-    string Area, IReadOnlyList<RoomKey> Tour, int LapRooms, LoopSimSummary Result,
+    string Area, int Level, IReadOnlyList<RoomKey> Tour, int LapRooms, LoopSimSummary Result,
     bool IsLoop = false, IReadOnlyList<LiveLoopRecord>? Live = null)
 {
-    public bool Safe => (Result.Deaths == 0 && Result.HangUps == 0) || (Live is { Count: > 0 } l && l.All(r => r.Deaths == 0));
+    public bool Safe => (Result.Deaths == 0 && Result.HangUps == 0) || PlayedSafely;
+
+    private bool PlayedSafely =>
+        Live?.Where(r => r.Level <= Level).ToList() is { Count: > 0 } atOrBelow && atOrBelow.All(r => r.Deaths == 0);
 
     public string Label
     {

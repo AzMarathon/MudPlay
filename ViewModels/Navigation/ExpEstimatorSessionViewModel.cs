@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
@@ -124,6 +126,10 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     [ObservableProperty] private int _rankLevel;
     [ObservableProperty] private string _rankStatus = "";
     [ObservableProperty] private AreaRank? _selectedRanking;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelRankingCommand))]
+    private bool _isRanking;
+    private CancellationTokenSource? _rankCts;
     public ObservableCollection<AreaRank> Rankings { get; } = new();
     public bool HasRankings => Rankings.Count > 0;
     public bool HasSimResult => SimResult is not null;
@@ -386,13 +392,15 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
     // Every hunting area's lair tour (AreaTours, grouped by the Monsters' Region /
     // Area labels) played by the character at RankLevel, safe areas first by
-    // exp/hr. Tours are mapped here on the UI thread — the room graph isn't safe to
-    // search from a worker while the live tracker can learn a room — one area at a
-    // time with a yield between, then every area simulates in parallel.
+    // exp/hr. Tours are mapped here on the UI thread — the room graph is rebuilt on
+    // it (a set switch) and game data is read there — so every search is followed by
+    // a yield that lets input and rendering through; then the areas simulate in
+    // parallel on workers. CancelRanking (the Cancel button, or the session's
+    // teardown) stops it between searches or simulations.
     [RelayCommand(CanExecute = nameof(CanRunCheck))]
     private async Task RankAreasAsync()
     {
-        if (_simulation is null) return;
+        if (_simulation is null || _filter is null) return;
         int level = RankLevel > 0 ? RankLevel : _simulation.Level();
         if (_simulation.Build(level) is not { } setup)
         {
@@ -404,31 +412,45 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             RankStatus = "MudPlay doesn't know which room you're in yet — step into a room so it can tell which areas you can reach.";
             return;
         }
-        RankLevel = level;
+        using var cts = new CancellationTokenSource();
+        _rankCts = cts;
+        CancellationToken cancel = cts.Token;
         IsSimulating = true;
+        IsRanking = true;
         Rankings.Clear();
         OnPropertyChanged(nameof(HasRankings));
         try
         {
             // Only what the character could reach from here at that level: level gates
             // (a (Level 50+) exit, a minimum-level sailing) judged at `level`, every
-            // other gate as the live movement filter has it, boats included.
-            IRoomFilter gates = new LevelAtFilter(_simulation.Filter ?? _filter, level);
+            // other gate as the live movement filter has it, boats and portals included.
+            IRoomFilter gates = new LevelIgnoringFilter(_filter, level);
+            RankStatus = "Finding the areas you can reach…";
+            await YieldToUi(cancel);
             IReadOnlyDictionary<RoomKey, int> reach = _resolver.DistancesFrom(here, gates, viaBoats: true);
+            await YieldToUi(cancel);
             var lairs = _resolver.LairRooms().ToList();
             var reachable = lairs.Where(l => reach.ContainsKey(l.Room)).ToList();
             IReadOnlyList<(string Area, IReadOnlyList<RoomKey> Rooms)> groups = AreaTours.Group(
                 reachable, n => AreaLabel(setup.Character.Overlay(n)));
             int gatedAreas = AreaTours.Group(lairs, n => AreaLabel(setup.Character.Overlay(n))).Count - groups.Count;
             var jobs = new List<(AreaTour Tour, SimCharacter Character, SimWorld World, IReadOnlyList<SimRoom> Lap, bool IsLoop)>();
+            int skippedAreas = 0, skippedLoops = 0;
             for (int i = 0; i < groups.Count; i++)
             {
                 RankStatus = $"Mapping area {i + 1} of {groups.Count}…";
-                await Task.Delay(1);
-                AreaTour tour = AreaTours.Order(groups[i].Area, groups[i].Rooms, k => _resolver.DistancesFrom(k, gates));
-                if (tour.Rooms.Count < 2) continue;
+                (string area, IReadOnlyList<RoomKey> rooms) = groups[i];
+                var distances = new Dictionary<RoomKey, IReadOnlyDictionary<RoomKey, int>>();
+                foreach (RoomKey from in AreaTours.SearchSources(rooms))
+                {
+                    await YieldToUi(cancel);
+                    distances[from] = _resolver.DistancesTo(from, rooms, gates);
+                }
+                AreaTour tour = AreaTours.Order(area, rooms, k => distances[k]);
+                if (tour.Rooms.Count < 2) { skippedAreas++; continue; }
+                await YieldToUi(cancel);
                 IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(tour.Rooms.Select(k => new LoopWaypoint(k)).ToList(), gates);
-                if (lap.Count == 0) continue;
+                if (lap.Count == 0) { skippedAreas++; continue; }
                 (SimCharacter ch, SimWorld world) = SimFreeze.For(setup.Character, setup.World, lap);
                 jobs.Add((tour, ch, world, lap, false));
             }
@@ -440,9 +462,9 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             {
                 if (loop.Waypoints.Count < 2 || !reach.ContainsKey(loop.Waypoints[0].Key)) continue;
                 RankStatus = $"Mapping your loop {loop.Name}…";
-                await Task.Delay(1);
+                await YieldToUi(cancel);
                 IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(loop.Waypoints, gates);
-                if (lap.Count == 0) continue;
+                if (lap.Count == 0) { skippedLoops++; continue; }
                 (SimCharacter ch, SimWorld world) = SimFreeze.For(setup.Character, setup.World, lap);
                 jobs.Add((new AreaTour(loop.Name, loop.Waypoints.Select(w => w.Key).ToList()), ch, world, lap, true));
             }
@@ -450,29 +472,71 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             string logs = _simulation.LogsDir;
             IReadOnlyList<LiveLoopRecord> live = string.IsNullOrWhiteSpace(character)
                 ? Array.Empty<LiveLoopRecord>()
-                : await Task.Run(() => LiveLoopSessions.Pool(LiveLoopSessions.ReadFolder(logs), character!, CheckMinHours));
+                : await Task.Run(() => LiveLoopSessions.Pool(LiveLoopSessions.ReadFolder(logs), character!, CheckMinHours), cancel);
 
-            double step = Math.Max(0.1, SimWalkSeconds);
+            double step = Math.Max(0.1, SimWalkSeconds), hours = Math.Clamp(SimHours, 0.1, 24);
             int runs = Math.Clamp(SimRuns, 1, 20);
-            RankStatus = $"Simulating {jobs.Count(j => !j.IsLoop)} areas and {jobs.Count(j => j.IsLoop)} of your loops at L{level}…";
+            string simulating = $"Simulating {jobs.Count(j => !j.IsLoop)} areas and {jobs.Count(j => j.IsLoop)} of your loops " +
+                $"at L{level}, {runs} × {hours:0.#} h each";
+            RankStatus = simulating + "…";
+            int done = 0;
+            var progress = new Progress<int>(_ =>
+            {
+                // A report queued behind the finish or a cancel mustn't overwrite its status.
+                if (!IsRanking || cancel.IsCancellationRequested) return;
+                RankStatus = $"{simulating} — {++done} of {jobs.Count} done…";
+            });
+            // One core is left free so the client (and the game it's playing) stays responsive.
             IReadOnlyList<AreaRank> ranked = AreaRank.Rank(await Task.Run(() => jobs.AsParallel()
-                .Select(j => new AreaRank(j.Tour.Name, j.Tour.Rooms, j.Lap.Count,
-                    LoopSimulator.RunMany(j.Character, j.Lap, j.World, step, 1.0, runs),
-                    j.IsLoop, j.IsLoop ? LiveAt(live, j.Tour.Name, level) : null))
-                .ToList()));
+                .WithDegreeOfParallelism(Math.Max(1, Environment.ProcessorCount - 1))
+                .WithCancellation(cancel)
+                .Select(j =>
+                {
+                    var rank = new AreaRank(j.Tour.Name, level, j.Tour.Rooms, j.Lap.Count,
+                        LoopSimulator.RunMany(j.Character, j.Lap, j.World, step, hours, runs, cancel),
+                        j.IsLoop, j.IsLoop ? LiveAt(live, j.Tour.Name, level) : null);
+                    ((IProgress<int>)progress).Report(1);
+                    return rank;
+                })
+                .ToList(), cancel));
 
             foreach (AreaRank r in ranked) Rankings.Add(r);
             OnPropertyChanged(nameof(HasRankings));
             int safe = ranked.Count(r => r.Safe);
+            string skipped = (skippedAreas > 0 ? $"; {skippedAreas} area(s) skipped (one lair or no walkable lap)" : "")
+                + (skippedLoops > 0 ? $"; {skippedLoops} of your loops skipped (no walkable lap)" : "");
             RankStatus = $"L{level} from {here.Map}/{here.Room}: {safe} safe option(s) (areas and your loops), best first; {ranked.Count - safe} where you died listed last"
-                + (gatedAreas > 0 ? $"; {gatedAreas} area(s) you can't reach at L{level} left out" : "") + ". Pick one to load its tour.";
-            _log?.Info("ExpEstimator", $"ranked {ranked.Count} areas at L{level}: " +
+                + (gatedAreas > 0 ? $"; {gatedAreas} area(s) you can't reach at L{level} left out" : "") + skipped
+                + ". Pick one to load its tour.";
+            _log?.Info("ExpEstimator", $"ranked {ranked.Count} options at L{level} ({gatedAreas} areas unreachable, " +
+                $"{skippedAreas} areas and {skippedLoops} loops skipped): " +
                 string.Join(" | ", ranked.Take(10).Select(r => r.Label)));
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            Rankings.Clear();
+            OnPropertyChanged(nameof(HasRankings));
+            RankStatus = "Ranking cancelled.";
+            _log?.Info("ExpEstimator", $"area ranking at L{level} cancelled");
         }
         finally
         {
+            _rankCts = null;
+            IsRanking = false;
             IsSimulating = false;
         }
+    }
+
+    // Stops a running RankAreas; the Cancel button, and the Navigation window when
+    // it tears this session down.
+    [RelayCommand(CanExecute = nameof(IsRanking))]
+    public void CancelRanking() => _rankCts?.Cancel();
+
+    // Let queued input and rendering run before the next search on the UI thread.
+    private static async Task YieldToUi(CancellationToken cancel)
+    {
+        await Dispatcher.UIThread.InvokeAsync(static () => { }, DispatcherPriority.Background);
+        cancel.ThrowIfCancellationRequested();
     }
 
     // What the user made on a loop: their record at the ranked level, and their
@@ -497,7 +561,11 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
     partial void OnSelectedRankingChanged(AreaRank? value)
     {
-        if (value is not null) LoadRooms(value.Tour, value.Area);
+        if (value is null) return;
+        LoadRooms(value.Tour, value.Area);
+        // Simulate plays the sketch as the character stands now, not as ranked.
+        if (_simulation?.Level() is int now && now != value.Level)
+            SimStatus = $"Loaded from the L{value.Level} ranking — Simulate plays it at your current level (L{now}) and today's gates.";
     }
 
     // Replace the sketch with a whole route at once — one estimate, not one per room.
@@ -508,6 +576,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         foreach (RoomKey key in rooms)
         {
             if (_graph.GetRoom(key) is not { } room) continue;
+            if (_clicks.Count > 0 && _clicks[^1].Equals(key)) continue;   // adjacent dupe, as AddClick
             _clicks.Add(key);
             Clicks.Add(new LoopBuilderRow(Clicks.Count + 1, key, room.DisplayName));
         }

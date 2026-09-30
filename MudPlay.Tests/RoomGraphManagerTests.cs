@@ -1873,5 +1873,10 @@ public sealed class RoomGraphManagerTests : IDisposable
 
         var path = bfs.FindPath(new RoomKey(9, 1291), new RoomKey(9, 1424));
         Assert.Equal(new[] { Direction.Teleport }, path!);
+
+        // The "can I get there at all?" reach crosses it too, as FindPath's fallback
+        // does; the walk-only distances keep it out.
+        Assert.Equal(1, bfs.ComputeDistancesFrom(new RoomKey(9, 1291), viaBoats: true)[new RoomKey(9, 1424)]);
+        Assert.False(bfs.ComputeDistancesFrom(new RoomKey(9, 1291)).ContainsKey(new RoomKey(9, 1424)));
     }
 }
