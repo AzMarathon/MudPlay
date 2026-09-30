@@ -8063,6 +8063,19 @@ public sealed class AppServices
     // left untouched so it still shows the user's real ON/OFF.
     private bool CombatSuppressedInCurrentRoom()
     {
+        if (DetourSuppressesCombat() is { } detour)
+        {
+            if (detour != _lastDetourCombatOff)
+                Log.Combat("Combat", $"combat off for the {detour} (Settings → Cash + Items)");
+            _lastDetourCombatOff = detour;
+            return true;
+        }
+        if (_lastDetourCombatOff is not null)
+        {
+            Log.Combat("Combat", $"{_lastDetourCombatOff} over — combat back on");
+            _lastDetourCombatOff = null;
+        }
+
         (Game.Map.RoomKey? evalKey, bool suppressed, _) = CombatSuppressionVerdict();
 
         // Edge-trigger a Combat-log line on transition — the three gate Funcs
@@ -8080,6 +8093,23 @@ public sealed class AppServices
     }
     private bool _lastCombatSuppressed;
     private Game.Map.RoomKey? _lastCombatSuppressedRoom;
+    private string? _lastDetourCombatOff;
+
+    // The detour holding combat off, when its Settings → Cash + Items box is ticked:
+    // an auto-sell detour or an auto-deposit trip, from leaving the loop until it's
+    // back and resumed. Null when neither applies.
+    // The combat gates call this constantly, so the settings are read only while a
+    // detour runs; the managers are built after the gates are wired.
+    public string? DetourSuppressesCombat()
+    {
+        bool selling = SellDetour is not null && SellDetour.IsDetouring;
+        bool depositing = AutoDeposit is not null && AutoDeposit.IsRerouting;
+        if (!selling && !depositing) return null;
+        Models.Profile.CashSettings cash = ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+        if (selling && cash.NoCombatOnSellDetour) return "auto-sell detour";
+        if (depositing && cash.NoCombatOnDepositTrip) return "auto-deposit trip";
+        return null;
+    }
 
     // The loop combat-suppression decision the engage gates act on: the room it was
     // judged against, whether combat is suppressed there, and whether that room is the

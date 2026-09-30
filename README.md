@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.1**
-> - Combat round totals credit a damage shield's hit back (hellfire shield, shockshield, spikes, counterstrike) to the shield's wearer instead of unknown
+> **Version 3.126.2**
+> - Settings → Cash + Items: "No combat during an auto-sell detour" and "…during an auto-deposit trip" walk past hostiles until the detour is back on the loop
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

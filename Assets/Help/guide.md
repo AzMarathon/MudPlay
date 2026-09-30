@@ -3170,6 +3170,11 @@ Stashing isn't affected; it's governed by the coin-type filter below.
 **Default:** off
 **What it does:** When you're a **party follower** (in a party, not leading), lets you stash currency as the leader drags you through your marked stash rooms. Normally a follower's own movement is held by the leader's drag, so the usual "stash while looping through" trigger never fires for them; this opts their pass-through back in. Marking stash rooms and the coin-type filter above work the same as when you're solo.
 
+### No combat during an auto-sell detour / an auto-deposit trip
+
+**Default:** both Off
+**What it does:** While a loop or Auto-Lair is out on a detour — turning aside to sell an item (an item's *Make detours to sell it*), or auto-depositing at the bank or an off-route stash room — don't start fights: hostiles are walked past as if **Auto-Combat** were off, from leaving the loop until the detour is back and the loop picks up again. Your Auto-Combat toggle itself isn't changed. A rest that triggers on the way still clears the room first, the same as a loop room marked *do not attack*. The program log notes when combat goes off and back on, and the bug report shows it.
+
 ### Don't collect if it makes you Light / Medium / Heavy
 
 **Default:** all Off
