@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.127.2**
+> **Version 3.127.3**
 > - Level Projection's Stealth column shows your sneak chance beside it: 84 (84%), or 100% from the level of a completed Perfect Stealth quest
 > - Every Level Projection column header explains its figure on hover, with the Paradigm formula when a Paradigm realm is loaded
+> - Session Statistics is grouped like the other panels (kills & experience, coin, items), with room below its last row
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
