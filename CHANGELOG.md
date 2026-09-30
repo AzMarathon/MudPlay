@@ -1,5 +1,9 @@
 # Version history
 
+## 3.126.22
+
+- Alt+click a room on the map to take it back out of a loop you're building or an exp/hr sketch, or to unmark an Auto-Lair room
+
 ## 3.126.21
 
 - After a flee (hit and run or a low-health run), a loop walks back to the room it fled and carries on the lap, re-sneaking, instead of restarting from the nearest waypoint

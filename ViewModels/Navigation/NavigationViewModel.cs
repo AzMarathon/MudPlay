@@ -2923,7 +2923,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     //     enters Lair mode from the top-right action chip, clicks rooms to
     //     add / remove, then commits via the rail's "Save lairs" button.
     //   - Idle — no-op (the click already moved SelectedRoomKey upstream).
-    public void OnRoomLeftClicked(RoomKey key)
+    // remove (Alt+click): take the room back out — the loop's or the exp/hr sketch's
+    // latest click on it, or its Auto-Lair mark — and never add.
+    public void OnRoomLeftClicked(RoomKey key, bool remove = false)
     {
         // Any left-click refreshes the ROOM INFO panel's contents (it's informational
         // and doesn't consume the click), but never forces the panel open — its expand
@@ -2939,13 +2941,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         switch (CurrentMode)
         {
             case NavigationMode.LoopBuild:
-                LoopBuilder?.AddClick(key);
+                if (remove) LoopBuilder?.RemoveLastClickOf(key);
+                else LoopBuilder?.AddClick(key);
                 break;
             case NavigationMode.AutoLair:
-                _services.AutoLair.Toggle(key);
+                if (remove) _services.AutoLair.Unmark(key);
+                else _services.AutoLair.Toggle(key);
                 break;
             case NavigationMode.ExpEstimator:
-                ExpEstimator?.AddClick(key);
+                if (remove) ExpEstimator?.RemoveLastClickOf(key);
+                else ExpEstimator?.AddClick(key);
                 break;
         }
     }

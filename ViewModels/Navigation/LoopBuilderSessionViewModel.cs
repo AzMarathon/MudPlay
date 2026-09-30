@@ -95,6 +95,17 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         Reexpand();
     }
 
+    // Alt+click on the map: take the room back out of the loop. A loop can pass
+    // through a room more than once, so it's the most recent click on it that goes.
+    // False when the room isn't in the loop.
+    public bool RemoveLastClickOf(RoomKey key)
+    {
+        int index = _clicks.LastIndexOf(key);
+        if (index < 0) return false;
+        RemoveClickAt(index);
+        return true;
+    }
+
     // Attach (or clear) a per-waypoint command + delay on the click at index —
     // driven by clicking the row in the loop-builder strip, which opens the same
     // WaypointActionEditDialog the loop editor uses. Commands don't change the
