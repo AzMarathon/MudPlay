@@ -1,5 +1,9 @@
 # Version history
 
+## 3.126.1
+
+- Combat round totals credit a damage shield's hit back (hellfire shield, shockshield, spikes, counterstrike) to the shield's wearer instead of unknown
+
 ## 3.126.0
 
 - Events: every event now has a Then step — go back to what was running, start a loop / Auto-Lair, walk somewhere, or fire another event

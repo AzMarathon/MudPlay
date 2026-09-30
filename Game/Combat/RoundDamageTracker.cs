@@ -18,6 +18,9 @@ namespace MudPlay.Game.Combat;
 // line as well as on a 5 s timer, so it only closes a round at least MinTickAge
 // old — never the one that line just opened.
 //
+// A damage shield's line (ShieldReflectLines) names only who it struck back at, so
+// it goes to the other side of the hit just before it: the shield's wearer.
+//
 // Every "... for N damage!" line is read by DamageLineAttributor against the room
 // roster (NoteRoomEntities) and the party. A caster's-eye spell line names no caster
 // ("Acid sears the orc for 12 damage!" is also what everyone else sees), so it counts
@@ -237,7 +240,26 @@ public sealed class RoundDamageTracker : IDisposable
             source = caster;
             othersRoomSpell = true;
         }
-        if (source is not null && target is not null && !a.NoDealer) _lastHit = (source, target, now);
+        // A damage shield strikes back at whoever just hit its wearer, and its line
+        // doesn't say whose shield: "wraith weed is scorched for 4 damage!" right after
+        // the weed hit us is ours; "You are scorched …" right after we hit a monster is
+        // that monster's (report: a priest's hellfire shield credited to unknown).
+        // "You are scorched …" reads like a condition's damage with no attacker; a
+        // shield's is the struck monster's.
+        bool reflect = false;
+        if (source is null && target is not null
+            && _lastHit is { } struck && now - struck.At <= ProcWindow
+            && ShieldReflectLines.IsReflect(text))
+        {
+            if (target == DamageLineAttributor.Self ? struck.Source == DamageLineAttributor.Self
+                    : struck.Source.Equals(target, StringComparison.OrdinalIgnoreCase))
+            {
+                source = struck.Target;
+                reflect = true;
+                a = a with { NoDealer = false };
+            }
+        }
+        if (source is not null && target is not null && !a.NoDealer && !reflect) _lastHit = (source, target, now);
 
         bool roomSpell = (source == DamageLineAttributor.Self || othersRoomSpell) && target is null && !a.NoDealer
             && _foes.Count > 0 && HitsTheRoom(text);
