@@ -1,12 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.16**
+> **Version 3.126.17**
 > - Windows updates swap the program in by renaming, so a client still closing or opened mid-update can't crash on a half-copied MudPlay.exe
 > - Profiles and shared realm files load reliably with two clients on one realm on Windows (a briefly-locked file no longer fails the load)
 > - A startup profile that fails to load says why on the terminal instead of silently opening the default profile
 > - A character open in one client follows a realm move made from another client's Profile Management, instead of saving its old realm back over it
 > - A failed update leaves MudPlay-update-failed.log beside the program, and the restored client points you to it
+> - Loops disarm trapped exits (or hand them to a capable party member) before stepping through, re-sneaking after the disarm, instead of walking into the trap
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
