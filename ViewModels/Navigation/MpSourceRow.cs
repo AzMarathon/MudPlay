@@ -16,6 +16,14 @@ public sealed class MpSourceRow
         Flags = MpStepFlagText.Describe(step.Flags);
     }
 
+    // The MegaMUD side of a row the user inserted: no step, every column empty.
+    private MpSourceRow()
+    {
+        Hash = RoomsMdName = Action = Extra = Flags = string.Empty;
+    }
+
+    public static readonly MpSourceRow None = new();
+
     public int Number { get; }
     public string Hash { get; }
     public string RoomsMdName { get; }

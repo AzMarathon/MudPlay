@@ -45,6 +45,20 @@
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
         </Style>
+        <!-- A step left out of the loop stays in the table, greyed. -->
+        <Style Selector="Grid.StepRow.Removed">
+            <Setter Property="Opacity" Value="0.4"/>
+        </Style>
+        <Style Selector="Button.RowEdit">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="MinHeight" Value="20"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
         <Style Selector="ListBox.Steps">
             <Setter Property="Padding" Value="0"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -152,7 +166,7 @@
 
             <!-- ============ Column headers ============ -->
             <Border Grid.Row="1" Padding="6,4" Background="#18FFFFFF" CornerRadius="3">
-                <Grid ColumnDefinitions="34,74,150,64,*,130,9,20,84,1.4*,44,130,64,26,26,26,26,22">
+                <Grid ColumnDefinitions="34,74,150,64,*,130,9,20,84,1.4*,44,130,64,26,26,26,26,22,92">
                     <TextBlock Grid.Column="0" Classes="Head" Text="#"/>
                     <TextBlock Grid.Column="1" Classes="Head" Text="Room hash"/>
                     <TextBlock Grid.Column="2" Classes="Head" Text="Rooms.md"/>
@@ -172,6 +186,8 @@
                     <TextBlock Grid.Column="14" Classes="HeadCenter" Text="NA" ToolTip.Tip="Do not attack in this room"/>
                     <TextBlock Grid.Column="15" Classes="HeadCenter" Text="RH" ToolTip.Tip="Rest up here — HP"/>
                     <TextBlock Grid.Column="16" Classes="HeadCenter" Text="RM" ToolTip.Tip="Rest up here — mana"/>
+                    <TextBlock Grid.Column="18" Classes="HeadCenter" Text="Edit"
+                               ToolTip.Tip="✕ leave a step out of the loop (↺ puts it back) · + add a room below · ▲ ▼ move the row. The map redraws after each change; press Verify to check the loop still walks."/>
                 </Grid>
             </Border>
 
@@ -179,8 +195,9 @@
             <ListBox Grid.Row="2" Classes="Steps" ItemsSource="{Binding Rows}">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:MpTranslatedRowViewModel">
-                        <Grid ColumnDefinitions="34,74,150,64,*,130,9,20,84,1.4*,44,130,64,26,26,26,26,22">
-                            <TextBlock Grid.Column="0" Classes="Cell" Text="{Binding Number}"/>
+                        <Grid Classes="StepRow" Classes.Removed="{Binding IsRemoved}"
+                              ColumnDefinitions="34,74,150,64,*,130,9,20,84,1.4*,44,130,64,26,26,26,26,22,92">
+                            <TextBlock Grid.Column="0" Classes="Cell" Text="{Binding NumberText}"/>
                             <TextBlock Grid.Column="1" Classes="Cell" Text="{Binding Source.Hash}" FontFamily="monospace"/>
                             <TextBlock Grid.Column="2" Classes="Cell" Text="{Binding Source.RoomsMdName}"
                                        ToolTip.Tip="{Binding Source.RoomsMdName}"/>
@@ -230,6 +247,22 @@
                                            IsVisible="{Binding HasDropped}"
                                            ToolTip.Tip="{Binding Dropped, StringFormat='Not carried over: {0}'}"/>
                             </Panel>
+                            <StackPanel Grid.Column="18" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center">
+                                <Button Classes="RowEdit" Content="{Binding RemoveGlyph}"
+                                        ToolTip.Tip="{Binding RemoveTip}"
+                                        Command="{Binding $parent[ListBox].((vm:MpImportReviewViewModel)DataContext).RemoveRowCommand}"
+                                        CommandParameter="{Binding}"/>
+                                <Button Classes="RowEdit" Content="+"
+                                        ToolTip.Tip="Add a room below this row — type its map/room into the new row's Set room box"
+                                        Command="{Binding $parent[ListBox].((vm:MpImportReviewViewModel)DataContext).InsertBelowCommand}"
+                                        CommandParameter="{Binding}"/>
+                                <Button Classes="RowEdit" Content="▲" ToolTip.Tip="Move this row up"
+                                        Command="{Binding $parent[ListBox].((vm:MpImportReviewViewModel)DataContext).MoveUpCommand}"
+                                        CommandParameter="{Binding}"/>
+                                <Button Classes="RowEdit" Content="▼" ToolTip.Tip="Move this row down"
+                                        Command="{Binding $parent[ListBox].((vm:MpImportReviewViewModel)DataContext).MoveDownCommand}"
+                                        CommandParameter="{Binding}"/>
+                            </StackPanel>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
@@ -262,7 +295,7 @@
                 </StackPanel>
                 <TextBlock Grid.Column="2" Classes="Value" VerticalAlignment="Center"
                            Foreground="{StaticResource ChromeFgMutedBrush}"
-                           Text="✓ matches · ≈ room differs from the recording · ↺ found again · ✎ set by you · ✗ untranslated (left out unless you set a room) · ⚠ no route onward · ⓘ what isn't carried over"/>
+                           Text="✓ matches · ≈ room differs from the recording · ↺ found again · ✎ set by you · + added by you · ✗ untranslated (left out unless you set a room) · greyed: left out · ⚠ no route onward · ⓘ what isn't carried over"/>
                 <Button Grid.Column="3" Content="Reject" Command="{Binding RejectCommand}" MinWidth="90" IsCancel="True"/>
                 <Button Grid.Column="4" Content="Accept" Command="{Binding AcceptCommand}" MinWidth="90"
                         Classes="Accent" IsEnabled="{Binding CanAccept}"/>
