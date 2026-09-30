@@ -3643,7 +3643,8 @@ public sealed class AppServices
             if (combat.ShowsRoundTotalsRow(combat.ShowCombatRoundTotalsParty)) shown.Add(Game.Combat.CombatantKind.Party);
             if (combat.ShowsRoundTotalsRow(combat.ShowCombatRoundTotalsPlayers)) shown.Add(Game.Combat.CombatantKind.Player);
             if (combat.ShowsRoundTotalsRow(combat.ShowCombatRoundTotalsMonsters)) shown.Add(Game.Combat.CombatantKind.Monster);
-            IReadOnlyList<string> table = Game.Combat.RoundTotalsFormatter.Table(round, shown);
+            IReadOnlyList<string> table = Game.Combat.RoundTotalsFormatter.Table(round, shown,
+                combat.ShowCombatRoundTotalsEachMonster);
             if (table.Count > 0) WriteTerminalNotice(string.Join("\r\n", table));
         };
         // Reset round counter + ring on BBS connect to match
@@ -4727,6 +4728,9 @@ public sealed class AppServices
             MonsterHp.MaxHp, MonsterHp.HpRegen,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud, log: Log);
         RoomClassifier.EntitiesObserved += MonsterHpEstimates.NoteRoomEntities;
+        // The round ledger caps a monster's damage taken at the HP it had left, and
+        // numbers same-named monsters, off these estimates.
+        RoundDamage.SetMonsterHp(MonsterHpEstimates.TargetOf, MonsterHpEstimates.RoomMonsters);
         RoundDamage.Attributed += line =>
         {
             if (line.Foes > 0) MonsterHpEstimates.NoteAreaDamage(line.Sides.Amount);

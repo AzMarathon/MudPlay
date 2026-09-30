@@ -398,6 +398,16 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _showCombatRoundTotalsParty;
     [ObservableProperty] private bool _showCombatRoundTotalsPlayers;
     [ObservableProperty] private bool _showCombatRoundTotalsMonsters;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowCombatRoundTotalsStacked))]
+    private bool _showCombatRoundTotalsEachMonster;
+
+    // The other half of the stacked / each-monster radio pair.
+    public bool ShowCombatRoundTotalsStacked
+    {
+        get => !ShowCombatRoundTotalsEachMonster;
+        set => ShowCombatRoundTotalsEachMonster = !value;
+    }
 
     // ----- Combat profiles (staged quick-swap chip bar) -------------
 
@@ -731,6 +741,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             ShowCombatRoundTotalsParty    = ShowCombatRoundTotalsParty,
             ShowCombatRoundTotalsPlayers  = ShowCombatRoundTotalsPlayers,
             ShowCombatRoundTotalsMonsters = ShowCombatRoundTotalsMonsters,
+            ShowCombatRoundTotalsEachMonster  = ShowCombatRoundTotalsEachMonster,
     };
 
     // Commit the staged edits through the shared session, which folds BOTH tabs'
@@ -871,6 +882,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         ShowCombatRoundTotalsParty    = dto.ShowsRoundTotalsRow(dto.ShowCombatRoundTotalsParty);
         ShowCombatRoundTotalsPlayers  = dto.ShowsRoundTotalsRow(dto.ShowCombatRoundTotalsPlayers);
         ShowCombatRoundTotalsMonsters = dto.ShowsRoundTotalsRow(dto.ShowCombatRoundTotalsMonsters);
+        ShowCombatRoundTotalsEachMonster  = dto.ShowCombatRoundTotalsEachMonster;
     }
 
     private CombatSettings ReadOrDefault()
@@ -1027,6 +1039,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     partial void OnShowCombatRoundTotalsPartyChanged(bool value)    => MarkDirty();
     partial void OnShowCombatRoundTotalsPlayersChanged(bool value)  => MarkDirty();
     partial void OnShowCombatRoundTotalsMonstersChanged(bool value) => MarkDirty();
+    partial void OnShowCombatRoundTotalsEachMonsterChanged(bool value)  => MarkDirty();
 
     // One Target Priority dropdown row — pairs the enum value with its friendly label.
     public sealed record TargetPriorityOption(TargetPriority Value, string Label);

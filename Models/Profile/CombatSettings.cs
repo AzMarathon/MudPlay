@@ -258,6 +258,11 @@ public sealed class CombatSettings
     public bool? ShowCombatRoundTotalsPlayers { get; set; }
     public bool? ShowCombatRoundTotalsMonsters { get; set; }
 
+    // How same-named monsters show in the round table — either / or: stacked on one row
+    // labelled with how many there were ("muckworm x3", the default), or a row each
+    // ("muckworm #1", "#2"…).
+    public bool ShowCombatRoundTotalsEachMonster { get; set; }
+
     // A box missing from settings saved before the boxes existed follows
     // ShowCombatRoundTotals: a table that was on keeps every row, one that was off
     // stays off (user, 2026-09-29).

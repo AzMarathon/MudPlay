@@ -125,6 +125,23 @@ public sealed class MonsterHpTracker
         }
     }
 
+    // The monster a hit on this name lands on — the first of the name, as NoteDamage
+    // has it — with its id (stable while it's in the room) and its HP before the hit.
+    // Null when no monster of that name is tracked.
+    public (int Id, int Hp)? TargetOf(string name)
+    {
+        if (First(name) is not { } i) return null;
+        Advance(i, _now());
+        return (i.Id, i.Hp);
+    }
+
+    // Every tracked monster in the room, in "Also here:" order — what a room spell hits.
+    public IReadOnlyList<(int Id, string Name, int Hp)> RoomMonsters()
+    {
+        DateTimeOffset now = _now();
+        return _room.Select(i => { Advance(i, now); return (i.Id, i.Name, i.Hp); }).ToList();
+    }
+
     // The running estimate for the first monster of this name, or null when there's
     // no such monster.
     public int? Estimate(string name)
@@ -199,8 +216,11 @@ public sealed class MonsterHpTracker
         i.RegenFrom = i.Hp >= i.MaxHp ? null : from + TimeSpan.FromTicks(ticks * interval.Ticks);
     }
 
+    private static int _nextId;
+
     private sealed class Instance(string name, string baseName, int maxHp, int regen)
     {
+        public int Id { get; } = System.Threading.Interlocked.Increment(ref _nextId);
         public string Name { get; } = name;
         public string BaseName { get; } = baseName;
         public int MaxHp { get; } = maxHp;

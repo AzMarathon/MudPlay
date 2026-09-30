@@ -1,5 +1,10 @@
 # Version history
 
+## 3.126.8
+
+- Combat round totals: same-named monsters either stack on one row with a count (muckworm x3, the default) or get a row each (muckworm #1, #2…)
+- Combat round totals count a monster's damage taken, and the dealer's dealt, only up to the HP it had left
+
 ## 3.126.5
 
 - After a buff cast breaks sneak, the next move waits for the re-sneak instead of going out first

@@ -2791,6 +2791,12 @@ The round number starts again at 1 once the room is clear of hostiles, so each f
 
 Four boxes under it (enabled while round totals are on, all **Off** by default) pick which rows print: **Me**, **Party**, **Other players** (players in the room who aren't in your party) and **Monsters**. Tick all four for the full table, or just the groups you care about. The **unknown** row prints whenever the table does. With **none ticked, no table prints**, so tick at least one after turning round totals on. (Updating from a version before these boxes: if round totals were on, all four start ticked; if they were off, all four start off.)
 
+A choice below them sets how same-named monsters show — one or the other:
+- **Stack same-named monsters (muckworm x3)** (the default) puts them on one row labelled with how many there were, so a room spell's 2436 taken reads as three muckworms' worth.
+- **One row per monster** gives each monster its own row (`muckworm #1`, `#2`, …). A hit on a shared name goes to the first one listed in *Also here:* (the same rule the monster HP estimates use), and a room spell hits each. It needs the monster's HP from game data; one without it stays on a stacked row.
+
+A monster **can't take more damage than it has left**: an 812 room spell on a 540-HP muckworm counts as 540 taken, and 540 dealt by the caster, so Dealt and Taken agree. The HP used is the monster's running estimate, which includes regen and whatever your `look`s showed.
+
 **Important notes:**
 - **How damage is credited.** Each "… for N damage!" line is read against the room's occupants (from *Also here:*), your party and "you". "Bob slashes large orc for 30" credits Bob, and "The large orc claws you with its pincers for 12" is damage you took from the orc.
 - **unknown** collects damage a line doesn't name a side for. Examples: a spell whose line names no caster ("Acid sears you"), an area effect ("An earthquake rocks the room"), or someone the room display hasn't shown yet.

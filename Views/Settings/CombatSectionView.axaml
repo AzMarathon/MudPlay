@@ -688,6 +688,14 @@
                     <CheckBox Content="Monsters"
                               IsChecked="{Binding ShowCombatRoundTotalsMonsters, Mode=TwoWay}"/>
                 </WrapPanel>
+                <WrapPanel Margin="24,0,0,0" IsEnabled="{Binding ShowCombatRoundTotals}">
+                    <RadioButton GroupName="RoundTotalsMonsters" Content="Stack same-named monsters (muckworm x3)" Margin="0,0,16,0"
+                                 IsChecked="{Binding ShowCombatRoundTotalsStacked, Mode=TwoWay}"
+                                 ToolTip.Tip="Same-named monsters share one row, labelled with how many there were, so a total like 2436 taken reads as three muckworms' worth."/>
+                    <RadioButton GroupName="RoundTotalsMonsters" Content="One row per monster"
+                                 IsChecked="{Binding ShowCombatRoundTotalsEachMonster, Mode=TwoWay}"
+                                 ToolTip.Tip="Give each monster its own row (muckworm #1, #2…). A hit on a shared name goes to the first one listed in Also here:, as the HP estimates do; a room spell hits each."/>
+                </WrapPanel>
 
             </StackPanel>
         </Grid>
