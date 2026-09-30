@@ -85,6 +85,19 @@ public sealed class StatEffectsTests
         Assert.Equal(8, StatEffects.MaxDamageBonus(strong, RealmType.Stock));
     }
 
+    // Paradigm adds 5 − Combat for a class whose Combat rating (CombatLVL − 2) is
+    // 1–4: a Mage (CombatLVL 3) gets +4, a Witchunter (7) nothing. Stock never does.
+    [Fact]
+    public void CritRating_ParadigmLowCombatClassBonus()
+    {
+        int bare = CharacterCalculator.CalcBaseCritRating(30, 80, 70, 60, RealmType.ParaMud);
+        Assert.Equal(bare + 4, CharacterCalculator.CalcBaseCritRating(30, 80, 70, 60, RealmType.ParaMud, classCombatLvl: 3));
+        Assert.Equal(bare + 1, CharacterCalculator.CalcBaseCritRating(30, 80, 70, 60, RealmType.ParaMud, classCombatLvl: 6));
+        Assert.Equal(bare, CharacterCalculator.CalcBaseCritRating(30, 80, 70, 60, RealmType.ParaMud, classCombatLvl: 7));
+        Assert.Equal(CharacterCalculator.CalcBaseCritRating(30, 80, 70, 60, RealmType.Stock),
+            CharacterCalculator.CalcBaseCritRating(30, 80, 70, 60, RealmType.Stock, classCombatLvl: 3));
+    }
+
     // Stock caps the base crit rating at 75; Paradigm doesn't.
     [Fact]
     public void CritRating_OnlyStockCapsAt75()

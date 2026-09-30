@@ -343,6 +343,7 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         // Enumerate once; the resolver picks min markup and the price formula
         // turns (level, markup) into copper.
         int classNumber = GetInt(classRow, "Number");
+        int classCombatLvl = GetInt(classRow, "CombatLVL");
         IReadOnlyList<TrainerShop> trainers = _trainers ??= TrainerCatalog.Enumerate(_gameData);
 
         // Floor at level 2 — level 1 is the 0-exp starting point, not a row.
@@ -394,7 +395,7 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
             LevelProjection p = LevelProjectionCalculator.ProjectLevel(
                 lvl, chart, str, intel, wil, agi, hea, chm,
                 minHits, maxHits, raceHpPerLevel, mageryType, mageryLevel, realm, bonuses,
-                hasClassStealth, hasRaceStealth);
+                hasClassStealth, hasRaceStealth, classCombatLvl);
             int? markup = TrainerCatalog.CheapestMarkup(trainers, lvl, classNumber);
             long? trainCost = markup is { } m ? (long)ShopPriceCalculator.TrainCopper(lvl - 1, m) : null;
             Rows.Add(new LevelProjectionRow(p, currentExp, lvl == currentLevel, isCaster, trainCost,

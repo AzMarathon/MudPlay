@@ -601,12 +601,12 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Formula:** `level/10 + (INT-50)/10 + (AGL-50)/20 + (CHM-50)/30`, at least 1. So INT ~10/pt, AGL ~20/pt, CHM ~30/pt. Each term truncates toward zero.
 - **Stock: the terms add as signed values, so a stat below 50 lowers crit, and the total is clamped to 1–75** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_calculate_secondary_stats` @ `0x41ac60`–`0x41acc5`, stored at `0x710`)*.
 - **Paradigm uses the same four terms, AGL included, but has no 75 cap** *([OBSERVED] 2026-09-30, MMUD-Explorer's GreaterMUD branch, frmMain crit calculation)*. (An earlier note said the AGL term was unverified on Paradigm; superseded 2026-09-30.)
-- **Paradigm adds `5 − Combat` for a class whose Combat rating is below 5** *([OBSERVED] 2026-09-30, MMUD-Explorer GreaterMUD branch)*. The client doesn't model it yet: the stat projection has no class Combat rating.
+- **Paradigm adds `5 − Combat` for a class whose Combat rating is 1–4** *([OBSERVED] 2026-09-30, MMUD-Explorer GreaterMUD branch)*. Combat here is the class table's `CombatLVL − 2`. So in the Paradigm 1.9.1 data: Mage / Priest (`CombatLVL` 3) +4, Druid / Gypsy (4) +3, the `CombatLVL` 5 classes +2, Warrior / Paladin / Ranger (6) +1, Witchunter (7) nothing. It applies after the floor of 1.
 - **Whether a stat below 50 lowers crit on Paradigm** *[NEEDS CONFIRMATION]*. MMUD-Explorer drops any term that isn't positive, but it does so on both realms, and the Stock DLL doesn't. So that looks like MMUD-Explorer's own shortcut, not a Paradigm rule. The client keeps the signed terms on both realms. Question: on Paradigm, does a character with CHA 30 get one less crit than the same character at CHA 50?
 - **The in-fight curve differs** — see *Combat → Bash and smash damage vs DR* for the crit row (Stock compresses above 40, Paradigm caps at 65).
 
 **Client use:**
-- `CharacterCalculator.CalcBaseCritRating` (realm-split: the 75 cap is Stock only).
+- `CharacterCalculator.CalcBaseCritRating` (realm-split: the 75 cap is Stock only; the class Combat bonus is Paradigm only, fed from the class row's `CombatLVL` by Level Projection and the CP tooltips).
 
 ### Melee damage bonus (STR onto the weapon's own range)
 *Status: [OBSERVED] 2026-09-30 · Realm: differs*

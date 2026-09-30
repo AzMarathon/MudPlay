@@ -186,16 +186,21 @@ public static class CharacterCalculator
 
     // Base critical rating from stats (0x710): Level/10 + (Int-50)/10 + (Agl-50)/20
     // + (Chm-50)/30, floored at 1. Stock also caps it at 75; Paradigm has no cap
-    // here. Combat crit % = this + gear crit bonus, then
+    // here, and gives a class whose Combat rating (the class table's CombatLVL − 2)
+    // is 1–4 another 5 − Combat. Combat crit % = this + gear crit bonus, then
     // CombatCalculator.CalcCritChance applies the realm's diminishing-returns curve.
-    public static int CalcBaseCritRating(int level, int intellect, int agility, int charm, RealmType realm)
+    public static int CalcBaseCritRating(int level, int intellect, int agility, int charm,
+                                         RealmType realm, int classCombatLvl = 0)
     {
         int rating = level / 10
                    + (intellect - 50) / 10
                    + (agility - 50) / 20
                    + (charm - 50) / 30;
         if (realm == RealmType.Stock && rating > 75) rating = 75;
-        return Math.Max(rating, 1);
+        rating = Math.Max(rating, 1);
+        int combat = classCombatLvl - 2;
+        if (realm == RealmType.ParaMud && combat is > 0 and < 5) rating += 5 - combat;
+        return rating;
     }
 
     // Base stealth skill (0x5fa) from stats + level: stat terms + stealthLvl + 20,

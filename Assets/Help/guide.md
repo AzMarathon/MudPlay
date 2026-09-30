@@ -1138,7 +1138,7 @@ For the curious, here are the actual equations behind the numbers above, with ev
 
 Encumbrance isn't applied on top — the Stealth value already carries it.
 
-**Crit rating** = `Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30`, at least 1. **Stock** also caps it at 75; **Paradigm** has no cap there, and a class with a Combat rating below 5 gets `5 − Combat` more on Paradigm (not yet shown in the projection). In a fight, Stock counts crit above 40 one point in three, and Paradigm caps crit at 65.
+**Crit rating** = `Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30`, at least 1. **Stock** also caps it at 75; **Paradigm** has no cap there, and on Paradigm a class with a Combat rating of 1–4 gets `5 − Combat` more (a Mage or Priest +4, a Warrior +1, a Witchunter nothing). In a fight, Stock counts crit above 40 one point in three, and Paradigm caps crit at 65.
 
 **Dodge** (raw value, before the vs-accuracy % conversion) = `Level/5 + (CHM−50)/5 + (AGI−50)/3` (+ gear `+Dodge`, + a light-load bonus below 33% encumbrance; on Paradigm, exactly 33% still counts). Accuracy has the same light-load bonus with the same cutoff.
 

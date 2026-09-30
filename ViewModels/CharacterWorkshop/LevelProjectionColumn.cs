@@ -60,7 +60,7 @@ public readonly record struct LevelProjectionColumn(
             "Backstab accuracy: Stealth ÷ 3 + (AGL − 50 + level) ÷ 2 + 15 + gear +backstab accuracy + your weapon's and gear's +accuracy, −15 if your STR is under the weapon's requirement. Uses today's weapon. — without a stealth class or race."),
         new LevelProjectionColumn("crit", "Crit", "Crit", 70, true, true,
             "Crit rating: level ÷ 10 + (INT − 50) ÷ 10 + (AGL − 50) ÷ 20 + (CHM − 50) ÷ 30, kept between 1 and 75, + gear +crits. In a fight, crit above 40 counts one point in three.",
-            "Crit rating: level ÷ 10 + (INT − 50) ÷ 10 + (AGL − 50) ÷ 20 + (CHM − 50) ÷ 30, at least 1 (Stock also caps it at 75), + gear +crits. In a fight, crit is capped at 65."),
+            "Crit rating: level ÷ 10 + (INT − 50) ÷ 10 + (AGL − 50) ÷ 20 + (CHM − 50) ÷ 30, at least 1 (Stock also caps it at 75), + 5 − your class's Combat rating when that's 1–4, + gear +crits. In a fight, crit is capped at 65."),
         new LevelProjectionColumn("dodge", "Dodge", "Dodge", 70, true, true,
             "Raw dodge: level ÷ 5 + (CHM − 50) ÷ 5 + (AGL − 50) ÷ 3 + gear +dodge. Your chance to dodge a given attack also depends on the attacker's accuracy."),
         new LevelProjectionColumn("stealth", "Stealth (sneak %)", "Stealth", 125, true, true,

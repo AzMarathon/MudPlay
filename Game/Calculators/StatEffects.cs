@@ -49,7 +49,8 @@ public readonly record struct StatContext(
     int MinHits, int MaxHits, int RaceHpPerLevel,
     int MageryType, int MageryLevel,
     bool HasThievery = false, bool HasTraps = false,
-    bool HasPicklocks = false, bool HasTracking = false);
+    bool HasPicklocks = false, bool HasTracking = false,
+    int ClassCombatLvl = 0);
 
 // The stat-derived secondary numbers a combat profile / CP plan cares about — the
 // gear-independent, stat-and-level portion. All sourced from the existing verified
@@ -79,8 +80,9 @@ public static class StatEffects
     public static int BashAccuracyFromStats(StatBlock s)
         => (s.Strength - 50) / 3 + (s.Agility - 50) / 6;
 
-    public static int CritRating(StatBlock s, RealmType realm)
-        => CharacterCalculator.CalcBaseCritRating(s.Level, s.Intellect, s.Agility, s.Charm, realm);
+    // classCombatLvl is the class table's raw CombatLVL (Paradigm's low-Combat bonus).
+    public static int CritRating(StatBlock s, RealmType realm, int classCombatLvl = 0)
+        => CharacterCalculator.CalcBaseCritRating(s.Level, s.Intellect, s.Agility, s.Charm, realm, classCombatLvl);
 
     // Raw dodge value (before the vs-accuracy % conversion) — level/5 + CHM/5 + AGI/3.
     public static int DodgeValue(StatBlock s)
@@ -137,7 +139,7 @@ public static class StatEffects
         // Derived-value functions (stat-and-level portion; gear excluded).
         Func<StatBlock, int> accy = s => AccuracyFromStats(s, realm);
         Func<StatBlock, int> stealth = s => Stealth(s, realm);   // realm-split rounding
-        Func<StatBlock, int> crit = s => CritRating(s, realm);
+        Func<StatBlock, int> crit = s => CritRating(s, realm, ctx.ClassCombatLvl);
         Func<StatBlock, int> minDmg = s => MinDamageBonus(s, realm);
         Func<StatBlock, int> maxDmg = s => MaxDamageBonus(s, realm);
         Func<StatBlock, int> picks = s => Picklocks(s, realm);

@@ -6,7 +6,7 @@
 > - Every Level Projection column header explains its figure on hover, with the Paradigm formula when a Paradigm realm is loaded
 > - Session Statistics is grouped like the other panels (kills & experience, coin, items), with room below its last row
 > - Stock min melee damage from STR is doubled and max damage drops below 50 STR in Level Projection and the stat tooltips, as the combat math already did
-> - Paradigm Picklocks counts CHM (weighted double), and Paradigm crit has no 75 cap
+> - Paradigm Picklocks counts CHM (weighted double); Paradigm crit has no 75 cap and adds the low-Combat class bonus (+4 for a Mage down to 0 for a Witchunter)
 > - Carry weight, magic resistance and crit's AGI term are marked confirmed for Paradigm
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

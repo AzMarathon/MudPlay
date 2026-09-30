@@ -27,7 +27,7 @@ public static class LevelProjectionCalculator
         int minHitsPerLevel, int maxHitsPerLevel, int raceHpPerLevel,
         int mageryType, int mageryLevel,
         RealmType realm, EquipmentStatSummary? gear = null,
-        bool hasClassStealth = false, bool hasRaceStealth = false)
+        bool hasClassStealth = false, bool hasRaceStealth = false, int classCombatLvl = 0)
     {
         // Cumulative exp threshold to reach this level. The grid derives the
         // "exp remaining" from this minus the character's current exp.
@@ -60,7 +60,7 @@ public static class LevelProjectionCalculator
         // projected to future levels, so it's not folded here. The other derived
         // columns take the aggregate's flat direct bonuses on top of the stat base.
         int accuracy = StatEffects.AccuracyFromStats(stats, realm);
-        int crit = StatEffects.CritRating(stats, realm) + (gear?.PlusCrits ?? 0);
+        int crit = StatEffects.CritRating(stats, realm, classCombatLvl) + (gear?.PlusCrits ?? 0);
         int dodge = StatEffects.DodgeValue(stats) + (gear?.PlusDodge ?? 0);
         int stealth = StatEffects.Stealth(stats, realm) + (gear?.PlusStealth ?? 0);
         int minDmg = StatEffects.MinDamageBonus(stats, realm) + (gear?.PlusMinDamage ?? 0);
