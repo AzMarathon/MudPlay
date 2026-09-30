@@ -146,7 +146,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // lambda reads the current ExpEstimator (null when not estimating), so a
         // single registration covers every enter/exit without per-transition wiring.
         _services.ExpEstimatorSnapshotProvider = () => ExpEstimator?.ToSnapshot();
+        // A character simulation was played with the old character / game data.
+        _services.Profile.ProfileLoaded += OnProfileLoadedDropSimulation;
+        _services.GameData.ActiveSetChanged += OnActiveSetDropSimulation;
     }
+
+    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _) => ExpEstimator?.ClearSimulation();
+    private void OnActiveSetDropSimulation(string? _) => ExpEstimator?.ClearSimulation();
 
     // Per-second pump for CURRENT NAV lair countdowns. Cheap to leave
     // running, but explicitly gated so an idle Navigation window does no work.
@@ -210,6 +216,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Lairs.SetupsChanged    -= OnSetupsChanged;
         _services.NavFolders.FoldersChanged -= OnNavFoldersChanged;
         _services.Macros.Macros.CollectionChanged -= OnMacrosCollectionChanged;
+        _services.Profile.ProfileLoaded -= OnProfileLoadedDropSimulation;
+        _services.GameData.ActiveSetChanged -= OnActiveSetDropSimulation;
+        ExpEstimator?.CancelSimulation();
     }
 
     // Loops + lairs share the on-disk folder tree; a folder add / rename /
@@ -2706,7 +2715,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             }
 
             var session = new ExpEstimatorSessionViewModel(
-                _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement);
+                _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement,
+                _services.BuildLoopSimulation, _services.Log);
             session.PropertyChanged += OnExpEstimatorPropertyChanged;
             ExpEstimator = session;
             CurrentMode = NavigationMode.ExpEstimator;
@@ -2724,7 +2734,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         TearDownExpEstimator();
         TearDownLoopBuilder();
         var session = new ExpEstimatorSessionViewModel(
-            _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement)
+            _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement,
+            _services.BuildLoopSimulation, _services.Log)
         { ProposedName = loop.Name };
         session.PropertyChanged += OnExpEstimatorPropertyChanged;
         foreach (LoopWaypoint w in loop.Waypoints) session.AddClick(w.Key);
@@ -2776,7 +2787,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void TearDownExpEstimator()
     {
         if (ExpEstimator is not null)
+        {
             ExpEstimator.PropertyChanged -= OnExpEstimatorPropertyChanged;
+            ExpEstimator.CancelSimulation();
+        }
         ExpEstimator = null;
         LoopBuilderPath = null;
         LoopBuilderWaypoints = null;

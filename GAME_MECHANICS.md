@@ -143,6 +143,9 @@ how many swings or spell fires a player or monster gets inside one round.
   - A faithful estimate must **replay the actual room order** with the realm's lair respawn clocks
     (one per room on Stock, per mob on Paradigm; see *Monsters, lairs & spawns → Lair respawn
     timers*), not assume a uniform per-lap fire rate — that's what the Exp/Hr estimator now does.
+  - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) replays the same room order with the
+    realm's lair clocks (one per room on Stock, per slot on Paradigm) and lands each kill on the 5 s round,
+    playing the live character's own attack, heal and rest decisions (`CombatSpellChooser`, `SelfHealPicker`).
 
 ### Combat spells: engaged once, auto-repeat per round
 *Status: CONFIRMED 2026-08-22 (user)*
@@ -636,7 +639,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - **Raising the Health stat raises max Hits, and so does a direct +HP bonus** *([CONFIRMED] 2026-09-28, user)*. Raw +Health is very rare on gear: no Stock spell or item carries it (ability 47), and on Paradigm only the platinum tiara does (+10) *([OBSERVED] 2026-09-28, imported game data)*. Items usually give +HP directly (ability 88). No player buff raises HP; one that did would raise max Hits too. (An earlier note read the DLL as computing max HP from the trained Health only, so a Health bonus wouldn't count; superseded 2026-09-28 by the user — the engine code that applies stat bonuses was never traced.)
 - **HP regen idle is `max(1, (level+20)*HEA/divisor)`, scaled by `HPregen%`** (750 Stock *([OBSERVED] `wccmmud.dll` 1.11p `_slow_update_character`)*; 500 Paradigm *([OBSERVED] MMUD-Explorer's GreaterMUD/Paradigm branch, `CalcRestingRate`; settled 2026-09-28 by the user's rule that MMUD-Explorer is the Paradigm formula source)*).
 - **Resting on Stock adds a second tick rather than tripling the first** *([OBSERVED] `wccmmud.dll` 1.11p; [CONFIRMED] 2026-09-27, user)*. The 30 s tick keeps paying the idle amount, and resting adds `3 × max(1, (level+20)*HEA/750)` every 21 s on top, scaled by `HPregen%`. See *Health, resting & recovery → Rest and meditate tick timing*.
-- **Paradigm resting works differently** *([NEEDS CONFIRMATION] user 2026-09-27: MMUD-Explorer has the Paradigm details)*. The client measures it on a 10 s grid at 3× the idle amount.
+- **Paradigm resting works differently: a 10 s tick in cycles of three, the third full** *([CONFIRMED] 2026-09-30, user; the two reduced ticks pay a third each)*. See *Health, resting & recovery → Rest and meditate tick timing*. (The 2026-09-27 note pointed to MMUD-Explorer for the details, which it turned out not to have; the client measures rest on a 10 s grid at 3× the idle amount.)
 
 **Client use:**
 - The CP tooltip shows the current-value max-HP marginal and the next HEA that ticks regen up.
@@ -919,11 +922,14 @@ How HP works from full health down through dropping and death, how monster healt
   - a 30 s tick (passive regen and bleeding out).
 - **Passive regen: every 30 s, both realms' base** — see *Character stats & progression → Health (HEA) — max HP and HP regen* and *Mana regeneration & the ManaRgn breakpoints*.
 - **Resting on Stock: an extra HP tick every 21 s** *([OBSERVED] DLL; [CONFIRMED] 2026-09-27, user)*. It pays `3 × max(1, (level+20)·HEA/750)`, then the HP-regen percent bonus, **in addition to** the 30 s tick.
-- **Resting on Paradigm: different** *([NEEDS CONFIRMATION] user 2026-09-27: MMUD-Explorer has the Paradigm details)*. Live captures show natural and rest both paying on a 10 s grid, rest at 3× the natural amount.
+- **Resting on Paradigm: a 10 s tick in cycles of three, the third tick full** *([CONFIRMED] 2026-09-30, user)*. While resting, HP ticks every 10 s instead of every 30 s. The first two ticks of each cycle pay a reduced amount and the third pays the full amount.
+  - **Each of the two reduced ticks pays one third of the full rest tick** *([CONFIRMED] 2026-09-30, user)*. MMUD-Explorer's source (checked 2026-09-30) has no Paradigm rest cycle: `CalcRestingRate` only switches the divisor (500 on GreaterMUD, 750 on Stock) and triples the amount when resting, and its exp/hr model uses one rest tick every 20 s on both realms (`SEC_PER_REST_TICK`). An earlier live capture (2026-09-27) showed natural and rest both paying on a 10 s grid, rest at 3× the natural amount (a druid: +3 standing, +9 resting). (Tagged [NEEDS CONFIRMATION] until the user answered, 2026-09-30.)
+  - `[NEEDS CONFIRMATION]` **Where a cycle starts.** Question: does the three-tick cycle count from the moment you lie down, or run on a fixed server grid?
 - **Meditating: every 15 s on Stock, every 10 s on Paradigm** *([CONFIRMED] 2026-09-27, user; Stock also [OBSERVED] DLL)*. On Stock the meditate tick pays the base mana formula **without** the `ManaRgn%` modifier, and the 30 s passive tick keeps running alongside it.
 
 **Client use:**
 - `RealmRegenProfile` / `RegenConstants`: Stock 30 / 21 / 15 s, Paradigm 10 / 10 / 10 s for natural / rest / meditate. `RegenTracker` learns the per-tick amounts live.
+- `SimCharacterBuilder.BuildRegen` (the Exp/Hr Estimator's character simulation) plays Paradigm rest as the three-tick cycle, the two reduced ticks a third of the full one, counted from lying down (that start is the unconfirmed part).
 
 ### Poison prevents resting
 *Status: CONFIRMED 2026-08-17 (user; report `paradigm-20260817-092945`); meditate split by realm 2026-09-28 · Realm: differs*
@@ -2602,6 +2608,7 @@ Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in *NPC-pla
   - `RoomTooltipBuilder`'s `Max Regen: N @ …` line (map tooltip, Room Info panel) shows `Delay-Delay+1m` on Stock and `(Delay − 1)m 30s` on Paradigm.
   - `LairTimerStore.ClockStart` times a Stock lair from the room's last kill (`NoteKill`, fed by `MonsterDeathWatcher.MonsterDied` while the player stands in a Confirmed lair room, a placed NPC's kill included), falling back to the entry when no kill was seen; Paradigm times it from the entry until issue #813 settles its clock. Auto-Lair's ready-times (`NextReadyAt`) and the CURRENT NAV countdown read it.
   - `LoopExpSimulator` (the Exp/Hr estimate) keeps one clock per lair room on Stock — the room's last death this visit, fixture kills included, restarts every lair slot in it — and one per mob on Paradigm.
+  - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) keeps one clock per lair room on Stock — every death in the room restarts it, the placed fixture's included — and one per slot on Paradigm (`RoomState`, by the frozen character's realm). `Spawn` refills a lair at once on entry, and while the character stands in the room only on a 5 s spawn pass at a random phase (the Stock pass rate, used for both realms). A lair whose timer didn't resolve (respawn 0) refills on entry only.
 
 ### NPC-placed monsters
 

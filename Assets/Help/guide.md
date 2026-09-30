@@ -357,6 +357,24 @@ A small **Realm:** line under the headline notes which game-data realm is active
 
 Use it to compare two hunting circuits without walking either one.
 
+### Simulating your character on the loop
+
+The estimate above assumes a fixed **Rounds to kill a mob**. **▶ Simulate my character** (under the lair list) instead plays **your** character around the sketched loop in simulated time and reports what it actually earned:
+
+- **exp/hr** (averaged over several runs, with the range between the luckiest and unluckiest), kills/hr and seconds per lap — a run that dies earns nothing for the rest of its hours, so a deadly loop's exp/hr drops accordingly;
+- **where the time goes** — attacking, moving, resting, meditating, waiting — the same split Session Stats shows live;
+- the **lowest HP and mana** it reached, and whether it **died** (a run that dies stops there);
+- which spells it cast, per hour.
+
+It plays by everything the client already knows about you: your stat screen, the gear you're wearing, the spells you've learned, your **Combat** attack spells and cast caps, your **per-monster overrides** (e.g. exor on undead), your **Health** rest / meditate triggers and your heal tiers. Each round is decided by the same code the live combat and heal engines use, so it picks what the client would pick. The monsters fight back with their real attacks, energy and between-rounds spells, and lairs refill on their real respawn timers — at once when you walk in after the timer, a few seconds later when you're already standing in the room. Rest and heal thresholds are read against your **Default** gear's pools, as the live client reads them. Type `stat` once after logging in so the client knows your level and pools; the button tells you if it doesn't yet.
+
+The **⚙** beside the button sets:
+
+- **Walk pace (seconds per room)** — your bare walking pace between rooms, lag included. Fighting is simulated separately, so this is *not* the all-in **Seconds per room** the estimate uses. Paradigm defaults to 1.2, Stock to 0.7.
+- **Hours per run** and **Runs** — each run rolls different luck; more runs narrow the range.
+
+What it doesn't simulate yet: keeping buffs up (their cost and their bonuses — a mana-regen roll spell, for one), debuffs, backstab openers, fleeing, room-spell summons, death-summon chains and bosses (they're left out of the lairs). Results are cleared (and a run still going is stopped) whenever you change the route or a simulation setting, switch character or game-data set; closing the Navigation window stops a run too. The estimate's own knobs above leave them alone. The last result is included in a bug report.
+
 ## Auto-Lair
 
 **Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**; clicking a marked room again, or **Alt+clicking** it, unmarks it), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.

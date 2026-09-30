@@ -8214,6 +8214,35 @@ public sealed class AppServices
             number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             MonsterOverlaySeed.GetOverlay(number));
 
+    // The live character and game data a loop simulation plays, read the same way the
+    // combat and casting engines read them (the Combat / Health / Spells sections, the
+    // shared monster-overlay resolve, worn gear, obtained spells, the Default-gear rest
+    // basis). Null before a `stat` screen has told us the character's level and pools.
+    public (Game.Simulation.SimCharacter Character, Game.Simulation.SimWorld World)? BuildLoopSimulation()
+    {
+        if (PlayerStats.Level <= 0 || PlayerStats.MaxHits <= 0) return null;
+        Game.Inventory.InventorySnapshot inv = Inventory.Snapshot;
+        IReadOnlyList<Game.Spells.KnownSpell> obtained =
+            Spellbook.Available.Where(k => Spellbook.IsObtained(k.Number)).ToList();
+        string? weapon = inv.EquippedItems.FirstOrDefault(w => w.Slot == "Weapon Hand").Name;
+        Models.Profile.CharacterProfile? profile = Profile.Current;
+        IReadOnlyList<Game.Quests.QuestBonus> quests = Game.Quests.CompletedQuestBonuses.Resolve(
+            GameData, Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class), profile?.QuestLog);
+
+        Game.Simulation.SimCharacter character = Game.Simulation.SimCharacterBuilder.Build(
+            PlayerStats, inv.EquippedItems, inv.Encumbrance, obtained, GameData,
+            string.IsNullOrEmpty(weapon) ? 0 : ItemMagic.HitMagic(weapon),
+            ReadSection<Models.Profile.CombatSettings>(profile, "Combat"),
+            ReadSection<Models.Profile.HealthSettings>(profile, "Health"),
+            ReadSection<Models.Profile.SpellsSettings>(profile, "Spells"),
+            profile?.PartyBuffs, quests, ResolveMonsterOverlay, SpellShort.ShortByNumber,
+            Game.Simulation.SimCharacterBuilder.AlignmentValue(Alignment.EvilPoints, Alignment.SelfAlignment),
+            DefaultBasisMaxHp(), DefaultBasisMaxMa());
+        var world = new Game.Simulation.SimWorld(
+            MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife);
+        return (character, world);
+    }
+
     // Whether the walker would actually FIGHT a lair room's occupants — the gate
     // RouteEtaEstimator uses so an ETA only charges combat dwell for lairs it'll
     // stop and clear. Resolves each lair monster through the same tier merge combat
