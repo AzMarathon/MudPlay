@@ -213,4 +213,22 @@ public sealed class LoopSimulatorTests
         Assert.True(run.DamageTaken >= 20 * 9, $"took {run.DamageTaken}");   // ≥ 9 rounds of hits before the kill
         Assert.True(run.WaitingSeconds >= 5, $"waited {run.WaitingSeconds}");  // held after the kill
     }
+
+    [Fact]
+    public void BurningHitSpellTicksEachSpellRoundForItsDuration()
+    {
+        // One landed hit sets a 30 s burn of 7 a spell round: no damage on the hit, then
+        // ~10 ticks. The monster survives one round (one chomp lands) and dies on the
+        // next before it swings again, so that one burn is all the damage there is.
+        var slot = new MonsterAttackSlot("chomps", Type: 1, Percent: 100, TruePercent: 100, MinDamage: 0, MaxDamage: 0,
+            Accuracy: 9999, Energy: 1000, HitSpell: 884);
+        var mobs = new Dictionary<int, MonsterCatalogEntry> { [5] = Mob(5, hp: 1500, exp: 10, align: 1, slot) };
+        var burn = new SimProc(7, 7, 30, 0, 0, 0, Holds: false);
+        var world = new SimWorld(n => mobs.GetValueOrDefault(n), HitSpell: n => n == 884 ? burn : null);
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 5000), new[] { Lair(1, 1, 3600, 5), Empty(2) },
+            world, secondsPerStep: 1, hours: 0.1, seed: 1);
+
+        Assert.Equal(1, run.Kills);
+        Assert.InRange(run.DamageTaken, 7 * 9, 7 * 10);
+    }
 }
