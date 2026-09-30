@@ -2605,9 +2605,24 @@ A monster's `Summoned By` field lists the rooms it appears in, each token tagged
 - **`Group: m/r`** (no `(lair)`) — an **assigned** roam / rare-random spawn; the room carries no `Lair` tag for it. Tooltip label **`Assigned:`**.
 - **`Group(lair): m/r`** — a **lair** spawn; the room's `Lair` tag lists the same monster. Tooltip label **`Lair:`** (sourced from the room's own `Lair` tag, which also carries the `(Max N)` simultaneous cap).
 - **One monster can carry more than one kind for the same room** — a placed boss that also has a `Group:` roam token, e.g. Aiken `1/398` has both `Room 1/398` and `Group: 1/398` — so the three tooltip lines may legitimately repeat a name.
+- **A `Group:` token only says the monster is in the room's spawn range; the room may never use it** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p and `wccmp002.dat`; Stock only, Paradigm not recorded)*. Each room record carries:
+  - a **room type** (`+0x43c`);
+  - a **set monster** (`+0x468`);
+  - a **placed NPC** (`+0x5c8`);
+  - a **monster group** (`+0x560`) with an **index range** (`+0x462`–`+0x464`).
+
+  How they're used:
+  - **`_generate_monster` spawns the set monster whenever one is given**, and draws at random from the group's index range only when it's 0 (@ `0x4244fc`).
+  - **The regen that runs around players fills types 0, 2 and 3 only** (@ `0x4233d9`, `0x4236a1`). Type 1 rooms are refilled only by the room-reset routine, again with the set monster (@ `0x430460`–`0x4304b1`).
+  - **The data compiler lists every monster in a room's range as a `Group:` token regardless.**
+
+  Example: 1/398 (Magic Shoppe) is type 1, set monster 22 (Aiken), group 2 with index range 1–1. **Cygani (#543)**, whose only token is `Group: 1/398`, therefore never spawns, even with Aiken dead.
+- **The MDB carries none of those room fields, nor a monster's own group.** Groups appear only in lair rooms' `Lair` tag (`[group-min-max-regen]`) and the Lairs table (`GroupIndex` → `MobList`) *([OBSERVED] 2026-09-30, imported data)*.
+- **Client policy (user, 2026-09-30): a monster is unobtainable when it can never spawn, even with `In Game` = 1.** That means: no `Room`, lair, `Spell` or `Textblock` token, and every `Group:` room has a different NPC and no lair. In all four imported sets (v1.11p, Paradigm 1.9.1, Euphoria, Lost Ways) that is Cygani alone. The MDB `NPC` column stands in for the set monster, which the data doesn't carry; at 1/398 the two are the same monster.
 - **Client use:**
   - The nav tooltip / Room Info panel split these into Placed / Assigned / Lair.
   - `MonsterSpawnIndex` parses the token kinds, while the combat resolver keeps a permissive union of all of them.
+  - `StrayMonsterRule` applies the unobtainable policy. It's used by the Monsters and Unobtainable tables (Reason: "Only listed under a room that spawns a different NPC") and by `MonsterCatalog.InPlay` (Monster Intel).
 
 ### Boss monsters
 

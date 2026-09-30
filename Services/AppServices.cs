@@ -4745,7 +4745,7 @@ public sealed class AppServices
         SpellAttackType = new Game.Combat.SpellAttackTypeIndex(GameData);
         Combat.SetMagicEligibility(
             MonsterMagic, ItemMagic, SpellReqLevel, MonsterResist, SpellAttackType);
-        MonsterCatalog = new Game.Combat.MonsterCatalog(GameData);
+        MonsterCatalog = new Game.Combat.MonsterCatalog(GameData, RoomGraph.GetRoom);
 
         // Drain-life eligibility — a drain spell can only affect a living, non-undead
         // target; the index tells the chooser which mobs to skip (fall back to the

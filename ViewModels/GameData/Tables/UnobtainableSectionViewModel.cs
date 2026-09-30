@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 
 namespace MudPlay.ViewModels.GameData.Tables;
@@ -10,16 +11,29 @@ namespace MudPlay.ViewModels.GameData.Tables;
 // The Item Finder catalogue skips the items (ItemFinderEntry.IsObtainable) and the Monsters
 // table leaves the monsters out, so nothing only a sysop can produce passes for a real
 // spawn; rather than leaving them simply hidden, this read-only view collects them so they
-// can be inspected. The Kind column says which table a row came from.
+// can be inspected. The Kind column says which table a row came from, and Reason why it's
+// here: flagged out of play by the game data, or a monster flagged in play that can never
+// spawn (StrayMonsterRule).
 public sealed class UnobtainableSectionViewModel : JsonTableSectionViewModel
 {
-    private static readonly IReadOnlyDictionary<string, string?> ItemKind =
-        new Dictionary<string, string?> { ["Kind"] = "Item" };
-    private static readonly IReadOnlyDictionary<string, string?> MonsterKind =
-        new Dictionary<string, string?> { ["Kind"] = "Monster" };
+    private const string FlaggedReason = "Flagged out of play";
+    private const string StrayReason = "Only listed under a room that spawns a different NPC";
 
-    public UnobtainableSectionViewModel(GameDataCache cache, SettingsResolver? resolver = null)
-        : base(cache, resolver) { }
+    private static readonly IReadOnlyDictionary<string, string?> ItemKind =
+        new Dictionary<string, string?> { ["Kind"] = "Item", ["Reason"] = FlaggedReason };
+    private static readonly IReadOnlyDictionary<string, string?> FlaggedMonster =
+        new Dictionary<string, string?> { ["Kind"] = "Monster", ["Reason"] = FlaggedReason };
+    private static readonly IReadOnlyDictionary<string, string?> StrayMonster =
+        new Dictionary<string, string?> { ["Kind"] = "Monster", ["Reason"] = StrayReason };
+
+    private readonly RoomGraphManager? _roomGraph;
+
+    public UnobtainableSectionViewModel(GameDataCache cache, SettingsResolver? resolver = null,
+                                        RoomGraphManager? roomGraph = null)
+        : base(cache, resolver)
+    {
+        _roomGraph = roomGraph;
+    }
 
     public override string Id => "unobtainable";
     public override string Title => "Unobtainable";
@@ -33,7 +47,7 @@ public sealed class UnobtainableSectionViewModel : JsonTableSectionViewModel
     // fields of both, so they share a column.
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Number", "Name", "Kind",
+        "Number", "Name", "Kind", "Reason",
         "ItemType", "Worn", "WeaponType", "ArmourType", "Min", "Max",
         "ArmourClass", "DamageResist", "Speed", "Accy", "StrReq", "Encum", "Price", "Currency",
         "HP", "EXP", "AvgDmg", "Align",
@@ -51,7 +65,7 @@ public sealed class UnobtainableSectionViewModel : JsonTableSectionViewModel
 
     public override IEnumerable<string> SearchableLabels => new[]
     {
-        Title, "unobtainable", "in game", "sysop", "unimplemented", "placeholder", "test item",
+        Title, "unobtainable", "in game", "sysop", "unimplemented", "placeholder", "test item", "never spawns",
         "monster", "mob", "npc",
     };
 
@@ -68,12 +82,14 @@ public sealed class UnobtainableSectionViewModel : JsonTableSectionViewModel
             ["Align"]      = LookupEnums.FormatMonAlignment,
         };
 
-    // Items, then monsters, each limited to the rows whose "In Game" is explicitly 0 — the
-    // inverse of ItemFinderEntry.IsObtainable and of the Monsters table's filter. Absent /
-    // non-numeric / non-zero means in play, so it's excluded.
+    // Items whose "In Game" is explicitly 0 (the inverse of ItemFinderEntry.IsObtainable),
+    // then monsters that are either that or a stray — the inverse of the Monsters table's
+    // filter. Absent / non-numeric / non-zero "In Game" means in play.
     protected override void PopulateRows(IList<GameDataRow> rows)
     {
+        Func<RoomKey, Room?>? getRoom = _roomGraph is null ? null : _roomGraph.GetRoom;
         AddTableRows(rows, "Items", InGameFlag.IsOutOfPlay, static _ => ItemKind);
-        AddTableRows(rows, "Monsters", InGameFlag.IsOutOfPlay, static _ => MonsterKind);
+        AddTableRows(rows, "Monsters", el => StrayMonsterRule.IsOutOfPlay(el, getRoom),
+            el => InGameFlag.IsOutOfPlay(el) ? FlaggedMonster : StrayMonster);
     }
 }

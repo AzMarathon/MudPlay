@@ -273,15 +273,17 @@ public sealed class MonsterCatalog
     // one-time Spells read. Exposed so Monster Intel's spell ranking reuses it
     // instead of re-reading Spells (which Build() has already evicted).
     private Dictionary<int, int>? _spellAttType;
-    // Monsters the game data marks out of play ("In Game" = 0) — the Game Data
-    // Browser's Unobtainable list. Kept in the catalog so a lookup by number still
+    // Monsters out of play — "In Game" = 0, or a stray (StrayMonsterRule): the Game
+    // Data Browser's Unobtainable list. Kept in the catalog so a lookup by number still
     // resolves, but left out of InPlay.
     private HashSet<int>? _outOfPlay;
+    private readonly Func<Map.RoomKey, Map.Room?>? _getRoom;
 
-    public MonsterCatalog(GameDataCache cache)
+    public MonsterCatalog(GameDataCache cache, Func<Map.RoomKey, Map.Room?>? getRoom = null)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
+        _getRoom = getRoom;
         _cache.ActiveSetChanged += _ => { _byNumber = null; _spellAttType = null; _outOfPlay = null; };
     }
 
@@ -334,7 +336,7 @@ public sealed class MonsterCatalog
                 if (TryInt(row, "Number", out int number))
                 {
                     map[number] = BuildEntry(row, number, spellAttType, spellFormulas);
-                    if (InGameFlag.IsOutOfPlay(row)) outOfPlay.Add(number);
+                    if (StrayMonsterRule.IsOutOfPlay(row, _getRoom)) outOfPlay.Add(number);
                 }
 
         _cache.EvictTable("Monsters");

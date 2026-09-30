@@ -1,5 +1,9 @@
 # Version history
 
+## 3.128.2
+
+- Unobtainable now also lists monsters that can never spawn despite being marked in game (Cygani), and says why each row is there
+
 ## 3.128.1
 
 - Players Seen no longer counts the players in your party
