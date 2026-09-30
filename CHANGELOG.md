@@ -1,5 +1,9 @@
 # Version history
 
+## 3.133.8
+
+- Party-splitting teleports (Darkwood vortex, chimes): the leader holds and re-invites everyone on landing instead of walking on alone
+
 ## 3.133.7
 
 - Stock: a `stat` no longer marks every listed buff freshly cast (on login or any time), so buff timers aren't restarted

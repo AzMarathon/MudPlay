@@ -283,6 +283,9 @@ public static class BugReportBuilder
         IReadOnlyList<string> pendingReform = svc.PartyReform.PendingReform;
         Kv(sb, "Reconnect reform followers",
             pendingReform.Count > 0 ? string.Join(", ", pendingReform) : "(none pending)");
+        // A split-teleport regroup in flight: a "leader walked on alone after a
+        // teleport" report needs whom it held for and whether the jump had landed.
+        Kv(sb, "Split-teleport reform", svc.AutoParty.ReformSummary);
         // Leader-side recovery state — who (if anyone) we're currently walking to
         // re-collect, and the reach cap that gates it. A "leader never came back
         // for me" report needs both.

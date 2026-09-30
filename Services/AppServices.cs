@@ -7356,6 +7356,8 @@ public sealed class AppServices
             isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader);
         // Settings → Other "Only auto-invite while navigation is running": a walk,
         // loop or auto-lair (running or paused), or an auto-deposit / train trip.
+        // A split-teleport reform waits for the leader to leave the room it started in.
+        AutoParty.SetRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);
         AutoParty.SetNavigationProbe(() =>
             MovementControl.IsActive || AutoDeposit.IsRerouting || SellDetour.IsDetouring
             || TrainerWalk.IsBusy || TrainFunding.IsBusy);

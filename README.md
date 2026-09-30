@@ -1,14 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.133.7**
-> - Stock: a `stat` no longer marks every listed buff freshly cast (on login or any time), so buff timers aren't restarted
-> - A stat screen's capture closes on its own prompt every time, not just the session's first
-> - Stock hit chances follow the game engine: 9–98% (was 8–99%) in Monster Intel, backstab verdicts and the simulator
-> - Monster HP estimates add regen every 30 s on Stock too (was 90 s)
-> - Simulator: monster hit spells use their base damage and duration (the game casts them with no level)
-> - Simulator: on Stock only plain damage hit spells burn; damage-ignoring-MR ones hit once on landing
-> - Simulator and estimate: Stock rooms hold 15 monsters with death summons placed one by one; death spells that target no one (calls for aid) summon nothing
+> **Version 3.133.8**
+> - Party-splitting teleports (Darkwood vortex, chimes): the leader holds and re-invites everyone on landing instead of walking on alone
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
