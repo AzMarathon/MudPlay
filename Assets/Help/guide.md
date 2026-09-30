@@ -341,7 +341,7 @@ Some settings apply to the **whole loop**, not one room. Reach them from **⚙ E
 
 ## Estimating a loop's exp/hour
 
-The **EXP/HR ESTIMATOR** panel in the right rail projects how much experience a prospective circuit would earn per hour *before* you commit to it — factoring in boss respawn timers and room summon rates, not just a flat monster count. It simulates the loop's *actual room order* against each lair's per-mob respawn timer, so the **shape** of the circuit matters: an out-and-back line that re-crosses just-cleared lairs on the way back reads lower than the same rooms walked as a ring, because those return steps waste combat time — exactly how it plays out in game.
+The **EXP/HR ESTIMATOR** panel in the right rail projects how much experience a prospective circuit would earn per hour *before* you commit to it — factoring in boss respawn timers and room summon rates, not just a flat monster count. It simulates the loop's *actual room order* against each lair's respawn timer, so the **shape** of the circuit matters: an out-and-back line that re-crosses just-cleared lairs on the way back reads lower than the same rooms walked as a ring, because those return steps waste combat time — exactly how it plays out in game.
 
 The estimate's assumptions live in the **⚙ Estimate Settings** flyout at the top of the panel — the **I'm Rooming** toggle (on = you hit the whole room at once; off = one mob at a time), **Rounds to kill a mob**, and the two biggest levers below. Two tunables drive the estimate most:
 
@@ -350,7 +350,12 @@ The estimate's assumptions live in the **⚙ Estimate Settings** flyout at the t
 
 Click **Start estimating**, then **click the rooms** on the map to sketch the circuit (**Alt+click** a room to take it back out, or **drag** a numbered chip onto another room to move it); the panel shows a running **exp/hr** figure as you add rooms. **Save as loop** turns the sketch into a real loop, **Load loop…** pulls an existing loop in to evaluate it, **Clear rooms** starts over, and **Stop Estimating** exits the mode.
 
-A small **Realm:** line under the headline notes which game-data realm is active — it affects **only** how often a room's **summon spell** re-rolls (Paradigm re-rolls every combat round plus on entry; Stock on a slower 6-second medium tick plus on room change), never your kill rate. A summon spell with a `nomonsters:` gate only fires while the room is empty, so it contributes a roll on a clear pass-through but nothing when you arrive to a full lair. Use it to compare two hunting circuits without walking either one.
+A small **Realm:** line under the headline notes which game-data realm is active — it never changes your kill rate, but it changes two things:
+
+- **How a lair respawns.** On **Stock** a lair room keeps one clock, restarted by every kill in it (its placed fixture's too), and the whole room comes back together **`Delay` to `Delay + 1` minutes after its last kill** — the estimate uses the middle of that window. Killing a room's fixture on every pass can hold its lair empty. On **Paradigm** each monster comes back on its own, **`(Delay − 1)` minutes + 30 s** after it was killed.
+- **How often a room's summon spell re-rolls** — Paradigm every combat round plus on entry; Stock on a slower 6-second medium tick plus on room change. A summon spell with a `nomonsters:` gate only fires while the room is empty, so it contributes a roll on a clear pass-through but nothing when you arrive to a full lair.
+
+Use it to compare two hunting circuits without walking either one.
 
 ### Simulating your character on the loop
 
@@ -374,11 +379,13 @@ What it doesn't simulate yet: keeping buffs up (their cost and their bonuses —
 
 **Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**; clicking a marked room again, or **Alt+clicking** it, unmarks it), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
 
+**When a lair counts as ready.** Its respawn timer (from the room's **Max Regen** time — the middle of the window on Stock — or your override) runs on **Stock** from the **last kill** in the lair — the clock the game itself restarts on every kill, so a long fight pushes the next visit back by its length — and on **Paradigm** from when you **entered** it. A Stock lair you haven't seen a kill in yet times from your entry. The **CURRENT NAV** countdown for a marked lair follows the same clock.
+
 **How long it stays in a lair.** It leaves for the next one as soon as the fight is over *and* the drops are picked up — it won't walk off and abandon loot it just fought for.
 
 "Fight over" means the room re-displays with no monster you'd engage left in it, which is the reliable signal; the game's own `*Combat Off*` line isn't usable on its own, since it also fires every time you cast and once per strike for thrown weapons and the like. **Engage timeout** (Settings → Auto-Lair, default 30s) is only the upper bound, for a fight that never resolves — something you can't kill, or one that ran away.
 
-**A lair that hasn't respawned costs a few seconds, not the full timeout.** If nothing turns up within a moment of stepping in, Auto-Lair takes that as "not back yet" and moves on to the next lair rather than standing in an empty room — entering already burned that lair's timer, so there's nothing to be gained by waiting there. If it still looks like it's idling, the usual reason is that the monsters you're after don't actually *spawn* in that room: some wander in from elsewhere on their own schedule, and a room they merely pass through isn't a lair Auto-Lair can time.
+**A lair that hasn't respawned costs a few seconds, not the full timeout.** If nothing turns up within a moment of stepping in, Auto-Lair takes that as "not back yet" and moves on to the next lair rather than standing in an empty room. If it still looks like it's idling, the usual reason is that the monsters you're after don't actually *spawn* in that room: some wander in from elsewhere on their own schedule, and a room they merely pass through isn't a lair Auto-Lair can time.
 
 ## Fighting in a dark room
 
@@ -444,7 +451,7 @@ The panel lists clickable links to everything attached to the room:
 
 - **Room name** — click to open the room's record (or, for a shop room, its shop stock popup), with the map/room number and illumination beneath it.
 - **Illumination** — **`Room Illu:`** shows the room's own light. If you carry any light — worn +illu gear, a readied light, or a light spell in the Buff Watchdog — a **`Your Illu:`** line appears with your effective value, and the visibility phrase moves onto it. The phrase reads the room's state — *pitch black*, *very dark*, *barely visible*, *dimly lit* — or **"You can see."** once fully lit.
-- **Monsters** — grouped (like the map tooltip) into **Placed** (a boss / NPC fixture), **Assigned** (roams there / rarely spawns), and **Lair** (consistent lair spawners, with the lair's **Max Regen** beneath). A monster can appear in more than one group.
+- **Monsters** — grouped (like the map tooltip) into **Placed** (a boss / NPC fixture), **Assigned** (roams there / rarely spawns), and **Lair** (consistent lair spawners, with the lair's **Max Regen** beneath — how many it spawns and how long it takes to come back — for a `Delay` of 5, `5-6m` on Stock, counted from the room's last kill, or `4m 30s` on Paradigm). A monster can appear in more than one group.
 - **Obvious exits** — click one to re-root the map on that neighbour.
 - **Floor items** — everything the room drops on the ground (static placements plus anything its `roomitem` command scatters).
 - **Shop and room spell** — when the room hosts a shop, and its cast-on-enter room spell.

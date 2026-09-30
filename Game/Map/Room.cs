@@ -64,8 +64,8 @@ public sealed record Room
     public int Npc { get; init; }
 
     // Per-room respawn delay tick from the MDB. Encodes the lair's
-    // time-to-repopulate via the GreaterMUD formula
-    // seconds = (Delay - 1) × 60 + 30 (so Delay = 5 → 4 m 30 s). 0 means "no
+    // time-to-repopulate, read by realm in LairTimerStore.RespawnSecondsForDelay
+    // (Delay = 5 → Paradigm 4 m 30 s, Stock 5–6 min). 0 means "no
     // per-room delay set" — LairTimerStore.DefaultRespawnSeconds falls through
     // to the GroupIndex → Lairs.AvgDelay path or the pre-1.83 monster-list
     // fallback when this is unset.

@@ -140,12 +140,12 @@ how many swings or spell fires a player or monster gets inside one round.
   so that return walk is dead time that wastes combat ticks. So the middle lairs of a line are hit
   less than a naive "each lair once per lap" count, and the end lairs less than the middle.
 - **Client use:**
-  - A faithful estimate must **replay the actual room order** with per-mob respawn clocks (see
-    *Monsters, lairs & spawns → Lair respawn timers*), not assume a uniform per-lap fire rate —
-    that's what the Exp/Hr estimator now does.
-  - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) replays the same room order with a
-    clock per lair slot and lands each kill on the 5 s round, playing the live character's own
-    attack, heal and rest decisions (`CombatSpellChooser`, `SelfHealPicker`).
+  - A faithful estimate must **replay the actual room order** with the realm's lair respawn clocks
+    (one per room on Stock, per mob on Paradigm; see *Monsters, lairs & spawns → Lair respawn
+    timers*), not assume a uniform per-lap fire rate — that's what the Exp/Hr estimator now does.
+  - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) replays the same room order with the
+    realm's lair clocks (one per room on Stock, per slot on Paradigm) and lands each kill on the 5 s round,
+    playing the live character's own attack, heal and rest decisions (`CombatSpellChooser`, `SelfHealPicker`).
 
 ### Combat spells: engaged once, auto-repeat per round
 *Status: CONFIRMED 2026-08-22 (user)*
@@ -2596,15 +2596,19 @@ Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in *NPC-pla
 - **A lair also refills under a character standing in it, but slower than walking in once its timer has run out** *([CONFIRMED] 2026-09-30, user)*.
 - **How the Stock engine refills a lair** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p and `wccmp002.dat`; Stock only, Paradigm not recorded)*. In-memory room offsets (disk record minus 2):
   - **Every lair-tagged room is room type 3** (`+0x43c`; all 3,102 of them in `wccmp002.dat`). Its `(Max N)` is `+0x55c`, its `Delay` is `+0x5bc` (0 falls back to the global default at `0x482d0c`, 5), and its live spawn count is `+0x606`.
+  - **No Stock lair room has `Delay` 0** *([OBSERVED] 2026-09-30, `data-v1.11p` Rooms)*, so `LairTimerStore`'s `AvgDelay` / `RegenTime` fallback never runs on Stock, and the engine's global default of 5 never applies to the exported data.
   - **A kill stamps one last-kill time for the whole room.** `_check_kill_monster` @ `0x424eb7` lowers the spawn count and writes the current clock minute (hour × 60 + minute) to `+0x562` (@ `0x424f1a`–`0x424f3d`), and again on the room the monster died in (@ `0x424fc5`–`0x424fe8`).
+  - **A placed NPC's kill restarts the room clock too** *([OBSERVED] 2026-09-30, DLL)*. The first stamp is on the monster's home room and is skipped, with the count, when the monster is that room's placed NPC (`+0x5c8`, @ `0x424ef0`); the second, on the room it died in, has no such check. So killing a lair room's fixture — the cave worm in `1/866` (*NPC-placed monsters*) — restarts that room's lair clock. *[NEEDS CONFIRMATION] — seen in the DLL only: does a room whose fixture is killed every round really never refill its lair?*
   - **`_generate_monster` @ `0x424361` refuses while the count is at `Max`** (@ `0x4243a5`) **and until the clock minute minus `Delay` is past the last-kill minute** (@ `0x42440b`–`0x424466`). So the room is ready `Delay` to `Delay + 1` minutes after its last kill, in whole clock minutes, and then every missing spawn comes back together.
   - **Walking in refills at once.** `_user_allowed_in_room` @ `0x4172ff`, which `_move_user` calls before the move, generates into a type-3 room until a generate fails, when no other player is in it (@ `0x4173bd`–`0x417450`).
   - **Standing in it, the refill waits for the monster-create pass.** `_background_monster_create` @ `0x4218b7` calls `0x4232d3`, which walks every player's room and generates into a type-3 room until one fails, with no random roll (@ `0x42353e`–`0x423585`). The pass runs every 5 fast ticks, 5 s by default (`0x482ca8`; the sysop can change it @ `0x465b1a`). On Stock that pass is the whole of "slower in the room": up to 5 s after the room is ready.
-  - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) keeps a clock per lair slot. `Spawn` refills a lair at once on entry, and while the character stands in the room only on a 5 s spawn pass at a random phase (the Stock pass rate, used for both realms). A lair whose timer didn't resolve (respawn 0) refills on entry only (review of PR #802).
 - (A 2026-09-30 `[CONFLICT — ask the user]` note said the DLL's room-wide clock and `Delay`–`Delay + 1` minute wait disagreed with the per-slot clock and `(Delay − 1)` min + 30 s rules, which then carried no realm; settled 2026-09-30 by the user: the DLL is right for Stock, and the per-slot rule is Paradigm's.)
 - **Client use:**
+  - `LairTimerStore.RespawnSecondsForDelay` turns `Delay` into `T` by realm: Stock `Delay × 60 + 30` (the middle of its `Delay`–`Delay + 1` minute window), Paradigm `(Delay − 1) × 60 + 30`. `DefaultRespawnSeconds` hands it to everything that shows or plans a lair timer: `RouteExpResolver` (the Exp/Hr estimate), the map's lair heat-map and CURRENT NAV countdowns (`NavigationViewModel`), the lair editors (`LairEditorDialogViewModel`, `LairTimerEditDialogViewModel`) and Auto-Lair.
+  - `RoomTooltipBuilder`'s `Max Regen: N @ …` line (map tooltip, Room Info panel) shows `Delay-Delay+1m` on Stock and `(Delay − 1)m 30s` on Paradigm.
+  - `LairTimerStore.ClockStart` times a Stock lair from the room's last kill (`NoteKill`, fed by `MonsterDeathWatcher.MonsterDied` while the player stands in a Confirmed lair room, a placed NPC's kill included), falling back to the entry when no kill was seen; Paradigm times it from the entry until issue #813 settles its clock. Auto-Lair's ready-times (`NextReadyAt`) and the CURRENT NAV countdown read it.
+  - `LoopExpSimulator` (the Exp/Hr estimate) keeps one clock per lair room on Stock — the room's last death this visit, fixture kills included, restarts every lair slot in it — and one per mob on Paradigm.
   - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) keeps one clock per lair room on Stock and one per slot on Paradigm (`RoomState`, by the frozen character's realm). `Spawn` refills a lair at once on entry, and while the character stands in the room only on a 5 s spawn pass at a random phase (the Stock pass rate, used for both realms). A lair whose timer didn't resolve (respawn 0) refills on entry only (review of PR #802).
-  - Still on the Paradigm rule for both realms: `LoopExpSimulator` (the estimate's per-mob clocks) and `LairTimerStore.DefaultRespawnSeconds` (`(Delay − 1)` min + 30 s), which also feeds the simulator's `T`.
 
 ### NPC-placed monsters
 
@@ -2612,7 +2616,7 @@ Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in *NPC-pla
 
 - **NPC-placed mobs regenerate on entry — effectively no respawn cap.** A monster placed via the room's **`NPC`** field (a fixture, distinct from a `Lair` group) with `RegenTime` 0-ish **regenerates the moment you (re-)enter the room after killing it** — no timer to wait out. These are the classic "rooming" targets (kill as fast as you can fight; bounded by kill speed, not respawn).
 - **Verified stock examples:** slime beast `1/1765` (`NPC=57`, `RegenTime 0`, 250 xp); cave worm `1/866` (`NPC=8`, `RegenTime 0`, 100 xp); barmaid `1/311` (`NPC=248`, `RegenTime 1`, **0 xp** — an evil-points target, not exp). Her regen timer follows the same mechanic as every other monster's, but she is also the room's placed `NPC`, so kill her, walk out and back in, and she is there again at once *([CONFIRMED] 2026-09-26, user)*. With `GameLimit 5` she is **not** a boss (see *Boss monsters*), so her placement respawns instantly like any other fixture. **Client use:** `BossCatalog.IsBoss` is `GameLimit == 1`, shared by `RouteExpResolver`, so she counts as an instant fixture.
-- **A room can carry both an NPC fixture and a `Lair` group** (cave-worm room `1/866` has `NPC=8` plus a lair), so a room's yield is the sum of its NPC target(s) + its lair contribution.
+- **A room can carry both an NPC fixture and a `Lair` group** (cave-worm room `1/866` has `NPC=8` plus a lair), so a room's yield is the sum of its NPC target(s) + its lair contribution. On Stock, killing the fixture restarts the lair's clock (see *Lair respawn timers*).
 - **In a loop, an instant mob still yields only once per lap** (bounded by lap time); only a stay-in-room **rooming** setup kills it every round.
 - **Exception — bosses:** a placed monster that qualifies as a boss is *not* instant; see *Boss monsters*.
 

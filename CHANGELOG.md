@@ -6,6 +6,12 @@
 - Reports exp/hr with its range over several runs, kills/hr, the attack / move / rest / meditate split, lowest HP and mana, deaths and spells cast per hour
 - Simulation result is in the bug report and the program log
 
+## 3.128.11
+
+- Stock lairs time as Stock does — back Delay to Delay + 1 min after the last kill, not Paradigm's (Delay − 1) min + 30 s — in the room tooltip, map timers, lair editors and exp estimates
+- Exp/Hr estimate: a Stock lair room refills all at once off one clock, restarted by every kill in it (a placed fixture's too)
+- Auto-Lair and the CURRENT NAV countdown time a Stock lair from its last kill instead of the entry, so a long fight no longer brings it back early
+
 ## 3.128.8
 
 - A walk-to that turns auto-combat back on now fights the monster already in the room

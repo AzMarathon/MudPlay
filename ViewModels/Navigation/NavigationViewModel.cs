@@ -4064,7 +4064,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return phase;
         }
 
-        // Visited this session → live countdown from LastEntered.
+        // Visited this session → live countdown from the lair's clock start.
         int? overrideSec = mgr.GetOverride(key);
         DateTimeOffset? ready = _services.LairTimers.NextReadyAt(key, overrideSec);
         if (ready is { } readyAt)
