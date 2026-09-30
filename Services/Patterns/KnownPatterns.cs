@@ -235,6 +235,10 @@ public static class KnownPatterns
     // "You dropped N <coin> pieces." — discard confirmation.
     public const string CashDropped         = "cash.dropped";
 
+    // "You don't have N <coin> to drop!" — a discard drop the server refused: the
+    // coin count we dropped from was stale (report paradigm-20260929-183240).
+    public const string CashDropRefused     = "cash.drop-refused";
+
     // "You hid N <coin> pieces." — stash-room confirmation. Wire shape distinct
     // from CashDropped because the `hide` command is the stash-room verb in stock
     // MajorMUD. Without this, the held-coin tally goes stale after a stash and

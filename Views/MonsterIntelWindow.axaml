@@ -52,6 +52,15 @@
         <Style Selector="Border.AttackRow.basis TextBlock.DetailLine">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
         </Style>
+        <!-- A row's working line: muted, but a lighter grey on the highlighted row's
+             cyan, where the muted grey all but disappears. A style class (not a local
+             Foreground) so the highlight can change it. -->
+        <Style Selector="TextBlock.SubLine">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <Style Selector="Border.AttackRow.basis TextBlock.SubLine">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+        </Style>
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
@@ -182,7 +191,7 @@
                             <Flyout Placement="Bottom">
                                 <StackPanel MinWidth="300" Spacing="6">
                                     <TextBlock Classes="FieldLabel" TextWrapping="Wrap" MaxWidth="320"
-                                               Text="Checkbox: show the attack in Your Matchup.   Radio: use it for Est. Rounds to Kill — or pick 'Fastest of all my attacks' to use whichever of your attacks (melee or spell) kills each monster soonest. Backstab reads 1 for a sure one-stab kill, — otherwise."/>
+                                               Text="Checkbox: show the attack in Your Matchup.   Radio: use it for Est. Rounds to Kill — or pick 'Fastest of all my attacks' to use whichever of your attacks (melee or spell) kills each monster soonest. Backstab counts round 1 as the stab and the rest as normal attacks (1 for a sure one-stab kill)."/>
                                     <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
                                         <ItemsControl ItemsSource="{Binding AttackOptions}">
                                             <ItemsControl.ItemTemplate>
@@ -416,8 +425,7 @@
                                             <Border Classes="AttackRow" Classes.basis="{Binding IsRoundsBasis}">
                                                 <StackPanel>
                                                     <TextBlock Classes="DetailLine" TextWrapping="Wrap" Text="{Binding Text}"/>
-                                                    <TextBlock Classes="DetailLine" TextWrapping="Wrap" Margin="10,0,0,0"
-                                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                    <TextBlock Classes="DetailLine SubLine" TextWrapping="Wrap" Margin="10,0,0,0"
                                                                Text="{Binding Detail}" IsVisible="{Binding HasDetail}"/>
                                                 </StackPanel>
                                             </Border>

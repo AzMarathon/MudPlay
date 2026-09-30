@@ -538,15 +538,25 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         BuffOffense buff = CurrentSelfBuff();
 
-        // Backstab is a single opener, not something you sustain round after round:
-        // as the basis it reads 1 for a sure one-stab kill and "—" for anything else.
+        // Backstab opens the fight: round 1 is the stab, and the rounds after it are
+        // normal attacks ("a") on what it leaves (report paradigm-20260929-183044). A
+        // sure one-stab kill is 1; otherwise the stab counts at its average after DR.
+        // A monster that sees hidden gets no stab, so it's the normal attack alone.
         if (roundsMelee == MudAttackType.Backstab)
         {
             PlayerMatchupProfile bs = BackstabProfile(worn, encum, buff);
+            PlayerMatchupProfile follow = CharacterCalculator.BuildMeleeAttackProfile(
+                MudAttackType.Normal, _stats!, worn, encum, _gameData, buff);
             foreach (MonsterIntelEntry entry in _all)
             {
                 if (entry.Hp <= 0) { entry.EstimatedRoundsToKill = -1; continue; }
-                entry.EstimatedRoundsToKill = EvaluateBackstab(bs, entry.Source).IsOneStabKill ? 1 : 0;
+                BackstabMatchup stab = EvaluateBackstab(bs, entry.Source);
+                if (stab.IsOneStabKill) { entry.EstimatedRoundsToKill = 1; continue; }
+                MonsterMatchupProfile monster = MonsterProfileFor(entry.Source);
+                bool stabbed = stab.Verdict != BackstabVerdict.SeesHidden;
+                int left = stabbed ? Math.Max(1, monster.Hp - (stab.MinDamage + stab.MaxDamage) / 2) : monster.Hp;
+                int after = MonsterMatchupCalculator.Compute(follow, monster with { Hp = left }).RoundsToKill;
+                entry.EstimatedRoundsToKill = after > 0 ? after + (stabbed ? 1 : 0) : 0;
             }
             return;
         }
