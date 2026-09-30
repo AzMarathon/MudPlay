@@ -2414,12 +2414,22 @@
                                                                 <StackPanel Spacing="2">
                                                                     <TextBlock FontSize="11" TextWrapping="Wrap"
                                                                                Foreground="{StaticResource ChromeFgSecBrush}"
-                                                                               Text="Walk pace (seconds per room)"/>
+                                                                               Text="Walk pace (seconds per room, 0 = your gear's)"/>
                                                                     <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
                                                                                    Value="{Binding ExpEstimator.SimSecondsPerStep, Mode=TwoWay}"
-                                                                                   Minimum="0.25" Maximum="10" Increment="0.05"
+                                                                                   Minimum="0" Maximum="10" Increment="0.05"
                                                                                    FormatString="0.00" ShowButtonSpinner="True"
-                                                                                   ToolTip.Tip="Your bare walking pace between rooms, lag included — fighting is simulated separately, so this is NOT the all-in 'Seconds per room' above. Paradigm defaults to 1.2 (1.0 floor + lag), Stock to 0.7."/>
+                                                                                   ToolTip.Tip="Your bare walking pace between rooms. 0 works it out: on Paradigm the server's move timer from your quickness and carry weight (never under 1.0 s) plus the lag below; on Stock the measured pace for your encumbrance. Fighting is simulated separately, so this is NOT the all-in 'Seconds per room' above."/>
+                                                                </StackPanel>
+                                                                <StackPanel Spacing="2">
+                                                                    <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                                               Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                               Text="Lag per move (ms, Paradigm)"/>
+                                                                    <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
+                                                                                   Value="{Binding ExpEstimator.SimLagMs, Mode=TwoWay}"
+                                                                                   Minimum="0" Maximum="2000" Increment="10"
+                                                                                   FormatString="0" ShowButtonSpinner="True"
+                                                                                   ToolTip.Tip="Added to the server's move timer when the pace is worked out from your gear. A '1.0' mover really walks 1.08–1.15 s — 80 to 150 ms of lag."/>
                                                                 </StackPanel>
                                                                 <StackPanel Spacing="2">
                                                                     <TextBlock FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"

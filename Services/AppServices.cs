@@ -8192,13 +8192,23 @@ public sealed class AppServices
             number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             MonsterOverlaySeed.GetOverlay(number));
 
+    // Seconds per room the character walks right now, with lagSeconds of lag on
+    // Paradigm: the realm's Auto travel model — the server move timer from live
+    // encumbrance and gear quickness there, the measured encumbrance buckets (lag
+    // already in them) on Stock.
+    public double LoopSimulationWalkSeconds(double lagSeconds) =>
+        (GameData.ActiveRealm == Game.RealmType.ParaMud
+            ? new Game.Map.ParadigmMovementCostModel(() => Inventory.Snapshot, GameData, lagSeconds)
+            : BuildTravelCostModel(new Models.Profile.AutoLairSettings())).EstimateTravel(1).TotalSeconds;
+
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the
     // shared monster-overlay resolve, worn gear, obtained spells) — moved to atLevel
     // when one is given (SimLevelProjection). Null before a `stat` screen has told us
     // the character's level and pools.
     public Game.Simulation.SimulationSource LoopSimulationSource =>
-        _loopSimulationSource ??= new(BuildLoopSimulation, () => PlayerStats.Name, () => PlayerStats.Level, AppPaths.LogsDir);
+        _loopSimulationSource ??= new(BuildLoopSimulation, () => PlayerStats.Name, () => PlayerStats.Level,
+            LoopSimulationWalkSeconds, AppPaths.LogsDir);
     private Game.Simulation.SimulationSource? _loopSimulationSource;
 
     public (Game.Simulation.SimCharacter Character, Game.Simulation.SimWorld World)? BuildLoopSimulation(int? atLevel = null)
@@ -8225,7 +8235,8 @@ public sealed class AppServices
             (int)(Alignment.EvilPoints ?? 0));
         var world = new Game.Simulation.SimWorld(
             MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife,
-            ExpResolver.DeathSummonsOf);
+            ExpResolver.DeathSummonsOf,
+            n => SpellCatalog.GetFormulaByNumber(n) is { } f ? Game.Simulation.SimProc.From(f) : null);
         return (character, world);
     }
 
