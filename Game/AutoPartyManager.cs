@@ -168,6 +168,22 @@ public sealed class AutoPartyManager : IDisposable
     // What "navigation is running" means for OnlyWhileNavigating — wired in AppServices.
     public void SetNavigationProbe(Func<bool> isNavigating) => _isNavigating = isNavigating;
 
+    // The room we're in (RoomTracker's current room), so a split-teleport reform can
+    // tell the leader has crossed. Some teleports wait before moving anyone (Darkwood's
+    // `go vortex` carries `adddelay 5`), and until the leader lands the members are
+    // still standing beside it: seeing them there isn't an arrival.
+    private Func<Map.RoomKey?>? _currentRoom;
+    public void SetRoomProbe(Func<Map.RoomKey?> currentRoom) => _currentRoom = currentRoom;
+
+    // The room a split-teleport reform started in; null when none is pending or the
+    // room wasn't known.
+    private Map.RoomKey? _reformOrigin;
+
+    // The leader has left the reform's origin room (or we can't tell, which keeps the
+    // old immediate behaviour).
+    private bool ReformCrossed =>
+        _reformOrigin is not { } origin || _currentRoom?.Invoke() is not { } here || !here.Equals(origin);
+
     public void SetMovementGate(MovementCoordinator coordinator, Func<bool> isLooping)
     {
         _coordinator = coordinator;
@@ -274,6 +290,10 @@ public sealed class AutoPartyManager : IDisposable
                 string given = ExtractGiven(m.Name);
                 if (string.IsNullOrEmpty(given)) continue;
                 _recentlyInvited.Remove(given);
+                // A party-splitting teleport drops every member from the roster ("X is
+                // no longer following you.") — that's the split the reform is waiting
+                // out, so their hold stays until they rejoin or the window ends.
+                if (_reformGiven.Contains(given)) continue;
                 // Row gone (uninvited / left) — release any loop hold for them.
                 EndInviteWait(given, reason: "left the roster");
             }
@@ -904,6 +924,13 @@ public sealed class AutoPartyManager : IDisposable
     // party-splitting-teleport stall). No member looks during that evolution — the
     // race just stays unknown (the safe non-trap-capable default) until a later,
     // non-reform join or a manual look fills it in.
+    // For the bug report: the split-teleport reform in flight — who it's holding for,
+    // who it's still waiting to see arrive, and the room it started in.
+    public string ReformSummary => _reformGiven.Count == 0 ? "(none)"
+        : $"holding for {string.Join(", ", _reformGiven)}; awaiting arrival: "
+          + (_reformPendingInvite.Count == 0 ? "nobody" : string.Join(", ", _reformPendingInvite))
+          + (_reformOrigin is { } o ? $"; from {o.Map}/{o.Room}, crossed={ReformCrossed}" : "");
+
     public bool IsReformSettling
         => _reformPendingInvite.Count > 0
         || _reformGiven.Count > 0
@@ -918,6 +945,7 @@ public sealed class AutoPartyManager : IDisposable
 
         DateTime now = NowProvider();
         bool anyDeferred = false;
+        _reformOrigin = _currentRoom?.Invoke();
         foreach (PartyMember m in _party.Members.ToArray())
         {
             if (m.IsSelf) continue;
@@ -960,6 +988,8 @@ public sealed class AutoPartyManager : IDisposable
 
         DateTime now = NowProvider();
         bool anyDeferred = false;
+        // The followers are in this room already; nothing to cross.
+        _reformOrigin = null;
         foreach (string name in followerGivens)
         {
             string given = ExtractGiven(name);
@@ -1010,6 +1040,16 @@ public sealed class AutoPartyManager : IDisposable
         // room, so skip it.
         if (_reformPendingInvite.Count == 0) return;
         if (!_wire.IsBound) return;
+        // A delayed teleport hasn't moved us yet: the room would only list members
+        // still waiting beside us. Try again once we've crossed (the invite window
+        // ends the pending set, and with it these retries).
+        if (!ReformCrossed)
+        {
+            _log?.Log(LogSeverity.Info, "AutoParty",
+                "Party reform: still in the room we teleported from (a delayed teleport) — waiting to land before looking for arrivals.");
+            ScheduleReformRedisplay();
+            return;
+        }
         // Bare CR = Enter = redisplay the current room, surfacing an "Also here:"
         // line for members who teleported in unwitnessed.
         _wire.Send("");
@@ -1023,6 +1063,10 @@ public sealed class AutoPartyManager : IDisposable
     // strangers recalling in, or a member already invited.
     private void TrySendDeferredReformInvite(string given)
     {
+        // Still in the room we teleported from: a member listed or seen here hasn't
+        // crossed yet (a delayed teleport), and an invite now would only re-invite
+        // someone about to be split off.
+        if (!ReformCrossed) return;
         if (!_reformPendingInvite.Remove(given)) return;
         if (!_wire.IsBound) return;
         DateTime now = NowProvider();

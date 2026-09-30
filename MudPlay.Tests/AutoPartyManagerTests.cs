@@ -946,6 +946,66 @@ public sealed class AutoPartyManagerTests
             b => Encoding.Latin1.GetString(b) == "invite Forged\r");
     }
 
+    // The split itself drops every member from the roster ("X is no longer following
+    // you."): that's what the reform is waiting out, so the hold stays until they're
+    // re-invited and rejoin — before, it released at once and the leader walked on
+    // alone.
+    [Fact]
+    public void SplitReform_KeepsHoldingWhenTheSplitDropsTheMembers()
+    {
+        var (engine, router, _, party) = Setup();
+        MovementCoordinator coord = new();
+        engine.InviteWaitWindow = TimeSpan.FromSeconds(90);
+        engine.SetMovementGate(coord, isLooping: () => false);
+
+        party.SelfIsLeader = true;
+        party.Members.Add(new PartyMember { Name = "MudPlay", IsSelf = true });
+        PartyMember raijin = new() { Name = "Raijin" };
+        party.Members.Add(raijin);
+
+        engine.NotePartySplitTeleport();
+        party.Members.Remove(raijin);
+
+        Assert.Contains(MovementCoordinator.PartyInviteGate, coord.AssertedGates);
+        Dispatch(router, "Raijin appears in a blinding flash of light!");
+        Assert.Contains(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "invite Raijin\r");
+        Assert.Contains(MovementCoordinator.PartyInviteGate, coord.AssertedGates);
+
+        party.Members.Add(new PartyMember { Name = "Raijin" });
+        Assert.DoesNotContain(MovementCoordinator.PartyInviteGate, coord.AssertedGates);
+    }
+
+    // A delayed teleport (Darkwood's `go vortex`, `adddelay 5`) leaves everyone in the
+    // origin room for seconds after the leader's keyword: members seen there haven't
+    // crossed, so they're neither re-invited nor counted as arrived, and the redisplay
+    // backstop waits. Once the leader lands elsewhere the reform runs as usual.
+    [Fact]
+    public void SplitReform_WaitsForTheLeaderToLeaveTheOriginRoom()
+    {
+        var (engine, router, _, party) = Setup();
+        MovementCoordinator coord = new();
+        engine.InviteWaitWindow = TimeSpan.FromSeconds(90);
+        engine.SetMovementGate(coord, isLooping: () => false);
+        RoomKey here = new(3, 784);
+        engine.SetRoomProbe(() => here);
+
+        party.SelfIsLeader = true;
+        party.Members.Add(new PartyMember { Name = "MudPlay", IsSelf = true });
+        party.Members.Add(new PartyMember { Name = "Raijin" });
+
+        engine.NotePartySplitTeleport();
+        engine.FireReformRedisplayForTests();
+        Dispatch(router, "Also here: Raijin.");
+
+        Assert.Empty(engine.LastSentForTests);
+        Assert.Contains(MovementCoordinator.PartyInviteGate, coord.AssertedGates);
+
+        here = new RoomKey(3, 740);
+        Dispatch(router, "Raijin appears in a blinding flash of light!");
+
+        Assert.Contains(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "invite Raijin\r");
+    }
+
     // ===== Leader-side reconnect reform =====
 
     [Fact]
