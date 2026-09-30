@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.128.4**
-> - How did I Die? shows the death scene in its original colours
+> **Version 3.128.8**
+> - A walk-to that turns auto-combat back on now fights the monster already in the room
+> - A hand-typed move into an occupied room while sneaking opens with a backstab again
+> - After training stats (the level-11 train moves you), the monster in the new room is attacked right away instead of seconds later
+> - Spell Book double-click opens the item that actually teaches the spell (e.g. the scroll of arcane enchantment, not an unobtainable tome)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

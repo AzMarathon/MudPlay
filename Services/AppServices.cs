@@ -6620,6 +6620,8 @@ public sealed class AppServices
             // tail, not a new one.
             restJustEnded: () => Health.RecoveredWithin(TimeSpan.FromSeconds(5)));
         OutboundMovement.MoveSent += AutoEquip.OnMoveSent;
+        // Every move re-opens the backstab surprise round, typed moves included.
+        OutboundMovement.MoveSent += Combat.NoteMoveSent;
 
         // Per-game-data-set loop catalogue. Loops live
         // under the active set's Loops/ folder, so the catalogue reloads
