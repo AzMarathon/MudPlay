@@ -1,5 +1,9 @@
 # Version history
 
+## 3.128.1
+
+- Players Seen no longer counts the players in your party
+
 ## 3.128.0
 
 - Click a base stat's name on Character Info to see every number it feeds and the stat values where each goes up, with your row highlighted, in your realm's formulas

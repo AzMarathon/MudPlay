@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.128.0**
-> - Click a base stat's name on Character Info to see every number it feeds and the stat values where each goes up, with your row highlighted, in your realm's formulas
+> **Version 3.128.1**
+> - Players Seen no longer counts the players in your party
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
