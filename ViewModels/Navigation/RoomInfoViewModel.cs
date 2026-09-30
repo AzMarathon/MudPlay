@@ -180,7 +180,7 @@ public sealed partial class RoomInfoViewModel : ObservableObject
             RoomKey target = exit.Target;
             Room? dest = _services.RoomGraph.GetRoom(target);
             string destName = dest is not null ? dest.DisplayName : target.ToString();
-            string hint = RoomTooltipBuilder.FormatExitHint(exit, _services.GameData);
+            string hint = RoomTooltipBuilder.FormatExitHint(exit, _services.GameData, _services.TrapDisarm.DisarmOdds);
             string label = $"{RoomTooltipBuilder.DirectionLabel(dir)} → {destName} ({target})";
             if (hint.Length > 0) label += $" · {hint}";
             Exits.Add(new RoomDetailLink(label, null, new RelayCommand(() => _services.NavigateToRoom(target))));

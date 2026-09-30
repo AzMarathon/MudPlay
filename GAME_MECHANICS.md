@@ -3045,6 +3045,23 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - `disarm trap <dir>`, sent in the trapped room toward the trap's direction, fires against the trap directly.
   - `sea <dir>` is player flavour: it tells a player where a trap is, from the days of reading room descriptions for clues. Now that trapped exits come from the game data, the client never searches for a trap.
 - **A failed disarm may or may not set the trap off, on both realms.** *([CONFIRMED] 2026-09-27, user.)*
+- **Stock: one roll decides a disarm, against the disarm skill.** *([OBSERVED] 2026-09-29, `wccmmud.dll` 1.11p `_cmd_disarm` @0x468bed and `_calculate_secondary_stats` @0x41a424. Stock only; Paradigm not recorded.)*
+  - **The roll:** `r = _genrdn(0, 100)`, against the character's disarm skill `D` (user field `0x608`).
+    - `r < D`: `You successfully disarmed the trap to the <dir>.`, and the exit is marked disarmed.
+    - `D ≤ r < D + 10`: `You failed to disarm any trap to the <dir>.`, a safe failure; nothing fires.
+    - `r ≥ D + 10`: the trap fires. The exit's disarm-failure message goes to you and the room, and the damage is `_genrdn(dmg/2, dmg+1)` for the exit's damage `dmg`. An exit whose trap state is 3 instead moves you through it (`_move_user`).
+  - **So, as percentages:** success ≈ `D`%, a safe failure ≈ 10%, the trap fires ≈ `90 − D`%. `D` ≥ 90 never fires the trap; `D` ≥ 100 always succeeds. `[NEEDS CONFIRMATION]` whether `_genrdn`'s upper bound is inclusive (a ±1% shift). The damage call passes `dmg+1` as its maximum, which suggests the upper bound is exclusive.
+  - **An exit already disarmed** (trap state 1 or 4, set by a success) answers `You failed to disarm any trap to the <dir>.` without a roll. Trap state 0 or 3 rolls.
+  - **Searching first gives no bonus to the disarm.** *([OBSERVED] 2026-09-29.)* When a search finds a trap, `_search_for_hidden_exits` only prints the found line and writes nothing to the exit or the player. `_cmd_disarm` reads only the disarm skill, HP, location and the exit's own fields. A search just costs a command, and it ends a sneak (*Movement & navigation → Sneaking — commands, equip order, and the sneak state machine*).
+  - **Cross-check:** MMUD-Explorer names 40 FindTraps, 41 DisarmTraps and 179 "FindTrapsValue", and folds only 40 and 179 into its Traps display, which agrees with the find / disarm split. It has no disarm odds and no Paradigm branch for traps.
+  - **Client policy (user, 2026-09-29):** until Paradigm is confirmed, the client assumes it works the same way (issue #797).
+  - **The Traps value `stat` shows is the find skill.** `sea <dir>` toward a trapped exit (type 9) rolls `_genrdn(0, 100)` against it (`_search_for_hidden_exits` @0x420597): below it, `You found a trap to the <dir>!` (`above you!` / `below you!` for up and down); otherwise `You notice nothing different to the <dir>.`, with the trap still there. `_show_status` prints the same field.
+  - **The disarm skill isn't the Traps value `stat` shows.** Both start from the same base, `(INT + AGL + CHM*2 + lvlTerm*28)/7` (*Character stats & progression → Utility skills — Perception + the thief four*), and both are 0 for a character without ability 40 (FindTraps). Then:
+    - **`stat`'s Traps (`0x606`)** adds ability 40 (FindTraps) and ability 179;
+    - **the disarm skill (`0x608`)** adds ability 41 (DisarmTraps) instead, floored at 0.
+    - So a +Traps (ability 40) item raises the Traps `stat` shows, and the chance to find a trap, but not the disarm odds.
+    - In the Paradigm game data (`data-Paradigm-1.9.1`), abilities 40 and 41 appear nowhere. The trap-skill classes and races (Missionary, Ninja, Thief, Bard, Gypsy; Gnome) carry Paradigm's own code 1002 (GrantTraps), and six items carry ability 179 (thief's kit +5; crystal shortsword, crystal scimitar and emerald-studded bracelet +10; blacknight +20; dark onyx ring +25). `[NEEDS CONFIRMATION]` whether Paradigm keeps the Stock find / disarm split, and so whether those items help a disarm. A level-10 Gypsy's `stat` Traps read 71 against a Stock-formula base of 70 with none of them worn, a hint that Paradigm's formula differs.
+  - **Exit type 24** (a trap variant, alongside the ordinary type 9) uses the same success roll. When it fires, it casts a spell on you (`_room_cast_on_user`) instead of rolling damage.
 - **Disarm replies differ by realm.** *(Paradigm: [OBSERVED] user screenshot 2026-09-27, meanings [CONFIRMED] user. Stock: [OBSERVED] `wccmmud.dll` 1.11p string table from github.com/lucid2310/Majormud, plus a user screenshot; meaning [CONFIRMED] user.)*
   - **Success, both realms:** `You successfully disarmed the trap to the <dir>.`
   - **Paradigm, no trap that way:** `Your command had no effect.`

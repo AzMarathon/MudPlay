@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
@@ -214,6 +215,21 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         Assert.Equal("trap: 36 dmg (~12% of HP)", rows[1].TrapText);
         // The arrival row (1/3) issues no outbound command, so it crosses no trap.
         Assert.False(rows[2].CrossesTrap);
+    }
+
+    // With the Traps skill, the trap note carries our odds of disarming it.
+    [Fact]
+    public void Build_Trap_WithDisarmOdds_AppendsThem()
+    {
+        RoomGraphManager graph = NewGraph(TrapRooms);
+        var route = new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) };
+
+        IReadOnlyList<RouteDetailRow> rows = CurrentRouteDetails.Build(
+            graph, null, null, route, _ => null,
+            _ => Array.Empty<RoomDetailLink>(), _ => { }, _ => null, ItemLink, maxHp: 300,
+            disarmOdds: TrapDisarmOdds.For(71));
+
+        Assert.Equal("trap: 36 dmg (~12% of HP) · disarm ~71%, springs 19%", rows[1].TrapText);
     }
 
     [Fact]

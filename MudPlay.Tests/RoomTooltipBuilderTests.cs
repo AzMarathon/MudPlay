@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using MudPlay.Game;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 using Xunit;
@@ -1253,6 +1254,15 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     // ----- Door / key pick+bash requirement in the exit hint --------
+
+    [Fact]
+    public void FormatExitHint_Trap_CarriesDisarmOdds_WhenGiven()
+    {
+        Assert.True(RoomExit.TryParseWire("9/470 (Trap, 40 damage)", out RoomExit exit));
+        Assert.Equal("Trap: 40 dmg", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+        Assert.Equal("Trap: 40 dmg, disarm ~71%, springs 19%",
+            RoomTooltipBuilder.FormatExitHint(exit, data: null, TrapDisarmOdds.For(71)));
+    }
 
     [Fact]
     public void FormatExitHint_Door_PicklocksAndStrength_SurfacesRequirement()

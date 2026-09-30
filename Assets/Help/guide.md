@@ -543,7 +543,18 @@ The requirement line names everything you'll need — and for a counter it can s
 
 Both cards show their trap count. Click either route to preview its line on the map, then **Go**. When no route crosses fewer traps than the shortest, there's nothing to weigh, so the walk just proceeds and disarms en route as before.
 
-When a route (the one you're walking, or a queued preview) crosses a trap, its **Details…** view flags that step in **red** with the trap's damage related to your HP — e.g. *trap: 36 dmg (~11% of HP)* — so you can see the hit each trapped step on the path would land.
+When a route (the one you're walking, or a queued preview) crosses a trap, its **Details…** view flags that step in **red** with the trap's damage related to your HP — e.g. *trap: 36 dmg (~11% of HP)* — so you can see the hit each trapped step on the path would land. If you have the Traps skill, the step also shows your odds of disarming it: *trap: 36 dmg (~11% of HP) · disarm ~71%, springs 19%*. The map's room tooltip and the room info panel show the same odds on a trapped exit (*Trap: 40 dmg, disarm ~71%, springs 19%*).
+
+**How Traps and disarming work.** Finding a trap and disarming it are two separate skills that start from the same number:
+
+- **The base** is `(INT + AGL + CHM×2 + level×28) ÷ 7`. Charm counts double, and past level 15 each level counts half. Only a class or race with the trap skill has it (Missionary, Ninja, Thief, Bard, Gypsy; Gnome on Paradigm).
+- **Traps**, the number `stat` shows, is your **find** skill: the base plus any +Traps gear. Searching an exit (`sea <dir>`) finds a trap if a roll of 0–100 comes in under it; otherwise you *notice nothing different*, even though the trap is there.
+- **Your disarm skill** is never shown. It's the base plus any +Disarm Traps gear. **+Traps gear (the thief's kit, dark onyx ring and similar) helps you find traps, not disarm them.** Without trap gear, the two are the same number.
+- **A disarm** (`disarm trap <dir>`) rolls 0–100 against your disarm skill: under it disarms the trap; the next 10 points above it is a safe miss (*You failed to disarm any trap…*), and you can try again; anything higher **springs the trap**, for half to all of its damage. So with a skill of 71: about 71% disarm, 10% safe miss, 19% springs. At 90 and up a trap never springs.
+- **Searching first doesn't help.** A search only tells you the trap is there; it gives no bonus to the disarm, and it ends a sneak. MudPlay knows every trapped exit from the game data, so it never searches and goes straight to the disarm, retrying a safe miss up to **@trap max disarms** times.
+- **A disarm ends a sneak too**, so with auto-sneak on MudPlay re-sneaks before stepping through.
+
+These rules were read from the Stock game engine. Paradigm is assumed to work the same way until it's confirmed.
 
 **Walk it or teleport.** When the shortest route somewhere takes a **teleport** (a cast, an item-use portal, a CMD jump) and a plain **walking** route also exists, the picker asks which you want — **"Walk it"** (the safe overland route) or **"Teleport"** (the shortcut). A teleport can drop you somewhere lethal, so the client won't make that call for you. When the shortcut goes through a paid NPC transport, the card states its fare ("Costs 1 runic per person").
 
@@ -3531,7 +3542,7 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 ### Utilize self or party members to disarm traps
 
 **Default:** On
-**What it does:** When the walker's route crosses a trapped exit, MudPlay tries to disarm it (using your own Traps skill) before stepping through. Turning this off makes the walker just walk through and eat any trap damage.
+**What it does:** When a walk-to, a loop or an Auto-Lair run crosses a trapped exit, MudPlay tries to disarm it before stepping through, using your own skill or, if you don't have it, a party member who does. Turning this off walks straight through and takes any trap damage. See *How Traps and disarming work* for the odds.
 
 ### @trap max disarms
 

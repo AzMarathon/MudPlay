@@ -34,7 +34,8 @@ public static class RouteDetailsLauncher
             services.HighlightWhereRoom,
             key => RoomHazard(services, key),
             id => ItemLink(services, id),
-            services.PlayerState.MaxHp);
+            services.PlayerState.MaxHp,
+            services.TrapDisarm.DisarmOdds);
     }
 
     // The fully-wired browse VM for a polyline: rows + the persisted hit-% colour
