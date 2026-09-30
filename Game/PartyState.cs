@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MudPlay.Models.GameData;
 using MudPlay.Services;
 
 namespace MudPlay.Game;
@@ -32,4 +33,18 @@ public sealed partial class PartyState : ObservableObject
 
     // True if the locally connected character is the party leader.
     [ObservableProperty] [field: Owner(typeof(PartyManager))] private bool _selfIsLeader;
+
+    // Whether a player is in the party right now, matched on given name so a
+    // surname or a family rename doesn't hide them.
+    public bool HasMember(string name)
+    {
+        (string given, _) = PlayerObservation.SplitName(name);
+        if (string.IsNullOrEmpty(given)) return false;
+        foreach (PartyMember m in Members)
+        {
+            (string memberGiven, _) = PlayerObservation.SplitName(m.Name);
+            if (memberGiven.Equals(given, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
 }

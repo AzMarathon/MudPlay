@@ -5882,7 +5882,8 @@ public sealed class AppServices
         // room-source subscriptions of its own — we wire the two hooks here.
         PlayerSightings = new Game.PlayerSightingTracker(
             () => RoomTracker.State.CurrentRoom, Profile,
-            selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
+            selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name,
+            isPartyMember: Party.State.HasMember);
         RoomClassifier.EntitiesObserved += PlayerSightings.NoteAlsoHere;
         RoomEntry.ArrivalObserved += PlayerSightings.NoteArrival;
         // Monster Intel's "Your Observations" — subscribes to the same fixed
