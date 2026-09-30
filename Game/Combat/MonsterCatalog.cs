@@ -304,6 +304,15 @@ public sealed class MonsterCatalog
         }
     }
 
+    // Whether the monster is on the Game Data Browser's Unobtainable list. Room
+    // tooltips leave these out, so a monster that can never appear isn't shown where
+    // it can't be met.
+    public bool IsOutOfPlay(int number)
+    {
+        Build();
+        return _outOfPlay!.Contains(number);
+    }
+
     // Spell Number → AttType across the active set, resolved once (the same map
     // the catalog uses internally to roll up each monster's cast elements).
     public IReadOnlyDictionary<int, int> SpellAttType { get { Build(); return _spellAttType!; } }

@@ -2623,7 +2623,7 @@ A monster's `Summoned By` field lists the rooms it appears in, each token tagged
 - **Client use:**
   - The nav tooltip / Room Info panel split these into Placed / Assigned / Lair.
   - `MonsterSpawnIndex` parses the token kinds, while the combat resolver keeps a permissive union of all of them.
-  - `StrayMonsterRule` applies the unobtainable policy. It's used by the Monsters and Unobtainable tables (Reason: "Only listed under a room that spawns a different NPC") and by `MonsterCatalog.InPlay` (Monster Intel).
+  - `StrayMonsterRule` applies the unobtainable policy. It's used by the Monsters and Unobtainable tables (Reason: "Only listed under a room that spawns a different NPC") and by `MonsterCatalog.InPlay` (Monster Intel). Room tooltips and room panels leave out every monster on the Unobtainable list (`MonsterSpawnIndex.OutOfPlay` → `MonsterCatalog.IsOutOfPlay`, checked in `RoomTooltipBuilder`).
 
 ### Boss monsters
 

@@ -4746,6 +4746,8 @@ public sealed class AppServices
         Combat.SetMagicEligibility(
             MonsterMagic, ItemMagic, SpellReqLevel, MonsterResist, SpellAttackType);
         MonsterCatalog = new Game.Combat.MonsterCatalog(GameData, RoomGraph.GetRoom);
+        // Room tooltips and room panels leave out what the Unobtainable list holds.
+        MonsterSpawns.OutOfPlay = MonsterCatalog.IsOutOfPlay;
 
         // Drain-life eligibility — a drain spell can only affect a living, non-undead
         // target; the index tells the chooser which mobs to skip (fall back to the
