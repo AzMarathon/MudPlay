@@ -4961,10 +4961,10 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   at the bottom of the crypt.
 - **So only same-class characters can make the trip together**; a mixed party splits at the hall. That is
   why the step is only easily auto-trainable running solo.
-- **Training stats after the 10→11 train, in the spirit's room, teleports you out** *([CONFIRMED] 2026-09-30, user; report `paradigm-20260930-085259`, Paradigm)*.
+- **Training stats after the 10→11 train, in the spirit's room, teleports you out** *([CONFIRMED] 2026-09-30, user; report `paradigm-20260930-085259`) · both realms*.
   - **No message marks the move.** In the capture, `train` → `Welcome to level 11!`, then `train stats` and SAVE on the creation screen. The next thing on the wire was the room display of Graveyard, Tomb Entrance 1/834, where the train had been in Large Tomb 1/2300.
   - **Every class lands in the same room, Graveyard, Tomb Entrance 1/834** *([CONFIRMED] 2026-09-30, user)*. Each class has its own 10→11 trainer room with its class spirit in it, and all of them send you to 1/834.
-  - Not recorded: whether Stock does the same.
+  - **Stock does the same** *([CONFIRMED] 2026-09-30, user)*.
 - **Client use:**
   - Party auto-train stops members at level 10 by default (Auto-Trainer → *Leave the level 11 train to a solo trip*).
   - The teleport lands while the train-stats screen's send hold is still up: the new room's `Also here:` comes before the `Obvious exits:` line that lifts it. Combat's attack there is held and re-decided when the hold lifts (`CombatManager.OnWireReleased`, report `paradigm-20260930-085259`). Room tracking re-localises off the room display.
