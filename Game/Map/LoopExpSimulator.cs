@@ -134,7 +134,8 @@ public sealed record ExpEstimatorSnapshot(
     string RealmName = "",           // active realm — drives the summon re-roll cadence
     IReadOnlyList<string>? Simulation = null,   // the character-simulation readout, null when not run
     double SimSecondsPerStep = 0,
-    IReadOnlyList<string>? LiveCheck = null);    // the simulator-vs-your-play lines, null when not run
+    IReadOnlyList<string>? LiveCheck = null,     // the simulator-vs-your-play lines, null when not run
+    IReadOnlyList<string>? AreaRanking = null);  // the top area-ranking lines, null when not run
 
 public static class LoopExpSimulator
 {

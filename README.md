@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.129.0**
-> - Exp/Hr Estimator: Check against my play sets every loop you've run an hour or more at one level (from your program logs) against the simulator at that level
-> - Loop simulation can move your character to another level (HP, mana, Spellcasting and level-scaled numbers follow; higher-level spells drop)
-> - The check's result is in the bug report and the program log
+> **Version 3.130.0**
+> - Exp/Hr Estimator: Rank areas at level plays your character through a lair tour of every hunting area (by the monsters' Region / Area labels) and lists them, safe areas best first
+> - Pick a ranked area to load its tour on the map; areas where you died are listed last
+> - The top of the ranking is in the bug report and the program log
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -104,6 +104,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SimulateCommand))]
     [NotifyCanExecuteChangedFor(nameof(CheckAgainstPlayCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RankAreasCommand))]
     private bool _isSimulating;
     [ObservableProperty] private string _simStatus = "";
     [ObservableProperty] private LoopSimSummary? _simResult;
@@ -112,6 +113,13 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     // Simulator-vs-your-play check (CheckAgainstPlay): one line per loop and level.
     [ObservableProperty] private string _checkStatus = "";
     public ObservableCollection<string> CheckLines { get; } = new();
+
+    // Area rankings (RankAreas): every area's lair tour at RankLevel (0 = current).
+    [ObservableProperty] private int _rankLevel;
+    [ObservableProperty] private string _rankStatus = "";
+    [ObservableProperty] private AreaRank? _selectedRanking;
+    public ObservableCollection<AreaRank> Rankings { get; } = new();
+    public bool HasRankings => Rankings.Count > 0;
     public bool HasSimResult => SimResult is not null;
     public bool CanSimulate => _simulation is not null;
 
@@ -250,7 +258,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             ProposedName, rooms, SecondsPerStep, AreaCombat, RoundsPerMob, RealConditionsMultiplier,
             ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses, summonLines, RealmLabel,
             SimResult is null ? null : SimLines.ToList(), SimSecondsPerStep,
-            CheckLines.Count == 0 ? null : CheckLines.Prepend(CheckStatus).ToList());
+            CheckLines.Count == 0 ? null : CheckLines.Prepend(CheckStatus).ToList(),
+            Rankings.Count == 0 ? null : Rankings.Take(15).Select(r => r.Label).Prepend(RankStatus).ToList());
     }
 
     // Play the live character around the route for SimRuns seeded runs of SimHours
@@ -367,6 +376,90 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     }
 
     private bool CanRunCheck() => _simulation is not null && !IsSimulating;
+
+    // Every hunting area's lair tour (AreaTours, grouped by the Monsters' Region /
+    // Area labels) played by the character at RankLevel, safe areas first by
+    // exp/hr. Tours are mapped here on the UI thread — the room graph isn't safe to
+    // search from a worker while the live tracker can learn a room — one area at a
+    // time with a yield between, then every area simulates in parallel.
+    [RelayCommand(CanExecute = nameof(CanRunCheck))]
+    private async Task RankAreasAsync()
+    {
+        if (_simulation is null) return;
+        int level = RankLevel > 0 ? RankLevel : _simulation.Level();
+        if (_simulation.Build(level) is not { } setup)
+        {
+            RankStatus = "No character yet — log in and type `stat` first.";
+            return;
+        }
+        RankLevel = level;
+        IsSimulating = true;
+        Rankings.Clear();
+        OnPropertyChanged(nameof(HasRankings));
+        try
+        {
+            IReadOnlyList<(string Area, IReadOnlyList<RoomKey> Rooms)> groups = AreaTours.Group(
+                _resolver.LairRooms().ToList(), n => AreaLabel(setup.Character.Overlay(n)));
+            var jobs = new List<(AreaTour Tour, SimCharacter Character, SimWorld World, IReadOnlyList<SimRoom> Lap)>();
+            for (int i = 0; i < groups.Count; i++)
+            {
+                RankStatus = $"Mapping area {i + 1} of {groups.Count}…";
+                await Task.Delay(1);
+                AreaTour tour = AreaTours.Order(groups[i].Area, groups[i].Rooms, k => _resolver.DistancesFrom(k, _filter));
+                if (tour.Rooms.Count < 2) continue;
+                IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(tour.Rooms.Select(k => new LoopWaypoint(k)).ToList(), _filter);
+                if (lap.Count == 0) continue;
+                (SimCharacter ch, SimWorld world) = SimFreeze.For(setup.Character, setup.World, lap);
+                jobs.Add((tour, ch, world, lap));
+            }
+
+            double step = Math.Max(0.25, SimSecondsPerStep);
+            int runs = Math.Clamp(SimRuns, 1, 20);
+            RankStatus = $"Simulating {jobs.Count} areas at L{level}…";
+            IReadOnlyList<AreaRank> ranked = AreaRank.Rank(await Task.Run(() => jobs.AsParallel()
+                .Select(j => new AreaRank(j.Tour.Name, j.Tour.Rooms, j.Lap.Count,
+                    LoopSimulator.RunMany(j.Character, j.Lap, j.World, step, 1.0, runs)))
+                .ToList()));
+
+            foreach (AreaRank r in ranked) Rankings.Add(r);
+            OnPropertyChanged(nameof(HasRankings));
+            int safe = ranked.Count(r => r.Safe);
+            RankStatus = $"L{level}: {safe} safe area(s), best first; {ranked.Count - safe} where you died listed last. Pick one to load its tour.";
+            _log?.Info("ExpEstimator", $"ranked {ranked.Count} areas at L{level}: " +
+                string.Join(" | ", ranked.Take(10).Select(r => r.Label)));
+        }
+        finally
+        {
+            IsSimulating = false;
+        }
+    }
+
+    // "Region / Area", or just the area when the two match; null when unfiled.
+    private static string? AreaLabel(Models.GameData.MonsterOverlay o) =>
+        string.IsNullOrWhiteSpace(o.Area) ? null
+        : !string.IsNullOrWhiteSpace(o.Region) && !string.Equals(o.Region, o.Area, StringComparison.OrdinalIgnoreCase)
+            ? $"{o.Region} / {o.Area}" : o.Area;
+
+    partial void OnSelectedRankingChanged(AreaRank? value)
+    {
+        if (value is not null) LoadRooms(value.Tour, value.Area);
+    }
+
+    // Replace the sketch with a whole route at once — one estimate, not one per room.
+    private void LoadRooms(IReadOnlyList<RoomKey> rooms, string name)
+    {
+        _clicks.Clear();
+        Clicks.Clear();
+        foreach (RoomKey key in rooms)
+        {
+            if (_graph.GetRoom(key) is not { } room) continue;
+            _clicks.Add(key);
+            Clicks.Add(new LoopBuilderRow(Clicks.Count + 1, key, room.DisplayName));
+        }
+        ProposedName = name;
+        OnPropertyChanged(nameof(HasClicks));
+        Recompute();
+    }
 
     private void FillSimLines(LoopSimSummary r)
     {

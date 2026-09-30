@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.Navigation"
+        xmlns:sim="using:MudPlay.Game.Simulation"
         xmlns:gd="using:MudPlay.ViewModels.GameData.Edit"
         xmlns:conv="using:Avalonia.Data.Converters"
         xmlns:controls="using:MudPlay.Controls"
@@ -2480,6 +2481,40 @@
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
+
+                                            <!-- Area ranking: every area's lair tour simulated at a level,
+                                                 safe areas first; picking a row loads its tour. -->
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                <Button Grid.Column="0" HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Center" FontSize="12"
+                                                        Command="{Binding ExpEstimator.RankAreasCommand}"
+                                                        Content="Rank areas at level"
+                                                        ToolTip.Tip="Builds a lair tour for every hunting area (grouped by the monsters' Region / Area labels), plays your character through each at this level, and lists them best first — areas where you died go last. Pick one to load its tour on the map."/>
+                                                <NumericUpDown Grid.Column="1" Width="90" FontSize="11"
+                                                               Value="{Binding ExpEstimator.RankLevel, Mode=TwoWay}"
+                                                               Minimum="0" Maximum="255" Increment="1"
+                                                               FormatString="0" ShowButtonSpinner="True"
+                                                               ToolTip.Tip="The level to simulate at — 0 means your current level. Another level moves today's character there (HP, mana and level-scaled numbers follow; your stats and gear stay)."/>
+                                            </Grid>
+                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                       IsVisible="{Binding ExpEstimator.RankStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                       Text="{Binding ExpEstimator.RankStatus}"/>
+                                            <ListBox Classes="RailList" MaxHeight="260"
+                                                     IsVisible="{Binding ExpEstimator.HasRankings}"
+                                                     ItemsSource="{Binding ExpEstimator.Rankings}"
+                                                     SelectedItem="{Binding ExpEstimator.SelectedRanking, Mode=TwoWay}"
+                                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate x:DataType="sim:AreaRank">
+                                                        <TextBlock FontSize="11" Margin="0,1,14,1"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                   ToolTip.Tip="{Binding Label}"
+                                                                   Text="{Binding Label}"/>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
                                         </StackPanel>
 
                                         <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>

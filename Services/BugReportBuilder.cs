@@ -1729,6 +1729,12 @@ public static class BugReportBuilder
             foreach (string line in snap.LiveCheck) sb.Append("- ").Append(line).Append('\n');
         }
 
+        if (snap.AreaRanking is not null)
+        {
+            sb.Append("\n**Area ranking**\n\n");
+            foreach (string line in snap.AreaRanking) sb.Append("- ").Append(line).Append('\n');
+        }
+
         return sb.ToString();
     }
 

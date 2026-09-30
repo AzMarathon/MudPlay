@@ -378,6 +378,17 @@ It only needs your logs and your saved loops; the sketch on the map doesn't matt
 
 Another level is simulated by moving **today's** character there: max HP, mana and Spellcasting shift by your class's per-level growth, the level-scaled numbers (accuracy, swings, regen, spell damage) follow, and spells above that level are dropped — but your stats, gear and quest bonuses stay as they are now. So a session from before a gear upgrade or a stat train reads high for reasons the simulator can't see; the rows at your current level are the fair test.
 
+### Ranking hunting areas at a level
+
+**Rank areas at level** (with a level beside it — 0 means your current level) answers "where should I hunt?". It builds a lair tour for **every hunting area** — each lair room goes to the area its monsters are filed under (the **Region / Area** labels on the Game Data Monsters tab; change a monster's area there and the ranking follows), and the tour walks from the area's first lair to the nearest unvisited one (a very large area is walked outward from the start instead) — then plays your character through each at that level and lists them:
+
+- **safe areas first, best exp/hr first**, with your lowest HP and the number of lairs;
+- **areas where you died** (or hung up) after them, however high their number — a run that dies only counts the minutes before it did.
+
+Pick a row to load that area's tour on the map: from there you can simulate it, trim it and **Save as loop**.
+
+A whole-area tour walks *every* lair in the area, including the rooms a hand-built loop would skip — so a loop you've tuned inside a good area will usually beat its area's number, and an area whose tour dies may still hold a safe corner. Use the ranking to find where to look, then build the loop there. Another level moves today's character there, the same way **Check against my play** does.
+
 ## Auto-Lair
 
 **Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**; clicking a marked room again, or **Alt+clicking** it, unmarks it), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
