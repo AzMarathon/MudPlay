@@ -1888,115 +1888,28 @@ public sealed class CastingDirector : IDisposable
     public bool IsEmergencyHealDue =>
         _isEnabled() && PickEmergencySelfHeal(_readSpells(), _readHealth()) is not null;
 
-    // Last-resort self-save. Deliberately does NOT gate on ManaClearsHealFloor
-    // (unlike Major/Minor below) — an emergency spends whatever mana is left
-    // rather than conserving the pool for a "later" that might not come, and it
-    // fires in ANY state (combat, resting, mid-walk), not just combat/rest like
-    // Minor's own position gate. Falls back Emergency → Major → Minor so a
-    // player who's only configured the older two tiers still gets a life-threat
-    // save at the new, lower trigger once they set EmergencyHealTrigger.
-    private string? PickEmergencySelfHeal(SpellsSettings spells, HealthSettings health)
-    {
-        if (_state.MaxHp <= 0) return null;
-        int trigger = ResolveHealHpTrigger(health.HpThresholdMode, health.EmergencyHealTrigger);
-        if (_state.Hp > trigger) return null;
-        if (!string.IsNullOrWhiteSpace(spells.EmergencyHealSpell)) return spells.EmergencyHealSpell;
-        if (!string.IsNullOrWhiteSpace(spells.MajorHealSpell)) return spells.MajorHealSpell;
-        return spells.MinorHealSpell;
-    }
+    // The self-heal tiers (SelfHealPicker has the rules) read against the live pools.
+    private string? PickEmergencySelfHeal(SpellsSettings spells, HealthSettings health) =>
+        SelfHealPicker.Emergency(spells, health, SelfHealState());
 
-    private string? PickMajorSelfHeal(SpellsSettings spells, HealthSettings health)
-    {
-        if (_state.MaxHp <= 0) return null;
-        if (!ManaClearsHealFloor(health)) return null;
-        // Trigger read per HpThresholdMode — percentage of MaxHp, or an absolute
-        // HP value — then compared against raw HP.
-        int majorTrigger = ResolveHealHpTrigger(health.HpThresholdMode, health.MajorHealCombatTrigger);
-        if (_state.Hp > majorTrigger) return null;
-        // Fall back to minor when the user hasn't configured a major
-        // — better to fire something than skip the life-threat path.
-        return !string.IsNullOrWhiteSpace(spells.MajorHealSpell)
-            ? spells.MajorHealSpell
-            : spells.MinorHealSpell;
-    }
+    private string? PickMajorSelfHeal(SpellsSettings spells, HealthSettings health) =>
+        SelfHealPicker.Major(spells, health, SelfHealState());
 
-    private string? PickMinorSelfHeal(SpellsSettings spells, HealthSettings health)
-    {
-        if (_state.MaxHp <= 0) return null;
-        if (!ManaClearsHealFloor(health)) return null;
+    private string? PickMinorSelfHeal(SpellsSettings spells, HealthSettings health) =>
+        SelfHealPicker.Minor(spells, health, SelfHealState());
 
-        // Use the in-combat trigger while engaged, the rest-time
-        // trigger otherwise (matches the user's two-threshold mental
-        // model from the Health tab). Read per HpThresholdMode.
-        int triggerValue = _state.InCombat
-            ? health.MinorHealCombatTrigger
-            : health.HealRestTrigger;
-        int trigger = ResolveHealHpTrigger(health.HpThresholdMode, triggerValue);
-        if (_state.Hp > trigger) return null;
-
-        // Out-of-combat heal-spell-during-rest only — don't cast
-        // mid-walk between rooms.
-        if (!_state.InCombat && _state.Position != PlayerPosition.Resting) return null;
-
-        // Prefer an HP-regen HoT (regeneration / rejuvinating field) over the
-        // single-target heal: once it's ticking it restores far more per mana
-        // than repeated instant heals, so cast it FIRST when the minor-heal
-        // trigger trips. Two gates keep it safe:
-        //  • It's only substituted while HP sits ABOVE the major-heal trigger —
-        //    inside the life-threat band we want the instant top-up, never a
-        //    slow HoT that heals a round later.
-        //  • IsRecastDue is false once the HoT is confirmed active with
-        //    remaining duration, so a running HoT falls through to the instant
-        //    single-target heal for the immediate top-up while it ticks.
-        int majorTrigger = ResolveHealHpTrigger(health.HpThresholdMode, health.MajorHealCombatTrigger);
-
-        // Two exclusive bands. Once HP falls into the major-heal band, yield to
-        // MajorSelfHeal instead of firing minor again. Minor is walked BEFORE major
-        // (lower priority int by default), and without this lower bound minor
-        // matched the whole Hp<=minorTrigger range and fired even at single-digit
-        // HP — major was dead code in combat and the player died (report
-        // paradigm-20260819-121247: minor cast at 13/142 HP with mana to spare).
-        // Yield only when a major spell is configured AND affordable, so a
-        // mana-starved caster still falls back to the cheaper minor heal rather
-        // than healing nothing (the decision pass would skip an unaffordable major
-        // and, with minor yielded, leave no heal at all).
-        if (_state.Hp <= majorTrigger
-            && !string.IsNullOrWhiteSpace(spells.MajorHealSpell)
-            && SpellAffordable(spells.MajorHealSpell))
-            return null;
-
-        if (_state.Hp > majorTrigger
-            && !string.IsNullOrWhiteSpace(spells.HpRegenSpell)
-            && IsRecastDue("", spells.HpRegenSpell))
-            return spells.HpRegenSpell;
-
-        return string.IsNullOrWhiteSpace(spells.MinorHealSpell) ? null : spells.MinorHealSpell;
-    }
+    private SelfHealInputs SelfHealState() => new(
+        _state.Hp, _state.MaxHp, _state.Ma, _state.MaxMa, _state.InCombat,
+        Resting: _state.Position == PlayerPosition.Resting,
+        HealHpTrigger: ResolveHealHpTrigger,
+        Affordable: SpellAffordable,
+        HpRegenRecastDue: spell => IsRecastDue("", spell));
 
     // Mirrors the decision-pass affordability skip (an unknown cost never blocks):
     // a spell is castable when we don't know its cost or the pool covers it. Used
     // so a minor heal only yields to major when major could actually fire.
     private bool SpellAffordable(string spell)
         => _manaCostLookup?.Invoke(spell) is not { } cost || _state.Ma >= cost;
-
-    // Mana-floor gate for self heals: only cast a heal when the caster pool sits at
-    // or above HealIfAboveMaCombat (in combat) or HealIfAboveMaResting (resting /
-    // idle), so a low pool regenerates instead of being drained on heal spells. A
-    // floor of 0 disables the gate. The value is read per MaThresholdMode
-    // (percentage of MaxMa, or absolute MA); an unknown pool (MaxMa 0, percentage
-    // mode) never blocks a heal so the safety path isn't suppressed by missing
-    // prompt data.
-    private bool ManaClearsHealFloor(HealthSettings health)
-    {
-        int floorValue = _state.InCombat
-            ? health.HealIfAboveMaCombat
-            : health.HealIfAboveMaResting;
-        if (floorValue <= 0) return true;
-        // Unknown pool (percentage mode, MaxMa 0) resolves to 0, so a heal is
-        // never blocked before prompt data loads. Absolute mode compares raw MA.
-        int floor = PoolThreshold.Resolve(health.MaThresholdMode, floorValue, _state.MaxMa);
-        return _state.Ma >= floor;
-    }
 
     // ----- Curing -----------------------------------------------------
 

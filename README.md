@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.22**
-> - Alt+click a room on the map to take it back out of a loop you're building or an exp/hr sketch, or to unmark an Auto-Lair room
+> **Version 3.127.0**
+> - Exp/Hr Estimator: Simulate my character plays your real character around the sketched loop (stats, gear, spells, per-monster overrides, heal and rest settings vs the monsters' real attacks and lair timers)
+> - Reports exp/hr with its range over several runs, kills/hr, the attack / move / rest / meditate split, lowest HP and mana, deaths and spells cast per hour
+> - Simulation result is in the bug report and the program log
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

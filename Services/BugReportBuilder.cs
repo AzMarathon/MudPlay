@@ -1715,6 +1715,14 @@ public static class BugReportBuilder
             foreach (string su in snap.Summons) sb.Append("- ").Append(su).Append('\n');
         }
 
+        sb.Append("\n**Character simulation**\n\n");
+        if (snap.Simulation is null) sb.Append("_(not run)_\n");
+        else
+        {
+            sb.Append("- Walk pace: ").Append(snap.SimSecondsPerStep.ToString("0.00")).Append(" s/room\n");
+            foreach (string line in snap.Simulation) sb.Append("- ").Append(line).Append('\n');
+        }
+
         return sb.ToString();
     }
 

@@ -86,6 +86,36 @@ public sealed class RouteExpResolver : IDisposable
         return new ExpRoute(lap);
     }
 
+    // The loop as the simulator walks it: every room in step order with its placed
+    // fixture and its lair — spawn count, respawn and the monsters it refills from.
+    // Unlike Resolve, nothing is averaged and 0-exp monsters stay in (they still spawn
+    // and cost fight time); only bosses are dropped, as their once-per-regen kill
+    // can't show up in an hour's run.
+    public IReadOnlyList<Simulation.SimRoom> ResolveSimLap(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
+    {
+        ArgumentNullException.ThrowIfNull(waypoints);
+        IReadOnlyList<RoomKey> keys = LoopExpander.ResolveCycleRoomKeys(waypoints, _bfs, _graph, filter);
+        if (keys.Count < 2) return Array.Empty<Simulation.SimRoom>();
+
+        var lap = new List<Simulation.SimRoom>(keys.Count - 1);
+        for (int i = 0; i < keys.Count - 1; i++)
+        {
+            RoomKey key = keys[i];
+            Room? room = _graph.GetRoom(key);
+            int npc = room is { Npc: > 0 } && Monsters().ContainsKey(room.Npc) && !Monster(room.Npc).IsBoss ? room.Npc : 0;
+            int lairMax = 0, respawn = 0;
+            IReadOnlyList<int> lairIds = Array.Empty<int>();
+            if (room is { HasLair: true } && ParseLair(room.RawLairTag) is (int mobs, List<int> ids))
+            {
+                lairIds = ids.Where(id => Monsters().ContainsKey(id) && !Monster(id).IsBoss).ToList();
+                lairMax = mobs;
+                respawn = _timers.DefaultRespawnSeconds(key) ?? 0;
+            }
+            lap.Add(new Simulation.SimRoom(key, npc, lairMax, lairIds, respawn));
+        }
+        return lap;
+    }
+
     // The monster-summoning entry spell in a room, or null. A room's Spell that carries
     // a TextBlock ability (148) whose roll table summons monsters yields expected exp
     // per visit — folded into the estimate on top of any placed lair. Memoised per

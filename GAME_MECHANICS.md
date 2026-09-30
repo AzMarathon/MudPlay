@@ -143,6 +143,9 @@ how many swings or spell fires a player or monster gets inside one round.
   - A faithful estimate must **replay the actual room order** with per-mob respawn clocks (see
     *Monsters, lairs & spawns → Lair respawn timers*), not assume a uniform per-lap fire rate —
     that's what the Exp/Hr estimator now does.
+  - `LoopSimulator` (Exp/Hr Estimator → *Simulate my character*) replays the same room order with a
+    clock per lair slot and lands each kill on the 5 s round, playing the live character's own
+    attack, heal and rest decisions (`CombatSpellChooser`, `SelfHealPicker`).
 
 ### Combat spells: engaged once, auto-repeat per round
 *Status: CONFIRMED 2026-08-22 (user)*
