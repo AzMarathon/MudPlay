@@ -1,5 +1,9 @@
 # Version history
 
+## 3.125.14
+
+- Monster Intel: the working line under the highlighted Your Matchup row is readable (lighter grey on the highlight)
+
 ## 3.125.13
 
 - Party "Return distance" now also caps how far a leader backtracks for a bare @comeback; the separate Settings → Other backtrack box is gone

@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.125.13**
-> - Party "Return distance" now also caps how far a leader backtracks for a bare @comeback; the separate Settings → Other backtrack box is gone
+> **Version 3.125.14**
+> - Monster Intel: the working line under the highlighted Your Matchup row is readable (lighter grey on the highlight)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
