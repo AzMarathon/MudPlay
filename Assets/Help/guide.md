@@ -376,7 +376,7 @@ When a monster's physical attack lands and carries a **hit spell**, the hit spel
 
 It needs program logs, and those are only written while **Program Log (F4) → Auto-collect logs** is on — it's **off by default**, so turn it on and play your loops before the check has anything to read. Logs older than **30 days** are deleted at startup, so the check covers roughly the last month. A loop session ends at its stop, a failure, or a level gained mid-loop (the exp after the train counts toward the new level). It only needs your logs and your saved loops; the sketch on the map doesn't matter. A loop you've since deleted or renamed is listed as no longer saved.
 
-Another level is simulated by moving **today's** character there: max HP, mana and Spellcasting shift by your class's per-level growth, the level-scaled numbers (accuracy, swings, regen, spell damage) follow, and spells above that level are dropped — but your stats, gear and quest bonuses stay as they are now. So a session from before a gear upgrade or a stat train reads high for reasons the simulator can't see; the rows at your current level are the fair test.
+Another level is simulated by moving **today's** character there: max HP, mana and Spellcasting shift by your class's per-level growth (a Mystic's kai is left as it is now), the level-scaled numbers (accuracy, swings, regen, spell damage) follow, and spells above that level are dropped — but your stats, gear and quest bonuses stay as they are now. So a session from before a gear upgrade or a stat train reads high for reasons the simulator can't see; the rows at your current level are the fair test.
 
 ## Auto-Lair
 

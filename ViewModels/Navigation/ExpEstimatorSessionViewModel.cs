@@ -36,6 +36,9 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     // a pace recomputed from gear that may have changed since.
     private double _simWalkUsed;
     private CancellationTokenSource? _simCancel;
+    // The live check's own token: a route change cancels a simulation but must leave
+    // the check (which reads saved loops, not the sketch) running.
+    private CancellationTokenSource? _checkCancel;
 
     public ExpEstimatorSessionViewModel(
         RouteExpResolver resolver, LoopManager loops, RoomGraphManager graph,
@@ -334,8 +337,12 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         }
     }
 
-    // Stop a simulation still running; its result is dropped.
-    public void CancelSimulation() => _simCancel?.Cancel();
+    // Stop a simulation or live check still running; its result is dropped.
+    public void CancelSimulation()
+    {
+        _simCancel?.Cancel();
+        _checkCancel?.Cancel();
+    }
 
     private bool CanRunSimulation() => _simulation is not null && !IsSimulating && _clicks.Count >= 2;
 
@@ -351,10 +358,15 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         if (_simulation is null) return;
         if (string.IsNullOrWhiteSpace(_simulation.Character()))
         {
-            CheckStatus = "No character yet — log in and type `stat` first.";
+            CheckStatus = "No character yet — log in and type stat first.";
             return;
         }
         string character = _simulation.Character()!;
+        // Registered like SimulateAsync's, so a setting change or closing the
+        // estimator drops a check still running instead of letting it land late.
+        using var cancel = new CancellationTokenSource();
+        _checkCancel = cancel;
+        CancellationToken token = cancel.Token;
         IsSimulating = true;
         CheckLines.Clear();
         CheckStatus = "Reading your program logs…";
@@ -363,7 +375,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             string dir = _simulation.LogsDir;
             IReadOnlyList<LiveLoopRecord> records = await Task.Run(() => LiveLoopSessions.Pool(
                 LiveLoopSessions.ReadFolder(dir, msg => _log?.Warn("ExpEstimator", $"live check: {msg}")),
-                character, CheckMinHours));
+                character, CheckMinHours), token);
+            if (token.IsCancellationRequested) return;
             if (records.Count == 0)
             {
                 // Program logs exist only while Auto-collect logs is on (off by default)
@@ -397,8 +410,9 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             IReadOnlyList<SimLiveCheckRow> rows = await Task.Run(() => jobs
                 .Select(j => j.Problem is not null
                     ? new SimLiveCheckRow(j.Live, null, j.Problem)
-                    : new SimLiveCheckRow(j.Live, LoopSimulator.RunMany(j.Character!, j.Lap!, j.World!, step, hours, runs)))
-                .ToList());
+                    : new SimLiveCheckRow(j.Live, LoopSimulator.RunMany(j.Character!, j.Lap!, j.World!, step, hours, runs, token)))
+                .ToList(), token);
+            if (token.IsCancellationRequested) return;
 
             foreach (SimLiveCheckRow row in rows) CheckLines.Add(row.Label);
             // Another level is simulated with today's gear, stats and spells, so a
@@ -413,7 +427,11 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             _log?.Info("ExpEstimator", $"live check for {character} ({runs}×{hours:0.#}h, {step:0.##}s/step): " +
                 string.Join(" | ", rows.Select(r => r.Label)));
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            // Cancelled on purpose (setting changed, estimator closed) — not an error.
+        }
+        catch (Exception ex)
         {
             CheckLines.Clear();
             CheckStatus = $"The check failed: {ex.Message}";
@@ -421,6 +439,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_checkCancel, cancel)) _checkCancel = null;
             IsSimulating = false;
         }
     }
@@ -448,12 +467,13 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
     private void ClearSimulation(bool alsoCheck = false)
     {
-        CancelSimulation();
+        _simCancel?.Cancel();
         SimResult = null;
         SimLines.Clear();
         SimStatus = "";
         if (alsoCheck)
         {
+            _checkCancel?.Cancel();
             CheckLines.Clear();
             CheckStatus = "";
         }

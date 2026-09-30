@@ -8,9 +8,10 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // Pins the program-log reader behind the simulator-vs-your-play check: a session
-// runs BeginCircle → Stop / Ended, exp and kills count per `Exp +=`, level and
-// character carry across logs only when one log began after the last one ended, the
-// room sweeper is skipped, midnight rolls the date, and an unreadable log is skipped.
+// runs BeginCircle → Stop / Ended and follows a mid-run rename, exp and kills count
+// per `Exp +=`, level and character carry from the same process's earlier log or
+// else only when one log began after the last one ended, the room sweeper is
+// skipped, midnight rolls the date, and an unreadable log is skipped.
 public sealed class LiveLoopSessionsTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "mudplay-liveloop-" + Path.GetRandomFileName());
@@ -136,6 +137,54 @@ public sealed class LiveLoopSessionsTests : IDisposable
         Assert.Equal("", sibling.Character);
         LiveLoopSession later = sessions.Single(s => s.Loop == "Later");
         Assert.Equal((47, "Ermias"), (later.Level, later.Character));
+    }
+
+    [Fact]
+    public void ALoopRenamedMidRunKeepsItsSessionUnderTheNewName()
+    {
+        string[] lines =
+        {
+            "23:50:02.000 [Debug]  StatParser: Level = 47",
+            "23:51:00.000 [Info]  LoopRunner: BeginCircle: loop='Old' start=1/1 steps=4",
+            "23:52:00.000 [Debug]  StatParser: Exp += 100 → 1 (gain line).",
+            "23:53:00.000 [Info]  LoopRunner: Renamed: loop='Old' → 'New'",
+            "23:54:00.000 [Debug]  StatParser: Exp += 200 → 2 (gain line).",
+            "23:55:00.000 [Info]  LoopRunner: Stop: loop='New' state=Running reason=user stop",
+            "23:59:00.000 [Debug]  StatParser: Exp += 5000 → 3 (gain line).",
+        };
+        int? level = null;
+        string? character = null;
+        LiveLoopSession s = Assert.Single(LiveLoopSessions.Parse(lines, LogStart, ref level, ref character, out _));
+        Assert.Equal(("New", 300L), (s.Loop, s.Exp));
+        Assert.Equal(new DateTime(2026, 9, 28, 23, 55, 0), s.End);
+    }
+
+    [Fact]
+    public void StateCarriesFromTheSameProcessesEarlierLogFirst()
+    {
+        // p1 plays Ermias; p2 (a sibling) logs Voice and writes last before p1's second
+        // log opens. p1's second log is still Ermias's, so it carries from p1's first.
+        WriteLog("2026-09-28_10-00-00-p1-program.log",
+            "10:00:01.000 [Debug]  StatParser: Name = \"Ermias\"",
+            "10:00:02.000 [Debug]  StatParser: Level = 47",
+            "10:30:00.000 [Info]  Session: closing");
+        WriteLog("2026-09-28_10-00-00-p2-program.log",
+            "10:00:01.000 [Debug]  StatParser: Name = \"Voice\"",
+            "10:00:02.000 [Debug]  StatParser: Level = 12",
+            "11:00:00.000 [Info]  Session: closing");
+        WriteLog("2026-09-28_12-00-00-p1-program.log",
+            "12:05:00.000 [Info]  LoopRunner: BeginCircle: loop='Mine' start=1/1 steps=4",
+            "12:30:00.000 [Info]  LoopRunner: Stop: loop='Mine' state=Running reason=user stop");
+        WriteLog("2026-09-28_13-00-00-p9-program.log",
+            "13:05:00.000 [Info]  LoopRunner: BeginCircle: loop='Fresh' start=1/1 steps=4",
+            "13:30:00.000 [Info]  LoopRunner: Stop: loop='Fresh' state=Running reason=user stop");
+
+        var sessions = LiveLoopSessions.ReadFolder(_dir);
+        LiveLoopSession mine = sessions.Single(s => s.Loop == "Mine");
+        Assert.Equal((47, "Ermias"), (mine.Level, mine.Character));
+        // A pid seen for the first time falls back to the log that last wrote before it.
+        LiveLoopSession fresh = sessions.Single(s => s.Loop == "Fresh");
+        Assert.Equal((47, "Ermias"), (fresh.Level, fresh.Character));
     }
 
     [Fact]
