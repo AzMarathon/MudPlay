@@ -1312,6 +1312,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 *Status: CONFIRMED 2026-09-12 (user)*
 
 - **An `AttHitSpell-N` proc rides a physical attack slot.** It is **not** a spell cast, so it has no cast level of its own — there is no per-slot level field for it (`AttMax-N` is the physical attack's max damage).
+- **The hit spell fires whenever that physical attack lands** *([CONFIRMED] 2026-09-30, Tehshortbus via user)*. Each round the monster spends its energy on whichever attacks it picks (e.g. a grimhound: 2 savage bites + 1 trample, 4 bites, 2 tramples, or 1 chomp); any pick that lands and carries a hit spell fires that spell. A debuffing hit spell alters your defences for its duration — the grimhound's trample → `knockdown` (#318: AC −10, Dodge −20, Accuracy −5, HoldPerson, 12 s) makes you take more damage while it lasts (roughly a 1–2% effect, Tehshortbus).
 - **The Monsters table has no monster-level column at all** (only `CharmLVL` and the per-mid-spell `MidSpellLVL-N`).
 - **A proc must not feed anything that needs a cast level.**
 - **Recognizing the message and timing a duration are different questions.** The proc's spell record still *has* messages, so it remains a legitimate candidate for attributing an unrecognized line.
@@ -1319,6 +1320,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 **Client use:**
 - Witnessed-ailment chip durations (`AppServices.ResolveAilmentDurationSeconds` → `MonsterCatalogEntry.CastLevelFor`) count only real spell slots (`AttType-N == 2`) and between-rounds spells, and skip `AttHitSpell` entirely.
 - `RoomSpellAttributor` may still use the proc's spell record to attribute an unrecognized line.
+- `LoopSimulator` fires a landed physical attack's hit spell (`SimProc`): one cast's damage, and its AC / Dodge / Accuracy change and hold for its duration. With no cast level, a level-scaled hit spell is read at its own ReqLevel (**Client policy**).
 
 ### Guarded monsters redirect attacks
 *Status: CONFIRMED 2026-07-14 (user + wire capture; report `paradigm-20260714-115526`)*
@@ -2767,6 +2769,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - Time rises quadratically with encumbrance and falls linearly with quickness: a light, high-quickness build sits pinned at the 1.0s floor (quickness 100 stays capped until ~67% enc), while a heavy or low-quickness build ranges up toward ~3.1s/hop.
   - The server will not process a hop faster than this, so back-to-back move commands are throttled to it rather than executing instantly.
   - Cross-checked against the falls-below-cap points: quickness 15 → 16% enc, 100 → 67%, 200 → 97%.
+- **Lag rides on top of that timer** *([CONFIRMED] 2026-09-30, Tehshortbus via user)*: a character at the 1.0s cap really walks **~1.08–1.15s** a room — 80–150 ms of lag. *([OBSERVED] 2026-09-30: a quickness-0, 32%-encumbrance priest's formula timer is 1.305s; its program log shows a 1.37s median over 5,454 back-to-back moves.)*
+  - **Client use:** `LoopSimulator`'s default walk pace is `ParadigmMovementCostModel` with a 100 ms lag (the Exp/Hr Estimator's *Lag per move*).
 - **Stock has no such floor.** Empirical captures (8 sessions, 199 moves) show a true-speed floor around **0.25s** unencumbered, medians ~0.6–0.7s at light/medium loads rising to ~1.65s when Heavy (≈67%+ enc), with wide lag-driven variance per hop. A comparable character therefore moves roughly **2–4× faster per hop on stock** than the Paradigm 1.0s cap.
 - **Design consequence — the dark-room settle window (and any fixed inter-move timer) is realm-coupled.** At 1.0s it ≈ the Paradigm server cadence, so on Paradigm it costs almost nothing on an empty room; on stock the same 1.0s nearly doubles the natural ~0.6s hop — a heavy tax.
 - **Overshoot (stepping before a dark pursuer reveals) is a fast-mover problem:** it only bites a character near the Paradigm cap or a quick stock character; a slow/heavy mover has ample reveal margin. This argues for making dark-room room-clear detection **event-driven** (step once the room is confirmed clear via the attack→"no effect" + combat-line-silence signals) rather than a single global duration.
