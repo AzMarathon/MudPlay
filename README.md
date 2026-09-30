@@ -3,6 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.128.2**
 > - Unobtainable now also lists monsters that can never spawn despite being marked in game (Cygani), and says why each row is there
+> - Room tooltips and room panels no longer show monsters on the Unobtainable list
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
