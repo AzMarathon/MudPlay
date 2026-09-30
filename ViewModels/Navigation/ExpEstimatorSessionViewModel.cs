@@ -420,7 +420,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             IReadOnlyList<(string Area, IReadOnlyList<RoomKey> Rooms)> groups = AreaTours.Group(
                 reachable, n => AreaLabel(setup.Character.Overlay(n)));
             int gatedAreas = AreaTours.Group(lairs, n => AreaLabel(setup.Character.Overlay(n))).Count - groups.Count;
-            var jobs = new List<(AreaTour Tour, SimCharacter Character, SimWorld World, IReadOnlyList<SimRoom> Lap)>();
+            var jobs = new List<(AreaTour Tour, SimCharacter Character, SimWorld World, IReadOnlyList<SimRoom> Lap, bool IsLoop)>();
             for (int i = 0; i < groups.Count; i++)
             {
                 RankStatus = $"Mapping area {i + 1} of {groups.Count}…";
@@ -430,21 +430,41 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
                 IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(tour.Rooms.Select(k => new LoopWaypoint(k)).ToList(), gates);
                 if (lap.Count == 0) continue;
                 (SimCharacter ch, SimWorld world) = SimFreeze.For(setup.Character, setup.World, lap);
-                jobs.Add((tour, ch, world, lap));
+                jobs.Add((tour, ch, world, lap, false));
             }
+
+            // The user's own saved loops rank beside the area tours — a loop tuned
+            // inside a good area beats that area's whole tour — with what the logs
+            // say the user actually made on each.
+            foreach (Loop loop in _loops.Loops)
+            {
+                if (loop.Waypoints.Count < 2 || !reach.ContainsKey(loop.Waypoints[0].Key)) continue;
+                RankStatus = $"Mapping your loop {loop.Name}…";
+                await Task.Delay(1);
+                IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(loop.Waypoints, gates);
+                if (lap.Count == 0) continue;
+                (SimCharacter ch, SimWorld world) = SimFreeze.For(setup.Character, setup.World, lap);
+                jobs.Add((new AreaTour(loop.Name, loop.Waypoints.Select(w => w.Key).ToList()), ch, world, lap, true));
+            }
+            string? character = _simulation.Character();
+            string logs = _simulation.LogsDir;
+            IReadOnlyList<LiveLoopRecord> live = string.IsNullOrWhiteSpace(character)
+                ? Array.Empty<LiveLoopRecord>()
+                : await Task.Run(() => LiveLoopSessions.Pool(LiveLoopSessions.ReadFolder(logs), character!, CheckMinHours));
 
             double step = Math.Max(0.1, SimWalkSeconds);
             int runs = Math.Clamp(SimRuns, 1, 20);
-            RankStatus = $"Simulating {jobs.Count} areas at L{level}…";
+            RankStatus = $"Simulating {jobs.Count(j => !j.IsLoop)} areas and {jobs.Count(j => j.IsLoop)} of your loops at L{level}…";
             IReadOnlyList<AreaRank> ranked = AreaRank.Rank(await Task.Run(() => jobs.AsParallel()
                 .Select(j => new AreaRank(j.Tour.Name, j.Tour.Rooms, j.Lap.Count,
-                    LoopSimulator.RunMany(j.Character, j.Lap, j.World, step, 1.0, runs)))
+                    LoopSimulator.RunMany(j.Character, j.Lap, j.World, step, 1.0, runs),
+                    j.IsLoop, j.IsLoop ? LiveAt(live, j.Tour.Name, level) : null))
                 .ToList()));
 
             foreach (AreaRank r in ranked) Rankings.Add(r);
             OnPropertyChanged(nameof(HasRankings));
             int safe = ranked.Count(r => r.Safe);
-            RankStatus = $"L{level} from {here.Map}/{here.Room}: {safe} safe area(s), best first; {ranked.Count - safe} where you died listed last"
+            RankStatus = $"L{level} from {here.Map}/{here.Room}: {safe} safe option(s) (areas and your loops), best first; {ranked.Count - safe} where you died listed last"
                 + (gatedAreas > 0 ? $"; {gatedAreas} area(s) you can't reach at L{level} left out" : "") + ". Pick one to load its tour.";
             _log?.Info("ExpEstimator", $"ranked {ranked.Count} areas at L{level}: " +
                 string.Join(" | ", ranked.Take(10).Select(r => r.Label)));
@@ -453,6 +473,20 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         {
             IsSimulating = false;
         }
+    }
+
+    // What the user made on a loop: their record at the ranked level, and their
+    // biggest sample within a few levels of it (the long runs are the trustworthy
+    // ones) when that's a different level.
+    private static IReadOnlyList<LiveLoopRecord> LiveAt(IReadOnlyList<LiveLoopRecord> live, string loop, int level)
+    {
+        var mine = live.Where(r => string.Equals(r.Loop, loop, StringComparison.OrdinalIgnoreCase)).ToList();
+        var shown = new List<LiveLoopRecord>();
+        if (mine.FirstOrDefault(r => r.Level == level) is { } same) shown.Add(same);
+        if (mine.Where(r => Math.Abs(r.Level - level) <= 3).OrderByDescending(r => r.Hours).FirstOrDefault() is { } big
+            && !shown.Contains(big))
+            shown.Add(big);
+        return shown;
     }
 
     // "Region / Area", or just the area when the two match; null when unfiled.

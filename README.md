@@ -3,7 +3,8 @@
 <!-- current-version:start -->
 > **Version 3.130.0**
 > - Exp/Hr Estimator: Rank areas at level plays your character through a lair tour of every hunting area you can reach from where you stand at that level (level-gated boats, portals and exits judged at that level), safe areas best first
-> - Pick a ranked area to load its tour on the map; areas where you died are listed last
+> - Your own saved loops rank alongside the areas (★), simulated at that level, with what you actually made on each from your logs
+- Pick a ranked row to load its tour or loop on the map; options where you died are listed last
 > - The top of the ranking is in the bug report and the program log
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

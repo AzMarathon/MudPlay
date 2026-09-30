@@ -57,4 +57,16 @@ public sealed class AreaToursTests
 
         Assert.Equal(new[] { "Fast", "Slow", "Deadly" }, ranked.Select(r => r.Area));
     }
+
+    [Fact]
+    public void AYourLoopPlayedLiveWithoutDyingCountsAsSafeEvenIfASimulatedRunDied()
+    {
+        LoopSimRun Died() => new(600, 600_000, 1, 1, 0, 0, 0, 0, 0, 0, 50, 600, new Dictionary<string, int>());
+        var live = new[] { new LiveLoopRecord("Marshlands Loop", 47, 3, 25.2, 90_300_000, 8000, 0) };
+        var loop = new AreaRank("Marshlands Loop", new[] { R(1) }, 46, new LoopSimSummary(new[] { Died() }), IsLoop: true, Live: live);
+
+        Assert.True(loop.Safe);
+        Assert.Contains("your loop", loop.Label);
+        Assert.Contains("25.2 h at L47", loop.Label);
+    }
 }

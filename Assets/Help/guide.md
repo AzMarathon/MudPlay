@@ -384,12 +384,13 @@ Another level is simulated by moving **today's** character there: max HP, mana a
 
 - **safe areas first, best exp/hr first**, with your lowest HP and the number of lairs;
 - **areas where you died** (or hung up) after them, however high their number — a run that dies only counts the minutes before it did.
+- **your own saved loops**, ranked right alongside the areas and marked ★, each simulated at that level too — with what **you actually made** on it from your program logs (your record at that level, and your biggest sample a few levels either side). A loop you've played for hours without dying counts as safe even if a simulated run died.
 
 **Reach is judged at the chosen level.** A level-gated way in — a `(Level 50+)` exit, the Port Blackwater boat to Albion (50+), the Bloodwood Weald portal to Shadowmere (75+) — only counts once the ranked level clears it, so ranking at 48 leaves Tagesh and Shadowmere out and ranking at 50 or 75 brings them in. Every other gate (doors, keys and items, tolls and fares, class, alignment) and your avoided rooms count as they do for your walks right now. The status line says how many areas were left out as unreachable. Three runs is few: an area on the edge (lowest HP in the teens) can land on either side of "died".
 
 Pick a row to load that area's tour on the map: from there you can simulate it, trim it and **Save as loop**.
 
-A whole-area tour walks *every* lair in the area, including the rooms a hand-built loop would skip — so a loop you've tuned inside a good area will usually beat its area's number, and an area whose tour dies may still hold a safe corner. Use the ranking to find where to look, then build the loop there. Another level moves today's character there, the same way **Check against my play** does.
+A whole-area tour walks *every* lair in the area, including the rooms a hand-built loop would skip — so a loop you've tuned inside a good area will usually beat its area's number (your loops in the list show it), and an area whose tour dies may still hold a safe corner. Use an area row to find where to look, then build the loop there. Another level moves today's character there, the same way **Check against my play** does.
 
 ## Auto-Lair
 

@@ -2,18 +2,35 @@ using MudPlay.Game.Map;
 
 namespace MudPlay.Game.Simulation;
 
-// One hunting area's simulated result at a level. An area where any run died or
-// hung up is unsafe: its exp/hr only counts the minutes before the run ended, so
-// it ranks after every safe area however high the number looks.
-public sealed record AreaRank(string Area, IReadOnlyList<RoomKey> Tour, int LapRooms, LoopSimSummary Result)
+// One ranked hunting option at a level: an area's whole lair tour, or one of the
+// user's saved loops (IsLoop), with Live — what the user actually earned on that
+// loop, from the program logs, at the ranked level and their biggest sample near it —
+// beside the simulation. An option where a simulated
+// run died or hung up is unsafe (its exp/hr only counts the minutes before the run
+// ended) and ranks after every safe one — unless the user has played it for hours
+// without dying, which outweighs the simulation.
+public sealed record AreaRank(
+    string Area, IReadOnlyList<RoomKey> Tour, int LapRooms, LoopSimSummary Result,
+    bool IsLoop = false, IReadOnlyList<LiveLoopRecord>? Live = null)
 {
-    public bool Safe => Result.Deaths == 0 && Result.HangUps == 0;
+    public bool Safe => (Result.Deaths == 0 && Result.HangUps == 0) || (Live is { Count: > 0 } l && l.All(r => r.Deaths == 0));
 
-    public string Label => Safe
-        ? $"{Area} — {Result.ExpPerHour:N0}/hr · low HP {Result.LowestHpPercent}% · {Tour.Count} lairs"
-        : $"{Area} — died in {Result.Deaths + Result.HangUps} of {Result.Runs.Count} runs";
+    public string Label
+    {
+        get
+        {
+            string name = IsLoop ? $"★ {Area} (your loop)" : Area;
+            string live = Live is { Count: > 0 } l
+                ? " · you made " + string.Join(", ", l.Select(r => $"{r.ExpPerHour:N0}/hr over {r.Hours:0.#} h at L{r.Level}"))
+                : "";
+            if (Result.Deaths + Result.HangUps > 0 && !Safe)
+                return $"{name} — died in {Result.Deaths + Result.HangUps} of {Result.Runs.Count} runs{live}";
+            string where = IsLoop ? $"{LapRooms} rooms" : $"{Tour.Count} lairs";
+            return $"{name} — {Result.ExpPerHour:N0}/hr simulated{live} · low HP {Result.LowestHpPercent}% · {where}";
+        }
+    }
 
-    // Safe areas by exp/hr, then the unsafe ones by exp/hr.
+    // Safe options by exp/hr, then the unsafe ones by exp/hr.
     public static IReadOnlyList<AreaRank> Rank(IEnumerable<AreaRank> ranks) =>
         ranks.OrderByDescending(r => r.Safe).ThenByDescending(r => r.Result.ExpPerHour).ToList();
 }
