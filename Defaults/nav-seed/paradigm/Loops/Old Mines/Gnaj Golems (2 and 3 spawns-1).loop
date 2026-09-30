@@ -1,0 +1,82 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Gnaj Golems (2 and 3 spawns-1)",
+  "Waypoints": [
+    {
+      "Room": "15/1440",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1441",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1442",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1446",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1447",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1448",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1449",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1452",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1453",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1454",
+      "Command": "go fissure",
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp by Winterhawk (Old Mines/OMJ2)."
+}

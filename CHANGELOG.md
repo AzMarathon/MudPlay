@@ -1,5 +1,9 @@
 # Version history
 
+## 3.134.1
+
+- Starter loops: the last MegaMUD loops converted — 15 new Stock loops and 23 new Paradigm loops (Strange Mansion, White Forest, Darkwood wyverns / bugbears, Mithril Mines complete, Misty Swamp and more); loop conversion is complete for both realms
+
 ## 3.134.0
 
 - Navigation: a running loop's chip stays on Pause through fights and rests; it reads Go only when you pause it

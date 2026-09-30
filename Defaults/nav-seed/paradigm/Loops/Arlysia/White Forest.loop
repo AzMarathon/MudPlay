@@ -1,0 +1,102 @@
+{
+  "SchemaVersion": 3,
+  "Name": "White Forest",
+  "Waypoints": [
+    {
+      "Room": "17/1733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1748",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1674",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1671",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1647",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1655",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1685",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp"
+}

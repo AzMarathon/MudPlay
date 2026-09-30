@@ -1,0 +1,362 @@
+{
+  "SchemaVersion": 3,
+  "Name": "White Forest (Ivory Golems)",
+  "Waypoints": [
+    {
+      "Room": "17/1733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1709",
+      "Command": "go path",
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1693",
+      "Command": "go path",
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1647",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1646",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1647",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1647",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1646",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1659",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1722",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp (Arlysia/WFDP)."
+}

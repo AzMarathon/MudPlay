@@ -1,0 +1,22 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Orc Barracks East Side",
+  "Waypoints": [
+    {
+      "Room": "15/2104",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2140",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp"
+}

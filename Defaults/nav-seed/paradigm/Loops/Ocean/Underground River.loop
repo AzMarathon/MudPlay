@@ -1,0 +1,147 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Underground River",
+  "Waypoints": [
+    {
+      "Room": "16/190",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/188",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/176",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/179",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/163",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/158",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/138",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/137",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/134",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/145",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/165",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/192",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/204",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/302",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/303",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/301",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/199",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/196",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/209",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/208",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/207",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/205",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp"
+}

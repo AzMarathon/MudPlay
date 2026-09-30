@@ -1,0 +1,577 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bugbears",
+  "Waypoints": [
+    {
+      "Room": "1/149",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/338",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/339",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/340",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/341",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/342",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/343",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/356",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/357",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/358",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/277",
+      "Command": "go path",
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/287",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/294",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/287",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/278",
+      "Command": "go path",
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/276",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/286",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/359",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/360",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/361",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/362",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/363",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/364",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/403",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/402",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/401",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/406",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/407",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/408",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/409",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/408",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/407",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/406",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/401",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/402",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1335",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1338",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1346",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1357",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1359",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2139",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1350",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1351",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1354",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1360",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1360",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1354",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1351",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1350",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2139",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1359",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1357",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1346",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1338",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1335",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/402",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/403",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/364",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/363",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/362",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/361",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/360",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/359",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/286",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/276",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/277",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/358",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/357",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/356",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/343",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/342",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/341",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/340",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/339",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/338",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/149",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/153",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from MegaMUD .mp by Winterhawk (Darkwood Forest/DFGC)."
+}
