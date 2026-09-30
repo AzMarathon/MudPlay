@@ -151,8 +151,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.GameData.ActiveSetChanged += OnActiveSetDropSimulation;
     }
 
-    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _) => ExpEstimator?.ClearSimulation();
-    private void OnActiveSetDropSimulation(string? _) => ExpEstimator?.ClearSimulation();
+    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _) => ExpEstimator?.ClearSimulation(alsoCheck: true);
+    private void OnActiveSetDropSimulation(string? _) => ExpEstimator?.ClearSimulation(alsoCheck: true);
 
     // Per-second pump for CURRENT NAV lair countdowns. Cheap to leave
     // running, but explicitly gated so an idle Navigation window does no work.
@@ -2716,8 +2716,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
             var session = new ExpEstimatorSessionViewModel(
                 _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement,
-                _services.BuildLoopSimulation, _services.Log,
-                _services.LoopSimulationWalkSeconds);
+                _services.LoopSimulationSource, _services.Log);
             session.PropertyChanged += OnExpEstimatorPropertyChanged;
             ExpEstimator = session;
             CurrentMode = NavigationMode.ExpEstimator;
@@ -2736,8 +2735,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         TearDownLoopBuilder();
         var session = new ExpEstimatorSessionViewModel(
             _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement,
-            _services.BuildLoopSimulation, _services.Log,
-            _services.LoopSimulationWalkSeconds)
+            _services.LoopSimulationSource, _services.Log)
         { ProposedName = loop.Name };
         session.PropertyChanged += OnExpEstimatorPropertyChanged;
         session.LoadWaypoints(loop.Waypoints);

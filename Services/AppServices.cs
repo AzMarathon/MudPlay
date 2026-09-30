@@ -8223,30 +8223,48 @@ public sealed class AppServices
             ? new Game.Map.ParadigmMovementCostModel(() => Inventory.Snapshot, GameData, lagSeconds)
             : AutoLair.TravelCostModel).EstimateTravel(1).TotalSeconds;
 
+    public Game.Simulation.SimulationSource LoopSimulationSource =>
+        _loopSimulationSource ??= new(BuildLoopSimulation, () => PlayerStats.Name, () => PlayerStats.Level,
+            LoopSimulationWalkSeconds, AppPaths.LogsDir);
+    private Game.Simulation.SimulationSource? _loopSimulationSource;
+
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the
     // shared monster-overlay resolve, worn gear, obtained spells, the Default-gear rest
-    // basis). Null before a `stat` screen has told us the character's level and pools.
-    public (Game.Simulation.SimCharacter Character, Game.Simulation.SimWorld World)? BuildLoopSimulation()
+    // basis) — moved to atLevel when one is given (SimLevelProjection). Null before a
+    // `stat` screen has told us the character's level and pools.
+    private (Game.Simulation.SimCharacter Character, Game.Simulation.SimWorld World)? BuildLoopSimulation(int? atLevel = null)
     {
         if (PlayerStats.Level <= 0 || PlayerStats.MaxHits <= 0) return null;
+        int level = atLevel is > 0 ? atLevel.Value : PlayerStats.Level;
+        Game.PlayerStats stats = level == PlayerStats.Level
+            ? PlayerStats : Game.Simulation.SimLevelProjection.StatsAt(PlayerStats, level, GameData);
         Game.Inventory.InventorySnapshot inv = Inventory.Snapshot;
-        IReadOnlyList<Game.Spells.KnownSpell> obtained =
-            Spellbook.Available.Where(k => Spellbook.IsObtained(k.Number)).ToList();
+        IReadOnlyList<Game.Spells.KnownSpell> obtained = Game.Simulation.SimLevelProjection.SpellsAt(
+            Spellbook.Available.Where(k => Spellbook.IsObtained(k.Number)).ToList(), level);
         string? weapon = inv.EquippedItems.FirstOrDefault(w => w.Slot == "Weapon Hand").Name;
         Models.Profile.CharacterProfile? profile = Profile.Current;
         IReadOnlyList<Game.Quests.QuestBonus> quests = Game.Quests.CompletedQuestBonuses.Resolve(
             GameData, Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class), profile?.QuestLog);
 
+        // The Default-gear rest basis is today's `stat`; at another level it moves by the
+        // same amount the projection moved max HP / mana, so thresholds keep their meaning.
+        int basisHp = DefaultBasisMaxHp(), basisMa = DefaultBasisMaxMa();
+        if (!ReferenceEquals(stats, PlayerStats))
+        {
+            if (basisHp > 0) basisHp = Math.Max(1, basisHp + stats.MaxHits - PlayerStats.MaxHits);
+            if (basisMa > 0) basisMa = Math.Max(0, basisMa + stats.MaxMana - PlayerStats.MaxMana);
+        }
+
         Game.Simulation.SimCharacter character = Game.Simulation.SimCharacterBuilder.Build(
-            PlayerStats, inv.EquippedItems, inv.Encumbrance, obtained, GameData,
+            stats, inv.EquippedItems, inv.Encumbrance, obtained, GameData,
             string.IsNullOrEmpty(weapon) ? 0 : ItemMagic.HitMagic(weapon),
             ReadSection<Models.Profile.CombatSettings>(profile, "Combat"),
             ReadSection<Models.Profile.HealthSettings>(profile, "Health"),
             ReadSection<Models.Profile.SpellsSettings>(profile, "Spells"),
             profile?.PartyBuffs, quests, ResolveMonsterOverlay, SpellShort.ShortByNumber,
             Game.Simulation.SimCharacterBuilder.AlignmentValue(Alignment.EvilPoints, Alignment.SelfAlignment),
-            DefaultBasisMaxHp(), DefaultBasisMaxMa()) with
+            basisHp, basisMa) with
         {
             HangupsDisabled = ReadSection<Models.Profile.GeneralSettings>(profile, "General").DisableHangups,
         };

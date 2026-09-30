@@ -309,6 +309,9 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         if (_loop is null || string.IsNullOrWhiteSpace(newName)) return;
         if (string.Equals(_loop.Name, newName, StringComparison.Ordinal)) return;
+        // The live-vs-simulated check follows a running loop through the program log
+        // by name; without this line a loop renamed mid-run never closes its session.
+        _log?.Info("LoopRunner", $"Renamed: loop='{_loop.Name}' → '{newName}'");
         _loop.Name = newName;
         Raise(new LoopEvent(LoopEventKind.Renamed, newName));
     }
@@ -2480,8 +2483,11 @@ public sealed class LoopRunner : IRecoverableEngine
     // follow-up event to clear it. Mirrors Stop's reset-then-raise ordering.
     // Callers build the LoopEvent as the argument, so its Detail (which reads
     // live step state like _index) is frozen before Reset() wipes that state.
+    // Every terminal failure passes here (Stop logs its own line), so this is the
+    // program log's end-of-run marker for a loop that didn't stop cleanly.
     private void RaiseAfterReset(LoopEvent evt)
     {
+        _log?.Info("LoopRunner", $"Ended: loop='{_loop?.Name ?? "?"}' reason={evt.Detail}");
         Reset();
         Raise(evt);
     }
