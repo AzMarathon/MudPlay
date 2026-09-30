@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.131.2**
-> - Exp/Hr Estimator: the Rank areas level picker is wide enough to show a 3-digit level
+> **Version 3.132.0**
+> - Simulator window: **Start simulating** in the Exp/Hr Estimator section opens it, no estimating needed; simulate any saved loop or the estimator's sketch
+> - Check against my play and Rank areas are tables in their own tabs; picking a ranked row shows its full result and its route on the map
+> - Simulator plays sneak backstab openers: a sneaking backstabber opens each fight with the surprise stab
+> - Rank areas level picker fits a 3-digit level
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

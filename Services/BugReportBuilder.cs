@@ -62,6 +62,7 @@ public static class BugReportBuilder
             new("Movement engine", SafeSection(() => BuildMovement(svc))),
             new("Navigation engines", SafeSection(() => BuildNavigationEngines(svc))),
             new("Exp/Hr estimator", SafeSection(() => BuildExpEstimator(svc))),
+            new("Loop simulator", SafeSection(() => BuildSimulator(svc))),
             new("Special room markers", SafeSection(() => BuildRoomMarkers(svc))),
             new("Auto-mode", SafeSection(() => BuildAutoMode(svc))),
             new("Keybindings", SafeSection(() => BuildKeybindings(svc))),
@@ -1733,12 +1734,30 @@ public static class BugReportBuilder
             foreach (string su in snap.Summons) sb.Append("- ").Append(su).Append('\n');
         }
 
+        return sb.ToString();
+    }
+
+    // The Simulator window's last result, live check and area ranking — what a "the
+    // simulated number looks wrong" report needs beside the character sections. Its
+    // state lives on the Navigation view-model, which registers the provider; null
+    // (no Navigation window yet) reads as not opened.
+    private static string BuildSimulator(AppServices svc)
+    {
+        Game.Simulation.SimulatorSnapshot? snap = svc.SimulatorSnapshotProvider?.Invoke();
+        if (snap is null) return "_(simulator not opened)_";
+        System.Globalization.CultureInfo inv = System.Globalization.CultureInfo.InvariantCulture;
+
+        StringBuilder sb = new();
+        Kv(sb, "Route picked", snap.Route ?? "(none)");
+        Kv(sb, "Realm", snap.RealmName);
+        Kv(sb, "Runs", $"{snap.Runs} × {snap.Hours.ToString("0.#", inv)} h");
+
         sb.Append("\n**Character simulation**\n\n");
         if (snap.Simulation is null) sb.Append("_(not run)_\n");
         else
         {
-            sb.Append("- Walk pace: ").Append(snap.SimSecondsPerStep.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))
-              .Append(" s/room, ").Append(snap.SimHours.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)).Append(" h per run\n");
+            sb.Append("- Route: ").Append(snap.SimulatedRoute).Append('\n');
+            sb.Append("- Walk pace: ").Append(snap.WalkSeconds.ToString("0.00", inv)).Append(" s/room\n");
             foreach (string line in snap.Simulation) sb.Append("- ").Append(line).Append('\n');
         }
 

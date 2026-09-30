@@ -59,7 +59,10 @@ public sealed record SimRegen(
 // master switch that stops the Health hang-up. DefaultMaxHp / DefaultMaxMana are the
 // Default gear set's pools, the basis the live engines resolve rest and heal
 // thresholds against (GAME_MECHANICS "Rest basis — the Default-gear baseline");
-// 0 = unknown, the current max stands in.
+// 0 = unknown, the current max stands in. Backstab is the sneak opener's profile
+// (the Backstab set's weapon in hand), null when the character doesn't open with one
+// (Backstab off, Auto-Sneak off, or no Stealth); BackstabHitMagic is that weapon's
+// hit-magic level.
 public sealed record SimCharacter(
     RealmType Realm,
     int Level,
@@ -79,4 +82,6 @@ public sealed record SimCharacter(
     IReadOnlyList<SimBuff>? Buffs = null,
     bool HangupsDisabled = false,
     int DefaultMaxHp = 0,
-    int DefaultMaxMana = 0);
+    int DefaultMaxMana = 0,
+    PlayerMatchupProfile? Backstab = null,
+    int BackstabHitMagic = 0);

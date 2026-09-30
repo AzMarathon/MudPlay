@@ -1,8 +1,12 @@
 # Version history
 
-## 3.131.2
+## 3.132.0
 
-- Exp/Hr Estimator: the Rank areas level picker is wide enough to show a 3-digit level
+- Simulator window: **Start simulating** in the Exp/Hr Estimator section opens it, no estimating needed; simulate any saved loop or the estimator's sketch
+- Check against my play and Rank areas are tables in their own tabs; picking a ranked row shows its full result and its route on the map
+- Simulator plays sneak backstab openers: a sneaking backstabber opens each fight with the surprise stab
+- Rank areas level picker fits a 3-digit level
+- bug reports addressed: paradigm-20260930-114254
 
 ## 3.131.1
 
