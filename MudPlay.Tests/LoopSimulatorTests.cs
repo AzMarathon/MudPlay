@@ -220,9 +220,9 @@ public sealed class LoopSimulatorTests
     }
 
     [Fact]
-    public void BurningHitSpellTicksEachSpellRoundForItsDuration()
+    public void BurningHitSpellTicksEvery3SecondsForItsDuration()
     {
-        // One landed hit sets a 30 s burn of 7 a spell round: no damage on the hit, then
+        // One landed hit sets a 30 s burn of 7 every 3 s: no damage on the hit, then
         // ~10 ticks. The monster survives one round (one chomp lands) and dies on the
         // next before it swings again, so that one burn is all the damage there is.
         var slot = new MonsterAttackSlot("chomps", Type: 1, Percent: 100, TruePercent: 100, MinDamage: 0, MaxDamage: 0,
@@ -448,5 +448,68 @@ public sealed class LoopSimulatorTests
 
         Assert.InRange(stock.Kills, 30, 2 + 2 * 3600 / 180);
         Assert.InRange(paradigm.Kills, 55, 61);
+    }
+
+    [Fact]
+    public void MonsterWeCannotHurtStillTriggersTheHangUp()
+    {
+        // A hostile above the weapon's magic level, with no attack spell: nothing to
+        // fight, but it hits 20 a round while the character rests beside it. Its hits
+        // put the live client in combat, so the 50% hang-up fires before a death.
+        var health = new HealthSettings { RestIfBelowHp = 90, RestMaxHp = 100, HangIfBelowHp = 50, UseMeditateAbility = false };
+        MonsterCatalogEntry ghost = Mob(9, hp: 1000, exp: 10, align: 1, Hit(20, 20, accuracy: 9999)) with { Magical = 20 };
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 100, health: health), new[] { Lair(1, 1, 3600, 9), Empty(2) },
+            World(ghost), secondsPerStep: 1, hours: 0.25, seed: 1);
+
+        Assert.NotNull(run.HungUpAtSeconds);
+        Assert.Null(run.DiedAtSeconds);
+    }
+
+    [Fact]
+    public void MonsterWeCannotHurtStillTriggersTheRun()
+    {
+        var health = new HealthSettings { RestIfBelowHp = 90, RestMaxHp = 100, RunIfBelowHp = 50, HangIfBelowHp = 0,
+            UseMeditateAbility = false };
+        MonsterCatalogEntry ghost = Mob(9, hp: 1000, exp: 10, align: 1, Hit(20, 20, accuracy: 9999)) with { Magical = 20 };
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 100, health: health, combat: new CombatSettings { RunDistance = 1 }),
+            new[] { Lair(1, 1, 3600, 9), Empty(2) }, World(ghost), secondsPerStep: 1, hours: 0.25, seed: 1);
+
+        Assert.True(run.Flees > 0);
+    }
+
+    [Fact]
+    public void FledCharacterReturnsOnlyAboveItsRunTrigger()
+    {
+        // No rest trigger, so nothing holds the character away but the run trigger:
+        // walking back at once at 40% HP would take two more 30-damage hits to a
+        // death; waiting until HP climbs back over 50% never does.
+        var health = new HealthSettings { RunIfBelowHp = 50, RestIfBelowHp = 0, HangIfBelowHp = 0, UseMeditateAbility = false };
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 100, damage: 1, health: health, combat: new CombatSettings { RunDistance = 1 }),
+            new[] { Lair(1, 1, 3600, 8), Empty(2) }, World(Mob(8, hp: 100000, exp: 10, align: 1, Hit(30, 30, accuracy: 9999))),
+            secondsPerStep: 1, hours: 0.5, seed: 1);
+
+        Assert.True(run.Flees > 0);
+        Assert.Null(run.DiedAtSeconds);
+    }
+
+    [Fact]
+    public void FailedRerollCastKeepsTheCycleGoing()
+    {
+        // An endless reroll cycle no roll satisfies, on a spell that lands half the
+        // time and outlasts the run: every round's recast goes out whether the last
+        // one landed or not. Ending the cycle on a failed cast would leave the buff
+        // sitting there after a handful of casts.
+        var spells = new Dictionary<string, SimSpell>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["prfl"] = Spell("prfl", mana: 1, duration: 36000, manaRegenMin: 0, manaRegenMax: 100) with { CastChance = 50 },
+        };
+        var buffs = new[] { new SimBuff("prfl", 0, false, false, false, RerollBelow: 101, RerollCount: 0, RerollInfinite: true) };
+        var health = new HealthSettings { BlessIfAboveMa = 0, RestIfBelowMa = 0, UseMeditateAbility = false };
+        LoopSimRun run = LoopSimulator.Run(
+            Character(spells: spells, buffs: buffs, maxMana: 1000, health: health),
+            new[] { Empty(1), Empty(2) }, World(), secondsPerStep: 1, hours: 0.5, seed: 1);
+
+        int casts = run.Casts.GetValueOrDefault("prfl");
+        Assert.True(casts > 300, $"cast {casts} times");
     }
 }

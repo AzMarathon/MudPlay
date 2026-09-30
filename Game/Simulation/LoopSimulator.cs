@@ -338,23 +338,26 @@ public static class LoopSimulator
             if (present) MonstersAttack();
             Track();
             if (_hp <= 0) { _diedAt = Now; return; }
-            if (combat && HealthTriggers()) return;
+            if (present && HealthTriggers()) return;
             BetweenRoundCast(combat && Fighting);
             Here().Mobs.RemoveAll(m => !m.Alive);
             if (present && !_isAway && _ch.Realm == RealmType.ParaMud) RoomSummon();
         }
 
         // The Health tab's run / hang-up triggers, read after the round lands with
-        // HealthManager's gates: hang up at or below its trigger with a hostile here
-        // (unless hang-ups are disabled) ends the run; run at or below either pool's
-        // trigger leaves RunDistance rooms and rests there before walking back to
-        // finish the fight. The simulated room is left as it was (no pursuit is
-        // modelled). A hold (knockdown) refuses the moves, so the flee waits for it to
-        // wear off (GAME_MECHANICS "Knockdown — a movement-preventing hold").
+        // HealthManager's gates, whenever a monster still attacking us is here — one
+        // we can't hurt included, since its hits put the live client in combat too:
+        // hang up at or below its trigger (unless hang-ups are disabled) ends the run;
+        // run at or below either pool's trigger leaves RunDistance rooms and rests
+        // there, walking back once both pools are above their run triggers. The
+        // simulated room is left as it was (no pursuit is modelled). A hold
+        // (knockdown) refuses the moves, so the flee waits for it to wear off
+        // (GAME_MECHANICS "Knockdown — a movement-preventing hold").
         private bool HealthTriggers()
         {
             HealthSettings h = _ch.Health;
-            if (!_ch.HangupsDisabled && _ch.MaxHp > 0 && Here().Mobs.Any(m => m.AttacksUs)
+            if (!Here().Mobs.Any(m => m.AttacksUs)) return false;
+            if (!_ch.HangupsDisabled && _ch.MaxHp > 0
                 && _hp <= PoolThreshold.Resolve(h.HpThresholdMode, h.HangIfBelowHp, _ch.MaxHp))
             {
                 _hungUpAt = Now;
@@ -707,11 +710,11 @@ public static class LoopSimulator
                 && !(resting && !_ch.SpellSlots.SelfBlessWhileResting);
 
             if (_pendingReroll is { } reroll && selfAllowed
-                && buffs.FirstOrDefault(b => string.Equals(b.Spell, reroll, StringComparison.OrdinalIgnoreCase)) is { } rb
-                && CastBuff(rb, inCombat))
+                && buffs.FirstOrDefault(b => string.Equals(b.Spell, reroll, StringComparison.OrdinalIgnoreCase)) is { } rb)
             {
-                _pendingReroll = null;
-                return true;
+                _pendingReroll = null;     // CastBuff re-stages it when the cycle needs another go
+                if (CastBuff(rb, inCombat)) return true;
+                _pendingReroll = reroll;
             }
             int hpFull = PoolThreshold.Resolve(h.HpThresholdMode, h.RestMaxHp, _ch.MaxHp);
             int maFull = PoolThreshold.Resolve(h.MaThresholdMode, h.RestMaxMa, _ch.MaxMana);
@@ -726,13 +729,22 @@ public static class LoopSimulator
             return false;
         }
 
+        // ManaRegenReroller judges on the send, not the landing: a failed cast reads
+        // back the roll still on, so a cycle goes on re-judging it; with nothing on to
+        // read, the reroll is simply tried again.
         private bool CastBuff(SimBuff b, bool inCombat)
         {
             if (!TryPay(b.Spell, out SimSpell? spell)) return false;
-            if (!Roll(spell.CastChance ?? 100)) return true;
-            int rolled = Land(spell);
-            if (spell.ManaRegenMin != spell.ManaRegenMax && b.RerollBelow is not null)
-                JudgeRoll(b, rolled, inCombat);
+            bool rollSpell = spell.ManaRegenMin != spell.ManaRegenMax && b.RerollBelow is not null;
+            if (Roll(spell.CastChance ?? 100))
+            {
+                int rolled = Land(spell);
+                if (rollSpell) JudgeRoll(b, rolled, inCombat);
+            }
+            else if (rollSpell && _buffs.TryGetValue(spell.Short, out var on) && on.Until > Now)
+                JudgeRoll(b, on.ManaRegen, inCombat);
+            else if (rollSpell && _reroll is { Waiting: false })
+                _pendingReroll = b.Spell;
             return true;
         }
 
@@ -877,8 +889,22 @@ public static class LoopSimulator
             }
             _posture = Posture.Standing;
             if (Held) return;      // knocked down / held: can't walk off until it wears off
-            if (_isAway) StartWalk(Walk.Return, Math.Max(1, _ch.Combat.RunDistance) * _secondsPerStep);
+            if (_isAway)
+            {
+                if (RecoveredFromRun(h)) StartWalk(Walk.Return, Math.Max(1, _ch.Combat.RunDistance) * _secondsPerStep);
+            }
             else StartWalk(Walk.Next, _secondsPerStep + _lap[_pos].PauseSeconds);
+        }
+
+        // HealthManager's auto-resume after a flee: both pools back above their run
+        // triggers (a pool whose run trigger is off never holds it), so the walk back
+        // doesn't run straight into another flee.
+        private bool RecoveredFromRun(HealthSettings h)
+        {
+            bool hp = h.RunIfBelowHp <= 0 || _hp > PoolThreshold.Resolve(h.HpThresholdMode, h.RunIfBelowHp, _ch.MaxHp);
+            bool ma = h.RunIfBelowMa <= 0 || _ch.MaxMana <= 0
+                || _ma > PoolThreshold.Resolve(h.MaThresholdMode, h.RunIfBelowMa, _ch.MaxMana);
+            return hp && ma;
         }
 
         // HealthManager.ChooseRestCommand: meditate for mana alone (or first, when

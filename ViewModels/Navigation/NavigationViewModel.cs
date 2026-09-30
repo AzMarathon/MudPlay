@@ -2728,10 +2728,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         var session = new ExpEstimatorSessionViewModel(
             _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement,
             _services.BuildLoopSimulation, _services.Log,
-                _services.LoopSimulationWalkSeconds)
+            _services.LoopSimulationWalkSeconds)
         { ProposedName = loop.Name };
         session.PropertyChanged += OnExpEstimatorPropertyChanged;
-        foreach (LoopWaypoint w in loop.Waypoints) session.AddClick(w.Key);
+        session.LoadWaypoints(loop.Waypoints);
         ExpEstimator = session;
         CurrentMode = NavigationMode.ExpEstimator;
         OnPropertyChanged(nameof(ExpEstimator));
