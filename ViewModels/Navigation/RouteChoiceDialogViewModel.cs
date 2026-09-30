@@ -265,6 +265,8 @@ public sealed partial class RouteChoiceDialogViewModel
     [NotifyPropertyChangedFor(nameof(IsShortcutSelected))]
     [NotifyPropertyChangedFor(nameof(IsTokenSelected))]
     [NotifyCanExecuteChangedFor(nameof(GoCommand))]
+    [NotifyCanExecuteChangedFor(nameof(GoCombatOffCommand))]
+    [NotifyCanExecuteChangedFor(nameof(GoSprintCommand))]
     [NotifyCanExecuteChangedFor(nameof(ShowDetailsCommand))]
     private RouteChoiceResult? _selectedRoute;
 
@@ -745,6 +747,24 @@ public sealed partial class RouteChoiceDialogViewModel
 
     [RelayCommand(CanExecute = nameof(CanGo))]
     private void Go() => CloseRequested?.Invoke(SelectedRoute);
+
+    // How the picked walk sets out: Run (Auto-Combat off) / Sprint (Sprint Mode) set
+    // it before closing, and the prompt applies it as the walk commits.
+    public RunStartMode StartMode { get; private set; } = RunStartMode.Normal;
+
+    [RelayCommand(CanExecute = nameof(CanGo))]
+    private void GoCombatOff()
+    {
+        StartMode = RunStartMode.CombatOff;
+        Go();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanGo))]
+    private void GoSprint()
+    {
+        StartMode = RunStartMode.Sprint;
+        Go();
+    }
 
     [RelayCommand]
     private void Cancel() => CloseRequested?.Invoke(null);

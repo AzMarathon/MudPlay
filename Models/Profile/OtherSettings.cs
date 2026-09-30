@@ -97,6 +97,13 @@ public sealed class OtherSettings
     // Game.AutoPartyManager.OnlyWhileNavigating.
     public bool AutoInviteOnlyWhileNavigating { get; set; }
 
+    // A walk-to / loop / Auto-Lair started with Run (Auto-Combat off) or Sprint (Sprint
+    // Mode) and stopped by hand before it began: true turns Auto-Combat back on /
+    // ends Sprint Mode (restoring the autos it turned off) at the stop; false (the
+    // default) leaves them off. Char-tier; Settings → Other.
+    public bool RunStopRestoresCombat { get; set; }
+    public bool SprintStopEndsSprint { get; set; }
+
     // When true (default) a look at a monster surfaces its estimated remaining
     // hit points — both in the status-bar "TGT HP:" slot and as a yellow line in
     // the terminal scrollback. Off suppresses both. Char-tier; Settings → Other.

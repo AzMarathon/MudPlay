@@ -472,6 +472,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void OnAutoLairPausedChanged(bool _)
     {
         OnPropertyChanged(nameof(RunStopLabel));
+        OnPropertyChanged(nameof(RunChipIsGo));
+        OnPropertyChanged(nameof(CanRunWithOptions));
         OnPropertyChanged(nameof(AutoLairPhaseLabel));
         OnPropertyChanged(nameof(AutoLairStatusText));
         RaiseTopBarStatus();
@@ -1146,6 +1148,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(GotoButtonLabel))]
     [NotifyPropertyChangedFor(nameof(CanRun))]
     [NotifyPropertyChangedFor(nameof(RunStopLabel))]
+    [NotifyPropertyChangedFor(nameof(RunChipIsGo))]
+    [NotifyPropertyChangedFor(nameof(CanRunWithOptions))]
     private RoomKey? _queuedDestination;
 
     partial void OnQueuedDestinationChanged(RoomKey? value)
@@ -1625,10 +1629,21 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // then calls Start. Stops any in-flight loop / walk first so the scheduler
     // has clean ground.
     [RelayCommand]
-    private void RunSetup(LairSetupRowViewModel? row)
+    private void RunSetup(LairSetupRowViewModel? row) => StartSetup(row, Game.Map.RunStartMode.Normal);
+
+    // Right-click → Run / Sprint: Go with Auto-Combat off, or in Sprint Mode, until
+    // the first lair.
+    [RelayCommand]
+    private void RunSetupCombatOff(LairSetupRowViewModel? row) => StartSetup(row, Game.Map.RunStartMode.CombatOff);
+
+    [RelayCommand]
+    private void RunSetupSprint(LairSetupRowViewModel? row) => StartSetup(row, Game.Map.RunStartMode.Sprint);
+
+    private void StartSetup(LairSetupRowViewModel? row, Game.Map.RunStartMode mode)
     {
         if (row is null) return;
         LoadSetupInternal(row.Source);
+        ApplyStartMode(mode);
         _services.AutoLair.Start();
     }
 
@@ -2039,9 +2054,20 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void RunLoop(LoopRowViewModel? row)
+    private void RunLoop(LoopRowViewModel? row) => StartLoop(row, Game.Map.RunStartMode.Normal);
+
+    // Right-click → Run / Sprint: Go with Auto-Combat off, or in Sprint Mode, until
+    // the loop reaches its first waypoint.
+    [RelayCommand]
+    private void RunLoopCombatOff(LoopRowViewModel? row) => StartLoop(row, Game.Map.RunStartMode.CombatOff);
+
+    [RelayCommand]
+    private void RunLoopSprint(LoopRowViewModel? row) => StartLoop(row, Game.Map.RunStartMode.Sprint);
+
+    private void StartLoop(LoopRowViewModel? row, Game.Map.RunStartMode mode)
     {
         if (row is null) return;
+        ApplyStartMode(mode);
         _services.LoopRunner.Start(row.Source);
     }
 
@@ -2975,6 +3001,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 // reachable clicks.
                 OnPropertyChanged(nameof(CanRun));
                 OnPropertyChanged(nameof(RunStopLabel));
+        OnPropertyChanged(nameof(RunChipIsGo));
+        OnPropertyChanged(nameof(CanRunWithOptions));
                 OnPropertyChanged(nameof(CanSaveCurrent));
                 RebuildCurrentNavRows();
                 RaiseTopBarStatus();
@@ -3000,7 +3028,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     //   - Idle — no-op (the click already moved SelectedRoomKey upstream).
     // remove (Alt+click): take the room back out — the loop's or the exp/hr sketch's
     // latest click on it, or its Auto-Lair mark — and never add.
-    public void OnRoomLeftClicked(RoomKey key, bool remove = false)
+    // queue (Ctrl+click): queue the room as the walk-to destination, the same as picking
+    // it in the search box — with nothing running and no build mode open, or from the
+    // loop builder (a queued destination outranks the builder's loop, so Go walks
+    // there; the sketch is kept). The other build modes keep their plain click.
+    public void OnRoomLeftClicked(RoomKey key, bool remove = false, bool queue = false)
     {
         // Any left-click refreshes the ROOM INFO panel's contents (it's informational
         // and doesn't consume the click), but never forces the panel open — its expand
@@ -3012,6 +3044,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // waypoint list; when one does, the click is consumed here so it doesn't also
         // drive the mode dispatch below (which is Idle/no-op with that dialog up anyway).
         if (_services.TryCaptureLoopWaypoint(key)) return;
+
+        if (queue && (CurrentMode == NavigationMode.LoopBuild
+                      || (CurrentMode == NavigationMode.Idle && !IsAnyExecuting && !_services.TokenRoute.Active)))
+        {
+            SelectedRoomKey = key;
+            QueuedDestination = key;
+            return;
+        }
 
         switch (CurrentMode)
         {
@@ -3381,6 +3421,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // start/stop path).
         OnPropertyChanged(nameof(IsWalkUserPaused));
         OnPropertyChanged(nameof(WalkPauseLabel));
+        // A loop's Pause / Go face reads the user pause too.
+        OnPropertyChanged(nameof(RunStopLabel));
+        OnPropertyChanged(nameof(RunChipIsGo));
+        OnPropertyChanged(nameof(CanRunWithOptions));
     }
 
     // Our own "held" ailment stops movement server-side without asserting any
@@ -3874,6 +3918,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public bool IsAnyExecuting =>
         EngineActionKind != NavigationEngineKind.Idle;
 
+    // The running loop is paused by the user (the UserGate), not merely held by a
+    // fight or rest.
+    private bool LoopUserPaused =>
+        _services.MovementCoordinator.AssertedGates.Contains(Game.Map.MovementCoordinator.UserGate);
+
+    // The Go chip's colour: green when pressing it starts / resumes, red when it
+    // pauses or stops.
+    public bool RunChipIsGo => RunStopLabel == "Go";
+
+    // The chip would start something new (not resume or stop one), so the Go ▾
+    // options apply: Run (Go with Auto-Combat off) and Sprint (Go in Sprint Mode).
+    public bool CanRunWithOptions =>
+        QueuedDestination is not null
+        || (CurrentMode == NavigationMode.LoopBuild && LoopBuilder?.CanSave == true)
+        || (!IsAnyExecuting && !_services.TokenRoute.Active && CanRun);
+
     // Run button enabled when idle and something is queued, OR when active
     // (then it acts as Stop).
     public bool CanRun =>
@@ -3891,29 +3951,30 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         get
         {
             // A queued destination overrides the engine faces: clicking Run walks
-            // there (see RunStop). Present a stable "Run" even while a loop or
+            // there (see RunStop). Present a stable "Go" even while a loop or
             // lair cycles its state machine, so the chip stops flickering
-            // Pause/Run under the armed destination.
-            if (QueuedDestination is not null) return "Run";
+            // Pause/Go under the armed destination.
+            if (QueuedDestination is not null) return "Go";
 
             // In Loop build with a runnable loop, Run runs the loop (superseding any
-            // in-flight walk-to) — so the chip reads Run, not the walk-to's Stop.
+            // in-flight walk-to) — so the chip reads Go, not the walk-to's Stop.
             if (CurrentMode == NavigationMode.LoopBuild && LoopBuilder?.CanSave == true)
-                return "Run";
+                return "Go";
 
+            // A running loop reads Pause until the USER pauses it. Its own state also
+            // flips to Paused whenever anything holds movement (a fight, a rest), so
+            // keying the face off that flickered Run / Pause through every fight.
             Game.Map.LoopRunner runner = _services.LoopRunner;
-            if (runner.State is Game.Map.LoopState.Running
-                              or Game.Map.LoopState.Approaching
-                              or Game.Map.LoopState.Recovering) return "Pause";
-            if (runner.State == Game.Map.LoopState.Paused) return "Run";
+            if (runner.State != Game.Map.LoopState.Idle && runner.CurrentLoop is not null)
+                return LoopUserPaused ? "Go" : "Pause";
             // Auto-Lair gets Pause / Run too — the chip stays distinct
             // from the Lair-mode "Stop" so the user has both Pause (this
             // chip) and Stop (the mode chip) without duplication.
             if (_services.AutoLair.IsActive)
-                return _services.AutoLair.IsPaused ? "Run" : "Pause";
+                return _services.AutoLair.IsPaused ? "Go" : "Pause";
             // A picked token route between walks (regrouping / using / landing) is
             // still a run the user can stop, though the walker is idle.
-            return IsAnyExecuting || _services.TokenRoute.Active ? "Stop" : "Run";
+            return IsAnyExecuting || _services.TokenRoute.Active ? "Stop" : "Go";
         }
     }
 
@@ -3934,6 +3995,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void OnTokenRouteChanged()
     {
         OnPropertyChanged(nameof(RunStopLabel));
+        OnPropertyChanged(nameof(RunChipIsGo));
+        OnPropertyChanged(nameof(CanRunWithOptions));
         OnPropertyChanged(nameof(CanRun));
         OnPropertyChanged(nameof(TopBarStatusText));
     }
@@ -4249,6 +4312,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanShowRouteDetails));
         OnPropertyChanged(nameof(CanRun));
         OnPropertyChanged(nameof(RunStopLabel));
+        OnPropertyChanged(nameof(RunChipIsGo));
+        OnPropertyChanged(nameof(CanRunWithOptions));
         RaiseTopBarStatus();
         OnPropertyChanged(nameof(TopBarStatusBadge));
         RefreshActivityStatus();
@@ -4282,7 +4347,19 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     //   - Auto-Lair mode with marked rooms → start the scheduler.
     //   - Otherwise, walk to the queued destination.
     [RelayCommand]
-    private async Task RunStop()
+    private Task RunStop() => RunOrStop(Game.Map.RunStartMode.Normal);
+
+    // Go ▾ → Run: start what Go would, with Auto-Combat off for the trip.
+    [RelayCommand]
+    private Task RunCombatOff() => RunOrStop(Game.Map.RunStartMode.CombatOff);
+
+    // Go ▾ → Sprint: start what Go would, in Sprint Mode for the trip.
+    [RelayCommand]
+    private Task RunSprint() => RunOrStop(Game.Map.RunStartMode.Sprint);
+
+    // mode applies only where the chip starts something new: a queued walk-to (once
+    // the route commits), a built loop, or a marked Auto-Lair.
+    private async Task RunOrStop(Game.Map.RunStartMode mode)
     {
         Game.Map.LoopRunner runner = _services.LoopRunner;
 
@@ -4319,7 +4396,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // favourites list, and the map right-click all funnel through the
             // same shared engine here; only how the walk is confirmed differs.
             QueuedDestination = null;
-            await RouteChoicePrompt.WalkAsync(_services, queued, path => PreviewPath = path);
+            await RouteChoicePrompt.WalkAsync(_services, queued, path => PreviewPath = path, mode);
             return;
         }
 
@@ -4338,7 +4415,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // the new clicks" so the edits actually apply. Otherwise
         // just clear the gate and let the runner continue from where
         // it left off.
-        if (runner.State == Game.Map.LoopState.Paused && runner.CurrentLoop is { } pausedLoop)
+        if (runner.State != Game.Map.LoopState.Idle && runner.CurrentLoop is { } pausedLoop && LoopUserPaused)
         {
             bool edited = _loopBuilderOpenedByPause
                        && LoopBuilder is { } b
@@ -4366,12 +4443,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Loop running / approaching / recovering → pause (assert user gate) and
-        // auto-open the builder seeded from the running loop so the
-        // user can edit clicks before resuming.
-        if (runner.State is Game.Map.LoopState.Running
-                         or Game.Map.LoopState.Approaching
-                         or Game.Map.LoopState.Recovering)
+        // Loop running (or held by a fight / rest, which isn't the user's pause) →
+        // pause (assert user gate) and auto-open the builder seeded from the running
+        // loop so the user can edit clicks before resuming.
+        if (runner.State != Game.Map.LoopState.Idle && runner.CurrentLoop is not null)
         {
             _services.MovementCoordinator.AssertGate(Game.Map.MovementCoordinator.UserGate);
             OpenBuilderForRunningLoop();
@@ -4397,6 +4472,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (!loopRunReady && _services.Walker.State is WalkState.Walking or WalkState.Paused)
         {
             _services.Walker.Stop("user stop from Navigation");
+            _services.NoteUserStoppedRun?.Invoke();
             return;
         }
 
@@ -4419,6 +4495,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
                     _services.Walker.Stop("loop run supersedes walk-to");
                 _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
+                ApplyStartMode(mode);
                 _services.LoopRunner.Start(transient);
                 if (CurrentMode == NavigationMode.LoopBuild) ToggleLoopMode();
             }
@@ -4427,9 +4504,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (CurrentMode == NavigationMode.AutoLair
             && _services.AutoLair.Marked.Count > 0)
         {
+            ApplyStartMode(mode);
             _services.AutoLair.Start();
             return;
         }
+    }
+
+    private void ApplyStartMode(Game.Map.RunStartMode mode)
+    {
+        if (mode != Game.Map.RunStartMode.Normal) _services.ApplyRunStartMode?.Invoke(mode);
     }
 
     // Set true when OpenBuilderForRunningLoop opened build mode in
@@ -4522,6 +4605,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.LoopRunner.Stop();
         if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
             _services.Walker.Stop("user stop from Navigation");
+        _services.NoteUserStoppedRun?.Invoke();
 
         _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
 
