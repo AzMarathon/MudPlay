@@ -1231,6 +1231,19 @@ public sealed class AppServices
     // the override is asymmetric — collection on, stashing off — for its duration.
     internal bool FundingErrandActive => _autoGetCashOverride == true;
 
+    // An errand engine is driving the walker for one of its own legs — a bank / stash
+    // trip, a sell detour, a trainer or funding trip, a token route, a party pickup, a
+    // path-item / light / drop detour, a maze or pyramid solve, a Roomba sweep. Its
+    // walks aren't the user's, so their ends aren't the user's walk ending.
+    public bool ErrandHasTheWalker =>
+        AutoDeposit.IsRerouting || SellDetour.IsDetouring
+        || TrainerWalk.IsBusy || TrainFunding.IsBusy
+        || TokenRoute.Active || PartyComeback.RecoveringMember is not null
+        || PathItemShopRouter.DetourActive || PathItemGiveRouter.DetourActive
+        || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive
+        || AutoLightShopRouter.DetourActive
+        || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive;
+
     // Collects the money for a train before the run commits to a trainer.
     public Game.Train.TrainFundingRouter TrainFunding { get; private set; } = null!;
 

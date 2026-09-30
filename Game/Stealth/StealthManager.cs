@@ -438,24 +438,42 @@ public sealed class StealthManager : IDisposable
     // of combat — an in-combat cast never re-sneaks here (NoteCombatEndedStealthReset
     // owns the combat-end reset), and TryBeginAutoSneak's own gates (settled state,
     // no NPC present) decide whether the `sn` actually goes out.
+    //
+    // The cast hold comes off LAST: clearing it can resume the walker on the spot, and
+    // it must find stealth already reset and the re-sneak's settle hold up — released
+    // first, the next move went out unsneaked, ahead of the `sn` (reports
+    // paradigm-20260929-185544, paradigm-20260929-191106).
     public void ReSneakAfterCast()
     {
-        ReleaseCastHold("the held cast went out");
-        if (_isAutoSneakEnabled?.Invoke() != true) return;
-        if (_state.InCombat) return;
-        if (_stateValue == StealthState.Sneaking)
+        // Drop the hold's flag now (a held cast would stop the re-sneak from starting)
+        // but keep its movement gate until the re-sneak's own is up.
+        bool gateUp = _castHold;
+        _castHoldTimer?.Stop();
+        _castHoldTimer = null;
+        _castHold = false;
+        try
         {
-            _log?.Info(LogCategory, "cast spent sneak — resetting for re-sneak");
-            Transition(StealthState.Idle);
-            _state.IsSneaking = false;
-            _sneakConfirmedThisRoom = false;
+            if (_isAutoSneakEnabled?.Invoke() != true) return;
+            if (_state.InCombat) return;
+            if (_stateValue == StealthState.Sneaking)
+            {
+                _log?.Info(LogCategory, "cast spent sneak — resetting for re-sneak");
+                Transition(StealthState.Idle);
+                _state.IsSneaking = false;
+                _sneakConfirmedThisRoom = false;
+            }
+            else if (_stateValue == StealthState.Hidden)
+            {
+                _log?.Info(LogCategory, "cast spent hide — resetting stealth");
+                NoteHideBroken();
+            }
+            TryBeginAutoSneak("post-cast re-sneak");
         }
-        else if (_stateValue == StealthState.Hidden)
+        finally
         {
-            _log?.Info(LogCategory, "cast spent hide — resetting stealth");
-            NoteHideBroken();
+            if (gateUp)
+                _coordinator?.ClearGate(MovementCoordinator.SneakCastGate, nameof(StealthManager), "the held cast went out");
         }
-        TryBeginAutoSneak("post-cast re-sneak");
     }
 
     // Movement-engine pre-move hook — called by the walker / loop runner

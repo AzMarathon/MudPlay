@@ -461,19 +461,21 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _walkerState = AppServices.Current.Walker.State;
             RefreshEngineActionChip();
-            // A standalone walk-to ending — arrival (Finished), a manual Stop, or a
-            // Failed route — settles the live auto-engines back into the character's
-            // base modes, the same way loop-start does, so the toggles you flipped for
-            // the trip return to their defined state once you've stopped pathing. Only a
-            // STANDALONE walk-to counts: during a loop or auto-lair the walker also fires
-            // these on each sub-path, and those are handled by the lap-boundary / pre-lair
-            // hooks instead. Guard on the live engine state, not cached flags, to avoid a
-            // stale-field race.
-            if ((e.Kind == Game.Map.WalkEventKind.Finished
-                 || e.Kind == Game.Map.WalkEventKind.Stopped
-                 || e.Kind == Game.Map.WalkEventKind.Failed)
+            // A standalone walk-to ARRIVING settles the live auto-engines back into the
+            // character's base modes, the same way loop-start does, so the toggles you
+            // flipped for the trip return to their defined state once you're there. Only
+            // an arrival: a walk stopped or failed mid-route — an errand (auto-deposit,
+            // sell detour, …) taking the walker over to replan, say — hasn't got you
+            // there, so your trip toggles stay (report paradigm-20260929-191251: combat
+            // turned itself back on when a bank detour replanned the walk to a loop).
+            // Nor an errand's own leg arriving. Only a STANDALONE walk-to counts: during a
+            // loop or auto-lair the walker also fires these on each sub-path, and those
+            // are handled by the lap-boundary / pre-lair hooks instead. Guard on the live
+            // engine state, not cached flags, to avoid a stale-field race.
+            if (e.Kind == Game.Map.WalkEventKind.Finished
                 && AppServices.Current.LoopRunner.State == Game.Map.LoopState.Idle
-                && !AppServices.Current.AutoLair.IsActive)
+                && !AppServices.Current.AutoLair.IsActive
+                && !AppServices.Current.ErrandHasTheWalker)
             {
                 // End Sprint first (restoring the engines it silenced), then let the base
                 // modes get the final word — same ordering as the loop-start reconcile.
