@@ -40,6 +40,42 @@ public sealed class SwapScriptExecutionTests
         Assert.Equal(new[] { "--profile", "Board/Char" }, argv);
     }
 
+    // A swap that fails restores the install and leaves the step log beside the
+    // executable, for the user to attach to a bug report.
+    [Fact]
+    public void Posix_FailedSwap_RestoresAndLeavesALogBesideTheExe()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-swapfail-" + Guid.NewGuid().ToString("N"));
+        string install = Path.Combine(root, "install");
+        Directory.CreateDirectory(install);
+        string exe = Path.Combine(install, "MudPlay");
+        File.WriteAllText(exe, "#!/usr/bin/env bash\nexit 0\n");
+        File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        string script = Path.Combine(root, "swap.sh");
+        File.WriteAllText(script, SwapScriptBuilder.BuildPosix());
+        try
+        {
+            using (Process probe = Process.Start(new ProcessStartInfo("/bin/sh", "-c \"exit 0\"") { UseShellExecute = false })!)
+            {
+                probe.WaitForExit();
+                // The "new build" folder doesn't exist, so moving it into place fails.
+                RunBash(script, probe.Id.ToString(), Path.Combine(root, "missing"), install, exe,
+                        Path.Combine(root, "stage"), "", "");
+            }
+
+            Assert.True(File.Exists(exe), "the install wasn't restored");
+            string failLog = Path.Combine(install, "MudPlay-update-failed.log");
+            Assert.True(File.Exists(failLog), "no failure log beside the executable");
+            Assert.Contains("FAILED: moving the new build", File.ReadAllText(failLog));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort temp cleanup */ }
+            try { Directory.Delete(install + ".bak", recursive: true); } catch { /* best-effort temp cleanup */ }
+        }
+    }
+
     // Build the install/staging layout the helper expects, run it, and return the
     // argv the relaunched "executable" saw. Null when the platform isn't bash.
     private static string[]? RunSwap(string profileToken, bool reconnect)

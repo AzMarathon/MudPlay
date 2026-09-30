@@ -1258,6 +1258,7 @@ public static class BugReportBuilder
                     ? $"{suppressedNow} (judged at {jr}, {(entering ? "room the in-flight loop move is entering" : "tracker's current room")})"
                     : "(unknown room)");
             Kv(sb, "Loop step in flight", svc.LoopRunner.IsStepInFlight.ToString());
+            Kv(sb, "Loop waiting on a trap disarm", svc.LoopRunner.IsAwaitingTrapDisarm.ToString());
         }
         // Settings → Cash + Items "No combat during an auto-sell detour / auto-deposit trip".
         Kv(sb, "Combat off for a detour", svc.DetourSuppressesCombat() ?? "(no)");

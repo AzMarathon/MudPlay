@@ -43,6 +43,7 @@ internal static class Program
         // out-of-band CLR failure channels. Either way a fatal error lands a
         // Crash-<timestamp>.md on the Desktop instead of vanishing.
         CrashReporter.Install();
+        Services.Update.UpdatePlatform.DeleteReplacedExecutables();
         CrashReporter.Guard(() =>
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args));
     }

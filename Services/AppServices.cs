@@ -6271,19 +6271,21 @@ public sealed class AppServices
         // (a positive Traps stat, or a class/race game-data trap-skill
         // grant when the value hasn't been captured yet). When the gate is
         // false the walker tries party delegation, else steps through.
-        Walker.SetTrapDisarmGate(() =>
+        Func<bool> trapDisarmGate = () =>
             Resolver.Resolve<Models.Profile.OtherSettings>("Other").UtilizeDisarmTrapsIfAble
-            && TrapDisarm.CanDisarm);
+            && TrapDisarm.CanDisarm;
+        Walker.SetTrapDisarmGate(trapDisarmGate);
         // Party-delegation half of "if able": same toggle, but the LOCAL
         // character can't disarm AND a capable party member can. The
         // walker tries the local gate first, then this; the delegation
         // manager broadcasts @trap on say and resumes on the member's
         // say reply (a signal source kept distinct from the self path).
         Walker.SetTrapDelegator(TrapDelegation.Delegate);
-        Walker.SetTrapDelegateGate(() =>
+        Func<bool> trapDelegateGate = () =>
             Resolver.Resolve<Models.Profile.OtherSettings>("Other").UtilizeDisarmTrapsIfAble
             && !TrapDisarm.CanDisarm
-            && TrapDelegation.AnyPartyMemberCanDisarm());
+            && TrapDelegation.AnyPartyMemberCanDisarm();
+        Walker.SetTrapDelegateGate(trapDelegateGate);
         Walker.SetTrapDelegateStopper(TrapDelegation.Cancel);
         // Proactive pre-move approach sequence: gear then `sn`, both as the last
         // commands before each walker move so the move itself is sneaked (the
@@ -6703,6 +6705,10 @@ public sealed class AppServices
         // the loop's bounded recovery budget; EnterRecovery reads this to avoid
         // charging those against it (report paradigm-20260902-113201).
         LoopRunner.SetConfusedCheck(() => Conditions.IsConfused);
+        // Trapped exits mid-circuit: the walker's disarm / delegate / walk-through
+        // decision, through the same managers.
+        LoopRunner.SetTrapHandling(TrapDisarm.Enqueue, trapDisarmGate,
+            TrapDelegation.Delegate, trapDelegateGate, TrapDelegation.Cancel);
         // Same proactive pre-move approach sequence for loop circuits — backstab
         // gear before the sneak (equipping breaks sneak), then the move.
         LoopRunner.SetMoveReadyCheck(() =>
@@ -7719,9 +7725,11 @@ public sealed class AppServices
             }
             catch (Exception ex)
             {
-                Log.Info("Startup",
-                    $"--profile load of '{cli.Name}' on '{cli.Bbs}' failed " +
-                    $"({ex.GetType().Name}); loading the default profile instead.");
+                // Shown on the terminal too: coming up on the default profile with no
+                // word why reads as "my profile won't load".
+                StartupOptions.ProfileNotice =
+                    $"Couldn't load '{cli.Name}' on '{cli.Bbs}' ({ex.GetType().Name}: {ex.Message}); opened the default profile instead.";
+                Log.Warn("Startup", StartupOptions.ProfileNotice);
                 Profile.LoadDefaultProfile();
             }
         }
@@ -7744,9 +7752,9 @@ public sealed class AppServices
             }
             catch (Exception ex)
             {
-                Log.Info("Startup",
-                    $"Auto-load of last profile '{startup.Name}' on '{startup.Bbs}' failed " +
-                    $"({ex.GetType().Name}); loading the default profile instead.");
+                StartupOptions.ProfileNotice =
+                    $"Couldn't auto-load '{startup.Name}' on '{startup.Bbs}' ({ex.GetType().Name}: {ex.Message}); opened the default profile instead.";
+                Log.Warn("Startup", StartupOptions.ProfileNotice);
                 Profile.LoadDefaultProfile();
             }
         }

@@ -91,6 +91,20 @@ public sealed class LoopRunner : IRecoverableEngine
     private Action? _winchStopAll;
     private bool _awaitingWinch;
 
+    // Trapped exits — mirrors the walker's trap integration: a trapped exit crossed
+    // mid-circuit is disarmed first (by us, or by a capable party member on @trap)
+    // instead of walking into the trap. Null until wired: unit harnesses walk through.
+    // _trapClearedFor marks the step whose trap was just disarmed, so re-driving it
+    // through the ordinary step path (a disarm ends a sneak, so the ready check gets
+    // its re-sneak) crosses instead of disarming again.
+    private Action<string, string, Action<string>>? _trapEnqueuer;
+    private Func<bool>? _shouldDisarmTrap;
+    private Action<string, Action<string>>? _trapDelegator;
+    private Func<bool>? _canDelegateTrap;
+    private Action? _trapDelegateStopAll;
+    private bool _awaitingTrapDisarm;
+    private (int Index, RoomKey Room, Direction Direction)? _trapClearedFor;
+
     private Loop? _loop;
     private int _index;
 
@@ -247,6 +261,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // True while a loop step is on the wire awaiting its landing — including while the
     // loop is paused mid-step (see LoopCombatSuppression.JudgeEnteringRoom).
     public bool IsStepInFlight => _stepInFlight;
+    public bool IsAwaitingTrapDisarm => _awaitingTrapDisarm;
 
     // Name of the most recently RUN loop, retained after the run stops (unlike
     // CurrentLoop, which nulls on Stop/Reset). Set when a loop starts and only
@@ -631,6 +646,25 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(handler);
         _onLeaderPartySplit = handler;
+    }
+
+    // Trapped-exit handling — the same five hooks the walker takes
+    // (AutoWalkManager.SetTrapEnqueuer / SetTrapDisarmGate / SetTrapDelegator /
+    // SetTrapDelegateGate / SetTrapDelegateStopper), bound to the same managers.
+    public void SetTrapHandling(
+        Action<string, string, Action<string>> enqueuer, Func<bool> disarmGate,
+        Action<string, Action<string>> delegator, Func<bool> delegateGate, Action delegateStopper)
+    {
+        ArgumentNullException.ThrowIfNull(enqueuer);
+        ArgumentNullException.ThrowIfNull(disarmGate);
+        ArgumentNullException.ThrowIfNull(delegator);
+        ArgumentNullException.ThrowIfNull(delegateGate);
+        ArgumentNullException.ThrowIfNull(delegateStopper);
+        _trapEnqueuer = enqueuer;
+        _shouldDisarmTrap = disarmGate;
+        _trapDelegator = delegator;
+        _canDelegateTrap = delegateGate;
+        _trapDelegateStopAll = delegateStopper;
     }
 
     // Door-open enqueuer — mirrors AutoWalkManager.SetDoorEnqueuer. AppServices
@@ -1231,6 +1265,36 @@ public sealed class LoopRunner : IRecoverableEngine
         // for a benign / unmapped target.
         _approachRoomHook?.Invoke(exit.Target);
 
+        // Trapped exit: disarm before crossing, the same way the walker does — by us
+        // when we can, else by a capable party member — and cross from OnTrapReply.
+        // A loop used to send the plain move and walk into the trap (report
+        // paradigm-20260929-215833: 40 damage off an arrow trap).
+        if (exit.Hint == RoomExitHint.Trap && _trapEnqueuer is not null)
+        {
+            bool alreadyCleared = _trapClearedFor == (_index, current.Key, step.Direction);
+            _trapClearedFor = null;
+            if (!alreadyCleared)
+            {
+                string dirWord = step.Display;
+                if (_shouldDisarmTrap?.Invoke() ?? true)
+                {
+                    _awaitingTrapDisarm = true;
+                    _log?.Info("LoopRunner", $"step {_index + 1}/{_expandedSteps.Count}: disarm trap {dirWord}");
+                    _trapEnqueuer(dirWord, "loop", OnTrapReply);
+                    return;
+                }
+                if (_trapDelegator is not null && (_canDelegateTrap?.Invoke() ?? false))
+                {
+                    _awaitingTrapDisarm = true;
+                    _log?.Info("LoopRunner", $"step {_index + 1}/{_expandedSteps.Count}: delegate trap {dirWord} to party");
+                    _trapDelegator(dirWord, OnTrapReply);
+                    return;
+                }
+                _log?.Info("LoopRunner",
+                    $"step {_index + 1}/{_expandedSteps.Count}: trap on {dirWord} — walking through (disarm disabled or unable)");
+            }
+        }
+
         // Door / KeyLocked: if the latest room observation already shows the
         // door open, cross with the plain cardinal. Otherwise route through the
         // same DoorOpenManager the walker uses (bash / pick / key) and cross
@@ -1419,6 +1483,44 @@ public sealed class LoopRunner : IRecoverableEngine
                 FailStep($"door open failed: {failed.Reason}");
                 return;
         }
+    }
+
+    // Terminal reply from TrapDisarmManager (or a party member via
+    // TrapDelegationManager) for a trapped circuit step. Mirrors
+    // AutoWalkManager.OnTrapReply: disarmed or no trap there leaves the exit clear;
+    // anything else fails the lap rather than walking into a trap that's there.
+    private void OnTrapReply(string reply)
+    {
+        if (!_awaitingTrapDisarm) return;
+        _awaitingTrapDisarm = false;
+
+        if (reply.Contains("flow stopped", StringComparison.OrdinalIgnoreCase))
+        {
+            FailStep("trap disarm cancelled");
+            return;
+        }
+        bool clear = reply.Contains("disarmed", StringComparison.OrdinalIgnoreCase)
+                     || reply.StartsWith("No trap", StringComparison.OrdinalIgnoreCase);
+        if (!clear)
+        {
+            FailStep($"trap disarm failed: {reply}");
+            return;
+        }
+        if (_loop is null || State != LoopState.Running
+            || _index >= _expandedSteps.Count
+            || _expandedSteps[_index] is not MoveLoopStep step
+            || _tracker.State.CurrentRoom is not { } current)
+        {
+            return;
+        }
+        // Cross through the ordinary step path, like a door: the disarm ended a
+        // sneak and a monster may have walked in, so the ready check and a combat
+        // pause get their say first. The marker keeps the re-driven step from
+        // disarming the same trap again.
+        _log?.Info("LoopRunner", $"step {_index + 1}/{_expandedSteps.Count}: trap {step.Display} clear — crossing");
+        _trapClearedFor = (_index, current.Key, step.Direction);
+        _stepInFlight = false;
+        SendNextStep();
     }
 
     // Terminal callback from WinchManager for a winch-gate circuit step. Mirrors
@@ -1664,13 +1766,13 @@ public sealed class LoopRunner : IRecoverableEngine
         if (_loop is null || _index >= _expandedSteps.Count) return;
         if (_expandedSteps[_index] is not MoveLoopStep) return;
 
-        // A door or hidden-reveal sub-FSM owns this step until its reply fires the
-        // cardinal. Its bash / pick / sea output re-observes the current (source)
+        // A door, hidden-reveal, winch or trap sub-FSM owns this step until its reply
+        // fires the cardinal. Its bash / pick / sea / disarm output re-observes the current (source)
         // room; acting on that transition here would treat the in-progress step as
         // blocked-at-source and spuriously enter recovery. The FSM clears its
         // await flag before emitting the real move, so the genuine arrival still
         // lands here.
-        if (_awaitingDoorOpen || _awaitingHiddenReveal || _awaitingWinch) return;
+        if (_awaitingDoorOpen || _awaitingHiddenReveal || _awaitingWinch || _awaitingTrapDisarm) return;
 
         // Suspect / Lost / Unknown are real confidence drops we forward
         // to the recovery gate. Pending is the normal Confirmed →
@@ -1866,6 +1968,8 @@ public sealed class LoopRunner : IRecoverableEngine
         if (_awaitingDoorOpen) { _doorStopAll?.Invoke(); _awaitingDoorOpen = false; }
         if (_awaitingHiddenReveal) { _hiddenSearchStopAll?.Invoke(); _awaitingHiddenReveal = false; }
         if (_awaitingWinch) { _winchStopAll?.Invoke(); _awaitingWinch = false; }
+        if (_awaitingTrapDisarm) { _trapDelegateStopAll?.Invoke(); _awaitingTrapDisarm = false; }
+        _trapClearedFor = null;
         _stepInFlight = false;
         _awaitingPromptForCommand = false;
         _expectedMoveTarget = null;
@@ -2096,10 +2200,10 @@ public sealed class LoopRunner : IRecoverableEngine
             // bounded by the stall watchdog in case the interrupting combat swallowed
             // it, rather than recovering or resending.
             if (_stepInFlight
-                && (_awaitingDoorOpen || _awaitingHiddenReveal || _awaitingWinch))
+                && (_awaitingDoorOpen || _awaitingHiddenReveal || _awaitingWinch || _awaitingTrapDisarm))
             {
                 _log?.Info("LoopRunner",
-                    $"resume: step {_index + 1} has a door/winch/hidden sub-FSM in flight; awaiting its reply, not recovering or resending");
+                    $"resume: step {_index + 1} has a door/winch/hidden/trap sub-FSM in flight; awaiting its reply, not recovering or resending");
                 ArmStallWatchdog($"resume with step {_index + 1} sub-FSM in flight");
                 return;
             }
@@ -2262,6 +2366,12 @@ public sealed class LoopRunner : IRecoverableEngine
         // Same for a winch FSM turning a gate on our behalf.
         if (_awaitingWinch) _winchStopAll?.Invoke();
         _awaitingWinch = false;
+        // A delegated trap is cancelled; a local disarm finishes on its own and its
+        // late reply is dropped (the walker does the same — stopping TrapDisarmManager
+        // would also drop a party member's @trap request).
+        if (_awaitingTrapDisarm) _trapDelegateStopAll?.Invoke();
+        _awaitingTrapDisarm = false;
+        _trapClearedFor = null;
         _loop = null;
         _index = 0;
         _expandedSteps = new List<LoopStep>();

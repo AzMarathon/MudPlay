@@ -3066,7 +3066,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - The Traps *value* itself still comes only from the `stat` screen's `Traps:` row — the single-line `exp` output (`Exp: N Level: M Exp needed for next level: ...`) reports only progression and never carries it.
 
 **Client use:**
-- `TrapDisarmManager` disarms every request directly (`disarm trap <dir>`), with no search phase, for both the walker's trapped exits and remote `@trap`. The trap-found line is no longer acted on.
+- `TrapDisarmManager` disarms every request directly (`disarm trap <dir>`), with no search phase, for the walker's and the loop runner's trapped exits and for remote `@trap`. `LoopRunner` gained it with report `paradigm-20260929-215833` (a loop walked into an arrow trap); Auto-Lair walks through the walker, so it already had it. The trap-found line is no longer acted on.
   - **A trap's own trigger line (any on the list above):** it retries up to `MaxTrapDisarmAttempts`, then reports failure, and the walker stops. A trap that fired is a trap that's there, so this never walks on. `DefaultPatterns` lists every wording under `TrapDisarmTriggered`.
   - **Paradigm `Your command had no effect.` while a disarm is pending:** read as "no trap", and the walker moves on.
   - **Stock `You failed to disarm any trap to the <dir>.`:** it retries up to the cap, then takes the exit as clear and walks on. That's the user's call: the worst case is walking into a live trap, which a failed disarm risks anyway. (An earlier note said the manager ran a search→disarm loop for `@trap`; superseded 2026-09-27.)

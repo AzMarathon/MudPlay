@@ -2087,6 +2087,121 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(1, doorCalls);
     }
 
+    // Outside (1/1) → Hall (1/2) through a trapped exit; Hall returns west plainly.
+    private const string TrapGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Outside",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2 (Trap, 40 damage)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Hall",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private sealed record TrapCalls(List<string> Disarms, Func<Action<string>?> Reply);
+
+    private static TrapCalls BindTrapHandling(Harness h, bool canDisarm = true, bool partyCan = false)
+    {
+        List<string> disarms = new();
+        Action<string>? reply = null;
+        h.Runner.SetTrapHandling(
+            (dir, _, r) => { disarms.Add(dir); reply = r; },
+            () => canDisarm,
+            (dir, r) => { disarms.Add("party:" + dir); reply = r; },
+            () => partyCan,
+            () => { });
+        return new TrapCalls(disarms, () => reply);
+    }
+
+    // Report paradigm-20260929-215833: a loop walked straight into an arrow trap (40
+    // damage) — the circuit never disarmed, only the walker did.
+    [Fact]
+    public void Circuit_TrappedExit_DisarmsThenCrosses()
+    {
+        Harness h = NewHarness(TrapGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TrapCalls trap = BindTrapHandling(h);
+
+        h.Runner.Start(new Loop("trap", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        Assert.Equal(new[] { "east" }, trap.Disarms);
+        Assert.Empty(h.Sent);
+
+        trap.Reply()!("Trap to the east disarmed.");
+        Assert.Single(h.Sent);
+        Assert.Equal("e\r", Encoding.Latin1.GetString(h.Sent[0]));
+        Assert.Single(trap.Disarms);                    // crossed, not disarmed again
+    }
+
+    // A disarm ends a sneak (GAME_MECHANICS "What ends a sneak"), so the crossing waits
+    // for the ready check's re-sneak — and the trap isn't disarmed a second time.
+    [Fact]
+    public void Circuit_TrapDisarmed_CrossesOnlyOnceTheReadyCheckPasses()
+    {
+        Harness h = NewHarness(TrapGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TrapCalls trap = BindTrapHandling(h);
+        bool ready = true;
+        h.Runner.SetMoveReadyCheck(() =>
+        {
+            if (!ready) h.Coordinator.AssertGate(MovementCoordinator.SneakSettleGate);
+            return ready;
+        });
+
+        h.Runner.Start(new Loop("trap", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        ready = false;                                   // the disarm ended the sneak
+        trap.Reply()!("Trap to the east disarmed.");
+        Assert.Empty(h.Sent);                            // held for the re-sneak
+
+        ready = true;
+        h.Coordinator.ClearGate(MovementCoordinator.SneakSettleGate);
+        h.Drain();
+        Assert.Equal("e\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+        Assert.Single(trap.Disarms);
+    }
+
+    [Fact]
+    public void Circuit_TrappedExit_DisarmFails_FailsTheLapWithoutCrossing()
+    {
+        Harness h = NewHarness(TrapGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TrapCalls trap = BindTrapHandling(h);
+
+        h.Runner.Start(new Loop("trap", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        trap.Reply()!("Couldn't disarm the trap to the east.");
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed && e.Detail.Contains("trap disarm failed"));
+    }
+
+    [Fact]
+    public void Circuit_TrappedExit_PartyMemberDisarmsWhenWeCant()
+    {
+        Harness h = NewHarness(TrapGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TrapCalls trap = BindTrapHandling(h, canDisarm: false, partyCan: true);
+
+        h.Runner.Start(new Loop("trap", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        Assert.Equal(new[] { "party:east" }, trap.Disarms);
+        trap.Reply()!("Trap to the east disarmed.");
+        Assert.Equal("e\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+    }
+
+    [Fact]
+    public void Circuit_TrappedExit_NobodyCanDisarm_WalksThrough()
+    {
+        Harness h = NewHarness(TrapGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TrapCalls trap = BindTrapHandling(h, canDisarm: false, partyCan: false);
+
+        h.Runner.Start(new Loop("trap", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        Assert.Empty(trap.Disarms);
+        Assert.Equal("e\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+    }
+
     [Fact]
     public void ClosedDoorInFlight_CombatPauseThenResume_WaitsForDoor_DoesNotRecoverOrResend()
     {

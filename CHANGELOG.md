@@ -1,5 +1,15 @@
 # Version history
 
+## 3.126.17
+
+- Windows updates swap the program in by renaming, so a client still closing or opened mid-update can't crash on a half-copied MudPlay.exe
+- Profiles and shared realm files load reliably with two clients on one realm on Windows (a briefly-locked file no longer fails the load)
+- A startup profile that fails to load says why on the terminal instead of silently opening the default profile
+- A character open in one client follows a realm move made from another client's Profile Management, instead of saving its old realm back over it
+- A failed update leaves MudPlay-update-failed.log beside the program, and the restored client points you to it
+- Loops disarm trapped exits (or hand them to a capable party member) before stepping through, re-sneaking after the disarm, instead of walking into the trap
+- bug reports addressed: paradigm-20260929-215833
+
 ## 3.126.13
 
 - A party follower sends @ok only once its HP / mana hold at rest-max, and re-asks @wait at most every few seconds — no more @wait / @ok bursts when HP bounces across the rest floor

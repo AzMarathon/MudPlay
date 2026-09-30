@@ -29,9 +29,7 @@ internal static class JsonStore
     // malformed — corrupt configuration is loud, not silent.
     public static T? Load<T>(string path) where T : class
     {
-        if (!File.Exists(path)) return null;
-
-        string json = File.ReadAllText(path);
+        if (ReadWithRetry(path) is not { } json) return null;
         try
         {
             return JsonSerializer.Deserialize<T>(json, Options);
@@ -71,6 +69,29 @@ internal static class JsonStore
             // gone. The original error still propagates to the caller.
             try { File.Delete(tmp); } catch { /* best-effort cleanup */ }
             throw;
+        }
+    }
+
+    // Windows holds a just-written file for a moment — another client's replace of
+    // it, an antivirus scan — and a read landing in that window throws a sharing
+    // violation that POSIX never raises. Two clients on one realm read each other's
+    // realm files, and a throw inside a profile load dropped the client onto the
+    // default profile (or left the load half-applied). So the read retries briefly,
+    // like the write's rename; a file that's gone reads as missing.
+    private static string? ReadWithRetry(string path)
+    {
+        const int attempts = 20;
+        for (int i = 1; ; i++)
+        {
+            if (!File.Exists(path)) return null;
+            try
+            {
+                return File.ReadAllText(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && i < attempts)
+            {
+                Thread.Sleep(Math.Min(i, 10) * 3);
+            }
         }
     }
 

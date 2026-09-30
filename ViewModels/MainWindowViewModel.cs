@@ -1547,7 +1547,8 @@ public partial class MainWindowViewModel : ObservableObject
         PropertyChanged += SyncToolbarStateFlags;
 
         // A --profile launch argument that didn't resolve (typo / ambiguous bare
-        // name) surfaces its reason on the terminal at startup — dismiss the splash
+        // name), or a startup profile that failed to load, surfaces its reason on
+        // the terminal at startup — dismiss the splash
         // so it's visible — instead of quietly coming up on a blank profile. Posted
         // so it lands after the ctor unwinds and the window is showing.
         if (StartupOptions.ProfileNotice is { } profileNotice)
@@ -1557,6 +1558,21 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 if (ShowSplash) ShowSplash = false;
                 WriteTerminalStatus($"[{profileNotice}]", TerminalStatusKind.Error);
+            });
+        }
+
+        // A self-update that failed relaunches this (old) build right after leaving
+        // its step log beside the executable; say so, and where the log is, so the
+        // user can attach it to a bug report.
+        if (Services.Update.UpdatePlatform.RecentFailedUpdateLog(TimeSpan.FromMinutes(10)) is { } failedUpdateLog)
+        {
+            AppServices.Current.Log.Warn("Update", $"the last update failed and was rolled back — see '{failedUpdateLog}'");
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (ShowSplash) ShowSplash = false;
+                WriteTerminalStatus(
+                    $"[The update failed and this version was restored. What went wrong is in {failedUpdateLog} — please attach it to a bug report.]",
+                    TerminalStatusKind.Error);
             });
         }
 

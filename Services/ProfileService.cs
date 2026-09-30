@@ -57,6 +57,14 @@ public sealed class ProfileService
     // no-op. Irrelevant once a named profile is loaded (Save keys on the name).
     private bool _defaultProfilePersists;
 
+    // The loaded character's realm as this client last read or wrote it on disk.
+    // Profile Management in another client assigns a realm by rewriting the file,
+    // while this client keeps its in-memory copy and saves the whole profile often
+    // — so a character open in two clients lost its realm to the stale copy and
+    // played (and wrote its realm files) on the BBS's first realm. Save compares
+    // against this to adopt such a change instead of writing over it.
+    private string? _savedRealm;
+
     // True when the loaded profile is the default profile (no named character) —
     // it persists to the Global default-profile file rather than a per-character
     // one, and gates File → Save's label + the "not a named character" UI.
@@ -149,6 +157,7 @@ public sealed class ProfileService
         Current = loaded;
         CurrentProfileName = profileName;
         CurrentBbsName = bbsName;
+        _savedRealm = loaded.Realm;
         Log?.Info(LogCategory, outgoing is null
             ? $"Loaded profile '{profileName}' on '{bbsName}'."
             : $"Swapped profile '{outgoing}' → '{profileName}' on '{bbsName}'.");
@@ -506,15 +515,59 @@ public sealed class ProfileService
         // A named profile with no pinned BBS has nowhere to write — it's named +
         // BBS-pinned via the File → Save As / Settings → BBS Apply flow first.
         if (CurrentBbsName is null) return;
+        string path = AppPaths.CharacterProfileFile(CurrentBbsName, CurrentProfileName);
+        bool realmAdopted = AdoptRealmChangedOnDisk(path);
         ProfileSaving?.Invoke(Current);
 
         Directory.CreateDirectory(AppPaths.ProfileFolder(CurrentBbsName, CurrentProfileName));
-        string path = AppPaths.CharacterProfileFile(CurrentBbsName, CurrentProfileName);
         if (backup && File.Exists(path))
         {
             File.Copy(path, path + ".bak", overwrite: true);
         }
         JsonStore.Save(path, Current);
+        _savedRealm = Current.Realm;
+        // Re-pin so the realm stores, game data and menu commands follow the realm.
+        if (realmAdopted) NotifyBbsPinApplied();
+    }
+
+    // Take the realm another client wrote to this character's file since we last
+    // read or wrote it — unless we changed it ourselves meanwhile, when ours stands.
+    private bool AdoptRealmChangedOnDisk(string path)
+    {
+        if (Current is not { } current) return false;
+        if (!string.Equals(current.Realm, _savedRealm, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!TryReadRealm(path, out string? onDisk)) return false;
+        if (string.Equals(onDisk, _savedRealm, StringComparison.OrdinalIgnoreCase)) return false;
+        Log?.Info(LogCategory,
+            $"'{CurrentProfileName}' was moved to realm '{onDisk ?? "(the BBS's first)"}' by another client — following it.");
+        current.Realm = onDisk;
+        return true;
+    }
+
+    // Just the Realm field of a saved profile. False when the file can't be read
+    // right now (missing, briefly locked, mid-write) — the next save checks again.
+    private static bool TryReadRealm(string path, out string? realm)
+    {
+        realm = null;
+        try
+        {
+            if (!File.Exists(path)) return false;
+            using FileStream fs = File.OpenRead(path);
+            using JsonDocument doc = JsonDocument.Parse(fs, new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true,
+            });
+            realm = doc.RootElement.TryGetProperty(nameof(CharacterProfile.Realm), out JsonElement r)
+                    && r.ValueKind == JsonValueKind.String
+                ? r.GetString()
+                : null;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
     }
 
     // Read-modify-write one section of the loaded profile's Settings: deserialize
@@ -574,6 +627,7 @@ public sealed class ProfileService
         ProfileSaving?.Invoke(Current);
         Directory.CreateDirectory(AppPaths.ProfileFolder(bbsName, profileName));
         JsonStore.Save(AppPaths.CharacterProfileFile(bbsName, profileName), Current);
+        _savedRealm = Current.Realm;
     }
 
     // Create a new named character on a BBS from the Global default template,
