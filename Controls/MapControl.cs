@@ -1355,10 +1355,13 @@ public sealed class MapControl : Control
         InvalidateVisual();
     }
 
-    // Losing the pointer mid-drag (a window stealing focus) drops the chip back.
+    // Losing the pointer mid-drag (a window stealing focus) drops the chip back. Our
+    // own release frees the capture too, after clearing _leftPressed — that one isn't
+    // a loss, and cancelling there threw away every drop before it landed.
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);
+        if (!_leftPressed) return;
         _leftPressed = false;
         _isDragging = false;
         if (_chipDragFrom is not null) EndChipDrag();
