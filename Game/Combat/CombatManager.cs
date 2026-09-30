@@ -2969,6 +2969,17 @@ public sealed partial class CombatManager : IDisposable
     // in-flight step. The false-fast confirm collapses the dark-room settle window,
     // so the loop double-steps past lairs and drags late-populating monsters. We
     // can't see in the dark, so there's nothing to refresh.
+    // The same debounced re-display, asked for from outside the engine: a monster's
+    // mid-fight summon (MonsterSummonWatcher). Only while the combat engine is on,
+    // since keeping its roster true is what the re-display is for.
+    public bool RequestRoomRefresh(string context)
+    {
+        if (!_isEnabled()) return false;
+        bool sent = TrySendRoomRefresh(context);
+        if (sent) _log?.Combat(LogCategory, $"room re-display ({context})");
+        return sent;
+    }
+
     private bool TrySendRoomRefresh(string context)
     {
         if (_wireSender is null) return false;

@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.128.2**
-> - Unobtainable now also lists monsters that can never spawn despite being marked in game (Cygani), and says why each row is there
-> - Room tooltips and room panels no longer show monsters on the Unobtainable list
+> **Version 3.128.3**
+> - A monster's mid-fight summon ("shouts for aid!") re-displays the room, so the summoned monster is fought instead of the client resting or looting once the summoner dies
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
