@@ -667,7 +667,13 @@ How a character earns and spends character points (CP), how exp needed per level
 
 - **`lvlTerm = level<16 ? level : 15 + (level-15)/2` — the level slope halves at 16** for all four thief skills (Stealth halves at the same level via its own `stealthLvl`). So they grow fast to 16 and half as fast after; past the knee the CP case for INT / AGL / CHM on these is what carries them.
 - **Perception is the only one every class carries;** the other four exist only for a class or race that was granted the skill (ability codes 39 Thievery, 40/41 Traps, 37/180 Picklocks, 38 Tracking, plus the custom/ParaMUD `1001`–`1004` `Grant*` variants).
-- **The `+skill` gear abilities stack on top of these bases.**
+- **The `+skill` gear abilities stack on top of these bases.** Perception adds ability 77 (Perception); Tracking adds ability 38 (Tracking) and is floored at 0 *([OBSERVED] 2026-09-30, `_calculate_secondary_stats`)*.
+- **What Perception and Tracking do** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p; Stock only, Paradigm not recorded)*. Each is a 0–100 roll against the skill; the details live with the action:
+  - **Perception** is never used passively. A plain room display rolls nothing; it acts only through these:
+    - **Finding a hidden exit** with `sea <dir>`: chance `Perception − 15`, never below 3% — *Movement & navigation → Hidden exits — `sea <dir>` reveal wording*.
+    - **Finding hidden players and stashed items** with a room `search`: players at `Perception` (*Movement & navigation → Hiding — sneak vs hide, the hide state machine, and search reveals*), items at `Perception − 10` (*Items, inventory & equipment → Hiding items in a room (stashing)*).
+    - **Noticing your own failed `sn` / `hid`**, and **hearing your own loud entry** when a sneak breaks on a move — *Movement & navigation → Sneaking — commands, equip order, and the sneak state machine*.
+  - **Tracking** is used only by `track` — *Movement & navigation → Tracking (`track`)*.
 
 **Client use:**
 - `CharacterCalculator.CalcPerception` / `…Thievery` / `…Traps` / `…Picklocks` / `…Tracking`.
@@ -2888,13 +2894,26 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Commands** *([OBSERVED])*: `sn` — attempt to sneak. (Hiding is `hid` — see *Hiding — sneak vs hide, the hide state machine, and search reveals*.)
 - **Equip before sneak** *([CONFIRMED])*: equipping / removing gear breaks sneak, so any gear change for an approach must be sent **before** the `sn`, never after. The correct approach order is **equip → sneak → move**.
 - **Sneak state machine** *(lines all [OBSERVED])*:
-  - `Attempting to sneak...` (alone, no suffix) — the server ACK: the sneak took and you're armed to move. A move made now carries the sneak into the next room.
-  - `Attempting to sneak...You don't think you're sneaking.` — soft rejection; the attempt didn't take. Resend `sn`.
+  - `Attempting to sneak...` (alone, no suffix) — no failure **noticed**. Either the sneak took and a move made now carries it into the next room, or it failed and your Perception roll missed that (see *The rolls* below). Only the next room's `Sneaking...` proves it. *(An earlier note called this the server ACK that the sneak took; superseded 2026-09-30 by `_cmd_sneak`, Stock.)*
+  - `Attempting to sneak...You don't think you're sneaking.` — a failure you noticed; the attempt didn't take. Resend `sn`.
   - `Sneaking...` — emitted on each room entry while sneak holds; post-move confirmation you arrived unseen.
   - `You make a sound as you enter the room!` — loud loss of sneak. You enter seen, so a backstab opened in that room would fail. *([CONFIRMED] user, 2026-09-26; report `paradigm-20260926-222210`.)*
   - `You may not sneak right now!` — a **combat cooldown**: you can't sneak for a few seconds after being in combat or attacked, and a retry shortly after works. *([CONFIRMED] user, 2026-09-26; report `paradigm-20260926-233357`. An earlier note called it a hard block with no auto-retry; superseded 2026-09-26.)*
-- **Sneak breaks *silently* when you move into a room that doesn't re-emit `Sneaking...`** *([OBSERVED])* — no failure line, the stealth is just gone. `Sneaking...` arrives between the move and the new room's display, and the old room's `Attempting to sneak...` doesn't carry over. A room shown without it is a guaranteed backstab failure *([CONFIRMED] user, 2026-09-27; report `paradigm-20260927-014325`)*.
-- **Any NPC in the room prevents a sneak from taking** *([OBSERVED])* — an `sn` is wasted while a monster shares the room.
+- **The rolls** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_cmd_sneak`, `_move_user`, the stealth-chance routine at `0x46cc43`; Stock only, Paradigm not recorded)*:
+  - **The stealth chance** starts from your Stealth (`0x5fa`; *Character stats & progression → Stealth base*), then:
+    - −10 over 66% encumbrance, or −5 over 33% (field `0x708`, set by `_get_encumbrance_percent`);
+    - ×⅔ while a status bit (`0x6f5 & 0x80`) is set — not identified;
+    - **−1 for each other player and −1 for each monster in the room**;
+    - clamped to 0 and a cap: 95 for `sn`, 100 for a move.
+  - **`sn` rolls 0–100 under the chance.** On a fail you roll 0–100 under your **Perception**: pass and you see `You don't think you're sneaking.`; fail and you see the same bare `Attempting to sneak...` a success prints.
+  - **Every sneaked move re-rolls** (0–101 under the chance, counting the room you're leaving), unless you have ability 186 (PerfectStealth), which always holds.
+    - **Held:** you arrive with `Sneaking...`.
+    - **Lost:** the sneak is gone. You hear `You make a sound as you enter the room!` only if a 0–100 roll under your **Perception** passes; otherwise the loss is silent. The room you left sees `You notice <name> sneaking out <dir>.` (`sneaking out upwards` / `downwards`).
+- **Sneak breaks *silently* when you move into a room that doesn't re-emit `Sneaking...`** *([OBSERVED])* — no failure line, the stealth is just gone. On Stock that's a lost move roll whose Perception roll also failed (see *The rolls*). `Sneaking...` arrives between the move and the new room's display, and the old room's `Attempting to sneak...` doesn't carry over. A room shown without it is a guaranteed backstab failure *([CONFIRMED] user, 2026-09-27; report `paradigm-20260927-014325`)*.
+- **`[CONFLICT — ask the user]` Does an NPC in the room stop a sneak?**
+  - *([OBSERVED], realm not recorded)* Any NPC in the room prevents a sneak from taking; an `sn` is wasted while a monster shares the room.
+  - *([OBSERVED] 2026-09-30, Stock `wccmmud.dll` 1.11p)* Each monster in the room only takes 1 point off the stealth chance (see *The rolls*); nothing blocks the sneak outright.
+  - Is the hard block Paradigm-only, or a side effect (monsters with see-hidden, a low Stealth)? The client's sneak keeping relies on it ("a re-sneak won't take with one there").
 - **What ends a sneak** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p: the 34 functions that clear the sneaking flag; treated as true on both realms — **Client policy**, user 2026-09-28)*. Where a function serves several commands, the command was read from the code and text around the clear, not traced line by line.
   - **Fighting:** any attack command, backstab included (`_cmd_any_attack`); `bash`; attacking a monster; a monster attacking you; PvP attacks.
   - **Casting any spell** (`_cmd_cast`, which also clears hidden) — see *Casting breaks both Sneak and Hide*.
@@ -2963,10 +2982,13 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - `Attempting to hide...` (alone, no suffix) — the attempt fired and the server ran a hide check, but the outcome is **NOT reported to you**. This line is **ambiguous**: it means "a check happened," not "you are hidden." You cannot tell success from failure off this line alone.
   - `Attempting to hide...You don't think you are hidden.` — explicit hide **FAILURE**. This is the only self-observable failure signal.
     - **Stock prints a space before the suffix:** `Attempting to hide... You don't think you are hidden.` *([OBSERVED] `wccmmud.dll` 1.11p string table; [CONFIRMED] 2026-09-27, user)*. `UserHideFailed` accepts either form; matching only the unspaced one missed every failed hide on Stock.
+- **The hide roll** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_cmd_hide`; Stock only)*: `hid` rolls 0–100 under the same stealth chance as `sn` (capped at 95; see the *The rolls* bullet under *Sneaking — commands, equip order, and the sneak state machine*). On a fail you roll 0–100 under your **Perception**: pass and you get ` You don't think you are hidden.`; fail and you get the bare `Attempting to hide...` a success prints. That's why the bare line is ambiguous.
 - **Hide SUCCESS is not self-observable.** There is no self-side "you are now hidden" confirmation. The only 100%-reliable confirmation is **external**: another player displaying the room and finding you **absent** from the `Also here:` line (or their `search` failing to turn you up). From your own output stream, the best you can know is "an attempt fired" (`Attempting to hide...`) or "it failed" (`...You don't think you are hidden.`) — never a positive success.
 - **Reveal (search) mechanic:**
   - A player runs `search` / `sea`. On a hit they see `You see <name> hiding in the shadows.` and the hidden character is revealed (returned to `Also here:`); on a miss they see `Your search revealed nothing.`.
   - The hidden character sees `<name> is searching the area.` while someone searches — i.e. you get a warning that a reveal attempt is in progress.
+  - **Each hidden player gets their own roll** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_display_users_hidden_in_room`; Stock only)*: 0–100 under the searcher's **Perception**, or automatic when the searcher has see-hidden (status bit `0x6f5 & 0x20`). A hit clears the target's hide.
+  - **Only a `search` reveals.** The check runs from `search` alone; a plain room display (walking in, `look`) never rolls for hidden players.
 - **Do not hide while in a party** *([CONFIRMED])*. A hidden member is removed from `Also here:`, and a player who isn't listed there **cannot be single-target-targeted** by other players — including party heals and buffs — until revealed. Only room-wide spells (relevant in PvP) and possibly party-wide spells still reach a hidden member. (See *Party → Targeted casts on a hiding member*.)
 
 **Client use:**
@@ -3025,6 +3047,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Revealing a hidden exit is `sea <dir>`; the reply wording is axis-dependent:**
   - **success** — cardinals `You found an exit to the <dir>!`; up/down `You found an exit upwards!` / `You found an exit downwards!` (no "to the", `<dir>wards` suffix). *`upwards` confirmed on the wire; `downwards` confirmed from an earlier capture.*
   - **failure** — cardinals `You notice nothing different to the <dir>.`; up/down `You notice nothing different above you.` / `You notice nothing different below you.` (no "to the", no direction word). *Both vertical forms confirmed (`above you` on the wire, `below you` by the user).*
+- **The chance** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_search_for_hidden_exits`; Stock only)*: on a hidden exit (exit type 6) whose searchable bit is set, `sea <dir>` finds it when a 0–100 roll comes in under **Perception − 15, never below 3**. A found exit stays revealed. The room sees `<name> is searching for exits.` either way.
 - **A "bonked" `sea` is distinct from a bonked *move*:** the `sea` reply above is not a move refusal.
 - **You can't search while blind.** `search` / `sea <dir>` answers only `You are blind.` and searches nothing *(Stock [OBSERVED] `wccmmud.dll` 1.11p `_cmd_search` → `_can_see`)*.
   - **Paradigm: treated the same for now** *([NEEDS CONFIRMATION] user 2026-09-27 will retest on Paradigm — does `sea <dir>` work blind there?)*.
@@ -3037,6 +3060,17 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - Because the up/down failure form drops "to the" entirely, a failure regex that only matched the cardinal `to the <dir>` shape never registered an up/down miss — so up/down searches never retried cleanly and stalled (the reported symptom).
 - `HiddenExitRevealManager` holds a search while the character is blind. It sends no `sea` while `ConditionTracker` has the blind flag. A `You are blind.` answer to its `sea` counts as a hold, not a spent attempt. It sends the `sea` once the blind flag clears. Before this, a blind `sea` got no success or failure line and left the walker waiting.
 - It also must not trust a stale observed-exits set from a room it only dead-reckoned into — see RoomTracker.SetRoom clearing ObservedExitDirections; a stale set made the walker skip the required search and ram a wall.
+
+### Tracking (`track`)
+*Status: OBSERVED 2026-09-30 (`wccmmud.dll` 1.11p: `_cmd_track`, `_track_player`, `_track_monster`) · Realm: Stock (Paradigm not recorded)*
+
+- **Syntax: `track <player or monster>`.** With no argument it prints `Syntax: TRACK {monster}`. The name is looked up realm-wide, like other action targets, so the target needn't be in your room.
+- **Everything leaves a trail.** A player carries their last **20** rooms (room and map number); a monster its last **10** (room number only, no map check).
+- **One roll per trail step through your room.** For each time the target's trail passes through the room you're standing in, each exit of the room leading to the room they went to next gets a 0–100 roll under your **Tracking**.
+  - Each pass prints `<name> went <dir> from here.` Several can print if they came through more than once.
+  - Nothing printed, an unknown target, or anything that isn't a player or monster: `Your tracking skills fail you this time.`
+- **Tracking 0 always fails.** There's no separate skill check; the rolls just can't pass. Only a class or race granted the skill has any (*Character stats & progression → Utility skills — Perception + the thief four*).
+- **It costs a 1-unit action delay**, and it isn't on the list of commands that end a sneak (*Sneaking — commands, equip order, and the sneak state machine*).
 
 ### Exit traps — search and disarm
 *Status: CONFIRMED (capture 2026-07-15, reports 132150 and 131801); `disarm trap <longdir>` acceptance NOT wire-confirmed*
@@ -4151,6 +4185,9 @@ A `get <item>` that can't succeed replies with one of these shapes:
   in one command, no `rem` first.
 - **Counts follow the batching rule** (see *Item batching: Paradigm counted commands vs Stock
   one-per-command*): Paradigm takes `hide <N> <item>` in one command; Stock needs one `hide` per copy.
+- **A room `search` finds each stashed item on its own roll** *([OBSERVED] 2026-09-30, `wccmmud.dll`
+  1.11p `_display_items_in_room` in its search mode; Stock only)*: 1–100 under the searcher's
+  **Perception − 10**. A plain room display never rolls, so walking in shows nothing.
 - Coin stashes: see *Money, banks & shops → Hiding coin in a room (stashing)*.
 
 **Client use:**
