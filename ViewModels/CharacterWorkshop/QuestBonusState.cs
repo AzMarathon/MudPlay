@@ -19,11 +19,16 @@ public sealed class QuestBonusState
     // discovery order. Empty when no completed quest grants a bonus.
     public IReadOnlyList<QuestBonus> Bonuses { get; private set; } = Array.Empty<QuestBonus>();
 
+    // Abilities awarded by completed quests (Perfect Stealth, …), each with the level
+    // this character can first do the quest at. Empty when none are complete.
+    public IReadOnlyList<QuestAbilityAward> AbilityAwards { get; private set; } = Array.Empty<QuestAbilityAward>();
+
     // Replace the published bonus set and notify readers.
-    public void Update(IReadOnlyList<QuestBonus> bonuses)
+    public void Update(IReadOnlyList<QuestBonus> bonuses, IReadOnlyList<QuestAbilityAward>? abilityAwards = null)
     {
         ArgumentNullException.ThrowIfNull(bonuses);
         Bonuses = bonuses;
+        AbilityAwards = abilityAwards ?? Array.Empty<QuestAbilityAward>();
         Changed?.Invoke();
     }
 }

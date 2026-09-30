@@ -137,8 +137,10 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
             return;
         }
         string title = $"How did I Die? — {r.RoomName ?? "Unknown room"} · {r.DiedText}";
-        await AppServices.Current.Dialogs
-            .OpenWindowAsync<DeathLogViewModel, bool>(new DeathLogViewModel(title, log));
+        Game.Recovery.DeathLogFormat.Parsed parsed = Game.Recovery.DeathLogFormat.Parse(log, r.At);
+        DisplayConfig display = AppServices.Current.Display;
+        await AppServices.Current.Dialogs.OpenWindowAsync<DeathLogViewModel, bool>(
+            new DeathLogViewModel(title, parsed.Header, parsed.Rows, display.FontFamily, display.FontSize));
     }
 
     // Double-clicking a death row opens/focuses the Navigation window and centres

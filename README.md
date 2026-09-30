@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.128.6**
+> **Version 3.129.6**
 > - Simulated monster attacks fire their hit spells when they land (damage, envelops-style burns each spell round, knockdown's defence loss and hold)
 > - Simulated walk pace defaults to your gear's move speed plus lag (Paradigm) or your encumbrance's measured pace (Stock), and no longer rounds each move up
 > - Loop simulation keeps your Buffs list up (a mana-regen roll spell rerolled below its threshold, its roll feeding mana regen)

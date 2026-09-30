@@ -201,8 +201,9 @@ public static class RoomTooltipBuilder
     // Resolves the "Also Here" set — lair-tag members plus boss / script-spawn
     // monsters whose presence lives on the monster's "Summoned By" field — into
     // ordered, name-deduped refs. `max` carries the lair tag's Max-N (null when
-    // the room has no lair). Shared by the map tooltip text and the interactive
-    // room-detail popup so the two never drift.
+    // the room has no lair). Monsters on the Unobtainable list are left out. Shared
+    // by the map tooltip text and the interactive room-detail popup so the two never
+    // drift.
     public static IReadOnlyList<RoomMonsterRef> ResolveAlsoHere(
         Room room, GameDataCache? data, MonsterSpawnIndex? spawnIndex, out int? max)
     {
@@ -214,6 +215,7 @@ public static class RoomTooltipBuilder
 
         void Add(int id)
         {
+            if (spawnIndex?.IsOutOfPlay(id) == true) return;
             string? name = LookupName(data, "Monsters", id);
             if (string.IsNullOrEmpty(name) || !seen.Add(name)) return;
             refs.Add(new RoomMonsterRef(id, name));
@@ -239,7 +241,7 @@ public static class RoomTooltipBuilder
     // RoomMonsters). Placed = the NPC fixture + "Room m/r" Summoned-By tokens;
     // Assigned = non-lair "Group:" tokens; Lair = the room's Lair tag. Each group
     // is name-deduped internally, but a monster may legitimately appear in more
-    // than one group. Shared by the map tooltip and the interactive panels so the
+    // than one group. Monsters on the Unobtainable list are left out of all three. Shared by the map tooltip and the interactive panels so the
     // labelling never drifts.
     public static RoomMonsters ResolveRoomMonsters(
         Room room, GameDataCache? data, MonsterSpawnIndex? spawnIndex)
@@ -252,6 +254,7 @@ public static class RoomTooltipBuilder
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (int id in ids)
             {
+                if (spawnIndex?.IsOutOfPlay(id) == true) continue;
                 string? name = LookupName(data, "Monsters", id);
                 if (string.IsNullOrEmpty(name) || !seen.Add(name)) continue;
                 refs.Add(new RoomMonsterRef(id, name));

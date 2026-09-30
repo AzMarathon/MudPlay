@@ -438,18 +438,50 @@ public sealed class KnownSpellCatalog
     // by a trainer). The Spell Book already shows only the version the class can
     // actually learn, so the teaching item must be for THAT version — matching a
     // same-named sibling would point at a scroll for a spell the class can't learn.
+    //
+    // Several items can teach one spell, and the first in the table isn't always one a
+    // player can get: lesser arcane enchantment #5535 is taught by the out-of-play tome
+    // #3656 as well as the shop-sold scroll #3678. So the spell's own "Learned From"
+    // item wins, then an item in play, and an out-of-play one only as a last resort.
     public int GetTeachingItemNumber(int spellNumber)
     {
         if (spellNumber <= 0) return 0;
         JsonDocument? items = _cache.GetRawTable("Items");
         if (items is null) return 0;
 
+        HashSet<int> named = LearnedFromItems(spellNumber);
+        int inPlay = 0, outOfPlay = 0;
         foreach (JsonElement row in items.RootElement.EnumerateArray())
-            for (int i = 0; i < ItemAbilSlots; i++)
-                if (ReadInt(row, $"Abil-{i}") == LearnSpAbilityCode
-                    && ReadInt(row, $"AbilVal-{i}") == spellNumber)
-                    return ReadInt(row, "Number");
-        return 0;
+        {
+            if (!TeachesSpell(row, spellNumber)) continue;
+            int number = ReadInt(row, "Number");
+            if (named.Contains(number)) return number;
+            if (InGameFlag.IsOutOfPlay(row)) { if (outOfPlay == 0) outOfPlay = number; }
+            else if (inPlay == 0) inPlay = number;
+        }
+        return inPlay != 0 ? inPlay : outOfPlay;
+    }
+
+    private static bool TeachesSpell(JsonElement item, int spellNumber)
+    {
+        for (int i = 0; i < ItemAbilSlots; i++)
+            if (ReadInt(item, $"Abil-{i}") == LearnSpAbilityCode
+                && ReadInt(item, $"AbilVal-{i}") == spellNumber)
+                return true;
+        return false;
+    }
+
+    private static readonly Regex LearnedFromItemRe =
+        new(@"Item\s*#\s*(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // The items the spell's "Learned From" annotation names ("Item #3678").
+    private HashSet<int> LearnedFromItems(int spellNumber)
+    {
+        HashSet<int> numbers = new();
+        if (_cache.FindRowByNumber("Spells", spellNumber) is not { } row) return numbers;
+        foreach (Match m in LearnedFromItemRe.Matches(ReadString(row, "Learned From") ?? string.Empty))
+            if (int.TryParse(m.Groups[1].Value, out int n)) numbers.Add(n);
+        return numbers;
     }
 
     private static readonly Regex LearnedFromNpcRe =
