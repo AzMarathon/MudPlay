@@ -429,6 +429,17 @@ someone hiding) or an item doesn't count.
 This only runs while the room is dark. In a lit room **Also here:** is
 authoritative and is used instead.
 
+**A monster that summons help mid-fight.** Some monsters cast a summon between
+rounds. The half-orc sentry's `The fat half-orc sentry shouts for aid!` brings in
+an orc warrior. The new monster arrives with no line of its own, so MudPlay
+re-displays the room (a bare Enter) as soon as it reads the summon line. The
+summoned monster joins the room list and gets fought next, so killing the
+summoner no longer ends the fight while its helper is still swinging at you. The
+summon wordings come from the Spells table and the message catalogue, so an
+edited or new summon message is picked up too. Nothing is sent while the combat
+engine is off or the room is dark, and at most one re-display goes out every
+few seconds.
+
 ## The map and obstacles
 
 **Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target), then **Walk here**, **I am here** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list), **Use Teleport**, **Center on Player**, **Center on Destination** (only while a walk is under way — jumps the view to where the walk ends: the walk-to target, or the loop's start room / the next lair when a loop or Auto-Lair is walking there first), **Center on…**, and toggles to mark a room **Avoid** or **Stash**. Like a manual pan, a re-centre holds the view for a while before it follows you again — 15 seconds by default, set in **Settings → Other → Navigation map: hold a browsed view for N seconds**.
@@ -1019,7 +1030,7 @@ The **Item Finder** button (in Equipment Manager) opens a searchable catalog of 
 
 **Attack type and damage columns.** The **Attack type** dropdown (Attack, Backstab, Bash, Smash, Punch, Kick, Jumpkick) sets which attack the weapon columns model, using your current stats and the rest of the gear you're wearing:
 - **Swings (W. Spd)**: swings per round with that weapon. Under **Backstab** it reads 1 on backstab-capable weapons, since a backstab is one strike, and blank on the rest.
-- **Dmg/Rnd**: average damage per round with that weapon for the selected attack, crits included. It assumes every swing lands: there's no monster to roll against, so treat it as a comparison figure. Monster Intel does the per-monster version.
+- **Dmg/Rnd**: average damage per round with that weapon for the selected attack, crits included. The crit chance is your crit rating from level and stats (see *The exact formulas*) plus +Crits gear and Quick & Deadly; the Calculators tab and Monster Intel count crit the same way. It assumes every swing lands: there's no monster to roll against, so treat it as a comparison figure. Monster Intel does the per-monster version.
 - **Est. BS Dmg**: your backstab damage range and average with that weapon (e.g. `62-118 (90)`), shown on every backstab-capable weapon whatever the attack type. It uses the same backstab formula as Monster Intel and the Calculators tab. It's different from **BS Min-Max**, which is only the item's own +BS bonus.
 
 A weapon's own +Strength / +Agility / +Stealth replaces your current weapon's in these numbers rather than adding to it.
@@ -1088,7 +1099,16 @@ Alongside HP and mana it also projects the **derived combat/utility stats** your
 - **Melee dmg** (STR's bonus onto your weapon's own damage range, shown as `+min/+max`);
 - **Max enc** (carry weight), and **Magic res**.
 
+**Hover any column header** to see how its figure is worked out and what goes into it. Where Paradigm's formula differs from Stock's (Total XP, HP/tick, Accuracy, Stealth, BS Accy), the tooltip shows the one for the realm you have loaded. For a column that's only confirmed on Stock, the Paradigm tooltip says so.
+
 The **HP/tick** column shows both rates as `idle / resting` (resting regen is 3× idle).
+
+The **Stealth (sneak %)** column shows your Stealth and, in brackets, the chance a sneak (`sn`) takes at it, e.g. `84 (84%)`. That's the figure for an empty room with a light load, and it tops out at 95%.
+
+- **Each monster** in the room takes **1%** off, and so does each other player.
+- **Carrying over a third** of your weight limit takes **5%** off, over two thirds **10%**.
+- **Once your sneak is broken, you can't re-sneak** while monsters are in the room, whatever the chance.
+- **If you've marked the Perfect Stealth quest complete** on the Quest Status tab, the column reads **100%** from the level you can do that quest at.
 
 These figures reflect **your current character**: the base attributes carry your equipment's and completed quests' stat bonuses (the `stat` screen is already gear-inclusive), and the table folds your gear's and completed quests' **direct** bonuses on top too — extra max HP / max mana, HP- and MP-regen %, and flat +dodge / +crit / +stealth / +magic-resist / +damage / +carry / **+skill** from items. (Accuracy stays the stat-and-level contribution — a weapon's own accuracy is situational and can't be projected to future levels.)
 
@@ -1117,18 +1137,18 @@ A caution worth knowing: all four thief skills grow on a level term whose **slop
 
 Each of the six base stats feeds several derived numbers. The ratios below are the marginal rate (how many points buy one more of the derived stat); the exact breakpoints for *your* character are on the CP Allocation column tooltips.
 
-- **Strength (STR)** — melee **damage** (adds to your weapon's own range: roughly +1 min damage per 10 STR above 100, +1 max per 10 above 50) and **carry weight** (+48 per point, steeper past 100). STR also feeds **accuracy** (~3/pt): on **Stock** for **all** attacks, on **Paradigm** for **bash / smash only** (normal Paradigm attacks get no STR accuracy).
+- **Strength (STR)** — melee **damage** (adds to your weapon's own range: +1 max per 10 STR above 50, and +1 min per 10 above 100 on Paradigm or +2 on Stock; on Stock, STR below 50 also takes max damage away) and **carry weight** (+48 per point, steeper past 100). STR also feeds **accuracy** (~3/pt): on **Stock** for **all** attacks, on **Paradigm** for **bash / smash only** (normal Paradigm attacks get no STR accuracy).
 - **Intellect (INT)** — **crit** rating (~10/pt), **stealth** (~8/pt), **magic resistance** (+1 per 4 INT), **perception** (+5 per 8 INT — the heaviest term in it), **all four thief skills**, and, for **Mages and Druids**, **mana regen + spellcasting**. On **Paradigm**, INT also feeds normal-attack **accuracy** (~6/pt); on **Stock** it does not. INT is the widest-reaching stat in the game — it's the only one that touches every utility skill as well as magic resistance, crit and mana.
 - **Willpower (WIL)** — **magic resistance** (the heaviest term — resistance is `(INT + 3×WIL) / 4`, so +3 per 4 WIL), **perception** (+2 per 8 WIL), **tracking** (~8/pt), and, for **Priests and Druids**, **mana regen + spellcasting**. WIL does **not** raise your *maximum* mana (that's level × magery level); it scales how fast mana comes back. It feeds **no combat term at all** — not accuracy, damage, dodge or HP — so for a non-caster it buys only resistance, perception and tracking.
 - **Agility (AGI)** — normal-attack **accuracy** (~6/pt on Stock, ~3/pt on Paradigm), **dodge** (~3/pt), **crit** (~20/pt), **stealth** (~4/pt), and **thievery / traps / picklocks**. Generally the most broadly useful combat stat.
 - **Health (HEA)** — **max HP** (rises nearly every point, more per point the higher your level) and **HP regeneration** (idle, tripled while resting). Both scale with level. It feeds nothing else — no skill and no combat term.
-- **Charm (CHM)** — **dodge** (~5/pt), **crit** (~30/pt), **stealth** (~6/pt), **perception** (+1 per 8), **traps** (~4/pt — CHM is weighted double there, the skill it moves fastest), **thievery** (~6/pt), **tracking** (~8/pt), and, for **Bards**, **mana regen**. On **Paradigm** it also feeds normal-attack **accuracy** (~10/pt).
+- **Charm (CHM)** — **dodge** (~5/pt), **crit** (~30/pt), **stealth** (~6/pt), **perception** (+1 per 8), **traps** (~4/pt — CHM is weighted double there, the skill it moves fastest), **picklocks** on Paradigm only (~4/pt, also weighted double), **thievery** (~6/pt), **tracking** (~8/pt), and, for **Bards**, **mana regen**. On **Paradigm** it also feeds normal-attack **accuracy** (~10/pt).
 
 **Mana regen scales off one stat per class.** Mage = INT, Priest = WIL, Druid = the average of INT and WIL, Bard = CHM (Mystics use a fixed Kai rate). Maximum mana is level × magery level regardless of stats.
 
 **Realm accuracy differs, and by attack type.** On **Stock**, accuracy is driven by **STR + AGI** for every attack (INT and CHM don't affect accuracy at all). On **Paradigm** it splits by attack: a **normal** attack uses **AGI + INT + CHM**, while a **bash / smash** uses **STR + AGI** (INT and CHM don't help bash/smash). The tooltips label each accuracy line with the attacks it applies to, and the client uses the correct set for your realm automatically.
 
-**Paradigm caveat.** The accuracy, dodge, stealth and damage ratios are verified for both realms. Crit's AGI term, carry-weight (encumbrance), and magic-resistance use the reverse-engineered **Stock** formula for both realms — they are **not independently verified for Paradigm**, so treat those three as close-but-unconfirmed there.
+**Paradigm caveat.** Accuracy, dodge, stealth, damage, crit, carry weight, magic resistance and picklocks are verified for both realms. Perception, Thievery, Traps and Tracking use the **Stock** formula on Paradigm too and aren't confirmed there.
 
 ### The exact formulas
 
@@ -1155,7 +1175,7 @@ For the curious, here are the actual equations behind the numbers above, with ev
 
 Encumbrance isn't applied on top — the Stealth value already carries it.
 
-**Crit rating** = `clamp( Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30, 1, 75 )`. *(AGI term unverified on Paradigm.)*
+**Crit rating** = `Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30`, at least 1. **Stock** also caps it at 75; **Paradigm** has no cap there, and on Paradigm a class with a Combat rating of 1–4 gets `5 − Combat` more (a Mage or Priest +4, a Warrior +1, a Witchunter nothing). In a fight, Stock counts crit above 40 one point in three, and Paradigm caps crit at 65.
 
 **Dodge** (raw value, before the vs-accuracy % conversion) = `Level/5 + (CHM−50)/5 + (AGI−50)/3` (+ gear `+Dodge`, + a light-load bonus below 33% encumbrance; on Paradigm, exactly 33% still counts). Accuracy has the same light-load bonus with the same cutoff.
 
@@ -1163,18 +1183,21 @@ Encumbrance isn't applied on top — the Stealth value already carries it.
 - **Stock**: `trunc(AGI/4) + trunc(INT/8) + trunc(CHM/6)` (each term truncated)
 - **Paradigm**: `round(AGI/4 + INT/8 + CHM/6)` (summed, then rounded once)
 
-**Max encumbrance** (carry weight) = `STR×48`, plus `STR×36 − 3600` once STR is above 100. *(Unverified on Paradigm.)*
+**Max encumbrance** (carry weight) = `STR×48`, plus `STR×36 − 3600` once STR is above 100.
 
-**Magic resistance** = `(INT + 3×WIL) / 4`. *(Unverified on Paradigm.)*
+**Magic resistance** = `(INT + 3×WIL) / 4`.
 
-**Melee damage bonus** (STR added onto the weapon's own min/max) = min `(STR−100)/10`, max `(STR−50)/10`, neither below 0.
+**Melee damage bonus** (STR added onto the weapon's own min/max):
+- **Stock**: min `2 × ((STR−100)/10)`, never below 0; max `(STR−50)/10`, which goes negative below 50 STR
+- **Paradigm**: min `(STR−100)/10`, max `(STR−50)/10`, neither below 0
 
 **Perception** = `(INT×5 + WIL×2 + CHM) / 8` (+ gear `+Perception`). The only utility skill with **no level term** — it's pure stats, and every class has it. *(Unverified on Paradigm.)*
 
-**The four thief skills** all share one level term, `LevelTerm = Level` below 16, else `15 + (Level−15)/2` — so **the level slope halves at 16**, and past that point stats are what move them. Each is a grant: a class or race that was never given the skill has no score for it. *(All unverified on Paradigm.)*
+**The four thief skills** all share one level term, `LevelTerm = Level` below 16, else `15 + (Level−15)/2` — so **the level slope halves at 16**, and past that point stats are what move them. Each is a grant: a class or race that was never given the skill has no score for it. *(Thievery, Traps and Tracking are unverified on Paradigm.)*
 - **Thievery** = `(AGI + INT + CHM + LevelTerm×24) / 6`
 - **Traps** = `(INT + AGI + CHM×2 + LevelTerm×28) / 7` — CHM counts double here
-- **Picklocks** = `((AGI + INT + LevelTerm×10) × 2) / 7` — the doubling happens *before* the divide, so the effective divisor is 3.5
+- **Picklocks**, **Stock** = `((AGI + INT + LevelTerm×10) × 2) / 7` — the doubling happens *before* the divide, so the effective divisor is 3.5
+- **Picklocks**, **Paradigm** = `(INT + AGI + CHM×2 + LevelTerm×28) / 7` — the Traps formula, so CHM counts double
 - **Tracking** = `(INT×2 + WIL + CHM + LevelTerm×40) / 8` — the heaviest level term of the four, so it grows mostly by levelling
 
 ## Quests, Bosses, and Deaths
@@ -1235,7 +1258,7 @@ A helper for cashing in boss chests (on the Bosses tab). It snapshots your carri
 
 ### Death Recovery
 
-Your death history. **How did I Die?** replays the backscroll from the moment of death, and **Recover Now** walks to the death room and grabs the pile (or toggle **Auto-Recover Deathpiles** to do it automatically).
+Your death history. **How did I Die?** replays the backscroll from the moment of death, in the colours you saw it in and in your terminal font (select and copy with the mouse or Ctrl+C). Deaths recorded before colours were kept show in plain text. The saved log file keeps the colours as ANSI codes, so it also reads in colour in `less -R`. **Recover Now** walks to the death room and grabs the pile (or toggle **Auto-Recover Deathpiles** to do it automatically).
 
 Recovery matches your realm: on **Paradigm** it recovers your `corpse` in one command; on **Stock**, where death scatters your items loose on the floor (and can overflow into adjacent rooms), it `get`s each item back.
 
@@ -1259,6 +1282,12 @@ Finally, if the only thing left un-recovered is **currency**, the death counts a
 - **Stock** prints no charge line, so the client **counts your successful uses** and shows remaining = the item's max charges minus what you've spent. Only uses that actually fire count: a use is confirmed by the item's cast message, so a *bonked* one (sent between rounds) burns nothing. **Rechargeable** items (the align-quest cloaks, and tokens where they exist) restock to full at your BBS's configured **cleanup time** (Settings → BBS); **finite** items (the gnarled / teak / mahogany wands) stay spent. Infinite-use items (e.g. the nexus spear on stock) show no charge line. For a **stack**, once the top copy empties the next is **assumed full** (a fresh drop is max charges) — a guess, since a partly-used copy picked off the ground would start lower; stock has no charge line to confirm it.
 
 On both realms these counts are **saved per character**, so they survive a restart — and a rechargeable item is assumed back to full once your BBS's cleanup time has passed, without needing to look at it again. The same figures back the `@uses` remote query.
+
+**Click a base stat's name** (Strength, Intellect, Willpower, Agility, Health, Charm) to open **Stat Breakpoints**. It shows every number that stat feeds, as one column each: dodge, accuracy, crit, stealth, damage, magic resistance, the skills, prices, HP regen and so on. Each column lists the stat values where that stat's share goes up or down a point, from 30 to 200, and **your row is highlighted**, with "You: +N" at the top.
+- The formulas are your realm's. Columns only confirmed on Stock are tagged **STOCK FORMULA** on Paradigm.
+- A **≈** column is one the game divides together with other stats, so the real step can land a point either side.
+- Thief skills show only if your class or race has them; spellcasting shows only under your casting stats.
+- The window follows your live stats and the loaded realm. The stat buttons along its top switch stats; clicking another stat name on Character Info switches it too, and clicking the same one again brings it forward, or closes it when it's already in front.
 
 Below the wealth block it shows an **AC / DR breakdown** in two lines: one for what your worn gear grants, and one for what your **configured self-buffs** add on top (assuming they're up) — the same buff figure the Equipment Manager and Monster Intel use.
 
@@ -1456,7 +1485,7 @@ The **Items** and **Players** tables carry a **Toggles** column that lists, per 
 
 The **Monsters** table lists only the monsters that can actually be met in the game. The ones the game data marks *out of play* — sysop-only NPCs, unused or test monsters (about 70 in the Paradigm set, such as the extra copies of *dark cleric* or *guardsman* that no room ever spawns) — are not here; they are in the **Unobtainable** table instead, so a name that appears twice in Monsters is two real spawns.
 
-The **Unobtainable** table collects everything the game data marks out of play, **Items** and **Monsters** alike, read-only. Its **Kind** column says which table a row came from (the two number ranges overlap, so read the ID together with the Kind); the item columns (type, slot, damage, price…) fill in for items and **HP / Exp / Avg Damage / Alignment** for monsters. The Item Finder skips the same items.
+The **Unobtainable** table collects everything the game data marks out of play, **Items** and **Monsters** alike, read-only. It also holds any **monster that can never spawn** even though the data marks it in play: one that isn't placed, isn't in a lair, isn't summoned by anything, and is only listed under rooms that have a different NPC. The game data can't show which rooms really skip their listed spawns, so this is a careful guess; in the known data sets it catches only *Cygani*, listed under Aiken's Magic Shoppe, where the Stock game files confirm the shop only ever spawns Aiken. Map room tooltips and room panels leave out anything on this list, so they only show monsters you can actually meet. Its **Kind** column says which table a row came from (the two number ranges overlap, so read the ID together with the Kind), and **Reason** says why it's here; the item columns (type, slot, damage, price…) fill in for items and **HP / Exp / Avg Damage / Alignment** for monsters. The Item Finder skips the same items.
 
 The **Monsters** table carries a full column set for browsing and filtering monster stats:
 
@@ -1822,21 +1851,27 @@ The **Time Analysis** panel splits the session's time into moving, attacking, re
 
 Each panel's **Reset** clears everything under it and nothing else: Time Analysis's clears the time breakdown, Sneak, Walk and the loop laps (a running loop's current lap keeps ticking); Session Statistics' clears its totals and restarts its per-hour rates.
 
-The **Session Statistics** panel, modelled on MegaMUD's statistics screen:
+The **Session Statistics** panel, modelled on MegaMUD's statistics screen, is in three groups:
 
-- **Kills** and **Experience** — this session's totals and their per-hour rates.
-- **Exp needed** — the experience still to earn for the level the countdown is heading for, with that level in brackets. It counts banked levels, so it's the first level your exp hasn't reached, not merely the next one to train. **Will level in** is the time to get there at this session's exp rate — the same countdown as the status bar's TNL and your Party-window row.
-- A **value | coins | items** table:
-  - **Collected** — coin you picked up (its value, and how many coins) and items (any `get`, yours or the automation's).
-  - **Deposit/Sold** — coin you banked, by hand or by auto-deposit, plus coin from items sold, and how many items you sold.
-  - **Stashed** — coin and items you hid, by hand or by the stash automation. Both are counted from the game's own `You deposit …` / `You hid …` replies, the same ones the **Transaction history** records.
-  - **Income rate** — coin picked up per hour, by value and by number of coins.
-  Coin shows as denominations; hover a figure for the exact amount.
+- **Kills & experience:**
+  - **Kills**, **Kills / hour**, **Experience** and **Exp / hour**: this session's totals and their per-hour rates.
+  - **Exp needed**: the experience still to earn for the level the countdown is heading for, with that level in brackets. It counts banked levels, so it's the first level your exp hasn't reached, not merely the next one to train.
+  - **Will level in**: the time to get there at this session's exp rate, the same countdown as the status bar's TNL and your Party-window row.
+- **Coin**, as denominations with the number of coins in brackets. Hover a value for the exact amount.
+  - **Collected**: coin you picked up.
+  - **Deposited / sold**: coin you banked, by hand or by auto-deposit, plus coin from items sold. Deposits are counted from the game's own `You deposit …` replies.
+  - **Stashed**: coin you hid, by hand or by the stash automation, counted from the game's `You hid …` replies. Both are the same replies the **Transaction history** records.
+  - **Income / hour**: coin picked up per hour.
+- **Items:**
+  - **Collected**: any `get`, yours or the automation's.
+  - **Sold**: items you sold.
+  - **Stashed**: items you hid, by hand or by the stash automation.
+
 All of these reset with the rest of the session (connect, character switch, **Reset session**, the panel's own **Reset**, an `@reset` from the party, and a loop start when *Reset statistics on loop start* is on).
 
 - **Right-click** the panel area to show or hide individual panels, and **drag a panel by its title** to reorder them — your layout is saved per character.
 - **Reset session** zeroes every counter and restarts the clocks; individual panels have their own **Reset** too. (These don't ask for confirmation.)
-- **Transaction history** and **Players Seen** open the detailed ledgers — coin banked and stashed this session, and every player you've encountered. In the transaction ledger, **stash** entries are tinted faint gold (the map's stash-marker colour) so they stand out from bank deposits, and **double-clicking any entry** opens the Navigation map centred on the room where that deposit or stash happened. Each row has a **Keep** checkbox: check the entries you want to hold onto, and **Clear history** wipes everything *except* those — a way to prune a full ledger without losing the rows that matter (with nothing checked it clears the whole thing, as before). The clear updates the on-disk log too, so kept rows survive a reconnect and cleared ones don't come back.
+- **Transaction history** and **Players Seen** open the detailed ledgers — coin banked and stashed this session, and every player you've encountered. Players in your party at the time don't count as seen; once someone leaves the party, seeing them counts again. In the transaction ledger, **stash** entries are tinted faint gold (the map's stash-marker colour) so they stand out from bank deposits, and **double-clicking any entry** opens the Navigation map centred on the room where that deposit or stash happened. Each row has a **Keep** checkbox: check the entries you want to hold onto, and **Clear history** wipes everything *except* those — a way to prune a full ledger without losing the rows that matter (with nothing checked it clears the whole thing, as before). The clear updates the on-disk log too, so kept rows survive a reconnect and cleared ones don't come back.
 
 ## Buff Watchdog
 

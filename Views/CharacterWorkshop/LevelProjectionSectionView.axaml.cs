@@ -49,9 +49,12 @@ public partial class LevelProjectionSectionView : UserControl
 
         foreach (LevelProjectionColumn col in _wired.VisibleColumns)
         {
+            object header = col.TipFor(_wired.Realm) is { } tip
+                ? new TextBlock { Text = col.Header, [ToolTip.TipProperty] = tip }
+                : col.Header;
             var column = new DataGridTextColumn
             {
-                Header = col.Header,
+                Header = header,
                 Width = new DataGridLength(col.Width),
                 // The row type exposes each cell as a plain string property, so the
                 // catalogue's Binding name is the property path.

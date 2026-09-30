@@ -556,6 +556,11 @@ public static class BugReportBuilder
         // setting below to explain why an alternate-order character is casting or
         // swinging this round (even rounds open on the mode's first phase).
         Kv(sb, "Alternation round", combat.AlternationRound.ToString());
+        // A spent opener explains a normal swing where a backstab was expected; a held
+        // attack explains a monster left unattacked while a send hold (the train-stats
+        // screen, a password prompt) was up.
+        Kv(sb, "Backstab opener spent", svc.Combat.BackstabOpenerSpent.ToString());
+        Kv(sb, "Attack held by send gate", svc.Combat.AttackHeldBySendGate.ToString());
         Kv(sb, "Awaiting backstab resolution", combat.AwaitingBackstabResolution
             ? $"yes (target={combat.PendingBackstabSpecies ?? "(none)"})"
             : "no");

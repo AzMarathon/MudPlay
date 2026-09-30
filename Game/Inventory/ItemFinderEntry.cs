@@ -501,7 +501,8 @@ public sealed record ItemFinderEntry
         {
             var weapon = new ItemDamageModel.WeaponInputs(
                 t.WeaponMin, t.WeaponMax, speed, strReq, t.PlusMinDamage, t.PlusMaxDamage, t.PlusCrits,
-                t.PlusBSMin, t.PlusBSMax, canBackstab, t.PlusStrength, t.PlusAgility, t.PlusStealth);
+                t.PlusBSMin, t.PlusBSMax, canBackstab, t.PlusStrength, t.PlusAgility, t.PlusStealth,
+                t.PlusIntellect, t.PlusCharm);
             BSDamageResult? bs = model.Backstab(weapon);
             double perRound = model.DamagePerRound(weapon, attackType);
             (double sideMin, double sideMax) = model.BackstabSides(weapon);
@@ -513,7 +514,8 @@ public sealed record ItemFinderEntry
 
         var delta = new ItemDamageModel.GearDelta(
             t.PlusStrength, t.PlusAgility, t.PlusStealth, t.PlusMinDamage, t.PlusMaxDamage, t.PlusCrits,
-            t.PlusBSMin, t.PlusBSMax, t.PlusPunchDmg, t.PlusKickDmg, t.PlusJumpKickDmg);
+            t.PlusBSMin, t.PlusBSMax, t.PlusPunchDmg, t.PlusKickDmg, t.PlusJumpKickDmg,
+            t.PlusIntellect, t.PlusCharm);
         (double min, double max, double avg) = model.BackstabGain(delta);
         (double gainMin, double gainMax) = model.BackstabSidesGain(delta);
         return new DamageEstimate(0, 0, 0, min, max, avg, model.DamagePerRoundGain(delta, attackType),

@@ -386,6 +386,44 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Assert.Contains("Placed: giant spider(#52)", text);   // boss spawn, with record number
     }
 
+    // A monster on the Unobtainable list stays out of the tooltip. Cygani is only listed
+    // under the Magic Shoppe, whose NPC is Aiken, so he never spawns (StrayMonsterRule);
+    // Aiken still shows.
+    [Fact]
+    public void Build_LeavesOutUnobtainableMonsters()
+    {
+        const string rooms = """
+            [
+              { "Map Number": 1, "Room Number": 398, "Name": "Magic Shoppe", "NPC": 22,
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 0,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string monsters = """
+            [
+              { "Number": 22,  "Name": "Aiken",  "In Game": 1, "Summoned By": "Room 1/398,Group: 1/398" },
+              { "Number": 543, "Name": "Cygani", "In Game": 1, "Summoned By": "Group: 1/398" }
+            ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),    rooms);
+        File.WriteAllText(Path.Combine(setRoot, "Monsters.json"), monsters);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        var catalog = new MudPlay.Game.Combat.MonsterCatalog(cache, graph.GetRoom);
+        MonsterSpawnIndex spawnIndex = new(cache) { OutOfPlay = catalog.IsOutOfPlay };
+
+        Room room = graph.GetRoom(new RoomKey(1, 398))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo: null, spawnIndex: spawnIndex);
+
+        Assert.Contains("Aiken(#22)", text);
+        Assert.DoesNotContain("Cygani", text);
+    }
+
     [Fact]
     public void Build_SeparatesPlacedAssignedAndLair()
     {

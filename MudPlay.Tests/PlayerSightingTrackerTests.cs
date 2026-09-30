@@ -125,6 +125,37 @@ public sealed class PlayerSightingTrackerTests
         Assert.Empty(t.Snapshot());
     }
 
+    // Party members are a given, not an encounter: skipped on both paths while
+    // they're in the party, counted again once they've left it.
+    [Fact]
+    public void CurrentPartyMembers_AreNotRecorded()
+    {
+        Room? current = MakeRoom(1, 100, "Town Square");
+        var party = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Ally" };
+        var t = new PlayerSightingTracker(() => current, profile: null, selfNameProvider: () => "Me",
+            isPartyMember: party.Contains);
+
+        t.NoteAlsoHere(AlsoHere("Ally Family", "Bob"));
+        t.NoteArrival(Arrival("Ally"));
+        Assert.Equal("Bob", Assert.Single(t.Snapshot()).Name);
+
+        party.Clear();
+        current = MakeRoom(1, 101, "North Road");
+        t.NoteArrival(Arrival("Ally"));
+        Assert.Contains(t.Snapshot(), r => r.Name == "Ally");
+    }
+
+    [Fact]
+    public void PartyStateHasMember_MatchesOnGivenName()
+    {
+        var state = new PartyState();
+        state.Members.Add(new PartyMember { Name = "Ally Family" });
+        Assert.True(state.HasMember("ally"));
+        Assert.True(state.HasMember("Ally Renamed"));
+        Assert.False(state.HasMember("Bob"));
+        Assert.False(state.HasMember(""));
+    }
+
     [Fact]
     public void NonPlayerEntities_AreIgnored()
     {

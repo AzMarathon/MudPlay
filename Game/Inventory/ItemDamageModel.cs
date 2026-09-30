@@ -13,20 +13,21 @@ namespace MudPlay.Game.Inventory;
 // Damage per round assumes every swing lands: the finder has no target, so there's no
 // AC / dodge to roll against. Crits blend in the way MonsterMatchupCalculator does.
 //
-// Strength / Agility / Stealth are the live stat-screen values, which already include
+// Strength / Agility / Intellect / Charm / Stealth are the live stat-screen values, which already include
 // whatever is worn now. A non-weapon item is scored by adding its deltas on top of
 // that, so the piece currently in the same slot is counted twice; the error is the
 // same for every candidate in that slot, so the ranking Find Best needs still holds.
 public sealed record ItemDamageModel(
-    RealmType Realm, int Level, int CombatLevel, int Strength, int Agility, int Stealth,
+    RealmType Realm, int Level, int CombatLevel, int Strength, int Agility, int Intellect, int Charm, int Stealth,
     bool HasClassStealth, int CurrentEncum, int MaxEncum,
     ItemDamageModel.RestBonuses Rest, ItemDamageModel.WeaponInputs? CurrentWeapon)
 {
     // A weapon's damage-relevant fields, pulled off an Items row (or the weapon in hand).
-    // Strength / Agility / Stealth are the stat bonuses the weapon itself grants.
+    // Strength / Agility / Intellect / Charm / Stealth are the stat bonuses the weapon
+    // itself grants; INT and CHA matter only through crit.
     public readonly record struct WeaponInputs(
         int Min, int Max, int Speed, int StrReq, int PlusMin, int PlusMax, int Crits, int BsMin, int BsMax,
-        bool CanBackstab, int Strength = 0, int Agility = 0, int Stealth = 0);
+        bool CanBackstab, int Strength = 0, int Agility = 0, int Stealth = 0, int Intellect = 0, int Charm = 0);
 
     // The gear bonuses a damage estimate folds in besides the weapon: everything worn
     // except the weapon hand, plus race / class abilities — the same aggregation Monster
@@ -38,12 +39,13 @@ public sealed record ItemDamageModel(
     // A non-weapon item's contribution to damage: the stat and bonus deltas it would add.
     public readonly record struct GearDelta(
         int Strength, int Agility, int Stealth, int PlusMin, int PlusMax, int Crits, int BsMin, int BsMax,
-        int PunchDmg, int KickDmg, int JumpKickDmg)
+        int PunchDmg, int KickDmg, int JumpKickDmg, int Intellect = 0, int Charm = 0)
     {
         public GearDelta Plus(GearDelta o) => new(
             Strength + o.Strength, Agility + o.Agility, Stealth + o.Stealth, PlusMin + o.PlusMin,
             PlusMax + o.PlusMax, Crits + o.Crits, BsMin + o.BsMin, BsMax + o.BsMax,
-            PunchDmg + o.PunchDmg, KickDmg + o.KickDmg, JumpKickDmg + o.JumpKickDmg);
+            PunchDmg + o.PunchDmg, KickDmg + o.KickDmg, JumpKickDmg + o.JumpKickDmg,
+            Intellect + o.Intellect, Charm + o.Charm);
     }
 
     // A backstab needs a real level; the swing model also needs a class combat level.
@@ -152,6 +154,10 @@ public sealed record ItemDamageModel(
         Strength - (CurrentWeapon?.Strength ?? 0) + weapon.Strength + item.Strength;
     private int AgilityWith(WeaponInputs weapon, GearDelta item) =>
         Agility - (CurrentWeapon?.Agility ?? 0) + weapon.Agility + item.Agility;
+    private int IntellectWith(WeaponInputs weapon, GearDelta item) =>
+        Intellect - (CurrentWeapon?.Intellect ?? 0) + weapon.Intellect + item.Intellect;
+    private int CharmWith(WeaponInputs weapon, GearDelta item) =>
+        Charm - (CurrentWeapon?.Charm ?? 0) + weapon.Charm + item.Charm;
     private int StealthWith(WeaponInputs weapon, GearDelta item) =>
         Stealth - (CurrentWeapon?.Stealth ?? 0) + weapon.Stealth + item.Stealth;
 
@@ -173,6 +179,7 @@ public sealed record ItemDamageModel(
         if (weapon.Max <= 0 || weapon.Speed <= 0) return 0;
         MeleeOffense o = CombatCalculator.ComputeMeleeOffense(
             type, Realm, Level, CombatLevel, StrengthWith(weapon, item), AgilityWith(weapon, item),
+            IntellectWith(weapon, item), CharmWith(weapon, item),
             weapon.Min, weapon.Max, weapon.Speed, weapon.StrReq,
             Rest.PlusMax + weapon.PlusMax + item.PlusMax, Rest.PlusMin + weapon.PlusMin + item.PlusMin,
             Rest.Crits + weapon.Crits + item.Crits, CurrentEncum, MaxEncum);

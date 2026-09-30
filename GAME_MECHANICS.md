@@ -599,22 +599,34 @@ How a character earns and spends character points (CP), how exp needed per level
 - `CalcStealthBase` is realm-split.
 
 ### Crit rating (base)
-*Status: CONFIRMED Stock (via `dll-stats-map.md` (`0x710`)); **AGL term NOT verified for Paradigm** — stock formula used for both, flagged for confirmation*
+*Status: mixed (per-bullet tags) · Realm: differs*
 
-- **Formula:** `clamp(level/10 + (INT-50)/10 + (AGL-50)/20 + (CHM-50)/30, 1, 75)`. So INT ~10/pt, AGL ~20/pt, CHM ~30/pt.
+- **Formula:** `level/10 + (INT-50)/10 + (AGL-50)/20 + (CHM-50)/30`, at least 1. So INT ~10/pt, AGL ~20/pt, CHM ~30/pt. Each term truncates toward zero.
+- **Stock: the terms add as signed values, so a stat below 50 lowers crit, and the total is clamped to 1–75** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_calculate_secondary_stats` @ `0x41ac60`–`0x41acc5`, stored at `0x710`)*.
+- **Paradigm uses the same four terms, AGL included, but has no 75 cap** *([OBSERVED] 2026-09-30, MMUD-Explorer's GreaterMUD branch, frmMain crit calculation)*. (An earlier note said the AGL term was unverified on Paradigm; superseded 2026-09-30.)
+- **Paradigm adds `5 − Combat` for a class whose Combat rating is 1–4** *([OBSERVED] 2026-09-30, MMUD-Explorer GreaterMUD branch)*. Combat here is the class table's `CombatLVL − 2`. So in the Paradigm 1.9.1 data: Mage / Priest (`CombatLVL` 3) +4, Druid / Gypsy (4) +3, the `CombatLVL` 5 classes +2, Warrior / Paladin / Ranger (6) +1, Witchunter (7) nothing. It applies after the floor of 1.
+- **Whether a stat below 50 lowers crit on Paradigm** *[NEEDS CONFIRMATION]*. MMUD-Explorer drops any term that isn't positive, but it does so on both realms, and the Stock DLL doesn't. So that looks like MMUD-Explorer's own shortcut, not a Paradigm rule. The client keeps the signed terms on both realms. Question: on Paradigm, does a character with CHA 30 get one less crit than the same character at CHA 50?
+- **The in-fight curve differs** — see *Combat → Bash and smash damage vs DR* for the crit row (Stock compresses above 40, Paradigm caps at 65).
+
+**Client use:**
+- `CharacterCalculator.CalcBaseCritRating` (realm-split: the 75 cap is Stock only; the class Combat bonus is Paradigm only, fed from the class row's `CombatLVL`). Level Projection and the CP tooltips use it, and so does `CombatCalculator.ComputeMeleeOffense`, which adds it to the +Crits (ability 58) sum before `CalcCritChance`. So the Workshop Calculators tab, Monster Intel's rounds-to-kill and the Item Finder's damage per round all count it. (Until 2026-09-30 those three used +Crits alone.)
 
 ### Melee damage bonus (STR onto the weapon's own range)
-*Status: CONFIRMED (GreaterMUD)*
+*Status: [OBSERVED] 2026-09-30 · Realm: differs*
 
-- **Floored at 0:** min `(STR-100)/10`, max `(STR-50)/10`, never negative. So ~+1 min per 10 STR above 100, ~+1 max per 10 above 50.
+- **Paradigm floors both at 0:** min `(STR-100)/10`, max `(STR-50)/10`, never negative. So ~+1 min per 10 STR above 100, ~+1 max per 10 above 50 *(MMUD-Explorer GreaterMUD branch: "no negative strength in greatermud")*.
+- **Stock doubles the min term and lets the max term go negative:** min `2 × ((STR-100)/10)`, only when positive; max `(STR-50)/10`, so STR 40 is −1 max *([OBSERVED] `wccmmud.dll` 1.11p @ `0x42ad26`–`0x42ad65`; MMUD-Explorer's Stock branch agrees)*. So ~+2 min per 10 STR above 100.
+
+**Client use:**
+- `CombatCalculator.StrMinDamageBonus` / `StrMaxDamageBonus`, shared by melee, backstab and martial-arts damage and by the stat projection (`StatEffects`). (Until 2026-09-30 the Level Projection and CP tooltips used the Paradigm floor on Stock too; the combat engine already split them.)
 
 ### Max encumbrance (carry weight)
-*Status: CONFIRMED Stock (via `dll-stats-map.md` (`0xb2`)); **NOT verified for Paradigm** — stock formula used for both, flagged for confirmation*
+*Status: CONFIRMED Stock (via `dll-stats-map.md` (`0xb2`)); Paradigm [OBSERVED] 2026-09-30, MMUD-Explorer `CalcEncum` (no realm branch) · Realm: both*
 
 - **Formula:** `STR*48`, plus `STR*36 - 3600` once STR > 100 (steeper past 100). So +48/pt (more above 100).
 
 ### Magic resistance
-*Status: CONFIRMED Stock (via `dll-stats-map.md`); **NOT verified for Paradigm** — stock formula used for both, flagged for confirmation*
+*Status: CONFIRMED Stock (via `dll-stats-map.md`); Paradigm [OBSERVED] 2026-09-30, MMUD-Explorer `CalcMR` (no realm branch) · Realm: both*
 
 - **Formula:** `(INT + 3*WIL)/4`. WIL is the heaviest term (~0.75/pt vs INT ~0.25/pt).
 
@@ -656,7 +668,7 @@ How a character earns and spends character points (CP), how exp needed per level
 - `CharacterCalculator.CalcSpellcasting`; the CP tooltip shows it under the casting stat(s) with the exact next breakpoint.
 
 ### Utility skills — Perception + the thief four
-*Status: CONFIRMED Stock (RE'd DLL `calculate_secondary_stats` @ `0x41a424`, offsets `0x5f8` / `0x5fe` / `0x606` / `0x60a` / `0x60c`); Paradigm unverified*
+*Status: CONFIRMED Stock (RE'd DLL `calculate_secondary_stats` @ `0x41a424`, offsets `0x5f8` / `0x5fe` / `0x606` / `0x60a` / `0x60c`); Paradigm Picklocks [OBSERVED] 2026-09-30 (MMUD-Explorer quoting the Paradigm server source); the other four unverified on Paradigm*
 
 - **All five are pure integer divisions of stats plus a shared level term**, so points that don't complete a division buy nothing:
 
@@ -665,31 +677,45 @@ How a character earns and spends character points (CP), how exp needed per level
 | Perception (`0x5f8`) | `(INT*5 + WIL*2 + CHM)/8` | INT ~1.6/pt, WIL ~0.6, CHM ~0.3 — **no level term** |
 | Thievery (`0x5fe`) | `(AGL + INT + CHM + lvlTerm*24)/6` | AGL / INT / CHM ~6/pt each |
 | Traps (`0x606`) | `(INT + AGL + CHM*2 + lvlTerm*28)/7` | CHM ~4/pt (weighted **double**), INT / AGL ~7/pt |
-| Picklocks (`0x60a`) | `((AGL + INT + lvlTerm*10)*2)/7` | AGL / INT ~4/pt (÷3.5 effective) |
+| Picklocks (`0x60a`) | Stock `((AGL + INT + lvlTerm*10)*2)/7`; Paradigm `(INT + AGL + CHM*2 + lvlTerm*28)/7` | Stock AGL / INT ~4/pt (÷3.5 effective), no CHM; Paradigm CHM ~4/pt, INT / AGL ~7/pt |
 | Tracking (`0x60c`) | `(INT*2 + WIL + CHM + lvlTerm*40)/8` | INT ~4/pt, WIL / CHM ~8/pt |
 
 - **`lvlTerm = level<16 ? level : 15 + (level-15)/2` — the level slope halves at 16** for all four thief skills (Stealth halves at the same level via its own `stealthLvl`). So they grow fast to 16 and half as fast after; past the knee the CP case for INT / AGL / CHM on these is what carries them.
 - **Perception is the only one every class carries;** the other four exist only for a class or race that was granted the skill (ability codes 39 Thievery, 40/41 Traps, 37/180 Picklocks, 38 Tracking, plus the custom/ParaMUD `1001`–`1004` `Grant*` variants).
-- **The `+skill` gear abilities stack on top of these bases.**
+- **The `+skill` gear abilities stack on top of these bases.** Perception adds ability 77 (Perception); Tracking adds ability 38 (Tracking) and is floored at 0 *([OBSERVED] 2026-09-30, `_calculate_secondary_stats`)*.
+- **What Perception and Tracking do** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p; Stock only, Paradigm not recorded)*. Each is a 0–100 roll against the skill; the details live with the action:
+  - **Perception** is never used passively. A plain room display rolls nothing; it acts only through these:
+    - **Finding a hidden exit** with `sea <dir>`: chance `Perception − 15`, never below 3% — *Movement & navigation → Hidden exits — `sea <dir>` reveal wording*.
+    - **Finding hidden players and stashed items** with a room `search`: players at `Perception` (*Movement & navigation → Hiding — sneak vs hide, the hide state machine, and search reveals*), items at `Perception − 10` (*Items, inventory & equipment → Hiding items in a room (stashing)*).
+    - **Noticing your own failed `sn` / `hid`**, and **hearing your own loud entry** when a sneak breaks on a move — *Movement & navigation → Sneaking — commands, equip order, and the sneak state machine*.
+  - **Tracking** is used only by `track` — *Movement & navigation → Tracking (`track`)*.
 
 **Client use:**
 - `CharacterCalculator.CalcPerception` / `…Thievery` / `…Traps` / `…Picklocks` / `…Tracking`.
 
 ### Formulas deliberately NOT adopted
-*Status: 2026-09-13, user decision*
+*Status: 2026-09-13, user decision; min melee damage superseded 2026-09-30 (user)*
 
-- **A second reverse-engineering write-up of `wccmmud.dll` v1.11p** corroborated stealth, magic resist, crit, max HP, mana, carry capacity and the five skills above exactly, but disagreed on three points. All three were reviewed and **left as shipped** — don't re-open them without a live capture:
-  - **Min melee damage.** That write-up reads `((STR-100)/10)*2` (citing `ADD EAX,EAX` @ `0x42AD4D`); we ship `(STR-100)/10`, matching the community chart and GreaterMUD.
+- **A second reverse-engineering write-up of `wccmmud.dll` v1.11p** corroborated stealth, magic resist, crit, max HP, mana, carry capacity and the five skills above exactly, but disagreed on three points. All three were reviewed and **left as shipped** — don't re-open them without a live capture (the min-damage point was since settled in the write-up's favour for Stock):
+  - **Min melee damage.** That write-up reads `((STR-100)/10)*2` (citing `ADD EAX,EAX` @ `0x42AD4D`). It is right for Stock: the doubling is in the DLL and MMUD-Explorer's Stock branch, and the combat engine applies it on Stock. The un-doubled form is Paradigm's. (Re-opened and settled 2026-09-30, user; the stat projection now splits it by realm — *Melee damage bonus (STR onto the weapon's own range)*.)
   - **Dodge.** It gives `(AGL-50)/3 + (CHM-50)/5` with no level term; we keep `level/5` as well.
   - **Spellcasting.** It reads a trailing `+= mageryLevel` (so `mageryLevel*6`); we keep `mageryLevel*5`.
 
 ### Realm differences in stat derivation & Paradigm-verification summary
 *Status: CONFIRMED 2026-09-10 (inspected syntax53/MMUD-Explorer `modMMudFunc.bas`) for the realm-difference note*
 
-- **MMUD-Explorer reads, not derives, most derived stats:** it reads crit / encumbrance / magic-resist / spellcasting / mana-regen / HP straight from the pasted character (`tCharStats.nCrit`, `.nEncumMax`, `.nMagicRes`, `.nSpellcasting`, …) — it does NOT derive them from primary stats, so it provides no independent Paradigm derivation to compare against. Most of the stat→derived formulas here are the RE'd stock ones.
-- **Known realm differences live in how these get *applied* in combat** (MMUD-Explorer's `bGreaterMUD` branches: accuracy weighting, dodge-vs-accuracy curve, spell-damage multiplier, resist application) and in the three stat derivations that already realm-split in code — **normal-attack accuracy** (Stock STR+AGL vs Paradigm AGL+INT+CHM), **stealth rounding** (Stock truncates each term, Paradigm rounds once — see *Stealth base*, `CalcStealthBase`) and **HP-regen divisor** (750 stock / 500 Paradigm). Those three the CP tooltip already reflects per realm; the rest use the stock derivation for both, flagged for confirmation.
-- **Realm-verified:** accuracy (both realms, incl. the MMUD-Explorer Paradigm branch), dodge, stealth (MMUD-Explorer-verified — realms differ by a rounding step, not identical), and melee damage.
-- **Unverified on Paradigm:** **crit's AGL term, encumbrance, and magic resistance use the stock formula for Paradigm as well and are unverified there** — treat as close-but-unconfirmed until a Paradigm source or capture pins them.
+- **MMUD-Explorer derives the stat-driven values itself, per realm** *([OBSERVED] 2026-09-30)*: crit (frmMain crit calculation), carry weight (`CalcEncum`), magic resistance (`CalcMR`), stealth (`CalculateStealth`), picklocks (`CalcPicklocks`), HP (`CalcMaxHP`), HP regen (`CalcRestingRate`), spellcasting and mana regen. Its `bGreaterMUD` branches are the Paradigm source for these. It doesn't derive Perception, Thievery, Traps or Tracking. (An earlier note said it only read these values off the pasted character, so offered no Paradigm derivation; superseded 2026-09-30.)
+- **Known realm differences live in how these get *applied* in combat** (MMUD-Explorer's `bGreaterMUD` branches: accuracy weighting, dodge-vs-accuracy curve, spell-damage multiplier, resist application) and in the stat derivations that realm-split in code:
+  - **normal-attack accuracy** (Stock STR+AGL vs Paradigm AGL+INT+CHM);
+  - **stealth rounding** (Stock truncates each term, Paradigm rounds once — see *Stealth base*, `CalcStealthBase`);
+  - **HP-regen divisor** (750 stock / 500 Paradigm);
+  - **STR melee damage** (Stock doubles the min term and allows a negative max — *Melee damage bonus (STR onto the weapon's own range)*);
+  - **crit's 75 cap** (Stock only — *Crit rating (base)*);
+  - **Picklocks** (Paradigm adds CHM — *Utility skills — Perception + the thief four*).
+
+  The CP tooltip and Level Projection reflect all of these per realm.
+- **Realm-verified:** accuracy, dodge, stealth, melee damage, crit (AGL term included), carry weight, magic resistance, HP, HP regen, spellcasting, mana regen and picklocks.
+- **Unverified on Paradigm:** Perception, Thievery, Traps and Tracking use the Stock formula on Paradigm. Also open: whether a stat below 50 lowers crit on Paradigm (*Crit rating (base)*).
 
 ### How your alignment moves during play
 *Status: CONFIRMED 2026-09-27 (user) and [OBSERVED] `wccmmud.dll` 1.11p (Stock), tagged per bullet · Realm: differs*
@@ -905,6 +931,7 @@ How HP works from full health down through dropping and death, how monster healt
 ### Poison prevents resting
 *Status: CONFIRMED 2026-08-17 (user; report `paradigm-20260817-092945`); meditate split by realm 2026-09-28 · Realm: differs*
 
+- **How the poison itself ticks and stacks** is in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*.
 - **While poisoned you cannot rest.** A `rest` issued while poisoned does **not** put you into the `(Resting)` state — poison refuses / breaks it — so the position never becomes Resting and the resting recovery doesn't happen; you only get the slow standing regen.
 - **Meditating while poisoned differs by realm.**
   - **Stock refuses it too** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p)*: both commands check the character's poison amount and refuse while it's above 0.
@@ -1750,7 +1777,7 @@ How one damage spell cast against a monster is worked out.
   2. **Spell targeting restriction (e.g. living-only)** — see *Spell targeting: monster type tags* and
      *"Your spell has no effect" — immunity spends no round*.
   3. **Damage-type resistance** — see *Elemental resistance — flat, deterministic, pre-emptable*,
-     *Magic Resist (M.R.) and `TypeOfResists`* and *Poison (`AttType 6`) — binary immunity*.
+     *Magic Resist (M.R.) and `TypeOfResists`* and *Poison (`AttType 6`) — immunity and damage resist*.
 - **`SpellImmu +N` blocks any spell whose base learnable level (the Spells table `ReqLevel`) is below
   N; such a spell deals no damage.** A spell learnable at level ≥ N still lands.
 - **Example:** monster **#184** has `SpellImmu +10`, so every spell learnable at level 9 or lower can't
@@ -1968,16 +1995,55 @@ How one damage spell cast against a monster is worked out.
   - So correcting the code-1↔17 gating changed **no combat decision** — the old reversed note was never
     implemented in engine code; it drove only the (now-fixed) doc and this display calculator.
 
-### Poison (`AttType 6`) — binary immunity
-*Status: CONFIRMED*
+### Poison (`AttType 6`) — immunity and damage resist
+*Status: mixed (per-bullet tags)*
 
-- **Poison is not resistible.** It has **no** resist value and **no** `Resist-Poison` code — a target is
-  either affected or immune, never "partially resisted."
-- **Immunity is sourced from race / items, not a resist stat:**
+- **Being poisoned is all-or-nothing.** A target either picks up the poisoned condition or is immune to it; there is no partial chance *(CONFIRMED, user; [OBSERVED] Stock 2026-09-30, `wccmmud.dll` 1.11p `_monster_cast` @ `0x428f43`: ImmuPoison (ability 21) from any source skips the poison entirely)*.
+- **On Stock, the damage part of a poison spell cast on a player is cut by the target's ImmuPoison value**, like any other resist: `damage × (100 − ImmuPoison) / 100` *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p resist switch @ `0x4280c1`, case 6 @ `0x428126` reads ability 21; applied @ `0x428230`)*. An earlier note said poison has no resist value at all and is never partially resisted; superseded 2026-09-30 for this Stock path. Not recorded: Paradigm, and poison spells a player casts on a monster.
+- **A player's poison spell with a duration is resisted outright by a target player with ImmuPoison** *([OBSERVED] 2026-09-30, Stock `_cast_user_target` @ `0x444d89`)*.
+- **Immunity is sourced from race / items, not a resist stat** *(CONFIRMED, user)*:
   - The **Kang** race is poison-immune.
   - The **golden headdress** item grants poison immunity.
   - **Swamp boots** / **snakeskin boots** negate certain room-cast "swamp poison" effects — snakeskin also
     grants immunity to certain poisons, varying by game-data set.
+- **The ticking, stacking and cures** are in *Poison and damage over time — ticks, stacking and cures*.
+
+**Client use:**
+- `SpellDamageCalculator.Element` treats poison as having no scalable resist, for spells cast at monsters. Incoming poison damage against the player doesn't apply the Stock ImmuPoison cut yet.
+
+### Poison and damage over time — ticks, stacking and cures
+*Status: [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p (addresses per bullet) · Realm: Stock; Paradigm not recorded*
+
+- **A player's poison is one number, not a list.** The engine keeps a single poison amount per player (player record `+0xbe`).
+  - **A new poison replaces it only if it's larger:** `amount = max(current, new)`. Poisons never add together. This applies to every source: monster casts (`_monster_cast` @ `0x428f5e`, `_monster_cast_area`), player casts (`_cast_user_target`) and melee-hit poison (`_attack_monster_user`, `_attack_user_user`).
+  - **The amount is the poison ability's value.** When that's 0, which is true of every Stock poison spell, it's the spell's rolled Min–Max damage.
+- **The poison tick comes every 30 seconds** on the slow update (`_slow_update_character` @ `0x4221fa`):
+  - it prints `You feel ill.` to the poisoned player only;
+  - it takes the whole poison amount off HP; the amount isn't re-rolled per tick;
+  - dropping below 0 prints `%s drops to the ground!` to the room, and the tick can kill (`_check_kill_user`), with no killer and no exp awarded;
+  - the normal 30-second regen still runs after it, so the net change is regen minus poison.
+- **How long it lasts:** a poison spell with a duration also takes one of the player's affect slots (see *Stock "10 spelling" affect cap*).
+  - When that slot expires, the spell's amount is **subtracted** from the poison number, floored at 0 (`_perform_spell_termination_player_upkeep` @ `0x44a172`), and the spell's own wear-off message prints *([OBSERVED] 2026-09-30, the spells' messages in both realm seeds)*. For most poison spells that's `The effects of the poison wear off` (25 spells in the Stock seed, 27 in Paradigm's). Stock has two one-offs: `The dizzying poison runs its course` and `You awaken, groggy and confused from the poison`.
+  - Poison from a source with no duration has no slot, so it lasts until it's cured or you die. No Stock spell works that way.
+  - **The poison amount never shrinks on its own.** Only slot expiry, cures, the healer and death lower it.
+- **Two poisons at once interact badly**, because of the max-then-subtract rule. With a 10 and a 30 on you, the poison number is 30:
+  - if the 10 wears off first, the number drops to 20 for the rest of the 30's duration;
+  - if the 30 wears off first, the number drops to 0 while the 10 is still on you.
+  So a second poison never adds damage and can cut the first one short.
+- **Other damage-over-time spells stack.** They live in the affect slots and tick every 3 seconds on the medium update (`_medium_update_character` @ `0x422aeb`; slot upkeep `_perform_routine_spell_player_upkeep` @ `0x449bf0`):
+  - `Damage` (ability 1) and `DrainLife` (8) take the slot's stored value off HP each tick, can drop the player and can kill;
+  - these ticks print no text; only the prompt's HP changes;
+  - `Dur` counts these 3-second ticks;
+  - different damage-over-time spells run side by side, one slot each.
+- **Recasting the same spell on someone who has it:**
+  - **Cast by a monster:** the slot is refreshed (new value, duration reset) only if the new roll is strictly higher. Otherwise the cast is dropped and the monster gets its energy back (@ `0x428fb5`).
+  - **Cast by a player** (`_add_cast_spell_to_user` @ `0x43ec31`): some casts overwrite the slot, the rest fail with `You attempt to cast %s, but fail.`. Poison casts overwrite.
+- **Cures:**
+  - **A CurePoison (ability 20) spell ends one poison spell**, the first poison slot it finds, running its wear-off. It then lowers the poison number by the cure's own value, floored at 0 (Stock cure poison: 8) (`_cast_user_target` @ `0x44683f`). So one cast can leave a player with two poisons still poisoned.
+  - **The healer's `buy cure poison`** (`_buy_item` @ `0x41b9e6`) zeroes the poison number and ends every poison slot, for 25 silver: `... and your poisoning is cured.`. If you weren't poisoned it costs 15 silver: `... and find that you were not poisoned!`.
+  - **Death** ends every slot and zeroes the poison number.
+- **Where it shows:** `You are Poisoned!` in the status display, a `P` flag in `par`, and `%s is poisoned!` when someone looks at you.
+- **Resting and meditating are refused while poisoned** — see *Health, resting & recovery → Poison prevents resting*.
 
 ### Attack-spell mana efficiency
 *Status: Unrated (client formula as used by Monster Intel)*
@@ -2546,9 +2612,25 @@ A monster's `Summoned By` field lists the rooms it appears in, each token tagged
 - **`Group: m/r`** (no `(lair)`) — an **assigned** roam / rare-random spawn; the room carries no `Lair` tag for it. Tooltip label **`Assigned:`**.
 - **`Group(lair): m/r`** — a **lair** spawn; the room's `Lair` tag lists the same monster. Tooltip label **`Lair:`** (sourced from the room's own `Lair` tag, which also carries the `(Max N)` simultaneous cap).
 - **One monster can carry more than one kind for the same room** — a placed boss that also has a `Group:` roam token, e.g. Aiken `1/398` has both `Room 1/398` and `Group: 1/398` — so the three tooltip lines may legitimately repeat a name.
+- **A `Group:` token only says the monster is in the room's spawn range; the room may never use it** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p and `wccmp002.dat`; Stock only, Paradigm not recorded)*. Each room record carries:
+  - a **room type** (`+0x43c`);
+  - a **set monster** (`+0x468`);
+  - a **placed NPC** (`+0x5c8`);
+  - a **monster group** (`+0x560`) with an **index range** (`+0x462`–`+0x464`).
+
+  How they're used:
+  - **`_generate_monster` spawns the set monster whenever one is given**, and draws at random from the group's index range only when it's 0 (@ `0x4244fc`).
+  - **The regen that runs around players fills types 0, 2 and 3 only** (@ `0x4233d9`, `0x4236a1`). Type 1 rooms are refilled only by the room-reset routine, again with the set monster (@ `0x430460`–`0x4304b1`).
+  - **The data compiler lists every monster in a room's range as a `Group:` token regardless.**
+
+  Example: 1/398 (Magic Shoppe) is type 1, set monster 22 (Aiken), group 2 with index range 1–1. **Cygani (#543)**, whose only token is `Group: 1/398`, therefore never spawns, even with Aiken dead.
+- **The MDB carries none of those room fields, nor a monster's own group.** Groups appear only in lair rooms' `Lair` tag (`[group-min-max-regen]`) and the Lairs table (`GroupIndex` → `MobList`) *([OBSERVED] 2026-09-30, imported data)*.
+- **The MDB `NPC` column is the placed NPC (`+0x5c8`), not the set monster, and a placed NPC doesn't stop group spawns** *([OBSERVED] 2026-09-30, `wccmp002.dat` vs v1.11p `Rooms.json`)*. In the Stock data, 137 rooms have an NPC, no lair and other monsters in their `Group:` listing. 135 of those have no set monster, so their group spawns are real, e.g. the graveyard's skeletons beside its placed NPC. Only 1/398 (Aiken) and 1/309 (Sentara's Clothing, Madame Madison #914) carry a set monster.
+- **Client policy (user, 2026-09-30): a monster is unobtainable when it can never spawn, even with `In Game` = 1.** The data can't show a room's set monster, so the rule is a heuristic: no `Room`, lair, `Spell` or `Textblock` token, and every `Group:` room has a different NPC and no lair. It leans on every other source being missing too. In all four imported sets (v1.11p, Paradigm 1.9.1, Euphoria, Lost Ways) that is Cygani alone, and on Stock the room file confirms his room's set monster is Aiken.
 - **Client use:**
   - The nav tooltip / Room Info panel split these into Placed / Assigned / Lair.
   - `MonsterSpawnIndex` parses the token kinds, while the combat resolver keeps a permissive union of all of them.
+  - `StrayMonsterRule` applies the unobtainable policy. It's used by the Monsters and Unobtainable tables (Reason: "Only listed under a room that spawns a different NPC") and by `MonsterCatalog.InPlay` (Monster Intel). Room tooltips and room panels leave out every monster on the Unobtainable list (`MonsterSpawnIndex.OutOfPlay` → `MonsterCatalog.IsOutOfPlay`, checked in `RoomTooltipBuilder`).
 
 ### Boss monsters
 
@@ -2603,6 +2685,18 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
   - The summons also cost combat time: **single-target** fights every monster the room becomes (kill count = tree size, `8` per zombie), while **AoE/rooming** clears one tier per pass (waves = tree depth, `3`).
   - So a death-summon room yields far more than its face value, but the extra kill/wave time — and the cap on huge fan-outs — keep it below the naive exp-ratio multiple.
   - Bosses are left on their base exp (their death-summon, if any, is not folded — a rare edge, and boss exp is already a flat amortised approximation).
+
+### Mid-fight summons
+*Status: [OBSERVED] 2026-09-30 (user capture; game data v1.11p and Paradigm 1.9.1) · Realm: both (data); the capture's realm isn't recorded*
+
+- **A monster's between-round spell can be a summon.** Half-orc sentry #479 carries `MidSpell-0` 593 *summon orc warrior* at 10%. Spell 593 is `Abil-0` 12 (summon) with `AbilVal-0` 480 (*orc warrior*).
+- **The cast prints `The <monster> shouts for aid!`**, e.g. `The fat half-orc sentry shouts for aid!`. That's the Casting-on-you and witness wording of spells 510, 528 and 593 in both message seeds, so the line alone doesn't say which of the three was cast.
+- **The summoned monster is in the room at once and joins the fight**, with no arrival line and no fresh `Also here:`. In the capture, `The thin orc warrior all-out slashes you for 16 damage!` came the next round, while the sentry was still alive.
+- **The summoner's death line reuses the wording but isn't a cast:** `The half-orc sentry shouts for aid, and falls dead!`.
+- **Not recorded:** whether the shout still prints when the summon fails at the room cap. The cap is described in *Death-summon cascades*.
+
+**Client use:**
+- `MonsterSummonWatcher` (built from `SummonLineSet`, the Target / witness wordings of every spell with ability 12) asks `CombatManager.RequestRoomRefresh` for the debounced bare-CR room re-display when the named caster is a monster on the roster. The summoned monster then reaches the roster before its summoner dies. Until 2026-09-30 the summoner's death emptied the roster, dropped combat, and the client rested or looted while the summoned monster attacked.
 
 ### Room-spell monster summons
 
@@ -2897,13 +2991,26 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Commands** *([OBSERVED])*: `sn` — attempt to sneak. (Hiding is `hid` — see *Hiding — sneak vs hide, the hide state machine, and search reveals*.)
 - **Equip before sneak** *([CONFIRMED])*: equipping / removing gear breaks sneak, so any gear change for an approach must be sent **before** the `sn`, never after. The correct approach order is **equip → sneak → move**.
 - **Sneak state machine** *(lines all [OBSERVED])*:
-  - `Attempting to sneak...` (alone, no suffix) — the server ACK: the sneak took and you're armed to move. A move made now carries the sneak into the next room.
-  - `Attempting to sneak...You don't think you're sneaking.` — soft rejection; the attempt didn't take. Resend `sn`.
+  - `Attempting to sneak...` (alone, no suffix) — no failure **noticed**. Either the sneak took and a move made now carries it into the next room, or it failed and your Perception roll missed that (see *The rolls* below). Only the next room's `Sneaking...` proves it. *(An earlier note called this the server ACK that the sneak took; superseded 2026-09-30 by `_cmd_sneak`, Stock.)*
+  - `Attempting to sneak...You don't think you're sneaking.` — a failure you noticed; the attempt didn't take. Resend `sn`.
   - `Sneaking...` — emitted on each room entry while sneak holds; post-move confirmation you arrived unseen.
   - `You make a sound as you enter the room!` — loud loss of sneak. You enter seen, so a backstab opened in that room would fail. *([CONFIRMED] user, 2026-09-26; report `paradigm-20260926-222210`.)*
-  - `You may not sneak right now!` — a **combat cooldown**: you can't sneak for a few seconds after being in combat or attacked, and a retry shortly after works. *([CONFIRMED] user, 2026-09-26; report `paradigm-20260926-233357`. An earlier note called it a hard block with no auto-retry; superseded 2026-09-26.)*
-- **Sneak breaks *silently* when you move into a room that doesn't re-emit `Sneaking...`** *([OBSERVED])* — no failure line, the stealth is just gone. `Sneaking...` arrives between the move and the new room's display, and the old room's `Attempting to sneak...` doesn't carry over. A room shown without it is a guaranteed backstab failure *([CONFIRMED] user, 2026-09-27; report `paradigm-20260927-014325`)*.
-- **Any NPC in the room prevents a sneak from taking** *([OBSERVED])* — an `sn` is wasted while a monster shares the room.
+  - `You may not sneak right now!` — a **combat cooldown**: you can't sneak for a few seconds after being in combat or attacked, and a retry shortly after works. It's also the refusal while a monster that could attack you shares the room (the *NPCs and sneaking* rules in this topic). *([CONFIRMED] user, 2026-09-26; report `paradigm-20260926-233357`. An earlier note called it a hard block with no auto-retry; superseded 2026-09-26.)*
+- **The rolls** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_cmd_sneak`, `_move_user`, the stealth-chance routine at `0x46cc43`; Stock only, Paradigm not recorded)*:
+  - **The stealth chance** starts from your Stealth (`0x5fa`; *Character stats & progression → Stealth base*), then:
+    - −10 over 66% encumbrance, or −5 over 33% (field `0x708`, set by `_get_encumbrance_percent`);
+    - ×⅔ while a status bit (`0x6f5 & 0x80`) is set — not identified;
+    - **−1 for each other player and −1 for each monster in the room**;
+    - clamped to 0 and a cap: 95 for `sn`, 100 for a move.
+  - **`sn` rolls 0–100 under the chance.** On a fail you roll 0–100 under your **Perception**: pass and you see `You don't think you're sneaking.`; fail and you see the same bare `Attempting to sneak...` a success prints.
+  - **Every sneaked move re-rolls** (0–101 under the chance, counting the room you're leaving), unless you have ability 186 (PerfectStealth), which always holds.
+    - **Held:** you arrive with `Sneaking...`.
+    - **Lost:** the sneak is gone. You hear `You make a sound as you enter the room!` only if a 0–100 roll under your **Perception** passes; otherwise the loss is silent. The room you left sees `You notice <name> sneaking out <dir>.` (`sneaking out upwards` / `downwards`).
+- **Sneak breaks *silently* when you move into a room that doesn't re-emit `Sneaking...`** *([OBSERVED])* — no failure line, the stealth is just gone. On Stock that's a lost move roll whose Perception roll also failed (see *The rolls*). `Sneaking...` arrives between the move and the new room's display, and the old room's `Attempting to sneak...` doesn't carry over. A room shown without it is a guaranteed backstab failure *([CONFIRMED] user, 2026-09-27; report `paradigm-20260927-014325`)*.
+- **NPCs and sneaking** *([CONFIRMED] 2026-09-30, user)*:
+  - **Only a monster with see-hidden stops a sneak you already have.** Other monsters don't break it; on Stock each just takes 1 point off a move's re-roll *([OBSERVED]; see *The rolls*)*.
+  - **You can't re-sneak in a room with NPCs.** Once your sneak is broken, `sn` won't take until you're in a room without them. On Stock, `_can_sneak` refuses `sn` with `You may not sneak right now!` before any roll, when a monster in the room could attack you (`_monster_could_attack`), when someone in the room is attacking you, or while a combat timer (`0x6f0`) runs *([OBSERVED] `wccmmud.dll` 1.11p)*.
+  - *(An earlier, realm-unrecorded note said any NPC in the room prevents a sneak from taking; restated 2026-09-30 as the two rules above.)*
 - **What ends a sneak** *([OBSERVED] 2026-09-28, `wccmmud.dll` 1.11p: the 34 functions that clear the sneaking flag; treated as true on both realms — **Client policy**, user 2026-09-28)*. Where a function serves several commands, the command was read from the code and text around the clear, not traced line by line.
   - **Fighting:** any attack command, backstab included (`_cmd_any_attack`); `bash`; attacking a monster; a monster attacking you; PvP attacks.
   - **Casting any spell** (`_cmd_cast`, which also clears hidden) — see *Casting breaks both Sneak and Hide*.
@@ -2972,10 +3079,13 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - `Attempting to hide...` (alone, no suffix) — the attempt fired and the server ran a hide check, but the outcome is **NOT reported to you**. This line is **ambiguous**: it means "a check happened," not "you are hidden." You cannot tell success from failure off this line alone.
   - `Attempting to hide...You don't think you are hidden.` — explicit hide **FAILURE**. This is the only self-observable failure signal.
     - **Stock prints a space before the suffix:** `Attempting to hide... You don't think you are hidden.` *([OBSERVED] `wccmmud.dll` 1.11p string table; [CONFIRMED] 2026-09-27, user)*. `UserHideFailed` accepts either form; matching only the unspaced one missed every failed hide on Stock.
+- **The hide roll** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_cmd_hide`; Stock only)*: `hid` rolls 0–100 under the same stealth chance as `sn` (capped at 95; see the *The rolls* bullet under *Sneaking — commands, equip order, and the sneak state machine*). On a fail you roll 0–100 under your **Perception**: pass and you get ` You don't think you are hidden.`; fail and you get the bare `Attempting to hide...` a success prints. That's why the bare line is ambiguous.
 - **Hide SUCCESS is not self-observable.** There is no self-side "you are now hidden" confirmation. The only 100%-reliable confirmation is **external**: another player displaying the room and finding you **absent** from the `Also here:` line (or their `search` failing to turn you up). From your own output stream, the best you can know is "an attempt fired" (`Attempting to hide...`) or "it failed" (`...You don't think you are hidden.`) — never a positive success.
 - **Reveal (search) mechanic:**
   - A player runs `search` / `sea`. On a hit they see `You see <name> hiding in the shadows.` and the hidden character is revealed (returned to `Also here:`); on a miss they see `Your search revealed nothing.`.
   - The hidden character sees `<name> is searching the area.` while someone searches — i.e. you get a warning that a reveal attempt is in progress.
+  - **Each hidden player gets their own roll** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_display_users_hidden_in_room`; Stock only)*: 0–100 under the searcher's **Perception**, or automatic when the searcher has see-hidden (status bit `0x6f5 & 0x20`). A hit clears the target's hide.
+  - **Only a `search` reveals.** The check runs from `search` alone; a plain room display (walking in, `look`) never rolls for hidden players.
 - **Do not hide while in a party** *([CONFIRMED])*. A hidden member is removed from `Also here:`, and a player who isn't listed there **cannot be single-target-targeted** by other players — including party heals and buffs — until revealed. Only room-wide spells (relevant in PvP) and possibly party-wide spells still reach a hidden member. (See *Party → Targeted casts on a hiding member*.)
 
 **Client use:**
@@ -3016,6 +3126,12 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     - others in the room see `You see %s bash the %s to the %s.` / `…attempt to bash the %s to the %s.` (and `…above you.` / `…below you.` forms).
     - The engine also has `You bash the door open and walk through` followed by `The door slams shut behind you!`, which moves the basher through the exit. **No exit in the game uses it** *([CONFIRMED] 2026-09-28, user: never seen in play)*.
   - **`pick <dir>`:** `You successfully unlocked the %s.` / `Your skill fails you this time.`; others see `You see %s pick the lock on the %s to the %s.` (and above / below forms). The picklock command has no "not locked" line of its own.
+- **How a pick succeeds** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_cmd_picklock`, with the exit layout in `tools/1.11p source/exit_fields.md`; Stock only, Paradigm not recorded)*:
+  - **One roll: 0–100 under your Picklocks plus the lock's modifier.** The modifier is stored negated: the game data's `[N picklocks]` is a modifier of `−(N − 1)`. So the chance is about **Picklocks − N + 1** percent: a `[101 picklocks]` door needs Picklocks over 100, and at 150 it opens about half the time.
+  - **0 Picklocks always fails**, with no roll.
+  - **A door marked "any"** carries a positive modifier, which adds to the chance.
+  - **The same field is the bash modifier** (exit types 2, 7 and 11).
+  - **Picking costs a 2-unit action delay** and ends a sneak and a hide.
   - **`use <key> <dir>`:** `You successfully unlocked the door.` / `…the %s.`; `The door was not locked.` / `The %s was not locked.`; a wrong key `The %s doesn't seem to fit that lock.`
   - **`open <dir>`:** `The door is now open.` / `The %s is now open.`; `The door was already open.` / `The %s was already open.`; `The door is locked.` / `The %s is locked.`; `That is not a door or a gate!`
   - **`close` / `lock <dir>`** (the client never sends these): `The door is now closed.`, `The door is now locked.`, `The gate is now locked.`, `That %s is not open. Closing it will do nothing!`, `You must close the door before you may lock it.` (gate form too), `There is no benefit to locking in that direction.`, `You may not close doors or gates while attacking or being attacked!` (lock form too).
@@ -3034,6 +3150,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Revealing a hidden exit is `sea <dir>`; the reply wording is axis-dependent:**
   - **success** — cardinals `You found an exit to the <dir>!`; up/down `You found an exit upwards!` / `You found an exit downwards!` (no "to the", `<dir>wards` suffix). *`upwards` confirmed on the wire; `downwards` confirmed from an earlier capture.*
   - **failure** — cardinals `You notice nothing different to the <dir>.`; up/down `You notice nothing different above you.` / `You notice nothing different below you.` (no "to the", no direction word). *Both vertical forms confirmed (`above you` on the wire, `below you` by the user).*
+- **The chance** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_search_for_hidden_exits`; Stock only)*: on a hidden exit (exit type 6) whose searchable bit is set, `sea <dir>` finds it when a 0–100 roll comes in under **Perception − 15, never below 3**. A found exit stays revealed. The room sees `<name> is searching for exits.` either way.
 - **A "bonked" `sea` is distinct from a bonked *move*:** the `sea` reply above is not a move refusal.
 - **You can't search while blind.** `search` / `sea <dir>` answers only `You are blind.` and searches nothing *(Stock [OBSERVED] `wccmmud.dll` 1.11p `_cmd_search` → `_can_see`)*.
   - **Paradigm: treated the same for now** *([NEEDS CONFIRMATION] user 2026-09-27 will retest on Paradigm — does `sea <dir>` work blind there?)*.
@@ -3046,6 +3163,17 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - Because the up/down failure form drops "to the" entirely, a failure regex that only matched the cardinal `to the <dir>` shape never registered an up/down miss — so up/down searches never retried cleanly and stalled (the reported symptom).
 - `HiddenExitRevealManager` holds a search while the character is blind. It sends no `sea` while `ConditionTracker` has the blind flag. A `You are blind.` answer to its `sea` counts as a hold, not a spent attempt. It sends the `sea` once the blind flag clears. Before this, a blind `sea` got no success or failure line and left the walker waiting.
 - It also must not trust a stale observed-exits set from a room it only dead-reckoned into — see RoomTracker.SetRoom clearing ObservedExitDirections; a stale set made the walker skip the required search and ram a wall.
+
+### Tracking (`track`)
+*Status: OBSERVED 2026-09-30 (`wccmmud.dll` 1.11p: `_cmd_track`, `_track_player`, `_track_monster`) · Realm: Stock (Paradigm not recorded)*
+
+- **Syntax: `track <player or monster>`.** With no argument it prints `Syntax: TRACK {monster}`. The name is looked up realm-wide, like other action targets, so the target needn't be in your room.
+- **Everything leaves a trail.** A player carries their last **20** rooms (room and map number); a monster its last **10** (room number only, no map check).
+- **One roll per trail step through your room.** For each time the target's trail passes through the room you're standing in, each exit of the room leading to the room they went to next gets a 0–100 roll under your **Tracking**.
+  - Each pass prints `<name> went <dir> from here.` Several can print if they came through more than once.
+  - Nothing printed, an unknown target, or anything that isn't a player or monster: `Your tracking skills fail you this time.`
+- **Tracking 0 always fails.** There's no separate skill check; the rolls just can't pass. Only a class or race granted the skill has any (*Character stats & progression → Utility skills — Perception + the thief four*).
+- **It costs a 1-unit action delay**, and it isn't on the list of commands that end a sneak (*Sneaking — commands, equip order, and the sneak state machine*).
 
 ### Exit traps — search and disarm
 *Status: CONFIRMED (capture 2026-07-15, reports 132150 and 131801); `disarm trap <longdir>` acceptance NOT wire-confirmed*
@@ -4160,6 +4288,9 @@ A `get <item>` that can't succeed replies with one of these shapes:
   in one command, no `rem` first.
 - **Counts follow the batching rule** (see *Item batching: Paradigm counted commands vs Stock
   one-per-command*): Paradigm takes `hide <N> <item>` in one command; Stock needs one `hide` per copy.
+- **A room `search` finds each stashed item on its own roll** *([OBSERVED] 2026-09-30, `wccmmud.dll`
+  1.11p `_display_items_in_room` in its search mode; Stock only)*: 1–100 under the searcher's
+  **Perception − 10**. A plain room display never rolls, so walking in shows nothing.
 - Coin stashes: see *Money, banks & shops → Hiding coin in a room (stashing)*.
 
 **Client use:**
@@ -4839,8 +4970,13 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   at the bottom of the crypt.
 - **So only same-class characters can make the trip together**; a mixed party splits at the hall. That is
   why the step is only easily auto-trainable running solo.
+- **Training stats after the 10→11 train, in the spirit's room, teleports you out** *([CONFIRMED] 2026-09-30, user; report `paradigm-20260930-085259`) · both realms*.
+  - **No message marks the move.** In the capture, `train` → `Welcome to level 11!`, then `train stats` and SAVE on the creation screen. The next thing on the wire was the room display of Graveyard, Tomb Entrance 1/834, where the train had been in Large Tomb 1/2300.
+  - **Every class lands in the same room, Graveyard, Tomb Entrance 1/834** *([CONFIRMED] 2026-09-30, user)*. Each class has its own 10→11 trainer room with its class spirit in it, and all of them send you to 1/834.
+  - **Stock does the same** *([CONFIRMED] 2026-09-30, user)*.
 - **Client use:**
   - Party auto-train stops members at level 10 by default (Auto-Trainer → *Leave the level 11 train to a solo trip*).
+  - The teleport lands while the train-stats screen's send hold is still up: the new room's `Also here:` comes before the `Obvious exits:` line that lifts it. Combat's attack there is held and re-decided when the hold lifts (`CombatManager.OnWireReleased`, report `paradigm-20260930-085259`). Room tracking re-localises off the room display.
 
 ### Targeted casts on a hiding member
 *Status: CONFIRMED 2026-08-28 (user + screenshot)*

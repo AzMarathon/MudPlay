@@ -40,15 +40,17 @@ namespace MudPlay.Game;
 // current-room provider. It DOES own its ProfileService subscriptions (like
 // PlayerDatabase) so hydrate / snapshot follow the loaded character.
 //
-// Only our own character is filtered out (the "Also here:" line excludes the
-// local player by game convention anyway, and we never see ourselves walk in);
-// party members ARE logged — by the user's definition they're players we see in
-// the room, and excluding them would silently drop rows.
+// Our own character is filtered out (the "Also here:" line excludes the local
+// player by game convention anyway, and we never see ourselves walk in), and so is
+// anyone in our party at the moment of the sighting: seeing the people we travel
+// with is a given, not an encounter (user, 2026-09-30). A former member seen after
+// leaving the party counts as usual, and rows already logged stay.
 public sealed class PlayerSightingTracker : IDisposable
 {
     private readonly Func<Room?> _currentRoom;
     private readonly ProfileService? _profile;
     private readonly Func<string?> _selfNameProvider;
+    private readonly Func<string, bool> _isPartyMember;
     private readonly Func<DateTimeOffset> _clock;
 
     // Authoritative in-session store, keyed on given name (case-insensitive).
@@ -72,6 +74,7 @@ public sealed class PlayerSightingTracker : IDisposable
         Func<Room?> currentRoom,
         ProfileService? profile,
         Func<string?> selfNameProvider,
+        Func<string, bool>? isPartyMember = null,
         Func<DateTimeOffset>? clock = null)
     {
         ArgumentNullException.ThrowIfNull(currentRoom);
@@ -79,6 +82,7 @@ public sealed class PlayerSightingTracker : IDisposable
         _currentRoom = currentRoom;
         _profile = profile;
         _selfNameProvider = selfNameProvider;
+        _isPartyMember = isPartyMember ?? (static _ => false);
         _clock = clock ?? (static () => DateTimeOffset.Now);
 
         if (_profile is not null)
@@ -111,7 +115,7 @@ public sealed class PlayerSightingTracker : IDisposable
             if (e.Kind != EntityKind.Player) continue;
             (string given, _) = PlayerObservation.SplitName(e.ResolvedName);
             if (string.IsNullOrEmpty(given)) continue;
-            if (IsSelf(given)) continue;
+            if (IsSelf(given) || _isPartyMember(given)) continue;
             if (!_countedThisVisit.Add(given)) continue; // already counted this visit
             Record(given);
             any = true;
@@ -127,7 +131,7 @@ public sealed class PlayerSightingTracker : IDisposable
         if (e.Kind != EntityKind.Player) return;
         (string given, _) = PlayerObservation.SplitName(e.Name);
         if (string.IsNullOrEmpty(given)) return;
-        if (IsSelf(given)) return;
+        if (IsSelf(given) || _isPartyMember(given)) return;
 
         RollVisit();
         // A walk-in is always a fresh sighting; mark them counted for this visit

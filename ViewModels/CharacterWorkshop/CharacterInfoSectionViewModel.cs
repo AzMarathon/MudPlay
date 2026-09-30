@@ -8,6 +8,7 @@ using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Cash;
@@ -57,6 +58,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     // one refresh runs once the burst goes quiet.
     private readonly DispatcherTimer _inventoryRefreshDebounce;
     private Control? _view;
+    private StatBreakpointsWindow? _breakpointsWindow;
 
     public override string Id => "characterinfo";
     public override string Title => "Character Info";
@@ -693,8 +695,28 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     // into derived combat (which consumes the combined aggregate).
     private void OnQuestBonusesChanged() => RefreshDerived();
 
+    // A base-stat label opens the Stat Breakpoints window on that stat. It's a deep
+    // link: the same stat again raises or closes the window, another stat switches it
+    // and only raises.
+    [RelayCommand]
+    private void OpenStatBreakpoints(string statName)
+    {
+        if (!Enum.TryParse(statName, out BaseStat stat)) return;
+        if (_breakpointsWindow is { DataContext: StatBreakpointsViewModel open } window)
+        {
+            if (open.Stat == stat) { DialogService.RaiseOrClose(window); return; }
+            open.Show(stat);
+            DialogService.RaiseExisting(window);
+            return;
+        }
+        _breakpointsWindow = new StatBreakpointsWindow { DataContext = new StatBreakpointsViewModel(_stats, _gameData, stat) };
+        _breakpointsWindow.Closed += (_, _) => _breakpointsWindow = null;
+        _breakpointsWindow.Show();
+    }
+
     public override void Dispose()
     {
+        _breakpointsWindow?.Close();
         _inventoryRefreshDebounce.Stop();
         _stats.PropertyChanged -= OnStatsChanged;
         _inventory.Changed -= OnInventoryChanged;
