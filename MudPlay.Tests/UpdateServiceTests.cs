@@ -193,7 +193,7 @@ public sealed class UpdateServiceTests
         // Waits on the PID, mirrors install ↔ backup, treats robocopy >=8 as failure.
         Assert.Contains("tasklist", s);
         Assert.Contains("robocopy", s);
-        Assert.Contains("errorlevel 8", s);
+        Assert.Contains("if %RC% geq 8", s);
         Assert.Contains("start \"\" \"%EXE%\"", s);
         // On success it cleans up staging + backup and deletes itself.
         Assert.Contains("rmdir /s /q \"%STAGE%\"", s);
@@ -208,7 +208,8 @@ public sealed class UpdateServiceTests
     {
         string s = SwapScriptBuilder.BuildWindows();
         Assert.Contains("set \"EXENAME=%~nx4\"", s);
-        Assert.Contains("robocopy \"%NEW%\" \"%DST%\" /MIR /XF \"%EXENAME%\" \"%EXENAME%.old-*\"", s);
+        Assert.Contains("set \"KEEP=/XF \"%EXENAME%\" \"%EXENAME%.old-*\"", s);
+        Assert.Contains("robocopy \"%NEW%\" \"%DST%\" /MIR %KEEP%", s);
         Assert.DoesNotContain("robocopy \"%NEW%\" \"%DST%\" /MIR /NFL", s);
         Assert.Contains("copy /y \"%NEW%\\%EXENAME%\" \"%EXE%.new\"", s);
         Assert.Contains("move /y \"%EXE%\" \"%OLD%\"", s);
@@ -217,6 +218,22 @@ public sealed class UpdateServiceTests
         Assert.Contains("/R:5 /W:1", s);
         Assert.Contains(":rollback", s);
         Assert.Contains("goto rollback", s);
+    }
+
+    // A failed swap leaves its step log beside the executable for the user to attach
+    // to a bug report; a successful one deletes it.
+    [Fact]
+    public void BuildWindows_LeavesAFailureLogBesideTheExe()
+    {
+        string s = SwapScriptBuilder.BuildWindows();
+        Assert.Contains("set \"LOG=%~dpn0.log\"", s);
+        Assert.Contains("set \"FAILLOG=%DST%\\MudPlay-update-failed.log\"", s);
+        Assert.Contains("/LOG+:\"%LOG%\"", s);
+        Assert.Contains("FAILED: %WHY%", s);
+        Assert.Contains("copy /y \"%LOG%\" \"%FAILLOG%\"", s);
+        Assert.Contains("del /f /q \"%LOG%\"", s);
+        // The mirror never purges an earlier failure log.
+        Assert.Contains("\"MudPlay-update-failed.log\"", s);
     }
 
     [Fact]

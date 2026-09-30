@@ -1561,6 +1561,21 @@ public partial class MainWindowViewModel : ObservableObject
             });
         }
 
+        // A self-update that failed relaunches this (old) build right after leaving
+        // its step log beside the executable; say so, and where the log is, so the
+        // user can attach it to a bug report.
+        if (Services.Update.UpdatePlatform.RecentFailedUpdateLog(TimeSpan.FromMinutes(10)) is { } failedUpdateLog)
+        {
+            AppServices.Current.Log.Warn("Update", $"the last update failed and was rolled back — see '{failedUpdateLog}'");
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (ShowSplash) ShowSplash = false;
+                WriteTerminalStatus(
+                    $"[The update failed and this version was restored. What went wrong is in {failedUpdateLog} — please attach it to a bug report.]",
+                    TerminalStatusKind.Error);
+            });
+        }
+
         // Startup auto-connect. The profile the app launched with — a --profile
         // argument (how Profile Management's "Load" spawns an instance) or the
         // auto-load-last profile — is loaded by AppServices BEFORE this ctor

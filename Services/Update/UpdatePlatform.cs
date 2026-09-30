@@ -72,6 +72,27 @@ public static class UpdatePlatform
         return string.IsNullOrEmpty(exe) ? null : System.IO.Path.GetDirectoryName(exe);
     }
 
+    // The step log a failed swap leaves beside the executable, when it's fresh —
+    // the swap relaunches the old build straight after writing it, so a recent one
+    // means this launch is that relaunch. An older one was already announced.
+    public static string? RecentFailedUpdateLog(TimeSpan within, string? exePath = null)
+    {
+        exePath ??= Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exePath) || System.IO.Path.GetDirectoryName(exePath) is not { Length: > 0 } dir)
+            return null;
+        string log = System.IO.Path.Combine(dir, "MudPlay-update-failed.log");
+        try
+        {
+            return System.IO.File.Exists(log) && DateTime.UtcNow - System.IO.File.GetLastWriteTimeUtc(log) <= within
+                ? log
+                : null;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     // The Windows swap renames the replaced executable aside ("MudPlay.exe.old-<n>")
     // because a client may still be running it. Delete the ones nothing runs any
     // more; one still in use stays for a later startup. Returns how many went.
