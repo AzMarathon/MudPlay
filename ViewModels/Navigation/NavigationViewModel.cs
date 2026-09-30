@@ -3028,7 +3028,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     //   - Idle — no-op (the click already moved SelectedRoomKey upstream).
     // remove (Alt+click): take the room back out — the loop's or the exp/hr sketch's
     // latest click on it, or its Auto-Lair mark — and never add.
-    public void OnRoomLeftClicked(RoomKey key, bool remove = false)
+    // queue (Ctrl+click): with nothing running and no build mode open, queue the room
+    // as the walk-to destination, the same as picking it in the search box.
+    public void OnRoomLeftClicked(RoomKey key, bool remove = false, bool queue = false)
     {
         // Any left-click refreshes the ROOM INFO panel's contents (it's informational
         // and doesn't consume the click), but never forces the panel open — its expand
@@ -3040,6 +3042,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // waypoint list; when one does, the click is consumed here so it doesn't also
         // drive the mode dispatch below (which is Idle/no-op with that dialog up anyway).
         if (_services.TryCaptureLoopWaypoint(key)) return;
+
+        if (queue && CurrentMode == NavigationMode.Idle && !IsAnyExecuting && !_services.TokenRoute.Active)
+        {
+            SelectedRoomKey = key;
+            QueuedDestination = key;
+            return;
+        }
 
         switch (CurrentMode)
         {

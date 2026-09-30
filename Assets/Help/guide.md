@@ -276,6 +276,7 @@ Any label too long for a narrow rail is trimmed with an ellipsis — **hover it 
 To send your character to a room:
 
 - **Search** — type a room name or a map/room key (e.g. `1/297`) in the top search box, pick the match, then click the green **Go** chip (or **▾ → Run / Sprint**).
+- **Ctrl+click a room** on the map — with nothing running and no builder open, it's queued just as if you'd searched for it: click **Go** (or **▾ → Run / Sprint**) to walk there.
 - **Right-click a room** on the map → **Walk here**.
 - **Favourites** — save rooms you visit often (right-click a room → **Add to favorites**, or the Management dialog's **Go To** tab), then click one in the **GOTO** rail to walk there. In the Management dialog's **Go To** tab each saved room is listed as its label followed by its **(map/room)** number, so identically-named rooms are easy to tell apart. **Right-click a Go To** in the rail for **Walk here**, **Edit…**, **Move to folder…**, an **Add to / Remove from favourites** toggle (stars it — the ★ that promotes it to the terminal's right-click **Favorites** flyout — without deleting it), and **Delete this Go To** (removes the saved location entirely).
 Type **"favourite"** (or any 3+ character part of the word) into the GOTO or loop filter box to surface your starred Go Tos and favourited loops.
