@@ -1,5 +1,11 @@
 # Version history
 
+## 3.129.0
+
+- Exp/Hr Estimator: Check against my play sets every loop you've run an hour or more at one level (from your program logs) against the simulator at that level
+- Loop simulation can move your character to another level (HP, mana, Spellcasting and level-scaled numbers follow; higher-level spells drop)
+- The check's result is in the bug report and the program log
+
 ## 3.128.4
 
 - Loop simulation keeps your Buffs list up (a mana-regen roll spell rerolled below its threshold, its roll feeding mana regen)

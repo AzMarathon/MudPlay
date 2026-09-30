@@ -1723,6 +1723,12 @@ public static class BugReportBuilder
             foreach (string line in snap.Simulation) sb.Append("- ").Append(line).Append('\n');
         }
 
+        if (snap.LiveCheck is not null)
+        {
+            sb.Append("\n**Simulator vs your play**\n\n");
+            foreach (string line in snap.LiveCheck) sb.Append("- ").Append(line).Append('\n');
+        }
+
         return sb.ToString();
     }
 

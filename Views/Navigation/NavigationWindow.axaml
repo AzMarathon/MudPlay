@@ -2459,6 +2459,27 @@
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
                                             </Border>
+
+                                            <!-- Simulator vs your play: every loop played an hour or more
+                                                 at one level (program logs), simulated at that level. -->
+                                            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                    FontSize="12"
+                                                    Command="{Binding ExpEstimator.CheckAgainstPlayCommand}"
+                                                    Content="Check against my play"
+                                                    ToolTip.Tip="Reads your program logs for every loop you've run an hour or more at one level, simulates each at the level you played it, and shows your real exp/hr beside the simulated one — how far to trust a simulated number."/>
+                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                       IsVisible="{Binding ExpEstimator.CheckStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                       Text="{Binding ExpEstimator.CheckStatus}"/>
+                                            <ItemsControl ItemsSource="{Binding ExpEstimator.CheckLines}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="x:String">
+                                                        <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,1"
+                                                                   Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                   Text="{Binding}"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
                                         </StackPanel>
 
                                         <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>

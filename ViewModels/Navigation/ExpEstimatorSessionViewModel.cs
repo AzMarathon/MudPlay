@@ -28,14 +28,14 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     private readonly RoomGraphManager _graph;
     private readonly GameDataCache _gameData;
     private readonly IRoomFilter? _filter;
-    private readonly Func<(SimCharacter Character, SimWorld World)?>? _simulation;
+    private readonly SimulationSource? _simulation;
     private readonly LogService? _log;
     private readonly List<RoomKey> _clicks = new();
 
     public ExpEstimatorSessionViewModel(
         RouteExpResolver resolver, LoopManager loops, RoomGraphManager graph,
         GameDataCache gameData, IRoomFilter? filter = null,
-        Func<(SimCharacter Character, SimWorld World)?>? simulation = null, LogService? log = null)
+        SimulationSource? simulation = null, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(loops);
@@ -103,10 +103,15 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     [ObservableProperty] private int _simRuns = 3;
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SimulateCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CheckAgainstPlayCommand))]
     private bool _isSimulating;
     [ObservableProperty] private string _simStatus = "";
     [ObservableProperty] private LoopSimSummary? _simResult;
     public ObservableCollection<string> SimLines { get; } = new();
+
+    // Simulator-vs-your-play check (CheckAgainstPlay): one line per loop and level.
+    [ObservableProperty] private string _checkStatus = "";
+    public ObservableCollection<string> CheckLines { get; } = new();
     public bool HasSimResult => SimResult is not null;
     public bool CanSimulate => _simulation is not null;
 
@@ -244,7 +249,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         return new ExpEstimatorSnapshot(
             ProposedName, rooms, SecondsPerStep, AreaCombat, RoundsPerMob, RealConditionsMultiplier,
             ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses, summonLines, RealmLabel,
-            SimResult is null ? null : SimLines.ToList(), SimSecondsPerStep);
+            SimResult is null ? null : SimLines.ToList(), SimSecondsPerStep,
+            CheckLines.Count == 0 ? null : CheckLines.Prepend(CheckStatus).ToList());
     }
 
     // Play the live character around the route for SimRuns seeded runs of SimHours
@@ -252,7 +258,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRunSimulation))]
     private async Task SimulateAsync()
     {
-        if (_simulation?.Invoke() is not { } setup)
+        if (_simulation?.Build(null) is not { } setup)
         {
             SimStatus = "No character yet — log in and type `stat` so the client knows your level and pools.";
             return;
@@ -289,6 +295,78 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     }
 
     private bool CanRunSimulation() => _simulation is not null && !IsSimulating && _clicks.Count >= 2;
+
+    // Loops need this many live hours at one level before they're checked — a
+    // shorter sample swings too far on luck to judge the simulator by.
+    private const double CheckMinHours = 1.0;
+
+    // Set every loop this character has played (per level, from the program logs)
+    // against the simulator at that level, so the user can see how far to trust it.
+    [RelayCommand(CanExecute = nameof(CanRunCheck))]
+    private async Task CheckAgainstPlayAsync()
+    {
+        if (_simulation is null) return;
+        if (string.IsNullOrWhiteSpace(_simulation.Character()))
+        {
+            CheckStatus = "No character yet — log in and type `stat` first.";
+            return;
+        }
+        string character = _simulation.Character()!;
+        IsSimulating = true;
+        CheckLines.Clear();
+        CheckStatus = "Reading your program logs…";
+        try
+        {
+            string dir = _simulation.LogsDir;
+            IReadOnlyList<LiveLoopRecord> records = await Task.Run(() =>
+                LiveLoopSessions.Pool(LiveLoopSessions.ReadFolder(dir), character, CheckMinHours));
+            if (records.Count == 0)
+            {
+                CheckStatus = $"No loop played for {CheckMinHours:0} h or more at one level in your logs yet.";
+                return;
+            }
+
+            // Characters and laps are built (and frozen) here on the UI thread; the
+            // simulations themselves run on a worker.
+            var jobs = new List<(LiveLoopRecord Live, SimCharacter? Character, SimWorld? World, IReadOnlyList<SimRoom>? Lap, string? Problem)>();
+            foreach (LiveLoopRecord r in records)
+            {
+                if (_loops.Get(r.Loop) is not { } loop) { jobs.Add((r, null, null, null, "loop no longer saved")); continue; }
+                IReadOnlyList<SimRoom> lap = _resolver.ResolveSimLap(loop.Waypoints, _filter);
+                if (lap.Count == 0) { jobs.Add((r, null, null, null, "route no longer resolves")); continue; }
+                if (_simulation.Build(r.Level) is not { } setup) { jobs.Add((r, null, null, null, "no character")); continue; }
+                (SimCharacter ch, SimWorld world) = SimFreeze.For(setup.Character, setup.World, lap);
+                jobs.Add((r, ch, world, lap, null));
+            }
+
+            double step = Math.Max(0.25, SimSecondsPerStep);
+            int runs = Math.Clamp(SimRuns, 1, 20);
+            CheckStatus = $"Simulating {jobs.Count(j => j.Problem is null)} loop(s)…";
+            IReadOnlyList<SimLiveCheckRow> rows = await Task.Run(() => jobs
+                .Select(j => j.Problem is not null
+                    ? new SimLiveCheckRow(j.Live, null, j.Problem)
+                    : new SimLiveCheckRow(j.Live, LoopSimulator.RunMany(j.Character!, j.Lap!, j.World!, step, 1.0, runs)))
+                .ToList());
+
+            foreach (SimLiveCheckRow row in rows) CheckLines.Add(row.Label);
+            // Another level is simulated with today's gear, stats and spells, so a
+            // session from before an upgrade reads high for reasons the simulator
+            // can't see.
+            int now = _simulation.Level();
+            if (rows.Any(r => r.Live.Level != now))
+                CheckLines.Add($"Other levels are simulated with today's gear, stats and spells (you're L{now} now) — older sessions read high.");
+            var diffs = rows.Where(r => r.DiffPercent is not null).Select(r => r.DiffPercent!.Value).ToList();
+            CheckStatus = diffs.Count == 0 ? "" :
+                $"{diffs.Count(d => Math.Abs(d) <= 10)} of {diffs.Count} within 10% · average {diffs.Average():+0.0;-0.0}%";
+            _log?.Info("ExpEstimator", $"live check for {character}: " + string.Join(" | ", rows.Select(r => r.Label)));
+        }
+        finally
+        {
+            IsSimulating = false;
+        }
+    }
+
+    private bool CanRunCheck() => _simulation is not null && !IsSimulating;
 
     private void FillSimLines(LoopSimSummary r)
     {

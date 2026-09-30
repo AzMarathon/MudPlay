@@ -370,6 +370,14 @@ The **⚙** beside the button sets:
 
 The readout adds the damage you took per hour, how often you fled, and any hang-ups. What it doesn't simulate yet: monsters' on-hit procs (the "Your life is drained…" kind), item-cast buffs, backstab openers, and the extra time doors and searches take. Results are cleared whenever you change the route or a simulation setting. The last result is included in a bug report.
 
+### Checking the simulator against your own play
+
+**Check against my play** (under the simulation readout) answers "how far can I trust a simulated number?". It reads your program logs for every loop you've run an **hour or more at one level**, simulates each of them **at the level you played it**, and lists your real exp/hr beside the simulated one — `BigSharks3 L47 · 5.6 h live 2,473,718/hr → simulated 2,586,583 (+4.6%)` — with a count of how many land within 10%.
+
+It only needs your logs and your saved loops; the sketch on the map doesn't matter. A loop you've since deleted or renamed is listed as no longer saved.
+
+Another level is simulated by moving **today's** character there: max HP, mana and Spellcasting shift by your class's per-level growth, the level-scaled numbers (accuracy, swings, regen, spell damage) follow, and spells above that level are dropped — but your stats, gear and quest bonuses stay as they are now. So a session from before a gear upgrade or a stat train reads high for reasons the simulator can't see; the rows at your current level are the fair test.
+
 ## Auto-Lair
 
 **Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**; clicking a marked room again, or **Alt+clicking** it, unmarks it), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.

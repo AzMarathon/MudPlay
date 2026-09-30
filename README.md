@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.128.4**
-> - Loop simulation keeps your Buffs list up (a mana-regen roll spell rerolled below its threshold, its roll feeding mana regen)
-> - Simulated fights cast your debuffs, follow death-summon chains and summoning rooms, and credit bosses at exp ÷ regen
-> - Simulated Health run / hang-up triggers: flee, rest away and come back; waypoint command delays count
-> - Simulation readout adds damage taken per hour, flees and hang-ups
+> **Version 3.129.0**
+> - Exp/Hr Estimator: Check against my play sets every loop you've run an hour or more at one level (from your program logs) against the simulator at that level
+> - Loop simulation can move your character to another level (HP, mana, Spellcasting and level-scaled numbers follow; higher-level spells drop)
+> - The check's result is in the bug report and the program log
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
