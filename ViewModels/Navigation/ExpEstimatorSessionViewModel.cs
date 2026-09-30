@@ -108,6 +108,16 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         Recompute();
     }
 
+    // Alt+click on the map: take the room back out — its most recent click, as the
+    // loop builder does. False when the room isn't in the sketch.
+    public bool RemoveLastClickOf(RoomKey key)
+    {
+        int index = _clicks.LastIndexOf(key);
+        if (index < 0) return false;
+        RemoveClickAt(index);
+        return true;
+    }
+
     public void MoveClick(int fromIndex, int toIndex)
     {
         if (fromIndex == toIndex) return;

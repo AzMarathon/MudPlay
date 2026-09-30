@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.126.22**
-> - Alt+click a room on the map to take it back out of a loop you're building, or to unmark an Auto-Lair room
+> - Alt+click a room on the map to take it back out of a loop you're building or an exp/hr sketch, or to unmark an Auto-Lair room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
