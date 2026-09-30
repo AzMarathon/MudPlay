@@ -389,9 +389,44 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.Log.Info("AutoMode", "Run + Combat off: Auto-Combat off until the run begins.");
                 break;
             case Game.Map.RunStartMode.Sprint:
-                if (!IsSprintModeActive) IsSprintModeActive = true;
-                AppServices.Current.Log.Info("AutoMode", "Run + Sprint: Sprint Mode on until the run begins.");
+                if (IsSprintModeActive) return;
+                IsSprintModeActive = true;
+                _tripStartedSprint = true;
+                AppServices.Current.Log.Info("AutoMode", "Sprint: Sprint Mode on until the run begins.");
                 break;
+        }
+    }
+
+    // A Sprint start turned Sprint Mode on and it hasn't ended yet.
+    private bool _tripStartedSprint;
+
+    // The user stopped the run before it began (a walk-to short of its destination, a
+    // loop still walking to its start, an Auto-Lair short of its first lair). Settings →
+    // Other decides whether the autos a Run / Sprint start turned off come back now or
+    // stay off (the default); either way the trip's promise ends here, so a later,
+    // unrelated arrival doesn't flip them.
+    private void OnUserStoppedRun()
+    {
+        if (!_tripTurnedOffCombat && !_tripStartedSprint) return;
+        Models.Profile.OtherSettings other = AppServices.Current.Resolver.Resolve<Models.Profile.OtherSettings>("Other");
+        if (_tripTurnedOffCombat)
+        {
+            if (other.RunStopRestoresCombat) EndTripCombatOff();
+            else
+            {
+                _tripTurnedOffCombat = false;
+                AppServices.Current.Log.Info("AutoMode", "Run stopped before it began — Auto-Combat stays off (Settings → Other).");
+            }
+        }
+        if (_tripStartedSprint)
+        {
+            _tripStartedSprint = false;
+            if (other.SprintStopEndsSprint && IsSprintModeActive)
+            {
+                IsSprintModeActive = false;
+                AppServices.Current.Log.Info("AutoMode", "Sprint stopped before it began — Sprint Mode ended, its autos back on (Settings → Other).");
+            }
+            else AppServices.Current.Log.Info("AutoMode", "Sprint stopped before it began — Sprint Mode stays on (Settings → Other).");
         }
     }
 
@@ -1489,6 +1524,7 @@ public partial class MainWindowViewModel : ObservableObject
         // behind — without the note the leader walked back through the teleport to
         // fetch them.
         AppServices.Current.ApplyRunStartMode = ApplyRunStartMode;
+        AppServices.Current.NoteUserStoppedRun = OnUserStoppedRun;
         AppServices.Current.Walker.SetPartySplitHandler(OnLeaderPartySplitTeleport);
         AppServices.Current.LoopRunner.SetPartySplitHandler(OnLeaderPartySplitTeleport);
 
@@ -5132,7 +5168,11 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Toolbar Stop — backs the running engine fully out to Idle.
     [RelayCommand]
-    private void MovementStop() => AppServices.Current.MovementControl.Stop();
+    private void MovementStop()
+    {
+        AppServices.Current.MovementControl.Stop();
+        OnUserStoppedRun();
+    }
 
     // Singleton handle for the one Navigation Management dialog — either entry point
     // (toolbar Start fallback, map window button) reuses it rather than stacking a
@@ -6001,6 +6041,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     partial void OnIsSprintModeActiveChanged(bool value)
     {
+        if (!value) _tripStartedSprint = false;
         PersistGeneralFlag("SprintMode", value, g => g.SprintMode = value);
         // A profile reseed sets this without a real user toggle — skip the engine
         // coupling so loading a Sprint-on character doesn't stomp the engines'

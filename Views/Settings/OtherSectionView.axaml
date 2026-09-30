@@ -160,6 +160,17 @@
                       Margin="0,8,0,0"
                       ToolTip.Tip="When checked: players you've flagged 'Invite to party if seen' are auto-invited only while navigation is running — a walk, loop or auto-lair (running or paused), or an auto-deposit or train trip. Standing idle, seeing them does nothing. When unchecked (default), they're invited whenever you see them. Re-invites of your own party (after a disconnect, a split or a trainer trip) aren't affected. Applies only for this character."/>
 
+            <!-- Go ▾ Run / Sprint starts stopped by hand before the run began:
+                 whether the autos they turned off come back. Char-tier settings. -->
+            <CheckBox Content="Stopping a Run turns Auto-Combat back on"
+                      IsChecked="{Binding RunStopRestoresCombat, Mode=TwoWay}"
+                      Margin="0,8,0,0"
+                      ToolTip.Tip="When checked: stopping a walk-to, loop or Auto-Lair you started with Run (Go with Auto-Combat off) before it began turns Auto-Combat back on at once. When unchecked (default), Auto-Combat stays off. (A Run that isn't stopped turns it back on by itself once it reaches its destination, loop or first lair.) Applies only for this character."/>
+            <CheckBox Content="Stopping a Sprint ends Sprint Mode"
+                      IsChecked="{Binding SprintStopEndsSprint, Mode=TwoWay}"
+                      Margin="0,8,0,0"
+                      ToolTip.Tip="When checked: stopping a walk-to, loop or Auto-Lair you started with Sprint (Go in Sprint Mode) before it began ends Sprint Mode at once, turning back on the autos it turned off. When unchecked (default), Sprint Mode stays on until your next walk arrives. (A Sprint that isn't stopped ends by itself once it reaches its destination, loop or first lair.) Applies only for this character."/>
+
             <!-- Master gate for the monster-HP-lookup display. When checked
                  (default), looking at a monster surfaces its estimated remaining
                  hit points in the status-bar "TGT HP:" slot and as a yellow line

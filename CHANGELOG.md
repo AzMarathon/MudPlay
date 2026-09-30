@@ -4,6 +4,7 @@
 
 - Navigation: a running loop's chip stays on Pause through fights and rests; it reads Go only when you pause it
 - Navigation: Run is now Go, with a ▾ for Run (Go with Auto-Combat off) and Sprint (Go in Sprint Mode) until the walk-to arrives, the loop begins, or the Auto-Lair reaches its first lair — also in the route picker, Navigation Management and the rail's right-click menus
+- Settings → Other: choose whether stopping a Run turns Auto-Combat back on and stopping a Sprint ends Sprint Mode (both off: they stay off)
 
 ## 3.133.8
 

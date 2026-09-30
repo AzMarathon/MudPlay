@@ -4460,6 +4460,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (!loopRunReady && _services.Walker.State is WalkState.Walking or WalkState.Paused)
         {
             _services.Walker.Stop("user stop from Navigation");
+            _services.NoteUserStoppedRun?.Invoke();
             return;
         }
 
@@ -4592,6 +4593,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.LoopRunner.Stop();
         if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
             _services.Walker.Stop("user stop from Navigation");
+        _services.NoteUserStoppedRun?.Invoke();
 
         _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
 

@@ -267,7 +267,7 @@ A row of action chips — **Save**, **Go**, **Loop mode**, **Lair mode** — sit
 - **Run** — Go with **Auto-Combat off** for the trip.
 - **Sprint** — Go in **Sprint Mode** (no resting stops, no fighting or looting).
 
-Either lasts only for the trip there. Combat comes back on, or Sprint ends, the moment a walk-to arrives, a loop reaches its first waypoint and begins its circuit, or an Auto-Lair steps into its first lair. The same **Run** and **Sprint** choices sit beside **Go** in the route picker, on each loop, lair, Go To and the walk-to search in **Navigation Management**, and in the right-click menu of the rail's loops and lairs. While a loop runs, the chip reads **Pause**, and only turns back to **Go** when you pause it yourself — not every time a fight or a rest holds the loop. While you're in Loop mode a **Clear all** chip appears to the left of **Save**; it wipes every step from the loop you're building so you can start fresh.
+Either lasts only for the trip there. Combat comes back on, or Sprint ends, the moment a walk-to arrives, a loop reaches its first waypoint and begins its circuit, or an Auto-Lair steps into its first lair. Stop the run yourself before then and they stay off, unless you've ticked *Stopping a Run turns Auto-Combat back on* / *Stopping a Sprint ends Sprint Mode* under Settings → Other. The same **Run** and **Sprint** choices sit beside **Go** in the route picker, on each loop, lair, Go To and the walk-to search in **Navigation Management**, and in the right-click menu of the rail's loops and lairs. While a loop runs, the chip reads **Pause**, and only turns back to **Go** when you pause it yourself — not every time a fight or a rest holds the loop. While you're in Loop mode a **Clear all** chip appears to the left of **Save**; it wipes every step from the loop you're building so you can start fresh.
 
 Any label too long for a narrow rail is trimmed with an ellipsis — **hover it to read the full text**. This covers the status line, the GOTO / loop / lair / favourite rows, the live CURRENT NAV step list, search results, folder names, and the EXP/HR estimator rows.
 
@@ -3699,6 +3699,18 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **Default:** Off
 **What it does:** Players you've flagged **Invite to party if seen** (Game Data → Players) are auto-invited only while navigation is running: a walk, loop or Auto-Lair (running or paused), or an auto-deposit or train trip. Standing idle, seeing them does nothing. Off, they're invited whenever you see them.
 **Important notes:** Re-inviting your own party (after a disconnect, a split or a trainer trip) isn't affected. Saved for this character.
+
+### Stopping a Run turns Auto-Combat back on
+
+**Default:** Off
+**What it does:** Covers a walk-to, loop or Auto-Lair you started with **Run** (Go with Auto-Combat off) and then stopped yourself before it began, with a Stop chip in the Navigation window or the toolbar's Stop. On, Auto-Combat comes back on at the stop. Off, it stays off.
+**Important notes:** A Run you don't stop turns combat back on by itself once it arrives, reaches its loop, or reaches its first lair. Saved for this character.
+
+### Stopping a Sprint ends Sprint Mode
+
+**Default:** Off
+**What it does:** The same for a **Sprint** start (Go in Sprint Mode). On, stopping it before it began ends Sprint Mode at once, turning back on the autos Sprint turned off. Off, Sprint Mode stays on until your next walk arrives.
+**Important notes:** Saved for this character.
 
 ### Show monster HP lookup
 

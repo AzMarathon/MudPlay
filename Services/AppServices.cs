@@ -2209,6 +2209,11 @@ public sealed class AppServices
     // Navigation Management call it right before the run starts.
     public Action<Game.Map.RunStartMode>? ApplyRunStartMode { get; set; }
 
+    // The user stopped a walk-to / loop / Auto-Lair by hand (a Stop chip or the
+    // toolbar Stop): a Run / Sprint start's turned-off autos come back or stay off
+    // per Settings → Other. Registered by the main window's view-model.
+    public Action? NoteUserStoppedRun { get; set; }
+
     // Folder CRUD over the shared per-BBS Loops directory that holds
     // both Loops and Lairs. Create / rename
     // / delete folders; reloads both catalogues after a filesystem
