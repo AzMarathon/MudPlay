@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.131.1**
-> - Combat round totals: new **Cap at monster HP** box; off (the default) counts every hit as printed again, so a killing blow reads in full
+> **Version 3.132.0**
+> - Simulator window: **Start simulating** in the Exp/Hr Estimator section opens it, no estimating needed; simulate any saved loop or the estimator's sketch
+> - Check against my play and Rank areas are tables in their own tabs; picking a ranked row shows its full result and its route on the map
+> - Simulator plays sneak backstab openers: a sneaking backstabber opens each fight with the surprise stab
+> - Rank areas level picker fits a 3-digit level
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

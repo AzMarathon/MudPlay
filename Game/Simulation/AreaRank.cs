@@ -34,6 +34,15 @@ public sealed record AreaRank(
         }
     }
 
+    // The Simulator window's ranking columns.
+    public string Name => IsLoop ? $"★ {Area}" : Area;
+    public string Kind => IsLoop ? $"your loop · {LapRooms} rooms" : $"area · {Tour.Count} lairs";
+    public string YouMade => Live is { Count: > 0 } l
+        ? string.Join(", ", l.Select(r => $"{r.ExpPerHour:N0}/hr over {r.Hours:0.#} h at L{r.Level}"))
+        : "";
+    public string Died => Result.Deaths + Result.HangUps == 0 ? ""
+        : $"{Result.Deaths + Result.HangUps} of {Result.Runs.Count} runs{(Safe ? " (you haven't)" : "")}";
+
     // Safe options by exp/hr, then the unsafe ones by exp/hr.
     public static IReadOnlyList<AreaRank> Rank(IEnumerable<AreaRank> ranks) =>
         ranks.OrderByDescending(r => r.Safe).ThenByDescending(r => r.Result.ExpPerHour).ToList();

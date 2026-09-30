@@ -22,6 +22,14 @@ namespace MudPlay.Game.Simulation;
 // between-round cast cycle"); regen ticks on the realm's cadence (RealmRegenProfile).
 // Reaching 0 HP ends the run as a death; the Health tab's hang-up trigger ends it
 // as a hang-up.
+//
+// A character that opens with a backstab walks sneaked. By the user's call
+// (2026-09-30, report paradigm-20260930-114254) a sneak always holds on a move and
+// is re-taken the moment the room it leaves is clear; see-hidden breaks it, and so
+// does anything on GAME_MECHANICS "What ends a sneak" the simulation does (an
+// attack, a cast, a rest). Arriving sneaked at a fight, the first round is the
+// surprise stab (GAME_MECHANICS "Backstab"); every round after it is the usual
+// attack choice.
 public static class LoopSimulator
 {
     public static LoopSimSummary RunMany(
@@ -146,6 +154,7 @@ public static class LoopSimulator
         private long _postureSince;
         private bool _hpGate, _maGate;
         private int _pos;
+        private bool _sneaking, _stabPending;
         private double? _moveDoneAt;
         private Walk _walk;
         private bool _isAway;
@@ -177,6 +186,7 @@ public static class LoopSimulator
             // The spawn pass runs on the server's own clock, unrelated to the round.
             _spawnPassPhase = _rng.Next(SpawnPassSteps);
             _perSlotClock = ch.Realm == RealmType.ParaMud;
+            _sneaking = ch.Backstab is not null;
         }
 
         private double Now => _step * Step;
@@ -232,6 +242,17 @@ public static class LoopSimulator
                 AddMob(state, room.NpcMonster, lairSlot: -1);
             Spawn(state, entering: true);
             RoomSummon();
+            ArriveSneaking(state);
+        }
+
+        // A sneak carried into the room: a see-hidden monster there spots it, else a
+        // fight here opens with the surprise stab.
+        private void ArriveSneaking(RoomState state)
+        {
+            _stabPending = false;
+            if (!_sneaking) return;
+            if (state.Mobs.Any(m => m.Alive && m.Entry.SeesHidden)) { _sneaking = false; return; }
+            _stabPending = state.Mobs.Any(m => m.Alive && m.Fightable);
         }
 
         // Fill every empty lair slot whose clock has run out. Walking in refills at once;
@@ -388,8 +409,16 @@ public static class LoopSimulator
             target.Engaged = true;
 
             CombatSpellDecision decision = _chooser.Choose(_ch.Combat, Context(target, fightable));
+            // Any attack spends the surprise and ends the sneak.
+            _stabPending = false;
+            _sneaking = false;
             bool area = decision.Action is CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2;
-            if (decision.Spell is { } code && _ch.Spells.TryGetValue(code, out SimSpell? spell))
+            if (decision.Action == CombatSpellAction.Backstab)
+            {
+                Stab(target);
+                Count("bs");
+            }
+            else if (decision.Spell is { } code && _ch.Spells.TryGetValue(code, out SimSpell? spell))
             {
                 if (CastAttack(spell, target, area ? fightable : null))
                 {
@@ -429,7 +458,7 @@ public static class LoopSimulator
                 TargetRawName: target.Key,
                 Mana: ma,
                 MaxMana: _ch.MaxMana,
-                BackstabPending: false,
+                BackstabPending: _stabPending,
                 SpellsAvailable: ma > 0,
                 LevelBlockedActions: CombatSpellGates.LevelBlocked(_world.MonsterMagic, _world.SpellReqLevel, number, singleEff, normalEff, altEff),
                 ResistBlockedActions: CombatSpellGates.ResistBlocked(_world.MonsterResist, _world.SpellAttackType, number, normalEff, altEff),
@@ -509,6 +538,23 @@ public static class LoopSimulator
                 int dmg = Roll(melee.CritChancePercent) ? melee.AvgCritDamage : melee.AvgWeaponDamage;
                 Damage(target, Math.Max(0, dmg - dr));
             }
+        }
+
+        // The surprise round is one stab: the backstab roll against the monster's
+        // backstab defence and the stab's range less its DR, as Monster Intel judges
+        // it (BackstabMatchupCalculator). A miss is the whole round.
+        private void Stab(Mob target)
+        {
+            if (_ch.Backstab is not { } bs || _ch.BackstabHitMagic < target.Entry.Magical) return;
+            MonsterCatalogEntry e = target.Entry;
+            MonsterDebuffEffect d = target.Debuff;
+            var monster = new MonsterMatchupProfile(e.ArmourClass - d.AcDelta,
+                (int)Math.Max(0, e.DamageResist - d.DrDelta), target.Hp, e.Dodge - d.DodgeDelta,
+                HasPhysicalAttack: false, AttackAccuracy: 0, AvgAttackDamage: 0, IsEvil: false, IsGood: false);
+            BackstabMatchup stab = BackstabMatchupCalculator.Evaluate(
+                bs with { NormalAccuracy = bs.NormalAccuracy + ProcSum(p => p.AccuracyDelta) }, monster, e.BsDefense, seesHidden: false);
+            if (!Roll(stab.HitPercent)) return;
+            Damage(target, Between(stab.MinDamage, stab.MaxDamage));
         }
 
         private void Damage(Mob mob, long amount)
@@ -822,6 +868,8 @@ public static class LoopSimulator
             _ma -= spell.ManaPerCast;
             Count(spell.Short);
             _posture = Posture.Standing;
+            _sneaking = false;
+            _stabPending = false;
             return true;
         }
 
@@ -882,6 +930,7 @@ public static class LoopSimulator
                 {
                     _posture = want;
                     _postureSince = _step;
+                    _sneaking = false;
                 }
                 return;
             }
@@ -915,11 +964,15 @@ public static class LoopSimulator
             return Posture.Resting;
         }
 
+        // A broken sneak is re-taken before the step only where nothing is alive in the
+        // room (GAME_MECHANICS "NPCs and sneaking").
         private void StartWalk(Walk kind, double seconds)
         {
             _walk = kind;
             _posture = Posture.Standing;
             _moveDoneAt = Now + seconds;
+            _stabPending = false;
+            if (!_sneaking && _ch.Backstab is not null && !Here().Mobs.Any(m => m.Alive)) _sneaking = true;
         }
 
         private void Arrive()
@@ -934,6 +987,7 @@ public static class LoopSimulator
                     break;
                 case Walk.Return:
                     _isAway = false;
+                    ArriveSneaking(Here());
                     break;
                 default:
                     int next = (_pos + 1) % _lap.Count;

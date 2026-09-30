@@ -146,6 +146,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // lambda reads the current ExpEstimator (null when not estimating), so a
         // single registration covers every enter/exit without per-transition wiring.
         _services.ExpEstimatorSnapshotProvider = () => ExpEstimator?.ToSnapshot();
+
+        Simulator = new SimulatorViewModel(
+            _services.ExpResolver, _services.Loops, _services.GameData, _services.Movement,
+            _services.LoopSimulationSource, _services.Log, () => ExpEstimator, ShowSimulatedRouteOnMap);
+        _services.SimulatorSnapshotProvider = () => Simulator.ToSnapshot();
         // A character simulation was played with the old character / game data.
         _services.Profile.ProfileLoaded += OnProfileLoadedDropSimulation;
         _services.GameData.ActiveSetChanged += OnActiveSetDropSimulation;
@@ -155,10 +160,51 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // switch already does, through the graph reload).
     private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _)
     {
-        ExpEstimator?.CancelRanking();
-        ExpEstimator?.ClearSimulation(alsoCheck: true);
+        Simulator.CancelRanking();
+        Simulator.ClearSimulation(alsoCheck: true);
     }
-    private void OnActiveSetDropSimulation(string? _) => ExpEstimator?.ClearSimulation(alsoCheck: true);
+    private void OnActiveSetDropSimulation(string? _) => Simulator.ClearSimulation(alsoCheck: true);
+
+    // The Simulator window's state: it plays saved loops or the estimator's sketch,
+    // so it lives here with the Navigation window rather than with the estimator.
+    public SimulatorViewModel Simulator { get; }
+
+    private Views.Navigation.SimulatorWindow? _simulatorWindow;
+
+    // "Start simulating" in the estimator section: open the Simulator window, raise it
+    // when buried, close it when in front (DialogService.RaiseOrClose).
+    [RelayCommand]
+    private void OpenSimulator()
+    {
+        if (_simulatorWindow is { } open) { DialogService.RaiseOrClose(open); return; }
+        _simulatorWindow = new Views.Navigation.SimulatorWindow { DataContext = Simulator };
+        _simulatorWindow.Closed += (_, _) => _simulatorWindow = null;
+        _simulatorWindow.Show();
+    }
+
+    // A ranked tour picked in the Simulator goes on the map as the estimator's sketch,
+    // entering estimator mode when needed — but never over a loop being built or a
+    // running walk, loop or Auto-Lair, which entering the estimator would throw away.
+    // Returns why it couldn't, or null.
+    private string? ShowSimulatedRouteOnMap(IReadOnlyList<RoomKey> rooms, string name)
+    {
+        if (rooms.Count == 0) return null;
+        if (!IsExpEstimatorMode)
+        {
+            if (IsLoopMode) return "Save or discard the loop you're building to see this route on the map.";
+            if (_services.AutoLair.IsActive || _services.LoopRunner.State != Game.Map.LoopState.Idle
+                || _services.Walker.State is WalkState.Walking or WalkState.Paused)
+                return "Stop the running loop, walk or Auto-Lair to see this route on the map.";
+            ToggleExpEstimatorMode();
+        }
+        if (ExpEstimator is null) return "The Exp/Hr Estimator couldn't open.";
+        ExpEstimator.LoadRoute(rooms, name);
+        // Selection before Layout: MapControl centres on SelectedRoomKey when the
+        // layout swaps (see OnFloorChangeRequested).
+        SelectedRoomKey = rooms[0];
+        Layout = _services.Bfs.BuildLayout(rooms[0]);
+        return null;
+    }
 
     // Per-second pump for CURRENT NAV lair countdowns. Cheap to leave
     // running, but explicitly gated so an idle Navigation window does no work.
@@ -182,7 +228,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        ExpEstimator?.CancelRanking();
+        Simulator.CancelRanking();
+        Simulator.CancelSimulation();
+        _simulatorWindow?.Close();
         _lairTick.Stop();
         _sailingTick.Stop();
         _searchDebounce?.Stop();
@@ -225,7 +273,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Macros.Macros.CollectionChanged -= OnMacrosCollectionChanged;
         _services.Profile.ProfileLoaded -= OnProfileLoadedDropSimulation;
         _services.GameData.ActiveSetChanged -= OnActiveSetDropSimulation;
-        ExpEstimator?.CancelSimulation();
     }
 
     // Loops + lairs share the on-disk folder tree; a folder add / rename /
@@ -1496,6 +1543,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         RefreshLoopsAndLairs();
         RebuildContextFavorites();   // a loop's favourite flag may have flipped — refresh the map flyout
+        Simulator.RefreshRoutes();
     }
 
     private void OnSetupsChanged()
@@ -2722,14 +2770,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             }
 
             var session = new ExpEstimatorSessionViewModel(
-                _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement,
-                _services.LoopSimulationSource, _services.Log);
+                _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement);
             session.PropertyChanged += OnExpEstimatorPropertyChanged;
+            session.RouteChanged += Simulator.SketchChanged;
             ExpEstimator = session;
             CurrentMode = NavigationMode.ExpEstimator;
         }
         OnPropertyChanged(nameof(ExpEstimator));
         OnPropertyChanged(nameof(IsExpEstimating));
+        Simulator.SketchChanged();
     }
 
     // Seed a fresh estimator session from a saved loop so it can be analysed.
@@ -2741,15 +2790,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         TearDownExpEstimator();
         TearDownLoopBuilder();
         var session = new ExpEstimatorSessionViewModel(
-            _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement,
-            _services.LoopSimulationSource, _services.Log)
+            _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement)
         { ProposedName = loop.Name };
         session.PropertyChanged += OnExpEstimatorPropertyChanged;
         session.LoadWaypoints(loop.Waypoints);
+        session.RouteChanged += Simulator.SketchChanged;
         ExpEstimator = session;
         CurrentMode = NavigationMode.ExpEstimator;
         OnPropertyChanged(nameof(ExpEstimator));
         OnPropertyChanged(nameof(IsExpEstimating));
+        Simulator.SketchChanged();
 
         // Centre the map on the loop's first room so the loaded route is in view.
         // Selection before Layout: MapControl centres on SelectedRoomKey when the
@@ -2796,14 +2846,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (ExpEstimator is not null)
         {
             ExpEstimator.PropertyChanged -= OnExpEstimatorPropertyChanged;
-            ExpEstimator.CancelRanking();
-            ExpEstimator.CancelSimulation();
+            ExpEstimator.RouteChanged -= Simulator.SketchChanged;
         }
         ExpEstimator = null;
         LoopBuilderPath = null;
         LoopBuilderWaypoints = null;
         OnPropertyChanged(nameof(ExpEstimator));
         OnPropertyChanged(nameof(IsExpEstimating));
+        Simulator.SketchChanged();
     }
 
     private void TearDownLoopBuilder()
@@ -2832,6 +2882,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 break;
             case nameof(ExpEstimatorSessionViewModel.WaypointKeys):
                 LoopBuilderWaypoints = s?.WaypointKeys;
+                break;
+            case nameof(ExpEstimatorSessionViewModel.ProposedName):
+                Simulator.SketchRenamed();
                 break;
         }
     }
@@ -3503,7 +3556,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // RoomSearchService listens to GraphReloaded itself and flushes
         // its monster + distance caches. A ranking mid-way through mapping would mix
         // the old graph's searches with the new one's.
-        ExpEstimator?.CancelRanking();
+        Simulator.CancelRanking();
         RefreshLayout();
         RefreshTeleportRooms();
         RefreshTrainerRooms();   // trainer set is per game-data set

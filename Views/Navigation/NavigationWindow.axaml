@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.Navigation"
-        xmlns:sim="using:MudPlay.Game.Simulation"
         xmlns:gd="using:MudPlay.ViewModels.GameData.Edit"
         xmlns:conv="using:Avalonia.Data.Converters"
         xmlns:controls="using:MudPlay.Controls"
@@ -2199,6 +2198,13 @@
                                                FontSize="10" TextWrapping="Wrap"
                                                Foreground="{StaticResource ChromeFgSecBrush}"
                                                Text="Locked while building a loop — save or run it first."/>
+                                    <!-- The Simulator plays saved loops (or this sketch) in its own
+                                         window, so it's reachable with or without estimating. -->
+                                    <Button Content="Start simulating"
+                                            FontSize="11"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                            ToolTip.Tip="Open the Simulator: play your character around a saved loop or this sketch, check the simulator against your own play, or rank hunting areas at a level."
+                                            Command="{Binding OpenSimulatorCommand}"/>
 
                                     <StackPanel IsVisible="{Binding IsExpEstimatorMode}" Spacing="6"
                                                 HorizontalAlignment="Stretch">
@@ -2389,146 +2395,6 @@
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
-                                        </StackPanel>
-
-                                        <!-- Character simulation: plays the live character around this
-                                             route (LoopSimulator) — their real spells, overrides, heals,
-                                             rests and the monsters' real attacks — instead of the
-                                             rounds-to-kill knob the estimate above assumes. -->
-                                        <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"
-                                                IsVisible="{Binding ExpEstimator.CanSimulate}"/>
-                                        <StackPanel IsVisible="{Binding ExpEstimator.CanSimulate}" Spacing="4">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                                                <Button Grid.Column="0" HorizontalAlignment="Stretch"
-                                                        HorizontalContentAlignment="Center" FontSize="12"
-                                                        Command="{Binding ExpEstimator.SimulateCommand}"
-                                                        Content="▶  Simulate my character"
-                                                        ToolTip.Tip="Play your character around this loop in simulated time — your stats, gear, spells, per-monster overrides, heal and rest settings against the monsters' real attacks — and report exp/hr, where the time goes, how low HP and mana get, and any deaths."/>
-                                                <Button Grid.Column="1" FontSize="12" Padding="6,2" Content="⚙"
-                                                        ToolTip.Tip="Simulation settings">
-                                                    <Button.Flyout>
-                                                        <Flyout Placement="Bottom">
-                                                            <StackPanel Spacing="6" Width="230">
-                                                                <TextBlock Text="Simulation Settings" FontSize="11" FontWeight="SemiBold"
-                                                                           Foreground="{StaticResource ChromeFgBrush}"/>
-                                                                <StackPanel Spacing="2">
-                                                                    <TextBlock FontSize="11" TextWrapping="Wrap"
-                                                                               Foreground="{StaticResource ChromeFgSecBrush}"
-                                                                               Text="Walk pace (seconds per room, 0 = your gear's)"/>
-                                                                    <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
-                                                                                   Value="{Binding ExpEstimator.SimSecondsPerStep, Mode=TwoWay}"
-                                                                                   Minimum="0" Maximum="10" Increment="0.05"
-                                                                                   FormatString="0.00" ShowButtonSpinner="True"
-                                                                                   ToolTip.Tip="Your bare walking pace between rooms. 0 works it out: on Paradigm the server's move timer from your quickness and carry weight (never under 1.0 s) plus the lag below; on Stock the measured pace for your encumbrance. Fighting is simulated separately, so this is NOT the all-in 'Seconds per room' above."/>
-                                                                </StackPanel>
-                                                                <StackPanel Spacing="2">
-                                                                    <TextBlock FontSize="11" TextWrapping="Wrap"
-                                                                               Foreground="{StaticResource ChromeFgSecBrush}"
-                                                                               Text="Lag per move (ms, Paradigm)"/>
-                                                                    <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
-                                                                                   Value="{Binding ExpEstimator.SimLagMs, Mode=TwoWay}"
-                                                                                   Minimum="0" Maximum="2000" Increment="10"
-                                                                                   FormatString="0" ShowButtonSpinner="True"
-                                                                                   ToolTip.Tip="Added to the server's move timer when the pace is worked out from your gear. A '1.0' mover really walks 1.08–1.15 s — 80 to 150 ms of lag."/>
-                                                                </StackPanel>
-                                                                <StackPanel Spacing="2">
-                                                                    <TextBlock FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"
-                                                                               Text="Hours per run"/>
-                                                                    <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
-                                                                                   Value="{Binding ExpEstimator.SimHours, Mode=TwoWay}"
-                                                                                   Minimum="0.1" Maximum="24" Increment="0.5"
-                                                                                   FormatString="0.0" ShowButtonSpinner="True"/>
-                                                                </StackPanel>
-                                                                <StackPanel Spacing="2">
-                                                                    <TextBlock FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"
-                                                                               Text="Runs (different luck each)"/>
-                                                                    <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
-                                                                                   Value="{Binding ExpEstimator.SimRuns, Mode=TwoWay}"
-                                                                                   Minimum="1" Maximum="20" Increment="1"
-                                                                                   FormatString="0" ShowButtonSpinner="True"/>
-                                                                </StackPanel>
-                                                            </StackPanel>
-                                                        </Flyout>
-                                                    </Button.Flyout>
-                                                </Button>
-                                            </Grid>
-                                            <TextBlock FontSize="11" TextWrapping="Wrap"
-                                                       IsVisible="{Binding ExpEstimator.SimStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                                       Foreground="{StaticResource ChromeFgSecBrush}"
-                                                       Text="{Binding ExpEstimator.SimStatus}"/>
-                                            <Border IsVisible="{Binding ExpEstimator.HasSimResult}"
-                                                    Background="{StaticResource ChromeBgElevBrush}"
-                                                    BorderBrush="#B98BE0" BorderThickness="1"
-                                                    CornerRadius="4" Padding="8,6">
-                                                <ItemsControl ItemsSource="{Binding ExpEstimator.SimLines}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="x:String">
-                                                            <TextBlock FontSize="11" TextWrapping="Wrap"
-                                                                       Foreground="{StaticResource ChromeFgSecBrush}"
-                                                                       Text="{Binding}"/>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </Border>
-
-                                            <!-- Simulator vs your play: every loop played an hour or more
-                                                 at one level (program logs), simulated at that level. -->
-                                            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                                    FontSize="12"
-                                                    Command="{Binding ExpEstimator.CheckAgainstPlayCommand}"
-                                                    Content="Check against my play"
-                                                    ToolTip.Tip="Reads your program logs for every loop you've run an hour or more at one level, simulates each at the level you played it, and shows your real exp/hr beside the simulated one — how far to trust a simulated number."/>
-                                            <TextBlock FontSize="11" TextWrapping="Wrap"
-                                                       IsVisible="{Binding ExpEstimator.CheckStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                                       Foreground="{StaticResource ChromeFgSecBrush}"
-                                                       Text="{Binding ExpEstimator.CheckStatus}"/>
-                                            <ItemsControl ItemsSource="{Binding ExpEstimator.CheckLines}">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="x:String">
-                                                        <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,1"
-                                                                   Foreground="{StaticResource ChromeFgSecBrush}"
-                                                                   Text="{Binding}"/>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-
-                                            <!-- Area ranking: every area's lair tour simulated at a level,
-                                                 safe areas first; picking a row loads its tour. -->
-                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
-                                                <Button Grid.Column="0" HorizontalAlignment="Stretch"
-                                                        HorizontalContentAlignment="Center" FontSize="12"
-                                                        Command="{Binding ExpEstimator.RankAreasCommand}"
-                                                        Content="Rank areas at level"
-                                                        ToolTip.Tip="Builds a lair tour for every hunting area (grouped by the monsters' Region / Area labels), plays your character through each at this level, and lists them best first — areas where you died go last. Pick one to load its tour on the map."/>
-                                                <Button Grid.Column="1" FontSize="12" Content="Cancel"
-                                                        IsVisible="{Binding ExpEstimator.IsRanking}"
-                                                        Command="{Binding ExpEstimator.CancelRankingCommand}"
-                                                        ToolTip.Tip="Stop the ranking."/>
-                                                <NumericUpDown Grid.Column="2" Width="90" FontSize="11"
-                                                               Value="{Binding ExpEstimator.RankLevel, Mode=TwoWay}"
-                                                               Minimum="0" Maximum="255" Increment="1"
-                                                               FormatString="0" ShowButtonSpinner="True"
-                                                               ToolTip.Tip="The level to simulate at — 0 means your current level. Another level moves today's character there (HP, mana and level-scaled numbers follow; your stats and gear stay)."/>
-                                            </Grid>
-                                            <TextBlock FontSize="11" TextWrapping="Wrap"
-                                                       IsVisible="{Binding ExpEstimator.RankStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                                       Foreground="{StaticResource ChromeFgSecBrush}"
-                                                       Text="{Binding ExpEstimator.RankStatus}"/>
-                                            <ListBox Classes="RailList" MaxHeight="260"
-                                                     IsVisible="{Binding ExpEstimator.HasRankings}"
-                                                     ItemsSource="{Binding ExpEstimator.Rankings}"
-                                                     SelectedItem="{Binding ExpEstimator.SelectedRanking, Mode=TwoWay}"
-                                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                                <ListBox.ItemTemplate>
-                                                    <DataTemplate x:DataType="sim:AreaRank">
-                                                        <TextBlock FontSize="11" Margin="0,1,14,1"
-                                                                   TextTrimming="CharacterEllipsis"
-                                                                   Foreground="{StaticResource ChromeFgSecBrush}"
-                                                                   ToolTip.Tip="{Binding Label}"
-                                                                   Text="{Binding Label}"/>
-                                                    </DataTemplate>
-                                                </ListBox.ItemTemplate>
-                                            </ListBox>
                                         </StackPanel>
 
                                         <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>

@@ -953,14 +953,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private IReadOnlyList<EquippedItem> BackstabWorn(IReadOnlyList<EquippedItem> worn, out string? setWeapon)
     {
         setWeapon = _profile?.Current?.Equipment?.BackstabSetWeapon();
-        string? inHand = worn.FirstOrDefault(w => w.Slot == "Weapon Hand").Name;
-        if (setWeapon is null || string.Equals(setWeapon, inHand, System.StringComparison.OrdinalIgnoreCase))
-        {
-            setWeapon = null;
-            return worn;
-        }
-        List<EquippedItem> swapped = worn.Where(w => w.Slot != "Weapon Hand").ToList();
-        swapped.Add(new EquippedItem(setWeapon, "Weapon Hand"));
+        IReadOnlyList<EquippedItem> swapped = EquippedItem.WithWeapon(worn, setWeapon);
+        if (ReferenceEquals(swapped, worn)) setWeapon = null;
         return swapped;
     }
 

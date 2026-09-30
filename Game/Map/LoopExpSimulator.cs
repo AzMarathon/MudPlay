@@ -132,12 +132,7 @@ public sealed record ExpEstimatorSnapshot(
     IReadOnlyList<string> Lairs,     // "map/room  Name — fires/hr, misses" per resolved lair
     IReadOnlyList<string> Bosses,    // "Name — +exp/hr, once per Nh" per amortised boss
     IReadOnlyList<string> Summons,   // "map/room  Spell — +exp/hr, N% summon" per summoning room
-    string RealmName = "",           // active realm — drives the summon re-roll cadence
-    IReadOnlyList<string>? Simulation = null,   // the character-simulation readout, null when not run
-    double SimSecondsPerStep = 0,
-    double SimHours = 0,
-    IReadOnlyList<string>? LiveCheck = null,     // the simulator-vs-your-play lines, null when not run
-    IReadOnlyList<string>? AreaRanking = null);  // the top area-ranking lines, null when not run
+    string RealmName = "");          // active realm — drives the summon re-roll cadence
 
 public static class LoopExpSimulator
 {
