@@ -1,0 +1,237 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.Navigation"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="940" d:DesignHeight="680"
+        x:Class="MudPlay.Views.Navigation.SimulatorWindow"
+        x:DataType="vm:SimulatorViewModel"
+        Title="Simulator"
+        Width="940" Height="680"
+        MinWidth="640" MinHeight="460"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.Group">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Border.Group">
+            <Setter Property="Background" Value="{StaticResource ChromeBgElevBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="10"/>
+        </Style>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.Status">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style Selector="TextBlock.Headline">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style Selector="DataGrid">
+            <Setter Property="Background" Value="{StaticResource ChromeBgSunkenBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="AutoGenerateColumns" Value="False"/>
+            <Setter Property="CanUserSortColumns" Value="True"/>
+            <Setter Property="CanUserResizeColumns" Value="True"/>
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="14" RowDefinitions="Auto,Auto,*" RowSpacing="10">
+
+        <!-- Route + what the runs are: shared by all three tabs. -->
+        <Border Grid.Row="0" Classes="Group">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8" RowDefinitions="Auto,Auto" RowSpacing="8">
+                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Route"/>
+                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                          ItemsSource="{Binding Routes}"
+                          SelectedItem="{Binding SelectedRoute, Mode=TwoWay}"
+                          PlaceholderText="No saved loops yet — save one, or sketch one in the Exp/Hr Estimator"
+                          ToolTip.Tip="The route Simulate plays: one of your saved loops, or the Exp/Hr Estimator's sketch while you're estimating.">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SimRouteOption">
+                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Grid.Column="2" Content="▶  Simulate my character" MinWidth="190"
+                        HorizontalContentAlignment="Center"
+                        Command="{Binding SimulateCommand}"
+                        ToolTip.Tip="Play your character around this route in simulated time — your stats, gear, spells, per-monster overrides, heal and rest settings, and a sneak backstab opener when you use one, against the monsters' real attacks — and report exp/hr, where the time goes, how low HP and mana get, and any deaths."/>
+                <Button Grid.Column="3" Content="Cancel"
+                        IsVisible="{Binding IsSimulating}"
+                        Command="{Binding CancelSimulationCommand}"
+                        ToolTip.Tip="Stop the simulation or check that's running."/>
+
+                <WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" ItemSpacing="18" LineSpacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Classes="FieldLabel" Text="Walk pace (s/room, 0 = your gear's)"/>
+                        <NumericUpDown Width="120" Value="{Binding SimSecondsPerStep, Mode=TwoWay}"
+                                       Minimum="0" Maximum="10" Increment="0.05" FormatString="0.00"
+                                       ToolTip.Tip="Your bare walking pace between rooms. 0 works it out: on Paradigm the server's move timer from your quickness and carry weight (never under 1.0 s) plus the lag beside it; on Stock the measured pace for your encumbrance. Fighting is simulated separately, so this is NOT the estimate's all-in 'Seconds per room'."/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Classes="FieldLabel" Text="Lag per move (ms, Paradigm)"/>
+                        <NumericUpDown Width="120" Value="{Binding SimLagMs, Mode=TwoWay}"
+                                       Minimum="0" Maximum="2000" Increment="10" FormatString="0"
+                                       ToolTip.Tip="Added to the server's move timer when the pace is worked out from your gear. A '1.0' mover really walks 1.08–1.15 s — 80 to 150 ms of lag."/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Classes="FieldLabel" Text="Hours per run"/>
+                        <NumericUpDown Width="110" Value="{Binding SimHours, Mode=TwoWay}"
+                                       Minimum="0.1" Maximum="24" Increment="0.5" FormatString="0.0"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Classes="FieldLabel" Text="Runs (different luck each)"/>
+                        <NumericUpDown Width="110" Value="{Binding SimRuns, Mode=TwoWay}"
+                                       Minimum="1" Maximum="20" Increment="1" FormatString="0"/>
+                    </StackPanel>
+                    <TextBlock Classes="FieldLabel"
+                               Text="{Binding RealmLabel, StringFormat='Realm: {0}'}"/>
+                </WrapPanel>
+            </Grid>
+        </Border>
+
+        <TextBlock Grid.Row="1" Classes="Status"
+                   IsVisible="{Binding SimStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   Text="{Binding SimStatus}"/>
+
+        <TabControl Grid.Row="2">
+
+            <!-- ============ The chosen route's result ============ -->
+            <TabItem Header="Simulation">
+                <ScrollViewer Margin="0,8,0,0">
+                    <StackPanel Spacing="10">
+                        <TextBlock Classes="Status" IsVisible="{Binding !HasSimResult}"
+                                   Text="Pick a route and press Simulate my character. The result shows here."/>
+                        <Border Classes="Group" IsVisible="{Binding HasSimResult}"
+                                BorderBrush="#B98BE0">
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="Headline" Text="{Binding SimHeadline}"/>
+                                <ItemsControl ItemsSource="{Binding SimStats}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SimStat">
+                                            <Grid ColumnDefinitions="140,*" Margin="0,2">
+                                                <TextBlock Grid.Column="0" Classes="FieldLabel" VerticalAlignment="Top"
+                                                           Text="{Binding Label}"/>
+                                                <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                                           Foreground="{StaticResource ChromeFgBrush}"
+                                                           FontSize="{StaticResource FontSizeSm}"
+                                                           Text="{Binding Value}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ============ Simulator vs the logs ============ -->
+            <TabItem Header="Check against my play">
+                <Grid Margin="0,8,0,0" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10">
+                        <Button Content="Check against my play"
+                                Command="{Binding CheckAgainstPlayCommand}"
+                                ToolTip.Tip="Reads your program logs for every loop you've run an hour or more at one level, simulates each at the level you played it, and shows your real exp/hr beside the simulated one — how far to trust a simulated number."/>
+                        <TextBlock Classes="Status" VerticalAlignment="Center"
+                                   Text="Every saved loop you've played an hour or more at one level, simulated at that level."/>
+                    </StackPanel>
+                    <TextBlock Grid.Row="1" Classes="Status"
+                               IsVisible="{Binding CheckStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Text="{Binding CheckStatus}"/>
+                    <!-- ReflectionBinding: the DataGrid's wrapped collection view defeats
+                         compiled-binding item-type inference. -->
+                    <DataGrid Grid.Row="2" ItemsSource="{Binding CheckRows}" IsVisible="{Binding HasCheckRows}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Loop" Width="*" Binding="{ReflectionBinding Live.Loop}"/>
+                            <DataGridTextColumn Header="Level" Width="60" Binding="{ReflectionBinding Live.Level}"/>
+                            <DataGridTextColumn Header="Hours" Width="70" Binding="{ReflectionBinding Live.Hours, StringFormat={}{0:0.#}}"/>
+                            <DataGridTextColumn Header="Your exp/hr" Width="110" Binding="{ReflectionBinding Live.ExpPerHour, StringFormat={}{0:N0}}"/>
+                            <DataGridTextColumn Header="Simulated" Width="110" Binding="{ReflectionBinding Simulated.ExpPerHour, StringFormat={}{0:N0}}"/>
+                            <DataGridTextColumn Header="Diff %" Width="70" Binding="{ReflectionBinding DiffPercent, StringFormat={}{0:+0.0;-0.0}}"/>
+                            <DataGridTextColumn Header="Your kills/hr" Width="100" Binding="{ReflectionBinding Live.KillsPerHour, StringFormat={}{0:0}}"/>
+                            <DataGridTextColumn Header="Sim kills/hr" Width="100" Binding="{ReflectionBinding Simulated.KillsPerHour, StringFormat={}{0:0}}"/>
+                            <DataGridTextColumn Header="Your deaths" Width="95" Binding="{ReflectionBinding Live.Deaths}"/>
+                            <DataGridTextColumn Header="Sim deaths" Width="90" Binding="{ReflectionBinding Simulated.Deaths}"/>
+                            <DataGridTextColumn Header="Note" Width="160" Binding="{ReflectionBinding Problem}"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <TextBlock Grid.Row="3" Classes="Status"
+                               IsVisible="{Binding CheckNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Text="{Binding CheckNote}"/>
+                </Grid>
+            </TabItem>
+
+            <!-- ============ Every reachable area at a level ============ -->
+            <TabItem Header="Rank areas">
+                <Grid Margin="0,8,0,0" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10">
+                        <TextBlock Classes="FieldLabel" Text="Level (0 = yours)"/>
+                        <NumericUpDown Width="120" Value="{Binding RankLevel, Mode=TwoWay}"
+                                       Minimum="0" Maximum="255" Increment="1" FormatString="0"
+                                       ToolTip.Tip="The level to simulate at — 0 means your current level. Another level moves today's character there (HP, mana and level-scaled numbers follow; your stats and gear stay)."/>
+                        <Button Content="Rank areas at level"
+                                Command="{Binding RankAreasCommand}"
+                                ToolTip.Tip="Builds a lair tour for every hunting area you can reach from where you stand (grouped by the monsters' Region / Area labels), plays your character through each and through your saved loops at this level, and lists them best first — options where you died go last. Pick one to see its details and its route on the map."/>
+                        <Button Content="Cancel" IsVisible="{Binding IsRanking}"
+                                Command="{Binding CancelRankingCommand}"
+                                ToolTip.Tip="Stop the ranking."/>
+                    </StackPanel>
+                    <TextBlock Grid.Row="1" Classes="Status"
+                               IsVisible="{Binding RankStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Text="{Binding RankStatus}"/>
+                    <DataGrid Grid.Row="2" ItemsSource="{Binding Rankings}" IsVisible="{Binding HasRankings}"
+                              SelectedItem="{Binding SelectedRanking, Mode=TwoWay}" SelectionMode="Single">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Area or loop" Width="*" Binding="{ReflectionBinding Name}"/>
+                            <DataGridTextColumn Header="Kind" Width="150" Binding="{ReflectionBinding Kind}"/>
+                            <DataGridTextColumn Header="Sim exp/hr" Width="105" Binding="{ReflectionBinding Result.ExpPerHour, StringFormat={}{0:N0}}"/>
+                            <DataGridTextColumn Header="Kills/hr" Width="75" Binding="{ReflectionBinding Result.KillsPerHour, StringFormat={}{0:0}}"/>
+                            <DataGridTextColumn Header="Low HP %" Width="80" Binding="{ReflectionBinding Result.LowestHpPercent}"/>
+                            <DataGridTextColumn Header="Died" Width="130" Binding="{ReflectionBinding Died}"/>
+                            <DataGridTextColumn Header="You made" Width="230" Binding="{ReflectionBinding YouMade}"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <Border Grid.Row="3" Classes="Group" IsVisible="{Binding HasRankDetail}" BorderBrush="#B98BE0">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="Group" TextWrapping="Wrap" Text="{Binding RankHeadline}"/>
+                            <ItemsControl ItemsSource="{Binding RankStats}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:SimStat">
+                                        <Grid ColumnDefinitions="140,*" Margin="0,1">
+                                            <TextBlock Grid.Column="0" Classes="FieldLabel" VerticalAlignment="Top"
+                                                       Text="{Binding Label}"/>
+                                            <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                                       Foreground="{StaticResource ChromeFgBrush}"
+                                                       FontSize="{StaticResource FontSizeSm}"
+                                                       Text="{Binding Value}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

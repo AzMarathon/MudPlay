@@ -77,6 +77,63 @@ public sealed class LoopSimulatorTests
 
     private static SimRoom Empty(int room) => new(new RoomKey(1, room), 0, 0, Array.Empty<int>(), 0);
 
+    // A sneaking backstabber: a stab that always lands and kills in one blow.
+    private static SimCharacter Stabber(int stab = 500) => Character(maxHp: 100, damage: 1) with
+    {
+        Backstab = new PlayerMatchupProfile(RealmType.ParaMud, NormalAccuracy: 9999, AvgWeaponDamage: 1,
+            SwingsPerRound: 1, HasWeapon: true, ArmourClass: 0, Dodge: 0, ProtEvil: 0, ProtGood: 0,
+            DamageResist: 0, BackstabMin: stab, BackstabMax: stab),
+        BackstabHitMagic = 10,
+        Combat = new CombatSettings { DoBackstab = true },
+    };
+
+    // Sneaking in, the surprise stab kills a hostile before it swings; the same
+    // character without the opener slugs it out and takes its hits (report
+    // paradigm-20260930-114254).
+    [Fact]
+    public void SneakOpenerKillsBeforeTheMonsterSwings()
+    {
+        SimRoom[] lap = { Lair(1, 1, 30, 3), Empty(2), Empty(3) };
+        SimWorld world = World(Mob(3, hp: 100, exp: 50, align: 1, Hit(10, 10)));
+
+        LoopSimRun stab = LoopSimulator.Run(Stabber(), lap, world, secondsPerStep: 1, hours: 1, seed: 1);
+        LoopSimRun slug = LoopSimulator.Run(Stabber() with { Backstab = null }, lap, world, secondsPerStep: 1, hours: 1, seed: 1);
+
+        Assert.True(stab.Kills > 0);
+        Assert.Equal(stab.Kills, stab.Casts.GetValueOrDefault("bs"));
+        Assert.Equal(0, stab.DamageTaken);
+        Assert.True(slug.DamageTaken > 0);
+        Assert.True(stab.Kills > slug.Kills);
+    }
+
+    // A see-hidden monster spots the sneak: no surprise stab on it.
+    [Fact]
+    public void SeeHiddenMonsterGetsNoStab()
+    {
+        MonsterCatalogEntry sees = Mob(3, hp: 100, exp: 50, align: 1, Hit(1, 1)) with
+        {
+            Abilities = new[] { new MonsterAbilitySlot(57, 1) },
+        };
+        LoopSimRun run = LoopSimulator.Run(Stabber(), new[] { Lair(1, 1, 30, 3), Empty(2) }, World(sees),
+            secondsPerStep: 1, hours: 1, seed: 1);
+
+        Assert.True(run.Kills > 0);
+        Assert.Equal(0, run.Casts.GetValueOrDefault("bs"));
+    }
+
+    // A stab that doesn't kill is the whole surprise round; the fight goes on with
+    // the usual attack, and the next stab waits for the next sneaked entry.
+    [Fact]
+    public void StabThatDoesNotKillIsFollowedByTheUsualAttack()
+    {
+        LoopSimRun run = LoopSimulator.Run(Stabber(stab: 60) with { Melee = Stabber().Melee with { AvgWeaponDamage = 50 } },
+            new[] { Lair(1, 1, 30, 3), Empty(2) }, World(Mob(3, hp: 100, exp: 50)), secondsPerStep: 1, hours: 1, seed: 1);
+
+        Assert.True(run.Kills > 0);
+        Assert.Equal(run.Kills, run.Casts.GetValueOrDefault("bs"));
+        Assert.True(run.Casts.GetValueOrDefault(new CombatSettings().NormalAttackCommand) >= run.Kills);
+    }
+
     [Fact]
     public void LairRefillsOnlyOnItsRespawnClock()
     {

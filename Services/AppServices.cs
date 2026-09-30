@@ -2199,6 +2199,10 @@ public sealed class AppServices
     // notes it as inactive. Bridges VM-only state into the AppServices-based report.
     public Func<Game.Map.ExpEstimatorSnapshot?>? ExpEstimatorSnapshotProvider { get; set; }
 
+    // The Simulator window's state for the bug report, registered by the Navigation
+    // view-model that owns it; null until a Navigation window has opened.
+    public Func<Game.Simulation.SimulatorSnapshot?>? SimulatorSnapshotProvider { get; set; }
+
     // Folder CRUD over the shared per-BBS Loops directory that holds
     // both Loops and Lairs. Create / rename
     // / delete folders; reloads both catalogues after a filesystem
@@ -8267,10 +8271,27 @@ public sealed class AppServices
             if (basisMa > 0) basisMa = Math.Max(0, basisMa + stats.MaxMana - PlayerStats.MaxMana);
         }
 
+        // The sneak opener, when the character opens with one: Backstab on, Auto-Sneak on
+        // and some Stealth, with the Backstab set's weapon in hand as the equipment
+        // manager wields it for the stab (Monster Intel's backstab line reads the same).
+        Models.Profile.CombatSettings combat = ReadSection<Models.Profile.CombatSettings>(profile, "Combat");
+        Game.Calculators.PlayerMatchupProfile? backstab = null;
+        int backstabMagic = 0;
+        if (combat.DoBackstab && ReadAutoModeFlag(d => d.AutoSneak) && stats.Stealth > 0
+            && Game.Calculators.CharacterCalculator.UsableMeleeAttacks(stats, GameData).Contains(Game.Calculators.MudAttackType.Backstab))
+        {
+            IReadOnlyList<Game.Inventory.EquippedItem> bsWorn = Game.Inventory.EquippedItem.WithWeapon(
+                inv.EquippedItems, profile?.Equipment?.BackstabSetWeapon());
+            backstab = Game.Calculators.CharacterCalculator.BuildMeleeAttackProfile(
+                Game.Calculators.MudAttackType.Backstab, stats, bsWorn, inv.Encumbrance, GameData);
+            string? bsWeapon = bsWorn.FirstOrDefault(w => w.Slot == Game.Inventory.EquippedItem.WeaponHand).Name;
+            backstabMagic = string.IsNullOrEmpty(bsWeapon) ? 0 : ItemMagic.HitMagic(bsWeapon);
+        }
+
         Game.Simulation.SimCharacter character = Game.Simulation.SimCharacterBuilder.Build(
             stats, inv.EquippedItems, inv.Encumbrance, obtained, GameData,
             string.IsNullOrEmpty(weapon) ? 0 : ItemMagic.HitMagic(weapon),
-            ReadSection<Models.Profile.CombatSettings>(profile, "Combat"),
+            combat,
             ReadSection<Models.Profile.HealthSettings>(profile, "Health"),
             ReadSection<Models.Profile.SpellsSettings>(profile, "Spells"),
             profile?.PartyBuffs, quests, ResolveMonsterOverlay, SpellShort.ShortByNumber,
@@ -8278,6 +8299,8 @@ public sealed class AppServices
             basisHp, basisMa) with
         {
             HangupsDisabled = ReadSection<Models.Profile.GeneralSettings>(profile, "General").DisableHangups,
+            Backstab = backstab,
+            BackstabHitMagic = backstabMagic,
         };
         var world = new Game.Simulation.SimWorld(
             MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife,
