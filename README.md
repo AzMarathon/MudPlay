@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.22**
-> - Alt+click a room on the map to take it back out of a loop you're building or an exp/hr sketch, or to unmark an Auto-Lair room
+> **Version 3.127.0**
+> - Drag a numbered waypoint chip onto another room to move it, while building a loop or an exp/hr sketch
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
