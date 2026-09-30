@@ -13,9 +13,10 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
         </Style>
-        <!-- A base-stat label that opens its breakpoint table: reads as a label until hovered. -->
+        <!-- A base-stat label that opens its breakpoint table: always drawn as a link.
+             The colour and underline sit on the template's ContentPresenter because the
+             button theme repaints it on hover and press. -->
         <Style Selector="Button.StatLink">
-            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -23,10 +24,13 @@
             <Setter Property="MinHeight" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
-        <Style Selector="Button.StatLink:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="Transparent"/>
+        <Style Selector="Button.StatLink /template/ ContentPresenter">
             <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
             <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
+        <Style Selector="Button.StatLink:pointerover /template/ ContentPresenter, Button.StatLink:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
         </Style>
         <Style Selector="TextBlock.FieldValue">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
