@@ -58,4 +58,17 @@ public sealed class LiveLoopSessionsTests
         Assert.Equal(("A", 47, 2), (r.Loop, r.Level, r.Sessions));
         Assert.Equal(1000.0, r.ExpPerHour, 3);
     }
+
+    [Fact]
+    public void MatchesOnTheFirstNameAndKeepsUnnamedSessionsWhenOnlyOneCharacterIsLogged()
+    {
+        var t = new DateTime(2026, 9, 28, 1, 0, 0);
+        LiveLoopSession S(string who) => new(who, "A", 47, t, t.AddHours(1), 1000, 1, 0);
+
+        var solo = LiveLoopSessions.Pool(new[] { S("Ermias Asghedom"), S("Ermias"), S("") }, "Ermias", 1.0);
+        Assert.Equal(3, Assert.Single(solo).Sessions);
+
+        var shared = LiveLoopSessions.Pool(new[] { S("Ermias Asghedom"), S("Voice"), S("") }, "Ermias Asghedom", 1.0);
+        Assert.Equal(1, Assert.Single(shared).Sessions);
+    }
 }

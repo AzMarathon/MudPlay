@@ -123,13 +123,19 @@ public static class LiveLoopSessions
     }
 
     // One character's sessions pooled by loop and level, keeping each pool of at
-    // least minHours — shorter samples swing too far on luck to check against.
+    // least minHours — shorter samples swing too far on luck to check against. The
+    // logs name a character by the full name on some screens and the first name on
+    // others, so they're matched on the first name (unique in MajorMUD); a session
+    // logged before any name counts only when the logs never name anyone else.
     public static IReadOnlyList<LiveLoopRecord> Pool(
         IEnumerable<LiveLoopSession> sessions, string character, double minHours)
     {
-        return sessions
+        var list = sessions.ToList();
+        string me = FirstName(character);
+        bool onlyMe = list.All(s => s.Character.Length == 0 || FirstName(s.Character).Equals(me, StringComparison.OrdinalIgnoreCase));
+        return list
             .Where(s => s.Level is not null && s.Hours > 0
-                && string.Equals(s.Character, character, StringComparison.OrdinalIgnoreCase))
+                && (s.Character.Length == 0 ? onlyMe : FirstName(s.Character).Equals(me, StringComparison.OrdinalIgnoreCase)))
             .GroupBy(s => (Loop: s.Loop, Level: s.Level!.Value))
             .Select(g => new LiveLoopRecord(g.Key.Loop, g.Key.Level, g.Count(), g.Sum(s => s.Hours),
                 g.Sum(s => s.Exp), g.Sum(s => s.Kills), g.Sum(s => s.Deaths)))
@@ -138,4 +144,7 @@ public static class LiveLoopSessions
             .ThenBy(r => r.Level)
             .ToList();
     }
+
+    private static string FirstName(string name) =>
+        name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries) is { Length: > 0 } parts ? parts[0] : string.Empty;
 }
