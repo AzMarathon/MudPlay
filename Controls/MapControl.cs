@@ -1009,7 +1009,9 @@ public sealed class MapControl : Control
     // landed on empty map space — so the context-menu target is cleared
     // instead of left pointing at a stale (off-screen) room.
     public event Action<RoomKey?, Point, KeyModifiers>? RoomRightClicked;
-    public event Action<RoomKey, Point>? RoomLeftClicked;
+    // Carries the click's modifier keys: Alt+click removes a room from a loop being
+    // built or unmarks an Auto-Lair room.
+    public event Action<RoomKey, Point, KeyModifiers>? RoomLeftClicked;
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
@@ -1290,7 +1292,7 @@ public sealed class MapControl : Control
 
                 // Notify the host (NavigationViewModel → loop builder
                 // when LoopMode is active).
-                RoomLeftClicked?.Invoke(hit, releasePos);
+                RoomLeftClicked?.Invoke(hit, releasePos, e.KeyModifiers);
             }
             else
             {

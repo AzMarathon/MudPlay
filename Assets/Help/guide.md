@@ -283,7 +283,7 @@ If you **type a movement command yourself** while a walk, loop, or auto-lair is 
 A **loop** is a saved circuit of rooms MudPlay walks over and over, fighting and looting as it goes. To build one the quick way:
 
 1. Click the **Loop mode** chip (it changes to **Building**). If you've run a loop this session, it's **pre-loaded** into the builder — with **all its settings intact** (per-room command / delay / no-rest / no-attack **and** the loop-wide Only-attack-in-lair flag), so you can **Run** it straight away or re-**Save** it — handy when a stop / `@stop` dropped you off one, or you ran an ad-hoc loop you never saved. Hit **Clear all** to wipe it and build a fresh one instead. (Turn the pre-load off under **Settings → General → "Load last ran loop"** if you'd rather always start empty.)
-2. **Left-click the rooms on the map, in order** — each becomes a waypoint. Reorder or remove them in the **CURRENT NAV** rail.
+2. **Left-click the rooms on the map, in order** — each becomes a waypoint. **Alt+click** a room to take it back out (a room you've added more than once loses its most recent click). Reorder or remove them in the **CURRENT NAV** rail too.
 3. Click **Run** to save and start it (you'll name it), or **Save** to keep it without running.
 
 You can start building a loop **while a walk-to is running** — building only collects rooms, it never moves you, so your walk continues uninterrupted. Clicking **Run** in the Navigation menu then hands movement over: it stops the walk and starts the loop. The **toolbar** Start / Stop / Pause buttons still control the *walk* itself, so reach for those to stop (or pause) the walk without starting the loop.
@@ -354,7 +354,7 @@ A small **Realm:** line under the headline notes which game-data realm is active
 
 ## Auto-Lair
 
-**Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
+**Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**; clicking a marked room again, or **Alt+clicking** it, unmarks it), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
 
 **How long it stays in a lair.** It leaves for the next one as soon as the fight is over *and* the drops are picked up — it won't walk off and abandon loot it just fought for.
 

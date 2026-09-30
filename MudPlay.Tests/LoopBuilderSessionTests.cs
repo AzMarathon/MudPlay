@@ -246,6 +246,26 @@ public sealed class LoopBuilderSessionTests : IDisposable
         Assert.Equal(2, s.ExpandedStepCount);    // N to 2, S closing back to 1
     }
 
+    // Alt+click on the map takes a room back out: the most recent click on it,
+    // since a loop can pass through a room more than once.
+    [Fact]
+    public void RemoveLastClickOf_RemovesTheLatestClickOnThatRoom()
+    {
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 2));
+        s.AddClick(new RoomKey(1, 3));
+        s.AddClick(new RoomKey(1, 2));
+
+        Assert.True(s.RemoveLastClickOf(new RoomKey(1, 2)));
+        Assert.Equal(new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) },
+            s.Clicks.Select(c => c.Key));
+        Assert.Equal(new[] { 1, 2, 3 }, s.Clicks.Select(c => c.Index));   // renumbered
+
+        Assert.False(s.RemoveLastClickOf(new RoomKey(9, 9)));             // not in the loop
+        Assert.Equal(3, s.Clicks.Count);
+    }
+
     [Fact]
     public void PreviewedRoomKeys_PopulatesAfterTwoClicks()
     {

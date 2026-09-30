@@ -225,9 +225,10 @@ public partial class NavigationWindow : Window
         _suppressRoomMenu = false;
     }
 
-    private void OnMapRoomLeftClicked(Game.Map.RoomKey key, Point _)
+    private void OnMapRoomLeftClicked(Game.Map.RoomKey key, Point _, KeyModifiers modifiers)
     {
-        if (DataContext is NavigationViewModel vm) vm.OnRoomLeftClicked(key);
+        if (DataContext is NavigationViewModel vm)
+            vm.OnRoomLeftClicked(key, remove: (modifiers & KeyModifiers.Alt) != 0);
     }
 
     // ----- Draggable map legend -------------------------------------------

@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.21**
-> - After a flee (hit and run or a low-health run), a loop walks back to the room it fled and carries on the lap, re-sneaking, instead of restarting from the nearest waypoint
-> - Trap disarm odds read disarm / failure (no dmg) / failure (dmg)
-> - "No combat during an auto-sell detour / auto-deposit trip" flips the Auto-Combat toggle itself, and only once the detour has left the loop's rooms
+> **Version 3.126.22**
+> - Alt+click a room on the map to take it back out of a loop you're building, or to unmark an Auto-Lair room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
