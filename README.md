@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.125.12**
-> - Game Data item and monster windows: options grouped by what they do, every box explained on hover, no splitter to drag, and they remember their size
-> - Game Data monster overrides: Debuff lists only debuffs, Spell / Alt spell (were Normal / Alternate) list only attack spells, and a spell of the wrong kind blocks Save
-> - Monster Spell / Alt spell and Debuff overrides can name a room spell, which is cast with no target
+> **Version 3.125.13**
+> - Party "Return distance" now also caps how far a leader backtracks for a bare @comeback; the separate Settings → Other backtrack box is gone
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

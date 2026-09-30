@@ -289,7 +289,7 @@
                 <NumericUpDown Grid.Row="3" Grid.Column="1"
                                Value="{Binding ReturnDistanceRooms, Mode=TwoWay}"
                                Minimum="1" Maximum="500" Width="120" MinWidth="120" HorizontalAlignment="Left"
-                               ToolTip.Tip="Leader-side recovery reach: the farthest, in map room-hops from where we are, we'll walk to re-collect a reconnecting party member before declining (telepathing @forget instead). Gates both the follower @comeback pickup and the leader-initiated @where probe. Default 30."/>
+                               ToolTip.Tip="Leader-side recovery reach. When a member tells us their room (@comeback 9/1012, or an @where answer), the farthest in map room-hops we'll walk to re-collect them before declining (telepathing @forget instead). When they send a bare @comeback, how many rooms we'll walk back along our own path looking for them (the path remembers the last 50) before going idle. Default 30."/>
 
                 <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="If leading, accept @comeback for (min)"/>
                 <NumericUpDown Grid.Row="4" Grid.Column="1"

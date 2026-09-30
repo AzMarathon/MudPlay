@@ -1,5 +1,9 @@
 # Version history
 
+## 3.125.13
+
+- Party "Return distance" now also caps how far a leader backtracks for a bare @comeback; the separate Settings → Other backtrack box is gone
+
 ## 3.125.12
 
 - Game Data item and monster windows: options grouped by what they do, every box explained on hover, no splitter to drag, and they remember their size

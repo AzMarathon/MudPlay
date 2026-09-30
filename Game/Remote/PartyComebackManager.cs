@@ -34,7 +34,7 @@ namespace MudPlay.Game.Remote;
 //   - Idle (no engine running) → reply "I can't I'm idle" and do nothing.
 //   - Explicit room → walk straight there, re-invite, await follow, resume.
 //   - No room → walk backwards along the path just taken (the
-//     RoomTracker.GetHistory trail), room by room, up to MaxBacktrackRooms,
+//     RoomTracker.GetHistory trail), room by room, up to ReturnDistanceRooms,
 //     checking for the follower at each arrival; recover on sight, else go idle
 //     and let the player handle it.
 //
@@ -152,14 +152,10 @@ public sealed class PartyComebackManager : IDisposable
         new(StringComparer.OrdinalIgnoreCase);
     private const int MaxFailedRecoveries = 2;
 
-    // Backtrack budget — how many rooms back along the just-walked path the leader
-    // will search for a stranded follower before giving up and going idle. Mirrors
-    // OtherSettings.MaxComebackBacktrackRooms; clamped to 1..50 on use.
-    public int MaxBacktrackRooms { get; set; } = 10;
-
-    // Leader-side recovery reach in BFS room-hops. A returning member farther than
-    // this is declined instead of chased. Mirrors PartySettings.ReturnDistanceRooms
-    // (Settings → Party); clamped 1..500 by the caller.
+    // Leader-side recovery reach (Settings → Party "Return distance", clamped 1..500
+    // by the caller). A member who names a room farther than this many BFS hops away
+    // is declined instead of chased; a bare @comeback backtracks at most this many
+    // rooms along our own path (which RoomTracker keeps 50 rooms of).
     public int ReturnDistanceRooms { get; set; } = 30;
 
     // Clock seam for probe-expiry bookkeeping; overridable in tests.
@@ -741,7 +737,7 @@ public sealed class PartyComebackManager : IDisposable
         // GetHistory() is newest-first: [0] is the current room, [1] the
         // previous, etc. Skip [0] and walk the trail backwards.
         IReadOnlyList<RoomKey> history = _tracker.GetHistory();
-        int budget = Math.Clamp(MaxBacktrackRooms, 1, 50);
+        int budget = Math.Max(1, ReturnDistanceRooms);
         for (int i = 1; i < history.Count && _backtrack.Count < budget; i++)
             _backtrack.Add(history[i]);
     }

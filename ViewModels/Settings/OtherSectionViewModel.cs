@@ -139,13 +139,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // toggle. PartyLevelTracker runs the check whenever this character leads a
     // party.
 
-    // Leader-side @comeback backtrack budget — how many rooms the leader walks
-    // backwards along the path just taken when a stranded follower sends a bare
-    // @comeback (no target room) before giving up and going idle. Range 1..50.
-    // Ignored when the follower supplies an explicit room. Pushed into the live
-    // PartyComebackManager on Apply + profile load.
-    [ObservableProperty] private int _maxComebackBacktrackRooms = 10;
-
     // Follower-side auto-@comeback. When on, being left behind by the party
     // leader (a movement-failure line just before "You are no longer following
     // X.") telepaths @comeback to the leader automatically. When off, the
@@ -290,7 +283,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             MaxPickAttempts       = Math.Clamp(MaxPickAttempts,       1, 100),
             PicklocksOverBash     = PicklocksOverBash,
             HideWhenDiscarding    = HideWhenDiscarding,
-            MaxComebackBacktrackRooms = Math.Clamp(MaxComebackBacktrackRooms, 1, 50),
             AutoRequestComebackWhenLeftBehind = AutoRequestComebackWhenLeftBehind,
             AutoInviteOnlyWhileNavigating = AutoInviteOnlyWhileNavigating,
             ShowMonsterHpLookup   = ShowMonsterHpLookup,
@@ -372,7 +364,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         MaxPickAttempts       = dto.MaxPickAttempts;
         PicklocksOverBash     = dto.PicklocksOverBash;
         HideWhenDiscarding    = dto.HideWhenDiscarding;
-        MaxComebackBacktrackRooms = dto.MaxComebackBacktrackRooms;
         AutoRequestComebackWhenLeftBehind = dto.AutoRequestComebackWhenLeftBehind;
         AutoInviteOnlyWhileNavigating = dto.AutoInviteOnlyWhileNavigating;
         ShowMonsterHpLookup = dto.ShowMonsterHpLookup;
@@ -415,9 +406,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         // @trap attempt caps — push into the live manager so the next
         // queued @trap honours the edit without a profile reload.
         svcs.TrapDisarm.MaxDisarmAttempts = Math.Clamp(dto.MaxTrapDisarmAttempts, 1, 50);
-        // @comeback backtrack budget — live-mirror so the next stranded-
-        // follower pickup honours the edit without a profile reload.
-        svcs.PartyComeback.MaxBacktrackRooms = Math.Clamp(dto.MaxComebackBacktrackRooms, 1, 50);
         // Follower-side auto-@comeback toggle — live-mirror so the next
         // left-behind honours the edit without a profile reload.
         svcs.ComebackRequest.Enabled = dto.AutoRequestComebackWhenLeftBehind;
@@ -442,7 +430,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnMaxPickAttemptsChanged(int value)       => MarkDirty();
     partial void OnPicklocksOverBashChanged(bool value)    => MarkDirty();
     partial void OnHideWhenDiscardingChanged(bool value) => MarkDirty();
-    partial void OnMaxComebackBacktrackRoomsChanged(int value) => MarkDirty();
     partial void OnAutoRequestComebackWhenLeftBehindChanged(bool value) => MarkDirty();
     partial void OnAutoInviteOnlyWhileNavigatingChanged(bool value) => MarkDirty();
     partial void OnShowMonsterHpLookupChanged(bool value) => MarkDirty();
