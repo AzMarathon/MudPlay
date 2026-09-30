@@ -298,8 +298,12 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         SimLines.Add($"Attacking {r.Share(x => x.AttackingSeconds):P0} · moving {r.Share(x => x.MovingSeconds):P0} · " +
                      $"resting {r.Share(x => x.RestingSeconds):P0} · meditating {r.Share(x => x.MeditatingSeconds):P0} · " +
                      $"waiting {r.Share(x => x.WaitingSeconds):P0}");
-        SimLines.Add($"Lowest HP {r.LowestHpPercent}% · lowest mana {r.LowestManaPercent}%");
+        SimLines.Add($"Lowest HP {r.LowestHpPercent}% · lowest mana {r.LowestManaPercent}% · {r.DamageTakenPerHour:N0} damage taken/hr");
         SimLines.Add(r.Deaths == 0 ? "No deaths" : $"Died in {r.Deaths} of {r.Runs.Count} runs");
+        if (r.HangUps > 0) SimLines.Add($"Hung up in {r.HangUps} of {r.Runs.Count} runs");
+        if (r.FleesPerHour > 0) SimLines.Add($"Fled {r.FleesPerHour:0.#} times an hour");
+        foreach (SimBossCredit b in r.Bosses ?? Array.Empty<SimBossCredit>())
+            SimLines.Add($"Boss {b.Name}: +{b.ExpPerHour:N0}/hr (once per {b.RegenHours:0.#}h, not fought in the runs)");
         var casts = r.CastsPerHour();
         if (casts.Count > 0)
             SimLines.Add("Per hour: " + string.Join(", ", casts.Take(6).Select(c => $"{c.Spell} {c.PerHour:0}")));

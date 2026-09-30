@@ -361,14 +361,14 @@ The estimate above assumes a fixed **Rounds to kill a mob**. **▶ Simulate my c
 - the **lowest HP and mana** it reached, and whether it **died** (a run that dies stops there);
 - which spells it cast, per hour.
 
-It plays by everything the client already knows about you: your stat screen, the gear you're wearing, the spells you've learned, your **Combat** attack spells and cast caps, your **per-monster overrides** (e.g. exor on undead), your **Health** rest / meditate triggers and your heal tiers. Each round is decided by the same code the live combat and heal engines use, so it picks what the client would pick. The monsters fight back with their real attacks, energy and between-rounds spells, and lairs refill on their real respawn timers. Type `stat` once after logging in so the client knows your level and pools; the button tells you if it doesn't yet.
+It plays by everything the client already knows about you: your stat screen, the gear you're wearing, the spells you've learned, your **Combat** attack spells, cast caps and debuffs, your **per-monster overrides** (e.g. exor on undead), your **Health** rest / meditate / run / hang-up triggers, your heal tiers, and your **Buffs** list (the solo self-buffs, recast at their margin, with a mana-regen roll spell rerolled below its threshold and its roll feeding your mana regen while it's up). Each round is decided by the same code the live combat and heal engines use, so it picks what the client would pick. The monsters fight back with their real attacks, energy and between-rounds spells; lairs refill on their real respawn timers; a monster's death spell summons its next tier, and a summoning room rolls its summon table on entry and every round (Paradigm) or 6 seconds (Stock). A boss is credited at its exp ÷ regen hours rather than fought, the way the estimate counts it. Type `stat` once after logging in so the client knows your level and pools; the button tells you if it doesn't yet.
 
 The **⚙** beside the button sets:
 
 - **Walk pace (seconds per room)** — your bare walking pace between rooms, lag included. Fighting is simulated separately, so this is *not* the all-in **Seconds per room** the estimate uses. Paradigm defaults to 1.2, Stock to 0.7.
 - **Hours per run** and **Runs** — each run rolls different luck; more runs narrow the range.
 
-What it doesn't simulate yet: keeping buffs up (their cost and their bonuses — a mana-regen roll spell, for one), debuffs, backstab openers, fleeing, room-spell summons, death-summon chains and bosses (they're left out of the lairs). Results are cleared whenever you change the route or a simulation setting. The last result is included in a bug report.
+The readout adds the damage you took per hour, how often you fled, and any hang-ups. What it doesn't simulate yet: monsters' on-hit procs (the "Your life is drained…" kind), item-cast buffs, backstab openers, and the extra time doors and searches take. Results are cleared whenever you change the route or a simulation setting. The last result is included in a bug report.
 
 ## Auto-Lair
 

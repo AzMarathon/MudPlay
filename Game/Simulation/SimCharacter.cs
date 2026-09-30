@@ -1,4 +1,5 @@
 using MudPlay.Game.Calculators;
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 
@@ -9,22 +10,38 @@ namespace MudPlay.Game.Simulation;
 // folded in); a round's fires split it evenly. Heal is one cast's range. ManaPerCast
 // is charged on every fire, landed or not (GAME_MECHANICS "You attempt to cast
 // <spell>, but fail." — cast but missed). CastChance is null for a non-caster.
+// DurationSeconds is how long a landed buff / debuff lasts; ManaRegen / HpRegen are
+// the regen-percent range it adds while up (a roll spell's range, or a fixed value
+// as both ends); Debuff is what it strips off a monster it lands on.
 public sealed record SimSpell(
     string Short, int Number, int ManaPerCast, int FiresPerRound, int? CastChance,
     long MinDamagePerRound, long MaxDamagePerRound, bool UsesMagicResist, int TypeOfResists,
-    int AttType, long MinHeal, long MaxHeal);
+    int AttType, long MinHeal, long MaxHeal,
+    double DurationSeconds = 0,
+    int ManaRegenMin = 0, int ManaRegenMax = 0,
+    int HpRegenMin = 0, int HpRegenMax = 0,
+    MonsterDebuffEffect Debuff = default);
 
-// Per-tick regen amounts and the realm cadence they arrive on (RealmRegenProfile).
-// HpResting replaces the standing tick while resting on Paradigm (rest rides the
-// same 10 s grid at 3x) and adds its own tick on Stock; MaMeditating always adds on
-// top of the standing mana tick.
-public readonly record struct SimRegen(
-    double HpStanding, double HpResting, double MaStanding, double MaMeditating,
+// One self-maintained buff from the Buffs list, in cast-priority order: recast when
+// it's down or within RecastMarginSec of wearing off. A roll spell recasts at once
+// while its roll lands below RerollBelow, up to RerollCount times (or without limit).
+public sealed record SimBuff(
+    string Spell, int RecastMarginSec, bool OnlyWhenHpFull, bool OnlyWhenMaFull,
+    bool BeforeRestingForMana, int? RerollBelow, int RerollCount, bool RerollInfinite);
+
+// Per-tick regen, as functions of the regen percent active buffs add (ManaRgn /
+// HPRegen), on the realm cadence they arrive on (RealmRegenProfile). HpResting
+// replaces the standing tick while resting on Paradigm (rest rides the same 10 s
+// grid at 3x) and adds its own tick on Stock; MaMeditating always adds on top of
+// the standing mana tick.
+public sealed record SimRegen(
+    Func<int, double> HpStanding, Func<int, double> HpResting,
+    Func<int, double> MaStanding, double MaMeditating,
     RealmRegenProfile Cadence, bool RestReplacesStanding);
 
 // Everything the loop simulator plays by: the character's pools, offense, defense
-// and regen, their spellbook, and the live Combat / Health / Spells settings the
-// engines read — so a simulated round picks what the client would pick.
+// and regen, their spellbook and buff list, and the live Combat / Health / Spells
+// settings the engines read — so a simulated round picks what the client would pick.
 public sealed record SimCharacter(
     RealmType Realm,
     int Level,
@@ -40,4 +57,5 @@ public sealed record SimCharacter(
     SpellsSettings SpellSlots,
     Func<int, MonsterOverlay> Overlay,
     Func<int, string?> SpellShortByNumber,
-    int EvilPoints);
+    int EvilPoints,
+    IReadOnlyList<SimBuff>? Buffs = null);

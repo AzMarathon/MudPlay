@@ -8216,7 +8216,8 @@ public sealed class AppServices
             profile?.PartyBuffs, quests, ResolveMonsterOverlay, SpellShort.ShortByNumber,
             (int)(Alignment.EvilPoints ?? 0));
         var world = new Game.Simulation.SimWorld(
-            MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife);
+            MonsterCatalog.Get, MonsterMagic, SpellReqLevel, MonsterResist, SpellAttackType, SpellTargetType, MonsterLife,
+            ExpResolver.DeathSummonsOf);
         return (character, world);
     }
 

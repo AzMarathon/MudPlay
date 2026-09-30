@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.128.0**
-> - Exp/Hr Estimator: Simulate my character plays your real character around the sketched loop (stats, gear, spells, per-monster overrides, heal and rest settings vs the monsters' real attacks and lair timers)
-> - Reports exp/hr with its range over several runs, kills/hr, the attack / move / rest / meditate split, lowest HP and mana, deaths and spells cast per hour
-> - Simulation result is in the bug report and the program log
+> **Version 3.128.4**
+> - Loop simulation keeps your Buffs list up (a mana-regen roll spell rerolled below its threshold, its roll feeding mana regen)
+> - Simulated fights cast your debuffs, follow death-summon chains and summoning rooms, and credit bosses at exp ÷ regen
+> - Simulated Health run / hang-up triggers: flee, rest away and come back; waypoint command delays count
+> - Simulation readout adds damage taken per hour, flees and hang-ups
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

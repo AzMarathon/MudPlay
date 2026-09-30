@@ -4,7 +4,7 @@ using MudPlay.Models.GameData;
 namespace MudPlay.Game.Simulation;
 
 // Resolves everything a simulation of this lap will look up — each monster's
-// record and overlay, and the cast-codes its overrides name — into plain
+// record, overlay and death summons, and the cast-codes its overrides name — into plain
 // dictionaries, and makes the game-data indexes build their tables, all on the
 // caller's (UI) thread. The run then happens on a worker thread without touching
 // the live settings resolver or a lazily-building index.
@@ -20,7 +20,8 @@ public static class SimFreeze
         var monsters = new Dictionary<int, MonsterCatalogEntry?>();
         var overlays = new Dictionary<int, MonsterOverlay>();
         var shorts = new Dictionary<int, string?>();
-        foreach (int id in lap.SelectMany(r => r.LairMonsters.Append(r.NpcMonster)).Where(id => id > 0).Distinct())
+        var summons = new Dictionary<int, IReadOnlyList<int>?>();
+        foreach (int id in MonstersOn(lap, world, summons))
         {
             monsters[id] = world.Monster(id);
             MonsterOverlay o = character.Overlay(id);
@@ -40,6 +41,32 @@ public static class SimFreeze
             Overlay = id => overlays.TryGetValue(id, out MonsterOverlay? o) ? o : new MonsterOverlay(),
             SpellShortByNumber = n => shorts.GetValueOrDefault(n),
         };
-        return (frozen, world with { Monster = id => monsters.GetValueOrDefault(id) });
+        return (frozen, world with
+        {
+            Monster = id => monsters.GetValueOrDefault(id),
+            DeathSummons = id => summons.GetValueOrDefault(id),
+        });
+    }
+
+    // Every monster that can appear on the lap: placed, lair, boss, room-summoned, and each
+    // tier of a death-summon chain below them (walked to the end). Records each
+    // monster's death-summon list as it goes.
+    private static HashSet<int> MonstersOn(
+        IReadOnlyList<SimRoom> lap, SimWorld world, Dictionary<int, IReadOnlyList<int>?> summons)
+    {
+        var seen = new HashSet<int>();
+        var queue = new Queue<int>(lap.SelectMany(r => r.LairMonsters
+            .Append(r.NpcMonster)
+            .Concat(r.Bosses ?? Array.Empty<int>())
+            .Concat(r.Summon?.Entries.Select(e => e.Monster) ?? Enumerable.Empty<int>())));
+        while (queue.Count > 0)
+        {
+            int id = queue.Dequeue();
+            if (id <= 0 || !seen.Add(id)) continue;
+            IReadOnlyList<int>? tier = world.DeathSummons?.Invoke(id);
+            summons[id] = tier;
+            if (tier is not null) foreach (int next in tier) queue.Enqueue(next);
+        }
+        return seen;
     }
 }

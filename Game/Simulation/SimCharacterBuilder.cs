@@ -43,14 +43,46 @@ public static class SimCharacterBuilder
         PlayerDefenseProfile defense = IncomingHitEstimator.BuildLiveDefense(
             stats, worn, encumbrance, gameData, buffs, obtainedSpells, questBonuses);
 
+        IReadOnlyDictionary<string, SimSpell> spellMap = BuildSpells(stats, worn, obtainedSpells, gameData, realm);
         return new SimCharacter(
             realm, stats.Level, stats.MaxHits, stats.MaxMana,
             melee, weaponHitMagic, defense,
             BuildRegen(stats, worn, gameData, questBonuses, realm),
-            BuildSpells(stats, worn, obtainedSpells, gameData, realm),
+            spellMap,
             combat, health, spells, overlay,
             number => number > 0 ? spellShortByNumber(number) : null,
-            evilPoints);
+            evilPoints,
+            BuildBuffs(buffs, obtainedSpells, spellMap, realm));
+    }
+
+    // The solo self-buffs of the Buffs list, in the order the casting engine walks
+    // them (BuffPriorityOrder): a self-cast slot (CastOnSelf), or a whole-party spell
+    // that's on and allowed solo (WholePartyOn + CastSolo) — a lone character is a
+    // party of one. Item-cast tokens and dark-only light spells are left out. A roll
+    // threshold counts only once it's in rolled-percent units (always on Paradigm,
+    // which reads the roll off `abil 145`).
+    private static IReadOnlyList<SimBuff> BuildBuffs(
+        BuffSettings? buffs, IReadOnlyList<KnownSpell> obtained,
+        IReadOnlyDictionary<string, SimSpell> spellMap, RealmType realm)
+    {
+        if (buffs is null) return Array.Empty<SimBuff>();
+        var targets = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (KnownSpell k in obtained) targets.TryAdd(k.Short, k.Targets);
+        bool WholeParty(string? code) => code is not null && targets.TryGetValue(code, out int t) && BuffClassifier.IsWholeParty(t);
+
+        var list = new List<SimBuff>();
+        foreach (BuffSlot slot in BuffPriorityOrder.InPriorityOrder(buffs.Slots, buffs.PriorityTopDown, buffs.ManualOrder,
+                     s => BuffPriorityOrder.Category(ItemCastToken.IsToken(s.Spell), WholeParty(s.Spell))))
+        {
+            if (string.IsNullOrWhiteSpace(slot.Spell) || slot.OnlyWhenDark || ItemCastToken.IsToken(slot.Spell)) continue;
+            if (!spellMap.ContainsKey(slot.Spell)) continue;
+            bool selfCast = WholeParty(slot.Spell) ? slot.WholePartyOn && slot.CastSolo : slot.CastOnSelf;
+            if (!selfCast) continue;
+            int? rerollBelow = slot.RerollThresholdIsRoll || realm == RealmType.ParaMud ? slot.RerollThreshold : null;
+            list.Add(new SimBuff(slot.Spell, slot.RecastMarginSec, slot.OnlyWhenHpFull, slot.OnlyWhenMaFull,
+                slot.CastBeforeRestingForMana, rerollBelow, slot.RerollCount, slot.RerollInfinite));
+        }
+        return list;
     }
 
     // Per-tick regen from the stat formulas (CharacterCalculator.CalcHpRegen /
@@ -75,19 +107,18 @@ public static class SimCharacterBuilder
         if (questBonuses is not null) CharacterCalculator.ApplyQuestBonuses(gear, questBonuses, "Quests");
         EquipmentStatSummary t = gear.Totals;
 
-        double hpStanding = CharacterCalculator.CalcHpRegen(stats.Level, stats.Health, t.HpRegenPercent, false, realm);
-        double hpResting = CharacterCalculator.CalcHpRegen(stats.Level, stats.Health, t.HpRegenPercent, true, realm);
-        double maStanding = CharacterCalculator.CalcManaRegen(stats.Level, stats.Intellect, stats.Willpower, stats.Charm,
-            mageryType, mageryLevel, t.MpRegenPercent, false, realm);
-        double maMeditating = CharacterCalculator.CalcManaRegen(stats.Level, stats.Intellect, stats.Willpower, stats.Charm,
-            mageryType, mageryLevel, t.MpRegenPercent, true, realm);
-
-        bool paradigm = realm == RealmType.ParaMud;
-        return paradigm
-            ? new SimRegen(hpStanding / 3, hpResting / 3, maStanding / 3, maMeditating,
-                RealmRegenProfile.For(realm), RestReplacesStanding: true)
-            : new SimRegen(hpStanding, hpResting, maStanding, maMeditating,
-                RealmRegenProfile.For(realm), RestReplacesStanding: false);
+        int hpPct = t.HpRegenPercent, mpPct = t.MpRegenPercent;
+        int level = stats.Level, health = stats.Health, intel = stats.Intellect, wil = stats.Willpower, cha = stats.Charm;
+        // Paradigm pays each natural cycle in thirds on its 10 s grid.
+        double share = realm == RealmType.ParaMud ? 1.0 / 3 : 1.0;
+        return new SimRegen(
+            HpStanding: extra => share * CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, false, realm),
+            HpResting: extra => share * CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, true, realm),
+            MaStanding: extra => share * CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
+                mageryType, mageryLevel, mpPct + extra, false, realm),
+            MaMeditating: CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
+                mageryType, mageryLevel, mpPct, true, realm),
+            RealmRegenProfile.For(realm), RestReplacesStanding: realm == RealmType.ParaMud);
     }
 
     private static IReadOnlyDictionary<string, SimSpell> BuildSpells(
@@ -111,9 +142,34 @@ public static class SimCharacterBuilder
                 SpellCalculator.MaxDamage(f, stats.Level, spellDamageBonus: bonus, realm: realm),
                 SpellDamageCalculator.UsesMagicResist(f), f.TypeOfResists, f.AttType,
                 SpellCalculator.SingleCastMinHeal(f, stats.Level),
-                SpellCalculator.SingleCastMaxHeal(f, stats.Level)));
+                SpellCalculator.SingleCastMaxHeal(f, stats.Level),
+                DurationSeconds: SpellCalculator.Duration(f, stats.Level) * SpellCalculator.SpellRoundSecondsWallClock,
+                ManaRegenMin: RegenRange(f, stats.Level, ManaRegenCode).Min,
+                ManaRegenMax: RegenRange(f, stats.Level, ManaRegenCode).Max,
+                HpRegenMin: RegenRange(f, stats.Level, HpRegenCode).Min,
+                HpRegenMax: RegenRange(f, stats.Level, HpRegenCode).Max,
+                Debuff: MonsterDebuffCalculator.AffectsMonsterStats(known)
+                    ? MonsterDebuffCalculator.Fold(new[] { known }, stats.Level) : default));
         }
         return map;
+    }
+
+    private const int HpRegenCode = 123, ManaRegenCode = 145;
+
+    // The regen percent a spell adds while it's up: a stored value is fixed, a 0 is
+    // rolled from the spell's level-scaled range each cast (GAME_MECHANICS "Mana
+    // regeneration & the ManaRgn breakpoints"). Only a positive HP-regen value is a
+    // buff (a negative one is chaos surge's drain), so that side keeps positives.
+    private static (int Min, int Max) RegenRange(in SpellFormulaInput f, int level, int code)
+    {
+        foreach (SpellAbility a in f.Abilities)
+        {
+            if (a.Code != code) continue;
+            if (a.Value != 0) return code == HpRegenCode && a.Value < 0 ? (0, 0) : (a.Value, a.Value);
+            (long lo, long hi) = SpellCalculator.AffectMagnitude(f, level);
+            return ((int)lo, (int)hi);
+        }
+        return (0, 0);
     }
 
     private static int ReadInt(JsonElement row, string name) =>

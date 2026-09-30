@@ -6,6 +6,7 @@ using MudPlay.Game.Calculators;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Map;
 using MudPlay.Game.Simulation;
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using Xunit;
@@ -33,27 +34,38 @@ public sealed class LoopSimulatorTests
 
     private static SimCharacter Character(int maxHp = 200, int damage = 1000, double swings = 1,
         CombatSettings? combat = null, HealthSettings? health = null,
-        IReadOnlyDictionary<string, SimSpell>? spells = null, int maxMana = 0) => new(
+        IReadOnlyDictionary<string, SimSpell>? spells = null, int maxMana = 0,
+        IReadOnlyList<SimBuff>? buffs = null, SpellsSettings? slots = null) => new(
         RealmType.ParaMud, Level: 30, MaxHp: maxHp, MaxMana: maxMana,
         Melee: new PlayerMatchupProfile(RealmType.ParaMud, NormalAccuracy: 9999, AvgWeaponDamage: damage,
             SwingsPerRound: swings, HasWeapon: true, ArmourClass: 0, Dodge: 0, ProtEvil: 0, ProtGood: 0,
             DamageResist: 0),
         WeaponHitMagic: 10,
         Defense: new PlayerDefenseProfile(0, 0, 0, 0, false, 0, EvilLevel.Saint, 0, AcExact: 0),
-        Regen: new SimRegen(1, 30, 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true),
+        Regen: new SimRegen(_ => 1, _ => 30, extra => extra / 10.0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true),
         Spells: spells ?? new Dictionary<string, SimSpell>(),
         Combat: combat ?? new CombatSettings(),
         Health: health ?? new HealthSettings { UseMeditateAbility = false },
-        SpellSlots: new SpellsSettings(),
+        SpellSlots: slots ?? new SpellsSettings(),
         Overlay: _ => new MonsterOverlay(),
         SpellShortByNumber: _ => null,
-        EvilPoints: 0);
+        EvilPoints: 0,
+        Buffs: buffs);
 
-    private static SimWorld World(params MonsterCatalogEntry[] mobs)
+    private static SimWorld World(params MonsterCatalogEntry[] mobs) => World(null, mobs);
+
+    private static SimWorld World(Dictionary<int, IReadOnlyList<int>>? deathSummons, params MonsterCatalogEntry[] mobs)
     {
         var byNumber = mobs.ToDictionary(m => m.Number);
-        return new SimWorld(n => byNumber.GetValueOrDefault(n));
+        return new SimWorld(n => byNumber.GetValueOrDefault(n),
+            DeathSummons: n => deathSummons?.GetValueOrDefault(n));
     }
+
+    private static SimSpell Spell(string code, int mana, long dmg = 0, double duration = 0,
+        int manaRegenMin = 0, int manaRegenMax = 0, MonsterDebuffEffect debuff = default) =>
+        new(code, 1, mana, FiresPerRound: 1, CastChance: 100, MinDamagePerRound: dmg, MaxDamagePerRound: dmg,
+            UsesMagicResist: false, TypeOfResists: 0, AttType: 0, MinHeal: 0, MaxHeal: 0,
+            DurationSeconds: duration, ManaRegenMin: manaRegenMin, ManaRegenMax: manaRegenMax, Debuff: debuff);
 
     private static SimRoom Lair(int room, int max, int respawn, params int[] monsters) =>
         new(new RoomKey(1, room), 0, max, monsters, respawn);
@@ -119,5 +131,67 @@ public sealed class LoopSimulatorTests
 
         Assert.True(run.Casts.GetValueOrDefault("blst") > 0);
         Assert.Equal(run.Casts["blst"], run.Kills);
+    }
+
+    [Fact]
+    public void RollBuffIsKeptUpAndRerolledBelowItsThreshold()
+    {
+        // A mana-regen roll spell (0–100% rolled) kept up solo, rerolled while it lands
+        // under 50: it gets cast more often than its 60 s duration alone would need.
+        var spells = new Dictionary<string, SimSpell>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["prfl"] = Spell("prfl", mana: 1, duration: 60, manaRegenMin: 0, manaRegenMax: 100),
+        };
+        var buffs = new[] { new SimBuff("prfl", 0, false, false, false, RerollBelow: 50, RerollCount: 0, RerollInfinite: true) };
+        var health = new HealthSettings { BlessIfAboveMa = 0, RestIfBelowMa = 0, UseMeditateAbility = false };
+        LoopSimRun run = LoopSimulator.Run(
+            Character(spells: spells, buffs: buffs, maxMana: 1000, health: health),
+            new[] { Empty(1), Empty(2) }, World(), secondsPerStep: 1, hours: 1, seed: 1);
+
+        int casts = run.Casts.GetValueOrDefault("prfl");
+        Assert.True(casts > 60, $"cast {casts} times");
+    }
+
+    [Fact]
+    public void DeathSpellSummonsTheNextTier()
+    {
+        // Killing the stitched parent summons two parts; the kills and exp include them.
+        var summons = new Dictionary<int, IReadOnlyList<int>> { [20] = new[] { 21, 21 } };
+        LoopSimRun run = LoopSimulator.Run(Character(), new[] { Lair(1, 1, 3600, 20), Empty(2) },
+            World(summons, Mob(20, hp: 10, exp: 100), Mob(21, hp: 10, exp: 10)), secondsPerStep: 1, hours: 0.5, seed: 1);
+
+        Assert.Equal(3, run.Kills);
+        Assert.Equal(120, run.Exp);
+    }
+
+    [Fact]
+    public void SingleTargetDebuffLandsBeforeTheKill()
+    {
+        var combat = new CombatSettings();
+        combat.SingleTargetDebuffSpell.SpellName = "curs";
+        var spells = new Dictionary<string, SimSpell>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["curs"] = Spell("curs", mana: 5, duration: 60, debuff: new MonsterDebuffEffect(20, 0, 0, 0, false)),
+        };
+        LoopSimRun run = LoopSimulator.Run(Character(damage: 1, combat: combat, spells: spells, maxMana: 500),
+            new[] { Lair(1, 1, 3600, 6), Empty(2) }, World(Mob(6, hp: 30, exp: 10)), secondsPerStep: 1, hours: 0.5, seed: 1);
+
+        Assert.Equal(1, run.Casts.GetValueOrDefault("curs"));
+    }
+
+    [Fact]
+    public void RunTriggerFleesRestsAndComesBack()
+    {
+        // Under 50% HP the character runs, rests to full away from the fight, and
+        // walks back to finish it — no death.
+        var health = new HealthSettings { RunIfBelowHp = 50, RestIfBelowHp = 60, RestMaxHp = 100, UseMeditateAbility = false };
+        var combat = new CombatSettings { RunDistance = 1 };
+        LoopSimRun run = LoopSimulator.Run(Character(maxHp: 100, damage: 20, health: health, combat: combat),
+            new[] { Lair(1, 1, 3600, 8), Empty(2) }, World(Mob(8, hp: 200, exp: 10, align: 1, Hit(30, 30))),
+            secondsPerStep: 1, hours: 1, seed: 1);
+
+        Assert.True(run.Flees > 0);
+        Assert.Null(run.DiedAtSeconds);
+        Assert.True(run.Kills >= 1);
     }
 }
