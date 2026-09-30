@@ -2780,7 +2780,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void TearDownExpEstimator()
     {
         if (ExpEstimator is not null)
+        {
             ExpEstimator.PropertyChanged -= OnExpEstimatorPropertyChanged;
+            ExpEstimator.CancelSimulation();
+        }
         ExpEstimator = null;
         LoopBuilderPath = null;
         LoopBuilderWaypoints = null;

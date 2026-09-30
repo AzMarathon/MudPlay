@@ -32,19 +32,19 @@ public static class LoopSimulator
         for (int seed = 1; seed <= runs; seed++)
         {
             cancel.ThrowIfCancellationRequested();
-            results.Add(Run(character, lap, world, secondsPerStep, hours, seed));
+            results.Add(Run(character, lap, world, secondsPerStep, hours, seed, cancel));
         }
         return new LoopSimSummary(results, BossCredits(lap, world));
     }
 
     public static LoopSimRun Run(
         SimCharacter character, IReadOnlyList<SimRoom> lap, SimWorld world,
-        double secondsPerStep, double hours, int seed)
+        double secondsPerStep, double hours, int seed, CancellationToken cancel = default)
     {
         ArgumentNullException.ThrowIfNull(character);
         ArgumentNullException.ThrowIfNull(lap);
         ArgumentNullException.ThrowIfNull(world);
-        return new Session(character, lap, world, secondsPerStep, seed).Play(hours * 3600.0);
+        return new Session(character, lap, world, secondsPerStep, seed).Play(hours * 3600.0, cancel);
     }
 
     // A boss is killable once per its regen, however often the lap passes it, so it
@@ -95,9 +95,15 @@ public static class LoopSimulator
         public bool AttacksUs => Alive && (Hostile || Engaged);
     }
 
+    // A lair's respawn clock: Stock keeps one for the whole room, restarted by every
+    // kill in it, and refills every empty slot together once it runs out. Paradigm is
+    // played with one clock per slot, started by that slot's kill — still unconfirmed
+    // against a room clock like Stock's (GAME_MECHANICS "Lair respawn timers"). Only
+    // the clock the realm uses is read.
     private sealed class RoomState(int slots)
     {
         public double[] SlotReadyAt { get; } = new double[slots];
+        public double RoomReadyAt { get; set; }
         public Mob?[] SlotMob { get; } = new Mob?[slots];
         public List<Mob> Mobs { get; } = new();
     }
@@ -109,6 +115,10 @@ public static class LoopSimulator
         private const int RoundSteps = 100;            // 5 s combat round
         private const int StockRoomSpellSteps = 120;   // Stock's 6 s medium tick
         private const int DotTickSteps = 60;           // the 3 s update an effect slot's damage ticks on
+        // The engine's monster-create pass, which refills the lair a player stands
+        // in, runs every 5 s by default (GAME_MECHANICS "Lair respawn timers").
+        private const int SpawnPassSteps = 100;
+        private const int CancelCheckSteps = 20000;    // every 1000 simulated seconds
         private const int MaxSwingsPerRound = 20;
         private const int RoomMonsterCap = 20;
 
@@ -127,6 +137,8 @@ public static class LoopSimulator
         private readonly Dictionary<string, (double Until, int ManaRegen, int HpRegen)> _buffs =
             new(StringComparer.OrdinalIgnoreCase);
         private readonly int _standingSteps, _restingSteps, _meditatingSteps;
+        private readonly int _spawnPassPhase;
+        private readonly bool _perSlotClock;
 
         private long _step;
         private double _hp, _ma;
@@ -162,6 +174,9 @@ public static class LoopSimulator
             _standingSteps = StepsOf(ch.Regen.Cadence.StandingInterval);
             _restingSteps = StepsOf(ch.Regen.Cadence.RestingInterval);
             _meditatingSteps = StepsOf(ch.Regen.Cadence.MeditatingInterval);
+            // The spawn pass runs on the server's own clock, unrelated to the round.
+            _spawnPassPhase = _rng.Next(SpawnPassSteps);
+            _perSlotClock = ch.Realm == RealmType.ParaMud;
         }
 
         private double Now => _step * Step;
@@ -170,13 +185,15 @@ public static class LoopSimulator
 
         private static int StepsOf(TimeSpan t) => Math.Max(1, (int)Math.Round(t.TotalSeconds / Step));
 
-        public LoopSimRun Play(double durationSeconds)
+        public LoopSimRun Play(double durationSeconds, CancellationToken cancel)
         {
             if (_lap.Count > 0) Enter(0);
             while (_lap.Count > 0 && Now < durationSeconds && !Ended)
             {
+                if (_step % CancelCheckSteps == 0) cancel.ThrowIfCancellationRequested();
                 if (_moveDoneAt is { } done && Now >= done) Arrive();
-                if (_moveDoneAt is null && !_isAway) Spawn(Here());
+                if (_moveDoneAt is null && !_isAway && _step % SpawnPassSteps == _spawnPassPhase)
+                    Spawn(Here(), entering: false);
                 if (_step % RoundSteps == 0) Round();
                 if (Ended) break;
                 if (_moveDoneAt is null && !_isAway && _ch.Realm != RealmType.ParaMud && _step % StockRoomSpellSteps == 0)
@@ -188,8 +205,8 @@ public static class LoopSimulator
                 Account();
                 _step++;
             }
-            return new LoopSimRun(Now, _exp, _kills, _laps, _moving, _attacking, _resting, _meditating, _waiting,
-                _lowHp, _lowMa, _diedAt, new Dictionary<string, int>(_casts, StringComparer.OrdinalIgnoreCase),
+            return new LoopSimRun(durationSeconds, Now, _exp, _kills, _laps, _moving, _attacking, _resting, _meditating,
+                _waiting, _lowHp, _lowMa, _diedAt, new Dictionary<string, int>(_casts, StringComparer.OrdinalIgnoreCase),
                 _flees, _hungUpAt, _damageTaken);
         }
 
@@ -213,19 +230,23 @@ public static class LoopSimulator
             // "NPC-placed monsters").
             if (room.NpcMonster > 0 && !state.Mobs.Any(m => m.LairSlot == -1 && m.Alive))
                 AddMob(state, room.NpcMonster, lairSlot: -1);
-            Spawn(state);
+            Spawn(state, entering: true);
             RoomSummon();
         }
 
-        // Fill every lair slot whose clock has run out — on entry, and while we
-        // stand in the room (a respawn lands on a resting character too).
-        private void Spawn(RoomState state)
+        // Fill every empty lair slot whose clock has run out. Walking in refills at once;
+        // standing in the room refills only when the spawn pass comes round, so a
+        // lair comes back slower under a character who waits in it. A lair whose
+        // timer couldn't be resolved (RespawnSeconds 0) refills on entry only — a
+        // zero clock checked while standing would respawn each kill on the spot.
+        private void Spawn(RoomState state, bool entering)
         {
             SimRoom room = _lap[_pos];
-            if (!room.HasLair) return;
+            if (!room.HasLair || (!entering && room.RespawnSeconds <= 0)) return;
+            if (!_perSlotClock && state.RoomReadyAt > Now) return;
             for (int slot = 0; slot < state.SlotMob.Length; slot++)
             {
-                if (state.SlotMob[slot] is not null || state.SlotReadyAt[slot] > Now) continue;
+                if (state.SlotMob[slot] is not null || (_perSlotClock && state.SlotReadyAt[slot] > Now)) continue;
                 int id = room.LairMonsters[_rng.Next(room.LairMonsters.Count)];
                 state.SlotMob[slot] = AddMob(state, id, slot);
             }
@@ -253,7 +274,9 @@ public static class LoopSimulator
         private Mob? AddMob(RoomState state, int number, int lairSlot)
         {
             if (_world.Monster(number) is not { } entry) return null;
-            bool hostile = entry.Align is 1 or 2 or 5 || (entry.Align == 6 && _ch.EvilPoints < 40);
+            // Lawful evil spares Outlaw-or-worse, as StockAggroCalculator.Acquire rules.
+            bool hostile = entry.Align is 1 or 2 or 5
+                || (entry.Align == 6 && _ch.AlignmentValue < StockAggroCalculator.OutlawValue);
             bool engageable = MonsterEngagement.IsEngageable(_ch.Overlay(number));
             var mob = new Mob
             {
@@ -497,7 +520,9 @@ public static class LoopSimulator
             if (mob.LairSlot >= 0)
             {
                 room.SlotMob[mob.LairSlot] = null;
-                room.SlotReadyAt[mob.LairSlot] = Now + _lap[_pos].RespawnSeconds;
+                double readyAt = Now + _lap[_pos].RespawnSeconds;
+                if (_perSlotClock) room.SlotReadyAt[mob.LairSlot] = readyAt;
+                else room.RoomReadyAt = readyAt;
             }
             if (ReferenceEquals(mob, _target))
             {
@@ -634,7 +659,7 @@ public static class LoopSimulator
             HealthSettings health = _ch.Health;
             var inputs = new SelfHealInputs((int)_hp, _ch.MaxHp, (int)_ma, _ch.MaxMana, inCombat,
                 Resting: _posture == Posture.Resting,
-                HealHpTrigger: (mode, value) => PoolThreshold.Resolve(mode, value, _ch.MaxHp),
+                HealHpTrigger: (mode, value) => RestThresholds.ResolveValue(mode, value, _ch.DefaultMaxHp, _ch.MaxHp, _ch.MaxHp),
                 Affordable: code => !_ch.Spells.TryGetValue(code, out SimSpell? s) || _ma >= s.ManaPerCast,
                 HpRegenRecastDue: code => !BuffUp(code, 0));
 
@@ -808,13 +833,18 @@ public static class LoopSimulator
                 if (b.Until > Now) { manaBonus += b.ManaRegen; hpBonus += b.HpRegen; }
 
             long since = _step - _postureSince;
+            bool resting = _posture == Posture.Resting;
             if (_step > 0 && _step % _standingSteps == 0)
             {
-                _hp += _posture == Posture.Resting && r.RestReplacesStanding ? r.HpResting(hpBonus) : r.HpStanding(hpBonus);
+                if (!resting || !r.RestReplacesStanding) _hp += r.HpStanding(hpBonus);
                 _ma += r.MaStanding(manaBonus);
             }
-            if (_posture == Posture.Resting && !r.RestReplacesStanding && since > 0 && since % _restingSteps == 0)
-                _hp += r.HpResting(hpBonus);
+            if (resting && since > 0 && since % _restingSteps == 0)
+            {
+                long tick = since / _restingSteps;
+                double rest = r.HpResting(hpBonus);
+                _hp += tick % Math.Max(1, r.RestFullEvery) == 0 ? rest : rest * r.RestReducedShare;
+            }
             if (_posture == Posture.Meditating && since > 0 && since % _meditatingSteps == 0)
                 _ma += r.MaMeditating;
             _hp = Math.Min(_hp, _ch.MaxHp);
@@ -828,10 +858,10 @@ public static class LoopSimulator
         {
             if (_moveDoneAt is not null || Fighting) return;
             HealthSettings h = _ch.Health;
-            int hpLow = PoolThreshold.Resolve(h.HpThresholdMode, h.RestIfBelowHp, _ch.MaxHp);
-            int hpFull = PoolThreshold.Resolve(h.HpThresholdMode, h.RestMaxHp, _ch.MaxHp);
-            int maLow = PoolThreshold.Resolve(h.MaThresholdMode, h.RestIfBelowMa, _ch.MaxMana);
-            int maFull = PoolThreshold.Resolve(h.MaThresholdMode, h.RestMaxMa, _ch.MaxMana);
+            (int hpLow, int hpFull) = RestThresholds.Resolve(h.HpThresholdMode, h.RestIfBelowHp, h.RestMaxHp,
+                _ch.DefaultMaxHp, _ch.MaxHp, _ch.MaxHp);
+            (int maLow, int maFull) = RestThresholds.Resolve(h.MaThresholdMode, h.RestIfBelowMa, h.RestMaxMa,
+                _ch.DefaultMaxMana, _ch.MaxMana, _ch.MaxMana);
             _hpGate = _hpGate ? _hp < hpFull : _hp < hpLow;
             _maGate = _ch.MaxMana > 0 && (_maGate ? _ma < maFull : _ma < maLow);
 

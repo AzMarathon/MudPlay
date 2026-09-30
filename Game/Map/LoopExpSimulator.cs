@@ -133,7 +133,8 @@ public sealed record ExpEstimatorSnapshot(
     IReadOnlyList<string> Summons,   // "map/room  Spell — +exp/hr, N% summon" per summoning room
     string RealmName = "",           // active realm — drives the summon re-roll cadence
     IReadOnlyList<string>? Simulation = null,   // the character-simulation readout, null when not run
-    double SimSecondsPerStep = 0);
+    double SimSecondsPerStep = 0,
+    double SimHours = 0);
 
 public static class LoopExpSimulator
 {
