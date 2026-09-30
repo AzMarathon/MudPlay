@@ -175,6 +175,13 @@ public sealed class BossTimerStore
     public TimeSpan? CleanupRemaining(string name)
         => KilledAt(name) is { } killed ? CleanupRemainingFrom(killed) : null;
 
+    // When a marked Cleanup boss flips back to ALIVE — the nightly cleanup after its
+    // kill — or null when it isn't marked or no cleanup time is configured.
+    public DateTimeOffset? NextCleanupFor(string name)
+        => KilledAt(name) is { } killed && _cleanupConfig?.Invoke() is { } cfg
+            ? BossTimerMath.NextCleanup(killed, cfg.TimeOfDay, cfg.Tz)
+            : null;
+
     private TimeSpan? CleanupRemainingFrom(DateTimeOffset killed)
     {
         if (_cleanupConfig?.Invoke() is not { } cfg) return null;

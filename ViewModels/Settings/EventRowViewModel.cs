@@ -54,10 +54,14 @@ public sealed partial class EventRowViewModel : ObservableObject
                                       : $"At {Source.AtTime}",
         EventTriggerType.Every  => FormatEvery(),
         EventTriggerType.State  => "When " + Game.Events.EventConditionEvaluator.Describe(Source.Conditions),
+        EventTriggerType.Boss   => FormatBoss(),
         _ => "—",
     };
 
-    public string EventText => Source.ActionType switch
+    // The action, its stop-after rule (loop / auto-lair), then what comes after.
+    public string EventText => ActionText + StopText + " → " + ThenText;
+
+    private string ActionText => Source.ActionType switch
     {
         EventActionType.WalkTo  => Source.WalkToTarget is { } t
                                        ? $"Walk to {t.Map}/{t.Room}"
@@ -74,8 +78,50 @@ public sealed partial class EventRowViewModel : ObservableObject
         EventActionType.Roomba  => Source.RoombaMode == EventRoombaMode.InventoryOnly
             ? "Roomba (inventory only)"
             : "Roomba sort",
+        EventActionType.Wait     => $"Wait {Source.WaitSeconds ?? 0}s",
+        EventActionType.RestUp   => "Rest up",
+        EventActionType.BankTrip => "Bank / stash trip",
         _ => "—",
     };
+
+    private string StopText
+    {
+        get
+        {
+            if (Source.ActionType is not (EventActionType.Loop or EventActionType.AutoLair)) return string.Empty;
+            List<string> rules = new();
+            if (Source.ActionType == EventActionType.Loop && Source.StopAfterLaps is > 0 and var laps)
+                rules.Add($"{laps} lap{(laps == 1 ? "" : "s")}");
+            if (Source.StopAfterMinutes is > 0 and var minutes) rules.Add($"{minutes} min");
+            if (!string.IsNullOrWhiteSpace(Source.StopWhenBossKilled)) rules.Add($"{Source.StopWhenBossKilled} dies");
+            if (Source.StopConditions is { Count: > 0 } c)
+                rules.Add(Game.Events.EventConditionEvaluator.Describe(c));
+            return rules.Count == 0 ? " (until stopped)" : $" (until {string.Join(" or ", rules)})";
+        }
+    }
+
+    private string ThenText => Source.ResolvedThen switch
+    {
+        EventThenType.Resume   => "go back",
+        EventThenType.Loop     => $"loop \"{Source.ThenLoopName}\"",
+        EventThenType.AutoLair => $"auto-lair \"{Source.ThenAutoLairSetupName}\"",
+        EventThenType.WalkTo   => Source.ThenWalkTo is { } t ? $"walk to {t.Map}/{t.Room}" : "walk to —",
+        EventThenType.Event    => $"event \"{Source.ThenEventName}\"",
+        _ => "stop",
+    };
+
+    private string FormatBoss()
+    {
+        string boss = string.IsNullOrWhiteSpace(Source.BossName) ? "(no boss)" : Source.BossName;
+        string lead = Source.BossLeadMinutes is > 0 and var m ? $" -{m}m" : string.Empty;
+        return Source.BossMoment switch
+        {
+            EventBossMoment.Guaranteed   => $"{boss}: guaranteed spawn{lead}",
+            EventBossMoment.Killed       => $"{boss}: killed",
+            EventBossMoment.CleanupReset => $"{boss}: cleanup reset{lead}",
+            _                            => $"{boss}: early window{lead}",
+        };
+    }
 
     // True when the event's Disabled flag is set (manually or by the reconciler).
     public bool IsDisabled => Source.Disabled;

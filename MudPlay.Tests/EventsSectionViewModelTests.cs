@@ -113,9 +113,26 @@ public sealed class EventsSectionViewModelTests
             WalkToTarget = new Models.Profile.RoomRef(1, 297),
         });
 
-        Assert.Equal("Loop \"Sewer farm\"",       vm.Rows[0].EventText);
-        Assert.Equal("Auto-lair \"Albion lairs\"", vm.Rows[1].EventText);
-        Assert.Equal("Walk to 1/297",              vm.Rows[2].EventText);
+        events.Add(new ScheduledEvent
+        {
+            TriggerType = EventTriggerType.Boss,
+            BossName = "Sarnak",
+            BossMoment = EventBossMoment.Guaranteed,
+            BossLeadMinutes = 5,
+            ActionType = EventActionType.Loop,
+            LoopName = "Sewer farm",
+            StopAfterLaps = 3,
+            StopWhenBossKilled = "Sarnak",
+            Then = EventThenType.Resume,
+        });
+
+        // The action, its stop rule (loop / auto-lair), then what comes after — an
+        // older event with no Then saved: a walk-to goes back, anything else stops.
+        Assert.Equal("Loop \"Sewer farm\" (until stopped) → stop",       vm.Rows[0].EventText);
+        Assert.Equal("Auto-lair \"Albion lairs\" (until stopped) → stop", vm.Rows[1].EventText);
+        Assert.Equal("Walk to 1/297 → go back",                           vm.Rows[2].EventText);
+        Assert.Equal("Loop \"Sewer farm\" (until 3 laps or Sarnak dies) → go back", vm.Rows[3].EventText);
+        Assert.Equal("Sarnak: guaranteed spawn -5m", vm.Rows[3].TimeText);
     }
 
     // ----- CRUD commands -------------------------------------------

@@ -160,7 +160,11 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
         new(seed, isNew,
             AppServices.Current.Loops,
             AppServices.Current.Lairs,
-            AppServices.Current.RoomSearch);
+            AppServices.Current.RoomSearch,
+            bossNames: AppServices.Current.Bosses.ResolveForRealm(AppServices.Current.GameData.ActiveRealm)
+                .Select(b => b.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(),
+            eventNames: _events.Events.Select(e => e.Name).Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList());
 
     [RelayCommand(CanExecute = nameof(CanModifyOrRemove))]
     private void Remove()

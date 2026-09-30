@@ -470,6 +470,23 @@ public static class BugReportBuilder
               .Append('\n');
         sb.Append('\n');
 
+        // The event running now (its action, laps, Then and what it goes back to), and
+        // each boss-timer event's next fire — a "didn't go back to the loop" report
+        // hinges on both.
+        sb.Append("**Running event:** ").Append(svc.Events.RunSummary).Append("\n\n");
+        List<Models.GameData.ScheduledEvent> bossEvents = svc.Events.Events
+            .Where(e => e.TriggerType == Models.GameData.EventTriggerType.Boss).ToList();
+        sb.Append("**Boss-timer events** (").Append(bossEvents.Count).Append(")\n\n");
+        if (bossEvents.Count == 0) sb.Append("_(none)_\n");
+        else foreach (Models.GameData.ScheduledEvent e in bossEvents)
+            sb.Append("- ").Append(string.IsNullOrWhiteSpace(e.Name) ? "(unnamed)" : e.Name)
+              .Append(e.Disabled ? " [disabled]" : string.Empty).Append(": ")
+              .Append(e.BossName ?? "(no boss)").Append(' ').Append(e.BossMoment)
+              .Append(e.BossLeadMinutes is > 0 ? $" -{e.BossLeadMinutes}m" : string.Empty)
+              .Append(" — next ").Append(svc.EventBoss.NextFire(e)?.ToString("MM-dd HH:mm") ?? "not scheduled")
+              .Append('\n');
+        sb.Append('\n');
+
         IReadOnlyList<AutoPartyManager.NagSnapshot> nags = svc.AutoParty.ActiveNagSnapshot();
         sb.Append("**@join nags** (").Append(nags.Count).Append(")\n\n");
         if (nags.Count == 0) sb.Append("_(none active)_\n");
