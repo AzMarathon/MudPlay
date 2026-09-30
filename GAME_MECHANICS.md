@@ -826,10 +826,20 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 - **It fires after an armor-block glance (0 damage to us) OR a real hit.**
 - **The item wording varies** (`armour spikes`, `collar spikes`, …), so the line can't be keyed on wording.
 - **The monster is the victim**, so the damage is OURS (or a party member's), not a monster hit.
+- **Spells give it too, and every source works the same** *([CONFIRMED] 2026-09-29, user)*: any physical attack on the wearer reflects damage back at the attacker, in a white line. A spell or item carries ability **72** (the reflect's max damage) and **137** (its "Shockshield Message" number) — e.g. hellfire shield (#1384: 72=10, 137→1145), shockshield (#64), chaos shield (#405), chaos surge (#748), bladed sphere (#1041/#5015), barbskin (#1062). *[OBSERVED] game data.* Paradigm also points at messages **8957** (exalted aegis), **9663** (golden armour) and **10135** (berserk), whose wording isn't in the Stock table. [NEEDS CONFIRMATION] what those three print.
+- **The messages** *([OBSERVED] Stock 1.11p message table `wccmsg2`; user 2026-09-29: the same on Paradigm)* — the wearer's view / the struck attacker's view / everyone else's:
+  - 1145 `%s is scorched for %d damage!` / `You are scorched for %d damage!` / `%s is scorched for %s damage!`
+  - 1446 `%s is shocked for %d damage!` / `You are shocked for %d damage!` / `%s is shocked for %s damage!`
+  - 2877 `You spike %s for %d damage!` / `You are stabbed by spikes for %d damage!` / `%s is spiked for %s damage!`
+  - 2879 `Your blades slash %s for %d damage!` / `The blades slash you for %d damage!` / `The blades slash %s for %d damage!`
+  - 2078 `The collar spikes stab %s …`, 3050 `The armour spikes stabs %s …`, 3051 `The shield spike stabs %s …`, 3140 `The shield spikes stab %s …` (each `… for %d damage!`, `you` in the struck attacker's view)
+  - 3136 `You counterstrike %s for %d damage!` / `A counterstrike at you does %d damage!` / `A counterstrike at %s does %d damage!`
+- **The line doesn't say whose shield it was** (the wearer and a bystander see the same `<attacker> is scorched …`), but it follows the hit that set it off.
 
 **Client use:**
 - Recognized by COLOUR (white/default, vs the red of a real incoming hit) + `for N damage` + a non-`you` target — NOT by wording.
 - Classified `Reflect`, not a monster hit.
+- The round ledger credits it by the hit just before it (`ShieldReflectLines`, `RoundDamageTracker`): `<monster> is scorched …` right after that monster hit someone is that someone's damage; `You are scorched …` right after we hit a monster is that monster's. Only these wordings, so an unnamed caster's spell after a monster's hit isn't credited to its victim.
 
 ---
 

@@ -232,6 +232,66 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal(431, r.UnknownTaken);
     }
 
+    // A damage shield's line names only whom it struck back at; the hit just before
+    // says whose shield it was.
+    [Theory]
+    [InlineData("large giant rat is scorched for 4 damage!")]
+    [InlineData("The shield spikes stab large giant rat for 4 damage!")]
+    [InlineData("A counterstrike at large giant rat does 4 damage!")]
+    public void ShieldReflect_OnAMonsterThatHitUs_IsOurs(string reflect)
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("The large giant rat bites you for 29 damage!");
+        h.Feed(reflect);
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(4, Row(r, DamageLineAttributor.Self).Dealt);
+        Assert.Equal(4, Row(r, "large giant rat").Taken);
+        Assert.Equal(0, r.UnknownDealt);
+    }
+
+    [Fact]
+    public void ShieldReflect_OnAMonsterThatHitAPartyMember_IsTheirs()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("The goblin bites Bob for 2 damage!");
+        h.Feed("goblin is shocked for 3 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(3, Row(r, "Bob").Dealt);
+        Assert.Equal(3, Row(r, "goblin").Taken);
+    }
+
+    [Fact]
+    public void ShieldReflect_OnUs_IsTheMonstersWeHit()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("You slash goblin for 11 damage!");
+        h.Feed("You are scorched for 5 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(5, Row(r, "goblin").Dealt);
+        Assert.Equal(5, Row(r, DamageLineAttributor.Self).Taken);
+        Assert.Equal(0, r.UnknownDealt);
+    }
+
+    // Only a shield's own wording counts — someone's unnamed spell right after the
+    // monster's hit isn't ours.
+    [Fact]
+    public void UnnamedSpell_AfterAMonsterHit_StaysUnknown()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("The goblin bites you for 2 damage!");
+        h.Feed("A brilliant beam zaps goblin for 10 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(10, r.UnknownDealt);
+    }
+
     // Damage nobody dealt — a condition or effect — is yours to take and no one's to
     // deal, so it doesn't land in unknown (report paradigm-20260929-003750).
     [Theory]

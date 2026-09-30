@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.126.0**
-> - Events: every event now has a Then step — go back to what was running, start a loop / Auto-Lair, walk somewhere, or fire another event
-> - Events: loops and Auto-Lairs started by an event can stop after N laps, N minutes, a boss-timer moment (any column hitting 0, a kill, a cleanup reset), or conditions holding
-> - Events: new Boss trigger (any Bosses-tab timer column hitting 0, a kill, a cleanup reset, N minutes early) and Wait, Rest up and Bank trip actions
-> - Events: existing events convert on first load, keeping what they did (a walk-to goes back, anything else stops)
-> - Bug report lists every event's full settings, whether it's disabled or auto-disabled, its next fire, and the event running now
+> **Version 3.126.1**
+> - Combat round totals credit a damage shield's hit back (hellfire shield, shockshield, spikes, counterstrike) to the shield's wearer instead of unknown
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
