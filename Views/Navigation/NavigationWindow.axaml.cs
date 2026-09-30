@@ -36,6 +36,7 @@ public partial class NavigationWindow : Window
         {
             map.RoomRightClicked       += OnMapRoomRightClicked;
             map.RoomLeftClicked        += OnMapRoomLeftClicked;
+            map.WaypointDragged        += OnMapWaypointDragged;
             map.RoomHovered            += OnMapRoomHovered;
             map.FloorChangeRequested   += OnMapFloorChangeRequested;
             // Shift+right-click fires a single unambiguous floor/teleport jump
@@ -223,6 +224,11 @@ public partial class NavigationWindow : Window
         if (!_suppressRoomMenu) return;
         e.Cancel = true;
         _suppressRoomMenu = false;
+    }
+
+    private void OnMapWaypointDragged(Game.Map.RoomKey from, Game.Map.RoomKey to)
+    {
+        if (DataContext is NavigationViewModel vm) vm.OnWaypointDragged(from, to);
     }
 
     private void OnMapRoomLeftClicked(Game.Map.RoomKey key, Point _, KeyModifiers modifiers)

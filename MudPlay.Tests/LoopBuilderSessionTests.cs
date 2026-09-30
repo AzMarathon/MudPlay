@@ -51,14 +51,32 @@ public sealed class LoopBuilderSessionTests : IDisposable
         ]
         """;
 
-    private (LoopBuilderSessionViewModel Session, LoopManager Loops) NewSession()
+    // GraphJson plus a room with no exits, which no loop can reach.
+    private const string IslandGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Island",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private (LoopBuilderSessionViewModel Session, LoopManager Loops) NewSession(string json = GraphJson)
     {
         // Unique per-test set name so concurrent tests don't collide
         // and Dispose can clean up. AppPaths.GameDataRoot can't be
         // sandboxed (cached at static-init).
         string setRoot = Path.Combine(AppPaths.GameDataRoot, _setName);
         Directory.CreateDirectory(setRoot);
-        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"), GraphJson);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"), json);
         GameDataCache cache = new();
         cache.SwitchSet(_setName);
         RoomGraphManager graph = new(cache);
@@ -264,6 +282,35 @@ public sealed class LoopBuilderSessionTests : IDisposable
 
         Assert.False(s.RemoveLastClickOf(new RoomKey(9, 9)));             // not in the loop
         Assert.Equal(3, s.Clicks.Count);
+    }
+
+    // Map drag: the waypoint moves to the drop room and keeps its number and command.
+    [Fact]
+    public void MoveLastClickOf_MovesTheWaypoint_KeepingItsCommand()
+    {
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 2));
+        s.SetClickAction(1, "search", 500);
+
+        Assert.True(s.MoveLastClickOf(new RoomKey(1, 2), new RoomKey(1, 3)));
+        LoopBuilderRow moved = s.Clicks[1];
+        Assert.Equal((2, new RoomKey(1, 3), "C", "search"), (moved.Index, moved.Key, moved.Name, moved.Command));
+        Assert.Equal(new[] { new RoomKey(1, 1), new RoomKey(1, 3) }, s.WaypointKeys);
+        Assert.Equal(4, s.ExpandedStepCount);   // N, N out and S, S back
+    }
+
+    // A drop on a room the loop can't reach puts the chip back.
+    [Fact]
+    public void MoveLastClickOf_OntoAnUnreachableRoom_IsUndone()
+    {
+        (LoopBuilderSessionViewModel s, _) = NewSession(IslandGraphJson);
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 2));
+
+        Assert.False(s.MoveLastClickOf(new RoomKey(1, 2), new RoomKey(1, 9)));
+        Assert.Equal(new[] { new RoomKey(1, 1), new RoomKey(1, 2) }, s.WaypointKeys);
+        Assert.Equal(string.Empty, s.UnreachableSummary);
     }
 
     [Fact]

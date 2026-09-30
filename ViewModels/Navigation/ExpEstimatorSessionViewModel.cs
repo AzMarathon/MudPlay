@@ -153,6 +153,27 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         return true;
     }
 
+    // Map drag: move the room's most recent click to another room, as the loop
+    // builder does; a move that leaves the sketch with no route is undone.
+    public bool MoveLastClickOf(RoomKey from, RoomKey to)
+    {
+        int index = _clicks.LastIndexOf(from);
+        if (index < 0 || from.Equals(to) || _graph.GetRoom(to) is not { } room) return false;
+        bool wasRoutable = _clicks.Count < 2 || PreviewedRoomKeys is not null;
+        LoopBuilderRow old = Clicks[index];
+        _clicks[index] = to;
+        Clicks[index] = old with { Key = to, Name = room.DisplayName };
+        Recompute();
+        if (wasRoutable && _clicks.Count >= 2 && PreviewedRoomKeys is null)
+        {
+            _clicks[index] = from;
+            Clicks[index] = old;
+            Recompute();
+            return false;
+        }
+        return true;
+    }
+
     public void MoveClick(int fromIndex, int toIndex)
     {
         if (fromIndex == toIndex) return;

@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.127.0**
+> **Version 3.128.0**
 > - Exp/Hr Estimator: Simulate my character plays your real character around the sketched loop (stats, gear, spells, per-monster overrides, heal and rest settings vs the monsters' real attacks and lair timers)
 > - Reports exp/hr with its range over several runs, kills/hr, the attack / move / rest / meditate split, lowest HP and mana, deaths and spells cast per hour
 > - Simulation result is in the bug report and the program log

@@ -2957,6 +2957,21 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
     }
 
+    // Called by the window when a numbered waypoint chip is dragged onto another room
+    // while building a loop or an exp/hr sketch: the waypoint moves there.
+    public void OnWaypointDragged(RoomKey from, RoomKey to)
+    {
+        switch (CurrentMode)
+        {
+            case NavigationMode.LoopBuild:
+                LoopBuilder?.MoveLastClickOf(from, to);
+                break;
+            case NavigationMode.ExpEstimator:
+                ExpEstimator?.MoveLastClickOf(from, to);
+                break;
+        }
+    }
+
     // Called by the window when the map crawler hits an up/down exit.
     // Rebuilds the layout from the new room so the user can continue
     // crawling on the new floor.

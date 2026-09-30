@@ -535,6 +535,14 @@ public sealed class MapControl : Control
     private bool _isDragging;
     private Point _pressPos;
 
+    // Waypoint-chip drag: a left press on a building waypoint's chip drags the chip
+    // instead of panning. _chipDragFrom is the room pressed; _chipDragging turns on
+    // past the drag threshold; _chipDropTarget is the room under the cursor.
+    private RoomKey? _chipDragFrom;
+    private bool _chipDragging;
+    private RoomKey? _chipDropTarget;
+    private Point _chipDragPoint;
+
     // Hover-tooltip tracking.
     private RoomKey? _hoverRoom;
     private Point _hoverPos;
@@ -825,6 +833,10 @@ public sealed class MapControl : Control
         };
     }
 
+    // The room a dragged waypoint chip would land on.
+    private static readonly IPen ChipDropPen =
+        new Pen(new SolidColorBrush(Color.Parse("#E66C5A")), 2.5) { DashStyle = new DashStyle(new double[] { 3, 2 }, 0) };
+
     // Fill brush for the per-waypoint numbered circle markers.
     private static readonly IBrush LoopBuilderWaypointFill =
         new SolidColorBrush(Color.Parse("#E66C5A"));
@@ -1013,6 +1025,10 @@ public sealed class MapControl : Control
     // built or unmarks an Auto-Lair room.
     public event Action<RoomKey, Point, KeyModifiers>? RoomLeftClicked;
 
+    // A numbered waypoint chip (a loop or exp/hr sketch being built) was dragged from
+    // one room and dropped on another: move that waypoint there.
+    public event Action<RoomKey, RoomKey>? WaypointDragged;
+
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
         base.OnPointerWheelChanged(e);
@@ -1050,6 +1066,11 @@ public sealed class MapControl : Control
             _leftPressed = true;
             _isDragging = false;
             _pressPos = point.Position;
+            _chipDragging = false;
+            _chipDropTarget = null;
+            _chipDragFrom = LoopBuilderWaypoints is { Count: > 0 } wps
+                && TryHitTestRoom(point.Position, out RoomKey pressed) && wps.Contains(pressed)
+                    ? pressed : null;
             _panStartX = _panX;
             _panStartY = _panY;
             e.Pointer.Capture(this);
@@ -1092,6 +1113,23 @@ public sealed class MapControl : Control
                 && dx * dx + dy * dy >= DragThresholdPixels * DragThresholdPixels)
             {
                 _isDragging = true;
+                _chipDragging = _chipDragFrom is not null;
+            }
+
+            if (_chipDragging)
+            {
+                _chipDragPoint = now;
+                _chipDropTarget = TryHitTestRoom(now, out RoomKey over) ? over : null;
+                InvalidateVisual();
+                // No room tooltips while a chip is held — the room under the cursor
+                // changes constantly, same as a pan.
+                if (_hoverRoom is not null)
+                {
+                    _hoverRoom = null;
+                    RoomHovered?.Invoke(null, now);
+                }
+                _hoverTimer.Stop();
+                return;
             }
 
             if (_isDragging)
@@ -1279,6 +1317,18 @@ public sealed class MapControl : Control
         _isDragging = false;
         e.Pointer.Capture(null);
 
+        if (_chipDragging)
+        {
+            RoomKey from = _chipDragFrom!.Value;
+            EndChipDrag();
+            // Dropped on another room → move the waypoint; anywhere else it stays put.
+            if (TryHitTestRoom(releasePos, out RoomKey drop) && !drop.Equals(from))
+                WaypointDragged?.Invoke(from, drop);
+            e.Handled = true;
+            return;
+        }
+        _chipDragFrom = null;
+
         if (!wasDragging)
         {
             if (TryHitTestRoom(releasePos, out RoomKey hit))
@@ -1303,6 +1353,26 @@ public sealed class MapControl : Control
             }
         }
         e.Handled = true;
+    }
+
+    private void EndChipDrag()
+    {
+        _chipDragFrom = null;
+        _chipDragging = false;
+        _chipDropTarget = null;
+        InvalidateVisual();
+    }
+
+    // Losing the pointer mid-drag (a window stealing focus) drops the chip back. Our
+    // own release frees the capture too, after clearing _leftPressed — that one isn't
+    // a loss, and cancelling there threw away every drop before it landed.
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        if (!_leftPressed) return;
+        _leftPressed = false;
+        _isDragging = false;
+        if (_chipDragFrom is not null) EndChipDrag();
     }
 
     // Centre the view on the room at key. pan = -coord * zoom puts the cell's
@@ -1503,6 +1573,28 @@ public sealed class MapControl : Control
             LoopRunningWaypointFill, LoopRunningWaypointRing, tilePixels, cx, cy);
         DrawNumberedWaypoints(context, AutoLairWaypoints,
             AutoLairWaypointFill, AutoLairWaypointRing, tilePixels, cx, cy);
+        DrawChipDrag(context, tilePixels, cx, cy);
+    }
+
+    // The chip being dragged, under the cursor, with the room it would land on ringed.
+    private void DrawChipDrag(DrawingContext ctx, double tilePixels, double cx, double cy)
+    {
+        if (!_chipDragging || _chipDragFrom is not { } from || LoopBuilderWaypoints is not { } wps) return;
+        if (_chipDropTarget is { } target && !target.Equals(from) && Layout is not null
+            && Layout.Positions.TryGetValue(target, out var coord))
+            ctx.DrawRectangle(null, ChipDropPen, ComputeCellRect(coord, tilePixels, cx, cy).Inflate(2));
+
+        double radius = Math.Clamp(tilePixels * 0.34, 7.0, 15.0);
+        using (ctx.PushOpacity(0.8))
+            ctx.DrawEllipse(LoopBuilderWaypointFill, LoopBuilderWaypointRing, _chipDragPoint, radius, radius);
+        int number = 0;
+        for (int i = wps.Count - 1; i >= 0 && number == 0; i--)
+            if (wps[i].Equals(from)) number = i + 1;
+        string label = number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        FormattedText ft = new(label, System.Globalization.CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight, new Typeface("Inter", FontStyle.Normal, FontWeight.Bold),
+            Math.Clamp(tilePixels * 0.33, 10.0, 14.0), NumberedWaypointTextBrush);
+        ctx.DrawText(ft, new Point(_chipDragPoint.X - ft.Width / 2, _chipDragPoint.Y - ft.Height / 2));
     }
 
     private static Rect ComputeCellRect((int X, int Y) coord, double tilePixels, double cx, double cy)
