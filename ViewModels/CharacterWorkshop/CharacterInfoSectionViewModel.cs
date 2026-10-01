@@ -440,11 +440,15 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         if (!perfect && encPenalty > 0) stealthLines.Add($"−{encPenalty} for carrying {encPct}%");
         StealthTip = stealth <= 0 && !perfect ? null : string.Join("\n", stealthLines);
 
+        // The rob roll is 1–99 against Thievery on Stock: at or under it succeeds, up
+        // to 10 over is a quiet fail, beyond that you're caught. (Paradigm's roll isn't
+        // known; it keeps the plain out-of-100 figures.)
         int thievery = _stats.Thievery;
+        int faces = _gameData.ActiveRealm == RealmType.ParaMud ? 100 : 99;
         ThieveryTip = thievery <= 0 ? "Rob: 0%" : string.Join("\n",
-            $"Rob: {Capped(thievery, 100)}",
-            $"Quiet fail: {Math.Clamp(100 - thievery, 0, 10)}%",
-            $"Caught: {Math.Max(0, 90 - thievery)}%");
+            $"Rob: {Math.Min(thievery, faces) * 100.0 / faces:0}%" + (thievery > 100 ? $" ({thievery}, capped at 100)" : ""),
+            $"Quiet fail: {Math.Clamp(faces - thievery, 0, 10) * 100.0 / faces:0}%",
+            $"Caught: {Math.Max(0, faces - 10 - thievery) * 100.0 / faces:0}%");
 
         int traps = _stats.Traps;
         TrapDisarmOdds? disarm = AppServices.Current.TrapDisarm.DisarmOdds;
@@ -471,9 +475,11 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         string damage = change == 0 ? "no change"
             : (change < 0 ? "−" : "+") + Math.Abs(change).ToString("0.#", CultureInfo.InvariantCulture) + "%"
               + (rawCut > cutCap ? $" ({rawCut}, capped at {cutCap})" : "");
+        int resistCap = SpellDamageCalculator.PlayerFullResistCap(realm);
+        double resist = SpellDamageCalculator.PlayerFullResistChance(mr, realm);
         MagicResTip = string.Join("\n",
             $"Spell damage taken: {damage}" + (antimagic ? " (AntiMagic)" : ""),
-            $"Resist a spell outright: {Capped(mr / 2, SpellDamageCalculator.PlayerFullResistCap(realm))}",
+            $"Resist a spell outright: {resist:0}%" + (mr / 2 > resistCap ? $" ({mr / 2}, capped at {resistCap})" : ""),
             "Only for spells that magic resistance works on");
     }
 

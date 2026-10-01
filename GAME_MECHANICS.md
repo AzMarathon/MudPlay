@@ -883,6 +883,7 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
     - So `genrdn(1,100)` is **1–99** and `genrdn(0,100)` is **0–99**. A check written `genrdn(0,100) < n` is exactly n%; one written against `genrdn(1,100)` is out of 99.
   - **MMUD-Explorer differs:** it clamps the same raw chance to 8–99 and rolls 1–100 inclusive, hitting on `roll <= chance` (so 8% and 99%). Its simulator's own comment reads "9% MIN HIT CHANCE, 99% MAX (stock)".
   - **The client follows the DLL** *(user, 2026-10-01)*: `CombatCalculator.StockLandingPercent` gives `round((clamp(c, 10, 99) − 1) × 100 / 99)`, a whole-percent floor of 9 and ceiling of 99.
+  - **Other Stock checks on the same 1–99 roll that the client models** *(user, 2026-10-01: bring them in line)*: the outright spell resist (`SpellDamageCalculator.FullResistChance` / `PlayerFullResistChance`), the Follow% lock (`StockAggroCalculator.FollowChance`) and the rob odds on Character Info's Thievery tooltip. Cast success is a 0–99 roll against `min(98, Spellcasting + Diff)` (`_cast_monster_target` @ `0x4479c4`), so its percentages were already exact. The DLL's other 1–99 rolls (monster generation, restocking, noticing items in a room) aren't computed by the client.
 - **ParaMUD: 2% normally, dropping to 1% when the defender's class `ArmourType` is 1..6** — the light-armour tiers **Silk (1), Ninja (2), Leather (3–6)**. Heavier classes — **Chainmail (7), Scalemail (8), Platemail (9)** — and **Natural (0)** stay at the 2% floor.
 - **`ArmourType` is a per-class field (Classes table),** so it's the *character's* class armour tier that lowers the floor, not the gear currently worn. Value→name map (LookupEnums): 0 = Natural, 1 = Silk, 2 = Ninja, 3–6 = Leather, 7 = Chainmail, 8 = Scalemail, 9 = Platemail.
 - **Sibling dodge caps (also in `CombatCalculator`):** Stock hard-caps dodge at **95%**; ParaMUD applies a **soft cap at 55%** (diminishing returns above it) then a **hard cap at 98%**.
@@ -1500,7 +1501,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 - **Stock** *([CONFIRMED] — stock DLL source, user-provided)*. A stock monster attacks a single **locked target** at a time (not everyone it has aggroed). Each beat:
   1. **Locked target present** → hit it again (the lock clears if that player left / died).
   2. **No lock → spread pick** among the aggroed players in room / terminal order: each rolls `genrdn(0,100) < 50 − 5 × (hits they're already taking this beat)`; **first to pass** is hit; if none pass, the **last eligible** player is hit (fallback). The mob drifts toward whoever *isn't* already piled on — a player taking ≥10 hits this beat hits a 0% threshold and is skipped by fresh rolls.
-  3. **After swinging it rolls `genrdn(1,100) < Follow%`** (Monsters `Follow%`): pass → **lock** onto the just-hit player; fail on an **aggressive** align (∉ {0,3,4}) → **clear** the lock and re-spread next beat; fail on a **passive** align ({0,3,4}) → **keep** the lock.
+  3. **After swinging it rolls `genrdn(1,100) < Follow%`** (Monsters `Follow%`; the roll is 1–99, so Follow% `F` passes `(F − 1)` times in 99 — never at 1 or below, always at 100): pass → **lock** onto the just-hit player; fail on an **aggressive** align (∉ {0,3,4}) → **clear** the lock and re-spread next beat; fail on a **passive** align ({0,3,4}) → **keep** the lock.
   - **The mirror roll when a *player* hits the mob re-points the lock to that attacker** — the "attack last" behaviour. Follow% is the stickiness dial.
   - **Special types** (engine-internal type, not the imported `Type` column)**:** summoned (type `0x25`) never manage a lock this way; a type-5 monster only acquires a lock when currently untargeted.
   - **Carve-out:** an evil NPC won't spread onto a fellow-evil player (`EvilPoints > 39`).
@@ -1653,14 +1654,15 @@ Recorded for future PvP settings; the client doesn't act on any of it yet.
 
      PvP attacks use the same check, with the wording `Such an attack would result in a very unbalanced combat round.` An engine-side per-user exemption flag skips it; that flag wasn't identified.
   4. **`You are overcome with a feeling of guilt and return your hands to your own pockets`** (no trailing period) — you're standing in a **Protected** room (a room flag), or in an **Arena** room while arenas are in normal mode. Normal mode is where death doesn't count; the sysop switches modes with `SYSOP ARENA [status/normal/combat]`. In an arena in combat mode you can rob.
-- **The roll.** Roll 1–100 against your **Thievery** (see *Character stats & progression → Utility skills — Perception + the thief four*). With no Thievery, a success is impossible.
+- **The roll.** Roll `genrdn(1,100)` — 1–99 — against your **Thievery** (see *Character stats & progression → Utility skills — Perception + the thief four*). With no Thievery, a success is impossible.
   - **Roll > Thievery + 10: caught.** You see `You bump <victim> as you try to rob <him/her>.` The victim sees `<you> bumps you as <he/she> tries to rob you!`. **This is the only outcome that tells the victim.**
   - **Thievery < roll ≤ Thievery + 10: a quiet fail.** You see `Your skills fail as you try to rob <victim>.`, and the victim sees nothing.
   - **Roll ≤ Thievery: success.** Something is picked (below). The victim sees nothing.
+  - **As odds, with the roll 1–99** *([OBSERVED] 2026-10-01, `_rob_user` @ `0x41f5dd`)*: success `min(Thievery, 99)` in 99, quiet fail up to 10 in 99, caught `max(0, 89 − Thievery)` in 99.
   - **Every outcome counts as an evil act, caught or not.** The evil-points call comes before the result is shown. If it refuses you (`You have progressed too far to the evil side to do this action.` over 300, or one of the refusals above), you get that line and the rob stops.
   - The points: **1** for a Neutral victim, **2** for a Good one, **3** for a Saint or lawful one, and **none** against a Seedy-or-worse victim (evil points ≥ 30). See *Character stats & progression → How your alignment moves during play*.
 - **What a success takes.** The pick is random:
-  - **Coins, about half the time** (a 1–100 roll under 50). One denomination is picked at random from copper, silver, gold, platinum and runic. The amount is a uniform random 0 to the victim's whole holding of that coin, and it moves straight into your purse.
+  - **Coins, about half the time** (a 1–99 roll under 50: 49 in 99). One denomination is picked at random from copper, silver, gold, platinum and runic. The amount is a uniform random 0 to the victim's whole holding of that coin, and it moves straight into your purse.
     - You see `You stole <n> <coin name> from <victim>.`, e.g. `You stole 12 gold crowns from Bob.` The coin name is the singular or plural form from *Money, banks & shops → Coin wire wording*.
     - **A roll of 0, or a denomination the victim doesn't carry, prints `Your skills fail as you try to rob <victim>.`** So a "success" can still read as a fail.
   - **Otherwise, an item.** Each inventory slot is considered in turn, with about a 50% chance of being picked (a later pick replaces an earlier one). If no pick survives, the victim's **keys** are tried the same way.
@@ -1808,7 +1810,7 @@ How one damage spell cast against a monster is worked out.
 | **Spell damage bonus** (AlterSpDmg, ability 165) | `× (100 + bonus)/100` on **Damage (1)** and **Damage(-MR) (17)**, flat values included; **not** drain (8) or heal (18) | on 1 and 17, and on drain and heal; scaled values only |
 | **Spellcasting's share of the bonus** | none | **+1% per full 50 Spellcasting above 100** — `(Spellcasting − 100)/50` *([CONFIRMED] 2026-09-28, user, following MMUD-Explorer)* |
 | **Magic-resist cut** (code 17 only) | AntiMagic: `MR/2`% (0–75); otherwise `(MR − 50)/2`% capped at 50; with no cut and no AntiMagic, **+(50 − MR)%** below MR 50 | same, rounded |
-| **Full resist** | chance `min(98, MR/2)`% after a successful cast, when `TypeOfResists` is 2, or 1 against AntiMagic | same |
+| **Full resist** | a 1–99 roll at or under `min(98, MR/2)` after a successful cast (so `min(98, MR/2)` in 99), when `TypeOfResists` is 2, or 1 against AntiMagic | `min(98, MR/2)`% |
 | **Rounding** | truncates at every step | rounds the resist steps |
 
 - The elemental resist for each `AttType` is in *Elemental resistance — flat, deterministic, pre-emptable*; M.R. and `TypeOfResists` in *Magic Resist (M.R.) and `TypeOfResists`*.
@@ -2030,8 +2032,11 @@ How one damage spell cast against a monster is worked out.
   - So even an enormous M.R. only ever **halves** (or, under AntiMagic, three-quarters) the damage —
     never 0.
 - **Full-resist chance — gated by the spell's `TypeOfResists`, independent of the damage code.** A
-  separate per-cast roll can negate the spell entirely, with probability `M.R. / 2` percent (M.R. 100 →
-  50% chance, capped at 98% for M.R. ≥ 196) — a *chance*, never a certainty short of the cap.
+  separate per-cast roll can negate the spell entirely: the roll must come in at or under `M.R. / 2`
+  (M.R. 100 → 50, capped at 98 for M.R. ≥ 196) — a *chance*, never a certainty short of the cap. On
+  Stock the roll is 1–99, so that figure is out of 99 (M.R. 100 → 50.5%, the cap 99.0%) *([OBSERVED]
+  2026-10-01, `_cast_monster_target` @ `0x447eb3`)*; MMUD-Explorer rolls 1–100, which the client uses for
+  Paradigm.
 - **Net: 100 M.R. never means 0 damage** (the partial cut caps at 50%, or 75% under AntiMagic), so M.R.
   must **never** feed a ≥100%→skip guard. In every case a high-M.R. monster still takes Normal-spell
   damage.
@@ -2057,8 +2062,9 @@ How one damage spell cast against a monster is worked out.
     (ability 51) takes `MR/2`% less, 0–75; anyone else `(MR − 50)/2`% less, capped at 50; with no cut
     and no AntiMagic the hit grows by `(50 − MR)%`. Applied after the elemental resist (@ `0x428230`).
   - **Full resist** (Stock @ `0x427e92`): rolled only after a successful cast, when `TypeOfResists` is
-    2, or 1 and the player has AntiMagic. The chance is `MR/2`%, **capped at 97 for a player on Stock**
-    (`cmp edx,0x61`; a monster target caps at 98). MMUD-Explorer's sim caps it at 98 (MR 196), which
+    2, or 1 and the player has AntiMagic. The 1–99 roll must come in at or under `MR/2`, **capped at 97
+    for a player on Stock** (`cmp edx,0x61`; a monster target caps at 98), so the chance is that figure
+    in 99. MMUD-Explorer's sim caps it at 98 (MR 196), which
     the client uses for Paradigm. Wire text: `You resisted %s's cast of %s.`
 - **Client use:**
   - Character Info's Magic Res tooltip (`CharacterInfoSectionViewModel.ComputeMagicResTip`) and Monster

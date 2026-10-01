@@ -194,11 +194,21 @@ public sealed class MonsterAggroCalculatorTests
             new StockAggroMember("a", "Neutral", false, 0, IsLastAttacker: true),
             new StockAggroMember("b", "Neutral", false, 0),
         });
-        // f=0.6 re-locks onto the last hitter, else the 50/50 fresh spread:
-        //   a = .6 + .4×.5 = .8 ; b = .4×.5 = .2
-        Near(80.0, res.Members[0].SpreadPercent);
-        Near(20.0, res.Members[1].SpreadPercent);
+        // Follow 60 locks 59 times in 99 (a 1–99 roll under 60), else the 50/50 spread:
+        //   a = f + (1 − f)×.5 ; b = (1 − f)×.5
+        double f = 59 / 99.0;
+        Near(100 * (f + (1 - f) * 0.5), res.Members[0].SpreadPercent);
+        Near(100 * (1 - f) * 0.5, res.Members[1].SpreadPercent);
     }
+
+    // The Follow% roll is 1–99 and must come in under it.
+    [Theory]
+    [InlineData(0, 0.0)]
+    [InlineData(1, 0.0)]
+    [InlineData(50, 49 / 99.0)]
+    [InlineData(100, 1.0)]
+    public void Stock_FollowChance_IsOneUnderOutOf99(int follow, double chance)
+        => Assert.Equal(chance, StockAggroCalculator.FollowChance(follow), 6);
 
     [Fact]
     public void Stock_AttackLast_ProvokesEvenAPassiveMob()

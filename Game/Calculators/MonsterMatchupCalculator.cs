@@ -418,8 +418,8 @@ public static class MonsterMatchupCalculatorSpells
                 s.UsesMagicResist, monsterMagicResist, monsterAntiMagic, resistPercent, realm);
             long hi = Game.Spells.SpellDamageCalculator.AfterTargetResists(s.MaxDamagePerRound,
                 s.UsesMagicResist, monsterMagicResist, monsterAntiMagic, resistPercent, realm);
-            int fullResist = Game.Spells.SpellDamageCalculator.FullResistChance(
-                s.TypeOfResists, monsterMagicResist, monsterAntiMagic);
+            double fullResist = Game.Spells.SpellDamageCalculator.FullResistChance(
+                s.TypeOfResists, monsterMagicResist, monsterAntiMagic, realm);
             long effective = (long)System.Math.Round(
                 System.Math.Max(0, (lo + hi) / 2.0) * (100 - fullResist) / 100.0, System.MidpointRounding.AwayFromZero);
             // Kill estimate against this monster (only when a HP was supplied):

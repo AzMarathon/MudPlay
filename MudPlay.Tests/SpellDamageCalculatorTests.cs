@@ -180,4 +180,21 @@ public sealed class SpellDamageCalculatorTests
         Assert.Equal(0, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Cold, RealmType.ParaMud));
         Assert.Equal(0, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Poison, RealmType.ParaMud));
     }
+
+    // An outright resist is a roll at or under M.R./2. Stock's roll is 1–99, so the
+    // figure is out of 99 there; a player's M.R./2 stops at 97 on Stock, a monster's
+    // at 98.
+    [Fact]
+    public void FullResist_IsOutOf99OnStock()
+    {
+        Assert.Equal(27 * 100.0 / 99, SpellDamageCalculator.FullResistChance(2, 55, false, RealmType.Stock), 6);
+        Assert.Equal(27, SpellDamageCalculator.FullResistChance(2, 55, false, RealmType.ParaMud), 6);
+        Assert.Equal(98 * 100.0 / 99, SpellDamageCalculator.FullResistChance(2, 500, false, RealmType.Stock), 6);
+        Assert.Equal(0, SpellDamageCalculator.FullResistChance(0, 500, false, RealmType.Stock), 6);
+        Assert.Equal(0, SpellDamageCalculator.FullResistChance(1, 500, false, RealmType.Stock), 6);   // needs AntiMagic
+
+        Assert.Equal(27 * 100.0 / 99, SpellDamageCalculator.PlayerFullResistChance(55, RealmType.Stock), 6);
+        Assert.Equal(97 * 100.0 / 99, SpellDamageCalculator.PlayerFullResistChance(500, RealmType.Stock), 6);
+        Assert.Equal(98, SpellDamageCalculator.PlayerFullResistChance(500, RealmType.ParaMud), 6);
+    }
 }

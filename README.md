@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.58**
-> - Stock hit chance follows the engine's 1–99 roll: an attack lands between 9% and 99% (was capped at 98%)
+> **Version 3.134.59**
+> - Stock odds on the engine's 1–99 roll are now out of 99: resisting a spell outright, a monster's Follow% lock, and the rob chances
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

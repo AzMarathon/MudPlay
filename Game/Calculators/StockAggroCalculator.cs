@@ -64,7 +64,7 @@ public static class StockAggroCalculator
         // Stage 2.5 — the "attack last" lock. When a player hit the monster most
         // recently, the mob re-points its lock onto that attacker on a Follow% roll
         // (DLL attack_user_monster). So this beat the target is that member with
-        // probability f = Follow%/100 (the lock held), and the fresh spread otherwise:
+        // probability f (FollowChance — the lock held), and the fresh spread otherwise:
         //   pick_L  = f + (1 − f) × spread_L      pick_other = (1 − f) × spread_other
         // (the passive/aggressive split only governs multi-beat lock persistence, not
         // this single-beat re-point). Redistribution preserves the total of 1.
@@ -73,7 +73,7 @@ public static class StockAggroCalculator
             if (aggroed[i] && members[i].IsLastAttacker) { lockIdx = i; break; }
         if (lockIdx >= 0)
         {
-            double f = Math.Clamp(followPercent, 0, 100) / 100.0;
+            double f = FollowChance(followPercent);
             for (int i = 0; i < n; i++)
                 if (aggroed[i]) pick[i] *= 1 - f;
             pick[lockIdx] += f;
@@ -117,6 +117,12 @@ public static class StockAggroCalculator
         }
     }
 
+    // The chance a Follow% roll locks the monster on. The engine rolls 1–99 and locks
+    // when the roll is under Follow%, so Follow% F locks (F − 1) times in 99: never at
+    // 1 or below, always at 100 (GAME_MECHANICS "To-hit floor …", the genrdn rule).
+    public static double FollowChance(int followPercent) =>
+        Math.Clamp((Math.Clamp(followPercent, 0, 100) - 1) / 99.0, 0, 1);
+
     // Stage 3 — the Follow% stickiness readout.
     private static string Stickiness(int align, int followPercent)
     {
@@ -126,10 +132,11 @@ public static class StockAggroCalculator
             return $"Follow {fp}% — passive align: once locked it keeps hitting that target and never re-spreads.";
         if (fp >= 100)
             return "Follow 100% — locks onto whoever it just hit and never lets go.";
-        if (fp <= 0)
-            return "Follow 0% — never locks; re-spreads across the party every beat.";
-        double avgBeats = 100.0 / (100 - fp);
-        return $"Follow {fp}% — aggressive: after each hit it re-locks {fp}% of the time, else re-spreads " +
+        double lockChance = FollowChance(fp);
+        if (lockChance <= 0)
+            return $"Follow {fp}% — never locks; re-spreads across the party every beat.";
+        double avgBeats = 1 / (1 - lockChance);
+        return $"Follow {fp}% — aggressive: after each hit it re-locks {100 * lockChance:0}% of the time, else re-spreads " +
                $"(~{avgBeats:0.0} beats on one target before it drifts).";
     }
 }

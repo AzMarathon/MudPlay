@@ -1508,7 +1508,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         }
         bool resistible = sp.TypeOfResists == 2 || (sp.TypeOfResists == 1 && antimagic);
         if (resistible)
-            parts.Add($"{Math.Min(SpellDamageCalculator.PlayerFullResistCap(realm), mr / 2)}% to resist outright");
+            parts.Add($"{SpellDamageCalculator.PlayerFullResistChance(mr, realm):0}% to resist outright");
         if (!sp.CutsDamage && !resistible) parts.Add("ignores MR");
         return string.Join(" · ", parts);
     }
