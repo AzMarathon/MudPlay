@@ -147,6 +147,10 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   Background="{StaticResource ChromeBgBrush}"
                   Padding="8,6">
+        <!-- The drag's drop line is drawn on DropOverlay above the panels rather than
+             slotted between them, so nothing shifts (or re-fits the window) while a
+             panel is dragged. -->
+        <Grid>
         <StackPanel x:Name="PanelHost" Spacing="6"
                     Background="Transparent"
                     DragDrop.AllowDrop="True">
@@ -639,7 +643,12 @@
                 </StackPanel>
             </Expander>
 
+            <!-- Drop room below the last panel, so a dragged panel can be released
+                 into the last slot without hunting for the bottom edge. -->
+            <Border Height="24" Background="Transparent"/>
         </StackPanel>
+        <Canvas x:Name="DropOverlay" IsHitTestVisible="False"/>
+        </Grid>
     </ScrollViewer>
 
     </DockPanel>

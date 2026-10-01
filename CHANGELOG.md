@@ -1,9 +1,10 @@
 # Version history
 
-## 3.134.16
+## 3.134.17
 
 - Session Stats panels, graphs included, start collapsed and remember which are open per character
 - The Session Stats window sizes itself to show every open panel, up to the screen's height
+- Dragging a Session Stats panel no longer stutters or resizes the window, and there's room below the last panel to drop into the last slot
 
 ## 3.134.15
 

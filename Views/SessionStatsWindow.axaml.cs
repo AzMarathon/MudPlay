@@ -22,12 +22,13 @@ public partial class SessionStatsWindow : Window
     private static readonly DataFormat<string> PanelFormat =
         DataFormat.CreateInProcessFormat<string>("mudplay-session-stats-panel");
 
-    // Thin accent line slotted between panels during a drag to preview the drop
-    // position. Non-hit-testable so it never intercepts the drag's hit-testing.
+    // Thin accent line drawn on the DropOverlay canvas during a drag to preview the
+    // drop position. On an overlay, not in the panel stack: slotted between panels it
+    // shifted them as it moved — moving the very midpoints it's placed by, so it
+    // flickered between gaps — and re-fit the window on every move.
     private readonly Border _dropIndicator = new()
     {
         Height = 3,
-        Margin = new Thickness(2, 0),
         CornerRadius = new CornerRadius(1.5),
         IsHitTestVisible = false,
     };
@@ -186,7 +187,6 @@ public partial class SessionStatsWindow : Window
         _pressedId = null;
         _pressArgs = null;
 
-        StackPanel? host = this.FindControl<StackPanel>("PanelHost");
         var data = new DataTransfer();
         data.Add(DataTransferItem.Create(PanelFormat, id));
         try
@@ -197,7 +197,7 @@ public partial class SessionStatsWindow : Window
         {
             // Drop fires before the await returns; this also clears the preview
             // when the drag is cancelled or released outside the host.
-            host?.Children.Remove(_dropIndicator);
+            HideDropIndicator();
         }
     }
 
@@ -211,27 +211,33 @@ public partial class SessionStatsWindow : Window
         }
         e.DragEffects = DragDropEffects.Move;
 
-        // Slot the insertion line into the gap nearest the cursor.
-        host.Children.Remove(_dropIndicator);
-        int insertAt = host.Children.Count;
+        // Draw the line in the gap the drop would land in: above the first visible
+        // panel whose midpoint is below the cursor, or under the last one.
+        if (this.FindControl<Canvas>("DropOverlay") is not { } overlay) return;
         double y = e.GetPosition(host).Y;
-        for (int i = 0; i < host.Children.Count; i++)
+        Control? below = null, last = null;
+        foreach (Control child in host.Children)
         {
-            Control child = host.Children[i];
             if (child.Tag is not string || !child.IsVisible) continue;
-            if (y < child.Bounds.Y + child.Bounds.Height / 2)
-            {
-                insertAt = i;
-                break;
-            }
+            last = child;
+            if (below is null && y < child.Bounds.Y + child.Bounds.Height / 2) below = child;
         }
-        host.Children.Insert(insertAt, _dropIndicator);
+        if (last is null) return;
+        double gapY = below is not null
+            ? below.Bounds.Y - host.Spacing / 2
+            : last.Bounds.Bottom + host.Spacing / 2;
+        if (!overlay.Children.Contains(_dropIndicator)) overlay.Children.Add(_dropIndicator);
+        _dropIndicator.Width = Math.Max(0, host.Bounds.Width - 4);
+        Canvas.SetLeft(_dropIndicator, 2);
+        Canvas.SetTop(_dropIndicator, gapY - _dropIndicator.Height / 2);
     }
 
-    private void OnPanelDragLeave(object? sender, DragEventArgs e)
+    private void OnPanelDragLeave(object? sender, DragEventArgs e) => HideDropIndicator();
+
+    private void HideDropIndicator()
     {
-        if (this.FindControl<StackPanel>("PanelHost") is { } host)
-            host.Children.Remove(_dropIndicator);
+        if (this.FindControl<Canvas>("DropOverlay") is { } overlay)
+            overlay.Children.Remove(_dropIndicator);
     }
 
     private void OnPanelDrop(object? sender, DragEventArgs e)
@@ -240,7 +246,7 @@ public partial class SessionStatsWindow : Window
         if (this.FindControl<StackPanel>("PanelHost") is not { } host) return;
         if (e.DataTransfer.TryGetValue(PanelFormat) is not { } draggedId) return;
 
-        host.Children.Remove(_dropIndicator);
+        HideDropIndicator();
 
         List<string> ids = OrderedTags(host);
         int oldIndex = ids.IndexOf(draggedId);

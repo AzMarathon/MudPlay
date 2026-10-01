@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.16**
+> **Version 3.134.17**
 > - Session Stats panels, graphs included, start collapsed and remember which are open per character
 > - The Session Stats window sizes itself to show every open panel, up to the screen's height
+> - Dragging a Session Stats panel no longer stutters or resizes the window, and there's room below the last panel to drop into the last slot
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
