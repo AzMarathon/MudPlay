@@ -307,6 +307,22 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // full-benefit default never overstates a non-evil character's defense.
     [ObservableProperty] private int _simVileWardAlignIndex = 2;
 
+    // What-if resists against a monster's spell damage, seeded with the rest of the
+    // row from the worn gear + buffs. They feed each spell row's "you take … dmg"
+    // line, so a resist set can be tried without wearing it. Signed: a negative
+    // resist is a vulnerability (Stock adds damage for it).
+    [ObservableProperty] private int _simResistCold;
+    [ObservableProperty] private int _simResistFire;
+    [ObservableProperty] private int _simResistStone;
+    [ObservableProperty] private int _simResistLightning;
+    [ObservableProperty] private int _simResistWater;
+    // Stock cuts a poison spell's damage by ImmuPoison; Paradigm has no poison cut,
+    // so the picker shows only on Stock.
+    [ObservableProperty] private int _simResistPoison;
+
+    private ElementalResists SimResists => new(
+        SimResistCold, SimResistFire, SimResistStone, SimResistLightning, SimResistWater, SimResistPoison);
+
     public IReadOnlyList<string> VileWardAlignOptions { get; } =
         new[] { "Not evil (0%)", "Outlaw / Criminal (50%)", "Villain / Fiend (100%)" };
 
@@ -322,6 +338,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // change while the window is open, so no change-notification is needed.
     public bool ShowVileWard => _gameData.ActiveRealm == RealmType.ParaMud;
     public bool ShowProtGood => !ShowVileWard;
+    public bool ShowPoisonResist => !ShowVileWard;
 
     // The effective AC the selected monster's attack actually rolls against —
     // base AC (worn + buffs) + Shadow (vs all) + the wards that apply to THAT
@@ -504,6 +521,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             SimProtGood = _playerProtGood;
             SimVileWard = def.VileWard;
             SimShadow = _playerHasShadow;
+            SimResistCold = _playerResists.Cold;
+            SimResistFire = _playerResists.Fire;
+            SimResistStone = _playerResists.Stone;
+            SimResistLightning = _playerResists.Lightning;
+            SimResistWater = _playerResists.Water;
+            SimResistPoison = _playerResists.Poison;
             _suppressSimRecompute = false;
         }
 
@@ -663,6 +686,20 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     partial void OnSimVileWardChanged(int value) => OnSimInputChanged();
     partial void OnSimShadowChanged(bool value) => OnSimInputChanged();
     partial void OnSimVileWardAlignIndexChanged(int value) => OnSimInputChanged();
+
+    partial void OnSimResistColdChanged(int value) => OnSimResistChanged();
+    partial void OnSimResistFireChanged(int value) => OnSimResistChanged();
+    partial void OnSimResistStoneChanged(int value) => OnSimResistChanged();
+    partial void OnSimResistLightningChanged(int value) => OnSimResistChanged();
+    partial void OnSimResistWaterChanged(int value) => OnSimResistChanged();
+    partial void OnSimResistPoisonChanged(int value) => OnSimResistChanged();
+
+    // A resist only moves the selected monster's spell rows — no hit chance reads it.
+    private void OnSimResistChanged()
+    {
+        if (_suppressSimRecompute || !_hasCharacterContext) return;
+        if (SelectedEntry is { } entry) RebuildAttackRows(entry.Source);
+    }
 
     // The monster's matchup inputs, optionally with an applied debuff folded in.
     // Debuff deltas SUBTRACT from the monster's defense (AC / DR / Dodge) and its
@@ -1179,6 +1216,15 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (SelectedEntry is not { } entry) return;
         MonsterCatalogEntry m = entry.Source;
 
+        RebuildAttackRows(m);
+        RebuildAbilities(m);
+        RebuildYourMatchup(m);
+        RebuildObservations(m.Number);
+    }
+
+    private void RebuildAttackRows(MonsterCatalogEntry m)
+    {
+        AttackRows.Clear();
         foreach (MonsterAttackSlot a in m.Attacks)
         {
             int? hit = PerAttackHitYou(a, m);
@@ -1190,10 +1236,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 + (mid.Level > 0 ? $" lvl {mid.Level}" : string.Empty),
                 mid.DmgMax > 0 ? $"{FormatDamageRange(mid.DmgMin, mid.DmgMax)} dmg" : string.Empty,
                 string.Empty, SpellResistNote(mid.SpellMagicRes, mid.DmgMin, mid.DmgMax)));
-
-        RebuildAbilities(m);
-        RebuildYourMatchup(m);
-        RebuildObservations(m.Number);
     }
 
     // Renders MonsterObservationTracker's per-monster record, if any, as plain
@@ -1443,7 +1485,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         RealmType realm = _gameData!.ActiveRealm;
         bool antimagic = ItemEquipFilter.ResolveClassProfile(_gameData, _stats!.Class).AntiMagic;
-        int elemental = SpellDamageCalculator.PlayerElementalResist(_playerResists, sp.Element, realm);
+        int elemental = SpellDamageCalculator.PlayerElementalResist(SimResists, sp.Element, realm);
         double mrChange = sp.CutsDamage
             ? SpellDamageCalculator.PlayerMagicResistDamagePercent(mr, antimagic, realm) : 0;
         List<string> parts = new();

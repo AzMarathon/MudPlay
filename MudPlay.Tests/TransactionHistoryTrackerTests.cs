@@ -89,7 +89,7 @@ public sealed class TransactionHistoryTrackerTests
         Assert.Equal(2, rows.Count);
         Assert.All(rows, e => Assert.Equal(TransactionKind.Stash, e.Kind));
         Assert.Equal("Hid a torch", rows[0].Detail);
-        Assert.Equal("Hid 40 platinum, 400 gold — avg 44 platinum over 1 stash — total 40 platinum, 400 gold",
+        Assert.Equal("Last: 40 platinum, 400 gold - Total Stashes: 1 | Avg: 44 platinum | Total: 40 platinum, 400 gold",
             rows[1].Detail);
     }
 
@@ -109,7 +109,7 @@ public sealed class TransactionHistoryTrackerTests
     {
         (TransactionHistoryTracker t, _) = Make();
         t.NoteStash(new[] { ("copper", 250_000L) }, Array.Empty<string>());
-        Assert.Equal("Hid 250,000 copper — avg 25 platinum over 1 stash — total 250,000 copper",
+        Assert.Equal("Last: 250,000 copper - Total Stashes: 1 | Avg: 25 platinum | Total: 250,000 copper",
             Assert.Single(t.Snapshot()).Detail);
     }
 
@@ -129,7 +129,7 @@ public sealed class TransactionHistoryTrackerTests
 
         TransactionEntry e = Assert.Single(t.Snapshot());
         Assert.Equal(c.Now, e.Time);                      // the latest stash's time
-        Assert.Equal("Hid 300 silver — avg 20 gold over 2 stashes — total 400 silver", e.Detail);
+        Assert.Equal("Last: 300 silver - Total Stashes: 2 | Avg: 20 gold | Total: 400 silver", e.Detail);
         Assert.Equal(room, e.Location);
         Assert.Equal(e, Assert.Single(replaced).New);
     }
@@ -143,7 +143,7 @@ public sealed class TransactionHistoryTrackerTests
         c.Advance(1);
         t.NoteStash(new[] { ("silver", 115L) }, Array.Empty<string>(), "Stump (3/7)");
 
-        Assert.Equal("Hid 1 gold, 115 silver — avg 12 gold, 5 silver over 1 stash — total 1 gold, 115 silver",
+        Assert.Equal("Last: 1 gold, 115 silver - Total Stashes: 1 | Avg: 12 gold, 5 silver | Total: 1 gold, 115 silver",
             Assert.Single(t.Snapshot()).Detail);
     }
 
@@ -159,7 +159,7 @@ public sealed class TransactionHistoryTrackerTests
 
         IReadOnlyList<TransactionEntry> rows = t.Snapshot();
         Assert.Equal(new[] { "B (1/2)", "A (1/1)" }, rows.Select(r => r.Location));
-        Assert.Equal("Hid 1 gold — avg 3 gold over 2 stashes — total 6 gold", rows[1].Detail);
+        Assert.Equal("Last: 1 gold - Total Stashes: 2 | Avg: 3 gold | Total: 6 gold", rows[1].Detail);
     }
 
     [Fact]
@@ -181,14 +181,24 @@ public sealed class TransactionHistoryTrackerTests
         Assert.Equal("Deposited 500 wealth", rows[0].Detail);
         Assert.Equal("Hid a torch", rows[1].Detail);
         // Two visits: 94 silver + 1 gold together, then 106 silver.
-        Assert.Equal("Hid 106 silver — avg 10 gold, 5 silver over 2 stashes — total 1 gold, 200 silver", rows[2].Detail);
+        Assert.Equal("Last: 106 silver - Total Stashes: 2 | Avg: 10 gold, 5 silver | Total: 1 gold, 200 silver", rows[2].Detail);
+
+        // An earlier build's one-line roll-up reads back the same way.
+        (TransactionHistoryTracker interim, _) = Make();
+        interim.Hydrate(new[]
+        {
+            new TransactionEntry(t0, TransactionKind.Stash,
+                "Hid 127 silver — avg 12 gold, 7 silver over 3 stashes — total 381 silver", "Stump (3/7)"),
+        });
+        Assert.Equal("Last: 127 silver - Total Stashes: 3 | Avg: 12 gold, 7 silver | Total: 381 silver",
+            Assert.Single(interim.Snapshot()).Detail);
 
         // That row, loaded again, keeps counting from where it was.
         (TransactionHistoryTracker again, Clock c2) = Make();
         again.Hydrate(rows);
         c2.Now = t0.AddHours(1);
         again.NoteStash(new[] { ("silver", 100L) }, Array.Empty<string>(), "Stump (3/7)");
-        Assert.Equal("Hid 100 silver — avg 10 gold, 3 silver, 3 copper over 3 stashes — total 1 gold, 300 silver",
+        Assert.Equal("Last: 100 silver - Total Stashes: 3 | Avg: 10 gold, 3 silver, 3 copper | Total: 1 gold, 300 silver",
             again.Snapshot()[^1].Detail);
     }
 
@@ -304,5 +314,57 @@ public sealed class TransactionHistoryTrackerTests
         Assert.Equal(TransactionHistoryTracker.MaxEntries, snap.Count);
         // Oldest 5 dropped; the window starts at index 5.
         Assert.Equal("Deposited 5 wealth", snap[0].Detail);
+    }
+
+    // ----- shop visits --------------------------------------------------
+
+    [Fact]
+    public void Sales_AtOneShop_AreOneRowPerVisit()
+    {
+        (TransactionHistoryTracker t, Clock c) = Make();
+        const string shop = "General Store (1/2324)";
+        t.NoteSale("orc-head", 5, 1000, shop);
+        c.Advance(3);
+        t.NoteSale("club", 1, 250, shop);
+        c.Advance(3);
+        t.NoteSale("orc-head", 2, 400, shop);
+
+        TransactionEntry e = Assert.Single(t.Snapshot());
+        Assert.Equal(TransactionKind.Sold, e.Kind);
+        Assert.Equal("Sold orc-head ×7, club for 16 gold, 5 silver", e.Detail);
+        Assert.Equal(shop, e.Location);
+
+        // A later visit, or a purchase, is its own row.
+        c.Advance(600);
+        t.NoteSale("club", 1, 250, shop);
+        t.NotePurchase("lantern", 1, 396, shop);
+        IReadOnlyList<TransactionEntry> rows = t.Snapshot();
+        Assert.Equal(3, rows.Count);
+        Assert.Equal("Sold club for 2 gold, 5 silver", rows[1].Detail);
+        Assert.Equal(TransactionKind.Bought, rows[2].Kind);
+        Assert.Equal("Bought lantern for 3 gold, 9 silver, 6 copper", rows[2].Detail);
+    }
+
+    // ----- keep marks ---------------------------------------------------
+
+    [Fact]
+    public void Keep_IsOnTheEntry_FollowsACoinRowUpdate_AndSurvivesAReload()
+    {
+        (TransactionHistoryTracker t, Clock c) = Make();
+        var replaced = 0;
+        t.EntryReplaced += (_, _) => replaced++;
+        t.NoteStash(new[] { ("gold", 5L) }, Array.Empty<string>(), "A (1/1)");
+
+        TransactionEntry kept = t.SetKeep(Assert.Single(t.Snapshot()), true);
+        Assert.True(kept.Keep);
+        Assert.Equal(1, replaced);                         // the saved log is rewritten
+
+        c.Advance(60);
+        t.NoteStash(new[] { ("gold", 1L) }, Array.Empty<string>(), "A (1/1)");
+        Assert.True(Assert.Single(t.Snapshot()).Keep);     // the mark follows the room's row
+
+        (TransactionHistoryTracker again, _) = Make();
+        again.Hydrate(t.Snapshot());
+        Assert.True(Assert.Single(again.Snapshot()).Keep);
     }
 }

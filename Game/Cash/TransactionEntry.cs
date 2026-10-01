@@ -9,6 +9,12 @@ public enum TransactionKind
 
     // A stash room hid excess coin and/or auto-stash items.
     Stash,
+
+    // Items sold to a shop on one visit, with what they fetched.
+    Sold,
+
+    // Items bought from a shop on one visit, with what they cost.
+    Bought,
 }
 
 // One recorded cash/item offload for the Session Stats → Transaction history
@@ -21,4 +27,6 @@ public readonly record struct TransactionEntry(
     DateTimeOffset Time,
     TransactionKind Kind,
     string Detail,
-    string? Location = null);
+    string? Location = null,
+    // The user's "keep" mark: the row survives the window's Clear. Saved with the row.
+    bool Keep = false);

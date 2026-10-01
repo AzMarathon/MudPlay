@@ -4,23 +4,24 @@ using MudPlay.Game.Cash;
 
 namespace MudPlay.ViewModels;
 
-// One row in the Transaction history window: the recorded entry plus a transient
-// "keep" toggle. Checking Keep marks the entry to survive a "Clear unkept" — the
+// One row in the Transaction history window: the recorded entry plus its "keep"
+// toggle. Checking Keep marks the entry to survive a "Clear unkept" — the
 // selective wipe for when the ledger fills with routine offloads but a few rows
-// are worth holding onto. Keep is UI-only session state (not persisted); the
-// parent VM preserves the flag across its rebuilds via a kept-set keyed on the
-// entry, so an incoming transaction mid-review doesn't drop your marks.
+// are worth holding onto. The mark lives on the ledger entry and is saved with it,
+// so it outlasts the window and the session.
 public sealed partial class TransactionRowViewModel : ObservableObject
 {
     private readonly Action<TransactionRowViewModel>? _onKeepChanged;
 
-    public TransactionEntry Entry { get; }
+    // Re-pointed by the parent when a keep toggle replaces the ledger entry.
+    public TransactionEntry Entry { get; internal set; }
 
     // Pass-throughs so the row template binds the same field names it did when it
     // bound TransactionEntry directly.
     public DateTimeOffset Time => Entry.Time;
     public TransactionKind Kind => Entry.Kind;
-    public string Detail => Entry.Detail;
+    // A stash room's coin row is three lines; the entry holds them on one.
+    public string Detail => Entry.Detail.Replace(TransactionHistoryTracker.LineBreak, "\n", StringComparison.Ordinal);
     public string? Location => Entry.Location;
 
     [ObservableProperty] private bool _keep;

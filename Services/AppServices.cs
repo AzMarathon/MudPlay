@@ -5108,8 +5108,11 @@ public sealed class AppServices
         Inventory.ItemSold += (name, count, copper) =>
         {
             SessionActivity.NoteSale(count, copper);
+            TransactionHistory.NoteSale(name, count, copper, CurrentRoomLabel());
             Log.Debug("SessionStats", $"sale counted: {count} x {name} for {copper} copper");
         };
+        Inventory.ItemBought += (name, count, copper) =>
+            TransactionHistory.NotePurchase(name, count, copper, CurrentRoomLabel());
 
         // HpMaHistoryTracker. Accumulates per-loop-step min/max HP + mana for the
         // Session Stats "HP/MA History" band graph. Its inputs need LoopRunner

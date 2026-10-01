@@ -165,6 +165,46 @@
                                           MinWidth="170" VerticalAlignment="Center"
                                           ToolTip.Tip="YOUR alignment tier — it scales how much of your raw Vile Ward becomes AC: not evil = 0%, outlaw/criminal = 50%, villain/fiend = 100%."/>
                             </StackPanel>
+                            <!-- What-if resists: they change the "you take … dmg" line on the
+                                 selected monster's spell rows, not any hit chance. -->
+                            <TextBlock Classes="FieldLabel" Text="Resists (what-if):" VerticalAlignment="Center" Margin="0,6,14,0"
+                                       ToolTip.Tip="Your resist to each kind of spell damage, in percent. Seeded from your worn gear and configured buffs; change one to see what a monster's spell would do to you in a resist set. Shown on each spell in the Attacks list."/>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,6,16,0">
+                                <TextBlock Classes="FieldLabel" Text="Cold" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding SimResistCold, Mode=TwoWay}" Minimum="-300" Maximum="300" Increment="5"
+                                               FormatString="0" ShowButtonSpinner="True" Width="124" MinWidth="124"
+                                               ToolTip.Tip="Percent of cold spell damage you resist."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,6,16,0">
+                                <TextBlock Classes="FieldLabel" Text="Fire" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding SimResistFire, Mode=TwoWay}" Minimum="-300" Maximum="300" Increment="5"
+                                               FormatString="0" ShowButtonSpinner="True" Width="124" MinWidth="124"
+                                               ToolTip.Tip="Percent of fire spell damage you resist."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,6,16,0">
+                                <TextBlock Classes="FieldLabel" Text="Stone" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding SimResistStone, Mode=TwoWay}" Minimum="-300" Maximum="300" Increment="5"
+                                               FormatString="0" ShowButtonSpinner="True" Width="124" MinWidth="124"
+                                               ToolTip.Tip="Percent of stone spell damage you resist."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,6,16,0">
+                                <TextBlock Classes="FieldLabel" Text="Lightning" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding SimResistLightning, Mode=TwoWay}" Minimum="-300" Maximum="300" Increment="5"
+                                               FormatString="0" ShowButtonSpinner="True" Width="124" MinWidth="124"
+                                               ToolTip.Tip="Percent of lightning spell damage you resist."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,6,16,0">
+                                <TextBlock Classes="FieldLabel" Text="Water" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding SimResistWater, Mode=TwoWay}" Minimum="-300" Maximum="300" Increment="5"
+                                               FormatString="0" ShowButtonSpinner="True" Width="124" MinWidth="124"
+                                               ToolTip.Tip="Percent of water spell damage you resist."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,6,16,0" IsVisible="{Binding ShowPoisonResist}">
+                                <TextBlock Classes="FieldLabel" Text="Poison" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding SimResistPoison, Mode=TwoWay}" Minimum="-300" Maximum="300" Increment="5"
+                                               FormatString="0" ShowButtonSpinner="True" Width="124" MinWidth="124"
+                                               ToolTip.Tip="Percent of a poison spell's damage you resist (your ImmuPoison value). Stock only; Paradigm doesn't cut poison damage."/>
+                            </StackPanel>
                         </WrapPanel>
                     </Border>
                 </StackPanel>

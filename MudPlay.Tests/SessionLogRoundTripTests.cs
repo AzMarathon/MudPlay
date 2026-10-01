@@ -114,4 +114,20 @@ public sealed class SessionLogRoundTripTests
         Assert.False(SessionLogService.TryParseTxnLine("[10:00:00] Bogus something", out _));
         Assert.False(SessionLogService.TryParseTxnLine("no brackets", out _));
     }
+
+    // A kept row carries "*" on its kind and reads back kept.
+    [Fact]
+    public void TxnLine_RoundTripsTheKeepMark()
+    {
+        TransactionEntry src = new(Local(10, 5, 0), TransactionKind.Stash, "Hid a torch", "Hollow Stump (3/7)", Keep: true);
+        string line = SessionLogService.FormatTxnLine(src);
+        Assert.Contains("] Stash* Hid a torch", line);
+        Assert.True(SessionLogService.TryParseTxnLine(line, out TransactionEntry back));
+        Assert.True(back.Keep);
+        Assert.Equal("Hid a torch", back.Detail);
+
+        Assert.True(SessionLogService.TryParseTxnLine(
+            SessionLogService.FormatTxnLine(src with { Keep = false }), out TransactionEntry plain));
+        Assert.False(plain.Keep);
+    }
 }

@@ -105,6 +105,7 @@ public sealed class SessionLogService : IDisposable
     // the time) so a reload on reconnect restores each row's real day, not
     // "today". Legacy time-only logs still parse — see TryParseStamp.
     private const string StampFormat = "yyyy-MM-dd HH:mm:ss";
+    private const string KeepMark = "*";
 
     private void OnChat(ChatLogEntry entry)
     {
@@ -118,8 +119,8 @@ public sealed class SessionLogService : IDisposable
         _txns.Append(FormatTxnLine(entry));
     }
 
-    // A stash room's coin row was updated in place. The log is append-only, so the
-    // whole (capped) ledger is written again.
+    // A row was replaced in place (a stash room's coin row updated, a "keep" mark
+    // changed). The log is append-only, so the whole (capped) ledger is written again.
     private void OnTransactionReplaced(TransactionEntry replaced, TransactionEntry current)
     {
         if (!_logTransactions || !_txns.IsOpen) return;
@@ -135,7 +136,9 @@ public sealed class SessionLogService : IDisposable
     internal static string FormatTxnLine(TransactionEntry entry)
     {
         string where = string.IsNullOrEmpty(entry.Location) ? string.Empty : $" @ {entry.Location}";
-        return $"[{entry.Time.ToLocalTime().ToString(StampFormat)}] {entry.Kind} {entry.Detail}{where}";
+        // A kept row carries "*" on its kind ("Stash* Hid …").
+        string keep = entry.Keep ? KeepMark : string.Empty;
+        return $"[{entry.Time.ToLocalTime().ToString(StampFormat)}] {entry.Kind}{keep} {entry.Detail}{where}";
     }
 
     private void ReopenFiles()
@@ -193,7 +196,7 @@ public sealed class SessionLogService : IDisposable
         // The ledger folds each stash room's coin rows into one as it loads; a log
         // from before that is rewritten once to match.
         IReadOnlyList<TransactionEntry> loaded = _transactions.Snapshot();
-        if (loaded.Count != entries.Count && _logTransactions) RewriteTransactions(loaded);
+        if (_logTransactions && !loaded.SequenceEqual(entries)) RewriteTransactions(loaded);
     }
 
     // Inverse of OnChat: "[stamp] Channel[ speaker]: message". The head before
@@ -218,8 +221,8 @@ public sealed class SessionLogService : IDisposable
         return true;
     }
 
-    // Inverse of OnTransaction: "[stamp] Kind detail[ @ location]". The first
-    // token is the kind; the remainder is the detail, with an optional trailing
+    // Inverse of OnTransaction: "[stamp] Kind[*] detail[ @ location]". The first
+    // token is the kind ("*" marks a kept row); the remainder is the detail, with an optional trailing
     // " @ location" split off the last such marker (details never contain one).
     internal static bool TryParseTxnLine(string line, out TransactionEntry entry)
     {
@@ -228,7 +231,10 @@ public sealed class SessionLogService : IDisposable
 
         int sp = rest.IndexOf(' ');
         if (sp < 0) return false;
-        if (!Enum.TryParse(rest[..sp], out TransactionKind kind)) return false;
+        string kindToken = rest[..sp];
+        bool keep = kindToken.EndsWith(KeepMark, StringComparison.Ordinal);
+        if (keep) kindToken = kindToken[..^KeepMark.Length];
+        if (!Enum.TryParse(kindToken, out TransactionKind kind)) return false;
         string body = rest[(sp + 1)..];
 
         string? location = null;
@@ -239,7 +245,7 @@ public sealed class SessionLogService : IDisposable
             body = body[..at];
         }
 
-        entry = new TransactionEntry(stamp, kind, body, location);
+        entry = new TransactionEntry(stamp, kind, body, location, keep);
         return true;
     }
 

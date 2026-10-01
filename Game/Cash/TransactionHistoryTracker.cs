@@ -1,8 +1,8 @@
 namespace MudPlay.Game.Cash;
 
-// A per-session ledger of cash/item offloads for the Session Stats →
-// Transaction history window. Records one TransactionEntry per bank `dep`osit and
-// per stash-room `hide` (coin or item), each with the wall-clock time, the store
+// A ledger of cash/item offloads and shop trades for the Session Stats →
+// Transaction history window. Records a TransactionEntry per bank `dep`osit, per
+// stash-room `hide` (coin or item) and per shop visit, each with the wall-clock time, the store
 // kind, a rendered description of what was put away, and the room it happened in
 // ("Name (map/room)" — the bank used or the stash room).
 //
@@ -14,10 +14,14 @@ namespace MudPlay.Game.Cash;
 //
 // Coin stashed in a room is ONE row per room, not one per echo: a loop passing its
 // stash every lap would otherwise bury the ledger in "Hid 94 silver" rows. The row
-// carries the last visit's amount, the average per visit and the running total
-// ("Hid 1 gold, 115 silver — avg 1 gold, 8 silver over 48 stashes — total 34 gold,
-// 5,210 silver"), takes the latest time and moves to the newest end on each stash.
-// Item hides stay one row each.
+// carries the last visit's amount and the number of stashes, the average per stash
+// and the running total (see FormatCoinRow), takes the latest time and moves to the
+// newest end on each stash. Item hides stay one row each.
+//
+// Selling and buying are one row per shop visit: the items and what they came to
+// ("Sold orc-head ×5, club for 12 gold, 5 silver"), from InventoryManager.ItemSold /
+// ItemBought. A sell run answers one line per item type; lines at the same shop
+// within a minute extend the visit's row.
 //
 // Owns no source subscriptions — AppServices wires those echo events to the Note*
 // forwarders — matching SessionActivityTracker and keeping the tracker
@@ -40,9 +44,30 @@ public sealed class TransactionHistoryTracker
     // "last" amount; a later one starts it afresh.
     private static readonly TimeSpan VisitWindow = TimeSpan.FromSeconds(10);
 
-    private const string PartSeparator = " — ";
-    private const string AveragePrefix = "avg ";
-    private const string TotalPrefix = "total ";
+    // Sale / purchase lines at one shop this close together are one visit.
+    private static readonly TimeSpan TradeWindow = TimeSpan.FromSeconds(60);
+
+    // The shop visit still being added to, if any.
+    private Trade? _trade;
+
+    private sealed class Trade
+    {
+        public TransactionKind Kind;
+        public string? Location;
+        public DateTimeOffset LastAt;
+        public long Copper;
+        public readonly List<(string Item, int Count)> Items = new();
+        public TransactionEntry Entry;
+    }
+
+    // Where a detail breaks onto a new line in the window. The saved log holds one
+    // line per entry, so the break is this marker there.
+    public const string LineBreak = " | ";
+
+    private const string LastPrefix = "Last: ";
+    private const string VisitsInfix = " - Total Stashes: ";
+    private const string AveragePrefix = "Avg: ";
+    private const string TotalPrefix = "Total: ";
 
     // The running coin tally behind each room's row, keyed by its location label.
     private readonly Dictionary<string, StashTally> _stashByLocation = new(StringComparer.Ordinal);
@@ -66,9 +91,9 @@ public sealed class TransactionHistoryTracker
     // append, so the tracker hands the fresh entry over directly.
     public event Action<TransactionEntry>? EntryAdded;
 
-    // Raised when a room's coin row is updated in place: the row it replaces, then the
-    // new one. The persistent log rewrites itself and the window carries a "keep"
-    // mark across.
+    // Raised when a row is replaced in place — a room's coin row updated by a stash,
+    // or a "keep" mark set or cleared: the row it replaces, then the new one. The
+    // persistent log rewrites itself.
     public event Action<TransactionEntry, TransactionEntry>? EntryReplaced;
 
     public TransactionHistoryTracker(Func<DateTimeOffset>? clock = null)
@@ -102,6 +127,44 @@ public sealed class TransactionHistoryTracker
         if (currencies.Count > 0) AddCoinStash(currencies, location);
     }
 
+    // Record items sold to / bought from a shop: the item's name, how many, and the
+    // copper they fetched or cost in total. location is the shop room, or null.
+    public void NoteSale(string item, int count, long copper, string? location = null) =>
+        NoteTrade(TransactionKind.Sold, item, count, copper, location);
+
+    public void NotePurchase(string item, int count, long copper, string? location = null) =>
+        NoteTrade(TransactionKind.Bought, item, count, copper, location);
+
+    private void NoteTrade(TransactionKind kind, string item, int count, long copper, string? location)
+    {
+        if (count <= 0 || string.IsNullOrWhiteSpace(item)) return;
+        DateTimeOffset now = _clock();
+        bool extending = _trade is { } open && open.Kind == kind && open.Location == location
+            && now - open.LastAt <= TradeWindow && _entries.Contains(open.Entry);
+        if (!extending) _trade = new Trade { Kind = kind, Location = location };
+        Trade trade = _trade!;
+
+        TransactionEntry old = trade.Entry;
+        if (extending) _entries.Remove(old);
+        int at = trade.Items.FindIndex(i => string.Equals(i.Item, item, StringComparison.OrdinalIgnoreCase));
+        if (at >= 0) trade.Items[at] = (trade.Items[at].Item, trade.Items[at].Count + count);
+        else trade.Items.Add((item, count));
+        trade.Copper += Math.Max(0, copper);
+        trade.LastAt = now;
+
+        string items = string.Join(", ", trade.Items.Select(i => i.Count > 1 ? $"{i.Item} ×{i.Count}" : i.Item));
+        string verb = kind == TransactionKind.Sold ? "Sold" : "Bought";
+        string price = trade.Copper > 0 ? FormatValue(trade.Copper) : "nothing";
+        trade.Entry = new TransactionEntry(now, kind, $"{verb} {items} for {price}", location,
+            Keep: extending && old.Keep);
+        _entries.Add(trade.Entry);
+        Evict();
+
+        if (extending) EntryReplaced?.Invoke(old, trade.Entry);
+        else EntryAdded?.Invoke(trade.Entry);
+        Changed?.Invoke();
+    }
+
     private void AddCoinStash(IReadOnlyList<(string Currency, long Amount)> currencies, string? location)
     {
         DateTimeOffset now = _clock();
@@ -123,13 +186,31 @@ public sealed class TransactionHistoryTracker
             tally.Total[currency] = tally.Total.GetValueOrDefault(currency) + amount;
         }
         tally.LastAt = now;
-        tally.Entry = new TransactionEntry(now, TransactionKind.Stash, FormatCoinRow(tally), location);
+        tally.Entry = new TransactionEntry(now, TransactionKind.Stash, FormatCoinRow(tally), location,
+            Keep: replacing && old.Keep);
         _entries.Add(tally.Entry);
         Evict();
 
         if (replacing) EntryReplaced?.Invoke(old, tally.Entry);
         else EntryAdded?.Invoke(tally.Entry);
         Changed?.Invoke();
+    }
+
+    // Mark or unmark a row "keep". The row stays where it is; EntryReplaced carries
+    // the change to the saved log. Returns the row as it now stands (unchanged when
+    // it is no longer in the ledger).
+    public TransactionEntry SetKeep(TransactionEntry entry, bool keep)
+    {
+        int at = _entries.IndexOf(entry);
+        if (at < 0 || entry.Keep == keep) return entry;
+        TransactionEntry marked = entry with { Keep = keep };
+        _entries[at] = marked;
+        if (_stashByLocation.TryGetValue(entry.Location ?? string.Empty, out StashTally? tally)
+            && tally.Entry == entry)
+            tally.Entry = marked;
+        if (_trade is { } trade && trade.Entry == entry) trade.Entry = marked;
+        EntryReplaced?.Invoke(entry, marked);
+        return marked;
     }
 
     // Point-in-time copy of the ledger, oldest entry first.
@@ -145,6 +226,7 @@ public sealed class TransactionHistoryTracker
         ArgumentNullException.ThrowIfNull(entries);
         _entries.Clear();
         _stashByLocation.Clear();
+        _trade = null;
         // Fold every coin row for a room into that room's one row — a log written
         // before the roll-up holds one per echo. A rolled-up row brings its own total
         // and visit count; an older one is a single echo, and echoes a moment apart
@@ -170,7 +252,8 @@ public sealed class TransactionHistoryTracker
             foreach ((string c, long n) in row.Last) tally.Last[c] = tally.Last.GetValueOrDefault(c) + n;
             foreach ((string c, long n) in row.Total) tally.Total[c] = tally.Total.GetValueOrDefault(c) + n;
             tally.LastAt = e.Time;
-            tally.Entry = new TransactionEntry(e.Time, TransactionKind.Stash, FormatCoinRow(tally), e.Location);
+            tally.Entry = new TransactionEntry(e.Time, TransactionKind.Stash, FormatCoinRow(tally), e.Location,
+                Keep: e.Keep || (known && tally.Entry.Keep));
             _entries.Add(tally.Entry);
         }
         Evict();
@@ -184,6 +267,7 @@ public sealed class TransactionHistoryTracker
     {
         _entries.Clear();
         _stashByLocation.Clear();
+        _trade = null;
         Changed?.Invoke();
     }
 
@@ -223,16 +307,19 @@ public sealed class TransactionHistoryTracker
         return $"Hid {string.Join(", ", parts)}";
     }
 
-    // "Hid 1 gold, 115 silver — avg 1 gold, 8 silver over 48 stashes — total 34 gold,
-    // 5,210 silver": the last visit's amounts, the average visit, then everything stashed
-    // in the room. Last and total stay in the coins that were hidden; the average is
-    // worked out by value and shown in the fewest coins.
+    // The room's coin row, three lines in the window:
+    //   Last: 1 gold, 115 silver - Total Stashes: 48
+    //   Avg: 12 gold, 7 silver
+    //   Total: 34 gold, 5,210 silver
+    // Last and Total stay in the coins that were hidden; Avg is worked out by value
+    // and shown in the highest coins. Stored on one line with LineBreak between them.
     private static string FormatCoinRow(StashTally tally)
     {
         long average = CopperValue(tally.Total) / Math.Max(1, tally.Visits);
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"Hid {FormatCoins(tally.Last)}{PartSeparator}{AveragePrefix}{FormatValue(average)} over {tally.Visits:N0} {(tally.Visits == 1 ? "stash" : "stashes")}"
-            + $"{PartSeparator}{TotalPrefix}{FormatCoins(tally.Total)}");
+            $"{LastPrefix}{FormatCoins(tally.Last)}{VisitsInfix}{tally.Visits:N0}"
+            + $"{LineBreak}{AveragePrefix}{FormatValue(average)}"
+            + $"{LineBreak}{TotalPrefix}{FormatCoins(tally.Total)}");
     }
 
     // The five denominations, highest first, with what each is worth in copper.
@@ -272,8 +359,8 @@ public sealed class TransactionHistoryTracker
             .OrderBy(kv => Rank(kv.Key))
             .Select(kv => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{kv.Value:N0} {kv.Key}")));
 
-    // One coin row read back. Visits is null for the older one-echo "Hid 115 silver",
-    // whose amount is both its last and its total.
+    // One coin row read back. Visits is null for a log's older one-echo "Hid 115
+    // silver", whose amount is both its last and its total.
     private readonly record struct CoinRow(
         Dictionary<string, long> Last, Dictionary<string, long> Total, int? Visits);
 
@@ -281,43 +368,48 @@ public sealed class TransactionHistoryTracker
     private static bool TryParseCoinRow(string detail, out CoinRow row)
     {
         row = default;
-        if (!detail.StartsWith("Hid ", StringComparison.Ordinal)) return false;
-        string[] parts = detail[4..].Split(PartSeparator);
         Dictionary<string, long> last = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, long> total = new(StringComparer.OrdinalIgnoreCase);
+
+        if (detail.StartsWith(LastPrefix, StringComparison.Ordinal))
+        {
+            // "Last: <coins> - Total Stashes: N | Avg: … | Total: <coins>". The
+            // average isn't read; it is recomputed from the total.
+            string[] lines = detail.Split(LineBreak);
+            int infix = lines[0].IndexOf(VisitsInfix, StringComparison.Ordinal);
+            if (lines.Length != 3 || infix < 0
+                || !lines[2].StartsWith(TotalPrefix, StringComparison.Ordinal)
+                || !TryParseCount(lines[0][(infix + VisitsInfix.Length)..], out int visits)
+                || !TryParseCoins(lines[0][LastPrefix.Length..infix], last)
+                || !TryParseCoins(lines[2][TotalPrefix.Length..], total))
+                return false;
+            row = new CoinRow(last, total, visits);
+            return true;
+        }
+
+        if (!detail.StartsWith("Hid ", StringComparison.Ordinal)) return false;
+        // An earlier build's roll-up: "Hid <coins> — avg … over N stashes — total <coins>".
+        string[] parts = detail[4..].Split(" — ");
         if (!TryParseCoins(parts[0], last)) return false;
         if (parts.Length == 1)
         {
             row = new CoinRow(last, last, null);
             return true;
         }
-
-        Dictionary<string, long> total = new(StringComparer.OrdinalIgnoreCase);
-        int visits = 0;
-        foreach (string part in parts.Skip(1))
-        {
-            if (part.StartsWith(TotalPrefix, StringComparison.Ordinal))
-            {
-                if (!TryParseCoins(part[TotalPrefix.Length..], total)) return false;
-            }
-            else if (part.StartsWith(AveragePrefix, StringComparison.Ordinal))
-            {
-                // "avg 12 gold, 5 silver over 48 stashes" — only the count is read back;
-                // the average is recomputed from the total.
-                int over = part.LastIndexOf(" over ", StringComparison.Ordinal);
-                if (over < 0) return false;
-                string count = part[(over + 6)..];
-                int end = count.IndexOf(' ');
-                if (end > 0) count = count[..end];
-                if (!int.TryParse(count, System.Globalization.NumberStyles.AllowThousands,
-                        System.Globalization.CultureInfo.InvariantCulture, out visits))
-                    return false;
-            }
-            else return false;
-        }
-        if (total.Count == 0 || visits <= 0) return false;
-        row = new CoinRow(last, total, visits);
+        if (parts.Length != 3 || !parts[2].StartsWith("total ", StringComparison.Ordinal)) return false;
+        int over = parts[1].LastIndexOf(" over ", StringComparison.Ordinal);
+        if (over < 0) return false;
+        string count = parts[1][(over + 6)..];
+        int end = count.IndexOf(' ');
+        if (end > 0) count = count[..end];
+        if (!TryParseCount(count, out int oldVisits) || !TryParseCoins(parts[2][6..], total)) return false;
+        row = new CoinRow(last, total, oldVisits);
         return true;
     }
+
+    private static bool TryParseCount(string text, out int count) =>
+        int.TryParse(text, System.Globalization.NumberStyles.AllowThousands,
+            System.Globalization.CultureInfo.InvariantCulture, out count) && count > 0;
 
     private static bool TryParseCoins(string text, Dictionary<string, long> into)
     {
