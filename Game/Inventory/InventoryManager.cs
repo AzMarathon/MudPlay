@@ -516,6 +516,26 @@ public sealed partial class InventoryManager : IDisposable
             return;
         }
 
+        // Training: "You hand over 350 copper farthings to train to the next level!"
+        // / "You hand over 1 gold crown and you receive training to attain level 3."
+        // The fee leaves the purse. Missed, the purse kept the coins the trainer took,
+        // the weight estimate sat at the cap and every coin pickup and stash after it
+        // was refused until an `i` (report paradigm-20261001-085357). The line gives
+        // the fee, not which coins went, so it comes off by value; CashManager re-reads
+        // the inventory afterwards to settle the mix.
+        Match trained = TrainFeeRegex().Match(line);
+        if (trained.Success)
+        {
+            long fee = ParsePriceToCopper(trained.Groups[1].Value);
+            if (fee > 0)
+            {
+                lock (_lock) ApplyTransaction(-fee);
+                Changed?.Invoke();
+                _log?.Debug(LogCategory, $"training fee {fee} copper taken off the purse");
+            }
+            return;
+        }
+
         Match deposit = DepositCurrencyRegex().Match(line);
         if (deposit.Success)
         {
@@ -1287,6 +1307,9 @@ public sealed partial class InventoryManager : IDisposable
 
     [GeneratedRegex(@"^You deposit (\d.+)\.$")]
     private static partial Regex DepositCurrencyRegex();
+
+    [GeneratedRegex(@"^You hand over (.+?) (?:and you receive training to attain level \d+|to train to the next level)")]
+    private static partial Regex TrainFeeRegex();
 
     [GeneratedRegex(@"^[Yy]ou withdrew (\d.+)\.$")]
     private static partial Regex WithdrawCurrencyRegex();

@@ -1509,4 +1509,21 @@ public sealed class InventoryManagerTests
         Assert.Equal(1, e.Percentage);
         Assert.Equal(EncumbranceLevel.Light, e.Category);
     }
+
+    // The trainer's fee leaves the purse. Missed, the purse kept coins it no longer
+    // held and the weight estimate ran up to the cap (report paradigm-20261001-085357).
+    [Theory]
+    [InlineData("You hand over 350 copper farthings to train to the next level!", 350)]
+    [InlineData("You hand over 1 gold crown and you receive training to attain level 3.", 100)]
+    public void TrainingFee_ComesOffThePurse(string trainLine, long fee)
+    {
+        Harness h = new();
+        FeedFullInventory(h);
+        long before = h.Inv.Snapshot.Currency.TotalCopperValue;
+        Assert.True(before >= fee);
+
+        h.Feed(trainLine);
+
+        Assert.Equal(before - fee, h.Inv.Snapshot.Currency.TotalCopperValue);
+    }
 }

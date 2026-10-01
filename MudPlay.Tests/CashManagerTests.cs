@@ -1298,7 +1298,56 @@ public sealed class CashManagerTests
 
         h.Feed("There are 100 gold pieces here.");
 
-        Assert.Empty(h.Sent);
+        // No `get`; one `i` checks the weight estimate behind the refusal.
+        Assert.Equal(new[] { "i" }, h.AllSent);
+    }
+
+    // The weight behind a refusal is a running estimate. One `i` per run of refusals
+    // checks it, and a pickup that goes through starts a new run.
+    [Fact]
+    public void Collect_RefusedForWeight_ChecksTheEstimateOncePerRun()
+    {
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.Snapshot = Snap(0, 0, 0, 0, 0, currentWeight: 1000, maxWeight: 1000);
+
+        h.Feed("There are 100 gold pieces here.");
+        h.Feed("There are 100 gold pieces here.");
+        h.Feed("There are 100 gold pieces here.");
+        Assert.Equal(new[] { "i" }, h.AllSent);
+
+        // The `i` showed the real weight: the next pile is picked up.
+        h.Settings.SilverPolicy = CashPolicy.Collect;
+        h.Snapshot = Snap(0, 0, 0, 0, 0, currentWeight: 300, maxWeight: 1000);
+        h.Feed("There are 100 silver pieces here.");
+        Assert.Equal("get 100 silver noble", h.LastSent);
+    }
+
+    // A train's fee leaves the purse by value only, so the next coin decision
+    // re-reads the inventory to settle which coins went.
+    [Theory]
+    [InlineData("You hand over 69200 copper farthings to train to the next level!")]
+    [InlineData("You hand over 1 gold crown and you receive training to attain level 3.")]
+    public void Trained_NextCoinDecisionReReadsInventory(string trainLine)
+    {
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.Snapshot = Snap(0, 0, 0, 0, 0, currentWeight: 300, maxWeight: 1000);
+
+        h.Feed(trainLine);
+        Assert.Empty(h.Sent);                 // not while the trainer's screen may be up
+
+        h.Feed("There are 100 gold pieces here.");
+        Assert.Equal(new[] { "i", "get 100 gold crown" }, h.AllSent);
+    }
+
+    // A refused stash means the coin counts are stale, same as a refused drop.
+    [Fact]
+    public void RefusedStash_ReReadsInventory()
+    {
+        using Harness h = new();
+        h.Feed("You don't have 6975 silver noble to hide!");
+        Assert.Equal(new[] { "i" }, h.AllSent);
     }
 
     [Fact]
@@ -1321,7 +1370,7 @@ public sealed class CashManagerTests
 
         h.Feed("There are 100 gold pieces here.");
 
-        Assert.Empty(h.Sent);                 // doomed get suppressed
+        Assert.Equal(new[] { "i" }, h.AllSent);   // doomed get suppressed; the estimate is checked once
         Assert.Single(h.AutoDeposits);        // ...and the deposit re-check armed
         Assert.Equal(150, h.AutoDeposits[0]);
     }
@@ -1353,7 +1402,7 @@ public sealed class CashManagerTests
 
         h.Feed("There are 1000 copper pieces here.");
 
-        Assert.Empty(h.Sent);
+        Assert.Equal(new[] { "i" }, h.AllSent);   // no `get`; the estimate is checked once
     }
 
     [Fact]

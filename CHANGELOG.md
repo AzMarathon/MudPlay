@@ -1,5 +1,11 @@
 # Version history
 
+## 3.134.45
+
+- Training's fee now comes off the coin tally, so pickups and stashing no longer stop after a train until you type `i`
+- A refused coin stash, or a pickup refused for weight, re-reads the inventory once to correct a wrong coin count
+- bug reports addressed: paradigm-20261001-085357
+
 ## 3.134.44
 
 - Unrecognized Lines skips the engine's fixed command replies (usage lines, refusals, door / bank / shop / gang / channel notices)

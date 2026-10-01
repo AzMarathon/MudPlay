@@ -559,9 +559,11 @@ How a character is named, how it earns and spends character points (CP), how exp
 - **The train success line differs by realm** (also listed in *Wire, prompt & command output → Message catalogue (lines the client parses)*):
   - Stock carries the attained level: `You hand over <cost> and you receive training to attain level N.`
   - Paradigm/ParaMud is **level-less**: `You hand over <cost> to train to the next level!` — mutually exclusive with the stock line, so auto-train infers the new level as current+1.
+- **The `<cost>` in that line is the fee, and it leaves the purse** *([OBSERVED] 2026-10-01, report `paradigm-20261001-085357`: after a train the game refused `hide 6975 silver noble` with `You don't have 6975 silver noble to hide!`, and `i` showed 55 silver)*. Paradigm states it in copper (`You hand over 350 copper farthings …`) whatever coins are taken. `[NEEDS CONFIRMATION]` Which coins does the trainer take when the purse holds several denominations?
 - **A trainer can also stock items** (the Bard Training Room sells songsheets, the Thief Training Room lockpicks) — same 20-slot stock table as a merchant — so a training room is a trainer *and* a merchant at once, not either/or.
 
 **Client use:**
+- `InventoryManager` takes the fee off the purse by value on either success line, and `CashManager` re-reads the inventory (`i`) at the next coin decision to settle which coins went — not at once, since a train can leave the `train stats` box open. Before 3.134.45 the fee was never deducted: the weight estimate ran up to the carry cap and every coin pickup and stash was refused until an `i` (report `paradigm-20261001-085357`).
 - The auto-trainer's CP-only reconcile selects a trainer by **class only** (`TrainerCatalog.SelectNearestForStats`), never the level-band `SelectNearest` — a band-filtered pick would walk you across the map (or abort) to allocate stats you could apply right where you stand.
 
 ### The `train stats` screen (Char. Creation box)
