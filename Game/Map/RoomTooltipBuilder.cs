@@ -36,7 +36,7 @@ public static class RoomTooltipBuilder
     public static string Build(Room room, RoomGraphManager graph, GameDataCache? data,
         TBInfoStore? tbinfo = null, MonsterSpawnIndex? spawnIndex = null,
         Game.Spells.KnownSpellCatalog? spellCatalog = null, int charIllu = 0,
-        RoomFloorItemIndex? floorItems = null, TrapDisarmOdds? disarmOdds = null)
+        RoomFloorItemIndex? floorItems = null, TrapDisarmOdds? disarmOdds = null, int picklocks = 0)
     {
         ArgumentNullException.ThrowIfNull(room);
         ArgumentNullException.ThrowIfNull(graph);
@@ -72,7 +72,7 @@ public static class RoomTooltipBuilder
         }
 
         // 8. Exits — blank line above, per-direction with destination.
-        string exitsBlock = BuildExitsBlock(room, graph, data, tbinfo, disarmOdds);
+        string exitsBlock = BuildExitsBlock(room, graph, data, tbinfo, disarmOdds, picklocks);
         if (exitsBlock.Length > 0)
         {
             sb.Append('\n').Append('\n').Append(exitsBlock);
@@ -471,7 +471,7 @@ public static class RoomTooltipBuilder
     };
 
     private static string BuildExitsBlock(Room room, RoomGraphManager graph, GameDataCache? data, TBInfoStore? tbinfo,
-        TrapDisarmOdds? disarmOdds)
+        TrapDisarmOdds? disarmOdds, int picklocks)
     {
         if (room.Exits.Count == 0) return string.Empty;
 
@@ -487,7 +487,7 @@ public static class RoomTooltipBuilder
             sb.Append('\n').Append("  ").Append(DirectionLabel(dir)).Append(" → ");
             sb.Append(destName).Append(' ').Append('(').Append(exit.Target).Append(')');
 
-            string hintRender = FormatExitHint(exit, data, disarmOdds);
+            string hintRender = FormatExitHint(exit, data, disarmOdds, picklocks);
             if (hintRender.Length > 0) sb.Append(" (").Append(hintRender).Append(')');
 
             // Multi-line per-step breakdown for action-required exits.
@@ -593,7 +593,8 @@ public static class RoomTooltipBuilder
     // convention). Falls back to the raw hint string for unclassified modifiers
     // so diagnostic info still shows. A trap carries our disarm odds when we have the
     // Traps skill.
-    public static string FormatExitHint(RoomExit exit, GameDataCache? data, TrapDisarmOdds? disarmOdds = null)
+    public static string FormatExitHint(RoomExit exit, GameDataCache? data, TrapDisarmOdds? disarmOdds = null,
+        int picklocks = 0)
     {
         switch (exit.Hint)
         {
@@ -636,7 +637,7 @@ public static class RoomTooltipBuilder
                 // the user knows they needn't have the key.
                 if (exit.Hint == RoomExitHint.KeyLocked
                     && FormatDoorRequirement(exit) is { Length: > 0 } alt)
-                    baseText += $", or {alt}";
+                    baseText += $", or {alt}{PickChance(exit, picklocks)}";
                 return baseText;
             }
 
@@ -645,7 +646,7 @@ public static class RoomTooltipBuilder
             // "(Door)" or "(Door [any picklocks/strength])") reads "any" — anyone
             // can bash / pick it — rather than showing nothing.
             case RoomExitHint.Door:
-                return $"Door: {FormatDoorSkill(exit)}";
+                return $"Door: {FormatDoorSkill(exit)}{PickChance(exit, picklocks)}";
 
             case RoomExitHint.Toll when exit.TollGold > 0:
                 return $"Toll: {exit.TollGold} gold";
@@ -717,6 +718,19 @@ public static class RoomTooltipBuilder
         return exit.CanBash
             ? $"{exit.StatRequirement} picklocks/strength"
             : $"{exit.StatRequirement} picklocks";
+    }
+
+    // ", pick ~46%" — our chance to pick the lock (user, 2026-09-30): one 0–100 roll
+    // under Picklocks less the lock's N − 1, so about Picklocks − N + 1 percent; an
+    // "any" lock's modifier adds, so at least Picklocks + 1 (GAME_MECHANICS "Locked
+    // doors — picking, opening and bashing"; read from Stock, assumed for Paradigm).
+    // Blank without Picklocks.
+    private static string PickChance(RoomExit exit, int picklocks)
+    {
+        if (picklocks <= 0) return string.Empty;
+        return exit.StatRequirement > 0
+            ? $", pick ~{Math.Clamp(picklocks - exit.StatRequirement + 1, 0, 100)}%"
+            : $", pick ≥{Math.Min(picklocks + 1, 100)}%";
     }
 
     // Like FormatDoorRequirement but never blank: a zero requirement renders "any"

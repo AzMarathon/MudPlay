@@ -3218,6 +3218,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - `DoorOpenManager` treats the two bash refusals as "can't bash" and falls back to pick, then the key, instead of re-bashing on the response watchdog forever (2026-09-28); the wrong-key line fails the key step at once.
 - `DoorOpenManager` bashes a *bashable* door (per `DoorPolicy`) **uncapped** — no fixed attempt limit — but interleaves rest: once HP falls to the Health-tab **rest-if-below** trigger it pauses bashing so `HealthManager` can rest to **rest-max**, then resumes. (Confirmed by user direction; replaced the old fixed `MaxBashAttempts` cap.)
 - Picking keeps its `MaxPickAttempts` retry cap.
+- `RoomTooltipBuilder.PickChance` shows the chance on a door's hint (map tooltip, Room Info, the room detail dialog): `Picklocks − N + 1`, clamped 0–100, and at least `Picklocks + 1` on an "any" lock (user request, 2026-09-30; the Stock rule assumed for Paradigm).
 
 ### Hidden exits — `sea <dir>` reveal wording
 *Status: CONFIRMED (capture 2026-07-14, report 121106); blocked-while-blind: Stock [OBSERVED] `wccmmud.dll` 1.11p, applied to both realms by the user 2026-09-27 pending a Paradigm retest*

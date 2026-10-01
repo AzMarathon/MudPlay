@@ -121,7 +121,7 @@
                             <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel" Text="Level" Margin="0,0,8,3"/>
                             <TextBlock Grid.Row="2" Grid.Column="3" Classes="FieldValue" Text="{Binding Level}" Margin="0,0,20,3"/>
                             <TextBlock Grid.Row="2" Grid.Column="4" Classes="FieldLabel" Text="Stealth" Margin="0,0,8,3"/>
-                            <TextBlock Grid.Row="2" Grid.Column="5" Classes="FieldValue" Text="{Binding Stealth}" Margin="0,0,0,3"/>
+                            <TextBlock Grid.Row="2" Grid.Column="5" Classes="FieldValue" Text="{Binding Stealth}" Margin="0,0,0,3" ToolTip.Tip="{Binding StealthTip}"/>
 
                             <!-- Row 3: Hits | Armour Class | Thievery -->
                             <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Hits" Margin="0,0,8,3"/>
@@ -129,15 +129,23 @@
                             <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel" Text="Armour Class" Margin="0,0,8,3"/>
                             <TextBlock Grid.Row="3" Grid.Column="3" Classes="FieldValue" Text="{Binding ArmourClass}" Margin="0,0,20,3"/>
                             <TextBlock Grid.Row="3" Grid.Column="4" Classes="FieldLabel" Text="Thievery" Margin="0,0,8,3"/>
-                            <TextBlock Grid.Row="3" Grid.Column="5" Classes="FieldValue" Text="{Binding Thievery}" Margin="0,0,0,3"/>
+                            <TextBlock Grid.Row="3" Grid.Column="5" Classes="FieldValue" Text="{Binding Thievery}" Margin="0,0,0,3" ToolTip.Tip="{Binding ThieveryTip}"/>
 
                             <!-- Row 4: Mana/Kai | Traps -->
                             <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="{Binding ManaLabel}" Margin="0,0,8,3"/>
                             <TextBlock Grid.Row="4" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaValue}" Margin="0,0,20,3"/>
                             <TextBlock Grid.Row="4" Grid.Column="4" Classes="FieldLabel" Text="Traps" Margin="0,0,8,3"/>
-                            <TextBlock Grid.Row="4" Grid.Column="5" Classes="FieldValue" Text="{Binding Traps}" Margin="0,0,0,3"/>
+                            <TextBlock Grid.Row="4" Grid.Column="5" Classes="FieldValue" Text="{Binding Traps}" Margin="0,0,0,3" ToolTip.Tip="{Binding TrapsTip}"/>
 
-                            <!-- Row 5: (left blank) | Picklocks -->
+                            <!-- Row 5: HP regen | Mana regen | Picklocks -->
+                            <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="HP Regen" Margin="0,0,8,3"
+                                       ToolTip.Tip="{Binding HpRegenTip}"/>
+                            <TextBlock Grid.Row="5" Grid.Column="1" Classes="FieldValue" Text="{Binding HpRegen}" Margin="0,0,20,3"
+                                       ToolTip.Tip="{Binding HpRegenTip}"/>
+                            <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel" Text="{Binding ManaLabel, StringFormat='{}{0} Regen'}" Margin="0,0,8,3"
+                                       IsVisible="{Binding ShowManaRegen}" ToolTip.Tip="{Binding ManaRegenTip}"/>
+                            <TextBlock Grid.Row="5" Grid.Column="3" Classes="FieldValue" Text="{Binding ManaRegen}" Margin="0,0,20,3"
+                                       IsVisible="{Binding ShowManaRegen}" ToolTip.Tip="{Binding ManaRegenTip}"/>
                             <TextBlock Grid.Row="5" Grid.Column="4" Classes="FieldLabel" Text="Picklocks" Margin="0,0,8,3"/>
                             <TextBlock Grid.Row="5" Grid.Column="5" Classes="FieldValue" Text="{Binding Picklocks}" Margin="0,0,0,3"/>
 
@@ -151,7 +159,7 @@
                                     ToolTip.Tip="Show what each point of Agility gives you"/>
                             <TextBlock Grid.Row="6" Grid.Column="3" Classes="FieldValue" Text="{Binding Agility}" Margin="0,0,20,3"/>
                             <TextBlock Grid.Row="6" Grid.Column="4" Classes="FieldLabel" Text="Tracking" Margin="0,0,8,3"/>
-                            <TextBlock Grid.Row="6" Grid.Column="5" Classes="FieldValue" Text="{Binding Tracking}" Margin="0,0,0,3"/>
+                            <TextBlock Grid.Row="6" Grid.Column="5" Classes="FieldValue" Text="{Binding Tracking}" Margin="0,0,0,3" ToolTip.Tip="{Binding TrackingTip}"/>
 
                             <!-- Row 7: Intellect | Health | Martial Arts -->
                             <Button Grid.Row="7" Grid.Column="0" Classes="StatLink" Content="Intellect" Margin="0,0,8,3"
