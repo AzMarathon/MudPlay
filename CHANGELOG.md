@@ -1,5 +1,11 @@
 # Version history
 
+## 3.134.11
+
+- Sell detours and stash pass-through check a running loop's whole cycle, so a shop / stash room further along the lap no longer gets a needless detour
+- A loop starts at its nearest room, partway along a leg if that's closest, instead of walking on to the nearest waypoint
+- Auto-deposit trips walk back to the loop's nearest room, like sell detours
+
 ## 3.134.8
 
 - A sell detour no longer reads a sale as "sold nothing" and puts the shop on a 10-minute wait

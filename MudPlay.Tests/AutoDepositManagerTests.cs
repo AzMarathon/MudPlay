@@ -223,7 +223,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         }
     }
 
-    private Harness NewHarness(string? graphJson = null)
+    private Harness NewHarness(string? graphJson = null, bool nearestLoopRoom = false)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), graphJson ?? GraphJson);
@@ -298,7 +298,13 @@ public sealed class AutoDepositManagerTests : IDisposable
             provisioner: provisioner,
             lightShop: lightShop,
             carriedCount: id => h.CountCarried(id),
-            post: action => action());
+            post: action => action(),
+            nearestLoopRoom: !nearestLoopRoom ? null : (from, l) =>
+            {
+                IReadOnlyList<RoomKey> rooms = LoopExpander.ResolveCycleRoomKeys(l.Waypoints, bfs, graph);
+                IReadOnlyDictionary<RoomKey, int> steps = bfs.ComputeDistancesTo(from, rooms);
+                return rooms.Where(steps.ContainsKey).OrderBy(r => steps[r]).Cast<RoomKey?>().FirstOrDefault();
+            });
         // Production drives OnRoomEntered from AppServices' early StateChanged
         // handler (registered ahead of LoopRunner) rather than a self-subscription;
         // mirror that here so Arrive() still triggers the pass-through stash.
@@ -831,6 +837,28 @@ public sealed class AutoDepositManagerTests : IDisposable
             h.Snapshot.Currency, EncumbranceReading.Empty,
             Array.Empty<EquippedItem>(), new[] { "torch" }, DateTimeOffset.UtcNow);
         h.AutoDeposit.OnInventoryChanged();
+    }
+
+    // A loop picks up at its room nearest the bank (1/2), not back where the trip
+    // began (1/1) — the same as a sell detour (user, 2026-09-30).
+    [Fact]
+    public void LoopTrip_WalksBackToTheLoopsNearestRoom_AndResumes()
+    {
+        using Harness h = NewHarness(nearestLoopRoom: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 1), new RoomKey(1, 2) })));
+        ArmBankGate(h);               // bank at 1/3, off the loop
+
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        DeliverBankInventory(h);
+        Assert.Equal("dep 5000", h.DepositLines().Single());
+
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 2));
+        Assert.Equal(LoopState.Running, h.Loop.State);
     }
 
     [Fact]

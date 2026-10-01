@@ -131,6 +131,7 @@ public sealed class AutoDepositManager : IDisposable
     private DetourResume _resume;
     private RoomKey _destination;
     private RoomKey _origin;
+    private readonly Func<RoomKey, Loop, RoomKey?> _nearestLoopRoom;
     private bool _destinationIsStash;
     // The reroute is an event's trip (StartEventTrip): it ends at the bank / stash.
     private bool _eventTrip;
@@ -153,7 +154,8 @@ public sealed class AutoDepositManager : IDisposable
         Action<Action> post,
         LogService? log = null,
         TimeSpan? buyTimeout = null,
-        Func<bool>? isFollower = null)
+        Func<bool>? isFollower = null,
+        Func<RoomKey, Loop, RoomKey?>? nearestLoopRoom = null)
     {
         ArgumentNullException.ThrowIfNull(cash);
         ArgumentNullException.ThrowIfNull(readCash);
@@ -186,6 +188,7 @@ public sealed class AutoDepositManager : IDisposable
         _carriedCount = carriedCount;
         _post = post;
         _isFollower = isFollower ?? (static () => false);
+        _nearestLoopRoom = nearestLoopRoom ?? (static (_, _) => null);
         _buyTimeout = buyTimeout ?? TimeSpan.FromSeconds(8);
         _buyTimer = new Timer(_ => _post(OnBuyTimeout), null,
             Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
@@ -274,7 +277,7 @@ public sealed class AutoDepositManager : IDisposable
         // route, don't spend a dedicated detour — OnRoomEntered stashes it
         // when the engine walks through on its own. Banks always detour;
         // off-route stash rooms still detour.
-        if (destinationIsStash && IsOnActiveRoute(destination, resume, current.Key))
+        if (destinationIsStash && IsOnActiveRoute(destination, resume))
         {
             _log?.Info(LogCategory,
                 $"stash room {destination} on the active {resume.Kind} route — "
@@ -577,9 +580,10 @@ public sealed class AutoDepositManager : IDisposable
     {
         shop = default;
         buy = default;
-        if (_walker.TryComputeRouteKeys(_destination, _origin) is not { } route) return false;
+        RoomKey back = ReturnRoom(_destination);
+        if (_walker.TryComputeRouteKeys(_destination, back) is not { } route) return false;
         if (_provisioner.PlanRouteBuy(route) is not { } req) return false;
-        if (!_lightShop.TrySelectShop(_destination, _origin, req.ItemId, out shop))
+        if (!_lightShop.TrySelectShop(_destination, back, req.ItemId, out shop))
         {
             _log?.Info(LogCategory,
                 $"return leg dark but no reachable shop stocks '{req.LightName}' — returning without light");
@@ -642,13 +646,30 @@ public sealed class AutoDepositManager : IDisposable
     {
         _buyTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _lightBuy = null;
-        _phase = DepositPhase.WalkingBackToOrigin;
-        if (!RerouteWalkTo(_origin))
+        RoomKey? here = _tracker.State.CurrentRoom?.Key;
+        RoomKey back = here is { } from ? ReturnRoom(from) : _origin;
+        if (here?.Equals(back) == true)
         {
-            _log?.Warn(LogCategory, $"can't return to {_origin} — resuming from here");
+            Resume();
+            return;
+        }
+        _phase = DepositPhase.WalkingBackToOrigin;
+        if (!back.Equals(_origin))
+            _log?.Info(LogCategory, $"walking back to {back}, the loop's nearest room (left it at {_origin})");
+        if (!RerouteWalkTo(back))
+        {
+            _log?.Warn(LogCategory, $"can't return to {back} — resuming from here");
             Resume();
         }
     }
+
+    // Where the trip heads home to from `from`: a loop picks up at whichever of its
+    // rooms is nearest, as a sell detour does (user, 2026-09-30); anything else goes
+    // back to where the trip began.
+    private RoomKey ReturnRoom(RoomKey from) =>
+        _resume.Kind == DetourResumeKind.Loop && _resume.Loop is { } loop
+            ? _nearestLoopRoom(from, loop) ?? _origin
+            : _origin;
 
     // Send a single `dep <value>` for the held wealth above the raw keep-on-hand
     // floor. Reads the snapshot fresh at deposit time (holdings may have shifted
@@ -698,7 +719,7 @@ public sealed class AutoDepositManager : IDisposable
     // Whether room is one the running engine will reach on its own — a resolved
     // loop-circuit room, or a marked Auto-Lair room. Such a room needs no detour:
     // the pass-through handler stashes it when the engine walks through.
-    private bool IsOnActiveRoute(RoomKey room, DetourResume resume, RoomKey current)
+    private bool IsOnActiveRoute(RoomKey room, DetourResume resume)
     {
         switch (resume.Kind)
         {
@@ -709,7 +730,7 @@ public sealed class AutoDepositManager : IDisposable
             case DetourResumeKind.Loop:
                 // The loop re-walks its resolved circuit each lap; membership
                 // means a guaranteed per-lap pass.
-                foreach (RoomKey k in _loopRunner.ResolveLoopRoomKeys(current))
+                foreach (RoomKey k in _loopRunner.ResolveLoopRoomKeys())
                     if (k.Equals(room)) return true;
                 return false;
             default:

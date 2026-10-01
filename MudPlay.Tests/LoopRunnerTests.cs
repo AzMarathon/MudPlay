@@ -260,6 +260,68 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(LoopState.Approaching, h.Runner.State);
     }
 
+    // A line A(1/1) ─N─ B(1/2) ─N─ C(1/3), with D(1/4) east of B. Looping A ↔ C runs
+    // A→B→C→B→A, so B sits on the cycle without being a waypoint.
+    private const string LegGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "1/4", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "D", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private static Loop AcLine() =>
+        new("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) });
+
+    private static void Land(Harness h, string name, params Direction[] exits) =>
+        h.Tracker.NoteRoomObserved(new RoomObservation(name, new HashSet<Direction>(exits)));
+
+    // A fresh loop walks to its nearest room — here B, partway along a leg — rather
+    // than on to the nearest waypoint (user, 2026-09-30).
+    [Fact]
+    public void Start_OffTheCycle_ApproachesTheNearestLoopRoom_NotTheNearestWaypoint()
+    {
+        Harness h = NewHarness(LegGraphJson, withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+
+        Assert.True(h.Runner.Start(AcLine()));
+
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
+        Assert.Equal(new RoomKey(1, 2), h.Runner.ApproachTarget);
+        Assert.Equal(1, h.Runner.CurrentIndex);          // joins at B's step, the move on to C
+    }
+
+    // Standing on the cycle off a waypoint, the loop starts right there with the step
+    // out of this room, and that first part-lap isn't counted as a lap.
+    [Fact]
+    public void Start_OnACycleRoomThatIsNotAWaypoint_StartsThere_AndThePartLapDoesNotCount()
+    {
+        Harness h = NewHarness(LegGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+
+        Assert.True(h.Runner.Start(AcLine()));
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+        Land(h, "C", Direction.S);
+        Land(h, "B", Direction.N, Direction.S, Direction.E);
+        Land(h, "A", Direction.N);                        // the part-lap wraps here
+        Assert.Equal(0, h.Runner.CompletedLaps);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.RepeatStarted);
+
+        Land(h, "B", Direction.N, Direction.S, Direction.E);
+        Land(h, "C", Direction.S);
+        Land(h, "B", Direction.N, Direction.S, Direction.E);
+        Land(h, "A", Direction.N);                        // a full lap
+        Assert.Equal(1, h.Runner.CompletedLaps);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.RepeatStarted);
+    }
+
     [Fact]
     public void LastRunLoop_CapturedAsCanonicalCopy_SurvivesStop()
     {
