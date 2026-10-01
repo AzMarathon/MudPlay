@@ -45,8 +45,11 @@ public static class RemoteActionPathExpander
 
     // Absolute backstop on the assembled detour length for one top-level exit —
     // guards the pathological deep-but-branchy case that stays under the depth
-    // cap. Far above any real go-act-return round-trip.
-    private const int MaxDetourSteps = 200;
+    // cap. Real puzzles run long: the Darkened Tunnels' two levers (15/604, 15/730)
+    // for the new master assassin's passage are a ~232-step round-trip once the
+    // unopenable 1000-picklocks doors are routed around, and 200 cut it off, so the
+    // walk stopped at the shut exit (user report, 2026-09-30).
+    private const int MaxDetourSteps = 400;
 
     // Expand directions against the actual exits rooted at source. Stops at the
     // first step whose source room or exit cell can't be resolved — the walker
