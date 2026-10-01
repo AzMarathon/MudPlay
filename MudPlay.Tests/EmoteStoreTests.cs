@@ -9,6 +9,7 @@ namespace MudPlay.Tests;
 // The staged/committed emote library + the shareable package. Each test uses its own
 // temp directory so it never touches the live Emotes folder. (Image scaling in Commit
 // falls back to a raw copy here since Avalonia's decoder isn't initialised.)
+[Collection(EmoteRuntimeCollection.Name)]
 public sealed class EmoteStoreTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "mudplay-emotes-" + Guid.NewGuid().ToString("N"));

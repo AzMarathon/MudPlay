@@ -14,12 +14,16 @@ namespace MudPlay.Tests;
 // startup) every new chat line is an Add plus a front-trim Remove. The window used to answer the
 // Remove with a full Rebuild — Rows.Clear() + re-adding thousands of rows — which reset the list's
 // scroll offset, so the box jumped on every incoming line even with Auto-scroll unchecked.
+[Collection(EmoteRuntimeCollection.Name)]
 public sealed class ConversationViewModelTests
 {
     // ChatHistoryStore.MaxEntries is private; the tests only need to be at least this many.
     private const int StoreCap = 5_000;
 
-    private static readonly DateTimeOffset T0 = new(2026, 9, 21, 12, 0, 0, TimeSpan.Zero);
+    // Local noon: the store adds a DaySeparator entry when the LOCAL date rolls over, and the
+    // fill spans 5,000 seconds — anchored to a UTC instant it crosses midnight in UTC+11 zones,
+    // which puts one entry too many in the store.
+    private static readonly DateTimeOffset T0 = new(new DateTime(2026, 9, 21, 12, 0, 0, DateTimeKind.Local));
 
     private static LineExtractor.EmittedLine Line(string text, int second) =>
         new(text, new CellAttributes[text.Length], T0.AddSeconds(second), IsPromptLine: false, IsChat: true);
