@@ -7412,6 +7412,7 @@ public sealed class AppServices
                 || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive,
             nearestLoopRoom: NearestLoopRoom,
             log: Log);
+        SellDetour.HandOffToBank = AutoDeposit.TakeOverFromDetour;
         Tick.HeartbeatElapsed += SellDetour.Evaluate;
         Inventory.Changed += SellDetour.Evaluate;
         // Settings → Cash + Items "No combat during a detour": holds the real Auto-Combat

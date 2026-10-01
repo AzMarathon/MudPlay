@@ -352,4 +352,28 @@ public sealed class SellDetourManagerTests : IDisposable
         Assert.False(h.Detour.IsDetouring);
         Assert.Contains("sold nothing lately: none", h.Detour.Status);
     }
+
+    // A sale that leaves a deposit due goes to the bank from the shop: the bank run
+    // takes the way back, so the detour doesn't walk back itself (user, 2026-09-30).
+    [Fact]
+    public void ADepositDueAfterSelling_HandsTheWayBackToTheBankRun()
+    {
+        using Harness h = NewHarness();
+        (DetourResumeKind Kind, RoomKey Origin)? handedOff = null;
+        h.Detour.HandOffToBank = (resume, origin) => { handedOff = (resume.Kind, origin); return true; };
+        h.Carried.Add("dagger");
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 2), new RoomKey(1, 3) })));
+        h.Detour.Evaluate();
+        h.Arrive(new RoomKey(1, 3));
+        h.Detour.Evaluate();
+        h.Arrive(new RoomKey(1, 2));
+        h.Arrive(new RoomKey(1, 1));
+        h.Arrive(Shop);
+        h.Sold();
+
+        Assert.Equal((DetourResumeKind.Loop, new RoomKey(1, 3)), handedOff);
+        Assert.False(h.Detour.IsDetouring);
+        Assert.Equal(LoopState.Idle, h.Loop.State);      // the bank run resumes it, not us
+    }
 }

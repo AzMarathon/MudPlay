@@ -123,6 +123,10 @@ public sealed class SellDetourManager : IDisposable
     // Sold up and walking back to where the run picks up.
     public bool IsReturning => _phase == Phase.WalkingBack;
 
+    // Offered the way back once everything's sold: true when a bank run took it over
+    // (AutoDepositManager.TakeOverFromDetour) because the sale left a deposit due.
+    public Func<DetourResume, RoomKey, bool>? HandOffToBank { get; set; }
+
     // The engine this detour will pick back up (meaningful while it runs).
     public DetourResume ResumePlan => _resume;
 
@@ -382,6 +386,15 @@ public sealed class SellDetourManager : IDisposable
                 GoToShop(next);
                 return;
             }
+        }
+
+        // A deposit the sale made due goes to the bank from here (user, 2026-09-30).
+        if (HandOffToBank?.Invoke(_resume, _origin) == true)
+        {
+            _phase = Phase.Idle;
+            DetouringChanged?.Invoke();
+            _log?.Info(LogCategory, "sold — a bank run is due, so the bank run takes the way back");
+            return;
         }
 
         // A walk-to just resumes toward its destination; a loop walks back to its

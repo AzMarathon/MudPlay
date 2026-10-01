@@ -3467,15 +3467,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private List<(string Label, NavChipTone Tone)> ActiveTrips()
     {
         List<(string, NavChipTone)> trips = [];
-        // Once the errand is done the chip says so: the walk back isn't the trip any
-        // more (report paradigm-20260930-205208).
+        // An errand reads as itself until it's done, then as the walk back (user,
+        // 2026-09-30; report paradigm-20260930-205208).
+        static string Back(DetourResumeKind kind) => kind == DetourResumeKind.Lair ? "Back to Lairs" : "Back to Loop";
         if (_services.AutoDeposit.IsRerouting)
-            trips.Add((_services.AutoDeposit.IsReturning ? "back from the bank" : "bank trip", NavChipTone.Trip));
+            trips.Add((_services.AutoDeposit.IsReturning ? Back(_services.AutoDeposit.ResumePlan.Kind) : "Bank Trip", NavChipTone.Trip));
         if (_services.SellDetour.IsDetouring)
-            trips.Add((_services.SellDetour.IsReturning ? "back from selling" : "sell trip", NavChipTone.Trip));
-        if (_services.TrainerWalk.IsBusy) trips.Add(("training", NavChipTone.Trip));
-        if (_services.PartyComeback.RecoveringMember is { } member)
-            trips.Add(($"going back for {member}", NavChipTone.Trip));
+            trips.Add((_services.SellDetour.IsReturning ? Back(_services.SellDetour.ResumePlan.Kind) : "Auto-Selling", NavChipTone.Trip));
+        if (_services.TrainerWalk.IsBusy) trips.Add(("Auto-Training", NavChipTone.Trip));
+        else if (_services.LoopRunner.ReturningFromDetour) trips.Add(("Back to Loop", NavChipTone.Trip));
+        if (_services.PartyComeback.RecoveringMember is not null) trips.Add(("@Comeback", NavChipTone.Trip));
         return trips;
     }
 
