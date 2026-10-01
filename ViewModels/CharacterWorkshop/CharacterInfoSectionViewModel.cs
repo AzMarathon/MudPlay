@@ -409,9 +409,9 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             && AppServices.Current.Profile.Current?.QuestLog?.Any(p => p.Complete && flags.Contains(p.Flag)) == true;
     }
 
-    // What the shown skill value means as a chance, by the engine rules recorded for
-    // Stock (GAME_MECHANICS "Sneaking", "Robbing players", "Exit traps", "Tracking"),
-    // assumed the same on Paradigm. Rolls are 0–100, so each figure is approximate.
+    // What each shown skill value comes to as a chance: the result, any cap, and any
+    // penalty that applies (GAME_MECHANICS "Sneaking", "Robbing players", "Exit traps",
+    // "Tracking"; Stock rules, assumed for Paradigm).
     private void ComputeSkillChances()
     {
         int stealth = _stats.Stealth;
@@ -419,37 +419,34 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         int encPct = encum.MaxWeight > 0 ? encum.CurrentWeight * 100 / encum.MaxWeight : 0;
         int encPenalty = encPct > 66 ? 10 : encPct > 33 ? 5 : 0;
         int chance = Math.Max(0, stealth - encPenalty);
-        StealthTip = stealth <= 0 ? null : string.Join("\n",
-            $"Sneak chance {chance}" + (encPenalty > 0 ? $" (−{encPenalty} for carrying {encPct}%)" : "")
-                + ", −1 for each player and monster in the room.",
-            $"`sn` takes ≈{Math.Min(chance, 95)}% (capped at 95).",
-            $"Each sneaked move keeps it ≈{Math.Min(chance, 100)}%.",
-            $"A miss is noticed ≈{Math.Clamp(_stats.Perception, 0, 100)}% (your Perception); otherwise it's silent.",
-            "Engine rules read from Stock; Paradigm assumed the same.");
+        List<string> stealthLines = new()
+        {
+            $"Sneak: {Capped(chance, 95)}",
+            $"Moving: {Capped(chance, 100)}",
+            "−1 per player or monster in the room",
+        };
+        if (encPenalty > 0) stealthLines.Add($"−{encPenalty} for carrying {encPct}%");
+        StealthTip = stealth <= 0 ? null : string.Join("\n", stealthLines);
 
         int thievery = _stats.Thievery;
-        ThieveryTip = thievery <= 0 ? "No Thievery: a rob can't succeed." : string.Join("\n",
-            $"Rob: succeeds ≈{Math.Min(thievery, 100)}%, fails quietly ≈{Math.Clamp(100 - thievery, 0, 10)}%, "
-                + $"caught ≈{Math.Max(0, 90 - thievery)}%.",
-            "Only getting caught tells the victim. Every rob counts as an evil act.",
-            "Engine rules read from Stock; Paradigm assumed the same.");
+        ThieveryTip = thievery <= 0 ? "Rob: 0%" : string.Join("\n",
+            $"Rob: {Capped(thievery, 100)}",
+            $"Quiet fail: {Math.Clamp(100 - thievery, 0, 10)}%",
+            $"Caught: {Math.Max(0, 90 - thievery)}%");
 
         int traps = _stats.Traps;
         TrapDisarmOdds? disarm = AppServices.Current.TrapDisarm.DisarmOdds;
-        TrapsTip = traps <= 0 ? "No Traps skill: searching won't find a trap." : string.Join("\n",
-            $"Searching a trapped exit finds the trap ≈{Math.Min(traps, 100)}%.",
-            disarm is { } d
-                ? $"Disarming (skill {d.Skill}): {d.Summary}."
-                : "Disarm odds show once a Traps value has been read.",
-            "Engine rules read from Stock; Paradigm assumed the same.");
+        TrapsTip = traps <= 0 ? "Find: 0%" : string.Join("\n",
+            $"Find: {Capped(traps, 100)}",
+            disarm is { } d ? $"Disarm: {d.Disarm}%  ·  safe fail {d.SafeMiss}%  ·  trap fires {d.Springs}%" : "Disarm: —");
 
         int tracking = _stats.Tracking;
-        TrackingTip = tracking <= 0
-            ? "No Tracking: `track` always fails."
-            : $"Each time the trail passed through your room, `track` reads it ≈{Math.Min(tracking, 100)}%.\n"
-              + "Engine rules read from Stock; Paradigm assumed the same.";
+        TrackingTip = $"Track: {Capped(Math.Max(0, tracking), 100)} per trail step";
     }
 
+    // "95% (105, capped at 95)" — the chance, and the raw figure when a cap cut it.
+    private static string Capped(int value, int cap) =>
+        value > cap ? $"{cap}% ({value}, capped at {cap})" : $"{value}%";
     // Aggregate the published completed-quest bonuses by ability id (quests stack,
     // so a stat granted by two quests sums) into the Quest Bonuses box rows.
     private void RebuildQuestBonusRows()
