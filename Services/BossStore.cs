@@ -71,7 +71,21 @@ public sealed class BossStore
             if (ov.Removed) byName.Remove(name);
             else byName[name] = ov;
         }
-        return byName.Values.Select(b => b.Clone()).ToList();
+        return byName.Values.Select(WithSeedResetDefaults).ToList();
+    }
+
+    // An overlay entry written before the reset defaults existed doesn't state them;
+    // it takes the seed boss's, so a boss the user only re-roomed still resets the
+    // way it ships.
+    private BossDef WithSeedResetDefaults(BossDef def)
+    {
+        BossDef clone = def.Clone();
+        if (_seedByName.TryGetValue(def.Name, out BossDef? seed))
+        {
+            clone.DefaultStopBefore ??= seed.DefaultStopBefore;
+            clone.DefaultGrabAll ??= seed.DefaultGrabAll;
+        }
+        return clone;
     }
 
     // Bosses visible on the given realm (Stock hides Paradigm-only entries).

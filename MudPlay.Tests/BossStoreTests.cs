@@ -115,7 +115,7 @@ public sealed class BossStoreTests : IDisposable
     }
 
     // Stop before ships off for the bosses that won't attack on sight — the Neutral
-    // ones, sheriff lionheart and mayor godfrey — and for the gigantic black ooze,
+    // ones, sheriff lionheart, justicar halford and mayor godfrey — and for the gigantic black ooze,
     // which is hostile but can't be avoided in the labyrinth (user, 2026-10-01).
     // Every other seed boss leaves it on.
     [Fact]
@@ -126,6 +126,9 @@ public sealed class BossStoreTests : IDisposable
         {
             AppPaths.ExtractEmbeddedSeeds(dir);
             List<BossDef> seed = JsonStore.Load<List<BossDef>>(Path.Combine(dir, "BossDefs.seed.json"))!;
+            // The live flag and its reset default ship in step.
+            Assert.All(seed, b => Assert.Equal(b.StopBefore, b.ResetStopBefore));
+            Assert.All(seed, b => Assert.False(b.ResetGrabAll));
             string[] off = seed.Where(b => !b.StopBefore).Select(b => b.Name).Distinct().OrderBy(n => n, StringComparer.Ordinal).ToArray();
             Assert.Equal(new[]
             {
@@ -146,6 +149,7 @@ public sealed class BossStoreTests : IDisposable
                 "grakh bonegrinder",
                 "grand master",
                 "hanging cocoon",
+                "justicar halford",
                 "kai master",
                 "lallim whitemane",
                 "lord chisholm",
@@ -166,6 +170,45 @@ public sealed class BossStoreTests : IDisposable
         {
             try { Directory.Delete(dir, recursive: true); } catch (IOException) { /* temp cleanup */ }
         }
+    }
+
+    // Each boss carries its own reset defaults; an edit to one is a delta the overlay keeps.
+    [Fact]
+    public void ResetDefaults_ArePerBoss_AndSurviveASave()
+    {
+        Assert.True(new BossDef().ResetStopBefore);
+        Assert.False(new BossDef().ResetGrabAll);
+
+        WriteSeed(Boss("cyclops", rooms: "7/730"));
+        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossDef edited = Assert.Single(s.Resolve());
+        edited.DefaultStopBefore = false;
+        edited.DefaultGrabAll = true;
+        s.Save([edited]);
+
+        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnActiveSetChanged(_scratchSet);
+        BossDef back = Assert.Single(reloaded.Resolve());
+        Assert.False(back.ResetStopBefore);
+        Assert.True(back.ResetGrabAll);
+        Assert.True(back.StopBefore);   // the live flag is untouched by a default edit
+    }
+
+    // An overlay entry saved before the reset defaults existed doesn't state them, so
+    // it resets the way the seed boss does.
+    [Fact]
+    public void OverlayEntryWithoutResetDefaults_TakesTheSeedBosss()
+    {
+        BossDef quiet = Boss("mayor godfrey", rooms: "1/1");
+        quiet.StopBefore = false; quiet.DefaultStopBefore = false;
+        WriteSeed(quiet);
+        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        s.Save([new BossDef { Name = "mayor godfrey", MonsterNumber = 1, Rooms = new() { "1/2" },
+            InStock = true, InParadigm = true, StopBefore = false }]);
+
+        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnActiveSetChanged(_scratchSet);
+        BossDef back = Assert.Single(reloaded.Resolve());
+        Assert.Equal(new[] { "1/2" }, back.Rooms);
+        Assert.False(back.ResetStopBefore);
     }
 
     // A boss stops the walk one room short unless the user turns that off.

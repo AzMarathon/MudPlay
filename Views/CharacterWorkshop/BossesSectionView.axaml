@@ -10,11 +10,13 @@
     <Grid Margin="22" RowDefinitions="Auto,*">
 
         <!-- Toolbar, left to right: filter, the active-timer summary, chest offload,
-             the two bulk toggles, timer sync, import / export, then Manage Bosses.
+             the two bulk toggles, timer sync, import / export, then Manage Bosses;
+             Reset to default sits alone at the right edge.
              Editing the boss list lives in the Manage Bosses dialog; the table itself
              is read-mostly (Stop before / Grab All toggle inline; Mark / Reset / Clear
              drive the timer). -->
-        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Center">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+        <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
             <TextBox Classes="clearable" Width="200" Margin="0,0,10,6" PlaceholderText="Filter by boss or room…"
                      Text="{Binding FilterText, Mode=TwoWay}"/>
             <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="0,0,18,6"
@@ -34,6 +36,10 @@
             <Button Content="Manage Bosses…" Margin="0,0,6,6" Command="{Binding ManageBossesCommand}"
                     ToolTip.Tip="Add, edit, or remove bosses in this realm's list."/>
         </WrapPanel>
+        <Button Grid.Column="1" Content="Reset to default" Margin="12,0,0,6" VerticalAlignment="Top"
+                Command="{Binding ResetToDefaultsCommand}"
+                ToolTip.Tip="Set Stop before and Grab All back to each boss's own defaults, for every boss in the table. The defaults are set in Manage Bosses…"/>
+        </Grid>
 
         <!-- Boss grid. Sortable by boss, respawn, and each timer (numeric sort keys
              so remaining time orders correctly; blank / expired rows sort last).

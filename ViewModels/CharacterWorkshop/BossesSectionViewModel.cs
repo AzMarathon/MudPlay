@@ -183,6 +183,21 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
     private void ToggleAllGrabAll() =>
         ToggleAll(r => r.CanGrabAll, r => r.GrabAll, (r, on) => r.GrabAll = on);
 
+    // Put Stop before and Grab All back to each boss's own defaults (set in the Manage
+    // dialog) for every boss in the table, filter or not.
+    [RelayCommand]
+    private void ResetToDefaults()
+    {
+        _suppress = true;
+        foreach (BossRowViewModel row in _allRows)
+        {
+            row.StopBefore = row.DefaultStopBefore;
+            if (row.CanGrabAll) row.GrabAll = row.DefaultGrabAll;
+        }
+        _suppress = false;
+        Persist();
+    }
+
     private void ToggleAll(Func<BossRowViewModel, bool> applies,
         Func<BossRowViewModel, bool> isOn, Action<BossRowViewModel, bool> set)
     {

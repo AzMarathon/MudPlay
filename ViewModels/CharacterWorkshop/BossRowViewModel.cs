@@ -55,6 +55,10 @@ public sealed partial class BossRowViewModel : ObservableObject
     // Iceforge); the tab hides the checkbox and shows a "cannot resolve" tooltip.
     public bool CanGrabAll { get; }
 
+    // This boss's own defaults (Manage dialog), which "Reset to default" restores.
+    public bool DefaultStopBefore => _def.ResetStopBefore;
+    public bool DefaultGrabAll => _def.ResetGrabAll;
+
     // Static respawn length ("10h" / "Cleanup" / "?") + its sort key (hours).
     [ObservableProperty] private string _respawnDisplay = string.Empty;
     [ObservableProperty] private int _respawnSortKey = int.MaxValue;

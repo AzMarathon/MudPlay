@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.49**
-> - Stop before defaults to off for Neutral bosses, sheriff lionheart, mayor godfrey and the gigantic black ooze
+> **Version 3.134.51**
+> - Stop before defaults to off for Neutral bosses, sheriff lionheart, justicar halford, mayor godfrey and the gigantic black ooze
+> - Bosses tab: Reset to default button puts Stop before and Grab All back to each boss's own defaults
+> - Manage Bosses: Default Stop Before and Default Grab All columns set those per boss; saving there no longer clears Grab All
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
