@@ -1233,6 +1233,21 @@ public sealed class HealthManagerTests
         Assert.Equal(1, h.ShadowRestResumeCount);
     }
 
+    // Mid-fight the client still reads stale-stealthed; ShadowRest must not hold combat
+    // there just because HP dipped under the rest trigger (report
+    // paradigm-20260930-192645).
+    [Fact]
+    public void ShadowRest_InAFight_DoesNotHold()
+    {
+        HealthSettings s = new() { UtilizeShadowRest = true };
+        using Harness h = new(s) { HostilesPresent = true };
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.InCombat = true;
+        h.State.Hp = 50;
+        Assert.False(h.Health.ShadowRestHolding);
+    }
+
     [Fact]
     public void ShadowRest_Inactive_NoResumeOnRecovery()
     {
@@ -1934,6 +1949,10 @@ public sealed class HealthManagerTests
         // RunDistance of these.
         public List<Game.Map.Direction> PlannedForward { get; } = new();
 
+        public Dictionary<Game.Map.RoomKey, Game.Map.Direction> PlannedFrom { get; } = new();
+        public Game.Map.Direction? PlannedDirectionFrom(Game.Map.RoomKey room) =>
+            PlannedFrom.TryGetValue(room, out Game.Map.Direction d) ? d : null;
+
         public Game.Map.Direction? PeekNextPlannedDirection() => NextPlanned;
         public IReadOnlyList<Game.Map.Direction> PeekPlannedDirections(int count) =>
             PlannedForward.Take(count).ToList();
@@ -2200,6 +2219,92 @@ public sealed class HealthManagerTests
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));   // landed — a rat is here
 
         Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
+    }
+
+    // A walk 1/10 → E → 1/11 → … ; behind its start 1/10 runs W to 1/9 and on W to
+    // 1/8, and N of 1/10 is 1/12. Reverse paths lead back to the start (1/10).
+    private static FleeHarness WalkStartFlee()
+    {
+        FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 1;
+        h.Engine!.JourneyOrigin = new Game.Map.RoomKey(1, 10);
+        h.Engine.PlannedFrom[new Game.Map.RoomKey(1, 10)] = Game.Map.Direction.E;
+        Dictionary<int, Dictionary<Game.Map.Direction, int>> map = new()
+        {
+            [8] = new() { [Game.Map.Direction.E] = 9 },
+            [9] = new() { [Game.Map.Direction.E] = 10, [Game.Map.Direction.W] = 8 },
+            [10] = new() { [Game.Map.Direction.E] = 11, [Game.Map.Direction.W] = 9, [Game.Map.Direction.N] = 12 },
+            [11] = new() { [Game.Map.Direction.W] = 10 },
+            [12] = new() { [Game.Map.Direction.S] = 10 },
+        };
+        h.Health.RoomExits = k => map.TryGetValue(k.Room, out var e)
+            ? e.ToDictionary(x => x.Key, x => new Game.Map.RoomKey(1, x.Value)) : null;
+        h.ReversePath = (from, _) => from.Room switch
+        {
+            11 => new[] { Game.Map.Direction.W },
+            9 => new[] { Game.Map.Direction.E },
+            8 => new[] { Game.Map.Direction.E, Game.Map.Direction.E },
+            _ => null,
+        };
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        return h;
+    }
+
+    // At the walk's start there's no trail left: run the opposite way to the walk,
+    // past the boss room to the north (report paradigm-20260930-192727).
+    [Fact]
+    public void Flee_AtTheWalkStart_RunsOppositeThePlan_AvoidingABossRoom()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.RoomRisk = k => (k.Room == 12, 0);
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 10));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+
+        Assert.Equal(new[] { Game.Map.Direction.W }, h.Engine!.SentBacktrackMoves);
+    }
+
+    // A bigger lair the opposite way loses to a quiet room (user, 2026-09-30).
+    [Fact]
+    public void Flee_AtTheWalkStart_SteersAroundABigLair()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.RoomRisk = k => (false, k.Room == 9 ? 5 : 0);
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 10));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+
+        Assert.Equal(new[] { Game.Map.Direction.N }, h.Engine!.SentBacktrackMoves);
+    }
+
+    // The report's bounce: a hostile followed each one-room leg, and the next leg went
+    // straight back. Still under the trigger, a follower keeps us running away —
+    // never back into the room the last leg fled.
+    [Fact]
+    public void KeepRunning_HostileFollows_NeverDoublesBack()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.RoomRisk = k => (k.Room == 12, 0);
+        h.HostileInRoom = true;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 11));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+        Assert.Equal(new[] { Game.Map.Direction.W }, h.Engine!.SentBacktrackMoves);   // back to the start
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 10));
+        Assert.True(h.Health.KeepRunning());                                           // it followed us
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+        Assert.True(h.Health.KeepRunning());
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 8));
+
+        // 1/11 → 1/10 → 1/9 → 1/8, each leg away; at the dead end the only way out is
+        // back, so it stands and fights rather than run into what followed it.
+        Assert.Equal(new[] { Game.Map.Direction.W, Game.Map.Direction.W, Game.Map.Direction.W },
+            h.Engine.SentBacktrackMoves);
+        Assert.False(h.Health.KeepRunning());
     }
 
     private static FleeHarness HitAndRunFlee()

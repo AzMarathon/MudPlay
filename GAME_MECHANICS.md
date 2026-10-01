@@ -3102,10 +3102,11 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - `StealthManager` holds movement (`SneakCooldownGate`) on `You may not sneak right now!` while Auto-Sneak is on. It retries `sn` every 2 s and releases once sneaking, or after 15 s.
 - `StealthManager.SneakEntry` → `SessionActivityTracker.NoteSneakEntry`: Session Stats' **Sneak %** counts a room entry as held on `Sneaking...` and as lost on `You make a sound as you enter the room!` or a silent loss.
 - `StealthManager.IsStealthedHere` (the backstab gate) counts a sneak only once the new room has confirmed it. `ReadyToMoveSneaking` holds a planned step until a sneak settles (`SneakSettleGate`, retries up to 15 s).
-- **Sneak keeping** (`Game.Stealth.SneakGuard`; **Client policy**, user 2026-09-28). The client holds its own sneak-ending automation in three cases:
+- **Sneak keeping** (`Game.Stealth.SneakGuard`; **Client policy**, user 2026-09-28). The client holds its own sneak-ending automation in four cases:
   - **A backstab is owed or unresolved here:** hold until it fires.
   - **Our sneaked move is in flight:** hold until it lands.
   - **Sneaking past NPCs we won't fight** (auto-combat off, or the room suppressed): hold until a room with no NPCs, since a re-sneak won't take with one there. There the held actions go out and we re-sneak.
+  - **ShadowResting beside a monster** (*Utilize shadowrest*, Auto-Sneak on or off): hold until the rest reaches rest-max (`SneakHold.UntilRested`; user, 2026-09-30, report `paradigm-20260930-193005`). A monster attacking ends the ShadowRest, and the hold with it.
   - **Held:**
     - automatic gear swaps (`EquipmentManager.HoldGear`), re-run when the hold lifts;
     - room search;

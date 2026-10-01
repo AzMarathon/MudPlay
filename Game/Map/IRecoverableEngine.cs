@@ -44,6 +44,11 @@ public interface IRecoverableEngine
     // circuit to fill the count.
     IReadOnlyList<Direction> PeekPlannedDirections(int count);
 
+    // The direction the plan leaves this room by, wherever the run stands now (a
+    // flee can put us behind the step index). Null when the plan doesn't pass
+    // through it. A flee with no trail left runs the other way.
+    Direction? PlannedDirectionFrom(RoomKey room) => null;
+
     // Send a single direction directly — bypassing the engine's planning
     // queue — and call RoomTracker.NoteMoveSent so the tracker stays in
     // sync. Used by the gate to backtrack during tier-3 recovery. The

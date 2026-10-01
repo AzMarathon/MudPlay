@@ -397,6 +397,14 @@ public sealed class CombatStateTracker : IDisposable
         _isInDarkRoom = isInDarkRoom;
     }
 
+    // True while combat is held on purpose (a ShadowRest resting stealthed beside a
+    // monster). The silence is the point then, not a stall: the watchdog leaves the
+    // gate up instead of re-displaying the room every 6 s (report
+    // paradigm-20260930-193005). A combat line ends the hold, and the watchdog with it.
+    private Func<bool>? _combatHeldOnPurpose;
+
+    public void SetCombatHeldOnPurposeProbe(Func<bool> held) => _combatHeldOnPurpose = held;
+
     // Wire the CombatSettings.BreakBeforeFleeing reader. When set and true,
     // toggling auto-attack OFF mid-fight sends `break` before the Combat gate
     // releases the walker, so the disengage lands ahead of the walker's next
@@ -502,6 +510,7 @@ public sealed class CombatStateTracker : IDisposable
         }
 
         if (_wireSender is null) return;
+        if (_combatHeldOnPurpose?.Invoke() == true) return;
         // Nothing to rescue unless the gate is held OR InCombat is stuck true.
         // With auto-attack off InCombat can hang with the gate clear, so the
         // gate alone is not a sufficient trigger — see shape 2 above.

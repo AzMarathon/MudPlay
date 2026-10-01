@@ -1400,6 +1400,25 @@ public sealed class CombatStateTrackerTests
         Assert.False(h.CombatGateHeld);
     }
 
+    // A ShadowRest holds combat beside a monster on purpose; that quiet isn't a stall,
+    // so the watchdog doesn't re-display the room every 6 s (report
+    // paradigm-20260930-193005).
+    [Fact]
+    public void IdleStallWatchdog_CombatHeldOnPurpose_LeavesTheRoomAlone()
+    {
+        using Harness h = new();
+        h.WireSender();
+        h.Tracker.SetCombatHeldOnPurposeProbe(() => true);
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+
+        h.FakeNow = h.FakeNow.AddSeconds(7);
+        h.Tracker.OnCombatTick();
+
+        Assert.Empty(h.SentRaw);
+        Assert.True(h.CombatGateHeld);
+    }
+
     [Fact]
     public void IdleStallWatchdog_DarkRoom_ClearsGateWithoutResyncCr()
     {

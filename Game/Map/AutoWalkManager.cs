@@ -292,6 +292,27 @@ public sealed class AutoWalkManager : IRecoverableEngine
         return _path[_index] is MoveStep move ? move.Direction : (Direction?)null;
     }
 
+    public Direction? PlannedDirectionFrom(RoomKey room)
+    {
+        if (_path is null || _origin is not { } here) return null;
+        foreach (WalkStep step in _path)
+        {
+            switch (step)
+            {
+                case MoveStep move:
+                    if (here.Equals(room)) return move.Direction;
+                    here = move.ExpectedTarget;
+                    break;
+                case BoatStep boat:
+                    here = boat.Passage.ArrivalRoom;
+                    break;
+                case SysGotoStep:
+                    return null;
+            }
+        }
+        return null;
+    }
+
     public IReadOnlyList<Direction> PeekPlannedDirections(int count)
     {
         if (count < 1 || _path is null) return Array.Empty<Direction>();
