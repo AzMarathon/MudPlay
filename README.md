@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.56**
-> - Unrecognized Lines skips the passage line a named exit prints (`go manhole`, `go path`)
+> **Version 3.134.57**
+> - Transaction history: a stash room's Total line also shows what the coins come to, e.g. (≈ 8.7 platinum)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

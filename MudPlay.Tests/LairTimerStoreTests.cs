@@ -354,7 +354,7 @@ public sealed class LairTimerStoreTests : IDisposable
     [Fact]
     public void Paradigm_ClockStillRunsFromTheEntry()
     {
-        // Paradigm's clock is unsettled (issue #813); it keeps timing from the entry.
+        // Paradigm's clock is unsettled (issue #839); it keeps timing from the entry.
         var (cache, graph, tracker) = BuildFixture(realm: RealmType.ParaMud);
         using LairTimerStore store = new(cache, graph, tracker);
         RoomKey lair = new(5, 100);

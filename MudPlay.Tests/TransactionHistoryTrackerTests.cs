@@ -89,7 +89,7 @@ public sealed class TransactionHistoryTrackerTests
         Assert.Equal(2, rows.Count);
         Assert.All(rows, e => Assert.Equal(TransactionKind.Stash, e.Kind));
         Assert.Equal("Hid a torch", rows[0].Detail);
-        Assert.Equal("Last: 40 platinum, 400 gold - Total Stashes: 1 | Avg: 44 platinum | Total: 40 platinum, 400 gold",
+        Assert.Equal("Last: 40 platinum, 400 gold - Total Stashes: 1 | Avg: 44 platinum | Total: 40 platinum, 400 gold (≈ 44 platinum)",
             rows[1].Detail);
     }
 
@@ -109,7 +109,7 @@ public sealed class TransactionHistoryTrackerTests
     {
         (TransactionHistoryTracker t, _) = Make();
         t.NoteStash(new[] { ("copper", 250_000L) }, Array.Empty<string>());
-        Assert.Equal("Last: 250,000 copper - Total Stashes: 1 | Avg: 25 platinum | Total: 250,000 copper",
+        Assert.Equal("Last: 250,000 copper - Total Stashes: 1 | Avg: 25 platinum | Total: 250,000 copper (≈ 25 platinum)",
             Assert.Single(t.Snapshot()).Detail);
     }
 
@@ -129,7 +129,7 @@ public sealed class TransactionHistoryTrackerTests
 
         TransactionEntry e = Assert.Single(t.Snapshot());
         Assert.Equal(c.Now, e.Time);                      // the latest stash's time
-        Assert.Equal("Last: 300 silver - Total Stashes: 2 | Avg: 20 gold | Total: 400 silver", e.Detail);
+        Assert.Equal("Last: 300 silver - Total Stashes: 2 | Avg: 20 gold | Total: 400 silver (≈ 40 gold)", e.Detail);
         Assert.Equal(room, e.Location);
         Assert.Equal(e, Assert.Single(replaced).New);
     }
@@ -143,7 +143,7 @@ public sealed class TransactionHistoryTrackerTests
         c.Advance(1);
         t.NoteStash(new[] { ("silver", 115L) }, Array.Empty<string>(), "Stump (3/7)");
 
-        Assert.Equal("Last: 1 gold, 115 silver - Total Stashes: 1 | Avg: 12 gold, 5 silver | Total: 1 gold, 115 silver",
+        Assert.Equal("Last: 1 gold, 115 silver - Total Stashes: 1 | Avg: 12 gold, 5 silver | Total: 1 gold, 115 silver (≈ 12.5 gold)",
             Assert.Single(t.Snapshot()).Detail);
     }
 
@@ -181,7 +181,7 @@ public sealed class TransactionHistoryTrackerTests
         Assert.Equal("Deposited 500 wealth", rows[0].Detail);
         Assert.Equal("Hid a torch", rows[1].Detail);
         // Two visits: 94 silver + 1 gold together, then 106 silver.
-        Assert.Equal("Last: 106 silver - Total Stashes: 2 | Avg: 10 gold, 5 silver | Total: 1 gold, 200 silver", rows[2].Detail);
+        Assert.Equal("Last: 106 silver - Total Stashes: 2 | Avg: 10 gold, 5 silver | Total: 1 gold, 200 silver (≈ 21 gold)", rows[2].Detail);
 
         // An earlier build's one-line roll-up reads back the same way.
         (TransactionHistoryTracker interim, _) = Make();
@@ -190,7 +190,7 @@ public sealed class TransactionHistoryTrackerTests
             new TransactionEntry(t0, TransactionKind.Stash,
                 "Hid 127 silver — avg 12 gold, 7 silver over 3 stashes — total 381 silver", "Stump (3/7)"),
         });
-        Assert.Equal("Last: 127 silver - Total Stashes: 3 | Avg: 12 gold, 7 silver | Total: 381 silver",
+        Assert.Equal("Last: 127 silver - Total Stashes: 3 | Avg: 12 gold, 7 silver | Total: 381 silver (≈ 38.1 gold)",
             Assert.Single(interim.Snapshot()).Detail);
 
         // That row, loaded again, keeps counting from where it was.
@@ -198,7 +198,7 @@ public sealed class TransactionHistoryTrackerTests
         again.Hydrate(rows);
         c2.Now = t0.AddHours(1);
         again.NoteStash(new[] { ("silver", 100L) }, Array.Empty<string>(), "Stump (3/7)");
-        Assert.Equal("Last: 100 silver - Total Stashes: 3 | Avg: 10 gold, 3 silver, 3 copper | Total: 1 gold, 300 silver",
+        Assert.Equal("Last: 100 silver - Total Stashes: 3 | Avg: 10 gold, 3 silver, 3 copper | Total: 1 gold, 300 silver (≈ 31 gold)",
             again.Snapshot()[^1].Detail);
     }
 
@@ -366,5 +366,25 @@ public sealed class TransactionHistoryTrackerTests
         (TransactionHistoryTracker again, _) = Make();
         again.Hydrate(t.Snapshot());
         Assert.True(Assert.Single(again.Snapshot()).Keep);
+    }
+
+    // The Total line adds what the coins come to, in the highest coin it reaches —
+    // and a row carrying that reads back the same.
+    [Fact]
+    public void CoinStash_TotalLine_AddsItsWorth()
+    {
+        (TransactionHistoryTracker t, Clock c) = Make();
+        t.NoteStash(new[] { ("gold", 11L), ("silver", 8_617L) }, Array.Empty<string>(), "Tunnel (9/413)");
+        string detail = Assert.Single(t.Snapshot()).Detail;
+        Assert.EndsWith("Total: 11 gold, 8,617 silver (≈ 8.7 platinum)", detail);
+
+        (TransactionHistoryTracker again, _) = Make();
+        again.Hydrate(t.Snapshot());
+        Assert.Equal(detail, Assert.Single(again.Snapshot()).Detail);
+
+        // One pile of the coin the worth would be in: nothing to add.
+        (TransactionHistoryTracker plain, _) = Make();
+        plain.NoteStash(new[] { ("gold", 5L) }, Array.Empty<string>());
+        Assert.EndsWith("Total: 5 gold", Assert.Single(plain.Snapshot()).Detail);
     }
 }
