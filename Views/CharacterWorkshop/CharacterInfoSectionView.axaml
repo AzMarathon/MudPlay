@@ -182,8 +182,8 @@
                                     Command="{Binding OpenStatBreakpointsCommand}" CommandParameter="Charm"
                                     ToolTip.Tip="Show what each point of Charm gives you"/>
                             <TextBlock Grid.Row="8" Grid.Column="3" Classes="FieldValue" Text="{Binding Charm}" Margin="0,0,20,3"/>
-                            <TextBlock Grid.Row="8" Grid.Column="4" Classes="FieldLabel" Text="Magic Res" Margin="0,0,8,3"/>
-                            <TextBlock Grid.Row="8" Grid.Column="5" Classes="FieldValue" Text="{Binding MagicRes}" Margin="0,0,0,3"/>
+                            <TextBlock Grid.Row="8" Grid.Column="4" Classes="FieldLabel" Text="Magic Res" Margin="0,0,8,3" ToolTip.Tip="{Binding MagicResTip}"/>
+                            <TextBlock Grid.Row="8" Grid.Column="5" Classes="FieldValue" Text="{Binding MagicRes}" Margin="0,0,0,3" ToolTip.Tip="{Binding MagicResTip}"/>
 
                             <!-- Row 9: (left blank) | Spellcasting -->
                             <TextBlock Grid.Row="9" Grid.Column="4" Classes="FieldLabel" Text="Spellcasting" Margin="0,0,8,3"/>

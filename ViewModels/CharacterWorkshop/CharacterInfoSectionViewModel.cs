@@ -15,6 +15,7 @@ using MudPlay.Game.Cash;
 using MudPlay.Game.GameData;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Quests;
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.Views.CharacterWorkshop;
@@ -128,6 +129,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     [ObservableProperty] private string? _thieveryTip;
     [ObservableProperty] private string? _trapsTip;
     [ObservableProperty] private string? _trackingTip;
+    [ObservableProperty] private string? _magicResTip;
 
     // How each attack row was worked out — the inputs, and which of them came from
     // gear and which from the buffs being cast on us.
@@ -354,6 +356,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         ComputeDerivedCombat(combined.Totals, classRow, raceRow);
         ComputeRegen(combined.Totals, classRow);
         ComputeSkillChances();
+        ComputeMagicResTip();
     }
 
     // HP and mana per regen tick (CharacterCalculator), with when each tick lands
@@ -451,6 +454,27 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
         int tracking = _stats.Tracking;
         TrackingTip = $"Track: {Capped(Math.Max(0, tracking), 100)} per trail step";
+    }
+
+    // What Magic Res comes to against a monster's spell: the change in damage taken
+    // and the chance to resist it outright (GAME_MECHANICS "Magic Resist (M.R.) and
+    // `TypeOfResists`").
+    private void ComputeMagicResTip()
+    {
+        int mr = _stats.MagicRes;
+        if (mr <= 0) { MagicResTip = null; return; }
+        RealmType realm = _gameData.ActiveRealm;
+        bool antimagic = ItemEquipFilter.ResolveClassProfile(_gameData, _stats.Class).AntiMagic;
+        double change = SpellDamageCalculator.PlayerMagicResistDamagePercent(mr, antimagic, realm);
+        int cutCap = antimagic ? 75 : 50;
+        int rawCut = SpellDamageCalculator.UncappedMagicResistCut(mr, antimagic);
+        string damage = change == 0 ? "no change"
+            : (change < 0 ? "−" : "+") + Math.Abs(change).ToString("0.#", CultureInfo.InvariantCulture) + "%"
+              + (rawCut > cutCap ? $" ({rawCut}, capped at {cutCap})" : "");
+        MagicResTip = string.Join("\n",
+            $"Spell damage taken: {damage}" + (antimagic ? " (AntiMagic)" : ""),
+            $"Resist a spell outright: {Capped(mr / 2, SpellDamageCalculator.PlayerFullResistCap(realm))}",
+            "Only for spells that magic resistance works on");
     }
 
     // "95% (105, capped at 95)" — the chance, and the raw figure when a cap cut it.

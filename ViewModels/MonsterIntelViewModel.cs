@@ -1179,14 +1179,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         foreach (MonsterAttackSlot a in m.Attacks)
         {
             int? hit = PerAttackHitYou(a, m);
-            AttackRows.Add(BuildAttackRow(a, hit));
+            AttackRows.Add(BuildAttackRow(a, hit, MagicResNote(a.SpellMagicRes, a.SpellDmgMin, a.SpellDmgMax)));
         }
         foreach (MonsterMidSpellSlot mid in m.MidSpells)
             AttackRows.Add(new AttackRowViewModel(
                 $"({mid.Percent}%) Between-rounds spell", $"Spell #{mid.SpellId}"
                 + (mid.Level > 0 ? $" lvl {mid.Level}" : string.Empty),
                 mid.DmgMax > 0 ? $"{FormatDamageRange(mid.DmgMin, mid.DmgMax)} dmg" : string.Empty,
-                string.Empty));
+                string.Empty, MagicResNote(mid.SpellMagicRes, mid.DmgMin, mid.DmgMax)));
 
         RebuildAbilities(m);
         RebuildYourMatchup(m);
@@ -1400,7 +1400,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // is this physical attack's own chance to land on the player (null for spell
     // slots / no character), appended to the damage line so each attack shows its
     // individual to-hit next to its accuracy.
-    private static AttackRowViewModel BuildAttackRow(MonsterAttackSlot a, int? hitYou)
+    private static AttackRowViewModel BuildAttackRow(MonsterAttackSlot a, int? hitYou, string magicResNote)
     {
         string header = string.IsNullOrEmpty(a.Name) ? "Attack" : a.Name;
         string chance = $"({(a.TruePercent > 0 ? (int)Math.Round(a.TruePercent) : a.Percent)}%) {header}";
@@ -1414,13 +1414,48 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 ? $"{FormatDamageRange(a.SpellDmgMin, a.SpellDmgMax)} dmg · Success {a.MinDamage}%"
                 : $"Success {a.MinDamage}%";
             return new AttackRowViewModel(chance, $"Spell #{a.Accuracy} lvl {a.MaxDamage}",
-                spellDetail, a.Energy > 0 ? $"{a.Energy} energy" : string.Empty);
+                spellDetail, a.Energy > 0 ? $"{a.Energy} energy" : string.Empty, magicResNote);
         }
         string kind = a.Type == 3 ? "Rob" : "Physical";
         string detail = $"{a.MinDamage}-{a.MaxDamage} dmg, acc {a.Accuracy}"
             + (hitYou is { } h ? $" → {h}% to hit you" : string.Empty);
         return new AttackRowViewModel(chance, kind, detail,
             a.Energy > 0 ? $"{a.Energy} energy" : string.Empty);
+    }
+
+    // What the character's Magic Res does to one of the monster's spells: the damage
+    // range after the cut and the chance to resist it outright, or "ignores MR" when
+    // neither applies (GAME_MECHANICS "Magic Resist (M.R.) and `TypeOfResists`").
+    // Without a character it only says which of the two the spell is open to.
+    private string MagicResNote(MonsterSpellMagicRes? spell, int dmgMin, int dmgMax)
+    {
+        if (spell is not { } sp) return string.Empty;
+        int mr = _stats?.MagicRes ?? 0;
+        if (!_hasCharacterContext || mr <= 0)
+        {
+            if (sp.CutsDamage) return sp.TypeOfResists == 2 ? "cut by MR, can be resisted" : "cut by MR";
+            return sp.TypeOfResists == 2 ? "can be resisted" : "ignores MR";
+        }
+
+        RealmType realm = _gameData!.ActiveRealm;
+        bool antimagic = ItemEquipFilter.ResolveClassProfile(_gameData, _stats!.Class).AntiMagic;
+        List<string> parts = new();
+        if (sp.CutsDamage && dmgMax > 0)
+        {
+            long lo = SpellDamageCalculator.AfterTargetResists(dmgMin, true, mr, antimagic, 0, realm);
+            long hi = SpellDamageCalculator.AfterTargetResists(dmgMax, true, mr, antimagic, 0, realm);
+            double change = SpellDamageCalculator.PlayerMagicResistDamagePercent(mr, antimagic, realm);
+            parts.Add(change == 0
+                ? $"your MR {mr}: no change"
+                : $"your MR {mr}: {FormatDamageRange((int)lo, (int)hi)} dmg ({(change < 0 ? "−" : "+")}{Math.Abs(change):0.#}%)");
+        }
+        else if (sp.CutsDamage)
+        {
+            parts.Add("cut by MR");
+        }
+        if (sp.TypeOfResists == 2 || (sp.TypeOfResists == 1 && antimagic))
+            parts.Add($"{Math.Min(SpellDamageCalculator.PlayerFullResistCap(realm), mr / 2)}% to resist outright");
+        return parts.Count == 0 ? "ignores MR" : string.Join(" · ", parts);
     }
 
     // A damage range, collapsing an equal min/max to a single figure ("40" not
@@ -1431,5 +1466,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
 // One line of the Attacks panel — deliberately loose text fields (Header,
 // Kind, Detail, Energy) rather than a rigid schema, since a physical slot and
-// a spell slot show genuinely different information.
-public sealed record AttackRowViewModel(string Header, string Kind, string Detail, string Energy);
+// a spell slot show genuinely different information. MagicRes is a spell slot's
+// own line on what the character's magic resist does to it.
+public sealed record AttackRowViewModel(string Header, string Kind, string Detail, string Energy, string MagicRes = "");

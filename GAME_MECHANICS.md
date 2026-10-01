@@ -2008,7 +2008,22 @@ How one damage spell cast against a monster is worked out.
     ≥100% elemental resist is safely pre-emptable.
   - Among Normal spells, `magic missile` is `TypeOfResists 0` (never rolled-resisted) while `harm` is
     `TypeOfResists 2`.
+- **A player hit by a monster's spell gets the same two effects from their own Magic Res** *(Stock
+  [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_monster_cast`; Paradigm [OBSERVED] 2026-09-30,
+  MMUD-Explorer `clsMonsterAttackSim` `CalcResistedDamage` / `IsSpellResisted`, no realm branch)*.
+  - **Partial cut, Damage(-MR) (17) only** (Stock handler @ `0x4288f0`): an AntiMagic character
+    (ability 51) takes `MR/2`% less, 0–75; anyone else `(MR − 50)/2`% less, capped at 50; with no cut
+    and no AntiMagic the hit grows by `(50 − MR)%`. Applied after the elemental resist (@ `0x428230`).
+  - **Full resist** (Stock @ `0x427e92`): rolled only after a successful cast, when `TypeOfResists` is
+    2, or 1 and the player has AntiMagic. The chance is `MR/2`%, **capped at 97 for a player on Stock**
+    (`cmp edx,0x61`; a monster target caps at 98). MMUD-Explorer's sim caps it at 98 (MR 196), which
+    the client uses for Paradigm. Wire text: `You resisted %s's cast of %s.`
 - **Client use:**
+  - Character Info's Magic Res tooltip (`CharacterInfoSectionViewModel.ComputeMagicResTip`) and Monster
+    Intel's per-spell note on the Attacks rows (`MonsterIntelViewModel.MagicResNote`) show the cut and
+    the full-resist chance for the character's current Magic Res, via
+    `SpellDamageCalculator.PlayerMagicResistDamagePercent` / `PlayerFullResistCap`; a monster spell
+    open to neither reads "ignores MR". AntiMagic is read from the class record only.
   - The Game Data spell view's interactive damage calculator (`SpellDamageCalculator`) implements the
     reduction in each realm's order — see *Spell damage — Stock vs Paradigm*. Below MR 50 the hit is
     amplified by `(50 − MR)%`. The probabilistic full-resist chance is shown separately, never folded

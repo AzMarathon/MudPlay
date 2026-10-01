@@ -19,10 +19,18 @@ namespace MudPlay.Game.Combat;
 // WITHOUT the player per-round energy multiplier (the monster casts once when the
 // attack lands; how often it fires rides the monster's own attack energy). Both 0
 // for a physical slot, a non-damaging spell, or an unresolved spell number.
+//
+// SpellMagicRes says how the target's magic resist bears on the linked spell; null
+// for a physical slot or an unresolved spell number.
 public sealed record MonsterAttackSlot(
     string Name, int Type, int Percent, double TruePercent,
     int MinDamage, int MaxDamage, int Accuracy, int Energy, int HitSpell,
-    int SpellDmgMin = 0, int SpellDmgMax = 0);
+    int SpellDmgMin = 0, int SpellDmgMax = 0, MonsterSpellMagicRes? SpellMagicRes = null);
+
+// How a target's magic resist bears on one monster spell: CutsDamage when it is a
+// Damage(-MR) spell (the partial cut applies), and the spell's TypeOfResists (0
+// never resisted outright, 1 only by an AntiMagic target, 2 by anyone).
+public readonly record struct MonsterSpellMagicRes(bool CutsDamage, int TypeOfResists);
 
 // One MidSpell-N ("between rounds") slot. Percent is stored as a cumulative
 // threshold across the 5 slots on the raw row — MonsterCatalog resolves this to
@@ -31,7 +39,7 @@ public sealed record MonsterAttackSlot(
 // single-cast damage range (same model as MonsterAttackSlot's), 0 for a
 // non-damaging or unresolved spell.
 public sealed record MonsterMidSpellSlot(int SpellId, int Percent, int Level,
-    int DmgMin = 0, int DmgMax = 0);
+    int DmgMin = 0, int DmgMax = 0, MonsterSpellMagicRes? SpellMagicRes = null);
 
 // One DropItem-N slot.
 public sealed record MonsterDropSlot(int ItemId, int Percent);
@@ -388,7 +396,8 @@ public sealed class MonsterCatalog
                 Energy: ReadInt(row, $"AttEnergy-{i}"),
                 HitSpell: ReadInt(row, $"AttHitSpell-{i}"),
                 SpellDmgMin: dmgMin,
-                SpellDmgMax: dmgMax));
+                SpellDmgMax: dmgMax,
+                SpellMagicRes: type == 2 ? ResolveSpellMagicRes(accuracy, resolveFormula) : null));
         }
 
         // MidSpell%-N is a cumulative threshold across the 5 slots; resolve to
@@ -405,7 +414,8 @@ public sealed class MonsterCatalog
             cumulative = threshold;
             int level = ReadInt(row, $"MidSpellLVL-{i}");
             (int mdMin, int mdMax) = ResolveSpellDamage(spellId, level, resolveFormula);
-            midSpells.Add(new MonsterMidSpellSlot(spellId, delta, level, mdMin, mdMax));
+            midSpells.Add(new MonsterMidSpellSlot(spellId, delta, level, mdMin, mdMax,
+                ResolveSpellMagicRes(spellId, resolveFormula)));
         }
 
         List<MonsterDropSlot> drops = new();
@@ -507,6 +517,12 @@ public sealed class MonsterCatalog
         if (lo < 0) lo = 0;
         return ((int)lo, (int)hi);
     }
+
+    private static MonsterSpellMagicRes? ResolveSpellMagicRes(
+        int spellNumber, Func<int, SpellFormulaInput?> resolveFormula) =>
+        resolveFormula(spellNumber) is { } f
+            ? new MonsterSpellMagicRes(SpellDamageCalculator.UsesMagicResist(f), f.TypeOfResists)
+            : null;
 
     private static void AddElement(HashSet<string> into, int attType)
     {

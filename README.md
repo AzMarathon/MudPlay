@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.37**
-> - Walks lever puzzles with long go-pull-return detours, e.g. the two-lever gate to the new master assassin, instead of stopping at the shut exit
+> **Version 3.134.40**
+> - Logging in next to a monster no longer drops the fight when the room is re-located, so auto-sneak stops sending `sn` mid-combat
+> - Character Info: Magic Res tooltip shows the spell damage change and the chance to resist a spell outright
+> - Monster Intel: each monster spell shows what your Magic Res does to it, or "ignores MR"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

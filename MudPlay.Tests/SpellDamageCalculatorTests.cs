@@ -146,4 +146,20 @@ public sealed class SpellDamageCalculatorTests
         SpellFormulaInput buff = new() { Number = 10, Abilities = [new SpellAbility(2, 10)] };
         Assert.False(SpellDamageCalculator.IsDamageSpell(buff));
     }
+
+    // A player's own magic resist against a monster's Damage(-MR) spell: the cut is
+    // (MR-50)/2 capped at 50, MR/2 capped at 75 for an AntiMagic class, and a hit is
+    // amplified below MR 50.
+    [Theory]
+    [InlineData(55, false, -2)]
+    [InlineData(50, false, 0)]
+    [InlineData(30, false, 20)]
+    [InlineData(200, false, -50)]
+    [InlineData(100, true, -50)]
+    [InlineData(200, true, -75)]
+    public void PlayerMagicResistDamagePercent_BothRealms(int mr, bool antimagic, double expected)
+    {
+        Assert.Equal(expected, SpellDamageCalculator.PlayerMagicResistDamagePercent(mr, antimagic, RealmType.Stock));
+        Assert.Equal(expected, SpellDamageCalculator.PlayerMagicResistDamagePercent(mr, antimagic, RealmType.ParaMud));
+    }
 }
