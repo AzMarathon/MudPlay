@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.25**
+> **Version 3.134.26**
 > - Navigation hold chips fade out over 3 s instead of 2
 > - The "+N.NN lvls" readout rounds down, so it never shows a level banked before it is
 > - Auto-train's funding counts the trip's tolls and fares, so a toll on the way doesn't leave it short at the trainer
@@ -10,6 +10,7 @@
 > - A sale that crosses the auto-deposit threshold goes to the bank from the shop before returning
 > - Hold chips show only the holds worth seeing, with clearer names: Low HP, Low MANA, @Wait <name>, Downed Ally <name>, <name> disconnected, Waiting on <name> to join, Buffing / Curing / Healing, Auto-all is off…
 > - Character Info's attack table counts the buffs being cast on you (e.g. smite, shadowform), with a tooltip showing how each row was worked out
+> - Session Stats' Sneak % rounds down to a tenth, so a missed sneak doesn't read as 100%
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

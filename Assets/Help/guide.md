@@ -1888,7 +1888,7 @@ The **Player Statistics** panel is your own combat, read off the same round ledg
 
 The **Time Analysis** panel splits the session's time into moving, attacking, resting and waiting, with the time spent under each ailment. Below that:
 
-- **Sneak** — the share of rooms you entered while sneaking where the sneak held (the room showed `Sneaking...`). A loud entry, or a room that showed without `Sneaking...`, counts as a lost sneak. Hover it for the counts.
+- **Sneak** — the share of rooms you entered while sneaking where the sneak held (the room showed `Sneaking...`). A loud entry, or a room that showed without `Sneaking...`, counts as a lost sneak. It rounds down to a tenth (1,067 of 1,069 reads 99.8%, not 100%). Hover it for the counts.
 - **Walk** — the average time per walk or loop step, from the move going out to the new room showing. Time stopped between steps (a fight, a rest, a door, a gate) doesn't count, and a step that didn't land isn't timed.
 - **Loop laps** — while a loop runs: laps completed, the last and average lap time, the live current lap and the room each lap starts at.
 

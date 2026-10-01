@@ -1,6 +1,6 @@
 # Version history
 
-## 3.134.25
+## 3.134.26
 
 - Navigation hold chips fade out over 3 s instead of 2
 - The "+N.NN lvls" readout rounds down, so it never shows a level banked before it is
@@ -10,7 +10,8 @@
 - A sale that crosses the auto-deposit threshold goes to the bank from the shop before returning
 - Hold chips show only the holds worth seeing, with clearer names: Low HP, Low MANA, @Wait <name>, Downed Ally <name>, <name> disconnected, Waiting on <name> to join, Buffing / Curing / Healing, Auto-all is off…
 - Character Info's attack table counts the buffs being cast on you (e.g. smite, shadowform), with a tooltip showing how each row was worked out
-- bug reports addressed: paradigm-20260930-203138, paradigm-20260930-204041, paradigm-20260930-205208
+- Session Stats' Sneak % rounds down to a tenth, so a missed sneak doesn't read as 100%
+- bug reports addressed: paradigm-20260930-203138, paradigm-20260930-204041, paradigm-20260930-205208, paradigm-20260930-213857
 
 ## 3.134.17
 
