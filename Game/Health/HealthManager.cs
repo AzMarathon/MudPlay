@@ -658,15 +658,18 @@ public sealed class HealthManager : IDisposable
 
     public void SetSneakBeforeRestProbe(Func<bool> sneakBeforeRest) => _sneakBeforeRest = sneakBeforeRest;
 
-    private bool _loggedSneakingBeforeRest;
+    // True while a rest is held for the sneak that goes first. The sneak's answer
+    // re-runs Evaluate (AppServices), so the rest goes out the moment it lands rather
+    // than at the next HP or mana change (report paradigm-20260930-192045).
+    public bool RestWaitingOnSneak { get; private set; }
 
     private bool SneakingBeforeShadowRest(HealthSettings s)
     {
         bool waiting = s.UtilizeShadowRest && _shadowRestClass?.Invoke() == true
             && _sneakBeforeRest?.Invoke() == true;
-        if (waiting && !_loggedSneakingBeforeRest)
+        if (waiting && !RestWaitingOnSneak)
             _log?.Combat(LogCategory, "rest held a moment — sneaking first so it's a ShadowRest");
-        _loggedSneakingBeforeRest = waiting;
+        RestWaitingOnSneak = waiting;
         return waiting;
     }
 
@@ -1521,15 +1524,18 @@ public sealed class HealthManager : IDisposable
         // cleared) while ShadowRest was holding. Fire once on the falling edge so
         // CombatManager re-runs the room and opens with a backstab — we're still
         // stealthed and the opener is unspent because combat stayed suppressed.
+        // Only the gate clearing counts: a buff cast mid-rest ends the sneak for a
+        // moment, which drops ShadowRestHolding while the rest is far from done, and
+        // resuming there re-ran the room at low HP (report paradigm-20260930-192045).
         bool shadowRestHolding = ShadowRestHolding;
-        if (_shadowRestWasHolding && !shadowRestHolding)
+        if (_shadowRestWasHolding && !shadowRestHolding && !IsRecoveringRest)
         {
             _log?.Combat(LogCategory,
                 $"shadowrest recovered to rest-max — resuming combat " +
                 $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
             _onShadowRestRecovered?.Invoke();
         }
-        _shadowRestWasHolding = shadowRestHolding;
+        _shadowRestWasHolding = shadowRestHolding || (_shadowRestWasHolding && IsRecoveringRest);
 
         // General recovery resume: a rest gate topped off to rest-max (falling edge of
         // IsRecoveringRest). CombatManager may have been holding engagement of a

@@ -4734,6 +4734,13 @@ public sealed class AppServices
         Health.SetSneakKeptProbe(() => SneakGuard.Holds);
         Health.SetMeditateWhilePoisonedProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
         Health.SetSneakBeforeRestProbe(() => Stealth.SneakBeforeRest());
+        // The sneak a ShadowRest waits on has answered: rest now. Posted so the
+        // answer line finishes its dispatch first.
+        Stealth.StateChanged += (prev, _) =>
+        {
+            if (prev == Game.Stealth.StealthState.AttemptingSneak && Health.RestWaitingOnSneak)
+                Avalonia.Threading.Dispatcher.UIThread.Post(Health.Evaluate);
+        };
 
         // Passive-neutral recovery hold: engage a KillOnSight neutral only once we're
         // at/above the rest trigger, so we can rest between kills (a neutral won't

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.134.12
+
+- A ShadowRest rest goes out as soon as its sneak lands, not seconds later at the next HP tick
+- A buff cast mid-ShadowRest no longer reads as rested and re-opens combat at low HP
+- bug reports addressed: paradigm-20260930-192045
+
 ## 3.134.11
 
 - Sell detours and stash pass-through check a running loop's whole cycle, so a shop / stash room further along the lap no longer gets a needless detour

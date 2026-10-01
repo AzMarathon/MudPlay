@@ -1208,6 +1208,31 @@ public sealed class HealthManagerTests
         Assert.Equal(1, h.ShadowRestResumeCount);
     }
 
+    // A buff cast mid-rest ends the sneak for a moment: that isn't recovery, so the
+    // resume (which re-runs the room for a fight) waits for the rest gate to clear
+    // (report paradigm-20260930-192045).
+    [Fact]
+    public void ShadowRest_SneakLapsesMidRest_ResumesOnlyAtRestMax()
+    {
+        HealthSettings s = new() { UtilizeShadowRest = true };
+        using Harness h = new(s) { HostilesPresent = true };
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 50;
+        Assert.True(h.Health.ShadowRestHolding);
+
+        h.Stealthed = false;          // our own cast ends the sneak
+        h.State.Hp = 52;
+        Assert.Equal(0, h.ShadowRestResumeCount);
+
+        h.Stealthed = true;           // re-sneaked, still resting
+        h.State.Hp = 60;
+        Assert.Equal(0, h.ShadowRestResumeCount);
+
+        h.State.Hp = 190;             // rest-max
+        Assert.Equal(1, h.ShadowRestResumeCount);
+    }
+
     [Fact]
     public void ShadowRest_Inactive_NoResumeOnRecovery()
     {
