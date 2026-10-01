@@ -24,12 +24,7 @@ public sealed class NavActivityTests
     public void EveryGate_HasAPlainLabel_NotTheRawName()
     {
         foreach (string gate in AllGateValues())
-        {
-            (string text, _) = NavActivity.Describe(
-                new[] { gate }, isPaused: true, isMovementPrevented: false);
-            Assert.NotEqual($"Waiting — {gate}", text);   // raw-name fallback = unmapped
-            Assert.NotEmpty(text);
-        }
+            Assert.True(NavActivity.IsMapped(gate), $"gate '{gate}' has no label");
     }
 
     [Fact]
@@ -38,7 +33,7 @@ public sealed class NavActivityTests
         (string text, NavActivityKind kind) = NavActivity.Describe(
             new[] { MovementCoordinator.AutoAllGate }, isPaused: true, isMovementPrevented: false);
         Assert.Equal(NavActivityKind.Waiting, kind);
-        Assert.Contains("Auto-All", text);
+        Assert.Contains("Auto-all is off", text);
     }
 
     [Fact]
@@ -57,7 +52,7 @@ public sealed class NavActivityTests
         (string text, NavActivityKind kind) = NavActivity.Describe(
             new[] { MovementCoordinator.HealthRecoveryGate }, isPaused: true, isMovementPrevented: true);
         Assert.Equal(NavActivityKind.Waiting, kind);
-        Assert.Equal("Waiting — held", text);
+        Assert.Equal("Waiting — Held", text);
     }
 
     [Theory]
@@ -78,7 +73,7 @@ public sealed class NavActivityTests
             new[] { MovementCoordinator.CombatGate, MovementCoordinator.UserGate,
                     MovementCoordinator.SneakSettleGate, MovementCoordinator.HealthRecoveryGate },
             isMovementPrevented: false);
-        Assert.Equal(new[] { "resting (low HP)", "sneaking" }, holds.Select(h => h.Label));
+        Assert.Equal(new[] { "Low HP" }, holds.Select(h => h.Label));   // sneaking isn't shown
     }
 
     [Fact]
@@ -86,7 +81,7 @@ public sealed class NavActivityTests
     {
         var holds = NavActivity.ActiveHolds(
             new[] { MovementCoordinator.HeldGate }, isMovementPrevented: true);
-        Assert.Equal(new[] { "held" }, holds.Select(h => h.Label));
+        Assert.Equal(new[] { "Held" }, holds.Select(h => h.Label));
     }
 
     [Fact]
@@ -115,5 +110,31 @@ public sealed class NavActivityTests
         due.ForEach(a => a());
         NavHoldChip chip = Assert.Single(strip.Chips);
         Assert.False(chip.IsCleared);
+    }
+
+    // The party holds name who they're about, and a stealth stop says what it casts
+    // (user, 2026-09-30).
+    [Fact]
+    public void ActiveHolds_NameTheMembers_AndTheCast()
+    {
+        var holds = NavActivity.ActiveHolds(
+            new[] { MovementCoordinator.PartyWaitGate, MovementCoordinator.AllyDownGate,
+                    MovementCoordinator.MemberDisconnectGate, MovementCoordinator.PartyInviteGate,
+                    MovementCoordinator.SneakCastGate },
+            isMovementPrevented: false,
+            new NavHoldNames(new[] { "Bob" }, new[] { "Ann" }, new[] { "Cy" }, new[] { "Dee" }, "Healing"));
+        Assert.Equal(new[] { "@Wait Bob", "Downed Ally Dee", "Ann disconnected", "Waiting on Cy to join", "Healing" },
+            holds.Select(h => h.Label));
+    }
+
+    // The holds the user doesn't want to see get no chip.
+    [Fact]
+    public void ActiveHolds_HiddenHoldsAndSettleBeats_GetNoChip()
+    {
+        var holds = NavActivity.ActiveHolds(
+            new[] { MovementCoordinator.AcquisitionGate, MovementCoordinator.SneakSettleGate,
+                    MovementCoordinator.DarkRoomSettleGate, MovementCoordinator.GearSwapGate },
+            isMovementPrevented: false);
+        Assert.Empty(holds);
     }
 }

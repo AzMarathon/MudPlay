@@ -7208,6 +7208,9 @@ public sealed class AppServices
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
             RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log);
         TrainerWalk.SetFundingRouter(TrainFunding);
+        TrainerWalk.RouteTolls = (a, b) => Movement.TollCopperOnRoute(Bfs, a, b);
+        TrainerWalk.HasTollFreeRoute = (a, b) => Movement.HasTollFreeRoute(Bfs, a, b);
+        TrainerWalk.ReserveForTraining = copper => Movement.ReservedCopper = copper;
         // The errand drives the walker itself, so it needs the same event stream the
         // coordinator watches. TrainerWalkManager ignores walk events while its phase
         // is Funding, so the two never both act on one event.
@@ -7409,6 +7412,7 @@ public sealed class AppServices
                 || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive,
             nearestLoopRoom: NearestLoopRoom,
             log: Log);
+        SellDetour.HandOffToBank = AutoDeposit.TakeOverFromDetour;
         Tick.HeartbeatElapsed += SellDetour.Evaluate;
         Inventory.Changed += SellDetour.Evaluate;
         // Settings → Cash + Items "No combat during a detour": holds the real Auto-Combat

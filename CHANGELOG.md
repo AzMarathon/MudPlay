@@ -1,5 +1,20 @@
 # Version history
 
+## 3.134.29
+
+- Navigation hold chips fade out over 3 s instead of 2
+- The "+N.NN lvls" readout rounds down, so it never shows a level banked before it is
+- Auto-train's funding counts the trip's tolls and fares, so a toll on the way doesn't leave it short at the trainer
+- Auto-train takes the shortest route its money allows: round the tolls when the purse covers the training but not them, or when even the bank can't cover both
+- Trip chips read Bank Trip / Auto-Selling / Auto-Training / @Comeback, then "Back to Loop" (or "Back to Lairs") on the walk back
+- A sale that crosses the auto-deposit threshold goes to the bank from the shop before returning
+- Hold chips show only the holds worth seeing, with clearer names: Low HP, Low MANA, @Wait <name>, Downed Ally <name>, <name> disconnected, Waiting on <name> to join, Buffing / Curing / Healing, Auto-all is off…
+- Character Info's attack table counts the buffs being cast on you (e.g. smite, shadowform), with a tooltip showing how each row was worked out
+- Session Stats' Sneak % rounds down to a tenth, so a missed sneak doesn't read as 100%
+- Character Info shows HP and mana regen per tick (meditate once its quest is complete), and the skill tooltips give the chance each one means
+- Door hints on the map, Room Info and room details show your chance to pick the lock
+- bug reports addressed: paradigm-20260930-203138, paradigm-20260930-204041, paradigm-20260930-205208, paradigm-20260930-213857
+
 ## 3.134.17
 
 - Session Stats panels, graphs included, start collapsed and remember which are open per character

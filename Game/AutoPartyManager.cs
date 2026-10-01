@@ -110,6 +110,9 @@ public sealed class AutoPartyManager : IDisposable
     // Per-given-name invite-wait deadlines — present while we're holding the
     // loop for an auto-invited player to join. Maps to the moment the invite
     // went out; the wait expires at invitedAt + InviteWaitWindow.
+    // Who we've invited and are holding the walk for, until they join.
+    public IReadOnlyCollection<string> PendingInvites => _inviteWaits.Keys;
+
     private readonly Dictionary<string, DateTime> _inviteWaits =
         new(StringComparer.OrdinalIgnoreCase);
 

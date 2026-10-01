@@ -1116,6 +1116,27 @@ public sealed class CashManager : IDisposable
             $"auto-deposit re-armed after aborted reroute (retry held {AutoDepositRetryCooldownMs / 1000}s)");
     }
 
+    // Whether a deposit is due right now: a gate over its threshold with a bank or
+    // stash room picked. The sell detour asks before walking back, so a sale that
+    // crossed the gate goes to the bank from the shop.
+    public bool IsAutoDepositDue()
+    {
+        CashSettings settings = _readSettings();
+        if (string.IsNullOrEmpty(settings.BankRoomKey)) return false;
+        CurrencyHoldings held = _getSnapshot().Currency;
+        return (settings.AutoDepositIfWealthExceeds > 0 && held.TotalCopperValue > settings.AutoDepositIfWealthExceeds)
+            || (settings.AutoDepositIfCoinsExceed > 0 && held.TotalCoinCount > settings.AutoDepositIfCoinsExceed);
+    }
+
+    // A deposit started outside the gate's own firing (handed over by a detour):
+    // latch the single-fire guard as a firing would, so the gate doesn't start a
+    // second one on the next inventory line.
+    public void NoteAutoDepositStarted()
+    {
+        _autoDepositFiredThisCrossing = true;
+        _autoDepositRetryNotBefore = default;
+    }
+
     private void CheckAutoDeposit()
     {
         CashSettings settings = _readSettings();

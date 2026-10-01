@@ -214,9 +214,15 @@ public sealed class AutoDepositManager : IDisposable
     // reroute single-controller.
     public bool IsRerouting => _busy;
 
-    // Raised when a reroute or event trip starts or ends (IsRerouting flips). May
-    // fire off the UI thread, from the buy / deposit-sync timers.
+    // Raised when a reroute or event trip starts, turns for home (IsReturning), or
+    // ends (IsRerouting flips). May fire off the UI thread, from the buy /
+    // deposit-sync timers.
     public event Action? ReroutingChanged;
+
+    // The deposit / stash is done and the reroute is on its way back (a light-shop
+    // stop on the way home included).
+    public bool IsReturning => _busy && _phase is DepositPhase.WalkingToLightShop
+        or DepositPhase.BuyingLight or DepositPhase.WalkingBackToOrigin;
 
     // The engine this detour will pick back up (meaningful while it runs).
     public DetourResume ResumePlan => _resume;
@@ -312,6 +318,36 @@ public sealed class AutoDepositManager : IDisposable
             _cash.NotifyAutoDepositAborted();
             Resume();
         }
+    }
+
+    // A detour that stopped the loop (the sell detour) is done and a deposit is due:
+    // go to the bank from here rather than walk back first, then return to the loop
+    // as any bank run does (user, 2026-09-30). False — the caller walks back itself —
+    // when no deposit is due, nothing can be resumed, or there's no destination.
+    public bool TakeOverFromDetour(DetourResume resume, RoomKey origin)
+    {
+        if (_busy || resume.Kind is not (DetourResumeKind.Loop or DetourResumeKind.Lair)) return false;
+        if (!_cash.IsAutoDepositDue()) return false;
+        if (!TryResolveDestination(out RoomKey destination, out bool destinationIsStash)) return false;
+
+        _cash.NoteAutoDepositStarted();
+        _busy = true;
+        ReroutingChanged?.Invoke();
+        _resume = resume;
+        _destination = destination;
+        _origin = origin;
+        _destinationIsStash = destinationIsStash;
+        _log?.Info(LogCategory,
+            $"auto-deposit taking over from a detour: {(destinationIsStash ? "stash" : "bank")} {destination} "
+            + $"before returning (resume={resume.Kind} origin={origin})");
+        _phase = DepositPhase.WalkingToDestination;
+        if (!RerouteWalkTo(destination))
+        {
+            _log?.Warn(LogCategory, $"can't reach {destination} — resuming");
+            _cash.NotifyAutoDepositAborted();
+            Resume();
+        }
+        return true;
     }
 
     // The Settings → Cash bank / stash room, when it's a real destination.
@@ -557,6 +593,7 @@ public sealed class AutoDepositManager : IDisposable
         {
             _lightBuy = buy;
             _phase = DepositPhase.WalkingToLightShop;
+            ReroutingChanged?.Invoke();
             _log?.Info(LogCategory,
                 $"return leg runs dark — detouring to light shop {shop} for '{buy.LightName}' x{buy.Count}");
             if (!RerouteWalkTo(shop))
@@ -654,6 +691,7 @@ public sealed class AutoDepositManager : IDisposable
             return;
         }
         _phase = DepositPhase.WalkingBackToOrigin;
+        ReroutingChanged?.Invoke();
         if (!back.Equals(_origin))
             _log?.Info(LogCategory, $"walking back to {back}, the loop's nearest room (left it at {_origin})");
         if (!RerouteWalkTo(back))

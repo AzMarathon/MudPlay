@@ -9,9 +9,7 @@ public sealed partial class NavHoldChip(string label, NavChipTone tone) : Observ
 {
     public string Label { get; } = label;
 
-    // Settle beats (checking the dark / for an ambush) happen while moving, so they
-    // get a quieter colour than a real wait; a trip gets its own.
-    public bool IsBeat { get; } = tone == NavChipTone.Beat;
+    // A trip gets its own colour; a hold reads amber.
     public bool IsTrip { get; } = tone == NavChipTone.Trip;
 
     [ObservableProperty] private bool _isCleared;

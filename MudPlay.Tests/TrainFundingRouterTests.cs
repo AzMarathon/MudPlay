@@ -169,6 +169,61 @@ public sealed class TrainFundingRouterTests
         Assert.True(h.Result!.Value.Funded);
     }
 
+    // The trip's tolls are part of the bill, priced from wherever the errand stands:
+    // standing at the bank, it draws the fee plus the tolls from there on, not the
+    // bare fee (report paradigm-20260930-204041: topped up to the fee, then paid a
+    // 5 gold toll on the way to the trainer).
+    [Fact]
+    public void TollsOnTheTrip_AreDrawnWithTheFee()
+    {
+        Harness h = new() { Purse = 0 };
+        h.Sources.Add(Bank(5000));
+
+        h.Router.Begin(1000, Trainer, new TrainTripTolls(from => from.Equals(BankRoom) ? 500 : 300, _ => false));
+        Assert.Equal(BankRoom, h.Walked[0]);
+
+        h.ArriveAtLastWalk();
+        Assert.Contains("with 1500", h.Sent);
+
+        h.Purse = 1500;
+        h.FireTimers();
+        Assert.True(h.Result!.Value.Funded);
+    }
+
+    [Fact]
+    public void PurseCoversTheFeeButNotTheTolls_GoesToTheBank()
+    {
+        Harness h = new() { Purse = 1000 };
+        h.Sources.Add(Bank(5000));
+
+        Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(1000, Trainer, new TrainTripTolls(_ => 500, _ => false)));
+        Assert.Equal(BankRoom, h.Walked[0]);
+    }
+
+    // The purse covers the training but not the tolls, and the tolls can be routed
+    // round: skip the bank and walk round them (user, 2026-09-30).
+    [Fact]
+    public void PurseCoversTheFee_TollsAvoidable_SkipsTheBank()
+    {
+        Harness h = new() { Purse = 1000 };
+        h.Sources.Add(Bank(5000));
+
+        Assert.Equal(TrainFundingStart.Funded, h.Router.Begin(1000, Trainer, new TrainTripTolls(_ => 500, _ => true)));
+        Assert.Empty(h.Walked);
+    }
+
+    // Purse and bank together can't cover the tolls as well: fetch the fee and route
+    // round them (user, 2026-09-30).
+    [Fact]
+    public void BankCantCoverTheTollsToo_FetchesTheFeeAndRoutesRound()
+    {
+        Harness h = new() { Purse = 0 };
+        h.Sources.Add(Bank(1200));
+
+        Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(1000, Trainer, new TrainTripTolls(_ => 500, _ => true)));
+        Assert.Equal(BankRoom, h.Walked[0]);
+    }
+
     [Fact]
     public void PartialStashIsSkippedWhenOneBankCoversTheWholeBill()
     {

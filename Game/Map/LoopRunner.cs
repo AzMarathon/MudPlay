@@ -319,6 +319,12 @@ public sealed class LoopRunner : IRecoverableEngine
     // Waypoint the walker is approaching, or null when not in LoopState.Approaching.
     public RoomKey? ApproachTarget => _approachTarget;
 
+    // Walking back into the circuit after an errand (ResumeAfterDetour) — a bank,
+    // sell or training trip — until the lap picks up again. The Navigation top bar
+    // reads it as "Back to Loop".
+    private bool _returningFromDetour;
+    public bool ReturningFromDetour => _returningFromDetour && State is LoopState.Approaching or LoopState.Paused;
+
     // Room the running cycle begins + ends at (the rotation entry). Stable from the
     // moment the rotation is computed (during Start for v2 loops with UserWaypoints)
     // until the runner resets. Null for legacy v1 loops where the cycle has no
@@ -892,6 +898,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // Set after any supersede-Stop above (which routes through Reset and would
         // otherwise clear it) so the one-shot survives to BeginCircle.
         _suppressFirstWaypointEvent = suppressFirstWaypointEvent;
+        _returningFromDetour = suppressFirstWaypointEvent;
 
         RoomKey? currentKey = _tracker.State.CurrentRoom?.Key;
 
@@ -1180,6 +1187,7 @@ public sealed class LoopRunner : IRecoverableEngine
     private void BeginCircle()
     {
         if (_loop is null) return;
+        _returningFromDetour = false;
 
         State = LoopState.Running;
         _recovery?.Attach(this);
@@ -2571,6 +2579,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _circleStartRoom = null;
         _firstWaypointReached = false;
         _suppressFirstWaypointEvent = false;
+        _returningFromDetour = false;
         _pausedFromApproach = false;
         _approachFinishedWhilePaused = false;
         _recoverAttempts = 0;

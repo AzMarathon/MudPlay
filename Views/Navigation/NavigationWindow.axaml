@@ -331,11 +331,10 @@
             <Setter Property="Foreground" Value="#0E0E0E"/>
         </Style>
 
-        <!-- Chips after the status line — one per hold in force (amber for a
-             wait, muted for a settle beat while moving) and per errand trip
-             (cyan: bank, sell, training, going back for a member). An ended hold's chip
-             fades out over 2 s (NavHoldChipStrip.FadeTime) so a split-second hold
-             can still be read. -->
+        <!-- Chips after the status line — one per hold worth showing (amber) and per
+             errand trip (cyan: Bank Trip, Auto-Selling, Auto-Training, @Comeback, Back
+             to Loop). An ended chip fades out over 3 s (NavHoldChipStrip.FadeTime) so a
+             split-second hold can still be read. -->
         <Style Selector="Border.HoldChip">
             <Setter Property="CornerRadius" Value="3"/>
             <Setter Property="Padding" Value="6,1"/>
@@ -346,7 +345,7 @@
             <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:2"/>
+                    <DoubleTransition Property="Opacity" Duration="0:0:3"/>
                 </Transitions>
             </Setter>
         </Style>
@@ -354,13 +353,6 @@
             <Setter Property="FontSize" Value="10"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="#0E0E0E"/>
-        </Style>
-        <Style Selector="Border.HoldChip.Beat">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
-        </Style>
-        <Style Selector="Border.HoldChip.Beat TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
         </Style>
         <Style Selector="Border.HoldChip.Trip">
             <Setter Property="Background" Value="{StaticResource AccentCyanBrush}"/>
@@ -476,7 +468,6 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:NavHoldChip">
                                 <Border Classes="HoldChip"
-                                        Classes.Beat="{Binding IsBeat}"
                                         Classes.Trip="{Binding IsTrip}"
                                         Classes.Cleared="{Binding IsCleared}">
                                     <TextBlock Text="{Binding Label}"/>

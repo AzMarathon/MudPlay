@@ -138,4 +138,13 @@ public sealed class TrainBudgetCalculatorTests
     {
         Assert.Equal(expected, TrainBudgetCalculator.WithinCeiling(level, ceiling));
     }
+
+    // A level not yet reached never reads as banked (report paradigm-20260930-203138).
+    [Theory]
+    [InlineData(0.9956, "0.99")]
+    [InlineData(1.0, "1.00")]
+    [InlineData(0.29, "0.29")]
+    [InlineData(2.914, "2.91")]
+    public void FormatBankableLevels_RoundsDown(double levels, string expected)
+        => Assert.Equal(expected, TrainBudgetCalculator.FormatBankableLevels(levels));
 }

@@ -114,6 +114,26 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     [ObservableProperty] private string _smashDamage = "—";
     // Backstab damage range ("min-max") for the equipped weapon; empty when not stealth-capable.
     [ObservableProperty] private string _backstabDamage = string.Empty;
+
+    // Regen per tick from the stat formulas, with the realm's tick timing in the
+    // tooltips. Meditate shows only once the Meditate quest is ticked complete.
+    [ObservableProperty] private string _hpRegen = "—";
+    [ObservableProperty] private string? _hpRegenTip;
+    [ObservableProperty] private string _manaRegen = "—";
+    [ObservableProperty] private string? _manaRegenTip;
+    [ObservableProperty] private bool _showManaRegen;
+
+    // The chance each utility skill gives, from the value shown (user, 2026-09-30).
+    [ObservableProperty] private string? _stealthTip;
+    [ObservableProperty] private string? _thieveryTip;
+    [ObservableProperty] private string? _trapsTip;
+    [ObservableProperty] private string? _trackingTip;
+
+    // How each attack row was worked out — the inputs, and which of them came from
+    // gear and which from the buffs being cast on us.
+    [ObservableProperty] private string? _attackTip;
+    [ObservableProperty] private string? _bashTip;
+    [ObservableProperty] private string? _backstabTip;
     // Swings/round per attack, from the MajorMUD energy budget
     // (CombatCalculator.CalcSwings): weapon speed + level + class CombatLVL +
     // agility + strength-vs-StrReq + encumbrance. Bash doubles energy per swing
@@ -332,6 +352,102 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         RebuildQuestBonusRows();
 
         ComputeDerivedCombat(combined.Totals, classRow, raceRow);
+        ComputeRegen(combined.Totals, classRow);
+        ComputeSkillChances();
+    }
+
+    // HP and mana per regen tick (CharacterCalculator), with when each tick lands
+    // (GAME_MECHANICS "Rest and meditate tick timing").
+    private void ComputeRegen(EquipmentStatSummary t, JsonElement? classRow)
+    {
+        RealmType realm = _gameData.ActiveRealm;
+        int level = _stats.Level;
+        if (level <= 0)
+        {
+            HpRegen = ManaRegen = "—";
+            HpRegenTip = ManaRegenTip = null;
+            ShowManaRegen = false;
+            return;
+        }
+
+        int idle = CharacterCalculator.CalcHpRegen(level, _stats.Health, t.HpRegenPercent, isResting: false, realm);
+        int rest = CharacterCalculator.CalcHpRegen(level, _stats.Health, t.HpRegenPercent, isResting: true, realm);
+        HpRegen = $"+{idle} / +{rest}";
+        HpRegenTip = realm == RealmType.ParaMud
+            ? $"Standing: +{idle} HP every 30 s.\nResting: ticks every 10 s in threes — +{rest / 3}, +{rest / 3}, then +{rest}."
+            : $"Standing: +{idle} HP every 30 s.\nResting: that tick keeps paying, plus +{rest} every 21 s.";
+
+        int mageryType = GetInt(classRow, "MageryType"), mageryLevel = GetInt(classRow, "MageryLVL");
+        ShowManaRegen = mageryType > 0;
+        if (!ShowManaRegen) { ManaRegen = "—"; ManaRegenTip = null; return; }
+        int passive = CharacterCalculator.CalcManaRegen(level, _stats.Intellect, _stats.Willpower, _stats.Charm,
+            mageryType, mageryLevel, t.MpRegenPercent, isMeditating: false, realm);
+        string passiveLine = $"Every 30 s: +{passive} {ManaLabel.ToLowerInvariant()}.";
+        if (MeditateLearned())
+        {
+            int meditate = CharacterCalculator.CalcManaRegen(level, _stats.Intellect, _stats.Willpower, _stats.Charm,
+                mageryType, mageryLevel, t.MpRegenPercent, isMeditating: true, realm);
+            ManaRegen = $"+{passive} / +{meditate}";
+            ManaRegenTip = passiveLine + (realm == RealmType.ParaMud
+                ? $"\nMeditating: +{meditate} every 10 s."
+                : $"\nMeditating: +{meditate} every 15 s, on top of the 30 s tick.");
+        }
+        else
+        {
+            ManaRegen = $"+{passive}";
+            ManaRegenTip = passiveLine + "\nMeditate shows once its quest is ticked complete on the Quests tab.";
+        }
+    }
+
+    // The Meditate quest (Quests tab, by name) ticked complete for this character.
+    private static bool MeditateLearned()
+    {
+        HashSet<int> flags = AppServices.Current.Quests.NamedQuests()
+            .Where(q => string.Equals(q.Name.Trim(), "Meditate", StringComparison.OrdinalIgnoreCase))
+            .Select(q => q.Flag).ToHashSet();
+        return flags.Count > 0
+            && AppServices.Current.Profile.Current?.QuestLog?.Any(p => p.Complete && flags.Contains(p.Flag)) == true;
+    }
+
+    // What the shown skill value means as a chance, by the engine rules recorded for
+    // Stock (GAME_MECHANICS "Sneaking", "Robbing players", "Exit traps", "Tracking"),
+    // assumed the same on Paradigm. Rolls are 0–100, so each figure is approximate.
+    private void ComputeSkillChances()
+    {
+        int stealth = _stats.Stealth;
+        EncumbranceReading encum = _inventory.Snapshot.Encumbrance;
+        int encPct = encum.MaxWeight > 0 ? encum.CurrentWeight * 100 / encum.MaxWeight : 0;
+        int encPenalty = encPct > 66 ? 10 : encPct > 33 ? 5 : 0;
+        int chance = Math.Max(0, stealth - encPenalty);
+        StealthTip = stealth <= 0 ? null : string.Join("\n",
+            $"Sneak chance {chance}" + (encPenalty > 0 ? $" (−{encPenalty} for carrying {encPct}%)" : "")
+                + ", −1 for each player and monster in the room.",
+            $"`sn` takes ≈{Math.Min(chance, 95)}% (capped at 95).",
+            $"Each sneaked move keeps it ≈{Math.Min(chance, 100)}%.",
+            $"A miss is noticed ≈{Math.Clamp(_stats.Perception, 0, 100)}% (your Perception); otherwise it's silent.",
+            "Engine rules read from Stock; Paradigm assumed the same.");
+
+        int thievery = _stats.Thievery;
+        ThieveryTip = thievery <= 0 ? "No Thievery: a rob can't succeed." : string.Join("\n",
+            $"Rob: succeeds ≈{Math.Min(thievery, 100)}%, fails quietly ≈{Math.Clamp(100 - thievery, 0, 10)}%, "
+                + $"caught ≈{Math.Max(0, 90 - thievery)}%.",
+            "Only getting caught tells the victim. Every rob counts as an evil act.",
+            "Engine rules read from Stock; Paradigm assumed the same.");
+
+        int traps = _stats.Traps;
+        TrapDisarmOdds? disarm = AppServices.Current.TrapDisarm.DisarmOdds;
+        TrapsTip = traps <= 0 ? "No Traps skill: searching won't find a trap." : string.Join("\n",
+            $"Searching a trapped exit finds the trap ≈{Math.Min(traps, 100)}%.",
+            disarm is { } d
+                ? $"Disarming (skill {d.Skill}): {d.Summary}."
+                : "Disarm odds show once a Traps value has been read.",
+            "Engine rules read from Stock; Paradigm assumed the same.");
+
+        int tracking = _stats.Tracking;
+        TrackingTip = tracking <= 0
+            ? "No Tracking: `track` always fails."
+            : $"Each time the trail passed through your room, `track` reads it ≈{Math.Min(tracking, 100)}%.\n"
+              + "Engine rules read from Stock; Paradigm assumed the same.";
     }
 
     // Aggregate the published completed-quest bonuses by ability id (quests stack,
@@ -354,10 +470,23 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         HasQuestBonuses = QuestBonusRows.Count > 0;
     }
 
-    private void ComputeDerivedCombat(EquipmentStatSummary t, JsonElement? classRow, JsonElement? raceRow)
+    private void ComputeDerivedCombat(EquipmentStatSummary gear, JsonElement? classRow, JsonElement? raceRow)
     {
         RealmType realm = _gameData.ActiveRealm;
         int level = _stats.Level;
+
+        // The buffs being cast on us count as the game counts them in `stat all`
+        // (report: smite's +max damage and shadowform's BS bonuses were missing).
+        MudPlay.Game.Spells.BuffCombat buff = MudPlay.Game.Spells.BuffCombatCalculator.Compute(
+            AppServices.Current.Profile.Current?.PartyBuffs, level,
+            AppServices.Current.Spellbook.Available, AppServices.Current.PartyState.IsInParty);
+        EquipmentStatSummary t = gear.Copy();
+        t.PlusAccuracy += buff.Accuracy;
+        t.MaxSingleAbil22 = Math.Max(t.MaxSingleAbil22, buff.AccuracyMaxSingle);
+        t.PlusMaxDamage += buff.MaxDamage;
+        t.PlusBSAccuracy += buff.BsAccuracy;
+        t.PlusBSMin += buff.BsMin;
+        t.PlusBSMax += buff.BsMax;
         int nCombatLevel = GetInt(classRow, "CombatLVL");
         int str = _stats.Strength, agi = _stats.Agility, intel = _stats.Intellect, chm = _stats.Charm;
 
@@ -398,6 +527,16 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         {
             AttackDamage = BashDamage = SmashDamage = "—";
         }
+        string? meleeTip = t.WeaponMax > 0
+            ? string.Join("\n",
+                $"Weapon {t.WeaponMin}-{t.WeaponMax}, strength {str}",
+                Part("+max damage", gear.PlusMaxDamage, buff, "max damage"),
+                Part(realm == RealmType.ParaMud ? "+accuracy (all sources add)" : "+accuracy (highest source)",
+                    realm == RealmType.ParaMud ? gear.PlusAccuracy : gear.MaxSingleAbil22, buff, "accuracy"),
+                $"Worn accuracy {t.TotalWornAccy}")
+            : null;
+        AttackTip = meleeTip;
+        BashTip = meleeTip;
 
         // Swings/round for the melee rows. Needs a weapon (its speed drives the
         // energy budget), a level and a class CombatLVL. Bash doubles energy per
@@ -434,6 +573,14 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
                 t.PlusBSMin, t.PlusBSMax, t.PlusMaxDamage, hasClassStealth, realm);
             BackstabDamage = string.Create(CultureInfo.InvariantCulture,
                 $"{bsDmg.MinDamage}-{bsDmg.MaxDamage}");
+            BackstabTip = string.Join("\n",
+                $"Weapon {t.WeaponMin}-{t.WeaponMax}, stealth {stealth}, strength {str}, agility {agi}, level {level}",
+                Part("BS accuracy", gear.PlusBSAccuracy, buff, "BS accuracy"),
+                Part("BS min damage", gear.PlusBSMin, buff, "BS min damage"),
+                Part("BS max damage", gear.PlusBSMax, buff, "BS max damage"),
+                Part("+max damage", gear.PlusMaxDamage, buff, "max damage"),
+                Part(realm == RealmType.ParaMud ? "+accuracy (all sources add)" : "+accuracy (highest source)",
+                    realm == RealmType.ParaMud ? gear.PlusAccuracy : gear.MaxSingleAbil22, buff, "accuracy"));
             BackstabSwings = "1.0";   // a backstab is always a single strike
         }
         else
@@ -443,6 +590,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             BackstabAccuracy = stealth > 0 ? "—" : "N/A";
             BackstabDamage = string.Empty;
             BackstabSwings = string.Empty;
+            BackstabTip = null;
         }
 
         // Martial-arts attacks — Mystic special strikes. Each strike row is gated
@@ -531,6 +679,21 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         MeleeDamageResult d = CombatCalculator.CalcMartialArtsDamage(
             type, realm, level, maPlusSkill, str, plusMaxDamage, maPlusDamage, plusMinDamage);
         return string.Create(CultureInfo.InvariantCulture, $"{d.MinDamage}-{d.MaxDamage}");
+    }
+
+    // "+max damage 3 — gear 2, smite +1": one tooltip line, the gear part then each
+    // cast buff's part.
+    private static string Part(string label, int gearValue, MudPlay.Game.Spells.BuffCombat buff, string what)
+    {
+        int spells = 0;
+        List<string> parts = new() { $"gear {gearValue.ToString("+0;-0;0", CultureInfo.InvariantCulture)}" };
+        foreach (MudPlay.Game.Spells.BuffCombatSource src in buff.Sources)
+        {
+            if (src.What != what) continue;
+            spells += src.Value;
+            parts.Add($"{src.Spell} {src.Value.ToString("+0;-0", CultureInfo.InvariantCulture)}");
+        }
+        return $"{label} {gearValue + spells} — {string.Join(", ", parts)}";
     }
 
     private static string Acc(MudAttackType type, RealmType realm, int level, int nCombatLevel,

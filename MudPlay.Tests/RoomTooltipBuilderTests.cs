@@ -1311,6 +1311,19 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Assert.Equal("Door: 11 picklocks/strength", RoomTooltipBuilder.FormatExitHint(exit, data: null));
     }
 
+    // With Picklocks, a door shows our chance to pick it: about Picklocks − N + 1,
+    // clamped to 0–100; an "any" lock at least Picklocks + 1 (user, 2026-09-30).
+    [Theory]
+    [InlineData("9/177 (Door [11 picklocks/strength])", 87, "Door: 11 picklocks/strength, pick ~77%")]
+    [InlineData("8/461 (Door [101 picklocks])", 87, "Door: 101 picklocks, pick ~0%")]
+    [InlineData("1/2666 (Door)", 87, "Door: any picklocks/strength, pick ≥88%")]
+    [InlineData("9/177 (Door [11 picklocks/strength])", 0, "Door: 11 picklocks/strength")]
+    public void FormatExitHint_Door_WithPicklocks_ShowsThePickChance(string wire, int picklocks, string expected)
+    {
+        Assert.True(RoomExit.TryParseWire(wire, out RoomExit exit));
+        Assert.Equal(expected, RoomTooltipBuilder.FormatExitHint(exit, data: null, picklocks: picklocks));
+    }
+
     [Fact]
     public void FormatExitHint_Door_PicklocksOnly_OmitsStrength()
     {

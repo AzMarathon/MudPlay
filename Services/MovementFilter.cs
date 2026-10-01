@@ -459,7 +459,7 @@ public sealed class MovementFilter : IRoomFilter
     private bool IsTollGateBlocked(in RoomExit exit)
     {
         if (exit.Hint != RoomExitHint.Toll || exit.TollGold <= 0) return false;
-        if (_tollGateSuspended) return false;   // planning the tolls-permitted route (see WarmForRoute)
+        if (_tollGateSuspended && !_tollGateForcedClosed) return false;   // planning the tolls-permitted route (see WarmForRoute)
         // A toll is phrased in gold crowns but any coin mix totalling N*100
         // copper passes — so the fold-to-copper conversion is here, not in the
         // shared wallet check.
@@ -472,7 +472,7 @@ public sealed class MovementFilter : IRoomFilter
     // toll gate while WarmForRoute plans the paid-crossings-permitted route.
     private bool IsFareGateBlocked(in RoomExit exit)
     {
-        if (exit.FareCopper <= 0 || _tollGateSuspended) return false;
+        if (exit.FareCopper <= 0 || (_tollGateSuspended && !_tollGateForcedClosed)) return false;
         return CannotAfford(exit.FareCopper);
     }
 
@@ -488,9 +488,33 @@ public sealed class MovementFilter : IRoomFilter
     private bool CannotAfford(long cost)
     {
         if (cost <= 0) return false;
+        if (_tollGateForcedClosed) return true;
         if (PartyWealthProvider?.Invoke() is { } partyMin) return partyMin < cost;
         if (WealthProvider?.Invoke() is not { } wealth) return false;
-        return wealth < cost;
+        return wealth - Math.Max(0, ReservedCopper) < cost;
+    }
+
+    // Copper set aside from our own wallet for something the walk is heading to pay,
+    // so a toll or fare is only taken when it's affordable on top of it: a train trip
+    // reserves its fees, and walks round a toll it couldn't then pay (user,
+    // 2026-09-30). 0 = nothing reserved.
+    public long ReservedCopper { get; set; }
+
+    // While set, every toll and fare reads unaffordable — HasTollFreeRoute's probe.
+    private bool _tollGateForcedClosed;
+
+    // Whether a walk from source to destination can avoid every toll and fare,
+    // planning through the acquirable gates as a train or detour walk does.
+    public bool HasTollFreeRoute(BfsMapper bfs, RoomKey source, RoomKey destination)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        _tollGateForcedClosed = true;
+        try
+        {
+            using IDisposable _ = SuspendAcquirableGates();
+            return bfs.FindPath(source, destination, this) is not null;
+        }
+        finally { _tollGateForcedClosed = false; }
     }
 
     // ----- Boat sailing gates (per-member minlevel + copper fare) -----------
@@ -543,6 +567,22 @@ public sealed class MovementFilter : IRoomFilter
     // that kind were passable — and probe only when that path genuinely crosses
     // one. Each half is independent: a toll on the route warms @wealth, a level
     // gate on the route warms @level; a route with neither warms nothing.
+    // The tolls and fares on the route a walk WOULD take once it can pay them: the
+    // toll gate stands down (an unaffordable toll is routed around only until the
+    // money is in hand), and so do the acquirable gates a train or detour walk plans
+    // through. Prices a trip's crossings before the money for it is fetched.
+    public long TollCopperOnRoute(BfsMapper bfs, RoomKey source, RoomKey destination)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        _tollGateSuspended = true;
+        try
+        {
+            using IDisposable _ = SuspendAcquirableGates();
+            return bfs.RouteTollCopper(source, destination, this);
+        }
+        finally { _tollGateSuspended = false; }
+    }
+
     public void WarmForRoute(BfsMapper bfs, RoomKey source, RoomKey destination)
     {
         ArgumentNullException.ThrowIfNull(bfs);

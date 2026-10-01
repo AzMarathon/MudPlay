@@ -111,7 +111,7 @@ public sealed class ExperienceQueryHandler : IDisposable
         {
             TimeToLevelEstimator.Result est = TimeToLevelEstimator.Estimate(_stats, _gameData, rate);
             levelTag = est.TargetLevel > 0
-                ? $" (L{_stats.Level + 1}, +{est.BankableLevelsFractional:0.00} lvls)"
+                ? $" (L{_stats.Level + 1}, +{TrainBudgetCalculator.FormatBankableLevels(est.BankableLevelsFractional)} lvls)"
                 : $" (L{_stats.Level + 1})";
         }
         string needed = $"Needed: {_stats.ExpToNext:N0}{levelTag}";

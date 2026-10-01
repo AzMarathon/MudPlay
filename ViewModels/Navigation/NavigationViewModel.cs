@@ -3467,13 +3467,33 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private List<(string Label, NavChipTone Tone)> ActiveTrips()
     {
         List<(string, NavChipTone)> trips = [];
-        if (_services.AutoDeposit.IsRerouting) trips.Add(("bank trip", NavChipTone.Trip));
-        if (_services.SellDetour.IsDetouring) trips.Add(("sell trip", NavChipTone.Trip));
-        if (_services.TrainerWalk.IsBusy) trips.Add(("training", NavChipTone.Trip));
-        if (_services.PartyComeback.RecoveringMember is { } member)
-            trips.Add(($"going back for {member}", NavChipTone.Trip));
+        // An errand reads as itself until it's done, then as the walk back (user,
+        // 2026-09-30; report paradigm-20260930-205208).
+        static string Back(DetourResumeKind kind) => kind == DetourResumeKind.Lair ? "Back to Lairs" : "Back to Loop";
+        if (_services.AutoDeposit.IsRerouting)
+            trips.Add((_services.AutoDeposit.IsReturning ? Back(_services.AutoDeposit.ResumePlan.Kind) : "Bank Trip", NavChipTone.Trip));
+        if (_services.SellDetour.IsDetouring)
+            trips.Add((_services.SellDetour.IsReturning ? Back(_services.SellDetour.ResumePlan.Kind) : "Auto-Selling", NavChipTone.Trip));
+        if (_services.TrainerWalk.IsBusy) trips.Add(("Auto-Training", NavChipTone.Trip));
+        else if (_services.LoopRunner.ReturningFromDetour) trips.Add(("Back to Loop", NavChipTone.Trip));
+        if (_services.PartyComeback.RecoveringMember is not null) trips.Add(("@Comeback", NavChipTone.Trip));
         return trips;
     }
+
+    // Who the party holds are about, and the kind of cast a stealth stop is for.
+    private NavHoldNames HoldNames() => new(
+        _services.PartyEssentials.WaitingMembers.ToList(),
+        _services.PartyDisconnectMovement.PendingMembers.ToList(),
+        _services.AutoParty.PendingInvites.ToList(),
+        _services.AllyDropped.DownedGivenNames.ToList(),
+        _services.CastDirector.SneakHeldCategory switch
+        {
+            Game.Spells.SpellCategory.Curing => "Curing",
+            Game.Spells.SpellCategory.EmergencyHeal or Game.Spells.SpellCategory.DownedAllyHeal
+                or Game.Spells.SpellCategory.MinorPartyHeal or Game.Spells.SpellCategory.MajorPartyHeal
+                or Game.Spells.SpellCategory.MinorSelfHeal or Game.Spells.SpellCategory.MajorSelfHeal => "Healing",
+            _ => null,   // a buff, or nothing known: the chip reads "Buffing"
+        });
 
     private void RefreshActivityStatus()
     {
@@ -3481,7 +3501,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         List<(string Label, NavChipTone Tone)> chips = ActiveTrips();
         if (AnyEngineLiveExecuting())
             chips.AddRange(NavActivity.ActiveHolds(
-                _services.MovementCoordinator.AssertedGates, _services.Conditions.IsMovementPrevented));
+                _services.MovementCoordinator.AssertedGates, _services.Conditions.IsMovementPrevented, HoldNames()));
         HoldChips.Update(chips);
         // A queued-but-idle route reads its hold reason off the live gates even when
         // the chip itself is empty — so refresh the line on every gate/held change,

@@ -384,7 +384,11 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     // ----- Session Statistics (sneak + walk) ---------------------------
 
-    public string SneakText => Activity.SneakPercent is { } p ? $"{p:F0}%" : "—";
+    // Rounded down to a tenth: 1,067 of 1,069 is 99.8%, not a rounded-up "100%" that
+    // hides the miss (report paradigm-20260930-213857).
+    public string SneakText => Activity.SneakPercent is { } p
+        ? (Math.Floor(p * 10 + 1e-9) / 10).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%"
+        : "—";
     public string SneakTip  => $"{Activity.SneakHeld:N0} of {Activity.SneakEntries:N0} rooms entered while sneaking kept the sneak.";
     public string WalkText  => Activity.AverageStep is { } step ? $"{step.TotalSeconds:F2}s" : "—";
     public string WalkTip   => $"Average from a move going out to the new room showing, over {Activity.Steps:N0} walk / loop steps.";
