@@ -108,6 +108,9 @@ public sealed class SellDetourManager : IDisposable
 
     public bool IsDetouring => _phase != Phase.Idle;
 
+    // Raised when a detour starts or ends (IsDetouring flips).
+    public event Action? DetouringChanged;
+
     // The engine this detour will pick back up (meaningful while it runs).
     public DetourResume ResumePlan => _resume;
 
@@ -249,6 +252,7 @@ public sealed class SellDetourManager : IDisposable
         _shop = shop;
         _visited.Add(shop);
         _phase = Phase.WalkingToShop;
+        DetouringChanged?.Invoke();
         if (!DriveWalk(shop))
         {
             _log?.Warn(LogCategory, $"can't reach {shop} — carrying on");
@@ -367,6 +371,7 @@ public sealed class SellDetourManager : IDisposable
     {
         DetourResume r = _resume;
         _phase = Phase.Idle;
+        DetouringChanged?.Invoke();
         _log?.Info(LogCategory, $"detour done — resuming {r.Kind}");
         _drivingWalker = true;
         try { r.Resume(_walker, _loops, _lair); }
@@ -377,6 +382,7 @@ public sealed class SellDetourManager : IDisposable
     {
         _log?.Info(LogCategory, $"detour abandoned — {why}");
         _phase = Phase.Idle;
+        DetouringChanged?.Invoke();
     }
 
     public void Dispose()

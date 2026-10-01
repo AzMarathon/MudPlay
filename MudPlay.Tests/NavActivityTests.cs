@@ -70,4 +70,50 @@ public sealed class NavActivityTests
     [InlineData("Moving — checking the dark", NavActivityKind.Moving, null)]
     public void HoldSuffix_FoldsOnlyTheWaitDetail(string text, NavActivityKind kind, string? expected)
         => Assert.Equal(expected, NavActivity.HoldSuffix(text, kind));
+
+    [Fact]
+    public void ActiveHolds_ListsEveryHold_ButNotPauseOrCombat()
+    {
+        var holds = NavActivity.ActiveHolds(
+            new[] { MovementCoordinator.CombatGate, MovementCoordinator.UserGate,
+                    MovementCoordinator.SneakSettleGate, MovementCoordinator.HealthRecoveryGate },
+            isMovementPrevented: false);
+        Assert.Equal(new[] { "resting (low HP)", "sneaking" }, holds.Select(h => h.Label));
+    }
+
+    [Fact]
+    public void ActiveHolds_HeldFlagAndGate_ShowOnce()
+    {
+        var holds = NavActivity.ActiveHolds(
+            new[] { MovementCoordinator.HeldGate }, isMovementPrevented: true);
+        Assert.Equal(new[] { "held" }, holds.Select(h => h.Label));
+    }
+
+    [Fact]
+    public void HoldChips_LingerAfterTheHoldEnds_ThenGo()
+    {
+        List<Action> due = [];
+        NavHoldChipStrip strip = new((action, _) => due.Add(action));
+        strip.Update([("sneaking", NavChipTone.Wait)]);
+        strip.Update([]);
+
+        NavHoldChip chip = Assert.Single(strip.Chips);
+        Assert.True(chip.IsCleared);
+        due.ForEach(a => a());
+        Assert.Empty(strip.Chips);
+    }
+
+    [Fact]
+    public void HoldChips_RelitWhileFading_IsAFreshChipTheFadeCantRemove()
+    {
+        List<Action> due = [];
+        NavHoldChipStrip strip = new((action, _) => due.Add(action));
+        strip.Update([("looting", NavChipTone.Wait)]);
+        strip.Update([]);
+        strip.Update([("looting", NavChipTone.Wait)]);
+
+        due.ForEach(a => a());
+        NavHoldChip chip = Assert.Single(strip.Chips);
+        Assert.False(chip.IsCleared);
+    }
 }

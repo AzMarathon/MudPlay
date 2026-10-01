@@ -5,6 +5,10 @@ namespace MudPlay.ViewModels.Navigation;
 // What a movement engine is doing right now, for the Navigation top bar.
 public enum NavActivityKind { None, Moving, Fighting, Waiting, Paused }
 
+// How a top-bar chip after the status line reads: a hold that stops movement, a
+// brief settle beat while moving, or an errand trip the walker is on.
+public enum NavChipTone { Wait, Beat, Trip }
+
 // Pure mapping from the live MovementCoordinator gate state to a plain-English
 // "what is the engine doing / why is it held" phrase. Split out of
 // NavigationViewModel so it's unit-testable and so a NEW gate can't silently slip
@@ -18,6 +22,48 @@ public enum NavActivityKind { None, Moving, Fighting, Waiting, Paused }
 // urgency rather than appending blindly.
 public static class NavActivity
 {
+    // Every hold the engine can be under, in priority order, with its plain label.
+    // Moving-kind entries are the brief per-room settle beats: a moment in the
+    // middle of moving, not a real stop, so they sit last and any real wait wins.
+    private static readonly (string Gate, string Label, NavActivityKind Kind)[] Holds =
+    [
+        (MovementCoordinator.AbandonedCombatGate, "leaving a fight", NavActivityKind.Waiting),
+        (MovementCoordinator.MortallyWoundedGate, "mortally wounded", NavActivityKind.Waiting),
+        // Our own confusion holds navigation locally (the leader/solo analogue of a
+        // confused follower's @wait) — our own affliction, same tier as held.
+        (MovementCoordinator.ConfusionGate, "confused", NavActivityKind.Waiting),
+        (MovementCoordinator.HeldGate, "held", NavActivityKind.Waiting),
+        (MovementCoordinator.FearGate, "afraid", NavActivityKind.Waiting),
+        // Recovery holds — resting / meditating below a rest floor.
+        (MovementCoordinator.HealthRecoveryGate, "resting (low HP)", NavActivityKind.Waiting),
+        (MovementCoordinator.ManaRecoveryGate, "meditating (low mana)", NavActivityKind.Waiting),
+        (MovementCoordinator.CorpseRecoveryGate, "recovering corpse", NavActivityKind.Waiting),
+        // Party holds — waiting on other members.
+        (MovementCoordinator.PartyWaitGate, "party asked to wait", NavActivityKind.Waiting),
+        (MovementCoordinator.AllyDownGate, "ally is down", NavActivityKind.Waiting),
+        (MovementCoordinator.PartyVitalsGate, "party member hurt", NavActivityKind.Waiting),
+        (MovementCoordinator.MemberDisconnectGate, "member reconnecting", NavActivityKind.Waiting),
+        (MovementCoordinator.PartyInviteGate, "for invitee to join", NavActivityKind.Waiting),
+        (MovementCoordinator.FollowerGate, "following leader", NavActivityKind.Waiting),
+        // Auto-engines kill switch off — a queued walk / loop / lair is planned but
+        // held here until Auto-All is restored; the single most common "why isn't it
+        // moving?" for a queued route.
+        (MovementCoordinator.AutoAllGate, "auto-engines off (Auto-All)", NavActivityKind.Waiting),
+        // In-room engine actions after a fight clears.
+        (MovementCoordinator.SearchGate, "searching the room", NavActivityKind.Waiting),
+        (MovementCoordinator.AcquisitionGate, "looting", NavActivityKind.Waiting),
+        (MovementCoordinator.GhSortGate, "sorting items (Roomba)", NavActivityKind.Waiting),
+        (MovementCoordinator.GearSwapGate, "changing gear", NavActivityKind.Waiting),
+        (MovementCoordinator.SneakCooldownGate, "sneak on cooldown", NavActivityKind.Waiting),
+        (MovementCoordinator.SneakSettleGate, "sneaking", NavActivityKind.Waiting),
+        (MovementCoordinator.SneakCastGate, "casting before re-sneaking", NavActivityKind.Waiting),
+        (MovementCoordinator.SellingGate, "selling", NavActivityKind.Waiting),
+        (MovementCoordinator.SellDetourGate, "stopping to go sell", NavActivityKind.Waiting),
+        (MovementCoordinator.DarkRoomSettleGate, "checking the dark", NavActivityKind.Moving),
+        (MovementCoordinator.CombatRedisplaySettleGate, "checking for an ambush", NavActivityKind.Moving),
+        (MovementCoordinator.SummonDeathSettleGate, "checking for a summon", NavActivityKind.Moving),
+    ];
+
     public static (string Text, NavActivityKind Kind) Describe(
         IReadOnlyCollection<string> gates, bool isPaused, bool isMovementPrevented)
     {
@@ -27,88 +73,40 @@ public static class NavActivity
         // own doing, and mid-fight "Fighting" is the more useful readout than a hold.
         if (gates.Contains(MovementCoordinator.UserGate)) return ("Paused", NavActivityKind.Paused);
         if (gates.Contains(MovementCoordinator.CombatGate)) return ("Fighting", NavActivityKind.Fighting);
-        if (gates.Contains(MovementCoordinator.AbandonedCombatGate))
-            return ("Waiting — leaving a fight", NavActivityKind.Waiting);
 
         // Our own held/mortally-wounded state stops movement server-side. The
         // condition flag is authoritative (SelfHeldResponder asserts HeldGate off the
         // same edge), so it's checked ahead of the gate scan.
         if (isMovementPrevented) return ("Waiting — held", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.MortallyWoundedGate))
-            return ("Waiting — mortally wounded", NavActivityKind.Waiting);
 
         // Nothing is gating and we're not held → genuinely moving.
         if (!isPaused) return ("Moving", NavActivityKind.Moving);
 
-        // Our own confusion holds navigation locally (the leader/solo analogue of a
-        // confused follower's @wait) — our own affliction, same tier as held above.
-        if (gates.Contains(MovementCoordinator.ConfusionGate))
-            return ("Waiting — confused", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.HeldGate))
-            return ("Waiting — held", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.FearGate))
-            return ("Waiting — afraid", NavActivityKind.Waiting);
-
-        // Recovery holds — resting / meditating below a rest floor.
-        if (gates.Contains(MovementCoordinator.HealthRecoveryGate))
-            return ("Waiting — resting (low HP)", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.ManaRecoveryGate))
-            return ("Waiting — meditating (low mana)", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.CorpseRecoveryGate))
-            return ("Waiting — recovering corpse", NavActivityKind.Waiting);
-
-        // Party holds — waiting on other members.
-        if (gates.Contains(MovementCoordinator.PartyWaitGate))
-            return ("Waiting — party asked to wait", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.AllyDownGate))
-            return ("Waiting — ally is down", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.PartyVitalsGate))
-            return ("Waiting — party member hurt", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.MemberDisconnectGate))
-            return ("Waiting — member reconnecting", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.PartyInviteGate))
-            return ("Waiting — for invitee to join", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.FollowerGate))
-            return ("Waiting — following leader", NavActivityKind.Waiting);
-
-        // Auto-engines kill switch off — a queued walk / loop / lair is planned but
-        // held here until Auto-All is restored; the single most common "why isn't it
-        // moving?" for a queued route.
-        if (gates.Contains(MovementCoordinator.AutoAllGate))
-            return ("Waiting — auto-engines off (Auto-All)", NavActivityKind.Waiting);
-
-        // In-room engine actions after a fight clears.
-        if (gates.Contains(MovementCoordinator.SearchGate))
-            return ("Waiting — searching the room", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.AcquisitionGate))
-            return ("Waiting — looting", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.GhSortGate))
-            return ("Waiting — sorting items (Roomba)", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.GearSwapGate))
-            return ("Waiting — changing gear", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.SneakCooldownGate))
-            return ("Waiting — sneak on cooldown", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.SneakSettleGate))
-            return ("Waiting — sneaking", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.SneakCastGate))
-            return ("Waiting — casting before re-sneaking", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.SellingGate))
-            return ("Waiting — selling", NavActivityKind.Waiting);
-        if (gates.Contains(MovementCoordinator.SellDetourGate))
-            return ("Waiting — stopping to go sell", NavActivityKind.Waiting);
-
-        // Brief per-room settle beats while a room reveals a late-arriving hostile.
-        // They're a moment in the middle of moving, not a real stop, so they read as
-        // Moving and sit last — any real wait above wins.
-        if (gates.Contains(MovementCoordinator.DarkRoomSettleGate))
-            return ("Moving — checking the dark", NavActivityKind.Moving);
-        if (gates.Contains(MovementCoordinator.CombatRedisplaySettleGate))
-            return ("Moving — checking for an ambush", NavActivityKind.Moving);
-        if (gates.Contains(MovementCoordinator.SummonDeathSettleGate))
-            return ("Moving — checking for a summon", NavActivityKind.Moving);
+        foreach ((string gate, string label, NavActivityKind kind) in Holds)
+            if (gates.Contains(gate)) return ($"{kind} — {label}", kind);
 
         string first = gates.FirstOrDefault() ?? "?";
         return ($"Waiting — {first}", NavActivityKind.Waiting);
+    }
+
+    // Every hold in force right now, in priority order, for the top bar's hold
+    // chips. User pause and combat are left out: the live state chip already reads
+    // Paused / Fighting. The held condition flag stands in for HeldGate, since it
+    // flips first and the two describe the same thing.
+    public static IReadOnlyList<(string Label, NavChipTone Tone)> ActiveHolds(
+        IReadOnlyCollection<string> gates, bool isMovementPrevented)
+    {
+        ArgumentNullException.ThrowIfNull(gates);
+        List<(string, NavChipTone)> holds = [];
+        if (isMovementPrevented) holds.Add(("held", NavChipTone.Wait));
+        foreach ((string gate, string label, NavActivityKind kind) in Holds)
+            if (gates.Contains(gate) && !(isMovementPrevented && gate == MovementCoordinator.HeldGate))
+                holds.Add((label, kind == NavActivityKind.Moving ? NavChipTone.Beat : NavChipTone.Wait));
+        foreach (string gate in gates)
+            if (gate is not MovementCoordinator.UserGate and not MovementCoordinator.CombatGate
+                && !Array.Exists(Holds, h => h.Gate == gate))
+                holds.Add((gate, NavChipTone.Wait));
+        return holds;
     }
 
     // The specific wait reason to fold into the top-bar status line (e.g. "Walking

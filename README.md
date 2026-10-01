@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.3**
-> - Leading through a party-splitting `go hole` with one follower (the party disbands) holds for the re-invite — fixed in 3.133.8, now pinned by a test
+> **Version 3.134.4**
+> - Navigation hold reasons (sneaking, looting, resting…) show as chips after the status line instead of flashing in its text
+> - An ended hold's chip fades out over 2 s, so split-second holds can be read; the engine never waits on it
+> - Bank, sell, training and @comeback trips show a cyan chip while they run
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
