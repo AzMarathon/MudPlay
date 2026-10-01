@@ -1,8 +1,10 @@
 # Version history
 
-## 3.134.18
+## 3.134.19
 
 - Navigation hold chips fade out over 3 s instead of 2
+- The "+N.NN lvls" readout rounds down, so it never shows a level banked before it is
+- bug reports addressed: paradigm-20260930-203138
 
 ## 3.134.17
 

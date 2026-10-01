@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.18**
+> **Version 3.134.19**
 > - Navigation hold chips fade out over 3 s instead of 2
+> - The "+N.NN lvls" readout rounds down, so it never shows a level banked before it is
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

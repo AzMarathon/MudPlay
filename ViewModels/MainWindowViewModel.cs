@@ -2212,7 +2212,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (remaining is not { } tnl) return rate;
         string time = tnl <= TimeSpan.Zero ? "ready"
             : Game.Calculators.ExperienceTableCalculator.FormatTimeToLevel(tnl);
-        return $"{rate} - TNL: {time} (+{est.BankableLevelsFractional:0.00} lvls)";
+        return $"{rate} - TNL: {time} (+{Game.Calculators.TrainBudgetCalculator.FormatBankableLevels(est.BankableLevelsFractional)} lvls)";
     }
 
     private void RefreshStatusBarTicks()

@@ -32,6 +32,12 @@ public static class TrainBudgetCalculator
     // already sits. 0 when nothing resolves. The fraction is exp's position between
     // the highest earned level's threshold and the next one's; a saturated / flat
     // curve (no span) contributes no fraction.
+    // The "+N.NN" text, rounded down: 99.6% of the way to a level must not read as a
+    // whole level banked (report paradigm-20260930-203138: "1.00" two minutes short).
+    // The epsilon keeps 0.29 from reading 0.28 off a 0.28999… double.
+    public static string FormatBankableLevels(double levels) =>
+        (Math.Floor(levels * 100 + 1e-9) / 100).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
     public static double BankableLevelsFractional(long exp, int currentLevel, int chart, RealmType realm, int cap)
     {
         if (currentLevel <= 0 || chart <= 0 || cap <= 0) return 0;
