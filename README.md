@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.11**
-> - Sell detours and stash pass-through check a running loop's whole cycle, so a shop / stash room further along the lap no longer gets a needless detour
-> - A loop starts at its nearest room, partway along a leg if that's closest, instead of walking on to the nearest waypoint
-> - Auto-deposit trips walk back to the loop's nearest room, like sell detours
+> **Version 3.134.12**
+> - A ShadowRest rest goes out as soon as its sneak lands, not seconds later at the next HP tick
+> - A buff cast mid-ShadowRest no longer reads as rested and re-opens combat at low HP
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
