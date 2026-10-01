@@ -169,6 +169,37 @@ public sealed class TrainFundingRouterTests
         Assert.True(h.Result!.Value.Funded);
     }
 
+    // The trip's tolls are part of the bill, priced from wherever the errand stands:
+    // standing at the bank, it draws the fee plus the tolls from there on, not the
+    // bare fee (report paradigm-20260930-204041: topped up to the fee, then paid a
+    // 5 gold toll on the way to the trainer).
+    [Fact]
+    public void TollsOnTheTrip_AreDrawnWithTheFee()
+    {
+        Harness h = new() { Purse = 0 };
+        h.Sources.Add(Bank(5000));
+
+        h.Router.Begin(1000, Trainer, from => from.Equals(BankRoom) ? 500 : 300);
+        Assert.Equal(BankRoom, h.Walked[0]);
+
+        h.ArriveAtLastWalk();
+        Assert.Contains("with 1500", h.Sent);
+
+        h.Purse = 1500;
+        h.FireTimers();
+        Assert.True(h.Result!.Value.Funded);
+    }
+
+    [Fact]
+    public void PurseCoversTheFeeButNotTheTolls_GoesToTheBank()
+    {
+        Harness h = new() { Purse = 1000 };
+        h.Sources.Add(Bank(5000));
+
+        Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(1000, Trainer, _ => 500));
+        Assert.Equal(BankRoom, h.Walked[0]);
+    }
+
     [Fact]
     public void PartialStashIsSkippedWhenOneBankCoversTheWholeBill()
     {

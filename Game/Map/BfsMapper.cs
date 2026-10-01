@@ -430,6 +430,25 @@ public sealed class BfsMapper
         return false;
     }
 
+    // Copper the shortest route from source to destination charges in tolls and NPC
+    // transport fares, under the supplied filter. 0 when there's no route.
+    public long RouteTollCopper(RoomKey source, RoomKey destination, IRoomFilter? filter = null)
+    {
+        IReadOnlyList<Direction>? path = FindPath(source, destination, filter);
+        if (path is null) return 0;
+
+        long copper = 0;
+        RoomKey cursor = source;
+        foreach (Direction dir in path)
+        {
+            if (_graph.GetRoom(cursor) is not { } room || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            if (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0) copper += (long)exit.TollGold * 100;
+            copper += Math.Max(0, exit.FareCopper);
+            cursor = exit.Target;
+        }
+        return copper;
+    }
+
     // True when the shortest route from source to destination crosses at least
     // one (Level: MIN to MAX) exit under the supplied filter. Used at walk-start
     // to decide whether a party @level freshness probe is worth firing: the

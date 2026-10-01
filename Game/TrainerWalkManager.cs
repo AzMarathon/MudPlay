@@ -511,6 +511,29 @@ public sealed class TrainerWalkManager : IDisposable
     // The bill is the WHOLE itinerary, not the first trainer's fee: trainers serve a
     // contiguous level band, so a banked run can span several, each charging its own
     // markup. Budgeting only the first leg would fund a trip that strands halfway.
+    // The tolls and fares the trip pays walking from a room: on to each trainer of
+    // the itinerary in turn, then back to where the run left off. Funding budgets
+    // them on top of the fees, so a toll on the way doesn't leave the purse short at
+    // the trainer (report paradigm-20260930-204041). Null when routes can't be priced.
+    public Func<RoomKey, RoomKey, long>? RouteTolls { get; set; }
+
+    private Func<RoomKey, long>? TripTolls(IReadOnlyList<Game.Train.TrainSegment> itinerary, RoomKey runFrom)
+    {
+        if (RouteTolls is not { } tolls) return null;
+        List<RoomKey> stops = itinerary.Select(s => new RoomKey(s.Trainer.Map, s.Trainer.Room)).ToList();
+        return here =>
+        {
+            long copper = 0;
+            RoomKey at = here;
+            foreach (RoomKey stop in stops)
+            {
+                copper += tolls(at, stop);
+                at = stop;
+            }
+            return copper + tolls(at, runFrom);
+        };
+    }
+
     private bool BeginFunding(RoomKey from, TrainerShop first)
     {
         if (_funding is null || _cpOnlyRun) return false;
@@ -525,7 +548,7 @@ public sealed class TrainerWalkManager : IDisposable
         if (cost <= 0) return false;
 
         var trainerRoom = new RoomKey(first.Map, first.Room);
-        switch (_funding.Begin(cost, trainerRoom))
+        switch (_funding.Begin(cost, trainerRoom, TripTolls(itinerary, from)))
         {
             case Game.Train.TrainFundingStart.Funded:
                 _fundingRetryAt = DateTimeOffset.MinValue;

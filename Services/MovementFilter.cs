@@ -543,6 +543,22 @@ public sealed class MovementFilter : IRoomFilter
     // that kind were passable — and probe only when that path genuinely crosses
     // one. Each half is independent: a toll on the route warms @wealth, a level
     // gate on the route warms @level; a route with neither warms nothing.
+    // The tolls and fares on the route a walk WOULD take once it can pay them: the
+    // toll gate stands down (an unaffordable toll is routed around only until the
+    // money is in hand), and so do the acquirable gates a train or detour walk plans
+    // through. Prices a trip's crossings before the money for it is fetched.
+    public long TollCopperOnRoute(BfsMapper bfs, RoomKey source, RoomKey destination)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        _tollGateSuspended = true;
+        try
+        {
+            using IDisposable _ = SuspendAcquirableGates();
+            return bfs.RouteTollCopper(source, destination, this);
+        }
+        finally { _tollGateSuspended = false; }
+    }
+
     public void WarmForRoute(BfsMapper bfs, RoomKey source, RoomKey destination)
     {
         ArgumentNullException.ThrowIfNull(bfs);

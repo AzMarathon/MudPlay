@@ -3609,6 +3609,7 @@ These shape how the **leader** runs an Auto-train party trip (the level-11 rule 
 
 **Default:** Stash rooms first, then a bank · any bank · any stash room
 **What it does:** Decides where auto-train may fetch the difference when your purse, above keep-on-hand, can't pay for the training.
+The bill counts the **tolls and transport fares on the trip** as well as the training fees — the walk on to each trainer and back to where the run left off — priced from wherever it stands, so a withdrawal at a bank covers the tolls from that bank onward too.
 - **Fetch the difference from:**
   - **Stash rooms first, then a bank:** the original behavior.
   - **A bank only.**

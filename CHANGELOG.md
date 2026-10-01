@@ -1,10 +1,11 @@
 # Version history
 
-## 3.134.19
+## 3.134.20
 
 - Navigation hold chips fade out over 3 s instead of 2
 - The "+N.NN lvls" readout rounds down, so it never shows a level banked before it is
-- bug reports addressed: paradigm-20260930-203138
+- Auto-train's funding counts the trip's tolls and fares, so a toll on the way doesn't leave it short at the trainer
+- bug reports addressed: paradigm-20260930-203138, paradigm-20260930-204041
 
 ## 3.134.17
 

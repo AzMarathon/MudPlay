@@ -7208,6 +7208,7 @@ public sealed class AppServices
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
             RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log);
         TrainerWalk.SetFundingRouter(TrainFunding);
+        TrainerWalk.RouteTolls = (a, b) => Movement.TollCopperOnRoute(Bfs, a, b);
         // The errand drives the walker itself, so it needs the same event stream the
         // coordinator watches. TrainerWalkManager ignores walk events while its phase
         // is Funding, so the two never both act on one event.
