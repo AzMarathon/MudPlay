@@ -2704,12 +2704,12 @@ Two distinct spawn mechanisms exist (lair mobs here, NPC-placed mobs in *NPC-pla
 - **A lair also refills under a character standing in it, but slower than walking in once its timer has run out** *([CONFIRMED] 2026-09-30, user)*.
 - **How the Stock engine refills a lair** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p and `wccmp002.dat`; Stock only, Paradigm not recorded)*. In-memory room offsets (disk record minus 2):
   - **Every lair-tagged room is room type 3** (`+0x43c`; all 3,102 of them in `wccmp002.dat`). Its `(Max N)` is `+0x55c`, its `Delay` is `+0x5bc` (0 falls back to the global default at `0x482d0c`, 5), and its live spawn count is `+0x606`.
-  - **No Stock lair room has `Delay` 0** *([OBSERVED] 2026-09-30, `data-v1.11p` Rooms)*, so `LairTimerStore`'s `AvgDelay` / `RegenTime` fallback never runs on Stock, and the engine's global default of 5 never applies to the exported data.
+  - **No Stock lair room has `Delay` 0 in the exported data, because the export writes the engine's default** *([OBSERVED] 2026-09-30, `data-v1.11p` Rooms; 2026-10-01, `wccmp002.dat` against it)*. The room file holds `Delay` 0 on 325 of the 3,102 lair rooms (7,049 rooms of every kind), and the export shows 5 for each of them and the file's own value everywhere else. So `LairTimerStore`'s `AvgDelay` / `RegenTime` fallback never runs on Stock. (An earlier note said the engine's default of 5 never applies to the exported data; superseded 2026-10-01.)
   - **A kill stamps one last-kill time for the whole room.** `_check_kill_monster` @ `0x424eb7` lowers the spawn count and writes the current clock minute (hour × 60 + minute) to `+0x562` (@ `0x424f1a`–`0x424f3d`), and again on the room the monster died in (@ `0x424fc5`–`0x424fe8`).
   - **A placed NPC's kill restarts the room clock too** *([OBSERVED] 2026-09-30, DLL)*. The first stamp is on the monster's home room and is skipped, with the count, when the monster is that room's placed NPC (`+0x5c8`, @ `0x424ef0`); the second, on the room it died in, has no such check. So killing a lair room's fixture — the cave worm in `1/866` (*NPC-placed monsters*) — restarts that room's lair clock. *[NEEDS CONFIRMATION] — seen in the DLL only: does a room whose fixture is killed every round really never refill its lair?*
   - **`_generate_monster` @ `0x424361` refuses while the count is at `Max`** (@ `0x4243a5`) **and until the clock minute minus `Delay` is past the last-kill minute** (@ `0x42440b`–`0x424466`). So the room is ready `Delay` to `Delay + 1` minutes after its last kill, in whole clock minutes, and then every missing spawn comes back together.
   - **Walking in refills at once.** `_user_allowed_in_room` @ `0x4172ff`, which `_move_user` calls before the move, generates into a type-3 room until a generate fails, when no other player is in it (@ `0x4173bd`–`0x417450`).
-  - **Standing in it, the refill waits for the monster-create pass.** `_background_monster_create` @ `0x4218b7` calls `0x4232d3`, which walks every player's room and generates into a type-3 room until one fails, with no random roll (@ `0x42353e`–`0x423585`). The pass runs every 5 fast ticks, 5 s by default (`0x482ca8`; the sysop can change it @ `0x465b1a`). On Stock that pass is the whole of "slower in the room": up to 5 s after the room is ready.
+  - **Standing in it, the refill waits for the monster-create pass.** `_background_monster_create` @ `0x4218b7` calls `0x4232d3`, which walks every player's room and generates into a type-3 room until one fails, with no random roll (@ `0x42353e`–`0x423585`). The same pass also fills a lair next to a player's room on a 5-in-99 roll per exit (*Random spawns in assigned rooms*). The pass runs every 5 fast ticks, 5 s by default (`0x482ca8`; the sysop can change it @ `0x465b1a`). On Stock that pass is the whole of "slower in the room": up to 5 s after the room is ready.
 - (A 2026-09-30 `[CONFLICT — ask the user]` note said the DLL's room-wide clock and `Delay`–`Delay + 1` minute wait disagreed with the per-slot clock and `(Delay − 1)` min + 30 s rules, which then carried no realm; settled 2026-09-30 by the user: the DLL is right for Stock, and the per-slot rule is Paradigm's.)
 - **Client use:**
   - `LairTimerStore.RespawnSecondsForDelay` turns `Delay` into `T` by realm: Stock `Delay × 60 + 30` (the middle of its `Delay`–`Delay + 1` minute window), Paradigm `(Delay − 1) × 60 + 30`. `DefaultRespawnSeconds` hands it to everything that shows or plans a lair timer: `RouteExpResolver` (the Exp/Hr estimate), the map's lair heat-map and CURRENT NAV countdowns (`NavigationViewModel`), the lair editors (`LairEditorDialogViewModel`, `LairTimerEditDialogViewModel`) and Auto-Lair.
@@ -2745,7 +2745,7 @@ A monster's `Summoned By` field lists the rooms it appears in, each token tagged
   - a **monster group** (`+0x560`) with an **index range** (`+0x462`–`+0x464`).
 
   How they're used:
-  - **`_generate_monster` spawns the set monster whenever one is given**, and draws at random from the group's index range only when it's 0 (@ `0x4244fc`).
+  - **`_generate_monster` spawns the set monster whenever one is given**, and draws at random from the group's index range only when it's 0 (@ `0x4244fc`). *Random spawns in assigned rooms* has the draw and the rolls that lead to it.
   - **The regen that runs around players fills types 0, 2 and 3 only** (@ `0x4233d9`, `0x4236a1`). Type 1 rooms are refilled only by the room-reset routine, again with the set monster (@ `0x430460`–`0x4304b1`).
   - **The data compiler lists every monster in a room's range as a `Group:` token regardless.**
 
@@ -2758,6 +2758,44 @@ A monster's `Summoned By` field lists the rooms it appears in, each token tagged
   - `MonsterSpawnIndex` parses the token kinds, while the combat resolver keeps a permissive union of all of them.
   - `StrayMonsterRule` applies the unobtainable policy. It's used by the Monsters and Unobtainable tables (Reason: "Only listed under a room that spawns a different NPC") and by `MonsterCatalog.InPlay` (Monster Intel). Room tooltips and room panels leave out every monster on the Unobtainable list (`MonsterSpawnIndex.OutOfPlay` → `MonsterCatalog.IsOutOfPlay`, checked in `RoomTooltipBuilder`).
 
+### Random spawns in assigned rooms
+
+*Status: OBSERVED 2026-10-01 (`wccmmud.dll` 1.11p disassembly and `wccmp002.dat`; not confirmed in play) · Realm: Stock (Paradigm not recorded)*
+
+How a room with a `Group:` token and no lair (*`Summoned By` spawn tokens*) gets its monsters. Offsets are in-memory room offsets (disk record minus 2). The quoted field names are the engine's own, from the sysop room dump (*Sysop commands → `SYSOP STATUS` — room dump format*).
+
+- **Assigned rooms are room type 0, and only the monster-create pass fills them.**
+  - 23,259 of the 26,694 Stock rooms are type 0, and 20,354 of those have a group index range or a set monster.
+  - Walking in spawns nothing in them: `_user_allowed_in_room` @ `0x4172ff` only regenerates a placed NPC and fills a type-3 lair (@ `0x417372`–`0x417450`).
+  - The pass is `0x4232d3`, run every 5 s by default (*Lair respawn timers*).
+- **Players' rooms: one roll per online player, each pass** (@ `0x423311`–`0x423535`). When the player's room is type 0 or 2 and holds fewer monsters than players, and fewer than 15 monsters, the pass rolls `genrdn(1,100)`, which is 1–99 (*Armour, defence & to-hit → To-hit floor — the minimum chance a monster can ever land, by realm and armour type*):
+  - **type 0 spawns on a roll under 5** — 4 in 99;
+  - **type 2 spawns on a roll under 90** — 89 in 99. Only three rooms are type 2, the arenas `1/2150`, `1/2155` and `1/2313`.
+  - The room's monster and player counts are taken once per pass, so every player in the room rolls against the same counts.
+  - A second branch, a roll over 99 spawning while the monsters number under twice the players, can't fire: the roll tops out at 99 (@ `0x4234d8`–`0x4234e9`).
+- **Neighbouring rooms: 5 in 99 per exit, each pass** (@ `0x4235b2`–`0x4237b3`). For each room a player stands in, each of the ten exits with a destination rolls `genrdn(1,100)` under 6. On a hit:
+  - a type 0 or 2 neighbour holding fewer monsters than the player's room holds players gets one generate, and that room's remaining exits are skipped;
+  - a type 3 neighbour is generated into until a generate fails, as in *Lair respawn timers*.
+  - **The neighbour is looked up on the map of the last online player the pass handled**, not the map of the room it adjoins: the map variable (`[ebp-0x18]`) is never rewritten in this loop (@ `0x42368b`). It reads as an engine slip.
+  - The test that would skip a neighbour already in the pass's room table is overwritten by the free-slot search (@ `0x42364e`–`0x423685`), so it doesn't.
+- **A pass stops after 9 spawns**, and the next pass resumes from the same player (`0x47fba4`, `0x47fba8`).
+- **`_generate_monster` @ `0x424361` can still refuse a winning roll:**
+  - **`Room Max`** — the room's live spawn count (`+0x606`) is at its max (`+0x55c`) (@ `0x4243a5`). Every type-0 room that can spawn has a max of 1–15.
+  - **`Last Killed` + `Delay`** — the room clock of *Lair respawn timers* applies to every room type but 2 (@ `0x4243fb`): nothing spawns until the clock minute is more than `Delay` past the room's last kill.
+  - **The `Controlling Room`'s area cap** — a room with a controlling room (`+0x5c4`, on the same map) spawns only while that room's area count (`+0x5c0`) is under its area max (`+0x5be`) (@ `0x42446d`–`0x4244ba`). A spawn raises the count (@ `0x424c0f`) and a kill lowers it (`_check_kill_monster`, @ `0x424f4d`–`0x424fa3`).
+    - 18,776 of the 20,354 spawning type-0 rooms have one: 327 controlling rooms, a median of 29 rooms each (the largest, `12/135`, has 938).
+    - Area max runs 0–1000 with a median of 28; 33 controlling rooms have area max 0.
+    - A controlling room that doesn't exist is cleared from the room (@ `0x4244d1`); 3 are missing from the room file.
+  - **No free slot** among the room's 15 monster slots (`+0x400`, @ `0x4243d4`).
+  - **The picked monster is at its `GameLimit`** (active `+0xa8` at limit `+0xa6`), or is a `GameLimit` 1 monster still inside its regen wait (*Boss monsters*) (@ `0x42462a`–`0x4246f9`). The attempt is lost; the engine doesn't pick again.
+  - **A server setting at `0x4906c9` equal to 2 blocks monsters of group 5 and group 37** (@ `0x42460c`). *[NEEDS CONFIRMATION] — which setting is that?*
+- **The group pick favours the first and last candidates** (@ `0x424526`–`0x4245ea`). With no set monster, the engine scans its monster quick-reference table for monsters in the room's group whose index is inside the room's range (`Min` `+0x462`, `Max` `+0x464`; a bound of 0 is open).
+  - The table is built by `_load_monster_quickreferences` @ `0x4601ec`: number, group (`+0x54`) and index (`+0x5c`) of up to 2,000 monsters, in the monster file's step order.
+  - The first match is held. Each later match replaces it on a `genrdn(1,100)` under 30 (29 in 99), and a roll of 99 ends the scan.
+  - Leaving the 1-in-99 stop aside, the last candidate gets 29%, each one before it 0.71 times the next, and the first what's left: two candidates split 71% / 29%, three split 50% / 21% / 29%.
+  - No match spawns nothing and, when the flag at `0x4790d4` is set, logs `Check mongen stats` with `Room: %d, Map: %d` to the sysop.
+- **The spawn is announced as an arrival** (*Monster movement lines*) from one of the room's plain exits among the eight compass directions, or `from nowhere` when it has none (@ `0x424c58`–`0x424e3e`). The first plain exit (exit type 0) is kept, and each later one replaces it on a `genrdn(1,10)` over 5.
+
 ### Boss monsters
 
 *Status: CONFIRMED 2026-08-03 (user + reports `paradigm-20260803-035136`, `-094657`)*
@@ -2768,6 +2806,7 @@ A monster's `Summoned By` field lists the rooms it appears in, each token tagged
   - The animated juggernaut (`Number 1211`, placed in `17/7055`, `GameLimit 1`, `RegenTime 3`, 1,300,000 exp) is killable **once per 3 hours**.
 - **A placed boss is NOT an instant fixture.** Normal `NPC`-placed monsters regenerate on entry (instant, every pass), but a *boss* placed monster is still gated by its regen, so it's amortised exactly like a lair boss, not grabbed every lap.
 - **A boss's `RegenTime` is in HOURS** (the Game-Data browser renders it "15 hour") — the same unit as every monster's `RegenTime` (see *Lair respawn timers*); a lair's `AvgDelay` is a separate field.
+- **Stock: the wait is `RegenTime` hours give or take an eighth, rolled afresh on every spawn attempt** *([OBSERVED] 2026-10-01, `wccmmud.dll` 1.11p `_generate_monster` @ `0x42462a`–`0x4246e2`; Stock only, Paradigm not recorded)*. For a `GameLimit` 1 monster with a last-kill date and a `RegenTime`, the engine refuses the spawn while the minutes since that kill are under `RegenTime × 60 + lngrnd(0, RegenTime × 15) − RegenTime × 7.5`.
 - **Exp/hr estimation of a boss:** pull it OUT of its lair's per-mob average and add its amortised contribution **`boss exp ÷ regen-hours`, counted once** for the whole loop (a single time no matter how many rooms it can appear in) — `1,200,000 ÷ 15 = 80,000/hr`, not `1.2M` per lap in every room. The regular (non-boss) lair mobs still fire per-room on the room delay.
 
 **Client use:**
