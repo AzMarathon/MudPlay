@@ -90,6 +90,10 @@ public sealed class EquipmentStatSummary
     public int WeaponSpeed { get; set; }         // Speed field from Weapon Hand item (drives swings/round; 0 = unarmed)
     public int MaxSingleAbil22 { get; set; }     // Highest single abil 22/105/106 value across all sources (Stock accuracy)
 
+    // A copy to fold other sources into (Character Info adds the cast buffs) without
+    // touching the gear figures this one reports.
+    public EquipmentStatSummary Copy() => (EquipmentStatSummary)MemberwiseClone();
+
     // Martial arts (Mystic).
     public int PlusPunchDmg { get; set; }        // Abil 92
     public int PlusPunchAccy { get; set; }       // Abil 89

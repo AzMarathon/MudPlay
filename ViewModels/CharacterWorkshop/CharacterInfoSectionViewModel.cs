@@ -114,6 +114,12 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     [ObservableProperty] private string _smashDamage = "—";
     // Backstab damage range ("min-max") for the equipped weapon; empty when not stealth-capable.
     [ObservableProperty] private string _backstabDamage = string.Empty;
+
+    // How each attack row was worked out — the inputs, and which of them came from
+    // gear and which from the buffs being cast on us.
+    [ObservableProperty] private string? _attackTip;
+    [ObservableProperty] private string? _bashTip;
+    [ObservableProperty] private string? _backstabTip;
     // Swings/round per attack, from the MajorMUD energy budget
     // (CombatCalculator.CalcSwings): weapon speed + level + class CombatLVL +
     // agility + strength-vs-StrReq + encumbrance. Bash doubles energy per swing
@@ -354,10 +360,23 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         HasQuestBonuses = QuestBonusRows.Count > 0;
     }
 
-    private void ComputeDerivedCombat(EquipmentStatSummary t, JsonElement? classRow, JsonElement? raceRow)
+    private void ComputeDerivedCombat(EquipmentStatSummary gear, JsonElement? classRow, JsonElement? raceRow)
     {
         RealmType realm = _gameData.ActiveRealm;
         int level = _stats.Level;
+
+        // The buffs being cast on us count as the game counts them in `stat all`
+        // (report: smite's +max damage and shadowform's BS bonuses were missing).
+        MudPlay.Game.Spells.BuffCombat buff = MudPlay.Game.Spells.BuffCombatCalculator.Compute(
+            AppServices.Current.Profile.Current?.PartyBuffs, level,
+            AppServices.Current.Spellbook.Available, AppServices.Current.PartyState.IsInParty);
+        EquipmentStatSummary t = gear.Copy();
+        t.PlusAccuracy += buff.Accuracy;
+        t.MaxSingleAbil22 = Math.Max(t.MaxSingleAbil22, buff.AccuracyMaxSingle);
+        t.PlusMaxDamage += buff.MaxDamage;
+        t.PlusBSAccuracy += buff.BsAccuracy;
+        t.PlusBSMin += buff.BsMin;
+        t.PlusBSMax += buff.BsMax;
         int nCombatLevel = GetInt(classRow, "CombatLVL");
         int str = _stats.Strength, agi = _stats.Agility, intel = _stats.Intellect, chm = _stats.Charm;
 
@@ -398,6 +417,16 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         {
             AttackDamage = BashDamage = SmashDamage = "—";
         }
+        string? meleeTip = t.WeaponMax > 0
+            ? string.Join("\n",
+                $"Weapon {t.WeaponMin}-{t.WeaponMax}, strength {str}",
+                Part("+max damage", gear.PlusMaxDamage, buff, "max damage"),
+                Part(realm == RealmType.ParaMud ? "+accuracy (all sources add)" : "+accuracy (highest source)",
+                    realm == RealmType.ParaMud ? gear.PlusAccuracy : gear.MaxSingleAbil22, buff, "accuracy"),
+                $"Worn accuracy {t.TotalWornAccy}")
+            : null;
+        AttackTip = meleeTip;
+        BashTip = meleeTip;
 
         // Swings/round for the melee rows. Needs a weapon (its speed drives the
         // energy budget), a level and a class CombatLVL. Bash doubles energy per
@@ -434,6 +463,14 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
                 t.PlusBSMin, t.PlusBSMax, t.PlusMaxDamage, hasClassStealth, realm);
             BackstabDamage = string.Create(CultureInfo.InvariantCulture,
                 $"{bsDmg.MinDamage}-{bsDmg.MaxDamage}");
+            BackstabTip = string.Join("\n",
+                $"Weapon {t.WeaponMin}-{t.WeaponMax}, stealth {stealth}, strength {str}, agility {agi}, level {level}",
+                Part("BS accuracy", gear.PlusBSAccuracy, buff, "BS accuracy"),
+                Part("BS min damage", gear.PlusBSMin, buff, "BS min damage"),
+                Part("BS max damage", gear.PlusBSMax, buff, "BS max damage"),
+                Part("+max damage", gear.PlusMaxDamage, buff, "max damage"),
+                Part(realm == RealmType.ParaMud ? "+accuracy (all sources add)" : "+accuracy (highest source)",
+                    realm == RealmType.ParaMud ? gear.PlusAccuracy : gear.MaxSingleAbil22, buff, "accuracy"));
             BackstabSwings = "1.0";   // a backstab is always a single strike
         }
         else
@@ -443,6 +480,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             BackstabAccuracy = stealth > 0 ? "—" : "N/A";
             BackstabDamage = string.Empty;
             BackstabSwings = string.Empty;
+            BackstabTip = null;
         }
 
         // Martial-arts attacks — Mystic special strikes. Each strike row is gated
@@ -531,6 +569,21 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         MeleeDamageResult d = CombatCalculator.CalcMartialArtsDamage(
             type, realm, level, maPlusSkill, str, plusMaxDamage, maPlusDamage, plusMinDamage);
         return string.Create(CultureInfo.InvariantCulture, $"{d.MinDamage}-{d.MaxDamage}");
+    }
+
+    // "+max damage 3 — gear 2, smite +1": one tooltip line, the gear part then each
+    // cast buff's part.
+    private static string Part(string label, int gearValue, MudPlay.Game.Spells.BuffCombat buff, string what)
+    {
+        int spells = 0;
+        List<string> parts = new() { $"gear {gearValue.ToString("+0;-0;0", CultureInfo.InvariantCulture)}" };
+        foreach (MudPlay.Game.Spells.BuffCombatSource src in buff.Sources)
+        {
+            if (src.What != what) continue;
+            spells += src.Value;
+            parts.Add($"{src.Spell} {src.Value.ToString("+0;-0", CultureInfo.InvariantCulture)}");
+        }
+        return $"{label} {gearValue + spells} — {string.Join(", ", parts)}";
     }
 
     private static string Acc(MudAttackType type, RealmType realm, int level, int nCombatLevel,
