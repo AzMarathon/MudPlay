@@ -143,6 +143,16 @@ public static class SpellDamageCalculator
         return (MagicResistCut(probe, System.Math.Max(1, magicResist), antimagic, realm) - probe) / 100.0;
     }
 
+    // The resist percent a player brings against a monster's spell of the given
+    // damage type. Stock cuts every type, poison (by ImmuPoison) and vulnerabilities
+    // included; Paradigm cuts the five elements only, and only by a positive resist.
+    public static int PlayerElementalResist(ElementalResists resists, SpellDamageElement element, RealmType realm)
+    {
+        int value = resists.For(element);
+        if (realm != RealmType.ParaMud) return value;
+        return element == SpellDamageElement.Poison ? 0 : System.Math.Max(0, value);
+    }
+
     // The partial cut before its cap (50%, or 75% for an AntiMagic character), so a
     // readout can say when the cap is what's limiting it.
     public static int UncappedMagicResistCut(int magicResist, bool antimagic) =>

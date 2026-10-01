@@ -68,6 +68,7 @@ public sealed class EquipmentStatSummary
     public int PlusStoneResist { get; set; }     // Abil 65
     public int PlusLightningResist { get; set; } // Abil 66
     public int PlusWaterResist { get; set; }     // Abil 147
+    public int PlusPoisonResist { get; set; }    // Abil 21 (ImmuPoison)
     public int PlusShadowResist { get; set; }    // Abil 9
 
     // Protection.

@@ -162,4 +162,22 @@ public sealed class SpellDamageCalculatorTests
         Assert.Equal(expected, SpellDamageCalculator.PlayerMagicResistDamagePercent(mr, antimagic, RealmType.Stock));
         Assert.Equal(expected, SpellDamageCalculator.PlayerMagicResistDamagePercent(mr, antimagic, RealmType.ParaMud));
     }
+
+    // A player's elemental resist against a monster's spell: Stock cuts every damage
+    // type (poison by ImmuPoison, vulnerabilities included); Paradigm cuts only the
+    // five elements, and only by a positive resist.
+    [Fact]
+    public void PlayerElementalResist_FollowsTheRealm()
+    {
+        ElementalResists r = new(Cold: -20, Fire: 25, Stone: 0, Lightning: 0, Water: 0, Poison: 50);
+
+        Assert.Equal(25, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Fire, RealmType.Stock));
+        Assert.Equal(-20, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Cold, RealmType.Stock));
+        Assert.Equal(50, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Poison, RealmType.Stock));
+        Assert.Equal(0, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.None, RealmType.Stock));
+
+        Assert.Equal(25, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Fire, RealmType.ParaMud));
+        Assert.Equal(0, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Cold, RealmType.ParaMud));
+        Assert.Equal(0, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Poison, RealmType.ParaMud));
+    }
 }

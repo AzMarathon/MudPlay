@@ -20,17 +20,18 @@ namespace MudPlay.Game.Combat;
 // attack lands; how often it fires rides the monster's own attack energy). Both 0
 // for a physical slot, a non-damaging spell, or an unresolved spell number.
 //
-// SpellMagicRes says how the target's magic resist bears on the linked spell; null
+// SpellMagicRes says how the target's resists bear on the linked spell; null
 // for a physical slot or an unresolved spell number.
 public sealed record MonsterAttackSlot(
     string Name, int Type, int Percent, double TruePercent,
     int MinDamage, int MaxDamage, int Accuracy, int Energy, int HitSpell,
     int SpellDmgMin = 0, int SpellDmgMax = 0, MonsterSpellMagicRes? SpellMagicRes = null);
 
-// How a target's magic resist bears on one monster spell: CutsDamage when it is a
-// Damage(-MR) spell (the partial cut applies), and the spell's TypeOfResists (0
-// never resisted outright, 1 only by an AntiMagic target, 2 by anyone).
-public readonly record struct MonsterSpellMagicRes(bool CutsDamage, int TypeOfResists);
+// How a target's resists bear on one monster spell: CutsDamage when it is a
+// Damage(-MR) spell (the magic-resist partial cut applies), the spell's
+// TypeOfResists (0 never resisted outright, 1 only by an AntiMagic target, 2 by
+// anyone), and the damage type an elemental resist cuts.
+public readonly record struct MonsterSpellMagicRes(bool CutsDamage, int TypeOfResists, SpellDamageElement Element);
 
 // One MidSpell-N ("between rounds") slot. Percent is stored as a cumulative
 // threshold across the 5 slots on the raw row — MonsterCatalog resolves this to
@@ -521,7 +522,8 @@ public sealed class MonsterCatalog
     private static MonsterSpellMagicRes? ResolveSpellMagicRes(
         int spellNumber, Func<int, SpellFormulaInput?> resolveFormula) =>
         resolveFormula(spellNumber) is { } f
-            ? new MonsterSpellMagicRes(SpellDamageCalculator.UsesMagicResist(f), f.TypeOfResists)
+            ? new MonsterSpellMagicRes(SpellDamageCalculator.UsesMagicResist(f), f.TypeOfResists,
+                SpellDamageCalculator.Element(f))
             : null;
 
     private static void AddElement(HashSet<string> into, int attType)

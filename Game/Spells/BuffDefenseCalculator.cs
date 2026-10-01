@@ -29,6 +29,7 @@ public static class BuffDefenseCalculator
         int ac = 0, protEvil = 0;
         double dr = 0;
         bool hasShadow = false, hasVileWard = false;
+        int cold = 0, fire = 0, stone = 0, lightning = 0, water = 0, poison = 0;
         foreach (BuffSlot slot in buffs.Slots)
         {
             string? code = slot.Spell?.Trim();
@@ -49,10 +50,17 @@ public static class BuffDefenseCalculator
                     case ProtEvilCode: protEvil += a.Value != 0 ? a.Value : (int)affMax; break;
                     case ShadowCode: hasShadow = true; break;
                     case VileWardCode: hasVileWard = true; break;
+                    case 3: cold += a.Value != 0 ? a.Value : (int)affMax; break;
+                    case 5: fire += a.Value != 0 ? a.Value : (int)affMax; break;
+                    case 65: stone += a.Value != 0 ? a.Value : (int)affMax; break;
+                    case 66: lightning += a.Value != 0 ? a.Value : (int)affMax; break;
+                    case 147: water += a.Value != 0 ? a.Value : (int)affMax; break;
+                    case 21: poison += a.Value != 0 ? a.Value : (int)affMax; break;
                 }
             }
         }
-        return new BuffDefense(ac, dr, protEvil, hasShadow, hasVileWard);
+        return new BuffDefense(ac, dr, protEvil, hasShadow, hasVileWard,
+            new ElementalResists(cold, fire, stone, lightning, water, poison));
     }
 
     // A configured slot lands on us (so its AC/DR counts toward our buffed defense)

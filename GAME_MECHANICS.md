@@ -1964,7 +1964,23 @@ How one damage spell cast against a monster is worked out.
 - **Not modeled today:** a resisted 0 / heal cast produces no `no effect` line, so when game data
   doesn't show the resist, the runtime 0 / negative hit line isn't acted on — the engine can keep
   re-casting a spell that heals the monster.
+- **A player's own resists cut a monster's spell the same way** — the ability codes in the table
+  above, read off the character (gear, race, class, quests, active buffs).
+  - **Stock** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_monster_cast`, resist switch @ `0x4280c1`,
+    applied @ `0x428230`)*: `damage × (100 − resist) / 100`, truncated, straight after the roll and
+    before the magic-resist cut, on every damage code. `AttType` 6 reads ImmuPoison (21) — see *Poison
+    (`AttType 6`) — immunity and damage resist*. The value is signed, so a negative resist adds damage.
+    The switch runs only for a spell whose record Type (`+0xc4`; names `Auto-Combat`, `Poison`,
+    `Change me`, `General`) is below 3 — a `General` spell skips it. That field is not in the imported
+    Spells table.
+  - **Paradigm** *([OBSERVED] 2026-09-30, MMUD-Explorer `clsMonsterAttackSim`, no realm branch)*: the
+    cut comes after the magic-resist cut, applies only to the five elements (not Normal 4 or Poison 6),
+    and only when the resist is above 0.
 - **Client use:**
+  - Monster Intel's per-spell resist line (`MonsterIntelViewModel.SpellResistNote`) applies the
+    character's resist for the spell's `AttType` through `SpellDamageCalculator.PlayerElementalResist`
+    and `AfterTargetResists`; the totals come from `IncomingHitEstimator.BuildLiveDefense`
+    (`PlayerDefenseProfile.Resists`: gear, race, class, completed quests, configured buffs).
   - Elemental ≥100% resist is pre-empted via `MonsterResistIndex`; `CombatSpellChooser` explicitly
     resist-blocks *elemental* spells only (see also *Magic Resist (M.R.) and `TypeOfResists`*).
 
@@ -2020,7 +2036,7 @@ How one damage spell cast against a monster is worked out.
     the client uses for Paradigm. Wire text: `You resisted %s's cast of %s.`
 - **Client use:**
   - Character Info's Magic Res tooltip (`CharacterInfoSectionViewModel.ComputeMagicResTip`) and Monster
-    Intel's per-spell note on the Attacks rows (`MonsterIntelViewModel.MagicResNote`) show the cut and
+    Intel's per-spell note on the Attacks rows (`MonsterIntelViewModel.SpellResistNote`) show the cut and
     the full-resist chance for the character's current Magic Res, via
     `SpellDamageCalculator.PlayerMagicResistDamagePercent` / `PlayerFullResistCap`; a monster spell
     open to neither reads "ignores MR". AntiMagic is read from the class record only.
