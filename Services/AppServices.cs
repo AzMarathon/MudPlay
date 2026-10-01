@@ -4244,7 +4244,13 @@ public sealed class AppServices
             // An item's `look` leads with its bare name, then free-text description
             // rows up to the prompt.
             isListingHeader: text =>
-                text.Length <= 40 && text[^1] != '.' && ItemNames.FindByName(text) is not null);
+                text.Length <= 40 && text[^1] != '.' && ItemNames.FindByName(text) is not null,
+            // A named exit ("go manhole") prints its own passage flavour, which the
+            // game data doesn't carry; the room's exit commands identify the cause.
+            isRoomExitCommand: command =>
+                RoomTracker.State.CurrentRoom is { } room
+                && room.Exits.Values.Any(exit => exit.TextCommands is { } commands
+                    && commands.Contains(command, StringComparer.OrdinalIgnoreCase)));
         // Subscribed after the message and candidate stores' own loads, so the queue is
         // re-checked against the set's freshly loaded catalogue.
         GameData.ActiveSetChanged += _ => MessageCandidateWatcher.PruneRecognized();

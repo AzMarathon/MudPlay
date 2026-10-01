@@ -1,5 +1,10 @@
 # Version history
 
+## 3.134.56
+
+- Unrecognized Lines skips the passage line a named exit prints (`go manhole`, `go path`)
+- bug reports addressed: unrecognized-lines-20261001-120022
+
 ## 3.134.55
 
 - Transaction history: coin stashed in a room is one row per stash room, showing the last stash, the number of stashes, the average and the total
