@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.30**
+> **Version 3.134.32**
 > - Session Stats rates show to a tenth of a percent and never read 0% or 100% unless they exactly are
+> - Session Stats can show its panels in two columns (I / II, top right), saved per character
+> - Session Stats' "Walk" row is now "Walk Latency"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

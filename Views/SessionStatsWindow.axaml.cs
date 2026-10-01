@@ -62,17 +62,25 @@ public partial class SessionStatsWindow : Window
                 ? brush
                 : Brushes.DeepSkyBlue;
 
-        if (this.FindControl<StackPanel>("PanelHost") is { } host)
+        if (this.FindControl<Grid>("PanelGrid") is { } grid)
         {
             // Tunnel so the title handle records the pressed panel before the
             // inner controls (expander headers, the Reset button) handle the click.
-            host.AddHandler(PointerPressedEvent, OnPanelPointerPressed, RoutingStrategies.Tunnel);
-            host.AddHandler(PointerMovedEvent, OnPanelPointerMoved, RoutingStrategies.Tunnel);
-            host.AddHandler(DragDrop.DragOverEvent, OnPanelDragOver);
-            host.AddHandler(DragDrop.DragLeaveEvent, OnPanelDragLeave);
-            host.AddHandler(DragDrop.DropEvent, OnPanelDrop);
-            host.LayoutUpdated += (_, _) => RefitToContent(host);
+            grid.AddHandler(PointerPressedEvent, OnPanelPointerPressed, RoutingStrategies.Tunnel);
+            grid.AddHandler(PointerMovedEvent, OnPanelPointerMoved, RoutingStrategies.Tunnel);
+            grid.AddHandler(DragDrop.DragOverEvent, OnPanelDragOver);
+            grid.AddHandler(DragDrop.DragLeaveEvent, OnPanelDragLeave);
+            grid.AddHandler(DragDrop.DropEvent, OnPanelDrop);
+            grid.LayoutUpdated += (_, _) => RefitToContent(grid);
         }
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is SessionStatsViewModel vm)
+                vm.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(SessionStatsViewModel.Columns)) OnColumnsChanged(vm);
+                };
+        };
 
         // Show the HP/MA graph's scrub cursor while the step slider is held. Tunnel
         // + handledEventsToo so the thumb's own pointer handling doesn't hide the
@@ -102,7 +110,7 @@ public partial class SessionStatsWindow : Window
     // height it wants, add the (constant) window chrome, clamp to Min/Max, and set
     // it. Guarded on the measured content height so the resize's own layout pass —
     // and the per-second stat refreshes — don't spin a loop.
-    private void RefitToContent(StackPanel host)
+    private void RefitToContent(Grid host)
     {
         double contentH = host.DesiredSize.Height;
         if (contentH <= 0 || Math.Abs(contentH - _lastContentHeight) < 1) return;
@@ -152,6 +160,13 @@ public partial class SessionStatsWindow : Window
     }
 
     // ----- Panel drag-reorder ---------------------------------------
+    // The panels live in one or two column hosts. Their order is one list; in two
+    // columns the first SplitAt fill PanelHost and the rest PanelHost2. A drop picks
+    // the column under the cursor and the gap by the panels' midpoints in it.
+
+    private StackPanel[] Hosts() =>
+        new[] { this.FindControl<StackPanel>("PanelHost"), this.FindControl<StackPanel>("PanelHost2") }
+            .Where(h => h is not null).Select(h => h!).ToArray();
 
     private void OnPanelPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -201,9 +216,42 @@ public partial class SessionStatsWindow : Window
         }
     }
 
+    // The column host under the pointer (the visible one nearest it) and the index
+    // among its panels the drop would land at.
+    private (StackPanel Host, int Index, double GapY)? DropTarget(DragEventArgs e)
+    {
+        StackPanel? host = null;
+        double best = double.MaxValue;
+        foreach (StackPanel h in Hosts())
+        {
+            if (!h.IsVisible) continue;
+            double x = e.GetPosition(h).X;
+            double distance = x < 0 ? -x : x > h.Bounds.Width ? x - h.Bounds.Width : 0;
+            if (distance < best) { best = distance; host = h; }
+        }
+        if (host is null) return null;
+
+        double y = e.GetPosition(host).Y;
+        int index = 0;
+        Control? below = null, last = null;
+        foreach (Control child in host.Children)
+        {
+            if (child.Tag is not string) continue;
+            if (child.IsVisible)
+            {
+                last = child;
+                if (below is null && y < child.Bounds.Y + child.Bounds.Height / 2) { below = child; break; }
+            }
+            index++;
+        }
+        double gapY = below is not null ? below.Bounds.Y - host.Spacing / 2
+            : last is not null ? last.Bounds.Bottom + host.Spacing / 2
+            : 0;
+        return (host, index, gapY);
+    }
+
     private void OnPanelDragOver(object? sender, DragEventArgs e)
     {
-        if (this.FindControl<StackPanel>("PanelHost") is not { } host) return;
         if (!e.DataTransfer.Contains(PanelFormat))
         {
             e.DragEffects = DragDropEffects.None;
@@ -211,25 +259,11 @@ public partial class SessionStatsWindow : Window
         }
         e.DragEffects = DragDropEffects.Move;
 
-        // Draw the line in the gap the drop would land in: above the first visible
-        // panel whose midpoint is below the cursor, or under the last one.
-        if (this.FindControl<Canvas>("DropOverlay") is not { } overlay) return;
-        double y = e.GetPosition(host).Y;
-        Control? below = null, last = null;
-        foreach (Control child in host.Children)
-        {
-            if (child.Tag is not string || !child.IsVisible) continue;
-            last = child;
-            if (below is null && y < child.Bounds.Y + child.Bounds.Height / 2) below = child;
-        }
-        if (last is null) return;
-        double gapY = below is not null
-            ? below.Bounds.Y - host.Spacing / 2
-            : last.Bounds.Bottom + host.Spacing / 2;
+        if (this.FindControl<Canvas>("DropOverlay") is not { } overlay || DropTarget(e) is not { } target) return;
         if (!overlay.Children.Contains(_dropIndicator)) overlay.Children.Add(_dropIndicator);
-        _dropIndicator.Width = Math.Max(0, host.Bounds.Width - 4);
-        Canvas.SetLeft(_dropIndicator, 2);
-        Canvas.SetTop(_dropIndicator, gapY - _dropIndicator.Height / 2);
+        _dropIndicator.Width = Math.Max(0, target.Host.Bounds.Width - 4);
+        Canvas.SetLeft(_dropIndicator, target.Host.Bounds.X + 2);
+        Canvas.SetTop(_dropIndicator, target.Host.Bounds.Y + target.GapY - _dropIndicator.Height / 2);
     }
 
     private void OnPanelDragLeave(object? sender, DragEventArgs e) => HideDropIndicator();
@@ -243,60 +277,79 @@ public partial class SessionStatsWindow : Window
     private void OnPanelDrop(object? sender, DragEventArgs e)
     {
         if (DataContext is not SessionStatsViewModel vm) return;
-        if (this.FindControl<StackPanel>("PanelHost") is not { } host) return;
         if (e.DataTransfer.TryGetValue(PanelFormat) is not { } draggedId) return;
-
         HideDropIndicator();
+        if (DropTarget(e) is not { } target) return;
 
-        List<string> ids = OrderedTags(host);
-        int oldIndex = ids.IndexOf(draggedId);
-        if (oldIndex < 0) return;
+        StackPanel[] hosts = Hosts();
+        List<string> left = TagsIn(hosts[0]);
+        List<string> right = hosts.Length > 1 ? TagsIn(hosts[1]) : new();
+        List<string> into = target.Host == hosts[0] ? left : right;
+        int index = target.Index;
+        int old = into.IndexOf(draggedId);
+        if (old >= 0 && old < index) index--;
+        left.Remove(draggedId);
+        right.Remove(draggedId);
+        into.Insert(Math.Clamp(index, 0, into.Count), draggedId);
 
-        // Count the visible panels whose midpoint sits above the cursor — that's
-        // the gap the dragged panel lands in. Removing it first shifts the gap
-        // down by one when the drag was originally above the target.
-        int gap = 0;
-        double y = e.GetPosition(host).Y;
-        foreach (Control child in host.Children)
-        {
-            if (child.Tag is not string || !child.IsVisible) continue;
-            if (y >= child.Bounds.Y + child.Bounds.Height / 2) gap++;
-            else break;
-        }
-
-        ids.RemoveAt(oldIndex);
-        int insertIndex = Math.Clamp(gap > oldIndex ? gap - 1 : gap, 0, ids.Count);
-        ids.Insert(insertIndex, draggedId);
-
-        ApplyOrder(host, ids);
-        vm.SaveOrder(ids);
+        List<string> order = left.Concat(right).ToList();
+        int split = vm.IsTwoColumns ? left.Count : vm.SplitAt;
+        vm.SaveOrder(order, split);
+        ApplyLayout(vm);
     }
 
-    // Reorder the panel host's children to match the VM's saved order.
+    // Lay the panels out in the VM's order and column count.
     private void ApplySavedOrder()
     {
-        if (DataContext is not SessionStatsViewModel vm) return;
-        if (this.FindControl<StackPanel>("PanelHost") is { } host)
-            ApplyOrder(host, vm.PanelOrder);
+        if (DataContext is SessionStatsViewModel vm)
+        {
+            SetGridColumns(vm.IsTwoColumns);
+            ApplyLayout(vm);
+        }
     }
 
-    private static void ApplyOrder(StackPanel host, IReadOnlyList<string> ids)
+    // Going to two columns widens the window to fit them, and back narrows it, so
+    // each column keeps the width one had.
+    private const double ColumnGap = 8;
+    private void OnColumnsChanged(SessionStatsViewModel vm)
     {
-        for (int target = 0; target < ids.Count; target++)
+        SetGridColumns(vm.IsTwoColumns);
+        Width = vm.IsTwoColumns ? Width * 2 + ColumnGap : Math.Max(MinWidth, (Width - ColumnGap) / 2);
+        ApplyLayout(vm);
+    }
+
+    private void SetGridColumns(bool two)
+    {
+        if (this.FindControl<Grid>("PanelGrid") is not { } grid) return;
+        grid.ColumnDefinitions = two
+            ? new ColumnDefinitions($"*,{ColumnGap},*")
+            : new ColumnDefinitions("*,0,0");
+    }
+
+    private void ApplyLayout(SessionStatsViewModel vm)
+    {
+        StackPanel[] hosts = Hosts();
+        if (hosts.Length == 0) return;
+        IReadOnlyList<string> order = vm.PanelOrder;
+        int[] placed = new int[hosts.Length];
+        for (int i = 0; i < order.Count; i++)
         {
-            Control? panel = PanelWithTag(host, ids[target]);
-            if (panel is null) continue;
-            int cur = host.Children.IndexOf(panel);
-            if (cur >= 0 && cur != target)
-                host.Children.Move(cur, target);
+            if (PanelWithTag(hosts, order[i]) is not { } panel) continue;
+            int col = vm.IsTwoColumns && hosts.Length > 1 && i >= vm.SplitAt ? 1 : 0;
+            StackPanel to = hosts[col];
+            if (panel.Parent is StackPanel from && from != to) from.Children.Remove(panel);
+            int at = placed[col]++;
+            int cur = to.Children.IndexOf(panel);
+            if (cur < 0) to.Children.Insert(at, panel);
+            else if (cur != at) to.Children.Move(cur, at);
         }
     }
 
     // Walk up from the event source to the nearest element flagged as a drag
-    // handle (a panel title); stop at the host so a press elsewhere yields false.
+    // handle (a panel title); stop at a column host so a press elsewhere yields false.
     private static bool IsOnDragHandle(StyledElement? src)
     {
-        for (StyledElement? e = src; e is not null and not StackPanel { Name: "PanelHost" }; e = e.Parent)
+        for (StyledElement? e = src; e is not null and not StackPanel { Name: "PanelHost" or "PanelHost2" }; e = e.Parent)
             if (e.Classes.Contains("draghandle"))
                 return true;
         return false;
@@ -311,15 +364,16 @@ public partial class SessionStatsWindow : Window
         return null;
     }
 
-    private static Control? PanelWithTag(StackPanel host, string id)
+    private static Control? PanelWithTag(IEnumerable<StackPanel> hosts, string id)
     {
-        foreach (Control child in host.Children)
-            if (child.Tag as string == id)
-                return child;
+        foreach (StackPanel host in hosts)
+            foreach (Control child in host.Children)
+                if (child.Tag as string == id)
+                    return child;
         return null;
     }
 
-    private static List<string> OrderedTags(StackPanel host)
+    private static List<string> TagsIn(StackPanel host)
     {
         List<string> ids = new();
         foreach (Control child in host.Children)

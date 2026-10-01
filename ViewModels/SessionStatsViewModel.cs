@@ -253,6 +253,19 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // The resolved panel order the window applies on open.
     public IReadOnlyList<string> PanelOrder => _panelOrder;
 
+    // One tall column or two side by side (user, 2026-09-30). In two, the first
+    // SplitAt panels of PanelOrder fill the left column; it starts at half.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOneColumn), nameof(IsTwoColumns))]
+    private int _columns = 1;
+    public bool IsOneColumn => Columns == 1;
+    public bool IsTwoColumns => Columns == 2;
+    public int SplitAt { get; private set; }
+
+    [RelayCommand]
+    private void SetColumns(string count) => Columns = count == "2" ? 2 : 1;
+    partial void OnColumnsChanged(int value) => PersistLayout();
+
     // Hydrate the order + visibility toggles from the per-character layout
     // store. Guarded so the toggle assignments don't write straight back.
     private void LoadLayout()
@@ -262,6 +275,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _panelOrder = resolved.Select(p => p.Id).ToList();
         foreach ((string id, bool visible) in resolved)
             SetVisible(id, visible);
+        Columns = _layoutStore.Columns;
+        SplitAt = Math.Clamp(_layoutStore.SplitAt ?? (_panelOrder.Count + 1) / 2, 0, _panelOrder.Count);
         IReadOnlyCollection<string> expanded = _layoutStore.Expanded;
         IsKillsGraphExpanded = expanded.Contains("KillsGraph");
         IsExpGraphExpanded = expanded.Contains("ExpGraph");
@@ -274,9 +289,10 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     // Push a new panel order (from a drag-reorder) through to the store,
     // keeping the current hidden set.
-    public void SaveOrder(IEnumerable<string> ids)
+    public void SaveOrder(IEnumerable<string> ids, int splitAt)
     {
         _panelOrder = ids.ToList();
+        SplitAt = Math.Clamp(splitAt, 0, _panelOrder.Count);
         PersistLayout();
     }
 
@@ -298,7 +314,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         if (IsPlayerStatsExpanded)  expanded.Add("PlayerStatistics");
         if (IsTimeAnalysisExpanded) expanded.Add("TimeAnalysis");
         if (IsSessionStatsExpanded) expanded.Add("SessionStatistics");
-        _layoutStore.Update(_panelOrder, hidden, expanded);
+        _layoutStore.Update(_panelOrder, hidden, expanded, Columns, SplitAt);
     }
 
     private void SetVisible(string id, bool visible)
