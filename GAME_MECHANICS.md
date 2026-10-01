@@ -2832,7 +2832,7 @@ How a room with a `Group:` token and no lair (*`Summoned By` spawn tokens*) gets
 - **Stock: the wait is `RegenTime` hours give or take an eighth, rolled afresh on every spawn attempt** *([OBSERVED] 2026-10-01, `wccmmud.dll` 1.11p `_generate_monster` @ `0x42462a`–`0x4246e2`; Stock only, Paradigm not recorded)*. For a `GameLimit` 1 monster with a last-kill date and a `RegenTime`, the engine refuses the spawn while the minutes since that kill are under `RegenTime × 60 + lngrnd(0, RegenTime × 15) − RegenTime × 7.5`.
 - **Paradigm: a boss can come back during the last 20% of its regen timer** *([CONFIRMED] 2026-10-01, user, relaying a Paradigm source: "generally bosses have a chance to regen 20% before their full timer", "each % is a 5% chance to spawn")*.
   - **The first chance comes 20% before the full timer, at 80% of `RegenTime` after the last kill** — a 10-hour boss at 8 hours.
-  - **The engine checks once for every 1% of the timer that passes** from then on.
+  - **The engine re-checks once for every 1% of the timer that passes** from then on: each mark is a fresh "does it respawn now" roll at that mark's chance.
   - **The chance is additive, 5 points per 1% mark:** basically 1% at the 80% mark (20% of the timer left), 5% with 19% left, 10% with 18% left, and so on up to certain at the full timer.
   - Worked through, about 57% of bosses are back by 85% of the timer and 97% by 90%; the average return is about 85%.
   - Example: a `RegenTime` 15 boss can first return at 12 hours and is checked every 9 minutes after that.
