@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.4**
-> - Navigation hold reasons (sneaking, looting, resting…) show as chips after the status line instead of flashing in its text
-> - An ended hold's chip fades out over 2 s, so split-second holds can be read; the engine never waits on it
-> - Bank, sell, training and @comeback trips show a cyan chip while they run
+> **Version 3.134.7**
+> - A sell detour no longer reads a sale as "sold nothing" and puts the shop on a 10-minute wait
+> - After selling, a loop walks back to its nearest room instead of to where the detour began
+> - Unticking Auto-sell on an item clears its sell detour and count too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

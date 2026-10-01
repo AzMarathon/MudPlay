@@ -1,5 +1,12 @@
 # Version history
 
+## 3.134.7
+
+- A sell detour no longer reads a sale as "sold nothing" and puts the shop on a 10-minute wait
+- After selling, a loop walks back to its nearest room instead of to where the detour began
+- Unticking Auto-sell on an item clears its sell detour and count too
+- bug reports addressed: paradigm-20260930-182742, paradigm-20260930-182838, paradigm-20260930-182854, paradigm-20260930-182949, paradigm-20260930-183614
+
 ## 3.134.4
 
 - Navigation hold reasons (sneaking, looting, resting…) show as chips after the status line instead of flashing in its text

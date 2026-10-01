@@ -4880,11 +4880,12 @@ glass jug               5               2 gold crowns
 - `SellDetourManager` walks a walk-to / loop / Auto-Lair to such a shop for an item flagged *Make detours to sell this item*, then carries on (see *Auto-buy / auto-discard band semantics* for the counts).
 
 ### Auto-buy / auto-discard band semantics
-*Status: **Client policy** — CONFIRMED 2026-07-10 (user design); sell floor and detour count 2026-09-28 (user); blank detour count 2026-09-29 (user)*
+*Status: **Client policy** — CONFIRMED 2026-07-10 (user design); sell floor and detour count 2026-09-28 (user); blank detour count 2026-09-29 (user); detour cleared with Auto-sell 2026-09-30 (user)*
 
 - **Auto-discard with no Min/Max band set → discard *all*** of that item (drop every copy).
 - **Auto-sell (in passing or on a detour) keeps Min. to keep when it's above 0, else sells every copy** — whether or not *Must have minimum* is ticked.
 - **A sell detour goes once more than *Detour to sell if above* are carried, and more than Min. to keep.** 0 = as soon as there are more than Min. to keep (the first copy when that's blank or 0). **Blank = no detour**, and the item editor shows a red warning when detours are ticked with the count blank. *(An earlier note said blank went as soon as there was one to sell; superseded 2026-09-29, user.)*
+- **A sell detour needs Auto-sell, so turning Auto-sell off clears the detour flag and its count** — in the item editor and in batch edit (user, 2026-09-30; report `paradigm-20260930-183614`).
 - **Auto-buy with no band → buy as many as affordable.**
 - **Ticking Auto-buy on in the item-edit dialog defaults `MaxToGet` to 10** (the user changes it from
   there). So a freshly-flagged auto-buy item is bounded at 10 by default, never unbounded-by-accident.

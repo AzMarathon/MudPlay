@@ -119,4 +119,21 @@ public sealed class ItemEditDialogViewModelTests
         vm.SellDetour = false;
         Assert.False(vm.NeedsSellDetourAbove);
     }
+
+    // A detour needs Auto-sell: unticking Auto-sell clears the detour and its count,
+    // and an item saved that way before is cleaned up on its next save (report
+    // paradigm-20260930-183614).
+    [Fact]
+    public void UntickingAutoSell_ClearsTheSellDetour()
+    {
+        ItemEditDialogViewModel vm = MakeVm(
+            new ItemOverlay { AutoSell = true, SellDetour = true, SellDetourAbove = "5" }, null);
+        vm.AutoSell = false;
+        Assert.False(vm.SellDetour);
+        Assert.Equal(string.Empty, vm.SellDetourAbove);
+
+        ItemOverlay stale = Save(MakeVm(new ItemOverlay { SellDetour = true, SellDetourAbove = "5" }, null)).Overlay;
+        Assert.Null(stale.SellDetour);
+        Assert.Null(stale.SellDetourAbove);
+    }
 }
