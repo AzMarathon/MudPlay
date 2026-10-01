@@ -742,15 +742,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Both phases anchor the rendered cycle to runner.CircleStartRoom
-        // (the rotation entry). Walking the cycle from a fixed anchor
-        // means the polyline stays still as the player steps through
-        // each leg — the user sees the complete loop the whole time
-        // instead of "what's left from here" shifting with every step.
-        // Legacy v1 loops (no rotation anchor) fall back to the live
-        // current room so they still render something.
-        RoomKey? source = runner.CircleStartRoom
-                           ?? _services.RoomTracker.State.CurrentRoom?.Key;
+        // Both phases draw the full cycle from its fixed start (ResolveLoopRoomKeys),
+        // so the polyline stays still as the player steps through each leg — the
+        // user sees the complete loop the whole time instead of "what's left from
+        // here" shifting with every step.
 
         if (runner.IsApproachInFlight)
         {
@@ -759,15 +754,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // the preview ring drawn under it. IsApproachInFlight (not
             // State==Approaching) so a combat pause mid-walk-to keeps the
             // preview red instead of flipping to the green running-loop line.
-            if (source is { } entry)
-            {
-                IReadOnlyList<RoomKey> previewKeys = runner.ResolveLoopRoomKeys(entry);
-                LoopApproachPreviewPath = previewKeys.Count >= 2 ? previewKeys : null;
-            }
-            else
-            {
-                LoopApproachPreviewPath = null;
-            }
+            IReadOnlyList<RoomKey> previewKeys = runner.ResolveLoopRoomKeys();
+            LoopApproachPreviewPath = previewKeys.Count >= 2 ? previewKeys : null;
             LoopPath = null;
             return;
         }
@@ -778,15 +766,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // RunningLoopRows) so the map lines up with the CURRENT NAV rows.
         LoopApproachPreviewPath = null;
         LoopRunningWaypoints = loop.Waypoints.Select(w => w.Key).ToList();
-        if (source is { } start)
-        {
-            IReadOnlyList<RoomKey> keys = runner.ResolveLoopRoomKeys(start);
-            LoopPath = keys.Count >= 2 ? keys : null;
-        }
-        else
-        {
-            LoopPath = null;
-        }
+        IReadOnlyList<RoomKey> keys = runner.ResolveLoopRoomKeys();
+        LoopPath = keys.Count >= 2 ? keys : null;
     }
 
     // ----- Status strip ---------------------------------------------

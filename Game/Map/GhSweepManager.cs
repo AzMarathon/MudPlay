@@ -706,8 +706,7 @@ public sealed class GhSweepManager : IDisposable
 
         if (!_loopRunner.Start(new Loop(SweepLoopName, orderedRooms))) return false;
 
-        RoomKey circuitStart = _loopRunner.CircleStartRoom ?? startRoom;
-        _sweepRooms.UnionWith(_loopRunner.ResolveLoopRoomKeys(circuitStart));
+        _sweepRooms.UnionWith(_loopRunner.ResolveLoopRoomKeys());
         _sweepRooms.UnionWith(allRooms);
         return true;
     }

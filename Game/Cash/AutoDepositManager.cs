@@ -274,7 +274,7 @@ public sealed class AutoDepositManager : IDisposable
         // route, don't spend a dedicated detour — OnRoomEntered stashes it
         // when the engine walks through on its own. Banks always detour;
         // off-route stash rooms still detour.
-        if (destinationIsStash && IsOnActiveRoute(destination, resume, current.Key))
+        if (destinationIsStash && IsOnActiveRoute(destination, resume))
         {
             _log?.Info(LogCategory,
                 $"stash room {destination} on the active {resume.Kind} route — "
@@ -698,7 +698,7 @@ public sealed class AutoDepositManager : IDisposable
     // Whether room is one the running engine will reach on its own — a resolved
     // loop-circuit room, or a marked Auto-Lair room. Such a room needs no detour:
     // the pass-through handler stashes it when the engine walks through.
-    private bool IsOnActiveRoute(RoomKey room, DetourResume resume, RoomKey current)
+    private bool IsOnActiveRoute(RoomKey room, DetourResume resume)
     {
         switch (resume.Kind)
         {
@@ -709,7 +709,7 @@ public sealed class AutoDepositManager : IDisposable
             case DetourResumeKind.Loop:
                 // The loop re-walks its resolved circuit each lap; membership
                 // means a guaranteed per-lap pass.
-                foreach (RoomKey k in _loopRunner.ResolveLoopRoomKeys(current))
+                foreach (RoomKey k in _loopRunner.ResolveLoopRoomKeys())
                     if (k.Equals(room)) return true;
                 return false;
             default:

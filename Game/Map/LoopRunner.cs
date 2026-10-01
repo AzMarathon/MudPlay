@@ -602,12 +602,16 @@ public sealed class LoopRunner : IRecoverableEngine
 
     // ----- public surface --------------------------------------------
 
-    // Resolves the active loop's MoveLoopSteps into a list of room keys starting at
-    // source. Used by the Navigation map renderer (loop-path overlay + sequence
-    // numbers). Returns empty when no loop is active.
-    public IReadOnlyList<RoomKey> ResolveLoopRoomKeys(RoomKey source)
+    // Every room of the active loop's full cycle, replaying the expanded moves from
+    // the room they begin at — the circle start (waypoint 0 when no entry was
+    // picked). Takes no start room on purpose: replaying from anywhere else (the
+    // current room mid-lap, or an approach room off the cycle) walks the moves off
+    // the real path. Returns empty when no loop is active.
+    public IReadOnlyList<RoomKey> ResolveLoopRoomKeys()
     {
         if (_loop is null || _graph is null) return Array.Empty<RoomKey>();
+        RoomKey? start = _circleStartRoom ?? (_loop.Waypoints.Count > 0 ? _loop.Waypoints[0].Key : null);
+        if (start is not { } source) return Array.Empty<RoomKey>();
         var keys = new List<RoomKey> { source };
         RoomKey here = source;
         foreach (LoopStep step in _expandedSteps)
@@ -930,7 +934,7 @@ public sealed class LoopRunner : IRecoverableEngine
 
         // Commit the cycle's entry UP FRONT — the moment we pick the closest
         // waypoint. Setting _circleStartRoom before ExpandSteps means the runtime
-        // traversal begins at the entry (and ResolveLoopRoomKeys(closest) produces
+        // traversal begins at the entry (and ResolveLoopRoomKeys() produces
         // the correct approach-preview cycle) WITHOUT reordering the authored
         // waypoint list — the entry is just a start offset into the fixed cycle.
         _circleStartRoom = closest;
@@ -1240,8 +1244,8 @@ public sealed class LoopRunner : IRecoverableEngine
     private bool LoopPathCrossesAvoided()
     {
         if (_filter is null) return false;
-        if (_circleStartRoom is not { } start) return true;
-        foreach (RoomKey key in ResolveLoopRoomKeys(start))
+        if (_circleStartRoom is null) return true;
+        foreach (RoomKey key in ResolveLoopRoomKeys())
             if (_filter.IsAvoided(key)) return true;
         return false;
     }

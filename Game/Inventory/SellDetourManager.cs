@@ -165,7 +165,7 @@ public sealed class SellDetourManager : IDisposable
             if (usable.Count == 0) { skipped.Add($"{c.Name}: {WhyNoShop(c)}"); continue; }
             // The engine reaches one of its shops anyway: Auto-sell sells in passing.
             RoomKey? passing = usable.Cast<RoomKey?>()
-                .FirstOrDefault(s => s!.Value.Equals(cur) || ReachedAnyway(s.Value, resume, cur));
+                .FirstOrDefault(s => s!.Value.Equals(cur) || ReachedAnyway(s.Value, resume));
             if (passing is not null)
             {
                 skipped.Add($"{c.Name}: the {resume.Kind} reaches {passing} itself");
@@ -247,11 +247,11 @@ public sealed class SellDetourManager : IDisposable
     }
 
     // Whether the running engine will stand in this shop room without a detour.
-    private bool ReachedAnyway(RoomKey shop, DetourResume resume, RoomKey cur) => resume.Kind switch
+    private bool ReachedAnyway(RoomKey shop, DetourResume resume) => resume.Kind switch
     {
         DetourResumeKind.Walk => resume.WalkDestination is { } d && d.Equals(shop),
         DetourResumeKind.Lair => _lair.IsMarked(shop),
-        DetourResumeKind.Loop => _loops.ResolveLoopRoomKeys(cur).Contains(shop),
+        DetourResumeKind.Loop => _loops.ResolveLoopRoomKeys().Contains(shop),
         _ => false,
     };
 

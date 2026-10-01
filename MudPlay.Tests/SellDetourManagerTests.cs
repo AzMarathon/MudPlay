@@ -234,6 +234,28 @@ public sealed class SellDetourManagerTests : IDisposable
         Assert.NotEqual(LoopState.Idle, h.Loop.State);
     }
 
+    // Mid-lap, with the shop on the part of the cycle not walked yet: the loop gets
+    // there itself, so no detour. The cycle's moves start at 1/3 (S, S, E, then back
+    // W, N, N); replayed from the room the player stands in they'd walk off the map
+    // before ever reaching the shop.
+    [Fact]
+    public void Loop_MidLap_ShopAheadOnTheCycle_NoDetour()
+    {
+        using Harness h = NewHarness();
+        h.Carried.Add("dagger");
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 3), Shop })));
+
+        h.Arrive(new RoomKey(1, 2));
+        h.Detour.Evaluate();
+        h.Arrive(new RoomKey(1, 1));
+        h.Detour.Evaluate();
+
+        Assert.False(h.Detour.IsDetouring);
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+        Assert.Contains($"the Loop reaches {Shop} itself", h.Detour.Status);
+    }
+
     [Fact]
     public void Blocked_NoDetour()
     {
