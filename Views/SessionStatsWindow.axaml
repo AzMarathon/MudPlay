@@ -94,7 +94,8 @@
         </Style>
         <!-- The I / II column picker: the active choice reads as pressed. -->
         <Style Selector="Button.colpick">
-            <Setter Property="Padding" Value="0,2"/>
+            <Setter Property="MinWidth" Value="24"/>
+            <Setter Property="Padding" Value="6,2"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
         <Style Selector="Button.colpick.active">
@@ -135,11 +136,11 @@
         <!-- Column count: one tall column, or two side by side so every panel open
              still fits a screen. Saved per character. -->
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
-            <Button Classes="topaction colpick" Content="I" Width="24"
+            <Button Classes="topaction colpick" Content="I"
                     Classes.active="{Binding IsOneColumn}"
                     Command="{Binding SetColumnsCommand}" CommandParameter="1"
                     ToolTip.Tip="One column"/>
-            <Button Classes="topaction colpick" Content="II" Width="24"
+            <Button Classes="topaction colpick" Content="II"
                     Classes.active="{Binding IsTwoColumns}"
                     Command="{Binding SetColumnsCommand}" CommandParameter="2"
                     ToolTip.Tip="Two columns side by side"/>
