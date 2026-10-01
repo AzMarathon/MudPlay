@@ -3485,6 +3485,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.PartyEssentials.WaitingMembers.ToList(),
         _services.PartyDisconnectMovement.PendingMembers.ToList(),
         _services.AutoParty.PendingInvites.ToList(),
+        _services.AllyDropped.DownedGivenNames.ToList(),
         _services.CastDirector.SneakHeldCategory switch
         {
             Game.Spells.SpellCategory.Curing => "Curing",

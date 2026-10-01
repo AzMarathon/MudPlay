@@ -15,9 +15,10 @@ public sealed record NavHoldNames(
     IReadOnlyCollection<string> WaitingFor,
     IReadOnlyCollection<string> Disconnected,
     IReadOnlyCollection<string> Invited,
+    IReadOnlyCollection<string> Downed,
     string? HeldCast)
 {
-    public static readonly NavHoldNames None = new([], [], [], null);
+    public static readonly NavHoldNames None = new([], [], [], [], null);
 }
 
 // Pure mapping from the live MovementCoordinator gate state to a plain-English
@@ -124,6 +125,9 @@ public static class NavActivity
                     break;
                 case MovementCoordinator.MemberDisconnectGate:
                     Named(holds, names.Disconnected, n => $"{n} disconnected", label);
+                    break;
+                case MovementCoordinator.AllyDownGate:
+                    Named(holds, names.Downed, n => $"Downed Ally {n}", label);
                     break;
                 case MovementCoordinator.PartyInviteGate:
                     Named(holds, names.Invited, n => $"Waiting on {n} to join", label);

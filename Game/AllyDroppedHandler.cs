@@ -213,6 +213,9 @@ public sealed partial class AllyDroppedHandler : IDisposable
     // Given names of aided-but-still-off-roster downed allies the CastingDirector
     // should top up by name (fed via SetDownedAllyProvider). Empty until an ally
     // is aided — an un-aided, still-mortally-wounded ally can't be healed anyway.
+    // Every ally we're holding for while they're down, aided or not yet.
+    public IReadOnlyCollection<string> DownedGivenNames => _downed.Keys;
+
     public IReadOnlyList<string> AidedDownedGivenNames()
     {
         List<string>? names = null;

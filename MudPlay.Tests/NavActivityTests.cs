@@ -118,11 +118,12 @@ public sealed class NavActivityTests
     public void ActiveHolds_NameTheMembers_AndTheCast()
     {
         var holds = NavActivity.ActiveHolds(
-            new[] { MovementCoordinator.PartyWaitGate, MovementCoordinator.MemberDisconnectGate,
-                    MovementCoordinator.PartyInviteGate, MovementCoordinator.SneakCastGate },
+            new[] { MovementCoordinator.PartyWaitGate, MovementCoordinator.AllyDownGate,
+                    MovementCoordinator.MemberDisconnectGate, MovementCoordinator.PartyInviteGate,
+                    MovementCoordinator.SneakCastGate },
             isMovementPrevented: false,
-            new NavHoldNames(new[] { "Bob" }, new[] { "Ann" }, new[] { "Cy" }, "Healing"));
-        Assert.Equal(new[] { "@Wait Bob", "Ann disconnected", "Waiting on Cy to join", "Healing" },
+            new NavHoldNames(new[] { "Bob" }, new[] { "Ann" }, new[] { "Cy" }, new[] { "Dee" }, "Healing"));
+        Assert.Equal(new[] { "@Wait Bob", "Downed Ally Dee", "Ann disconnected", "Waiting on Cy to join", "Healing" },
             holds.Select(h => h.Label));
     }
 
