@@ -98,7 +98,7 @@ public sealed class LairTimerStore : IDisposable
     // room, restarted by every kill in it — walking in doesn't touch it — so its
     // last kill is the anchor; a lair entered without a kill seen falls back to
     // the entry. Paradigm keeps timing from the entry until its clock is settled
-    // (issue #813). GAME_MECHANICS "Lair respawn timers".
+    // (issue #839). GAME_MECHANICS "Lair respawn timers".
     public DateTimeOffset? ClockStart(RoomKey key)
     {
         bool roomClock = _cache.ActiveRealm != RealmType.ParaMud;

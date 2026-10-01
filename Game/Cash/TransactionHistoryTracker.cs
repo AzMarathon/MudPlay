@@ -310,16 +310,27 @@ public sealed class TransactionHistoryTracker
     // The room's coin row, three lines in the window:
     //   Last: 1 gold, 115 silver - Total Stashes: 48
     //   Avg: 12 gold, 7 silver
-    //   Total: 34 gold, 5,210 silver
+    //   Total: 34 gold, 5,210 silver (≈ 5.6 platinum)
     // Last and Total stay in the coins that were hidden; Avg is worked out by value
-    // and shown in the highest coins. Stored on one line with LineBreak between them.
+    // and shown in the highest coins, and Total adds what it all comes to. Stored on one line with LineBreak between them.
     private static string FormatCoinRow(StashTally tally)
     {
         long average = CopperValue(tally.Total) / Math.Max(1, tally.Visits);
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"{LastPrefix}{FormatCoins(tally.Last)}{VisitsInfix}{tally.Visits:N0}"
             + $"{LineBreak}{AveragePrefix}{FormatValue(average)}"
-            + $"{LineBreak}{TotalPrefix}{FormatCoins(tally.Total)}");
+            + $"{LineBreak}{TotalPrefix}{FormatCoins(tally.Total)}{FormatWorth(tally.Total)}");
+    }
+
+    // " (≈ 8.7 platinum)" — the total's value in the highest coin it reaches, to one
+    // decimal. Left off when the total is already a single pile of that coin.
+    private static string FormatWorth(Dictionary<string, long> total)
+    {
+        long copper = CopperValue(total);
+        (string name, long worth) = Denominations.FirstOrDefault(d => copper >= d.Copper, Denominations[^1]);
+        if (total.Count == 1 && Rank(total.Keys.First()) == Rank(name)) return string.Empty;
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $" (≈ {(double)copper / worth:0.#} {name})");
     }
 
     // The five denominations, highest first, with what each is worth in copper.
@@ -381,7 +392,7 @@ public sealed class TransactionHistoryTracker
                 || !lines[2].StartsWith(TotalPrefix, StringComparison.Ordinal)
                 || !TryParseCount(lines[0][(infix + VisitsInfix.Length)..], out int visits)
                 || !TryParseCoins(lines[0][LastPrefix.Length..infix], last)
-                || !TryParseCoins(lines[2][TotalPrefix.Length..], total))
+                || !TryParseCoins(WithoutWorth(lines[2][TotalPrefix.Length..]), total))
                 return false;
             row = new CoinRow(last, total, visits);
             return true;
@@ -405,6 +416,13 @@ public sealed class TransactionHistoryTracker
         if (!TryParseCount(count, out int oldVisits) || !TryParseCoins(parts[2][6..], total)) return false;
         row = new CoinRow(last, total, oldVisits);
         return true;
+    }
+
+    // Drops the trailing " (≈ 8.7 platinum)"; it is recomputed from the coins.
+    private static string WithoutWorth(string totalLine)
+    {
+        int paren = totalLine.IndexOf(" (", StringComparison.Ordinal);
+        return paren < 0 ? totalLine : totalLine[..paren];
     }
 
     private static bool TryParseCount(string text, out int count) =>
