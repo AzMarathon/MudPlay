@@ -2788,7 +2788,7 @@ How a room with a `Group:` token and no lair (*`Summoned By` spawn tokens*) gets
     - A controlling room that doesn't exist is cleared from the room (@ `0x4244d1`); 3 are missing from the room file.
   - **No free slot** among the room's 15 monster slots (`+0x400`, @ `0x4243d4`).
   - **The picked monster is at its `GameLimit`** (active `+0xa8` at limit `+0xa6`), or is a `GameLimit` 1 monster still inside its regen wait (*Boss monsters*) (@ `0x42462a`–`0x4246f9`). The attempt is lost; the engine doesn't pick again.
-  - **A server setting at `0x4906c9` equal to 2 blocks monsters of group 5 and group 37** (@ `0x42460c`). *[NEEDS CONFIRMATION] — which setting is that?*
+  - **A tournament-play check blocks monsters of group 5 and group 37, and never applies** (@ `0x42460c`; the flag at `0x4906c9` is set by `TOURNAMENT_PLAY` in `wccmmud.ini`). Tournament play was never implemented or used *([CONFIRMED] 2026-10-01, user)*, so ignore it.
 - **The group pick favours the first and last candidates** (@ `0x424526`–`0x4245ea`). With no set monster, the engine scans its monster quick-reference table for monsters in the room's group whose index is inside the room's range (`Min` `+0x462`, `Max` `+0x464`; a bound of 0 is open).
   - The table is built by `_load_monster_quickreferences` @ `0x4601ec`: number, group (`+0x54`) and index (`+0x5c`) of up to 2,000 monsters, in the monster file's step order.
   - The first match is held. Each later match replaces it on a `genrdn(1,100)` under 30 (29 in 99), and a roll of 99 ends the scan.
