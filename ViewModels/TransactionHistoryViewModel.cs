@@ -19,11 +19,6 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
     private readonly TransactionHistoryTracker _tracker;
     private bool _disposed;
 
-    // Entries the user has marked "keep" — held across rebuilds so a transaction
-    // arriving mid-review doesn't clear the marks. Kept keyed on the entry value;
-    // pruned to the live ledger on every rebuild.
-    private readonly HashSet<TransactionEntry> _kept = new();
-
     // The session's recorded transactions, newest first.
     public ObservableCollection<TransactionRowViewModel> Rows { get; } = new();
 
@@ -61,12 +56,11 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
     private void Clear()
     {
         IReadOnlyList<TransactionEntry> snap = _tracker.Snapshot();
-        List<TransactionEntry> keep = snap.Where(_kept.Contains).ToList();   // chronological
+        List<TransactionEntry> keep = snap.Where(e => e.Keep).ToList();   // chronological
         if (keep.Count == snap.Count) return;
 
         if (keep.Count == 0)
         {
-            _kept.Clear();
             _tracker.Reset();
             AppServices.Current.SessionLog.TruncateTransactions();
         }
@@ -75,23 +69,22 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
             // Hydrate replaces the in-memory ledger and fires Changed → Rebuild; it
             // skips the persistence append hook, so rewrite the on-disk log to match.
             _tracker.Hydrate(keep);
-            AppServices.Current.SessionLog.RewriteTransactions(keep);
+            AppServices.Current.SessionLog.RewriteTransactions(_tracker.Snapshot());
         }
     }
 
-    private void OnRowKeepChanged(TransactionRowViewModel row)
-    {
-        if (row.Keep) _kept.Add(row.Entry);
-        else _kept.Remove(row.Entry);
-    }
+    // The mark goes onto the ledger entry (and from there into the saved log). The
+    // row is re-pointed at the marked entry rather than rebuilt, so the list doesn't
+    // jump under the cursor.
+    private void OnRowKeepChanged(TransactionRowViewModel row) =>
+        row.Entry = _tracker.SetKeep(row.Entry, row.Keep);
 
     private void Rebuild()
     {
         Rows.Clear();
         IReadOnlyList<TransactionEntry> snap = _tracker.Snapshot();
-        _kept.IntersectWith(snap);   // forget marks for entries the ledger has since dropped
         for (int i = snap.Count - 1; i >= 0; i--) // newest first
-            Rows.Add(new TransactionRowViewModel(snap[i], _kept.Contains(snap[i]), OnRowKeepChanged));
+            Rows.Add(new TransactionRowViewModel(snap[i], snap[i].Keep, OnRowKeepChanged));
         Count = Rows.Count;
     }
 

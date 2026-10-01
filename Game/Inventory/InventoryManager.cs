@@ -155,6 +155,9 @@ public sealed partial class InventoryManager : IDisposable
     // against confirmed sales/drops rather than optimistically or by re-diffing).
     // ItemSold also carries the sale's copper value off the same line.
     public event Action<string, int, long>? ItemSold;
+    // The buying counterpart: singular name, count and the total price in copper off
+    // the player's own `You bought …` / `You just bought …` line.
+    public event Action<string, int, long>? ItemBought;
     public event Action<string, int>? ItemDropped;
 
     // Fired (singular name + count) for each `You took <item>.` — an item entering
@@ -598,6 +601,7 @@ public sealed partial class InventoryManager : IDisposable
 
             string priceTail = bought.Groups[2].Value;
             long priceCopper = ParsePriceToCopper(priceTail);
+            ItemBought?.Invoke(boughtName, boughtCount, priceCopper);
             if (priceCopper > 0)
             {
                 (int Copper, int Silver, int Gold, int Platinum, int Runic) paid =

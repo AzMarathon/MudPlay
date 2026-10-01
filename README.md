@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.51**
-> - Stop before defaults to off for Neutral bosses, sheriff lionheart, justicar halford, mayor godfrey, lord of the hunt and the gigantic black ooze
-> - Bosses tab: Reset to default button puts Stop before and Grab All back to each boss's own defaults
-> - Manage Bosses: Default Stop Before and Default Grab All columns set those per boss; saving there no longer clears Grab All
+> **Version 3.134.55**
+> - Transaction history: coin stashed in a room is one row per stash room, showing the last stash, the number of stashes, the average and the total
+> - Transaction history: selling and buying are recorded, one row per shop visit
+> - Transaction history: a Keep tick is saved and survives closing the window or restarting
+> - Monster Intel: what-if resist pickers show the spell damage you would take in a resist set
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

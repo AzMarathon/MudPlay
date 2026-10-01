@@ -91,11 +91,11 @@ public sealed class SessionResetHandlerTests
         SeedPlayer(s.Players, "Leader", PlayerRemoteControls.AlterSettings);
         s.Transactions.NoteBankDeposit(5000);
         s.Transactions.NoteStash(new[] { ("gold", 400L) }, new[] { "a torch" });
-        Assert.Equal(2, s.Transactions.Snapshot().Count);
+        Assert.Equal(3, s.Transactions.Snapshot().Count);   // deposit, the item, the room's coin row
 
         s.Engine.DispatchForTests(Telepath("Leader", "@reset"));
 
-        Assert.Equal(2, s.Transactions.Snapshot().Count);
+        Assert.Equal(3, s.Transactions.Snapshot().Count);
     }
 
     [Fact]
