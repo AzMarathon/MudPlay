@@ -1,5 +1,12 @@
 # Version history
 
+## 3.134.36
+
+- Paradigm Attack / Bash accuracy matches `stat all` (it read one high)
+- Character Info's skill tooltips show just the chance, any cap and any penalty, on the label as well as the value
+- Character Info's attack rows show a buff's rolled bonus as a range, e.g. 10-(20-21)
+- The Stealth tooltip counts a completed Perfect Stealth quest (every sneak takes and holds)
+
 ## 3.134.32
 
 - Session Stats rates show to a tenth of a percent and never read 0% or 100% unless they exactly are

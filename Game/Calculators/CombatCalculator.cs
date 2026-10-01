@@ -590,9 +590,8 @@ public static class CombatCalculator
 
     // Accuracy for a given attack type (Normal / Bash / Smash), aiming to match
     // the in-game "stat all" Accy column. Branches heavily by realm: pity-accy
-    // and stat weighting differ, ParaMUD even-rounds the gear sum and applies a
-    // 1.5x smash multiplier plus a weapon-StrReq penalty. Bash applies -15, smash
-    // -25 (both realms). totalWornAccy is the summed Accy field of all worn
+    // and stat weighting differ, ParaMUD applies a 1.5x smash multiplier plus a
+    // weapon-StrReq penalty. Bash applies -15, smash -25 (both realms). totalWornAccy is the summed Accy field of all worn
     // items; maxSingleAbil22 is the highest single accuracy ability
     // (22/105/106).
     public static int CalcAccuracy(MudAttackType attackType, RealmType realm,
@@ -619,11 +618,11 @@ public static class CombatCalculator
 
         if (isParaMud)
         {
-            // Up to 33%: 15 - (encumPct-1)/10 (15→14→13→12 at 11/21/31); past it: +1.
+            // Up to 33%: 14 - (encumPct-1)/10 (14→13→12→11 at 11/21/31); past it,
+            // nothing. Fits every Paradigm `stat all` checked (2026-09-30): an earlier
+            // 15 here, with +1 past 33%, read one high on Attack and Bash alike.
             if (HasLightLoadBonus(encumPct, realm))
-                accyCalc += 15 - ((encumPct - 1) / 10);
-            else
-                accyCalc += 1;
+                accyCalc += 14 - ((encumPct - 1) / 10);
         }
         else
         {
@@ -660,11 +659,10 @@ public static class CombatCalculator
         if (charm > 0 && isParaMud && !isBashOrSmash)
             accyCalc += (charm - 50) / 10;
 
-        // Gear: worn Accy + abil22 sum; ParaMUD even-rounds the combined sum.
-        int gearAccy = wornAccy + plusAccy;
-        if (isParaMud)
-            gearAccy = (gearAccy / 2) * 2;
-        int result = accyCalc + gearAccy;
+        // Gear: worn Accy + the accuracy abilities, unrounded on both realms (a
+        // Paradigm even-round of the sum didn't match `stat all` with worn 11 / 10 and
+        // a +5 ability on and off, 2026-09-30).
+        int result = accyCalc + wornAccy + plusAccy;
 
         // ParaMUD smash 1.5x multiplier, before penalties.
         if (isParaMud && attackType == MudAttackType.Smash)

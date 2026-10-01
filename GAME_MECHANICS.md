@@ -587,7 +587,10 @@ How a character is named, how it earns and spends character points (CP), how exp
   - **The capture:** a level-2 Gypsy at 964/2880, which the game shows as `Light [33%]`, read Attack `43`, Bash `27` and Dodge `9`. All three are only reachable with the bonus: accuracy +12 and dodge +7.
   - **Stock does NOT grant it at exactly 33%** *([OBSERVED] `wccmmud.dll` 1.11p, `_move_player_to_fighter`; [CONFIRMED] 2026-09-27, user)*. The engine gives the bonus only when the load is under 33% and HP is above 0: accuracy `+ (15 − pct/10)`, dodge `+ (10 − pct/10)`. This matches MMUD-Explorer's `< 33` gate.
 
+- **Paradigm: the light-load term is `14 − (pct − 1)/10` up to 33% and nothing above it, and the gear (worn Accy + accuracy abilities) adds unrounded** *([OBSERVED] Paradigm, 2026-09-30, the user's `stat all` screenshots)*. A level-13 Gypsy at 31% load read Attack / Bash `83` / `65` with worn Accy 11 and +5 from golden snake earrings (ability 22), `78` / `60` without the earrings, and `82` / `64` without the bracers' 1 Accy; the level-2 capture above fits the same rule. Every reading is one below the earlier `15 − (pct − 1)/10` (with +1 past 33%) plus an even-rounded gear sum. (Which term actually carries that −1 can't be told from captures in the light-load range; past 33% both readings give the same number.)
+
 **Client use:**
+- `CombatCalculator.CalcAccuracy` uses this Paradigm light-load term and adds the gear unrounded.
 - `StatEffects.BashAccuracyFromStats` computes the bash/smash form; the CP tooltip labels each accuracy line with the attacks it applies to.
 - `CombatCalculator.HasLightLoadBonus` gates the encumbrance term in both `CalcAccuracy` and `CalcDodge`.
 

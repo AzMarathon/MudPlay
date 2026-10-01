@@ -166,6 +166,24 @@ public sealed class CombatCalculatorTests
     // Paradigm capture: a level-2 Gypsy (combat 4; STR 60 AGI 70 INT 70 CHM 30, +5
     // accuracy from gear) at 964/2880 = 33% read Attack 43 / Bash 27 / Dodge 9 in
     // `stat all`. All three need the light-load bonus, so 33% still earns it there.
+    // Paradigm captures, 2026-09-30: a level-13 Gypsy (combat 4; STR 70 AGI 85 INT 70
+    // CHM 46) at 1051/3360 = 31%, worn Accy 11 (rapier 10 + bracers 1) and +5 from an
+    // accuracy ability, read Attack / Bash 83 / 65; without the +5, 78 / 60; without
+    // the bracers' 1, 82 / 64. The gear adds unrounded.
+    [Theory]
+    [InlineData(11, 5, 83, 65)]
+    [InlineData(11, 0, 78, 60)]
+    [InlineData(10, 5, 82, 64)]
+    public void Paradigm_Accuracy_MatchesStatAll(int worn, int ability, int attack, int bash)
+    {
+        Assert.Equal(attack, CombatCalculator.CalcAccuracy(MudAttackType.Normal, RealmType.ParaMud,
+            level: 13, nCombatLevel: 4, strength: 70, agility: 85, intellect: 70, charm: 46,
+            totalWornAccy: worn, maxSingleAbil22: ability, currentEncum: 1051, maxEncum: 3360));
+        Assert.Equal(bash, CombatCalculator.CalcAccuracy(MudAttackType.Bash, RealmType.ParaMud,
+            level: 13, nCombatLevel: 4, strength: 70, agility: 85, intellect: 70, charm: 46,
+            totalWornAccy: worn, maxSingleAbil22: ability, currentEncum: 1051, maxEncum: 3360));
+    }
+
     [Fact]
     public void Paradigm_LightLoadBonusStillAppliesAtExactly33Percent()
     {
