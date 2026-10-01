@@ -18,4 +18,7 @@ public sealed class SessionStatsLayout
 
     // Panel ids the user has toggled hidden via the context menu.
     public List<string>? Hidden { get; set; }
+
+    // Panel ids the user has expanded. Every panel starts collapsed.
+    public List<string>? Expanded { get; set; }
 }

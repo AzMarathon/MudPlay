@@ -262,6 +262,13 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _panelOrder = resolved.Select(p => p.Id).ToList();
         foreach ((string id, bool visible) in resolved)
             SetVisible(id, visible);
+        IReadOnlyCollection<string> expanded = _layoutStore.Expanded;
+        IsKillsGraphExpanded = expanded.Contains("KillsGraph");
+        IsExpGraphExpanded = expanded.Contains("ExpGraph");
+        IsHpMaGraphExpanded = expanded.Contains("HpMaGraph");
+        IsPlayerStatsExpanded = expanded.Contains("PlayerStatistics");
+        IsTimeAnalysisExpanded = expanded.Contains("TimeAnalysis");
+        IsSessionStatsExpanded = expanded.Contains("SessionStatistics");
         _loadingLayout = false;
     }
 
@@ -284,7 +291,14 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         if (!IsPlayerStatsVisible)  hidden.Add("PlayerStatistics");
         if (!IsTimeAnalysisVisible) hidden.Add("TimeAnalysis");
         if (!IsSessionStatsVisible) hidden.Add("SessionStatistics");
-        _layoutStore.Update(_panelOrder, hidden);
+        List<string> expanded = new();
+        if (IsKillsGraphExpanded)   expanded.Add("KillsGraph");
+        if (IsExpGraphExpanded)     expanded.Add("ExpGraph");
+        if (IsHpMaGraphExpanded)    expanded.Add("HpMaGraph");
+        if (IsPlayerStatsExpanded)  expanded.Add("PlayerStatistics");
+        if (IsTimeAnalysisExpanded) expanded.Add("TimeAnalysis");
+        if (IsSessionStatsExpanded) expanded.Add("SessionStatistics");
+        _layoutStore.Update(_panelOrder, hidden, expanded);
     }
 
     private void SetVisible(string id, bool visible)
@@ -299,6 +313,21 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
             case "SessionStatistics": IsSessionStatsVisible = visible; break;
         }
     }
+
+    // Every panel starts collapsed; the ones the user opens are remembered per
+    // character with the order and hidden set (user, 2026-09-30).
+    [ObservableProperty] private bool _isKillsGraphExpanded;
+    [ObservableProperty] private bool _isExpGraphExpanded;
+    [ObservableProperty] private bool _isHpMaGraphExpanded;
+    [ObservableProperty] private bool _isPlayerStatsExpanded;
+    [ObservableProperty] private bool _isTimeAnalysisExpanded;
+    [ObservableProperty] private bool _isSessionStatsExpanded;
+    partial void OnIsKillsGraphExpandedChanged(bool value) => PersistLayout();
+    partial void OnIsExpGraphExpandedChanged(bool value) => PersistLayout();
+    partial void OnIsHpMaGraphExpandedChanged(bool value) => PersistLayout();
+    partial void OnIsPlayerStatsExpandedChanged(bool value) => PersistLayout();
+    partial void OnIsTimeAnalysisExpandedChanged(bool value) => PersistLayout();
+    partial void OnIsSessionStatsExpandedChanged(bool value) => PersistLayout();
 
     partial void OnIsKillsGraphVisibleChanged(bool value) => PersistLayout();
     partial void OnIsExpGraphVisibleChanged(bool value) => PersistLayout();
