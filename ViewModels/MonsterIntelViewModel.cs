@@ -351,8 +351,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // none shows every monster (still subject to the "no computable value" drop);
     // selecting any keeps a monster whose Hits You % falls in ANY selected band.
     // The band set is REALM-DEPENDENT — the lowest a monster's attack can land is
-    // 8% on Stock and 2% on ParaMUD (CombatCalculator.GetHitMin), so Stock drops
-    // the 2/5 bands (dead below its floor) and gains an 8% band. Session-only (not
+    // 9% on Stock and 2% on ParaMUD (CombatCalculator.GetHitMin), so Stock drops
+    // the 2/5 bands (dead below its floor) and gains a band at its floor. Session-only (not
     // persisted), built once from the active realm at construction.
     public ObservableCollection<HitsFilterBucket> HitsFilterBuckets { get; } = new();
 
@@ -363,7 +363,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private static readonly int[] ParadigmHitBands1Pct =
         { 1, 2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
     private static readonly int[] StockHitBands =
-        { 8, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
+        { CombatCalculator.STOCK_HIT_MIN, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
 
     // The ≤1% band exists only on ParaMUD for a light-armour class (ArmourType
     // 1..6) — the exact GetHitMin condition that drops the floor to 1%.
@@ -1068,8 +1068,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private void UpdateManaLabel() => ManaLabel = _playerState?.ManaType == ManaType.Kai ? "Kai" : "Mana";
 
     // Build the Hits-You-% filter bands for the active realm — contiguous [lo,hi]
-    // ranges from the realm's thresholds (Stock omits the 2/5 bands below its 8%
-    // floor, and adds an 8% band). Called once at construction; the realm is fixed
+    // ranges from the realm's thresholds (Stock omits the 2/5 bands below its 9%
+    // floor, and starts with a band at that floor). Called once at construction; the realm is fixed
     // for the window's life, like the catalog itself.
     private void RebuildHitsFilterBuckets()
     {

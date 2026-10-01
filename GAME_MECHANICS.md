@@ -865,20 +865,30 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 *Status: CONFIRMED 2026-09-06 (MMUD-Explorer `modMMudFunc.bas` `CalculateAttackDefense`) · Realm: differs*
 
 - **A physical hit chance never reaches 0%.** No matter how high a defender's AC/Dodge climbs, an attacker's chance to land a physical hit is **clamped to a floor**. The floor is realm-dependent, and on ParaMUD it also depends on the **defender's class armour type**.
-- **Stock: 9%.** Flat, regardless of armour type, with a 98% ceiling (an earlier MMUD-Explorer figure of 8–99% is superseded 2026-09-30).
-  - **The engine lands a hit on about 9–98%, not 8–99%** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_calculate_attack` @`0x42b928`–`0x42b9e9`)*.
+- **Stock: 9 in 99 (9.1%).** Flat, regardless of armour type, with a ceiling of 98 in 99 (99.0%). (An earlier MMUD-Explorer figure of 8–99% was superseded 2026-09-30 by 9–98%, and that by this on 2026-10-01 once the roll's range was settled.)
+  - **The engine clamps the chance to 10–99 and hits when a 1–99 roll comes in under it** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_calculate_attack` @`0x42b928`–`0x42b9e9`)*.
     - It rolls `genrdn(1,100)` first, then clamps the chance to **10–99**.
-    - It hits only when the roll is **under** the clamped chance (`cmp chance,roll; jle miss`). So the landing chance is `clamp(chance, 10, 99) − 1` in percent: a floor of **9%** and a ceiling of **98%**.
-    - `genrdn` is the host's (`WGSERVER.EXE`) and isn't in the DLL. If its top bound is exclusive, the ends are 9/99 ≈ 9.1% and 98/99 ≈ 99.0% *([NEEDS CONFIRMATION]: is `genrdn`'s top bound inclusive?)*.
-    - A dodge roll follows a hit: `genrdn(0,100) < dodge`, with dodge capped at 95. So a hit can still be dodged below the 9% floor.
+    - It hits only when the roll is **under** the clamped chance (`cmp chance,roll; jle miss`). With a roll of 1–99, a chance of `c` lands `(c − 1)` times in 99.
+    - A defender with **negative dodge** gives the attacker a chance to skip the AC check: `genrdn(0,100) > dodge + 100` sets the chance to 99 (@`0x42b937`).
+    - A dodge roll follows a hit: `genrdn(0,100) < dodge`, with dodge capped at 95. So a hit can still be dodged below the floor.
     - The same routine serves every attacker and defender (user or monster).
-  - **The client uses the DLL's 9–98%** *(user, 2026-09-30; it had kept MMUD-Explorer's 8–99% since 2026-09-27)*: `CombatCalculator` clamps a Stock chance to 10–99 and subtracts 1.
+  - **`genrdn(lo, hi)` never returns `hi`: it gives `lo ≤ x < hi`** *([OBSERVED] 2026-10-01; settles the earlier question)*. `genrdn` is the BBS host's function, not in the DLL, but the DLL's own calls show it:
+    - `_shuffle_mappings` (@`0x423e75`) swaps `array[genrdn(0,count)]` over an array of `count` entries; a result of `count` would be past its end.
+    - `_show_current_emulations` (@`0x420fe6`) switches on `genrdn(0,8)` with exactly eight cases, 0–7.
+    - `_move_user` (@`0x41797d`) asks for `genrdn(0,0x65)` where it wants 0–100.
+    - Damage rolls are `genrdn(0, max − min + 1) + min`, which is min–max only with an exclusive top.
+    - The open-source MBBSEmu host implements `genrdn` as `Random.Next(min, max)`, exclusive at the top.
+    - Galacticomm's own Kyrandia module, by the host's authors, uses it the same way: `if (genrdn(0,2) == 1)` for a coin flip, `genrdn(0,101) > 10`, `switch (genrdn(0,8))`.
+    - The one call that looks inclusive, `genrdn(0x41, 0x5a)` in `_background_slow` (@`0x42162f`), only scrambles single letters in ten strings; it just never produces a Z.
+    - So `genrdn(1,100)` is **1–99** and `genrdn(0,100)` is **0–99**. A check written `genrdn(0,100) < n` is exactly n%; one written against `genrdn(1,100)` is out of 99.
+  - **MMUD-Explorer differs:** it clamps the same raw chance to 8–99 and rolls 1–100 inclusive, hitting on `roll <= chance` (so 8% and 99%). Its simulator's own comment reads "9% MIN HIT CHANCE, 99% MAX (stock)".
+  - **The client follows the DLL** *(user, 2026-10-01)*: `CombatCalculator.StockLandingPercent` gives `round((clamp(c, 10, 99) − 1) × 100 / 99)`, a whole-percent floor of 9 and ceiling of 99.
 - **ParaMUD: 2% normally, dropping to 1% when the defender's class `ArmourType` is 1..6** — the light-armour tiers **Silk (1), Ninja (2), Leather (3–6)**. Heavier classes — **Chainmail (7), Scalemail (8), Platemail (9)** — and **Natural (0)** stay at the 2% floor.
 - **`ArmourType` is a per-class field (Classes table),** so it's the *character's* class armour tier that lowers the floor, not the gear currently worn. Value→name map (LookupEnums): 0 = Natural, 1 = Silk, 2 = Ninja, 3–6 = Leather, 7 = Chainmail, 8 = Scalemail, 9 = Platemail.
 - **Sibling dodge caps (also in `CombatCalculator`):** Stock hard-caps dodge at **95%**; ParaMUD applies a **soft cap at 55%** (diminishing returns above it) then a **hard cap at 98%**.
 
 **Client use:**
-- Mirrors `CombatCalculator.GetHitMin`: ParaMUD base `PARAMUD_HIT_MIN = 2`, minus 1 when `ArmourType` is in 1..6; Stock `STOCK_HIT_MIN = 9` (the engine clamp of 10–99, less 1; `STOCK_HIT_CAP = 98`).
+- Mirrors `CombatCalculator.GetHitMin`: ParaMUD base `PARAMUD_HIT_MIN = 2`, minus 1 when `ArmourType` is in 1..6; Stock `STOCK_HIT_MIN = 9` and `STOCK_HIT_CAP = 99` (the engine clamp of 10–99 against a 1–99 roll, via `StockLandingPercent`). Monster Intel's Stock Hits-You-% filter starts at a `≤9%` band.
 - This is why Monster Intel's Hits-You-% column can read **1%** for a light-armour ParaMUD class and its filter dropdown grows a leading `≤1%` band there — the estimator threads the class `ArmourType` into the hit-chance calc so the shown number matches the engine's real minimum (PR #503, v3.52.7).
 
 ### Thorns / ShockShield reflect damage
@@ -3326,7 +3336,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     - `r < D`: `You successfully disarmed the trap to the <dir>.`, and the exit is marked disarmed.
     - `D ≤ r < D + 10`: `You failed to disarm any trap to the <dir>.`, a safe failure; nothing fires.
     - `r ≥ D + 10`: the trap fires. The exit's disarm-failure message goes to you and the room, and the damage is `_genrdn(dmg/2, dmg+1)` for the exit's damage `dmg`. An exit whose trap state is 3 instead moves you through it (`_move_user`).
-  - **So, as percentages:** success ≈ `D`%, a safe failure ≈ 10%, the trap fires ≈ `90 − D`%. `D` ≥ 90 never fires the trap; `D` ≥ 100 always succeeds. `[NEEDS CONFIRMATION]` whether `_genrdn`'s upper bound is inclusive (a ±1% shift: inclusive gives `D`/101, 10/101 and `(91 − D)`/101). `_genrdn` is the host's (`WGSERVER.EXE`), not in the DLL, and its call sites point both ways *(re-checked 2026-09-30)*: the damage call's `dmg+1` and `genrdn(0, max − min + 1) + min` read it as exclusive, while `genrdn(0x41, 0x5a)` for the letters A–Z reads it as inclusive.
+  - **So, as percentages:** success ≈ `D`%, a safe failure ≈ 10%, the trap fires ≈ `90 − D`%. `D` ≥ 90 never fires the trap; `D` ≥ 100 always succeeds. The roll is 0–99: `genrdn` never returns the top of its range (*Armour, defence & to-hit → To-hit floor — the minimum chance a monster can ever land, by realm and armour type*). (An earlier note left the bound open, 2026-09-30, citing `genrdn(0x41, 0x5a)` for the letters A–Z as pointing the other way; settled 2026-10-01 — that call only scrambles single letters in ten strings, where a missing Z goes unnoticed.)
   - **The other trap kind (exit type 24) has no safe band** *([OBSERVED] 2026-09-30, `_cmd_disarm` @0x468c87)*: any roll at or above `D` prints `You failed to disarm any trap to the <dir>.` and then the exit's own message (slot `0x3d8`). What follows that message isn't traced.
   - **An exit already disarmed** (trap state 1 or 4, set by a success) answers `You failed to disarm any trap to the <dir>.` without a roll. Trap state 0 or 3 rolls.
   - **Searching first gives no bonus to the disarm.** *([OBSERVED] 2026-09-29.)* When a search finds a trap, `_search_for_hidden_exits` only prints the found line and writes nothing to the exit or the player. `_cmd_disarm` reads only the disarm skill, HP, location and the exit's own fields. A search just costs a command, and it ends a sneak (*Movement & navigation → Sneaking — commands, equip order, and the sneak state machine*).

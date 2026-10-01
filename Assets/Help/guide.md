@@ -1772,7 +1772,7 @@ A **Hits You %** filter dropdown narrows the list by how dangerous a monster's o
 
 The bands are **realm- and class-dependent**, because the lowest a monster's attack can ever land differs — **8% on Stock, 2% on ParaMUD**, dropping to **1% on ParaMUD for a light-armour class** (the engine lets Silk/Ninja/Leather armour-type classes floor one point lower):
 
-- **Stock** skips the impossible sub-8% bands and starts at `≤8%`.
+- **Stock** skips the impossible sub-9% bands and starts at `≤9%` (an attack there lands at least 9 times in 99, and at most 98 in 99).
 - **ParaMUD** offers `≤2%, 3–5%, 6–10%, 11–15%, …`.
 - **A light-armour ParaMUD character** additionally gets a leading `≤1%` band.
 
@@ -1795,7 +1795,7 @@ The **Apply Debuffs** button (just under Edit Attacks) folds your known enemy de
 
 - **Damage:** your **minimum** stab after the monster's **DR** must reach its HP. A 37 minimum against a 35 HP monster with 5 DR leaves 32, so it isn't a one-stab kill.
 - **To-hit:** the stab is rolled against the monster's **backstab defence** (a quarter of its AC plus its BS Defense), not its full AC.
-- **Verdict:** **sure one-stab kill** when the min kills *and* the stab lands as often as the game ever allows: **100% on Paradigm**, **98% on Stock** (Stock never lets any attack be certain, a stab included). Otherwise it says *one-stab kill if it lands*, *kills only on a high roll*, *can't kill it in one stab*, or *it sees hidden* (a see-hidden monster spots your sneak, so no surprise lands).
+- **Verdict:** **sure one-stab kill** when the min kills *and* the stab lands as often as the game ever allows: **100% on Paradigm**, **99% on Stock** (Stock never lets any attack be certain, a stab included: its best is 98 in 99). Otherwise it says *one-stab kill if it lands*, *kills only on a high roll*, *can't kill it in one stab*, or *it sees hidden* (a see-hidden monster spots your sneak, so no surprise lands).
 - **The working** — your range before and after DR, and the to-hit — sits on a second line.
 - **Weapon:** if your Equipment Manager's **Backstab** set names a weapon, the stab is worked out with that weapon (the one you'll actually swing), and the line says so.
 

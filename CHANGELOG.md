@@ -1,5 +1,9 @@
 # Version history
 
+## 3.134.58
+
+- Stock hit chance follows the engine's 1–99 roll: an attack lands between 9% and 99% (was capped at 98%)
+
 ## 3.134.57
 
 - Transaction history: a stash room's Total line also shows what the coins come to, e.g. (≈ 8.7 platinum)
