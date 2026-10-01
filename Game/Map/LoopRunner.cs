@@ -869,6 +869,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _circleStartRoom = null;
         _expandedSteps = new List<LoopStep>();
         _reExpandAtLapEnd = false;
+        _partialLap = false;
         if (!isRecovery)
         {
             _firstWaypointReached = false;
@@ -911,6 +912,10 @@ public sealed class LoopRunner : IRecoverableEngine
             return true;
         }
 
+        if (_bfs is not null && currentKey is { } from
+            && TryEnterAtNearestRoom(loop, from, throughGates, firstRun: !isRecovery))
+            return true;
+
         if (_walker is null || _bfs is null || currentKey is null)
         {
             _log?.Info("LoopRunner",
@@ -947,6 +952,85 @@ public sealed class LoopRunner : IRecoverableEngine
         _walker.WalkTo(closest.Value, planThroughAcquirableGates: throughGates);
         return true;
     }
+
+    // Start the loop at whichever room of its cycle is nearest — a room partway along a
+    // leg as readily as a waypoint — rather than walking on to the nearest waypoint
+    // and back (user, 2026-09-30). Standing on the cycle, it starts right there with
+    // no approach. The cycle stays anchored at the first authored waypoint; the entry
+    // is just the step index the run begins at. False when the cycle can't be
+    // resolved or none of it can be reached, leaving the caller the waypoint pick.
+    private bool TryEnterAtNearestRoom(Loop loop, RoomKey from, bool throughGates, bool firstRun)
+    {
+        _circleStartRoom = loop.Waypoints[0].Key;
+        ExpandSteps();
+        Dictionary<RoomKey, int> entryIndex = CycleEntryIndices();
+        if (entryIndex.Count == 0) return false;
+
+        IReadOnlyDictionary<RoomKey, int> steps;
+        using (IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGates() : null)
+            steps = _bfs!.ComputeDistancesTo(from, entryIndex.Keys, _filter);
+        RoomKey? best = null;
+        foreach ((RoomKey room, int index) in entryIndex)
+        {
+            if (!steps.TryGetValue(room, out int n)) continue;
+            if (best is not { } b || n < steps[b] || (n == steps[b] && index < entryIndex[b])) best = room;
+        }
+        if (best is not { } entry) return false;
+        if (!entry.Equals(from) && _walker is null) return false;
+
+        if (loop.Waypoints.Any(w => w.Key.Equals(entry)))
+        {
+            // A waypoint entry anchors the cycle there, so every lap is whole — the
+            // Roomba sweep, whose rooms are all waypoints, reads its first wrap as
+            // the recon lap done.
+            _circleStartRoom = entry;
+            ExpandSteps();
+            _index = 0;
+        }
+        else
+        {
+            _index = entryIndex[entry];
+            // A first lap entered partway along a leg isn't a lap: it isn't counted,
+            // timed or announced as a wrap.
+            _partialLap = firstRun;
+        }
+        Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
+        if (entry.Equals(from))
+        {
+            _log?.Info("LoopRunner",
+                $"Start branch=on-cycle: player at {from}, step {_index + 1} of {_expandedSteps.Count}; no approach needed");
+            BeginCircle();
+            return true;
+        }
+        _approachTarget = entry;
+        State = LoopState.Approaching;
+        _log?.Info("LoopRunner",
+            $"approach: walking from {from} → {entry} (nearest loop room, {steps[entry]} step(s); joins at step {_index + 1} of {_expandedSteps.Count})");
+        _walker!.WalkTo(entry, planThroughAcquirableGates: throughGates);
+        return true;
+    }
+
+    // For each room on the cycle, the step index the run begins at when entering
+    // there: the first step taken in that room (its room commands, then the move
+    // out). A room the cycle passes twice keeps its first visit.
+    private Dictionary<RoomKey, int> CycleEntryIndices()
+    {
+        Dictionary<RoomKey, int> entry = new();
+        if (_graph is null || _circleStartRoom is not { } here) return entry;
+        entry[here] = 0;
+        for (int i = 0; i < _expandedSteps.Count; i++)
+        {
+            if (_expandedSteps[i] is not MoveLoopStep move) continue;
+            if (_graph.GetRoom(here) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit))
+                return new Dictionary<RoomKey, int>();
+            here = exit.Target;
+            if (i + 1 < _expandedSteps.Count) entry.TryAdd(here, i + 1);
+        }
+        return entry;
+    }
+
+    // True from a first run that joined the cycle partway round until that lap wraps.
+    private bool _partialLap;
 
     // Pick the user-waypoint with the shortest BFS path from from. Returns null when
     // no waypoint is reachable (disconnected graph, all waypoints behind avoided
@@ -1275,10 +1359,15 @@ public sealed class LoopRunner : IRecoverableEngine
             // history (capped at MaxLapHistory) so AverageLapTime stays
             // bounded in memory across long-running sessions.
             DateTimeOffset now = DateTimeOffset.UtcNow;
-            TimeSpan lapTime = now - _lapStartedAt;
-            _lapDurations.Add(lapTime);
-            if (_lapDurations.Count > MaxLapHistory) _lapDurations.RemoveAt(0);
-            _completedLaps++;
+            bool partLap = _partialLap;
+            _partialLap = false;
+            if (!partLap)
+            {
+                TimeSpan lapTime = now - _lapStartedAt;
+                _lapDurations.Add(lapTime);
+                if (_lapDurations.Count > MaxLapHistory) _lapDurations.RemoveAt(0);
+                _completedLaps++;
+            }
             _lapStartedAt = now;
             _index = 0;
 
@@ -1291,7 +1380,7 @@ public sealed class LoopRunner : IRecoverableEngine
                 ExpandSteps();
             }
 
-            Raise(new LoopEvent(LoopEventKind.RepeatStarted, _loop.Name));
+            if (!partLap) Raise(new LoopEvent(LoopEventKind.RepeatStarted, _loop.Name));
 
             // A RepeatStarted subscriber can react synchronously — e.g. a
             // room-arrival dispatcher asserting a MovementCoordinator gate to
@@ -2457,6 +2546,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _trapClearedFor = null;
         _loop = null;
         _index = 0;
+        _partialLap = false;
         _expandedSteps = new List<LoopStep>();
         _reExpandAtLapEnd = false;
         _stepInFlight = false;
