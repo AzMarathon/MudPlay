@@ -422,14 +422,20 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         // A move re-rolls over 0–101 rather than `sn`'s 0–100, so even at its cap of
         // 100 a sneaked move keeps the sneak 100 in 101.
         int keep = Math.Min(chance, 100) * 100 / 101;
-        List<string> stealthLines = new()
-        {
-            $"Start sneaking (sn): {Capped(chance, 95)}",
-            $"Keep it each move: {keep}%" + (chance > 100 ? $" ({chance}, capped at 100)" : ""),
-            "−1 per player or monster in the room",
-        };
-        if (encPenalty > 0) stealthLines.Add($"−{encPenalty} for carrying {encPct}%");
-        StealthTip = stealth <= 0 ? null : string.Join("\n", stealthLines);
+        // A completed Perfect Stealth quest (ability 186) makes every sneak take and
+        // hold, penalties or not — as the Level Projection counts it.
+        bool perfect = _questBonuses.AbilityAwards.Any(award =>
+            award.AbilityId == Game.Stealth.SneakChance.PerfectStealthAbility && _stats.Level >= award.FromLevel);
+        List<string> stealthLines = perfect
+            ? new() { "Start sneaking (sn): 100% (Perfect Stealth)", "Keep it each move: 100% (Perfect Stealth)" }
+            : new()
+            {
+                $"Start sneaking (sn): {Capped(chance, 95)}",
+                $"Keep it each move: {keep}%" + (chance > 100 ? $" ({chance}, capped at 100)" : ""),
+                "−1 per player or monster in the room",
+            };
+        if (!perfect && encPenalty > 0) stealthLines.Add($"−{encPenalty} for carrying {encPct}%");
+        StealthTip = stealth <= 0 && !perfect ? null : string.Join("\n", stealthLines);
 
         int thievery = _stats.Thievery;
         ThieveryTip = thievery <= 0 ? "Rob: 0%" : string.Join("\n",
@@ -477,16 +483,17 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
         // The buffs being cast on us count as the game counts them in `stat all`
         // (report: smite's +max damage and shadowform's BS bonuses were missing).
+        // Their values are rolled per cast, so each row is worked out at both ends of
+        // the rolls and shown as a pair where they differ ("10-20/21").
+        MudPlay.Models.Profile.BuffSettings? buffSlots = AppServices.Current.Profile.Current?.PartyBuffs;
+        IReadOnlyList<MudPlay.Game.Spells.KnownSpell> known = AppServices.Current.Spellbook.Available;
+        bool inParty = AppServices.Current.PartyState.IsInParty;
         MudPlay.Game.Spells.BuffCombat buff = MudPlay.Game.Spells.BuffCombatCalculator.Compute(
-            AppServices.Current.Profile.Current?.PartyBuffs, level,
-            AppServices.Current.Spellbook.Available, AppServices.Current.PartyState.IsInParty);
-        EquipmentStatSummary t = gear.Copy();
-        t.PlusAccuracy += buff.Accuracy;
-        t.MaxSingleAbil22 = Math.Max(t.MaxSingleAbil22, buff.AccuracyMaxSingle);
-        t.PlusMaxDamage += buff.MaxDamage;
-        t.PlusBSAccuracy += buff.BsAccuracy;
-        t.PlusBSMin += buff.BsMin;
-        t.PlusBSMax += buff.BsMax;
+            buffSlots, level, known, inParty);
+        MudPlay.Game.Spells.BuffCombat buffLow = MudPlay.Game.Spells.BuffCombatCalculator.Compute(
+            buffSlots, level, known, inParty, lowest: true);
+        EquipmentStatSummary t = WithBuffs(gear, buff);
+        EquipmentStatSummary tLow = WithBuffs(gear, buffLow);
         int nCombatLevel = GetInt(classRow, "CombatLVL");
         int str = _stats.Strength, agi = _stats.Agility, intel = _stats.Intellect, chm = _stats.Charm;
 
@@ -504,11 +511,12 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
         if (level > 0 && nCombatLevel > 0)
         {
-            AttackAccuracy = Acc(MudAttackType.Normal, realm, level, nCombatLevel, str, agi, intel, chm, t, encumCur, encumMax);
-            BashAccuracy = Acc(MudAttackType.Bash, realm, level, nCombatLevel, str, agi, intel, chm, t, encumCur, encumMax);
-            SmashAccuracy = canSmash
-                ? Acc(MudAttackType.Smash, realm, level, nCombatLevel, str, agi, intel, chm, t, encumCur, encumMax)
-                : "—";
+            string AccPair(MudAttackType type) => Pair(
+                Acc(type, realm, level, nCombatLevel, str, agi, intel, chm, tLow, encumCur, encumMax),
+                Acc(type, realm, level, nCombatLevel, str, agi, intel, chm, t, encumCur, encumMax));
+            AttackAccuracy = AccPair(MudAttackType.Normal);
+            BashAccuracy = AccPair(MudAttackType.Bash);
+            SmashAccuracy = canSmash ? AccPair(MudAttackType.Smash) : "—";
         }
         else
         {
@@ -519,9 +527,15 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         // unarmed / martial-arts damage path is out of scope for this panel.
         if (t.WeaponMax > 0)
         {
-            AttackDamage = MeleeRange(MudAttackType.Normal, realm, str, t);
-            BashDamage = MeleeRange(MudAttackType.Bash, realm, str, t);
-            SmashDamage = canSmash ? MeleeRange(MudAttackType.Smash, realm, str, t) : "—";
+            string DamagePair(MudAttackType type)
+            {
+                MeleeDamageResult lo = CombatCalculator.CalcMeleeDamage(type, realm, str, tLow.WeaponMin, tLow.WeaponMax, tLow.PlusMaxDamage);
+                MeleeDamageResult hi = CombatCalculator.CalcMeleeDamage(type, realm, str, t.WeaponMin, t.WeaponMax, t.PlusMaxDamage);
+                return RangePair(lo.MinDamage, lo.MaxDamage, hi.MinDamage, hi.MaxDamage);
+            }
+            AttackDamage = DamagePair(MudAttackType.Normal);
+            BashDamage = DamagePair(MudAttackType.Bash);
+            SmashDamage = canSmash ? DamagePair(MudAttackType.Smash) : "—";
         }
         else
         {
@@ -530,9 +544,9 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         string? meleeTip = t.WeaponMax > 0
             ? string.Join("\n",
                 $"Weapon {t.WeaponMin}-{t.WeaponMax}, strength {str}",
-                Part("+max damage", gear.PlusMaxDamage, buff, "max damage"),
+                Part("+max damage", gear.PlusMaxDamage, buffLow, buff, "max damage"),
                 Part(realm == RealmType.ParaMud ? "+accuracy (all sources add)" : "+accuracy (highest source)",
-                    realm == RealmType.ParaMud ? gear.PlusAccuracy : gear.MaxSingleAbil22, buff, "accuracy"),
+                    realm == RealmType.ParaMud ? gear.PlusAccuracy : gear.MaxSingleAbil22, buffLow, buff, "accuracy"),
                 $"Worn accuracy {t.TotalWornAccy}")
             : null;
         AttackTip = meleeTip;
@@ -560,27 +574,31 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         int stealth = _stats.Stealth;
         if (canBackstab && level > 0 && stealth > 0)
         {
-            int bsNormAccy = realm == RealmType.ParaMud ? t.TotalWornAccy + effectiveAbil22 : effectiveAbil22;
-            int bsAccy = CombatCalculator.CalcBackstabAccuracy(
-                stealth, agi, level, str, t.WeaponStrReq,
-                t.PlusBSAccuracy, bsNormAccy, hasClassStealth, realm);
-            BackstabAccuracy = bsAccy.ToString(CultureInfo.InvariantCulture);
+            int BsAccy(EquipmentStatSummary s)
+            {
+                int abil22 = realm == RealmType.ParaMud ? s.PlusAccuracy : s.MaxSingleAbil22;
+                int norm = realm == RealmType.ParaMud ? s.TotalWornAccy + abil22 : abil22;
+                return CombatCalculator.CalcBackstabAccuracy(
+                    stealth, agi, level, str, s.WeaponStrReq, s.PlusBSAccuracy, norm, hasClassStealth, realm);
+            }
+            BackstabAccuracy = Pair(BsAccy(tLow).ToString(CultureInfo.InvariantCulture),
+                BsAccy(t).ToString(CultureInfo.InvariantCulture));
 
             // Damage range for the equipped weapon (WeaponMin/Max are 0 when
             // unarmed, which CalcBSDamage handles as the strength-only profile).
-            BSDamageResult bsDmg = CombatCalculator.CalcBSDamage(
-                level, stealth, str, t.WeaponMin, t.WeaponMax,
-                t.PlusBSMin, t.PlusBSMax, t.PlusMaxDamage, hasClassStealth, realm);
-            BackstabDamage = string.Create(CultureInfo.InvariantCulture,
-                $"{bsDmg.MinDamage}-{bsDmg.MaxDamage}");
+            BSDamageResult BsDmg(EquipmentStatSummary s) => CombatCalculator.CalcBSDamage(
+                level, stealth, str, s.WeaponMin, s.WeaponMax,
+                s.PlusBSMin, s.PlusBSMax, s.PlusMaxDamage, hasClassStealth, realm);
+            BSDamageResult lo = BsDmg(tLow), hi = BsDmg(t);
+            BackstabDamage = RangePair(lo.MinDamage, lo.MaxDamage, hi.MinDamage, hi.MaxDamage);
             BackstabTip = string.Join("\n",
                 $"Weapon {t.WeaponMin}-{t.WeaponMax}, stealth {stealth}, strength {str}, agility {agi}, level {level}",
-                Part("BS accuracy", gear.PlusBSAccuracy, buff, "BS accuracy"),
-                Part("BS min damage", gear.PlusBSMin, buff, "BS min damage"),
-                Part("BS max damage", gear.PlusBSMax, buff, "BS max damage"),
-                Part("+max damage", gear.PlusMaxDamage, buff, "max damage"),
+                Part("BS accuracy", gear.PlusBSAccuracy, buffLow, buff, "BS accuracy"),
+                Part("BS min damage", gear.PlusBSMin, buffLow, buff, "BS min damage"),
+                Part("BS max damage", gear.PlusBSMax, buffLow, buff, "BS max damage"),
+                Part("+max damage", gear.PlusMaxDamage, buffLow, buff, "max damage"),
                 Part(realm == RealmType.ParaMud ? "+accuracy (all sources add)" : "+accuracy (highest source)",
-                    realm == RealmType.ParaMud ? gear.PlusAccuracy : gear.MaxSingleAbil22, buff, "accuracy"));
+                    realm == RealmType.ParaMud ? gear.PlusAccuracy : gear.MaxSingleAbil22, buffLow, buff, "accuracy"));
             BackstabSwings = "1.0";   // a backstab is always a single strike
         }
         else
@@ -681,19 +699,53 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         return string.Create(CultureInfo.InvariantCulture, $"{d.MinDamage}-{d.MaxDamage}");
     }
 
-    // "+max damage 3 — gear 2, smite +1": one tooltip line, the gear part then each
-    // cast buff's part.
-    private static string Part(string label, int gearValue, MudPlay.Game.Spells.BuffCombat buff, string what)
+    // "+max damage 3-4 — gear 2, smite +1-2": one tooltip line, the gear part then
+    // each cast buff's part, a range where the buff's roll decides it. low and high
+    // list the same sources in the same order (BuffCombatCalculator).
+    private static string Part(string label, int gearValue, MudPlay.Game.Spells.BuffCombat low,
+        MudPlay.Game.Spells.BuffCombat high, string what)
     {
-        int spells = 0;
+        int spellsLow = 0, spellsHigh = 0;
         List<string> parts = new() { $"gear {gearValue.ToString("+0;-0;0", CultureInfo.InvariantCulture)}" };
-        foreach (MudPlay.Game.Spells.BuffCombatSource src in buff.Sources)
+        for (int i = 0; i < high.Sources.Count; i++)
         {
-            if (src.What != what) continue;
-            spells += src.Value;
-            parts.Add($"{src.Spell} {src.Value.ToString("+0;-0", CultureInfo.InvariantCulture)}");
+            MudPlay.Game.Spells.BuffCombatSource h = high.Sources[i];
+            int l = i < low.Sources.Count ? low.Sources[i].Value : h.Value;
+            if (h.What != what || (l == 0 && h.Value == 0)) continue;
+            spellsLow += l;
+            spellsHigh += h.Value;
+            parts.Add($"{h.Spell} {Signed(l)}" + (l == h.Value ? "" : $"-{h.Value}"));
         }
-        return $"{label} {gearValue + spells} — {string.Join(", ", parts)}";
+        return $"{label} {Pair((gearValue + spellsLow).ToString(CultureInfo.InvariantCulture), (gearValue + spellsHigh).ToString(CultureInfo.InvariantCulture))}"
+            + $" — {string.Join(", ", parts)}";
+    }
+
+    private static string Signed(int v) => v.ToString("+0;-0;0", CultureInfo.InvariantCulture);
+
+    // "129" or "129-130": one figure, or its range across the buffs' rolls.
+    private static string Pair(string low, string high) => low == high ? low : $"{low}-{high}";
+
+    // "10-20", "10-(20-21)" or "(85-87)-(101-103)": a damage range whose ends may each
+    // depend on a buff's roll (user's format, 2026-09-30).
+    private static string RangePair(int lowMin, int lowMax, int highMin, int highMax)
+    {
+        static string End(int a, int b) => a == b
+            ? a.ToString(CultureInfo.InvariantCulture)
+            : $"({Math.Min(a, b).ToString(CultureInfo.InvariantCulture)}-{Math.Max(a, b).ToString(CultureInfo.InvariantCulture)})";
+        return $"{End(lowMin, highMin)}-{End(lowMax, highMax)}";
+    }
+
+    // The gear summary with the cast buffs' bonuses folded in.
+    private static EquipmentStatSummary WithBuffs(EquipmentStatSummary gear, MudPlay.Game.Spells.BuffCombat buff)
+    {
+        EquipmentStatSummary t = gear.Copy();
+        t.PlusAccuracy += buff.Accuracy;
+        t.MaxSingleAbil22 = Math.Max(t.MaxSingleAbil22, buff.AccuracyMaxSingle);
+        t.PlusMaxDamage += buff.MaxDamage;
+        t.PlusBSAccuracy += buff.BsAccuracy;
+        t.PlusBSMin += buff.BsMin;
+        t.PlusBSMax += buff.BsMax;
+        return t;
     }
 
     private static string Acc(MudAttackType type, RealmType realm, int level, int nCombatLevel,
@@ -705,13 +757,6 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             realm == RealmType.ParaMud ? t.PlusAccuracy : t.MaxSingleAbil22,
             encumCur, encumMax, t.WeaponStrReq);
         return v.ToString(CultureInfo.InvariantCulture);
-    }
-
-    private static string MeleeRange(MudAttackType type, RealmType realm, int str, EquipmentStatSummary t)
-    {
-        MeleeDamageResult d = CombatCalculator.CalcMeleeDamage(
-            type, realm, str, t.WeaponMin, t.WeaponMax, t.PlusMaxDamage);
-        return string.Create(CultureInfo.InvariantCulture, $"{d.MinDamage}-{d.MaxDamage}");
     }
 
     // ----- Box A: alignment standing --------------------------------------

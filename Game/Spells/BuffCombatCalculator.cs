@@ -15,7 +15,12 @@ public static class BuffCombatCalculator
     private const int MaxDamageCode = 4, AccuracyCode = 22, Accuracy2Code = 105, Accuracy3Code = 106,
                       BsAccuCode = 116, BsMinCode = 117, BsMaxCode = 118;
 
-    public static BuffCombat Compute(BuffSettings? buffs, int level, IReadOnlyList<KnownSpell>? available, bool inParty)
+    // lowest: each level-scaled value at the bottom of its roll instead of the top —
+    // the game rolls a buff's value as it's cast, so the two bracket what's on now
+    // (user, 2026-09-30: show the range rather than guess the roll). Both passes list
+    // the same sources in the same order, so a caller can pair them.
+    public static BuffCombat Compute(BuffSettings? buffs, int level, IReadOnlyList<KnownSpell>? available, bool inParty,
+        bool lowest = false)
     {
         if (buffs is null || available is null || buffs.Slots.Count == 0) return BuffCombat.None;
 
@@ -32,12 +37,12 @@ public static class BuffCombatCalculator
             if (!byCode.TryGetValue(code, out KnownSpell spell)) continue;
             if (!CastOnUs(spell.Targets, slot, inParty) || !counted.Add(code)) continue;
 
-            (long _, long affMax) = SpellCalculator.AffectMagnitude(spell.Formula, level);
+            (long affMin, long affMax) = SpellCalculator.AffectMagnitude(spell.Formula, level);
             foreach (SpellAbility a in spell.Formula.Abilities)
             {
                 // A stored AbilVal is the flat value; 0 means the spell's level-scaled
-                // range — its max, as BuffDefenseCalculator reads AC / DR.
-                int v = a.Value != 0 ? a.Value : (int)affMax;
+                // range, rolled per cast.
+                int v = a.Value != 0 ? a.Value : (int)(lowest ? affMin : affMax);
                 string? what = a.Code switch
                 {
                     AccuracyCode or Accuracy2Code or Accuracy3Code => "accuracy",
@@ -47,7 +52,7 @@ public static class BuffCombatCalculator
                     BsMaxCode => "BS max damage",
                     _ => null,
                 };
-                if (what is null || v == 0) continue;
+                if (what is null) continue;
                 switch (a.Code)
                 {
                     case AccuracyCode or Accuracy2Code or Accuracy3Code:
