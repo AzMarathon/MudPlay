@@ -2831,11 +2831,12 @@ How a room with a `Group:` token and no lair (*`Summoned By` spawn tokens*) gets
 - **A boss's `RegenTime` is in HOURS** (the Game-Data browser renders it "15 hour") — the same unit as every monster's `RegenTime` (see *Lair respawn timers*); a lair's `AvgDelay` is a separate field.
 - **Stock: the wait is `RegenTime` hours give or take an eighth, rolled afresh on every spawn attempt** *([OBSERVED] 2026-10-01, `wccmmud.dll` 1.11p `_generate_monster` @ `0x42462a`–`0x4246e2`; Stock only, Paradigm not recorded)*. For a `GameLimit` 1 monster with a last-kill date and a `RegenTime`, the engine refuses the spawn while the minutes since that kill are under `RegenTime × 60 + lngrnd(0, RegenTime × 15) − RegenTime × 7.5`.
 - **Paradigm: a boss can come back during the last 20% of its regen timer** *([CONFIRMED] 2026-10-01, user, relaying a Paradigm source: "generally bosses have a chance to regen 20% before their full timer", "each % is a 5% chance to spawn")*.
-  - **The first chance comes 20% before the full timer**, at 80% of `RegenTime`.
+  - **The first chance comes 20% before the full timer, at 80% of `RegenTime` after the last kill** — a 10-hour boss at 8 hours.
   - **The engine checks once for every 1% of the timer that passes** from then on.
-  - **Each 1% adds about 5 points of spawn chance**, so the chance climbs until the boss spawns and is certain by the full timer (20 checks × 5 points).
+  - **The chance is additive, 5 points per 1% mark:** basically 1% at the 80% mark (20% of the timer left), 5% with 19% left, 10% with 18% left, and so on up to certain at the full timer.
+  - Worked through, about 57% of bosses are back by 85% of the timer and 97% by 90%; the average return is about 85%.
   - Example: a `RegenTime` 15 boss can first return at 12 hours and is checked every 9 minutes after that.
-  - *[NEEDS CONFIRMATION] — two readings of the wording, to settle with the user: is the first chance at 80% of the timer (taken here from "20% before their full timer")? And does the chance climb 5%, 10%, 15% … (taken here; about half are back by 85% of the timer and the average is about 84%), or stay a flat 5% per check (which would leave about a third still missing at the full timer)?*
+  - (A 2026-10-01 `[NEEDS CONFIRMATION]` note asked whether the window opens at 80% and whether the chance climbs or stays flat; settled the same day by the user as recorded here.)
 - **Exp/hr estimation of a boss:** pull it OUT of its lair's per-mob average and add its amortised contribution **`boss exp ÷ regen-hours`, counted once** for the whole loop (a single time no matter how many rooms it can appear in) — `1,200,000 ÷ 15 = 80,000/hr`, not `1.2M` per lap in every room. The regular (non-boss) lair mobs still fire per-room on the room delay.
 
 **Client use:**
