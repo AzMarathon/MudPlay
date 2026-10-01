@@ -419,10 +419,13 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         int encPct = encum.MaxWeight > 0 ? encum.CurrentWeight * 100 / encum.MaxWeight : 0;
         int encPenalty = encPct > 66 ? 10 : encPct > 33 ? 5 : 0;
         int chance = Math.Max(0, stealth - encPenalty);
+        // A move re-rolls over 0–101 rather than `sn`'s 0–100, so even at its cap of
+        // 100 a sneaked move keeps the sneak 100 in 101.
+        int keep = Math.Min(chance, 100) * 100 / 101;
         List<string> stealthLines = new()
         {
-            $"Sneak: {Capped(chance, 95)}",
-            $"Moving: {Capped(chance, 100)}",
+            $"Start sneaking (sn): {Capped(chance, 95)}",
+            $"Keep it each move: {keep}%" + (chance > 100 ? $" ({chance}, capped at 100)" : ""),
             "−1 per player or monster in the room",
         };
         if (encPenalty > 0) stealthLines.Add($"−{encPenalty} for carrying {encPct}%");
