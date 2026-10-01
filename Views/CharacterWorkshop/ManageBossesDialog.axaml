@@ -3,11 +3,11 @@
         xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="560"
+        mc:Ignorable="d" d:DesignWidth="1440" d:DesignHeight="560"
         x:Class="MudPlay.Views.CharacterWorkshop.ManageBossesDialog"
         x:DataType="vm:ManageBossesDialogViewModel"
         Title="Manage bosses"
-        Width="1180" Height="560"
+        Width="1440" Height="560"
         MinWidth="560" MinHeight="360"
         WindowStartupLocation="CenterOwner">
 
@@ -46,6 +46,23 @@
                                         Binding="{ReflectionBinding InParadigm, Mode=TwoWay}" Width="80"/>
                 <DataGridCheckBoxColumn Header="Show in Table"
                                         Binding="{ReflectionBinding ShowInTable, Mode=TwoWay}" Width="110"/>
+                <!-- What the Bosses tab's "Reset to default" restores for this boss. -->
+                <DataGridTemplateColumn Header="Default Stop Before" Width="140" CanUserSort="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:ManageBossRowViewModel">
+                            <CheckBox IsChecked="{Binding DefaultStopBefore, Mode=TwoWay}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Default Grab All" Width="125" CanUserSort="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:ManageBossRowViewModel">
+                            <CheckBox IsChecked="{Binding DefaultGrabAll, Mode=TwoWay}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Notes"
                                     Binding="{ReflectionBinding Notes, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                     Width="220"/>

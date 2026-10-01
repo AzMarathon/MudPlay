@@ -23,11 +23,18 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
     [ObservableProperty] private bool _inStock;
     [ObservableProperty] private bool _inParadigm;
     [ObservableProperty] private bool _showInTable = true;
+    // What the Bosses tab's "Reset to default" puts Stop before / Grab All back to.
+    [ObservableProperty] private bool _defaultStopBefore = true;
+    [ObservableProperty] private bool _defaultGrabAll;
 
     public int? MonsterNumber { get; private set; }
-    private bool _stopBefore;
+    // The live flags are edited on the main table and carried through unchanged; a
+    // boss added here starts on its defaults.
+    private readonly bool _isNew;
+    private readonly bool _stopBefore;
+    private readonly bool _grabAll;
 
-    public ManageBossRowViewModel() { }
+    public ManageBossRowViewModel() { _isNew = true; }
 
     public ManageBossRowViewModel(BossDef def, int? gameDataHours)
     {
@@ -39,6 +46,9 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
         Notes = def.Notes;
         IsCleanup = def.RespawnType == BossRespawnType.Cleanup;
         _stopBefore = def.StopBefore;
+        _grabAll = def.GrabAll;
+        DefaultStopBefore = def.ResetStopBefore;
+        DefaultGrabAll = def.ResetGrabAll;
         InStock = def.InStock;
         InParadigm = def.InParadigm;
         ShowInTable = def.ShowInTable;
@@ -53,7 +63,10 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
         InStock = InStock,
         InParadigm = InParadigm,
         RespawnType = IsCleanup ? BossRespawnType.Cleanup : BossRespawnType.Timed,
-        StopBefore = _stopBefore,   // edited on the main table, carried through unchanged
+        StopBefore = _isNew ? DefaultStopBefore : _stopBefore,
+        GrabAll = _isNew ? DefaultGrabAll : _grabAll,
+        DefaultStopBefore = DefaultStopBefore,
+        DefaultGrabAll = DefaultGrabAll,
         RespawnHoursOverride = ResolveOverride(),
         Notes = Notes.Trim(),
         ShowInTable = ShowInTable,

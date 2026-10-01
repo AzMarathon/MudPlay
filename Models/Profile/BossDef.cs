@@ -32,6 +32,18 @@ public sealed class BossDef
     // When set, the moment this boss dies the client blindly fires a `get <item>`
     // for every item in its game-data drop table — no room re-parse. Default off.
     public bool GrabAll { get; set; }
+    // What Stop before and Grab All go back to on the Bosses tab's "Reset to default".
+    // Set per boss in the Manage dialog, so a list someone edits or shares carries
+    // its own defaults. Null is "not stated": an overlay entry saved before these
+    // existed takes the seed boss's value (BossStore.Resolve), and failing that
+    // Stop before resets to on and Grab All to off.
+    public bool? DefaultStopBefore { get; set; }
+    public bool? DefaultGrabAll { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool ResetStopBefore => DefaultStopBefore ?? true;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool ResetGrabAll => DefaultGrabAll ?? false;
     public int? RespawnHoursOverride { get; set; }
     public string Notes { get; set; } = string.Empty;
     // Whether this boss appears in the Player Workshop Bosses table. Default true;
@@ -46,7 +58,9 @@ public sealed class BossDef
     {
         Name = Name, MonsterNumber = MonsterNumber, Rooms = new List<string>(Rooms),
         InStock = InStock, InParadigm = InParadigm, RespawnType = RespawnType,
-        StopBefore = StopBefore, GrabAll = GrabAll, RespawnHoursOverride = RespawnHoursOverride,
+        StopBefore = StopBefore, GrabAll = GrabAll,
+        DefaultStopBefore = DefaultStopBefore, DefaultGrabAll = DefaultGrabAll,
+        RespawnHoursOverride = RespawnHoursOverride,
         Notes = Notes, ShowInTable = ShowInTable, Removed = Removed,
     };
 
@@ -58,6 +72,7 @@ public sealed class BossDef
         && InStock == seed.InStock && InParadigm == seed.InParadigm
         && RespawnType == seed.RespawnType
         && StopBefore == seed.StopBefore && GrabAll == seed.GrabAll
+        && ResetStopBefore == seed.ResetStopBefore && ResetGrabAll == seed.ResetGrabAll
         && RespawnHoursOverride == seed.RespawnHoursOverride
         && string.Equals(Notes, seed.Notes, StringComparison.Ordinal)
         && ShowInTable == seed.ShowInTable && !Removed

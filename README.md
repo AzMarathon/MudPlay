@@ -1,12 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.48**
-> - Training's fee now comes off the coin tally, so pickups and stashing no longer stop after a train until you type `i`
-> - A refused coin stash, or a pickup refused for weight, re-reads the inventory once to correct a wrong coin count
-> - Bosses tab toolbar reordered (filter first), with Stop Before Toggle and Grab All Toggle buttons for the bosses shown
-> - Stop before is now on by default for every boss
-> - Stop before checkbox toggles on the first click, like Grab All
+> **Version 3.134.51**
+> - Stop before defaults to off for Neutral bosses, sheriff lionheart, justicar halford, mayor godfrey, lord of the hunt and the gigantic black ooze
+> - Bosses tab: Reset to default button puts Stop before and Grab All back to each boss's own defaults
+> - Manage Bosses: Default Stop Before and Default Grab All columns set those per boss; saving there no longer clears Grab All
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
