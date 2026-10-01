@@ -1,13 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.43**
-> - Logging in next to a monster no longer drops the fight when the room is re-located, so auto-sneak stops sending `sn` mid-combat
-> - Character Info: Magic Res tooltip shows the spell damage change and the chance to resist a spell outright
-> - Monster Intel: each monster spell shows the damage you take after your Magic Res and elemental resists, your chance to resist it, or "ignores MR"
-> - Unrecognized Lines no longer stages standard command output (shop list, top list, profile, abil, gang roster, descriptions), wrapped room lists, bank / level-up / death lines or unread prompts, and drops queued lines it now recognizes
-> - Silvermere and temple ambient lines are recognized
-> - More monster arrivals and departures are recognized (the shade's "materializes in the room", "stomps off to the north", "leaves to", "enters from")
+> **Version 3.134.44**
+> - Unrecognized Lines skips the engine's fixed command replies (usage lines, refusals, door / bank / shop / gang / channel notices)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
