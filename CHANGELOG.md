@@ -1,5 +1,9 @@
 # Version history
 
+## 3.134.52
+
+- Transaction history: coin stashed in a room is one row per stash room, showing the last stash, the average per stash and the total
+
 ## 3.134.51
 
 - Stop before defaults to off for Neutral bosses, sheriff lionheart, justicar halford, mayor godfrey, lord of the hunt and the gigantic black ooze

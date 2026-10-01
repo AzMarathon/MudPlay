@@ -64,6 +64,7 @@ public sealed class SessionLogService : IDisposable
         _profile.ProfileClosed += OnProfileClosed;
         _chat.EntryClassified += OnChat;
         _transactions.EntryAdded += OnTransaction;
+        _transactions.EntryReplaced += OnTransactionReplaced;
 
         ReopenFiles();
     }
@@ -115,6 +116,14 @@ public sealed class SessionLogService : IDisposable
     {
         if (!_logTransactions || !_txns.IsOpen) return;
         _txns.Append(FormatTxnLine(entry));
+    }
+
+    // A stash room's coin row was updated in place. The log is append-only, so the
+    // whole (capped) ledger is written again.
+    private void OnTransactionReplaced(TransactionEntry replaced, TransactionEntry current)
+    {
+        if (!_logTransactions || !_txns.IsOpen) return;
+        RewriteTransactions(_transactions.Snapshot());
     }
 
     internal static string FormatChatLine(ChatLogEntry entry)
@@ -181,6 +190,10 @@ public sealed class SessionLogService : IDisposable
         foreach (string line in _txns.Snapshot())
             if (TryParseTxnLine(line, out TransactionEntry entry)) entries.Add(entry);
         _transactions.Hydrate(entries);
+        // The ledger folds each stash room's coin rows into one as it loads; a log
+        // from before that is rewritten once to match.
+        IReadOnlyList<TransactionEntry> loaded = _transactions.Snapshot();
+        if (loaded.Count != entries.Count && _logTransactions) RewriteTransactions(loaded);
     }
 
     // Inverse of OnChat: "[stamp] Channel[ speaker]: message". The head before
@@ -295,6 +308,7 @@ public sealed class SessionLogService : IDisposable
         _profile.ProfileClosed -= OnProfileClosed;
         _chat.EntryClassified -= OnChat;
         _transactions.EntryAdded -= OnTransaction;
+        _transactions.EntryReplaced -= OnTransactionReplaced;
         CloseFiles();
     }
 }

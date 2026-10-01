@@ -40,6 +40,13 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
         _tracker = tracker;
         Rebuild();
         _tracker.Changed += OnChanged;
+        _tracker.EntryReplaced += OnEntryReplaced;
+    }
+
+    // A stash room's coin row was updated in place: a "keep" mark follows it.
+    private void OnEntryReplaced(TransactionEntry replaced, TransactionEntry current)
+    {
+        if (_kept.Remove(replaced)) _kept.Add(current);
     }
 
     private void OnChanged() => Dispatcher.UIThread.Post(() =>
@@ -75,7 +82,7 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
             // Hydrate replaces the in-memory ledger and fires Changed → Rebuild; it
             // skips the persistence append hook, so rewrite the on-disk log to match.
             _tracker.Hydrate(keep);
-            AppServices.Current.SessionLog.RewriteTransactions(keep);
+            AppServices.Current.SessionLog.RewriteTransactions(_tracker.Snapshot());
         }
     }
 
@@ -125,5 +132,6 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
         if (_disposed) return;
         _disposed = true;
         _tracker.Changed -= OnChanged;
+        _tracker.EntryReplaced -= OnEntryReplaced;
     }
 }

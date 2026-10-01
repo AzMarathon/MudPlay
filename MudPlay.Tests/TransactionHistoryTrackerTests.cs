@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using MudPlay.Game.Cash;
 using Xunit;
 
@@ -82,9 +84,13 @@ public sealed class TransactionHistoryTrackerTests
             new[] { ("gold", 400L), ("platinum", 40L) },
             new[] { "a torch" });
 
-        TransactionEntry e = Assert.Single(t.Snapshot());
-        Assert.Equal(TransactionKind.Stash, e.Kind);
-        Assert.Equal("Hid a torch, 400 gold, 40 platinum", e.Detail);
+        // Items get their own row; the coin goes on the room's one coin row.
+        IReadOnlyList<TransactionEntry> rows = t.Snapshot();
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, e => Assert.Equal(TransactionKind.Stash, e.Kind));
+        Assert.Equal("Hid a torch", rows[0].Detail);
+        Assert.Equal("Hid 40 platinum, 400 gold — avg 44 platinum over 1 stash — total 40 platinum, 400 gold",
+            rows[1].Detail);
     }
 
     [Fact]
@@ -103,7 +109,87 @@ public sealed class TransactionHistoryTrackerTests
     {
         (TransactionHistoryTracker t, _) = Make();
         t.NoteStash(new[] { ("copper", 250_000L) }, Array.Empty<string>());
-        Assert.Equal("Hid 250,000 copper", Assert.Single(t.Snapshot()).Detail);
+        Assert.Equal("Hid 250,000 copper — avg 25 platinum over 1 stash — total 250,000 copper",
+            Assert.Single(t.Snapshot()).Detail);
+    }
+
+    // ----- one coin row per stash room ---------------------------------
+
+    [Fact]
+    public void CoinStash_SameRoom_IsOneRow_WithLastAverageAndTotal()
+    {
+        (TransactionHistoryTracker t, Clock c) = Make();
+        const string room = "Hollow Stump (3/7)";
+        var replaced = new List<(TransactionEntry Old, TransactionEntry New)>();
+        t.EntryReplaced += (o, n) => replaced.Add((o, n));
+
+        t.NoteStash(new[] { ("silver", 100L) }, Array.Empty<string>(), room);
+        c.Advance(60);
+        t.NoteStash(new[] { ("silver", 300L) }, Array.Empty<string>(), room);
+
+        TransactionEntry e = Assert.Single(t.Snapshot());
+        Assert.Equal(c.Now, e.Time);                      // the latest stash's time
+        Assert.Equal("Hid 300 silver — avg 20 gold over 2 stashes — total 400 silver", e.Detail);
+        Assert.Equal(room, e.Location);
+        Assert.Equal(e, Assert.Single(replaced).New);
+    }
+
+    [Fact]
+    public void CoinStash_EchoesOfOneVisit_ShareTheLastAmount()
+    {
+        // The game answers a mixed stash with one line per coin type, a moment apart.
+        (TransactionHistoryTracker t, Clock c) = Make();
+        t.NoteStash(new[] { ("gold", 1L) }, Array.Empty<string>(), "Stump (3/7)");
+        c.Advance(1);
+        t.NoteStash(new[] { ("silver", 115L) }, Array.Empty<string>(), "Stump (3/7)");
+
+        Assert.Equal("Hid 1 gold, 115 silver — avg 12 gold, 5 silver over 1 stash — total 1 gold, 115 silver",
+            Assert.Single(t.Snapshot()).Detail);
+    }
+
+    [Fact]
+    public void CoinStash_EachRoomKeepsItsOwnRow_AndTheLatestMovesToTheEnd()
+    {
+        (TransactionHistoryTracker t, Clock c) = Make();
+        t.NoteStash(new[] { ("gold", 5L) }, Array.Empty<string>(), "A (1/1)");
+        c.Advance(60);
+        t.NoteStash(new[] { ("gold", 7L) }, Array.Empty<string>(), "B (1/2)");
+        c.Advance(60);
+        t.NoteStash(new[] { ("gold", 1L) }, Array.Empty<string>(), "A (1/1)");
+
+        IReadOnlyList<TransactionEntry> rows = t.Snapshot();
+        Assert.Equal(new[] { "B (1/2)", "A (1/1)" }, rows.Select(r => r.Location));
+        Assert.Equal("Hid 1 gold — avg 3 gold over 2 stashes — total 6 gold", rows[1].Detail);
+    }
+
+    [Fact]
+    public void Hydrate_FoldsAnOlderLogsCoinRows_AndReadsARolledRowBack()
+    {
+        (TransactionHistoryTracker t, Clock c) = Make();
+        DateTimeOffset t0 = c.Now;
+        t.Hydrate(new[]
+        {
+            new TransactionEntry(t0, TransactionKind.Stash, "Hid 94 silver", "Stump (3/7)"),
+            new TransactionEntry(t0.AddSeconds(1), TransactionKind.Stash, "Hid 1 gold", "Stump (3/7)"),
+            new TransactionEntry(t0.AddMinutes(5), TransactionKind.Bank, "Deposited 500 wealth", "Bank (1/297)"),
+            new TransactionEntry(t0.AddMinutes(9), TransactionKind.Stash, "Hid a torch", "Stump (3/7)"),
+            new TransactionEntry(t0.AddMinutes(10), TransactionKind.Stash, "Hid 106 silver", "Stump (3/7)"),
+        });
+
+        IReadOnlyList<TransactionEntry> rows = t.Snapshot();
+        Assert.Equal(3, rows.Count);
+        Assert.Equal("Deposited 500 wealth", rows[0].Detail);
+        Assert.Equal("Hid a torch", rows[1].Detail);
+        // Two visits: 94 silver + 1 gold together, then 106 silver.
+        Assert.Equal("Hid 106 silver — avg 10 gold, 5 silver over 2 stashes — total 1 gold, 200 silver", rows[2].Detail);
+
+        // That row, loaded again, keeps counting from where it was.
+        (TransactionHistoryTracker again, Clock c2) = Make();
+        again.Hydrate(rows);
+        c2.Now = t0.AddHours(1);
+        again.NoteStash(new[] { ("silver", 100L) }, Array.Empty<string>(), "Stump (3/7)");
+        Assert.Equal("Hid 100 silver — avg 10 gold, 3 silver, 3 copper over 3 stashes — total 1 gold, 300 silver",
+            again.Snapshot()[^1].Detail);
     }
 
     [Fact]
