@@ -2,7 +2,8 @@ using MudPlay.Models.Profile;
 
 namespace MudPlay.Services;
 
-// Per-character memory of the Session Stats window's panel order + hidden set.
+// Per-character memory of the Session Stats window's panel order, hidden set and
+// expanded set.
 // The SessionStatsViewModel reads Resolve when the window opens and pushes
 // changes back through Update as the user drags panels around or toggles them
 // via the context menu.
@@ -44,13 +45,18 @@ public sealed class SessionStatsLayoutStore
     // default spot), with each panel's current visibility.
     public IReadOnlyList<(string Id, bool Visible)> Resolve() => Resolve(_layout);
 
-    // Persist a new order + hidden set and write the profile through immediately.
-    public void Update(IEnumerable<string> order, IEnumerable<string> hidden)
+    // The panel ids the user has expanded; every other panel is collapsed.
+    public IReadOnlyCollection<string> Expanded => _layout.Expanded ?? (IReadOnlyCollection<string>)Array.Empty<string>();
+
+    // Persist a new order, hidden set and expanded set, and write the profile through
+    // immediately.
+    public void Update(IEnumerable<string> order, IEnumerable<string> hidden, IEnumerable<string> expanded)
     {
         _layout = new SessionStatsLayout
         {
             Order = order.ToList(),
             Hidden = hidden.ToList(),
+            Expanded = expanded.ToList(),
         };
         // Mirror the profile field eagerly too, so a Save triggered elsewhere
         // before the next ProfileSaving snapshot still carries the change.
@@ -89,5 +95,6 @@ public sealed class SessionStatsLayoutStore
     {
         Order = src?.Order is { } o ? new List<string>(o) : null,
         Hidden = src?.Hidden is { } h ? new List<string>(h) : null,
+        Expanded = src?.Expanded is { } e ? new List<string>(e) : null,
     };
 }

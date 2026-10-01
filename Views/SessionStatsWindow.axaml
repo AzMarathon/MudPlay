@@ -10,7 +10,7 @@
         x:DataType="vm:SessionStatsViewModel"
         Title="Session Stats"
         Width="280" Height="480"
-        MinWidth="240" MinHeight="160" MaxHeight="960"
+        MinWidth="240" MinHeight="160"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
@@ -89,9 +89,6 @@
              with a cap made each panel shrink to its own content, leaving the
              graphs a header's-width sliver and Player Statistics narrower than
              its siblings. -->
-        <Style Selector="StackPanel.panel">
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
-        </Style>
         <Style Selector="Expander.panel">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
         </Style>
@@ -172,15 +169,18 @@
             </StackPanel.ContextMenu>
 
             <!-- ===== Kills/hour graph ===== -->
-            <StackPanel Tag="KillsGraph" Classes="panel" Spacing="3"
-                        IsVisible="{Binding IsKillsGraphVisible}">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Classes="lbl draghandle" Text="Kills/hour"/>
-                    <TextBlock Grid.Column="1" Classes="valr"
-                               Foreground="{StaticResource AccentGreenBrush}"
-                               Text="{Binding KillsRateText}"
-                               ToolTip.Tip="{Binding DurationText}"/>
-                </Grid>
+            <Expander Tag="KillsGraph" Classes="panel"
+                      IsExpanded="{Binding IsKillsGraphExpanded, Mode=TwoWay}"
+                      IsVisible="{Binding IsKillsGraphVisible}">
+                <Expander.Header>
+                    <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Stretch">
+                        <TextBlock Grid.Column="0" Classes="lbl draghandle" Text="Kills/hour"/>
+                        <TextBlock Grid.Column="1" Classes="valr"
+                                   Foreground="{StaticResource AccentGreenBrush}"
+                                   Text="{Binding KillsRateText}"
+                                   ToolTip.Tip="{Binding DurationText}"/>
+                    </Grid>
+                </Expander.Header>
                 <Border Background="{StaticResource ChromeBgSunkenBrush}"
                         BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                         BorderThickness="1"
@@ -200,18 +200,22 @@
                         </Grid>
                     </Grid>
                 </Border>
-            </StackPanel>
+            </Expander>
 
             <!-- ===== Exp/hour graph ===== -->
-            <StackPanel Tag="ExpGraph" Classes="panel" Spacing="3"
-                        IsVisible="{Binding IsExpGraphVisible}">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Classes="lbl draghandle" Text="Exp/hour"/>
-                    <TextBlock Grid.Column="1" Classes="valr"
-                               Foreground="{StaticResource AccentCyanBrush}"
-                               Text="{Binding ExpRateText}"
-                               ToolTip.Tip="{Binding DurationText}"/>
-                </Grid>
+            <Expander Tag="ExpGraph" Classes="panel"
+                      IsExpanded="{Binding IsExpGraphExpanded, Mode=TwoWay}"
+                      IsVisible="{Binding IsExpGraphVisible}">
+                <Expander.Header>
+                    <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Stretch">
+                        <TextBlock Grid.Column="0" Classes="lbl draghandle" Text="Exp/hour"/>
+                        <TextBlock Grid.Column="1" Classes="valr"
+                                   Foreground="{StaticResource AccentCyanBrush}"
+                                   Text="{Binding ExpRateText}"
+                                   ToolTip.Tip="{Binding DurationText}"/>
+                    </Grid>
+                </Expander.Header>
+                <StackPanel Spacing="3">
                 <Border Background="{StaticResource ChromeBgSunkenBrush}"
                         BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                         BorderThickness="1"
@@ -232,7 +236,8 @@
                     </Grid>
                 </Border>
                 <TextBlock Classes="ttl" Text="{Binding TimeToLevelText}"/>
-            </StackPanel>
+                </StackPanel>
+            </Expander>
 
             <!-- ===== HP/MA History graph ===== -->
             <!-- Stock-chart view: one vertical high-low bar per loop step on a fixed
@@ -241,9 +246,13 @@
                  and which steps of the circuit dip lowest. Records only while a loop
                  is stepping; resets at each new loop start. Mana bars vanish for a
                  no-mana class. -->
-            <StackPanel Tag="HpMaGraph" Classes="panel" Spacing="3"
-                        IsVisible="{Binding IsHpMaGraphVisible}">
-                <TextBlock Classes="lbl draghandle" Text="HP/MA per loop step"/>
+            <Expander Tag="HpMaGraph" Classes="panel"
+                      IsExpanded="{Binding IsHpMaGraphExpanded, Mode=TwoWay}"
+                      IsVisible="{Binding IsHpMaGraphVisible}">
+                <Expander.Header>
+                    <TextBlock Classes="lbl draghandle" Text="HP/MA per loop step"/>
+                </Expander.Header>
+                <StackPanel Spacing="3">
                 <Border Background="{StaticResource ChromeBgSunkenBrush}"
                         BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                         BorderThickness="1"
@@ -306,10 +315,11 @@
                         TickFrequency="1" IsSnapToTickEnabled="True"
                         HorizontalAlignment="Stretch" Margin="19,0,19,0" Height="22" MinHeight="0"
                         ToolTip.Tip="Slide to anchor any loop step; the view pans to follow."/>
-            </StackPanel>
+                </StackPanel>
+            </Expander>
 
             <!-- ===== Player Statistics ===== -->
-            <Expander Tag="PlayerStatistics" Classes="panel" IsExpanded="True"
+            <Expander Tag="PlayerStatistics" Classes="panel" IsExpanded="{Binding IsPlayerStatsExpanded, Mode=TwoWay}"
                       IsVisible="{Binding IsPlayerStatsVisible}">
                 <Expander.Header>
                     <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Stretch">
@@ -424,7 +434,7 @@
             </Expander>
 
             <!-- ===== Time Analysis ===== -->
-            <Expander Tag="TimeAnalysis" Classes="panel" IsExpanded="True"
+            <Expander Tag="TimeAnalysis" Classes="panel" IsExpanded="{Binding IsTimeAnalysisExpanded, Mode=TwoWay}"
                       IsVisible="{Binding IsTimeAnalysisVisible}">
                 <Expander.Header>
                     <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Stretch">
@@ -534,7 +544,7 @@
             </Expander>
 
             <!-- ===== Session Statistics ===== -->
-            <Expander Tag="SessionStatistics" Classes="panel" IsExpanded="True"
+            <Expander Tag="SessionStatistics" Classes="panel" IsExpanded="{Binding IsSessionStatsExpanded, Mode=TwoWay}"
                       IsVisible="{Binding IsSessionStatsVisible}">
                 <Expander.Header>
                     <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Stretch">

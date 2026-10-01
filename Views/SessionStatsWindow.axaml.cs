@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Platform;
 using MudPlay.ViewModels;
 
 namespace MudPlay.Views;
@@ -93,7 +94,8 @@ public partial class SessionStatsWindow : Window
     // ----- Auto-fit height to the stacked panels ---------------------
 
     // Re-fit the window height to its content whenever the panels' total height
-    // changes (a panel expanded / collapsed / hidden). Avalonia's SizeToContent
+    // changes (a panel expanded / collapsed / hidden, or opening the window with its
+    // saved set of expanded panels). Avalonia's SizeToContent
     // fits on open but doesn't reliably react to runtime content changes here, so
     // we drive the height ourselves: measure the whole body unbounded to learn the
     // height it wants, add the (constant) window chrome, clamp to Min/Max, and set
@@ -116,8 +118,20 @@ public partial class SessionStatsWindow : Window
         // bottom buffer keeps the last panel off the window's bottom edge.
         const double BottomBuffer = 5;
         double chrome = Math.Max(0, Height - ClientSize.Height);
-        double target = Math.Clamp(neededClient + chrome + BottomBuffer, MinHeight, MaxHeight);
+        // Show everything that's open (user, 2026-09-30): the cap is the screen's
+        // working area, not a fixed height, and a window that would run off the
+        // bottom moves up to keep it all on screen. Only more than a screenful scrolls.
+        Screen? screen = Screens.ScreenFromWindow(this);
+        double ceiling = screen is null ? MaxHeight : Math.Min(MaxHeight, screen.WorkingArea.Height / screen.Scaling);
+        double target = Math.Clamp(neededClient + chrome + BottomBuffer, MinHeight, Math.Max(MinHeight, ceiling));
         if (Math.Abs(Height - target) > 0.5) Height = target;
+        if (screen is not null)
+        {
+            PixelRect area = screen.WorkingArea;
+            int heightPx = (int)Math.Ceiling(target * screen.Scaling);
+            if (Position.Y + heightPx > area.Bottom)
+                Position = new PixelPoint(Position.X, Math.Max(area.Y, area.Bottom - heightPx));
+        }
     }
 
     // ----- HP/MA graph scrub cursor ---------------------------------

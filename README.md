@@ -1,12 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.15**
-> - A ShadowRest doesn't hold combat once a fight is on, so a monster attacking you is fought straight away
-> - No room re-check every 6 s while ShadowResting beside a monster
-> - While ShadowResting beside a monster, nothing that breaks stealth goes out until rest-max
-> - Below the run trigger, a monster that follows you isn't attacked; the flee runs on
-> - A flee never doubles back into the room it just fled; at the walk's start it runs opposite the walk, avoiding boss rooms and big lairs
+> **Version 3.134.16**
+> - Session Stats panels, graphs included, start collapsed and remember which are open per character
+> - The Session Stats window sizes itself to show every open panel, up to the screen's height
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

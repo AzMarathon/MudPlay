@@ -1,5 +1,10 @@
 # Version history
 
+## 3.134.16
+
+- Session Stats panels, graphs included, start collapsed and remember which are open per character
+- The Session Stats window sizes itself to show every open panel, up to the screen's height
+
 ## 3.134.15
 
 - A ShadowRest doesn't hold combat once a fight is on, so a monster attacking you is fought straight away
