@@ -49,6 +49,9 @@ public sealed class MonsterMovementPatternTests
     [InlineData("A brine hag shuffles into the area.")]
     [InlineData("A skeleton arises from its place of rest.")]
     [InlineData("A sand worm crawls after you!")]
+    [InlineData("A slimeworm crashes through the ground into the room!")]
+    [InlineData("Commander Markus walks into the room.")]
+    [InlineData("As the Champion of Blood falls, a tower of fire whirls about his body!")]
     public void SpawnArrival_StockAppearLines(string line)
         => Assert.True(Matches(KnownPatterns.RoomSpawnArrival, line, out _));
 
@@ -56,6 +59,10 @@ public sealed class MonsterMovementPatternTests
     [InlineData("A shimmering portal appears in the wall.")]
     [InlineData("The orc creeps out of the room to north.")]
     [InlineData("A wall of fire appears in front of you!")]
+    [InlineData("You walk into the room.")]
+    [InlineData("Bob gossips: he just walked into the room.")]
+    [InlineData("Bob says \"it ran into the room!\"")]
+    [InlineData("Commander Markus walks into the room from the north.")]
     public void SpawnArrival_LeavesOtherLinesAlone(string line)
         => Assert.False(Matches(KnownPatterns.RoomSpawnArrival, line, out _));
 

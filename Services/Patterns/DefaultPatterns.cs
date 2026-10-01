@@ -449,15 +449,21 @@ public static class DefaultPatterns
         // room" nor a direction ("A shade materializes in the room.", "A dragon flies
         // down from above!", "A barrow wight steps out of the shadows!"), plus the
         // shade's follow line. Exact phrases, so a spell's flavour can't match.
+        // A named monster — usually one on a regen timer — arrives without an article:
+        // "Commander Markus walks into the room.". Any capitalized lead is taken for
+        // that ending, bar our own "You …" and anything quoted or channel-prefixed.
+        // The greater hellion's arrival is worded as the Champion of Blood's death.
         yield return new RegexPattern(KnownPatterns.RoomSpawnArrival,
-            @"^(?:A|An|The) .+ (?:into the (?:room|area)"
+            @"^(?:(?!You )[A-Z][^:""]* into the room"
+          + @"|As the Champion of Blood falls, a tower of fire whirls about his body"
+          + @"|(?:A|An|The) .+ (?:into the area"
           + @"|materializes (?:in the room|from the shadows|with a metallic shriek|soundlessly beside you|out of the shadows next to you)"
           + @"|appears (?:in a blinding flash|in flash of light|in a burst of flame|from the waters|right behind you)"
           + @"|(?:flies|flaps) down from above|crashes through the wall|burrows in from the cavern wall"
           + @"|crawls out of the .+ corpse|steps out of the shadows|slithers out of the dark pool"
           + @"|arises from its place of rest|rises from its rest"
           // A monster that followed us in: "A sand worm crawls after you!".
-          + @"|\w+ after you(?:[ ,].+)?)[.!]\s*$");
+          + @"|\w+ after you(?:[ ,].+)?))[.!]\s*$");
 
         // Reactive look-back — another player `look`ed at us. Wording is
         // user-confirmed (not in any imported game-data table); keyed on the
