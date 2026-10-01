@@ -1,5 +1,9 @@
 # Version history
 
+## 3.134.18
+
+- Navigation hold chips fade out over 3 s instead of 2
+
 ## 3.134.17
 
 - Session Stats panels, graphs included, start collapsed and remember which are open per character

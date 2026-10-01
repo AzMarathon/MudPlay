@@ -12,7 +12,7 @@ namespace MudPlay.ViewModels.Navigation;
 public sealed class NavHoldChipStrip
 {
     // Matches the opacity transition on Border.HoldChip in NavigationWindow.axaml.
-    public static readonly TimeSpan FadeTime = TimeSpan.FromSeconds(2);
+    public static readonly TimeSpan FadeTime = TimeSpan.FromSeconds(3);
 
     private readonly Action<Action, TimeSpan> _schedule;
 

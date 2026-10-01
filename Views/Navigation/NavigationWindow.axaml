@@ -334,7 +334,7 @@
         <!-- Chips after the status line — one per hold in force (amber for a
              wait, muted for a settle beat while moving) and per errand trip
              (cyan: bank, sell, training, going back for a member). An ended hold's chip
-             fades out over 2 s (NavHoldChipStrip.FadeTime) so a split-second hold
+             fades out over 3 s (NavHoldChipStrip.FadeTime) so a split-second hold
              can still be read. -->
         <Style Selector="Border.HoldChip">
             <Setter Property="CornerRadius" Value="3"/>
@@ -346,7 +346,7 @@
             <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:2"/>
+                    <DoubleTransition Property="Opacity" Duration="0:0:3"/>
                 </Transitions>
             </Setter>
         </Style>
