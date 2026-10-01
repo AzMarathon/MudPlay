@@ -384,11 +384,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     // ----- Session Statistics (sneak + walk) ---------------------------
 
-    // Rounded down to a tenth: 1,067 of 1,069 is 99.8%, not a rounded-up "100%" that
-    // hides the miss (report paradigm-20260930-213857).
-    public string SneakText => Activity.SneakPercent is { } p
-        ? (Math.Floor(p * 10 + 1e-9) / 10).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%"
-        : "—";
+    public string SneakText => Activity.SneakPercent is { } p ? RateText.Percent(p) : "—";
     public string SneakTip  => $"{Activity.SneakHeld:N0} of {Activity.SneakEntries:N0} rooms entered while sneaking kept the sneak.";
     public string WalkText  => Activity.AverageStep is { } step ? $"{step.TotalSeconds:F2}s" : "—";
     public string WalkTip   => $"Average from a move going out to the new room showing, over {Activity.Steps:N0} walk / loop steps.";
@@ -407,8 +403,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // HP/MA-history legend labels — each names the series and its worst dip across
     // the loop's steps ("HP (low 28%)"), so the scariest moment reads without
     // eyeballing the bars. 100% until the first on-loop sample lands.
-    public string HpLegendText => $"HP (low {LowestHpPercent:F0}%)";
-    public string MaLegendText => $"MA (low {LowestMaPercent:F0}%)";
+    public string HpLegendText => $"HP (low {RateText.Percent(LowestHpPercent)})";
+    public string MaLegendText => $"MA (low {RateText.Percent(LowestMaPercent)})";
 
     // HP/MA graph slider bounds: the window pans from step 1 to the tail, so the
     // slider's max is the count past a full window; it's only shown (and only

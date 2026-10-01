@@ -1,5 +1,9 @@
 # Version history
 
+## 3.134.30
+
+- Session Stats rates show to a tenth of a percent and never read 0% or 100% unless they exactly are
+
 ## 3.134.29
 
 - Navigation hold chips fade out over 3 s instead of 2
