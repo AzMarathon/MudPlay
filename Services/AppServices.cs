@@ -4220,13 +4220,15 @@ public sealed class AppServices
                 // "Uses remaining: N" off an item look — ItemChargeTracker reads it via
                 // TokenCatalog with no router pattern, so reuse that same recognizer.
                 || Game.Tokens.TokenCatalog.ParseUsesRemaining(text) >= 0
-                // Benign non-spell chatter no spell record will ever describe: player
-                // departures, disconnects, follow / toll / empty-say / also-here rows, the
-                // suicide-password advisory, and regen / illumination status labels.
-                || Game.BenignChatterMatcher.IsBenign(text)
                 // Another KNOWN player changing gear ("X wears / removes …!") — roster-gated
                 // so a same-shaped monster / spell line can't be suppressed.
-                || Game.BenignChatterMatcher.IsOtherPlayerGearSwap(text, IsKnownRoomPlayer),
+                || Game.BenignChatterMatcher.IsOtherPlayerGearSwap(text, IsKnownRoomPlayer)
+                // A prompt the statline pattern can't read arrives as an ordinary line,
+                // with the echo of whatever was typed glued on. The reconciler holds the
+                // last such prompt for as long as the mismatch lasts.
+                || (StatlineReconcile.LastPromptMatched == false
+                    && StatlineReconcile.LastUnmatchedPrompt?.Trim() is { Length: >= 3 } unreadPrompt
+                    && text.StartsWith(unreadPrompt, StringComparison.Ordinal)),
             // Colour-aware: a BBS action / emote is told from a spell line only by its
             // all-green colouring plus a known-player check — the exact recognizer
             // ChatRouter uses to file these under the SAY channel.
@@ -4238,7 +4240,14 @@ public sealed class AppServices
             // archery or a projectile spell, so the shape can't be a router pattern —
             // it needs to know who acted. A no-magery class settles it.
             isNonCasterPhysicalAction: text =>
-                Game.Combat.NonCasterAttackLine.Matches(text, PlayerCanCast));
+                Game.Combat.NonCasterAttackLine.Matches(text, PlayerCanCast),
+            // An item's `look` leads with its bare name, then free-text description
+            // rows up to the prompt.
+            isListingHeader: text =>
+                text.Length <= 40 && text[^1] != '.' && ItemNames.FindByName(text) is not null);
+        // Subscribed after the message and candidate stores' own loads, so the queue is
+        // re-checked against the set's freshly loaded catalogue.
+        GameData.ActiveSetChanged += _ => MessageCandidateWatcher.PruneRecognized();
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a VERBOSE
         // ailment (blind / confused / diseased / held) it announces a BARE token

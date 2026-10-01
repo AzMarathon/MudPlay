@@ -44,25 +44,35 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
     [InlineData(918, "A dog barks off in the distance.")]
     [InlineData(918, "Children rush past you hopping around in youthful glee.")]
     [InlineData(918, "A voice shouts aloud \"Read the bulletin in the Adventurer's Guild!\"")]
+    [InlineData(918, "A guardsman shouts out the time of day.")]
+    [InlineData(918, "A cheer of many voices can be heard in the distance.")]
+    [InlineData(925, "The large temple bell clangs loudly, echoing the time of day.")]
+    [InlineData(925, "The smell of incense wafts faintly in the air.")]
+    [InlineData(925, "The angelic sound of a choir floats down through the air.")]
     [InlineData(915, "A dry twig snaps loudly behind you.")]
     [InlineData(915, "The forest becomes strangely silent.")]
     [InlineData(915, "The leaves begin to rustle, as if some beast were about to spring forth!")]
     public void RoomSpellRecord_CarriesEachFlavorWording(int spell, string wording)
         => Assert.Contains(wording, Find(spell).WitnessMessage.Split('\n'));
 
-    [Theory]
-    [InlineData(918)]
-    [InlineData(915)]
-    public void RoomSpellRecord_IdMatchesItsFields(int spell)
+    [Fact]
+    public void UntouchedRoomSpellRecord_IdMatchesItsFields()
     {
-        // The seed's Id is trusted verbatim on load, so it must equal the hash of its
-        // fields — a stale Id would break the find-and-replace the edit flow relies on.
-        MessageRecord r = Find(spell);
+        MessageRecord r = Find(915);
         Assert.Equal(
             MessageRecord.ComputeId(r.Name, r.CasterMessage, r.TargetMessage,
                 r.WitnessMessage, r.AppliedMessage, r.AppliedEndsWith),
             r.Id);
     }
+
+    // A seed record whose text is fixed in place keeps the Id it shipped with: a
+    // set's own message file stores the user's removals and overrides by that Id, so
+    // a re-hashed one would bring the seed copy back beside theirs.
+    [Theory]
+    [InlineData(918, "9659da50fba38d23")]
+    [InlineData(925, "fcb53fe4cc8969b9")]
+    public void EditedRoomSpellRecord_KeepsItsShippedId(int spell, string id)
+        => Assert.Equal(id, Find(spell).Id);
 
     [Fact]
     public void SeededFlavorLines_AreRecognized_NotStaged()

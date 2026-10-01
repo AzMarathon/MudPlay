@@ -57,6 +57,8 @@ public sealed class MessageCandidateWatcherTests
             if (flush) Invoke("CommitPending");
         }
 
+        public void FeedLine(LineExtractor.EmittedLine line) => Invoke("OnLine", line);
+
         private void Invoke(string method, params object[] args) =>
             typeof(MessageCandidateWatcher)
                 .GetMethod(method,
@@ -659,5 +661,145 @@ public sealed class MessageCandidateWatcherTests
 
         h.Feed("A wholly different, uncatalogued line appears here.");
         Assert.Single(h.Candidates.Candidates);
+    }
+
+    // ----- listings, wrapped room rows, own-action replies ------------------
+
+    private static LineExtractor.EmittedLine Prompt() => new(
+        "[HP=91/MA=42]:", Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: true);
+
+    [Fact]
+    public void ShopListing_SkippedFromHeaderToPrompt()
+    {
+        Harness h = new();
+        h.Feed("Item                          Quantity    Price");
+        h.Feed("------------------------------------------------------");
+        h.Feed("crystal club                  10        1375 gold crowns");
+        h.Feed("a row no shape could describe");
+        Assert.Empty(h.Candidates.Candidates);
+
+        h.FeedLine(Prompt());
+        h.Feed("A shimmering rune flickers.");
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void RoomDisplay_DescriptionSkippedUpToExitsLine()
+    {
+        Harness h = new();
+        h.RoomNames.Add("Crumbling Tunnel");
+        h.Feed("Crumbling Tunnel");
+        h.Feed("Mud and trodden grass form the packed surface of this winding path. It");
+        h.Feed("Obvious exits: northwest, southeast");
+        Assert.Empty(h.Candidates.Candidates);
+
+        h.Feed("A shimmering rune flickers.");
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void WrappedAlsoHere_ContinuationRowsSkipped()
+    {
+        Harness h = new();
+        h.Feed("Also here: fat half-orc sentry, thin half-orc");
+        h.Feed("warrior, large");
+        h.Feed("guardsman.");
+        Assert.Empty(h.Candidates.Candidates);
+
+        h.Feed("A shimmering rune flickers.");
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void ListingBlock_EndsOnAPauseWhenNoPromptIsRead()
+    {
+        Harness h = new();
+        DateTimeOffset t = DateTimeOffset.UtcNow;
+        h.Feed("Top Heroes of the Realm By Experience", t);
+        h.Feed("some row", t.AddMilliseconds(50));
+        h.Feed("A shimmering rune flickers.", t.AddSeconds(5));
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void RoomCommandReply_LeadingWithTheVerbJustSent_Skipped()
+    {
+        Harness h = new();
+        h.Watcher.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("pull lever\r\n"));
+        h.Feed("You pull the large iron lever.");
+        Assert.Empty(h.Candidates.Candidates);
+
+        // No such command sent: the same shape is a candidate.
+        h.Feed("You push the button.");
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void LeftGame_HoldsCaptureUntilTheNextInGamePrompt()
+    {
+        Harness h = new();
+        h.Watcher.NotifyLeftGame();
+        h.Feed("Welcome to the official Paradigm server!");
+        Assert.Empty(h.Candidates.Candidates);
+
+        h.Watcher.NotifyInGame();
+        h.Feed("A shimmering rune flickers.");
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Theory]
+    [InlineData("Player ID:           228")]
+    [InlineData("Broadcast Channel:   6969")]
+    [InlineData("HP Regen:   3/9        AC vs Evil:  31           Cold Resist:     0")]
+    [InlineData("vs Good:     31           Dodge:          16")]
+    [InlineData("Attacks:")]
+    [InlineData("Type        Swings   Accy   Min   Max   QnD(Total)   Avg/Rnd(+xtra)")]
+    [InlineData("Attack       2.924     80    10    21     0(11)           60")]
+    [InlineData("mmis             2     15    15    24                     38")]
+    [InlineData("crystal sword                 10        1375 gold crowns (You can't use)")]
+    [InlineData("1. Rough                 Paladin    Prestige Worldwide  13195000000")]
+    [InlineData("Slee Stak                     27 Kang Cleric            - Online [Leader]")]
+    [InlineData("Porksoda just joined your channel (6969)")]
+    [InlineData("Your balance at Bank of Godfrey is:")]
+    [InlineData("On deposit: 33107 copper farthings [331.07 gold crowns]")]
+    [InlineData("You deposit 58271 copper farthings.")]
+    [InlineData("You withdrew 132 copper farthings.")]
+    [InlineData("You are now resting.")]
+    [InlineData("Welcome to level 10!")]
+    [InlineData("You gain 10 CPs")]
+    [InlineData("But, due to a miracle, you have been saved.")]
+    [InlineData("You have recovered the corpse of Raijin.")]
+    [InlineData("tall orc shaman attempts to cast harm on you, but fails.")]
+    [InlineData("big orc shaman attempts to cast harm on you, but you resist!")]
+    [InlineData("A new day has come!")]
+    [InlineData("TarlChain(210)             0")]
+    [InlineData("-=-=-=-=-=-=-=-=-=-=-=-")]
+    [InlineData("[HP=91/91 MA=11/42] :w")]
+    public void StandardEngineOutput_IsBenign(string line)
+    {
+        Assert.True(BenignChatterMatcher.IsBenign(line));
+    }
+
+    [Theory]
+    [InlineData("A shimmering rune flickers and fades.")]
+    [InlineData("You feel a surge of power!")]
+    [InlineData("The fanatic screams \"Death to those who oppose the Blood God!\"")]
+    [InlineData("Raijin casts minor healing on Raijin!")]
+    public void SpellShapedLines_AreNotBenign(string line)
+    {
+        Assert.False(BenignChatterMatcher.IsBenign(line));
+    }
+
+    [Fact]
+    public void PruneRecognized_DropsNowKnownLines_KeepsTheRest()
+    {
+        Harness h = new(seedDefaultPatterns: true);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Candidates.RecordSighting("You deposit 20420 copper farthings.", now, null, null);
+        h.Candidates.RecordSighting("A shade materializes in the room.", now, null, null);
+        h.Candidates.RecordSighting("A shimmering rune flickers and fades.", now, null, null);
+
+        Assert.Equal(2, h.Watcher.PruneRecognized());
+        Assert.Equal("A shimmering rune flickers and fades.", Assert.Single(h.Candidates.Candidates).RawText);
     }
 }
