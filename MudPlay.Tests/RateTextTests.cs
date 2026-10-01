@@ -23,4 +23,17 @@ public sealed class RateTextTests
     {
         Assert.Equal(expected, RateText.Compact(value));
     }
+
+    // A rate to a tenth that never reads 0% or 100% unless it is exactly that (report
+    // paradigm-20260930-213857: 1,067 of 1,069 sneaks read "100%").
+    [Theory]
+    [InlineData(99.81, "99.8%")]
+    [InlineData(99.96, "99.9%")]   // would round to 100 — it isn't
+    [InlineData(100.0, "100%")]
+    [InlineData(0.04, "0.1%")]     // would round to 0 — it isn't
+    [InlineData(0.0, "0%")]
+    [InlineData(47.25, "47.3%")]
+    [InlineData(50.0, "50%")]
+    public void Percent_ToATenth_NeverFalselyWhole(double percent, string expected)
+        => Assert.Equal(expected, RateText.Percent(percent));
 }

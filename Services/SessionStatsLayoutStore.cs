@@ -48,15 +48,22 @@ public sealed class SessionStatsLayoutStore
     // The panel ids the user has expanded; every other panel is collapsed.
     public IReadOnlyCollection<string> Expanded => _layout.Expanded ?? (IReadOnlyCollection<string>)Array.Empty<string>();
 
-    // Persist a new order, hidden set and expanded set, and write the profile through
-    // immediately.
-    public void Update(IEnumerable<string> order, IEnumerable<string> hidden, IEnumerable<string> expanded)
+    // The saved column count (1 or 2) and the two-column split point.
+    public int Columns => _layout.Columns == 2 ? 2 : 1;
+    public int? SplitAt => _layout.SplitAt;
+
+    // Persist a new order, hidden set, expanded set and column layout, and write the
+    // profile through immediately.
+    public void Update(IEnumerable<string> order, IEnumerable<string> hidden, IEnumerable<string> expanded,
+        int columns, int splitAt)
     {
         _layout = new SessionStatsLayout
         {
             Order = order.ToList(),
             Hidden = hidden.ToList(),
             Expanded = expanded.ToList(),
+            Columns = columns,
+            SplitAt = splitAt,
         };
         // Mirror the profile field eagerly too, so a Save triggered elsewhere
         // before the next ProfileSaving snapshot still carries the change.
@@ -96,5 +103,7 @@ public sealed class SessionStatsLayoutStore
         Order = src?.Order is { } o ? new List<string>(o) : null,
         Hidden = src?.Hidden is { } h ? new List<string>(h) : null,
         Expanded = src?.Expanded is { } e ? new List<string>(e) : null,
+        Columns = src?.Columns,
+        SplitAt = src?.SplitAt,
     };
 }

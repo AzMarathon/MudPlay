@@ -21,4 +21,9 @@ public sealed class SessionStatsLayout
 
     // Panel ids the user has expanded. Every panel starts collapsed.
     public List<string>? Expanded { get; set; }
+
+    // 1 or 2 columns (null = 1). In two columns the first SplitAt panels of Order
+    // fill the left column and the rest the right; null = half, rounded up.
+    public int? Columns { get; set; }
+    public int? SplitAt { get; set; }
 }

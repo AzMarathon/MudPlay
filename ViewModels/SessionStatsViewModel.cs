@@ -253,6 +253,19 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // The resolved panel order the window applies on open.
     public IReadOnlyList<string> PanelOrder => _panelOrder;
 
+    // One tall column or two side by side (user, 2026-09-30). In two, the first
+    // SplitAt panels of PanelOrder fill the left column; it starts at half.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOneColumn), nameof(IsTwoColumns))]
+    private int _columns = 1;
+    public bool IsOneColumn => Columns == 1;
+    public bool IsTwoColumns => Columns == 2;
+    public int SplitAt { get; private set; }
+
+    [RelayCommand]
+    private void SetColumns(string count) => Columns = count == "2" ? 2 : 1;
+    partial void OnColumnsChanged(int value) => PersistLayout();
+
     // Hydrate the order + visibility toggles from the per-character layout
     // store. Guarded so the toggle assignments don't write straight back.
     private void LoadLayout()
@@ -262,6 +275,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _panelOrder = resolved.Select(p => p.Id).ToList();
         foreach ((string id, bool visible) in resolved)
             SetVisible(id, visible);
+        Columns = _layoutStore.Columns;
+        SplitAt = Math.Clamp(_layoutStore.SplitAt ?? (_panelOrder.Count + 1) / 2, 0, _panelOrder.Count);
         IReadOnlyCollection<string> expanded = _layoutStore.Expanded;
         IsKillsGraphExpanded = expanded.Contains("KillsGraph");
         IsExpGraphExpanded = expanded.Contains("ExpGraph");
@@ -274,9 +289,10 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     // Push a new panel order (from a drag-reorder) through to the store,
     // keeping the current hidden set.
-    public void SaveOrder(IEnumerable<string> ids)
+    public void SaveOrder(IEnumerable<string> ids, int splitAt)
     {
         _panelOrder = ids.ToList();
+        SplitAt = Math.Clamp(splitAt, 0, _panelOrder.Count);
         PersistLayout();
     }
 
@@ -298,7 +314,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         if (IsPlayerStatsExpanded)  expanded.Add("PlayerStatistics");
         if (IsTimeAnalysisExpanded) expanded.Add("TimeAnalysis");
         if (IsSessionStatsExpanded) expanded.Add("SessionStatistics");
-        _layoutStore.Update(_panelOrder, hidden, expanded);
+        _layoutStore.Update(_panelOrder, hidden, expanded, Columns, SplitAt);
     }
 
     private void SetVisible(string id, bool visible)
@@ -384,11 +400,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     // ----- Session Statistics (sneak + walk) ---------------------------
 
-    // Rounded down to a tenth: 1,067 of 1,069 is 99.8%, not a rounded-up "100%" that
-    // hides the miss (report paradigm-20260930-213857).
-    public string SneakText => Activity.SneakPercent is { } p
-        ? (Math.Floor(p * 10 + 1e-9) / 10).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%"
-        : "—";
+    public string SneakText => Activity.SneakPercent is { } p ? RateText.Percent(p) : "—";
     public string SneakTip  => $"{Activity.SneakHeld:N0} of {Activity.SneakEntries:N0} rooms entered while sneaking kept the sneak.";
     public string WalkText  => Activity.AverageStep is { } step ? $"{step.TotalSeconds:F2}s" : "—";
     public string WalkTip   => $"Average from a move going out to the new room showing, over {Activity.Steps:N0} walk / loop steps.";
@@ -407,8 +419,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // HP/MA-history legend labels — each names the series and its worst dip across
     // the loop's steps ("HP (low 28%)"), so the scariest moment reads without
     // eyeballing the bars. 100% until the first on-loop sample lands.
-    public string HpLegendText => $"HP (low {LowestHpPercent:F0}%)";
-    public string MaLegendText => $"MA (low {LowestMaPercent:F0}%)";
+    public string HpLegendText => $"HP (low {RateText.Percent(LowestHpPercent)})";
+    public string MaLegendText => $"MA (low {RateText.Percent(LowestMaPercent)})";
 
     // HP/MA graph slider bounds: the window pans from step 1 to the tail, so the
     // slider's max is the count past a full window; it's only shown (and only

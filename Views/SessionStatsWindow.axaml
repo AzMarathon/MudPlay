@@ -5,12 +5,12 @@
         xmlns:controls="using:MudPlay.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="600"
+        mc:Ignorable="d" d:DesignWidth="390" d:DesignHeight="600"
         x:Class="MudPlay.Views.SessionStatsWindow"
         x:DataType="vm:SessionStatsViewModel"
         Title="Session Stats"
-        Width="280" Height="480"
-        MinWidth="240" MinHeight="160"
+        Width="390" Height="480"
+        MinWidth="390" MinHeight="160"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
@@ -92,6 +92,16 @@
         <Style Selector="Expander.panel">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
         </Style>
+        <!-- The I / II column picker: the active choice reads as pressed. -->
+        <Style Selector="Button.colpick">
+            <Setter Property="MinWidth" Value="24"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.colpick.active">
+            <Setter Property="Background" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="Foreground" Value="#0E0E0E"/>
+        </Style>
         <!-- Compact action-bar buttons (Reset session / Transaction history). -->
         <Style Selector="Button.topaction">
             <Setter Property="FontSize" Value="11"/>
@@ -122,6 +132,19 @@
             BorderBrush="{StaticResource ChromeBorderSoftBrush}"
             BorderThickness="0,0,0,1"
             Padding="8,5">
+        <DockPanel LastChildFill="False">
+        <!-- Column count: one tall column, or two side by side so every panel open
+             still fits a screen. Saved per character. -->
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
+            <Button Classes="topaction colpick" Content="I"
+                    Classes.active="{Binding IsOneColumn}"
+                    Command="{Binding SetColumnsCommand}" CommandParameter="1"
+                    ToolTip.Tip="One column"/>
+            <Button Classes="topaction colpick" Content="II"
+                    Classes.active="{Binding IsTwoColumns}"
+                    Command="{Binding SetColumnsCommand}" CommandParameter="2"
+                    ToolTip.Tip="Two columns side by side"/>
+        </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="6">
             <Button Classes="topaction"
                     Content="Reset session"
@@ -136,9 +159,10 @@
                     Command="{Binding OpenPlayersSeenCommand}"
                     ToolTip.Tip="Players this character has encountered — the last time and room each was seen, and how many times total. Persists across sessions."/>
         </StackPanel>
+        </DockPanel>
     </Border>
 
-    <!-- Single scrollable column of reorderable panels: the two rate graphs and
+    <!-- One or two scrollable columns of reorderable panels: the three graphs and
          the three stat sections. Each panel carries a stable Tag id matching
          SessionStatsLayoutStore.DefaultOrder; the code-behind reorders these
          children by Tag on open and on drop (drawing an insertion line as a drop
@@ -150,11 +174,9 @@
         <!-- The drag's drop line is drawn on DropOverlay above the panels rather than
              slotted between them, so nothing shifts (or re-fits the window) while a
              panel is dragged. -->
-        <Grid>
-        <StackPanel x:Name="PanelHost" Spacing="6"
-                    Background="Transparent"
-                    DragDrop.AllowDrop="True">
-            <StackPanel.ContextMenu>
+        <Grid x:Name="PanelGrid" ColumnDefinitions="*,0,0" Background="Transparent"
+              DragDrop.AllowDrop="True">
+        <Grid.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="Kills/hour graph" ToggleType="CheckBox"
                               IsChecked="{Binding IsKillsGraphVisible, Mode=TwoWay}"/>
@@ -170,7 +192,10 @@
                     <MenuItem Header="Session Statistics" ToggleType="CheckBox"
                               IsChecked="{Binding IsSessionStatsVisible, Mode=TwoWay}"/>
                 </ContextMenu>
-            </StackPanel.ContextMenu>
+        </Grid.ContextMenu>
+        <!-- Column one; in two-column mode PanelHost2 holds the panels after the
+             split, and the code-behind moves panels between the two. -->
+        <StackPanel x:Name="PanelHost" Grid.Column="0" Spacing="6" Background="Transparent">
 
             <!-- ===== Kills/hour graph ===== -->
             <Expander Tag="KillsGraph" Classes="panel"
@@ -355,32 +380,32 @@
                         <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Combat.Hits, StringFormat='{}×{0}'}"/>
                         <TextBlock Grid.Column="2" Classes="dimr" Text="{Binding HitRangeText}"/>
                         <TextBlock Grid.Column="3" Classes="dimr" Text="{Binding Combat.HitAvgDamage, StringFormat='{}{0:F0}'}"/>
-                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.HitPercent, StringFormat='{}{0:F0}%'}"/>
+                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.HitPercent, Converter={x:Static vm:PercentTextConverter.Instance}}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,30,52,28,44">
                         <TextBlock Grid.Column="0" Classes="lbl" Text="Miss"/>
                         <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Combat.Misses, StringFormat='{}×{0}'}"/>
-                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.MissPercent, StringFormat='{}{0:F0}%'}"/>
+                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.MissPercent, Converter={x:Static vm:PercentTextConverter.Instance}}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,30,52,28,44">
                         <TextBlock Grid.Column="0" Classes="lbl" Text="Crit"/>
                         <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Combat.Crits, StringFormat='{}×{0}'}"/>
                         <TextBlock Grid.Column="2" Classes="dimr" Text="{Binding CritRangeText}"/>
                         <TextBlock Grid.Column="3" Classes="dimr" Text="{Binding Combat.CritAvgDamage, StringFormat='{}{0:F0}'}"/>
-                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.CritPercent, StringFormat='{}{0:F0}%'}"/>
+                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.CritPercent, Converter={x:Static vm:PercentTextConverter.Instance}}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,30,52,28,44">
                         <TextBlock Grid.Column="0" Classes="lbl" Text="Backstab"/>
                         <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Combat.Backstabs, StringFormat='{}×{0}'}"/>
                         <TextBlock Grid.Column="2" Classes="dimr" Text="{Binding BackstabRangeText}"/>
                         <TextBlock Grid.Column="3" Classes="dimr" Text="{Binding Combat.BackstabAvgDamage, StringFormat='{}{0:F0}'}"/>
-                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.BackstabPercent, StringFormat='{}{0:F0}%'}"/>
+                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.BackstabPercent, Converter={x:Static vm:PercentTextConverter.Instance}}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,30,52,28,44">
                         <TextBlock Grid.Column="0" Classes="lbl" Text="BS miss"
                                    ToolTip.Tip="Backstabs that failed: a miss, or the sneak broke and the round swung as a normal attack."/>
                         <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Combat.BackstabFails, StringFormat='{}×{0}'}"/>
-                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.BackstabFailPercent, StringFormat='{}{0:F0}%'}"/>
+                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.BackstabFailPercent, Converter={x:Static vm:PercentTextConverter.Instance}}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,30,52,28,44">
                         <TextBlock Grid.Column="0" Classes="lbl" Text="Round"
@@ -409,7 +434,7 @@
                                     <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Casts, StringFormat='{}×{0}'}"/>
                                     <TextBlock Grid.Column="2" Classes="dimr" Text="{Binding RangeText}"/>
                                     <TextBlock Grid.Column="3" Classes="dimr" Text="{Binding AvgDamage, StringFormat='{}{0:F0}'}"/>
-                                    <TextBlock Grid.Column="4" Classes="valr" Text="{Binding AccuracyPercent, StringFormat='{}{0:F0}%'}"/>
+                                    <TextBlock Grid.Column="4" Classes="valr" Text="{Binding AccuracyPercent, Converter={x:Static vm:PercentTextConverter.Instance}}"/>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -427,12 +452,12 @@
                         <TextBlock Grid.Column="1" Classes="dimr" Text="{Binding Combat.MobHits, StringFormat='{}×{0}'}"/>
                         <TextBlock Grid.Column="2" Classes="dimr" Text="{Binding HitTakenRangeText}"/>
                         <TextBlock Grid.Column="3" Classes="dimr" Text="{Binding Combat.HitTakenAvgDamage, StringFormat='{}{0:F0}'}"/>
-                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.HitTakenPercent, StringFormat='{}{0:F0}%'}"/>
+                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.HitTakenPercent, Converter={x:Static vm:PercentTextConverter.Instance}}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,30,52,28,44">
                         <TextBlock Grid.Column="0" Classes="lbl" Text="Dodge/Miss"
                                    ToolTip.Tip="Incoming attacks avoided — the mob missed or we dodged."/>
-                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.AvoidPercent, StringFormat='{}{0:F0}%'}"/>
+                        <TextBlock Grid.Column="4" Classes="valr" Text="{Binding Combat.AvoidPercent, Converter={x:Static vm:PercentTextConverter.Instance}}"/>
                     </Grid>
                 </StackPanel>
             </Expander>
@@ -511,7 +536,7 @@
                                    ToolTip.Tip="{Binding SneakTip}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,148">
-                        <TextBlock Grid.Column="0" Classes="lbl" Text="Walk"
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Walk Latency"
                                    ToolTip.Tip="Average time per walk or loop step, from the move going out to the new room showing. Time stopped between steps doesn't count."/>
                         <TextBlock Grid.Column="1" Classes="valr" Text="{Binding WalkText}"
                                    ToolTip.Tip="{Binding WalkTip}"/>
@@ -647,7 +672,11 @@
                  into the last slot without hunting for the bottom edge. -->
             <Border Height="24" Background="Transparent"/>
         </StackPanel>
-        <Canvas x:Name="DropOverlay" IsHitTestVisible="False"/>
+        <StackPanel x:Name="PanelHost2" Grid.Column="2" Spacing="6" Background="Transparent"
+                    IsVisible="{Binding IsTwoColumns}">
+            <Border Height="24" Background="Transparent"/>
+        </StackPanel>
+        <Canvas x:Name="DropOverlay" Grid.ColumnSpan="3" IsHitTestVisible="False"/>
         </Grid>
     </ScrollViewer>
 
