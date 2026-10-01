@@ -467,6 +467,11 @@ public sealed class StealthManager : IDisposable
                 _log?.Info(LogCategory, "cast spent hide — resetting stealth");
                 NoteHideBroken();
             }
+            if (_skipReSneakForRest?.Invoke() == true)
+            {
+                _log?.Info(LogCategory, "cast during a rest — not re-sneaking; the rest would end it, the next move re-sneaks");
+                return;
+            }
             TryBeginAutoSneak("post-cast re-sneak");
         }
         finally
@@ -520,6 +525,14 @@ public sealed class StealthManager : IDisposable
     }
 
     private int _restSneakTries;
+
+    // True while a rest is under way that would end a sneak — any rest, unless the
+    // user utilizes ShadowRest on a race or class that has it. A cast mid-rest then
+    // leaves the sneak off instead of re-sneaking only for the next `rest` to end it
+    // (report paradigm-20260930-184343).
+    private Func<bool>? _skipReSneakForRest;
+
+    public void SetReSneakSkipForRest(Func<bool> skip) => _skipReSneakForRest = skip;
 
     // While true (fleeing with the emergency heal due), the auto re-sneak waits: the
     // heal ends a sneak, so it goes first and the re-sneak follows it (CastFired →

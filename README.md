@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.7**
+> **Version 3.134.8**
 > - A sell detour no longer reads a sale as "sold nothing" and puts the shop on a 10-minute wait
 > - After selling, a loop walks back to its nearest room instead of to where the detour began
 > - Unticking Auto-sell on an item clears its sell detour and count too
+> - Without Utilize shadowrest, a buff cast during a rest no longer re-sneaks just for the rest to end it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

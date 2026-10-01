@@ -3120,7 +3120,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - **After the backstab** (report `paradigm-20260928-165954`): when the backstab round settles with the target still up, a cast held for the opener goes out before the re-announce, and its `*Combat Off*` resume re-attacks (`CombatManager.SettleBackstab`).
   - **Ordering:** pre-move gear now goes out before the `sn`.
   - **Replies:** while stealthed, a reply to an @-command said aloud goes back by telepath.
-  - **ShadowRest (Paradigm):** a race or class with it sneaks before it rests, and its rest doesn't mark the sneak broken.
+  - **ShadowRest (Paradigm):** a race or class with it sneaks before it rests when *Utilize shadowrest* is ticked (`HealthManager.SneakingBeforeShadowRest`), and its rest doesn't mark the sneak broken.
+  - **A cast during a rest** (a buff the rest window lets out) ends the sneak. It is re-taken only when the user utilizes ShadowRest on a race or class that has it; otherwise the next `rest` would end the fresh sneak, so it waits for the next move's pre-move sneak (`StealthManager.SetReSneakSkipForRest`; **Client policy**, user 2026-09-30, report `paradigm-20260930-184343`).
 - **Loop simulator** (`LoopSimulator`; **Client policy**, user 2026-09-30, report `paradigm-20260930-114254`): a simulated sneak **always holds** on a move, because Paradigm's rolls aren't recorded and the report's character held 296 of 299 entries. A see-hidden monster in the room still breaks it, and so does an attack, a cast or a rest. It is re-taken with **no cooldown** on the way out of a room with nothing alive in it; the report shows `Sneaking...` in the same second as a one-stab kill.
 
 ### Observing another player's failed sneak into your room

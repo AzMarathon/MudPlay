@@ -670,6 +670,10 @@ public sealed class HealthManager : IDisposable
         return waiting;
     }
 
+    // The user utilizes ShadowRest and the race or class has it: a rest keeps the
+    // stealth, so sneaking before (or during) one is worth it.
+    public bool UsesShadowRest => _readSettings().UtilizeShadowRest && _shadowRestClass?.Invoke() == true;
+
     private bool ShadowRestActive() =>
         _readSettings().UtilizeShadowRest
         && _shadowRestClass?.Invoke() == true

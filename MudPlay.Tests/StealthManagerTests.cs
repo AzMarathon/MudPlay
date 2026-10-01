@@ -680,6 +680,24 @@ public sealed class StealthManagerTests
         Assert.Equal(StealthState.AttemptingSneak, h.Stealth.State);
     }
 
+    // A buff cast mid-rest ends the sneak; without ShadowRest the next `rest` would end
+    // a fresh one too, so it isn't re-taken until the next move (report
+    // paradigm-20260930-184343).
+    [Fact]
+    public void ReSneakAfterCast_DuringARestThatEndsSneak_DoesNotResend()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Stealth.SetReSneakSkipForRest(() => true);
+        h.Feed("Sneaking...");
+        int sent = h.Sent.Count;
+
+        h.Stealth.ReSneakAfterCast();
+
+        Assert.Equal(sent, h.Sent.Count);
+        Assert.False(h.State.IsSneaking);
+        Assert.Equal(StealthState.Idle, h.Stealth.State);
+    }
+
     // Reports paradigm-20260929-185544 / -191106: releasing the cast hold resumed the
     // walker, and the next move went out before the post-cast re-sneak held it. The
     // re-sneak's hold is up before the cast hold comes off, so movement never frees up

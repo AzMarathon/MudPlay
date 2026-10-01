@@ -1,11 +1,12 @@
 # Version history
 
-## 3.134.7
+## 3.134.8
 
 - A sell detour no longer reads a sale as "sold nothing" and puts the shop on a 10-minute wait
 - After selling, a loop walks back to its nearest room instead of to where the detour began
 - Unticking Auto-sell on an item clears its sell detour and count too
-- bug reports addressed: paradigm-20260930-182742, paradigm-20260930-182838, paradigm-20260930-182854, paradigm-20260930-182949, paradigm-20260930-183614
+- Without Utilize shadowrest, a buff cast during a rest no longer re-sneaks just for the rest to end it
+- bug reports addressed: paradigm-20260930-182742, paradigm-20260930-182838, paradigm-20260930-182854, paradigm-20260930-182949, paradigm-20260930-183614, paradigm-20260930-184343
 
 ## 3.134.4
 

@@ -4653,6 +4653,8 @@ public sealed class AppServices
         // `hide` per AutoMode toggles.
         Stealth = new Game.Stealth.StealthManager(Router, PlayerState, Log);
         Stealth.SetSneakHoldForHeal(() => Health.IsGateFleeing && CastDirector.IsEmergencyHealDue);
+        // A buff cast mid-rest doesn't re-sneak unless ShadowRest keeps it through the rest.
+        Stealth.SetReSneakSkipForRest(() => (Health.IsRecoveringRest || Health.RestInFlight) && !Health.UsesShadowRest);
         // A cast sneak keeping held on the way stops the walk in the next NPC-free room.
         Stealth.SetHeldCastCheck(() => CastDirector.HasSneakHeldCast);
         // Sneak keeping at the engine send gate: a command that can wait (an invite, a
