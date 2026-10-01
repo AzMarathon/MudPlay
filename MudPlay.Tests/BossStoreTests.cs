@@ -115,7 +115,8 @@ public sealed class BossStoreTests : IDisposable
     }
 
     // Stop before ships off for the bosses that won't attack on sight — the Neutral
-    // ones, sheriff lionheart, justicar halford and mayor godfrey — and for the gigantic black ooze,
+    // ones, sheriff lionheart, justicar halford and mayor godfrey — plus the lord of
+    // the hunt, and the gigantic black ooze,
     // which is hostile but can't be avoided in the labyrinth (user, 2026-10-01).
     // Every other seed boss leaves it on.
     [Fact]
@@ -153,6 +154,7 @@ public sealed class BossStoreTests : IDisposable
                 "kai master",
                 "lallim whitemane",
                 "lord chisholm",
+                "lord of the hunt",
                 "massive cocoon",
                 "mayor godfrey",
                 "mayor of arlysia",

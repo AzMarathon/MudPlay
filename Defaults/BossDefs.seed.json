@@ -1329,7 +1329,9 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false,
+    "DefaultStopBefore": false
   },
   {
     "Name": "shadowcat",
