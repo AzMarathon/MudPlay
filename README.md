@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.59**
-> - Stock odds on the engine's 1–99 roll are now out of 99: resisting a spell outright, a monster's Follow% lock, and the rob chances
+> **Version 3.134.60**
+> - Test suite: the Conversation window tests no longer fail at random in a full run, or on a UTC+11 clock
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
