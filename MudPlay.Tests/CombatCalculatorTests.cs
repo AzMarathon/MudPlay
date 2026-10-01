@@ -813,4 +813,20 @@ public sealed class CombatCalculatorTests
         Assert.True(with.AvgDamage > without.AvgDamage,
             $"+MinDamage should raise avg damage ({with.AvgDamage} vs {without.AvgDamage})");
     }
+
+    // Stock: the engine clamps the chance to 10–99 and its 1–99 roll must come in
+    // under it, so a chance of c lands (c − 1) times in 99.
+    [Theory]
+    [InlineData(-50, 9)]    // floor: 9 in 99
+    [InlineData(10, 9)]
+    [InlineData(11, 10)]
+    [InlineData(50, 49)]    // 49 in 99 = 49.5%
+    [InlineData(60, 60)]    // 59 in 99 = 59.6%
+    [InlineData(99, 99)]    // ceiling: 98 in 99
+    [InlineData(500, 99)]
+    public void StockLandingPercent_IsChanceLessOne_OutOf99(int chance, int percent)
+    {
+        Assert.Equal(percent, CombatCalculator.StockLandingPercent(chance));
+        Assert.InRange(percent, CombatCalculator.STOCK_HIT_MIN, CombatCalculator.STOCK_HIT_CAP);
+    }
 }

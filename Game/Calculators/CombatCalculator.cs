@@ -10,15 +10,23 @@ public static class CombatCalculator
 {
     // ----- Constants -------------------------------------------------------
 
-    // Stock landing-chance floor and ceiling: the engine clamps the chance to 10–99
-    // and hits only on a d100 roll under it, so a hit lands on clamp − 1 percent
+    // Stock landing chance: the engine clamps the chance to 10–99, rolls 1–99 (its
+    // roll never returns the top of the range it is asked for) and hits only when
+    // the roll is under the chance. So a chance of c lands (c − 1) times in 99: a
+    // floor of 9/99 and a ceiling of 98/99, 9% and 99% as whole percents
     // (GAME_MECHANICS "To-hit floor — the minimum chance a monster can ever land, by
     // realm and armour type").
-    private const int STOCK_ENGINE_CLAMP_MIN = 10, STOCK_ENGINE_CLAMP_MAX = 99;
-    public const int STOCK_HIT_MIN = STOCK_ENGINE_CLAMP_MIN - 1;
+    private const int STOCK_ENGINE_CLAMP_MIN = 10, STOCK_ENGINE_CLAMP_MAX = 99, STOCK_ROLL_FACES = 99;
+    public const int STOCK_HIT_MIN = 9;
     // ParaMUD hit-chance floor (1 against light armour types <= 6).
     public const int PARAMUD_HIT_MIN = 2;
-    public const int STOCK_HIT_CAP = STOCK_ENGINE_CLAMP_MAX - 1;
+    public const int STOCK_HIT_CAP = 99;
+
+    // The whole-percent chance a Stock attack lands, from the engine's raw chance.
+    public static int StockLandingPercent(int chance) =>
+        (int)Math.Round(
+            (Math.Clamp(chance, STOCK_ENGINE_CLAMP_MIN, STOCK_ENGINE_CLAMP_MAX) - 1) * 100.0 / STOCK_ROLL_FACES,
+            MidpointRounding.AwayFromZero);
     // ParaMUD hit-chance ceiling.
     public const int PARAMUD_HIT_CAP = 100;
     // Stock dodge ceiling.
@@ -124,7 +132,7 @@ public static class CombatCalculator
         int hitMax = realmType == RealmType.ParaMud ? PARAMUD_HIT_CAP : STOCK_HIT_CAP;
         hitChance = realmType == RealmType.ParaMud
             ? Math.Clamp(hitChance, hitMin, hitMax)
-            : Math.Clamp(hitChance, STOCK_ENGINE_CLAMP_MIN, STOCK_ENGINE_CLAMP_MAX) - 1;
+            : StockLandingPercent(hitChance);
 
         int dodgePercent = 0;
         if (realmType == RealmType.ParaMud)
