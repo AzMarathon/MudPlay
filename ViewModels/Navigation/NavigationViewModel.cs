@@ -3480,13 +3480,27 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         return trips;
     }
 
+    // Who the party holds are about, and the kind of cast a stealth stop is for.
+    private NavHoldNames HoldNames() => new(
+        _services.PartyEssentials.WaitingMembers.ToList(),
+        _services.PartyDisconnectMovement.PendingMembers.ToList(),
+        _services.AutoParty.PendingInvites.ToList(),
+        _services.CastDirector.SneakHeldCategory switch
+        {
+            Game.Spells.SpellCategory.Curing => "Curing",
+            Game.Spells.SpellCategory.EmergencyHeal or Game.Spells.SpellCategory.DownedAllyHeal
+                or Game.Spells.SpellCategory.MinorPartyHeal or Game.Spells.SpellCategory.MajorPartyHeal
+                or Game.Spells.SpellCategory.MinorSelfHeal or Game.Spells.SpellCategory.MajorSelfHeal => "Healing",
+            _ => null,   // a buff, or nothing known: the chip reads "Buffing"
+        });
+
     private void RefreshActivityStatus()
     {
         (string text, NavActivityKind kind) = ComputeActivity();
         List<(string Label, NavChipTone Tone)> chips = ActiveTrips();
         if (AnyEngineLiveExecuting())
             chips.AddRange(NavActivity.ActiveHolds(
-                _services.MovementCoordinator.AssertedGates, _services.Conditions.IsMovementPrevented));
+                _services.MovementCoordinator.AssertedGates, _services.Conditions.IsMovementPrevented, HoldNames()));
         HoldChips.Update(chips);
         // A queued-but-idle route reads its hold reason off the live gates even when
         // the chip itself is empty — so refresh the line on every gate/held change,
