@@ -1,5 +1,9 @@
 # Version history
 
+## 3.134.37
+
+- Walks lever puzzles with long go-pull-return detours, e.g. the two-lever gate to the new master assassin, instead of stopping at the shut exit
+
 ## 3.134.36
 
 - Paradigm Attack / Bash accuracy matches `stat all` (it read one high)

@@ -136,6 +136,41 @@ public sealed class RemoteActionPathExpanderTests : IDisposable
         ]
         """;
 
+    // A lever 120 rooms up a corridor from the gated exit: the go-act-return detour
+    // is 241 steps. The new master assassin's passage needs about 232, which an
+    // earlier 200-step backstop cut off, ending the walk at the shut exit.
+    [Fact]
+    public void CrossRoomMultiAction_LongDetour_StillBuilt()
+    {
+        const int corridor = 120;
+        var rooms = new System.Text.StringBuilder("[");
+        static string Room(int n, string name, string north, string south, string east, string west, string down) =>
+            $"{{\"Map Number\": 1, \"Room Number\": {n}, \"Name\": \"{name}\", \"Light\": 0, \"Shop\": 0, \"Lair\": \"\", \"Delay\": 0, "
+            + $"\"N\": \"{north}\", \"S\": \"{south}\", \"E\": \"{east}\", \"W\": \"{west}\", "
+            + "\"NE\": \"0\", \"NW\": \"0\", \"SE\": \"0\", \"SW\": \"0\", \"U\": \"0\", "
+            + $"\"D\": \"{down}\"}}";
+        rooms.Append(Room(1, "Start", "0", "0", "1/2", "0", "0")).Append(',');
+        rooms.Append(Room(2, "Host", "1/100", "0", "1/9 (Hidden/Needs 1 Actions, specific order)", "1/1", "0")).Append(',');
+        for (int i = 0; i < corridor; i++)
+        {
+            int n = 100 + i;
+            string north = i < corridor - 1 ? $"1/{n + 1}" : "0";
+            string south = i == 0 ? "1/2" : $"1/{n - 1}";
+            string down = i == corridor - 1 ? "Action#1 [on the E exit of room 1/2]: pull lever" : "0";
+            rooms.Append(Room(n, i == corridor - 1 ? "LeverRoom" : "Corridor", north, south, "0", "0", down)).Append(',');
+        }
+        rooms.Append(Room(9, "Vault", "0", "0", "0", "1/2", "0")).Append(']');
+
+        RoomGraphManager graph = NewGraph(rooms.ToString());
+        BfsMapper bfs = new(graph);
+        var steps = RemoteActionPathExpander.Expand(graph, new RoomKey(1, 1), new[] { Direction.E, Direction.E }, bfs);
+
+        Assert.Contains(steps, s => s is CommandStep { Command: "pull lever" });
+        MoveStep cross = Assert.IsType<MoveStep>(steps[^1]);
+        Assert.Equal(new RoomKey(1, 9), cross.ExpectedTarget);
+        Assert.Equal(2 + 2 * corridor + 1, steps.Count);   // in, up, pull, back down, cross
+    }
+
     [Fact]
     public void CrossRoomMultiAction_WithMapper_InjectsWalkActWalkBackCross()
     {

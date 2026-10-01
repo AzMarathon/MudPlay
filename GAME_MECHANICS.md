@@ -3635,6 +3635,10 @@ Among protectable hazards, a further split governs whether the navigator may off
   - `RemoteActionPathExpander` opens nested gates recursively (open the inner door, then cross), bounded
     by a nesting-depth cap + a lever-cycle guard; past those it clean-fails. This is fully generic off
     the exit graph — no per-area code (the Asylum + Pyramid remain the only bespoke area solvers).
+    A 400-step backstop caps one exit's assembled detour. [OBSERVED, game data 2026-09-30] The Darkened
+    Tunnels gate `15/477 N` (2 ordered levers in `15/604` / `15/730`, the way to the new master assassin
+    at `15/416`, both realms) needs a ~232-step detour once the 1000-picklocks doors are routed around;
+    the earlier 200 cap stopped the walk at the shut exit (user report, 2026-09-30).
   - A lever `Door`/`KeyLocked` exit carrying action cells is promoted to `MultiActionHidden` at
     graph-build; the required-action count is the number of DISTINCT StepNumbers (same-StepNumber levers
     count as one), and the path expander pulls one cheapest alternative per StepNumber — so a redundant
