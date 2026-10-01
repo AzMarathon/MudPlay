@@ -114,6 +114,60 @@ public sealed class BossStoreTests : IDisposable
         Assert.Null(s.ActiveSet);
     }
 
+    // Stop before ships off for the bosses that won't attack on sight — the Neutral
+    // ones, sheriff lionheart and mayor godfrey — and for the gigantic black ooze,
+    // which is hostile but can't be avoided in the labyrinth (user, 2026-10-01).
+    // Every other seed boss leaves it on.
+    [Fact]
+    public void ShippedSeed_StopBeforeIsOffOnlyForTheListedBosses()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-boss-seed-" + Path.GetRandomFileName());
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            List<BossDef> seed = JsonStore.Load<List<BossDef>>(Path.Combine(dir, "BossDefs.seed.json"))!;
+            string[] off = seed.Where(b => !b.StopBefore).Select(b => b.Name).Distinct().OrderBy(n => n, StringComparer.Ordinal).ToArray();
+            Assert.Equal(new[]
+            {
+                "animated juggernaut",
+                "aquilas",
+                "argak the grey",
+                "catoblepas",
+                "choira pyromancer",
+                "cocoon",
+                "darem tidegrasp",
+                "enigma lord",
+                "fair maiden",
+                "fallen champion",
+                "giant pulsating cocoon",
+                "giant river turtle",
+                "giant roc",
+                "gigantic black ooze",
+                "grakh bonegrinder",
+                "grand master",
+                "hanging cocoon",
+                "kai master",
+                "lallim whitemane",
+                "lord chisholm",
+                "massive cocoon",
+                "mayor godfrey",
+                "mayor of arlysia",
+                "remik of the ebon blade",
+                "sharh'kur",
+                "sheriff lionheart",
+                "storm giant commander",
+                "storm giant king",
+                "volodar",
+                "wandering cleric",
+                "woodelf lord",
+            }, off);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch (IOException) { /* temp cleanup */ }
+        }
+    }
+
     // A boss stops the walk one room short unless the user turns that off.
     [Fact]
     public void StopBefore_DefaultsOn()

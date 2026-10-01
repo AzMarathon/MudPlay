@@ -1,5 +1,9 @@
 # Version history
 
+## 3.134.49
+
+- Stop before defaults to off for Neutral bosses, sheriff lionheart, mayor godfrey and the gigantic black ooze
+
 ## 3.134.48
 
 - Training's fee now comes off the coin tally, so pickups and stashing no longer stop after a train until you type `i`

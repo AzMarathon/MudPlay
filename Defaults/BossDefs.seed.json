@@ -377,7 +377,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "werewolf",
@@ -588,7 +589,8 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "darken beast lord",
@@ -835,7 +837,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "colossal midnight dragon",
@@ -1046,7 +1049,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "storm giant king",
@@ -1056,7 +1060,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "yeshuz",
@@ -1194,7 +1199,8 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "shadowborn prophet",
@@ -1282,7 +1288,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "manscorpion king",
@@ -1385,7 +1392,8 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "adult red dragon",
@@ -1425,7 +1433,8 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "stone giant chieftain",
@@ -1515,7 +1524,8 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "dark naga",
@@ -1688,7 +1698,8 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "pharaoh rastep",
@@ -1913,7 +1924,8 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "kai master",
@@ -1923,7 +1935,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "aquilas",
@@ -1933,7 +1946,8 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "fachan tyrant",
@@ -2064,7 +2078,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "hideous abomination",
@@ -2084,7 +2099,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "choira pyromancer",
@@ -2094,7 +2110,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "darem tidegrasp",
@@ -2104,7 +2121,8 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "massive stone worm",
@@ -2124,7 +2142,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "jura szerak",
@@ -2166,7 +2185,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "captain flintlock",
@@ -2288,7 +2308,8 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "huge obsidian golem",
@@ -2366,7 +2387,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "black orc boss",
@@ -2440,7 +2462,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "justicar halford",
@@ -2477,7 +2500,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "lallim whitemane",
@@ -2487,7 +2511,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "sharh'kur",
@@ -2497,7 +2522,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "aurumvorax",
@@ -2630,7 +2656,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "mayor delanon",
@@ -2650,7 +2677,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "cocoon",
@@ -2665,7 +2693,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "hanging cocoon",
@@ -2677,7 +2706,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "massive cocoon",
@@ -2689,7 +2719,8 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   },
   {
     "Name": "cocoon",
@@ -2702,6 +2733,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed"
+    "RespawnType": "Timed",
+    "StopBefore": false
   }
 ]
