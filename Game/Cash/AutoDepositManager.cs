@@ -214,9 +214,15 @@ public sealed class AutoDepositManager : IDisposable
     // reroute single-controller.
     public bool IsRerouting => _busy;
 
-    // Raised when a reroute or event trip starts or ends (IsRerouting flips). May
-    // fire off the UI thread, from the buy / deposit-sync timers.
+    // Raised when a reroute or event trip starts, turns for home (IsReturning), or
+    // ends (IsRerouting flips). May fire off the UI thread, from the buy /
+    // deposit-sync timers.
     public event Action? ReroutingChanged;
+
+    // The deposit / stash is done and the reroute is on its way back (a light-shop
+    // stop on the way home included).
+    public bool IsReturning => _busy && _phase is DepositPhase.WalkingToLightShop
+        or DepositPhase.BuyingLight or DepositPhase.WalkingBackToOrigin;
 
     // The engine this detour will pick back up (meaningful while it runs).
     public DetourResume ResumePlan => _resume;
@@ -557,6 +563,7 @@ public sealed class AutoDepositManager : IDisposable
         {
             _lightBuy = buy;
             _phase = DepositPhase.WalkingToLightShop;
+            ReroutingChanged?.Invoke();
             _log?.Info(LogCategory,
                 $"return leg runs dark — detouring to light shop {shop} for '{buy.LightName}' x{buy.Count}");
             if (!RerouteWalkTo(shop))
@@ -654,6 +661,7 @@ public sealed class AutoDepositManager : IDisposable
             return;
         }
         _phase = DepositPhase.WalkingBackToOrigin;
+        ReroutingChanged?.Invoke();
         if (!back.Equals(_origin))
             _log?.Info(LogCategory, $"walking back to {back}, the loop's nearest room (left it at {_origin})");
         if (!RerouteWalkTo(back))

@@ -1,10 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.134.20**
+> **Version 3.134.22**
 > - Navigation hold chips fade out over 3 s instead of 2
 > - The "+N.NN lvls" readout rounds down, so it never shows a level banked before it is
 > - Auto-train's funding counts the trip's tolls and fares, so a toll on the way doesn't leave it short at the trainer
+> - Auto-train takes the shortest route its money allows: round the tolls when the purse covers the training but not them, or when even the bank can't cover both
+> - The bank / sell trip chip turns to "back from the bank" / "back from selling" on the walk back
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

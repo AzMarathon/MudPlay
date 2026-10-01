@@ -116,8 +116,12 @@ public sealed class SellDetourManager : IDisposable
 
     public bool IsDetouring => _phase != Phase.Idle;
 
-    // Raised when a detour starts or ends (IsDetouring flips).
+    // Raised when a detour starts, turns for home (IsReturning), or ends (IsDetouring
+    // flips).
     public event Action? DetouringChanged;
+
+    // Sold up and walking back to where the run picks up.
+    public bool IsReturning => _phase == Phase.WalkingBack;
 
     // The engine this detour will pick back up (meaningful while it runs).
     public DetourResume ResumePlan => _resume;
@@ -388,6 +392,7 @@ public sealed class SellDetourManager : IDisposable
             return;
         }
         _phase = Phase.WalkingBack;
+        DetouringChanged?.Invoke();
         _log?.Info(LogCategory, _returnTo.Equals(_origin)
             ? $"walking back to {_returnTo}"
             : $"walking back to {_returnTo}, the loop's nearest room (left it at {_origin})");

@@ -362,6 +362,7 @@ public sealed class TrainerWalkManager : IDisposable
         _partyTrip = false;
         bool trained = _partyTripTrained;
         _partyTripTrained = false;
+        ReserveForTraining?.Invoke(0);
         _phase = Phase.Idle;
         ResumeTarget resume = _resume;
         _resume = default;
@@ -511,27 +512,37 @@ public sealed class TrainerWalkManager : IDisposable
     // The bill is the WHOLE itinerary, not the first trainer's fee: trainers serve a
     // contiguous level band, so a banked run can span several, each charging its own
     // markup. Budgeting only the first leg would fund a trip that strands halfway.
-    // The tolls and fares the trip pays walking from a room: on to each trainer of
-    // the itinerary in turn, then back to where the run left off. Funding budgets
-    // them on top of the fees, so a toll on the way doesn't leave the purse short at
-    // the trainer (report paradigm-20260930-204041). Null when routes can't be priced.
+    // The tolls and fares on a route (as the walk takes it once it can pay), and
+    // whether a route round every toll exists. Funding budgets the trip's tolls on top
+    // of the fees, so a toll on the way doesn't leave the purse short at the trainer
+    // (report paradigm-20260930-204041), or routes round them when the money for both
+    // isn't there. Null when routes can't be priced.
     public Func<RoomKey, RoomKey, long>? RouteTolls { get; set; }
+    public Func<RoomKey, RoomKey, bool>? HasTollFreeRoute { get; set; }
 
-    private Func<RoomKey, long>? TripTolls(IReadOnlyList<Game.Train.TrainSegment> itinerary, RoomKey runFrom)
+    // Sets aside the trip's fees from the wallet the walk judges tolls against, so it
+    // takes a toll only when it can pay it on top of the training (0 releases it).
+    public Action<long>? ReserveForTraining { get; set; }
+
+    private Game.Train.TrainTripTolls? TripTolls(IReadOnlyList<Game.Train.TrainSegment> itinerary, RoomKey runFrom)
     {
-        if (RouteTolls is not { } tolls) return null;
+        if (RouteTolls is not { } tolls || HasTollFreeRoute is not { } tollFree) return null;
         List<RoomKey> stops = itinerary.Select(s => new RoomKey(s.Trainer.Map, s.Trainer.Room)).ToList();
-        return here =>
-        {
-            long copper = 0;
-            RoomKey at = here;
-            foreach (RoomKey stop in stops)
+        stops.Add(runFrom);
+        return new Game.Train.TrainTripTolls(
+            here =>
             {
-                copper += tolls(at, stop);
-                at = stop;
-            }
-            return copper + tolls(at, runFrom);
-        };
+                long copper = 0;
+                RoomKey at = here;
+                foreach (RoomKey stop in stops) { copper += tolls(at, stop); at = stop; }
+                return copper;
+            },
+            here =>
+            {
+                RoomKey at = here;
+                foreach (RoomKey stop in stops) { if (!tollFree(at, stop)) return false; at = stop; }
+                return true;
+            });
     }
 
     private bool BeginFunding(RoomKey from, TrainerShop first)
@@ -546,6 +557,7 @@ public sealed class TrainerWalkManager : IDisposable
             ReadDisabledTrainers(), from, (a, b) => _bfs.DistanceBetween(a, b));
         long cost = Game.Train.TrainItineraryPlanner.TotalCost(itinerary);
         if (cost <= 0) return false;
+        ReserveForTraining?.Invoke(cost);
 
         var trainerRoom = new RoomKey(first.Map, first.Room);
         switch (_funding.Begin(cost, trainerRoom, TripTolls(itinerary, from)))
@@ -1068,6 +1080,7 @@ public sealed class TrainerWalkManager : IDisposable
         int levels = _levelsTrained;
         Action<int, string>? partyDone = _partyDone;
         ResumeTarget resume = _resume;
+        ReserveForTraining?.Invoke(0);
         _phase = Phase.Idle;
         _target = null;
         _resume = default;

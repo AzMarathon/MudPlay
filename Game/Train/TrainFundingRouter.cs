@@ -80,9 +80,9 @@ public sealed class TrainFundingRouter
 
     private Phase _phase = Phase.Idle;
     private long _cost;
-    // Tolls and fares the train trip pays walking from a given room (to the trainers
-    // and back); null when the caller has none to add.
-    private Func<RoomKey, long>? _tollsFrom;
+    // The trip's tolls and fares from a room, and whether they can be routed round;
+    // null when the caller has none to add.
+    private TrainTripTolls? _tolls;
     private RoomKey _trainerRoom;
     private TrainFundingLeg _leg;
     private long _purseAtLegStart;
@@ -163,12 +163,12 @@ public sealed class TrainFundingRouter
     }
 
     // Price the bill against everything reachable and act on the answer.
-    public TrainFundingStart Begin(long cost, RoomKey trainerRoom, Func<RoomKey, long>? tollsFrom = null)
+    public TrainFundingStart Begin(long cost, RoomKey trainerRoom, TrainTripTolls? tolls = null)
     {
         if (IsBusy) return TrainFundingStart.Collecting;
 
         _cost = cost;
-        _tollsFrom = tollsFrom;
+        _tolls = tolls;
         _trainerRoom = trainerRoom;
         _legsRun = 0;
         _visited.Clear();
@@ -245,11 +245,10 @@ public sealed class TrainFundingRouter
     private bool RunningPurseWouldProceed()
     {
         long spendable = Spendable(_onHandCopper());
-        long bill = Bill(_currentRoom());
-        if (spendable >= bill) return true;
+        long need = Needed(_currentRoom(), spendable);
+        if (spendable >= need) return true;
         if (_currentRoom() is not { } here) return false;
-        TrainFundingPlan plan = TrainFundingPlanner.Plan(
-            bill, spendable, _sources(), here, _trainerRoom, _distance);
+        TrainFundingPlan plan = PlanFrom(here, spendable, _sources(), need);
         return plan.Affordable && plan.Legs.Count > 0;
     }
 
@@ -290,8 +289,12 @@ public sealed class TrainFundingRouter
         long onHand = _onHandCopper();
         long spendable = Spendable(onHand);
         long bill = Bill(_currentRoom());
-        if (spendable >= bill)
+        long need = Needed(_currentRoom(), spendable);
+        if (spendable >= need)
         {
+            if (need < bill)
+                _log?.Info(LogCategory, $"The purse covers the {_cost:N0} train but not the trip's "
+                    + $"{bill - _cost:N0} copper in tolls — routing round them instead of fetching more.");
             // Includes the happy accident the user asked for: coin picked up during
             // the errand can settle the bill mid-route, and the run should go
             // straight to the trainer instead of finishing a now-pointless leg.
@@ -326,8 +329,7 @@ public sealed class TrainFundingRouter
         if (firstCall && bill > _cost)
             _log?.Info(LogCategory, $"The trip pays {bill - _cost:N0} copper in tolls on top of the "
                 + $"{_cost:N0} train — budgeting {bill:N0}.");
-        TrainFundingPlan plan = TrainFundingPlanner.Plan(
-            bill, spendable, fresh, here, _trainerRoom, _distance);
+        TrainFundingPlan plan = PlanFrom(here, spendable, fresh, need);
 
         if (!plan.Affordable || plan.Legs.Count == 0)
         {
@@ -457,13 +459,41 @@ public sealed class TrainFundingRouter
     {
         _phase = Phase.Idle;
         RestoreAutoGetCash();
-        long shortfall = Math.Max(0, Bill(_currentRoom()) - Spendable(_onHandCopper()));
+        long spendable = Spendable(_onHandCopper());
+        long shortfall = Math.Max(0, Needed(_currentRoom(), spendable) - spendable);
         Finished?.Invoke(new(false, shortfall, detail));
     }
 
     // The train fee plus the tolls on the trip from `here`.
     private long Bill(RoomKey? here) =>
-        _cost + (here is { } room && _tollsFrom is { } tolls ? Math.Max(0, tolls(room)) : 0);
+        _cost + (here is { } room && _tolls is { } tolls ? Math.Max(0, tolls.CopperFrom(room)) : 0);
+
+    private bool TollsAvoidable(RoomKey? here) =>
+        here is { } room && _tolls is { } tolls && tolls.AvoidableFrom(room);
+
+    // What the run must hold from here: the fee and the tolls — but just the fee when
+    // the purse already covers it and the tolls can be routed round, so the run skips
+    // the bank and walks the long way instead (user, 2026-09-30). The walk then routes
+    // round any toll it can't pay on top of the fee (MovementFilter.ReservedCopper).
+    private long Needed(RoomKey? here, long spendable)
+    {
+        long bill = Bill(here);
+        return bill > _cost && spendable >= _cost && TollsAvoidable(here) ? _cost : bill;
+    }
+
+    // Plan to `need`; when even the bank and stashes can't cover the tolls on top of
+    // the fee, plan to the fee alone and route round them, if they can be (user,
+    // 2026-09-30).
+    private TrainFundingPlan PlanFrom(RoomKey here, long spendable, IReadOnlyList<TrainFundingSource> sources, long need)
+    {
+        TrainFundingPlan plan = TrainFundingPlanner.Plan(need, spendable, sources, here, _trainerRoom, _distance);
+        if (plan.Affordable || need <= _cost || !TollsAvoidable(here)) return plan;
+        TrainFundingPlan feeOnly = TrainFundingPlanner.Plan(_cost, spendable, sources, here, _trainerRoom, _distance);
+        if (feeOnly.Affordable)
+            _log?.Info(LogCategory, $"Not enough to cover the trip's {need - _cost:N0} copper in tolls as well — "
+                + "fetching the train fee and routing round them.");
+        return feeOnly.Affordable ? feeOnly : plan;
+    }
 
     // The balance the source list believes a bank room holds (0 when unknown).
     private long BalanceAt(RoomKey room)

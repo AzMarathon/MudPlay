@@ -3467,8 +3467,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private List<(string Label, NavChipTone Tone)> ActiveTrips()
     {
         List<(string, NavChipTone)> trips = [];
-        if (_services.AutoDeposit.IsRerouting) trips.Add(("bank trip", NavChipTone.Trip));
-        if (_services.SellDetour.IsDetouring) trips.Add(("sell trip", NavChipTone.Trip));
+        // Once the errand is done the chip says so: the walk back isn't the trip any
+        // more (report paradigm-20260930-205208).
+        if (_services.AutoDeposit.IsRerouting)
+            trips.Add((_services.AutoDeposit.IsReturning ? "back from the bank" : "bank trip", NavChipTone.Trip));
+        if (_services.SellDetour.IsDetouring)
+            trips.Add((_services.SellDetour.IsReturning ? "back from selling" : "sell trip", NavChipTone.Trip));
         if (_services.TrainerWalk.IsBusy) trips.Add(("training", NavChipTone.Trip));
         if (_services.PartyComeback.RecoveringMember is { } member)
             trips.Add(($"going back for {member}", NavChipTone.Trip));

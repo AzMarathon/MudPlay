@@ -179,7 +179,7 @@ public sealed class TrainFundingRouterTests
         Harness h = new() { Purse = 0 };
         h.Sources.Add(Bank(5000));
 
-        h.Router.Begin(1000, Trainer, from => from.Equals(BankRoom) ? 500 : 300);
+        h.Router.Begin(1000, Trainer, new TrainTripTolls(from => from.Equals(BankRoom) ? 500 : 300, _ => false));
         Assert.Equal(BankRoom, h.Walked[0]);
 
         h.ArriveAtLastWalk();
@@ -196,7 +196,31 @@ public sealed class TrainFundingRouterTests
         Harness h = new() { Purse = 1000 };
         h.Sources.Add(Bank(5000));
 
-        Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(1000, Trainer, _ => 500));
+        Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(1000, Trainer, new TrainTripTolls(_ => 500, _ => false)));
+        Assert.Equal(BankRoom, h.Walked[0]);
+    }
+
+    // The purse covers the training but not the tolls, and the tolls can be routed
+    // round: skip the bank and walk round them (user, 2026-09-30).
+    [Fact]
+    public void PurseCoversTheFee_TollsAvoidable_SkipsTheBank()
+    {
+        Harness h = new() { Purse = 1000 };
+        h.Sources.Add(Bank(5000));
+
+        Assert.Equal(TrainFundingStart.Funded, h.Router.Begin(1000, Trainer, new TrainTripTolls(_ => 500, _ => true)));
+        Assert.Empty(h.Walked);
+    }
+
+    // Purse and bank together can't cover the tolls as well: fetch the fee and route
+    // round them (user, 2026-09-30).
+    [Fact]
+    public void BankCantCoverTheTollsToo_FetchesTheFeeAndRoutesRound()
+    {
+        Harness h = new() { Purse = 0 };
+        h.Sources.Add(Bank(1200));
+
+        Assert.Equal(TrainFundingStart.Collecting, h.Router.Begin(1000, Trainer, new TrainTripTolls(_ => 500, _ => true)));
         Assert.Equal(BankRoom, h.Walked[0]);
     }
 

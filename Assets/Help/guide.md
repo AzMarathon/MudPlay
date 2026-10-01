@@ -247,7 +247,7 @@ Three areas:
 
 The status line spells out **what the engine is doing** — e.g. *"Looping Ring - step 4 of 12 on lap 3"* or *"Walking to (12/431) Tower"*. A small colour-coded chip before it shows the state — Moving / Fighting / Waiting / Paused.
 
-**Why it's held** shows as chips after the line, one per hold in force: amber for a wait (*resting (low HP)*, *sneaking*, *looting*, *party asked to wait*…), a muted outline for the quick checks made while moving (*checking the dark*, *checking for an ambush*). An **errand trip** that pauses the run and walks somewhere else gets a cyan chip for as long as it lasts — *bank trip* (auto-deposit), *sell trip*, *training*, *going back for <member>* (@comeback) — since the line itself only names where the walk is headed. Many holds last a split second, so when one ends its chip fades out over three seconds instead of vanishing — long enough to read. The engine doesn't wait for the fade; only the display lingers.
+**Why it's held** shows as chips after the line, one per hold in force: amber for a wait (*resting (low HP)*, *sneaking*, *looting*, *party asked to wait*…), a muted outline for the quick checks made while moving (*checking the dark*, *checking for an ambush*). An **errand trip** that pauses the run and walks somewhere else gets a cyan chip for as long as it lasts — *bank trip* (auto-deposit), *sell trip*, *training*, *going back for <member>* (@comeback) — since the line itself only names where the walk is headed. Once the deposit or sale is done the chip turns to *back from the bank* / *back from selling* for the walk back. Many holds last a split second, so when one ends its chip fades out over three seconds instead of vanishing — long enough to read. The engine doesn't wait for the fade; only the display lingers.
 
 A route that's **queued but not moving** says so and names the hold (a common one is **auto-engines off (Auto-All)** — the kill switch is off, so nothing walks until you turn it back on).
 
@@ -3609,7 +3609,7 @@ These shape how the **leader** runs an Auto-train party trip (the level-11 rule 
 
 **Default:** Stash rooms first, then a bank · any bank · any stash room
 **What it does:** Decides where auto-train may fetch the difference when your purse, above keep-on-hand, can't pay for the training.
-The bill counts the **tolls and transport fares on the trip** as well as the training fees — the walk on to each trainer and back to where the run left off — priced from wherever it stands, so a withdrawal at a bank covers the tolls from that bank onward too.
+The bill counts the **tolls and transport fares on the trip** as well as the training fees — the walk on to each trainer and back to where the run left off — priced from wherever it stands, so a withdrawal at a bank covers the tolls from that bank onward too. The trip takes the **shortest route your money allows**: when your purse covers the training but not the tolls, it skips the bank and walks round them; when even the bank can't cover both, it fetches the training fee and walks round the tolls. (Routing round only happens when there's a toll-free way; otherwise the tolls have to be paid.) While it's heading to train, the fees are set aside, so a toll is taken only when you can pay it on top of the training.
 - **Fetch the difference from:**
   - **Stash rooms first, then a bank:** the original behavior.
   - **A bank only.**
