@@ -1,5 +1,9 @@
 # Version history
 
+## 3.134.44
+
+- Unrecognized Lines skips the engine's fixed command replies (usage lines, refusals, door / bank / shop / gang / channel notices)
+
 ## 3.134.43
 
 - Logging in next to a monster no longer drops the fight when the room is re-located, so auto-sneak stops sending `sn` mid-combat

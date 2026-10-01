@@ -323,6 +323,20 @@ What the game prints on the wire, including the prompt/statline, the command rat
 | Train success — Paradigm/ParaMud (**level-less**; see *Character stats & progression → Trainers: level band, class restriction, and `train stats`*) | `You hand over <cost> to train to the next level!` — a successful train with **no level number**; mutually exclusive with the stock line above, so auto-train infers the new level as current+1 |
 | Server PvP announcement (**Paradigm-only**) | `Server PvP Message: <body>` — realm-wide server broadcast for PvP events; the kill form is `Server PvP Message: <killer> just killed <victim>!`, but other PvP bodies share the same `Server PvP Message: ` prefix. Not emitted on stock realms |
 
+### Fixed command replies (refusals and housekeeping notices)
+*Status: OBSERVED 2026-10-01 (Stock `wccmmud.dll` 1.11p strings, grouped by the function that prints them) · Realm: Stock; Paradigm wording not checked*
+
+- **The engine answers a mistyped or refused command with fixed text held in the DLL, not in the message table**, so none of it is a spell's message. The families:
+  - **Usage:** `Syntax: PICKLOCK {direction}`, `Syntax: GIVE {amount} {currency} TO {someone}` — one per command, always led by `Syntax: `.
+  - **Refusals:** `Why would you want to rob yourself?`, `You must close the door before you may lock it.`, `You are not carrying %s.`, `You may not enter that room while in combat.`, `There are no exits upwards!`.
+  - **Doors, seen and done:** `The %s to the %s just opened.`, `The door is now locked.`, `You see %s pick the lock on the %s to the %s.`, `You successfully unlocked the %s.`.
+  - **Bank, shop and gang:** `The bank cannot accept your deposit at this time.`, `You would get %s %s for your %s.`, `Gang member %s has been notified of their promotion.`, `Your gang leader has demoted you.`.
+  - **Channels and talk:** `--- Telepath Not Sent ---`, `You just joined channel %d.`, `Someone yells from the %s "%s"`, `You are using too much profanity - your message is not sent.`.
+- **Some engine-printed lines share their wording with a spell's message and are NOT in this family:** `You eat the %s.` and `You drink the %s.` are also the catalogued text of item spells (red fungus, the potions).
+- **`You are not of a high enough level to cast that spell.` is in the DLL but has never been seen in play** *([CONFIRMED] 2026-10-01, user)*.
+- **Client use:**
+  - `EngineReplyLines` holds about 170 of these formats; `MessageCandidateWatcher` skips a line that fits one, so it never reaches the Unrecognized Lines queue. **Client policy** (user, 2026-10-01): a line goes on the list only when it cannot be taken for a spell message — nothing with a spell's or an effect's flavour, even when the engine prints it itself. A test checks that no listed format matches any message in either seed.
+
 ### The `spells` / `sp` command output
 *Status: CONFIRMED 2026-08-13 (user capture) · Realm: Paradigm*
 

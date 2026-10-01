@@ -483,6 +483,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         || _knownLines.Contains(text)
         || IsKnownRoomName(text)
         || BenignChatterMatcher.IsBenign(text)
+        || EngineReplyLines.Matches(text)
         || MatchesAppliedEndsWith(text)
         || _templates.Matches(text)
         || _router.AnyPatternMatches(line);
