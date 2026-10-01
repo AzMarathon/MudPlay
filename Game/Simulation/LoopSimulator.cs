@@ -513,7 +513,8 @@ public static class LoopSimulator
         {
             MonsterCatalogEntry e = mob.Entry;
             mob.Engaged = true;
-            if (Roll(SpellDamageCalculator.FullResistChance(spell.TypeOfResists, e.SpellMagicResist, e.AntiMagic))) return;
+            if (_rng.NextDouble() * 100 < SpellDamageCalculator.FullResistChance(
+                    spell.TypeOfResists, e.SpellMagicResist, e.AntiMagic, _ch.Realm)) return;
             long lo = spell.MinDamagePerRound / fires, hi = spell.MaxDamagePerRound / fires;
             long raw = lo >= hi ? hi : lo + (long)(_rng.NextDouble() * (hi - lo + 1));
             int code = MonsterResistIndex.ElementalResistCode(spell.AttType);

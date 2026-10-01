@@ -126,14 +126,21 @@ public static class SpellDamageCalculator
         return mr ? MagicResistCut(damage, magicResist, antimagic, realm) : damage;
     }
 
-    // Chance (percent) a successfully cast spell is resisted outright: M.R./2,
-    // capped at 98, when the spell's TypeOfResists allows it (2 always, 1 only
-    // against an AntiMagic target).
-    public static int FullResistChance(int typeOfResists, int magicResist, bool antimagic)
+    // Chance (percent) a successfully cast spell is resisted outright by a monster:
+    // M.R./2, capped at 98, when the spell's TypeOfResists allows it (2 always, 1
+    // only against an AntiMagic target). Stock rolls 1–99 against it, so the figure
+    // is out of 99 there; Paradigm's is out of 100.
+    public static double FullResistChance(int typeOfResists, int magicResist, bool antimagic, RealmType realm)
     {
         bool eligible = typeOfResists == 2 || (typeOfResists == 1 && antimagic);
-        return eligible ? System.Math.Min(98, System.Math.Max(1, magicResist) / 2) : 0;
+        return eligible ? ResistRollPercent(System.Math.Min(98, System.Math.Max(1, magicResist) / 2), realm) : 0;
     }
+
+    // What an "at or under N" check against the engine's resist roll comes to, in
+    // percent. Stock's roll is 1–99 (GAME_MECHANICS "To-hit floor …", the genrdn
+    // rule), so N lands N times in 99.
+    private static double ResistRollPercent(int threshold, RealmType realm) =>
+        realm == RealmType.ParaMud ? threshold : System.Math.Min(100.0, threshold * 100.0 / 99);
 
     // How a player's own magic resist changes the damage of a monster's Damage(-MR)
     // spell, in percent (negative = takes less): the same partial cut a monster gets.
@@ -158,9 +165,14 @@ public static class SpellDamageCalculator
     public static int UncappedMagicResistCut(int magicResist, bool antimagic) =>
         antimagic ? magicResist / 2 : (magicResist - 50) / 2;
 
-    // The ceiling on a player's chance (M.R./2 percent) to resist a monster's spell
-    // outright: Stock stops a player at 97 (a monster at 98); Paradigm at 98.
+    // The ceiling on the figure a player's resist roll is checked against (M.R./2):
+    // Stock stops a player at 97 (a monster at 98); Paradigm at 98.
     public static int PlayerFullResistCap(RealmType realm) => realm == RealmType.ParaMud ? 98 : 97;
+
+    // Chance (percent) a player resists a monster's spell outright, for a spell that
+    // can be resisted: M.R./2 up to the cap, out of 99 on Stock.
+    public static double PlayerFullResistChance(int magicResist, RealmType realm) =>
+        ResistRollPercent(System.Math.Min(PlayerFullResistCap(realm), System.Math.Max(1, magicResist) / 2), realm);
 
     private static long ElementalCut(long damage, int elementalResist, RealmType realm) =>
         realm == RealmType.ParaMud
