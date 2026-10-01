@@ -4653,6 +4653,8 @@ public sealed class AppServices
         // `hide` per AutoMode toggles.
         Stealth = new Game.Stealth.StealthManager(Router, PlayerState, Log);
         Stealth.SetSneakHoldForHeal(() => Health.IsGateFleeing && CastDirector.IsEmergencyHealDue);
+        // A buff cast mid-rest doesn't re-sneak unless ShadowRest keeps it through the rest.
+        Stealth.SetReSneakSkipForRest(() => (Health.IsRecoveringRest || Health.RestInFlight) && !Health.UsesShadowRest);
         // A cast sneak keeping held on the way stops the walk in the next NPC-free room.
         Stealth.SetHeldCastCheck(() => CastDirector.HasSneakHeldCast);
         // Sneak keeping at the engine send gate: a command that can wait (an invite, a
@@ -7391,6 +7393,7 @@ public sealed class AppServices
                 || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive
                 || AutoLightShopRouter.DetourActive
                 || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive,
+            nearestLoopRoom: NearestLoopRoom,
             log: Log);
         Tick.HeartbeatElapsed += SellDetour.Evaluate;
         Inventory.Changed += SellDetour.Evaluate;
@@ -10988,6 +10991,22 @@ public sealed class AppServices
         int cap = ParseCount(overlay.MaxToGet, 0);   // 0 = "All" / blank / unset
         int target = cap > 0 ? cap : Math.Max(1, floor);
         return Math.Max(1, Math.Max(target, floor));
+    }
+
+    // The room on a loop's cycle that's fewest steps from `from`, or null when none
+    // can be walked to. One search covers every room on the cycle.
+    private Game.Map.RoomKey? NearestLoopRoom(Game.Map.RoomKey from, Game.Map.Loop loop)
+    {
+        System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> rooms =
+            Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement);
+        if (rooms.Count == 0) return null;
+        System.Collections.Generic.IReadOnlyDictionary<Game.Map.RoomKey, int> steps =
+            Bfs.ComputeDistancesTo(from, rooms, Movement);
+        Game.Map.RoomKey? best = null;
+        int fewest = int.MaxValue;
+        foreach (Game.Map.RoomKey room in rooms)
+            if (steps.TryGetValue(room, out int n) && n < fewest) { best = room; fewest = n; }
+        return best;
     }
 
     // Carried items that can take a sell detour: flagged Make detours + Auto-sell (and

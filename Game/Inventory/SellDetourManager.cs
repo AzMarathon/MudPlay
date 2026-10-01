@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 
@@ -7,8 +8,8 @@ namespace MudPlay.Game.Inventory;
 // that's carried above its "Detour to sell if above" count turns a running walk-to,
 // loop or Auto-Lair aside to a shop that trades it: stop the engine, walk to the
 // shop, let AutoSellManager sell there on arrival, then carry on — the walk-to
-// resumes to its destination, a loop / lair walks back to where it left off and
-// restarts (DetourResume, shared with the auto-deposit reroute).
+// resumes to its destination, a loop walks back to its nearest room and a lair to
+// where it left off, and restarts (DetourResume, shared with the auto-deposit reroute).
 //
 // Shop choice: the shops the user ticked "Sell here" on the item (any that trade it
 // when none are), and among those the one adding the fewest steps to the trip
@@ -57,10 +58,13 @@ public sealed class SellDetourManager : IDisposable
     private readonly Func<bool> _blocked;
     private readonly LogService? _log;
     private readonly Func<DateTimeOffset> _now;
+    private readonly Func<RoomKey, Loop, RoomKey?> _nearestLoopRoom;
+    private readonly Action<Action> _post;
 
     private Phase _phase = Phase.Idle;
     private DetourResume _resume;
     private RoomKey _origin;
+    private RoomKey _returnTo;
     private RoomKey _shop;
     private bool _drivingWalker;
     private readonly HashSet<RoomKey> _visited = new();
@@ -86,8 +90,10 @@ public sealed class SellDetourManager : IDisposable
         MovementCoordinator coordinator,
         Func<bool> isEnabled,
         Func<bool> blocked,
+        Func<RoomKey, Loop, RoomKey?> nearestLoopRoom,
         LogService? log = null,
-        Func<DateTimeOffset>? clock = null)
+        Func<DateTimeOffset>? clock = null,
+        Action<Action>? post = null)
     {
         _coordinator = coordinator;
         _candidates = candidates;
@@ -101,6 +107,8 @@ public sealed class SellDetourManager : IDisposable
         _blocked = blocked;
         _log = log;
         _now = clock ?? (static () => DateTimeOffset.Now);
+        _nearestLoopRoom = nearestLoopRoom;
+        _post = post ?? (static action => Dispatcher.UIThread.Post(action));
         _walker.Event += OnWalkEvent;
         _sell.Finished += OnSellFinished;
         _sell.ItemRefused += OnItemRefused;
@@ -122,7 +130,7 @@ public sealed class SellDetourManager : IDisposable
             string phase = _phase switch
             {
                 Phase.Idle => "idle",
-                Phase.WalkingBack => $"walking back to {_origin} (resume {_resume.Kind})",
+                Phase.WalkingBack => $"walking back to {_returnTo} (resume {_resume.Kind})",
                 _ => $"{_phase} at/to {_shop} (resume {_resume.Kind})",
             };
             string refused = _refused.Count == 0 ? "none"
@@ -251,6 +259,9 @@ public sealed class SellDetourManager : IDisposable
     {
         _shop = shop;
         _visited.Add(shop);
+        // Counted on the way out: by the time the walk to the shop finishes, Auto-sell
+        // may already have sold there.
+        _carriedAtShop = _candidates().ToDictionary(c => c.Number, c => c.Carried);
         _phase = Phase.WalkingToShop;
         DetouringChanged?.Invoke();
         if (!DriveWalk(shop))
@@ -280,7 +291,7 @@ public sealed class SellDetourManager : IDisposable
         }
         if (_phase == Phase.WalkingToShop)
         {
-            if (e.Kind == WalkEventKind.Finished) ArrivedAtShop();
+            if (e.Kind == WalkEventKind.Finished) AfterTheLine(Phase.WalkingToShop, ArrivedAtShop);
             else if (e.Kind == WalkEventKind.Failed)
             {
                 _log?.Warn(LogCategory, $"path to {_shop} failed — carrying on");
@@ -293,11 +304,17 @@ public sealed class SellDetourManager : IDisposable
         }
     }
 
+    // Auto-sell's Selling gate holds the walker in the shop, so the walk's Finished and
+    // Auto-sell's own Finished both fire inside the dispatch of the last `You sold`
+    // line — before the inventory has taken that line in. Judge the shop once the line
+    // is done, or a sale reads as nothing sold (report paradigm-20260930-182949).
+    private void AfterTheLine(Phase expected, Action then) =>
+        _post(() => { if (_phase == expected) then(); });
+
     // Auto-sell already queued on arrival (RoomTracker's room change runs ahead of the
     // walker's Finished); wait for it, or move on when there was nothing it would sell.
     private void ArrivedAtShop()
     {
-        _carriedAtShop = _candidates().ToDictionary(c => c.Number, c => c.Carried);
         if (_sell.IsSelling)
         {
             _phase = Phase.Selling;
@@ -311,8 +328,11 @@ public sealed class SellDetourManager : IDisposable
     private void OnSellFinished()
     {
         if (_phase != Phase.Selling) return;
-        NoteUnsold("the sale didn't go through");
-        Next();
+        AfterTheLine(Phase.Selling, () =>
+        {
+            NoteUnsold("the sale didn't go through");
+            Next();
+        });
     }
 
     private void OnItemRefused(int item)
@@ -339,15 +359,20 @@ public sealed class SellDetourManager : IDisposable
     // Another shop for a still-due item, or head back.
     private void Next()
     {
-        if (_tracker.State.CurrentRoom is { } here)
+        RoomKey? here = _tracker.State.CurrentRoom?.Key;
+        // A loop picks up from whichever of its rooms is nearest the shop, not back
+        // where the detour began (user, 2026-09-30; report paradigm-20260930-182854).
+        _returnTo = _resume.WalkDestination
+            ?? (here is { } from && _resume.Loop is { } loop ? _nearestLoopRoom(from, loop) : null)
+            ?? _origin;
+        if (here is { } cur)
         {
-            RoomKey back = _resume.WalkDestination ?? _origin;
             List<RoomKey> shops = _candidates()
                 .Where(c => c.Due)
                 .SelectMany(c => c.Shops.Where(s => !_visited.Contains(s) && Usable(c.Number, s)))
                 .Distinct().ToList();
             if (shops.Count > 0
-                && PathItemShopRouter.TrySelectShop(shops, here.Key, back, _distance, out RoomKey next))
+                && PathItemShopRouter.TrySelectShop(shops, cur, _returnTo, _distance, out RoomKey next))
             {
                 _log?.Info(LogCategory, $"on to {next} for what's left");
                 GoToShop(next);
@@ -355,16 +380,18 @@ public sealed class SellDetourManager : IDisposable
             }
         }
 
-        // A walk-to just resumes toward its destination; a loop / lair walks back to
-        // where it was first.
-        if (_resume.Kind == DetourResumeKind.Walk || _tracker.State.CurrentRoom?.Key.Equals(_origin) == true)
+        // A walk-to just resumes toward its destination; a loop walks back to its
+        // nearest room, a lair to where it was.
+        if (_resume.Kind == DetourResumeKind.Walk || here?.Equals(_returnTo) == true)
         {
             Resume();
             return;
         }
         _phase = Phase.WalkingBack;
-        _log?.Info(LogCategory, $"walking back to {_origin}");
-        if (!DriveWalk(_origin)) Resume();
+        _log?.Info(LogCategory, _returnTo.Equals(_origin)
+            ? $"walking back to {_returnTo}"
+            : $"walking back to {_returnTo}, the loop's nearest room (left it at {_origin})");
+        if (!DriveWalk(_returnTo)) Resume();
     }
 
     private void Resume()

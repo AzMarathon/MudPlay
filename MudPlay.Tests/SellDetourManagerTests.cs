@@ -54,6 +54,7 @@ public sealed class SellDetourManagerTests : IDisposable
         public required AutoLairManager Lair { get; init; }
         public required LairTimerStore Timers { get; init; }
         public required MessageRouter Router { get; init; }
+        public required MovementCoordinator Coordinator { get; init; }
         public required AutoSellManager Sell { get; init; }
         public required SellDetourManager Detour { get; init; }
         public List<string> Carried { get; } = new();
@@ -61,6 +62,17 @@ public sealed class SellDetourManagerTests : IDisposable
         public bool Blocked { get; set; }
         public bool ShopTrades { get; set; } = true;
         public DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        // Hold what the detour posts to the UI thread until RunPosted, as the real
+        // dispatcher does until the current line's dispatch is over.
+        public bool Defer { get; set; }
+        public List<Action> Posted { get; } = new();
+
+        public void RunPosted()
+        {
+            Action[] due = Posted.ToArray();
+            Posted.Clear();
+            foreach (Action a in due) a();
+        }
 
         public void Arrive(RoomKey room)
         {
@@ -123,11 +135,18 @@ public sealed class SellDetourManagerTests : IDisposable
             tracker: tracker, walker: walker, loops: loop, lair: lair, sell: sell, coordinator: coord,
             isEnabled: () => true,
             blocked: () => h.Blocked,
-            clock: () => h.Now);
+            nearestLoopRoom: (from, loop) =>
+            {
+                IReadOnlyList<RoomKey> rooms = LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, bfs, graph);
+                IReadOnlyDictionary<RoomKey, int> steps = bfs.ComputeDistancesTo(from, rooms);
+                return rooms.Where(steps.ContainsKey).OrderBy(r => steps[r]).Cast<RoomKey?>().FirstOrDefault();
+            },
+            clock: () => h.Now,
+            post: a => { if (h.Defer) h.Posted.Add(a); else a(); });
         h = new Harness
         {
             Graph = graph, Tracker = tracker, Walker = walker, Loop = loop, Lair = lair,
-            Timers = timers, Router = router, Sell = sell, Detour = detour,
+            Timers = timers, Router = router, Coordinator = coord, Sell = sell, Detour = detour,
         };
         return h;
     }
@@ -187,8 +206,10 @@ public sealed class SellDetourManagerTests : IDisposable
         Assert.False(h.Detour.IsDetouring);   // Auto-sell sells when the walk gets there
     }
 
+    // The walk back ends at the loop's room nearest the shop (1/2), not where the
+    // detour began (1/3) (report paradigm-20260930-182854).
     [Fact]
-    public void Loop_DetoursThenWalksBackAndResumesTheLoop()
+    public void Loop_DetoursThenWalksBackToItsNearestRoomAndResumes()
     {
         using Harness h = NewHarness();
         h.Carried.Add("dagger");
@@ -205,11 +226,10 @@ public sealed class SellDetourManagerTests : IDisposable
         h.Arrive(new RoomKey(1, 1));
         h.Arrive(Shop);
         h.Sold();
-        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);   // walking back to where it stopped
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
 
         h.Arrive(new RoomKey(1, 1));
         h.Arrive(new RoomKey(1, 2));
-        h.Arrive(new RoomKey(1, 3));
         Assert.False(h.Detour.IsDetouring);
         Assert.NotEqual(LoopState.Idle, h.Loop.State);
     }
@@ -286,5 +306,28 @@ public sealed class SellDetourManagerTests : IDisposable
         h.Detour.Evaluate();
         Assert.False(h.Detour.IsDetouring);
         Assert.Contains("refused it or can't be reached", h.Detour.Status);
+    }
+
+    // As wired, Auto-sell's Selling gate holds the walker in the shop, so the walk's
+    // Finished fires inside the `You sold` line's dispatch — before the inventory has
+    // taken the line in. That sale must not read as nothing sold, which would put the
+    // shop on a ten-minute wait (report paradigm-20260930-182949).
+    [Fact]
+    public void SaleTheInventoryHasNotTakenInYet_IsNotReadAsNothingSold()
+    {
+        using Harness h = NewHarness();
+        h.Sell.SetMovementGate(h.Coordinator);
+        h.Defer = true;
+        h.Carried.Add("dagger");
+        DetourAndArrive(h);
+        Assert.True(h.Sell.IsSelling);
+
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "You sold dagger for 5 gold crowns.", Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        h.Carried.Remove("dagger");                   // the inventory takes the line in after
+        h.RunPosted();
+
+        Assert.False(h.Detour.IsDetouring);
+        Assert.Contains("sold nothing lately: none", h.Detour.Status);
     }
 }

@@ -3120,7 +3120,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - **After the backstab** (report `paradigm-20260928-165954`): when the backstab round settles with the target still up, a cast held for the opener goes out before the re-announce, and its `*Combat Off*` resume re-attacks (`CombatManager.SettleBackstab`).
   - **Ordering:** pre-move gear now goes out before the `sn`.
   - **Replies:** while stealthed, a reply to an @-command said aloud goes back by telepath.
-  - **ShadowRest (Paradigm):** a race or class with it sneaks before it rests, and its rest doesn't mark the sneak broken.
+  - **ShadowRest (Paradigm):** a race or class with it sneaks before it rests when *Utilize shadowrest* is ticked (`HealthManager.SneakingBeforeShadowRest`), and its rest doesn't mark the sneak broken.
+  - **A cast during a rest** (a buff the rest window lets out) ends the sneak. It is re-taken only when the user utilizes ShadowRest on a race or class that has it; otherwise the next `rest` would end the fresh sneak, so it waits for the next move's pre-move sneak (`StealthManager.SetReSneakSkipForRest`; **Client policy**, user 2026-09-30, report `paradigm-20260930-184343`).
 - **Loop simulator** (`LoopSimulator`; **Client policy**, user 2026-09-30, report `paradigm-20260930-114254`): a simulated sneak **always holds** on a move, because Paradigm's rolls aren't recorded and the report's character held 296 of 299 entries. A see-hidden monster in the room still breaks it, and so does an attack, a cast or a rest. It is re-taken with **no cooldown** on the way out of a room with nothing alive in it; the report shows `Sneaking...` in the same second as a one-stab kill.
 
 ### Observing another player's failed sneak into your room
@@ -4880,11 +4881,12 @@ glass jug               5               2 gold crowns
 - `SellDetourManager` walks a walk-to / loop / Auto-Lair to such a shop for an item flagged *Make detours to sell this item*, then carries on (see *Auto-buy / auto-discard band semantics* for the counts).
 
 ### Auto-buy / auto-discard band semantics
-*Status: **Client policy** — CONFIRMED 2026-07-10 (user design); sell floor and detour count 2026-09-28 (user); blank detour count 2026-09-29 (user)*
+*Status: **Client policy** — CONFIRMED 2026-07-10 (user design); sell floor and detour count 2026-09-28 (user); blank detour count 2026-09-29 (user); detour cleared with Auto-sell 2026-09-30 (user)*
 
 - **Auto-discard with no Min/Max band set → discard *all*** of that item (drop every copy).
 - **Auto-sell (in passing or on a detour) keeps Min. to keep when it's above 0, else sells every copy** — whether or not *Must have minimum* is ticked.
 - **A sell detour goes once more than *Detour to sell if above* are carried, and more than Min. to keep.** 0 = as soon as there are more than Min. to keep (the first copy when that's blank or 0). **Blank = no detour**, and the item editor shows a red warning when detours are ticked with the count blank. *(An earlier note said blank went as soon as there was one to sell; superseded 2026-09-29, user.)*
+- **A sell detour needs Auto-sell, so turning Auto-sell off clears the detour flag and its count** — in the item editor and in batch edit (user, 2026-09-30; report `paradigm-20260930-183614`).
 - **Auto-buy with no band → buy as many as affordable.**
 - **Ticking Auto-buy on in the item-edit dialog defaults `MaxToGet` to 10** (the user changes it from
   there). So a freshly-flagged auto-buy item is bounded at 10 by default, never unbounded-by-accident.

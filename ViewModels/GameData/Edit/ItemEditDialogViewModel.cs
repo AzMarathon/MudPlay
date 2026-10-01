@@ -86,6 +86,16 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     [NotifyPropertyChangedFor(nameof(NeedsSellDetourAbove))]
     private string _sellDetourAbove = string.Empty;
     public bool CanSellDetour => CanBuySell && AutoSell;
+
+    // A detour only walks to the shop and Auto-sell does the selling, so unticking
+    // Auto-sell clears the detour too rather than leaving it set behind a greyed-out
+    // box (report paradigm-20260930-183614).
+    partial void OnAutoSellChanged(bool value)
+    {
+        if (value) return;
+        SellDetour = false;
+        SellDetourAbove = string.Empty;
+    }
     public bool NeedsSellDetourAbove => CanSellDetour && SellDetour && string.IsNullOrWhiteSpace(SellDetourAbove);
     private readonly HashSet<string> _sellShops = new(StringComparer.Ordinal);
     [ObservableProperty] private bool _autoStash;
@@ -426,8 +436,9 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
             AutoOpen          = autoOpen        ? true : null,
             AutoBuy           = autoBuy         ? true : null,
             AutoSell          = autoSell        ? true : null,
-            SellDetour        = sellDetour      ? true : null,
-            SellDetourAbove   = string.IsNullOrWhiteSpace(sellDetourAbove) ? null : sellDetourAbove.Trim(),
+            // Saved without Auto-sell, a detour is dropped (see OnAutoSellChanged).
+            SellDetour        = autoSell && sellDetour ? true : null,
+            SellDetourAbove   = !autoSell || string.IsNullOrWhiteSpace(sellDetourAbove) ? null : sellDetourAbove.Trim(),
             SellShops         = string.IsNullOrWhiteSpace(sellShops) ? null : sellShops,
             AutoStash         = autoStash       ? true : null,
             CannotBeTaken     = cannotBeTaken   ? true : null,

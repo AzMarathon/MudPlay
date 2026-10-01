@@ -46,6 +46,9 @@ public sealed class ItemBatchChanges
         if (AutoOpen != BatchToggle.Leave) o = o with { AutoOpen = AutoOpen.Apply(o.AutoOpen) };
         if (AutoBuy != BatchToggle.Leave) o = o with { AutoBuy = AutoBuy.Apply(o.AutoBuy) };
         if (AutoSell != BatchToggle.Leave) o = o with { AutoSell = AutoSell.Apply(o.AutoSell) };
+        // A sell detour needs Auto-sell, so turning Auto-sell off clears it too —
+        // false, not null, so a lower tier's detour can't show through.
+        if (AutoSell == BatchToggle.Off) o = o with { SellDetour = false, SellDetourAbove = null };
         if (AutoStash != BatchToggle.Leave) o = o with { AutoStash = AutoStash.Apply(o.AutoStash) };
         if (CannotBeTaken != BatchToggle.Leave) o = o with { CannotBeTaken = CannotBeTaken.Apply(o.CannotBeTaken) };
         if (MustHaveMinimum != BatchToggle.Leave) o = o with { MustHaveMinimum = MustHaveMinimum.Apply(o.MustHaveMinimum) };

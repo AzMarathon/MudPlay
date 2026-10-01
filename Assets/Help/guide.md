@@ -1397,7 +1397,7 @@ When **Auto-Sneak is on** it times those around your stealth. Commands you type 
 - **Stopping to cast.** A sneaked walk is always mid-step, so on its own a buff would never find a gap. When a buff, cure or heal is due (and you have the mana), your walk or loop pauses in the next room with no NPCs — including a room where your sneak already broke — casts it, re-sneaks and carries on. The status bar reads *Waiting — casting before re-sneaking*; if the cast doesn't go out within 7 seconds, the route moves on.
 - **Walk steps still happen.** A door, a trap, a lever or winch, or a hidden exit the route needs is done anyway, along with its party relay. MudPlay then re-sneaks before the next move.
 - **Emergency heal while fleeing.** When your *run if below* HP / mana settings have you fleeing (not a hit-and-run or a failed backstab's run), the *emergency heal* slot fires as soon as it's needed, and the re-sneak waits until it has gone out.
-- **Rests you need still happen.** A rest your *rest if below* settings call for goes out even if it ends the sneak. On Paradigm, a race or class with **ShadowRest** sneaks first and then rests, so the rest keeps you hidden.
+- **Rests you need still happen.** A rest your *rest if below* settings call for goes out even if it ends the sneak. On Paradigm, with **Utilize shadowrest** ticked and a race or class that has ShadowRest, it sneaks first and then rests, so the rest keeps you hidden — retrying a sneak that fails before the rest goes out. Without that, a rest ends the sneak, so a buff cast during the rest doesn't re-sneak; the sneak is taken again before your next step.
 - **Replies stay quiet.** While you're sneaking or hidden, a reply to an @-command someone said aloud goes back by telepath instead of a say.
 - **Gear before the sneak.** A boss / lair gear set or backstab gear for the next room goes on before the sneak, never after it.
 - **See-hidden and failed-sneak fights.** If a see-hidden monster forces a fight (with *Clear hostiles when sneak broken by see-hidden monster* on), or a failed sneak stops you to clear a room (with *Clear hostiles when sneak fails* on), the now-cleared room becomes the place the held actions fire, you re-sneak, and the walk continues.
@@ -1604,7 +1604,8 @@ Items and Monsters open an editable pane on the left with the read-only **Other 
 **Sell detours.** Tick **Make detours to sell it** (under Auto-sell, once Auto-sell is on) and a walk-to, loop or Auto-Lair will turn aside to sell it once you carry more than the **when carrying more than** count, and more than **Min. to keep**. **0** goes as soon as you carry more than Min. to keep (your first copy when that's blank or 0). **Blank means no detour**, so a red warning appears under the box when detours are ticked with it blank:
 
 - **Which shop:** tick **Sell here** on the shops in the **Bought / sold** list to choose. With none ticked, any shop that trades the item can be used. Among the allowed shops, it picks the one that adds the fewest steps.
-- **The trip:** the route stops at the next room, walks to the shop, sells, then carries on. A walk-to heads on to its destination; a loop or Auto-Lair walks back to where it stopped and picks up again.
+- **The trip:** the route stops at the next room, walks to the shop, sells, then carries on. A walk-to heads on to its destination; a loop walks back to whichever of its rooms is nearest the shop and picks up from there, and Auto-Lair walks back to where it stopped.
+- **Unticking Auto-sell** clears *Make detours to sell it* and its count too, since a detour only walks to the shop and Auto-sell does the selling (batch edit's Auto-sell **Off** does the same).
 - **When it doesn't detour:** if your walk ends at one of those shops, or your loop or Auto-Lair passes through one, it just sells on the way. It also waits while you're fighting, resting, paused, following a party leader, or another errand (a bank trip, a train trip, a token route) has the route.
 - **A shop that didn't buy it:** a shop that refuses the item ("You cannot sell … here.") or can't be reached isn't tried for it again this session. A shop that just didn't sell it — Auto-sell had nothing to sell there, or no sale reply came — waits 10 minutes before it's tried again. The bug report's *Sell detour* line lists both.
 
@@ -3103,7 +3104,7 @@ Only Default-set items you actually **have** (worn or carried) count — an item
 ### Utilize shadowrest
 
 **Default:** Off
-**What it does:** ShadowRest is a class ability on certain realms (not stock MajorMUD) that lets a stealthed character rest safely even with a monster in the room. With this on — and your class has the ability, and you're solo and currently hidden/sneaking — MudPlay uses that instead of retreating to rest.
+**What it does:** ShadowRest is a class ability on certain realms (not stock MajorMUD) that lets a stealthed character rest safely even with a monster in the room. With this on — and your class has the ability, and you're solo and currently hidden/sneaking — MudPlay uses that instead of retreating to rest. It also sneaks before each rest (and again after a buff cast mid-rest), so the rest stays stealthed. With it off, MudPlay doesn't sneak for a rest at all — even on a race or class that has the ability.
 **Important notes:** This checkbox only appears at all on realms that actually have a class with the ShadowRest ability; it's invisible on stock realms.
 
 ### Pre-rest / meditate command, Post-rest / meditate command
