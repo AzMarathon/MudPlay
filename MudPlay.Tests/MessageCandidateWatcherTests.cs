@@ -29,14 +29,16 @@ public sealed class MessageCandidateWatcherTests
         // needs the pre-game gate passes inGame:false. seedDefaultPatterns loads the
         // real catalog for tests about shapes DefaultPatterns is supposed to cover.
         public Harness(bool inGame = true, bool seedDefaultPatterns = false,
-            Func<LineExtractor.EmittedLine, bool>? isRecognizedLine = null)
+            Func<LineExtractor.EmittedLine, bool>? isRecognizedLine = null,
+            Func<string, bool>? isRoomExitCommand = null)
         {
             if (seedDefaultPatterns) DefaultPatterns.Seed(Router);
             Watcher = new MessageCandidateWatcher(
                 Router, Messages, Candidates, currentRoom: () => Room, log: Log,
                 isKnownRoomName: RoomNames.Contains,
                 isRecognizedByDirectParser: PartyManager.IsRosterRow,
-                isRecognizedLine: isRecognizedLine);
+                isRecognizedLine: isRecognizedLine,
+                isRoomExitCommand: isRoomExitCommand);
             if (inGame) Watcher.NotifyInGame();
         }
 
@@ -732,6 +734,23 @@ public sealed class MessageCandidateWatcherTests
         // No such command sent: the same shape is a candidate.
         h.Feed("You push the button.");
         Assert.Single(h.Candidates.Candidates);
+    }
+
+    // A named exit's passage line shares no word with its command; the room's own
+    // exit commands tie the two together.
+    [Fact]
+    public void NamedExitFlavour_AfterTheRoomsExitCommand_Skipped()
+    {
+        Harness h = new(isRoomExitCommand: c => c is "go manhole" or "go man" or "enter manhole");
+        h.Watcher.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("go manhole\r\n"));
+        h.Feed("You pull open the manhole cover, and slip inside the hole.");
+        Assert.Empty(h.Candidates.Candidates);
+
+        // Any other command leaves a "You …" line a candidate.
+        Harness other = new(isRoomExitCommand: c => c is "go manhole");
+        other.Watcher.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("fbal orc\r\n"));
+        other.Feed("You hurl a ball of flame at the orc!");
+        Assert.Single(other.Candidates.Candidates);
     }
 
     [Fact]

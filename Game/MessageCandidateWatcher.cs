@@ -81,6 +81,11 @@ public sealed class MessageCandidateWatcher : IDisposable
     // name that leads an item's `look` description. The fixed-wording headers are
     // BenignChatterMatcher's.
     private readonly Func<string, bool>? _isListingHeader;
+    // True when a command is one of the current room's named-exit commands ("go
+    // manhole", "enter path"). Asked as the command goes out, while the room it
+    // belongs to is still the current one.
+    private readonly Func<string, bool>? _isRoomExitCommand;
+    private DateTimeOffset _exitCommandAt;
     private readonly LogService? _log;
 
     // Built from MessageStore on every CollectionChanged — trimmed text of every
@@ -151,7 +156,8 @@ public sealed class MessageCandidateWatcher : IDisposable
         Func<string, bool>? isRecognizedByDirectParser = null,
         Func<string, bool>? isNonCasterPhysicalAction = null,
         Func<LineExtractor.EmittedLine, bool>? isRecognizedLine = null,
-        Func<string, bool>? isListingHeader = null)
+        Func<string, bool>? isListingHeader = null,
+        Func<string, bool>? isRoomExitCommand = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(messages);
@@ -165,6 +171,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         _isNonCasterPhysicalAction = isNonCasterPhysicalAction;
         _isRecognizedLine = isRecognizedLine;
         _isListingHeader = isListingHeader;
+        _isRoomExitCommand = isRoomExitCommand;
         _log = log;
 
         _templates = new MessageTemplateIndex(messages.Messages);
@@ -212,7 +219,9 @@ public sealed class MessageCandidateWatcher : IDisposable
         foreach (string part in System.Text.Encoding.Latin1.GetString(data).Split('\r', '\n'))
         {
             string cmd = part.Trim();
-            if (cmd.Length > 0) _recentCommands[cmd] = DateTimeOffset.UtcNow;
+            if (cmd.Length == 0) continue;
+            _recentCommands[cmd] = DateTimeOffset.UtcNow;
+            if (_isRoomExitCommand?.Invoke(cmd) == true) _exitCommandAt = DateTimeOffset.UtcNow;
         }
     }
 
@@ -459,10 +468,15 @@ public sealed class MessageCandidateWatcher : IDisposable
     // "You pull the large iron lever." answers our own `pull lever`: a room command's
     // reply leads with the verb just sent. The game data doesn't carry these texts, so
     // the command is the only thing that identifies them. A cast never matches — its
-    // command is the spell's short code, not a verb the reply repeats.
+    // command is the spell's short code, not a verb the reply repeats, and it is no
+    // room's exit command.
     private bool IsOwnActionReply(string text, DateTimeOffset now)
     {
         if (!text.StartsWith("You ", StringComparison.Ordinal)) return false;
+        // A named exit answers with its own passage line, which shares no word with
+        // the command: `go manhole` → "You pull open the manhole cover, and slip
+        // inside the hole.".
+        if (now - _exitCommandAt <= EchoWindow && now >= _exitCommandAt) return true;
         int end = text.IndexOf(' ', 4);
         if (end < 0) return false;
         ReadOnlySpan<char> verb = text.AsSpan(4, end - 4);
