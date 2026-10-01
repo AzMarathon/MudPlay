@@ -348,7 +348,7 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.CashDropped,
             @"^You drop(?:ped)? (?:a (?<currency>\w+)|(?<count>\d+) (?<currency2>\w+)) (?:farthing|noble|crown|piece|coin)s?\b");
         yield return new RegexPattern(KnownPatterns.CashDropRefused,
-            @"^You don't have (?:a (?<currency>\w+)|(?<count>\d+) (?<currency2>\w+)) (?:farthing|noble|crown|piece|coin)s? to drop!");
+            @"^You don't have (?:a (?<currency>\w+)|(?<count>\d+) (?<currency2>\w+)) (?:farthing|noble|crown|piece|coin)s? to (?:drop|hide)!");
         yield return new RegexPattern(KnownPatterns.CashHidden,
             @"^You hid (?:a (?<currency>\w+)|(?<count>\d+) (?<currency2>\w+)) (?:farthing|noble|crown|piece|coin)s?\b");
         // Corpse loot — "N <currency> drop to the ground." emitted

@@ -70,6 +70,8 @@ public sealed class CashManager : IDisposable
     private readonly IDisposable _pickedUpSub;
     private readonly IDisposable _droppedSub;
     private readonly IDisposable _dropRefusedSub;
+    private readonly IDisposable _trainedSub;
+    private readonly IDisposable _trainedNextSub;
     private readonly IDisposable _hiddenSub;
     private readonly IDisposable _noticeSub;
     private readonly IDisposable _killDropSub;
@@ -254,6 +256,8 @@ public sealed class CashManager : IDisposable
         _pickedUpSub = router.Subscribe(KnownPatterns.CashPickedUp,  OnCashPickedUp);
         _droppedSub  = router.Subscribe(KnownPatterns.CashDropped,   OnCashDropped);
         _dropRefusedSub = router.Subscribe(KnownPatterns.CashDropRefused, OnDropRefused);
+        _trainedSub = router.Subscribe(KnownPatterns.TrainAttainLevel, OnTrained);
+        _trainedNextSub = router.Subscribe(KnownPatterns.TrainAttainNextLevel, OnTrained);
         // `hide N <coin>` is the stash-room verb — same tally semantics
         // as drop. Without this subscription, stashing decrements only
         // via item-hide (UserHides) which isn't currency-aware; the
@@ -354,6 +358,9 @@ public sealed class CashManager : IDisposable
     // this often.
     private static readonly TimeSpan RefreshCooldown = TimeSpan.FromSeconds(10);
     private DateTime _lastRefreshAt;
+    // The weight estimate has been checked against the game since the last pickup
+    // that went through.
+    private bool _gateRefusalChecked;
 
     private void AuditHeldForDiscard()
     {
@@ -498,18 +505,34 @@ public sealed class CashManager : IDisposable
         CheckAutoDeposit();
     }
 
-    // "You don't have N <coin> to drop!" — the count we dropped from was stale.
-    // Re-read the inventory (`i`), whose fresh coin counts re-run the audit.
+    // "You don't have N <coin> to drop!" / "… to hide!" — the count we dropped or
+    // stashed from was stale. Re-read the inventory (`i`), whose fresh coin counts
+    // re-run the audit.
     private void OnDropRefused(MatchResult m)
     {
         (string? currency, int count) = ParseCashLine(m);
         if (currency is null) return;
         ClearDropSent(currency);
+        ReReadInventory($"drop or stash of {count} {currency} refused — coin counts are stale");
+    }
+
+    // A train went through. The purse took the fee off by value (InventoryManager),
+    // but not which coins went, so the next coin decision re-reads the inventory —
+    // then, not now: a train can leave the stat-training box open, where a typed
+    // `i` would land in the form.
+    private void OnTrained(MatchResult _) => _purseStale = true;
+
+    private bool _purseStale;
+
+    // One `i` per cooldown: its fresh counts replace whatever the running tally held.
+    private bool ReReadInventory(string why)
+    {
         DateTime now = DateTime.UtcNow;
-        if (now - _lastRefreshAt < RefreshCooldown) return;
+        if (now - _lastRefreshAt < RefreshCooldown) return false;
         _lastRefreshAt = now;
-        _log?.Warn(LogCategory, $"drop of {count} {currency} refused — coin counts are stale, re-reading inventory");
+        _log?.Warn(LogCategory, $"{why}, re-reading inventory");
         Send("i");
+        return true;
     }
 
     private void ClearDropSent(string currency) => _dropSentAt.Remove(_naming.Canonicalize(currency));
@@ -830,6 +853,9 @@ public sealed class CashManager : IDisposable
             return;
         }
 
+        if (_purseStale && ReReadInventory("trained since the last inventory read"))
+            _purseStale = false;
+
         CashSettings settings = _readSettings();
         int slot = SlotForCurrency(currency);
         InventorySnapshot snap = _getSnapshot();
@@ -920,6 +946,14 @@ public sealed class CashManager : IDisposable
         {
             _log?.Info(LogCategory,
                 $"collect skipped currency={currency} want={count} — at/over encumbrance gate");
+            // The weight behind this refusal is a running estimate between `i`
+            // reads. If it has drifted, nothing else would ever correct it — every
+            // pickup is refused, so no line arrives to move it — so check it against
+            // the game once per run of refusals. A character that really is full
+            // costs one `i`.
+            if (!_gateRefusalChecked
+                && ReReadInventory("coin pickup refused for weight — checking the estimate"))
+                _gateRefusalChecked = true;
             // We're at the weight cap, so no `get`/pickup echo will fire to re-run
             // the event-driven auto-deposit check. Re-evaluate it here: if wealth
             // already exceeds the deposit threshold this arms the bank reroute to
@@ -929,6 +963,7 @@ public sealed class CashManager : IDisposable
             return;
         }
 
+        _gateRefusalChecked = false;
         _gate?.NoteGetSent();
         _log?.Info(LogCategory, swapDone > 0
             ? $"collect currency={currency} get={totalPickup} (free={freePickup} + {swapDone} via drop-smaller-for-larger)"
@@ -1225,6 +1260,8 @@ public sealed class CashManager : IDisposable
         _pickedUpSub.Dispose();
         _droppedSub.Dispose();
         _dropRefusedSub.Dispose();
+        _trainedSub.Dispose();
+        _trainedNextSub.Dispose();
         _hiddenSub.Dispose();
         _noticeSub.Dispose();
         _killDropSub.Dispose();
