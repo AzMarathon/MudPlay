@@ -5,12 +5,12 @@
         xmlns:controls="using:MudPlay.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="600"
+        mc:Ignorable="d" d:DesignWidth="390" d:DesignHeight="600"
         x:Class="MudPlay.Views.SessionStatsWindow"
         x:DataType="vm:SessionStatsViewModel"
         Title="Session Stats"
-        Width="280" Height="480"
-        MinWidth="240" MinHeight="160"
+        Width="390" Height="480"
+        MinWidth="390" MinHeight="160"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
