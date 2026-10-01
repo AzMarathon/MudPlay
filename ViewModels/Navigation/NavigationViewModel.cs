@@ -85,6 +85,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnMapComparisonChanged();
         _services.MovementCoordinator.PauseStateChanged += OnPauseChanged;
         _services.MovementCoordinator.GatesChanged += OnGatesChanged;
+        _services.AutoDeposit.ReroutingChanged += OnTripChanged;
+        _services.SellDetour.DetouringChanged += OnTripChanged;
+        _services.TrainerWalk.StateChanged += OnTripChanged;
+        _services.PartyComeback.RecoveringChanged += OnTripChanged;
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved += RefreshDeathRooms;
         _services.RoomTracker.PlayerDeathObserved += ClearNavIntentOnDeath;
@@ -247,6 +251,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.MapComparison.Changed -= OnMapComparisonChanged;
         _services.MovementCoordinator.PauseStateChanged -= OnPauseChanged;
         _services.MovementCoordinator.GatesChanged -= OnGatesChanged;
+        _services.AutoDeposit.ReroutingChanged -= OnTripChanged;
+        _services.SellDetour.DetouringChanged -= OnTripChanged;
+        _services.TrainerWalk.StateChanged -= OnTripChanged;
+        _services.PartyComeback.RecoveringChanged -= OnTripChanged;
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved -= RefreshDeathRooms;
         _services.RoomTracker.PlayerDeathObserved -= ClearNavIntentOnDeath;
@@ -3447,9 +3455,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private NavActivityKind _activityKind = NavActivityKind.None;
 
     // Chip text — a short, colour-coded state word (Moving / Fighting / Waiting /
-    // Paused). The *reason* for a wait ("resting (low HP)") is folded into the
-    // top-bar status line itself (WithHold), so the chip stays a one-glance state
-    // pill instead of repeating the same phrase beside the line. Empty when idle.
+    // Paused). The *reason* for a wait ("resting (low HP)") rides in HoldChips after
+    // the status line, so this chip stays a one-glance state pill. Empty when idle.
     public string ActivityStatus => _activityKind switch
     {
         NavActivityKind.Moving   => "Moving",
@@ -3466,13 +3473,38 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public bool ActivityIsWaiting  => _activityKind == NavActivityKind.Waiting;
     public bool ActivityIsPaused   => _activityKind == NavActivityKind.Paused;
 
+    // One chip per hold in force while an engine runs, and per errand trip, after
+    // the status line.
+    public NavHoldChipStrip HoldChips { get; } = new();
+
+    // An errand trip started or ended. Auto-deposit can report from its timers, so
+    // hop to the UI thread.
+    private void OnTripChanged() => Dispatcher.UIThread.Post(RefreshActivityStatus);
+
+    // The errand detours that stop the running engine and walk somewhere else. The
+    // status line only says where the walker is going; the chip says why.
+    private List<(string Label, NavChipTone Tone)> ActiveTrips()
+    {
+        List<(string, NavChipTone)> trips = [];
+        if (_services.AutoDeposit.IsRerouting) trips.Add(("bank trip", NavChipTone.Trip));
+        if (_services.SellDetour.IsDetouring) trips.Add(("sell trip", NavChipTone.Trip));
+        if (_services.TrainerWalk.IsBusy) trips.Add(("training", NavChipTone.Trip));
+        if (_services.PartyComeback.RecoveringMember is { } member)
+            trips.Add(($"going back for {member}", NavChipTone.Trip));
+        return trips;
+    }
+
     private void RefreshActivityStatus()
     {
         (string text, NavActivityKind kind) = ComputeActivity();
-        // The hold reason is folded into the top-bar status line, and a queued-but-
-        // idle route reads its reason off the live gates even when the chip itself is
-        // empty — so refresh the line on every gate/held change, ahead of the chip's
-        // unchanged early-out below.
+        List<(string Label, NavChipTone Tone)> chips = ActiveTrips();
+        if (AnyEngineLiveExecuting())
+            chips.AddRange(NavActivity.ActiveHolds(
+                _services.MovementCoordinator.AssertedGates, _services.Conditions.IsMovementPrevented));
+        HoldChips.Update(chips);
+        // A queued-but-idle route reads its hold reason off the live gates even when
+        // the chip itself is empty — so refresh the line on every gate/held change,
+        // ahead of the chip's unchanged early-out below.
         RaiseTopBarStatus();
         if (text == _activityStatus && kind == _activityKind) return;
         _activityStatus = text;
@@ -3513,10 +3545,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             && _services.LoopRunner.CurrentLoop is not null)
         || _services.Walker.State is WalkState.Walking or WalkState.Paused;
 
-    // The hold reason to fold into the top-bar status line ("… — resting (low HP)"),
-    // or null when the engine isn't actually held. Reads the live gate state even
-    // when EngineActionKind is Idle, so a queued-but-gated route (e.g. Auto-All off)
-    // can still explain itself.
+    // The hold reason for a queued-but-idle route's status line ("Queued: walk to …
+    // — auto-engines off (Auto-All)"), or null when nothing holds movement. A running
+    // engine shows its holds as HoldChips instead.
     private string? CurrentHoldReason()
     {
         Game.Map.MovementCoordinator mc = _services.MovementCoordinator;
@@ -3525,13 +3556,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             mc.AssertedGates, mc.IsPaused, _services.Conditions.IsMovementPrevented);
         return NavActivity.HoldSuffix(text, kind);
     }
-
-    // Fold the live hold reason onto a running-engine status line, so the top bar
-    // reads as one sentence ("Looping Ring - step 4 of 12 … — resting (low HP)")
-    // rather than making the user cross-reference a separate chip. No-op while the
-    // engine is genuinely moving (CurrentHoldReason returns null).
-    private string WithHold(string baseText) =>
-        CurrentHoldReason() is { Length: > 0 } reason ? $"{baseText} — {reason}" : baseText;
 
     private void RefreshFromTracker()
     {
@@ -4045,7 +4069,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                     string dest = _services.Walker.Destination is { } k
                         ? FormatRoomRef(k)
                         : "?";
-                    return WithHold(WalkToStatus(dest));
+                    return WalkToStatus(dest);
                 }
                 case NavigationEngineKind.Looping:
                 {
@@ -4062,16 +4086,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                         // Same step/ETA readout as a plain walk-to (the walker drives
                         // the approach), with the loop intent appended until the loop
                         // starts cycling.
-                        return WithHold(WalkToStatus(target, $" then looping {name}"));
+                        return WalkToStatus(target, $" then looping {name}");
                     }
                     // Running circle — spell out where in the cycle we are. Step
                     // is CurrentIndex (next-to-send) as 1-based, clamped to the
                     // step count; lap is completed-laps + 1 (the lap in flight).
                     int total = lr.StepCount;
-                    if (total <= 0) return WithHold($"Looping {name}");
+                    if (total <= 0) return $"Looping {name}";
                     int step = Math.Min(total, lr.CurrentIndex + 1);
-                    return WithHold(
-                        $"Looping {name} - step {step} of {total} on lap {lr.CompletedLaps + 1}");
+                    return $"Looping {name} - step {step} of {total} on lap {lr.CompletedLaps + 1}";
                 }
                 case NavigationEngineKind.AutoLair:
                 {
@@ -4083,8 +4106,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                     string countLabel = $"cycling {n} marked lair{(n == 1 ? "" : "s")}";
                     if (_services.AutoLair.IsPaused) return $"{countLabel} · paused";
                     if (AutoLairStatusText is { Length: > 0 } status)
-                        return WithHold($"{AutoLairPhaseLabel} · {status}");
-                    return WithHold(countLabel);
+                        return $"{AutoLairPhaseLabel} · {status}";
+                    return countLabel;
                 }
                 default:
                 {
@@ -4128,12 +4151,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         EngineError is { Length: > 0 }
         || _services.RoomTracker.State.Confidence == RoomConfidence.Lost;
 
-    // Warning (amber status text) — not a hard failure, but movement is held
-    // for a reason (resting / held / confused / party wait / Auto-All off …),
-    // or Auto-Lair is retrying a failed approach. Something worth a glance.
+    // Warning (amber status text) — not a hard failure, but an idle engine is
+    // held for a reason (a queued route behind Auto-All off …), or Auto-Lair is
+    // retrying a failed approach. A running engine's holds are its HoldChips:
+    // tinting the line too would flicker it through every split-second hold.
     public bool StatusIsWarning =>
         !StatusIsFailure
-        && (CurrentHoldReason() is { Length: > 0 }
+        && ((!AnyEngineLiveExecuting() && CurrentHoldReason() is { Length: > 0 })
             || (EngineActionKind == NavigationEngineKind.AutoLair
                 && _services.AutoLair.LastWalkerFailure is { Length: > 0 }));
 

@@ -169,6 +169,9 @@ public sealed class PartyComebackManager : IDisposable
     // Whether that recovery is for a follower our own move left behind (path C).
     public bool RecoveringLeftBehind => _busy && _leftBehind;
 
+    // Raised when a recovery starts or ends (RecoveringMember goes set / null).
+    public event Action? RecoveringChanged;
+
     // Members we've hit the failed-recovery cap on and are now declining outright
     // (name → failure count). Surfaced in the bug report so a "leader keeps
     // abandoning me" report shows we gave up because their return route was
@@ -502,6 +505,7 @@ public sealed class PartyComebackManager : IDisposable
         _busy = true;
         _phase = ComebackPhase.Idle;
         _resume = resume;
+        RecoveringChanged?.Invoke();
         _senderGiven = senderGiven;
         _reply = reply;
         _log?.Info(LogCategory,
@@ -657,6 +661,7 @@ public sealed class PartyComebackManager : IDisposable
     private void GoIdle()
     {
         _busy = false;
+        RecoveringChanged?.Invoke();
         _walkTarget = null;
         _leftBehind = false;
         _okPremature = false;

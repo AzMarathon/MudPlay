@@ -211,6 +211,10 @@ public sealed class AutoDepositManager : IDisposable
     // reroute single-controller.
     public bool IsRerouting => _busy;
 
+    // Raised when a reroute or event trip starts or ends (IsRerouting flips). May
+    // fire off the UI thread, from the buy / deposit-sync timers.
+    public event Action? ReroutingChanged;
+
     // The engine this detour will pick back up (meaningful while it runs).
     public DetourResume ResumePlan => _resume;
 
@@ -279,6 +283,7 @@ public sealed class AutoDepositManager : IDisposable
         }
 
         _busy = true;
+        ReroutingChanged?.Invoke();
         _resume = resume;
         _destination = destination;
         _origin = current.Key;
@@ -349,6 +354,7 @@ public sealed class AutoDepositManager : IDisposable
             return false;
         }
         _busy = true;
+        ReroutingChanged?.Invoke();
         _eventTrip = true;
         _resume = default;
         _destination = destination;
@@ -759,6 +765,7 @@ public sealed class AutoDepositManager : IDisposable
         _busy = false;
         _eventTrip = false;
         _phase = DepositPhase.Idle;
+        ReroutingChanged?.Invoke();
     }
 
     private void Send(string text)

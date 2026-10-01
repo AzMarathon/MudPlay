@@ -245,7 +245,9 @@ Three areas:
 
 ### The status line
 
-The status line spells out **what the engine is doing and, when it's held, why** — e.g. *"Looping Ring - step 4 of 12 on lap 3 — resting (low HP)"* or *"Walking to (12/431) Tower — party asked to wait"*. A small colour-coded chip beside it shows the state — Moving / Fighting / Waiting / Paused — so Fighting and Paused aren't repeated on the line.
+The status line spells out **what the engine is doing** — e.g. *"Looping Ring - step 4 of 12 on lap 3"* or *"Walking to (12/431) Tower"*. A small colour-coded chip before it shows the state — Moving / Fighting / Waiting / Paused.
+
+**Why it's held** shows as chips after the line, one per hold in force: amber for a wait (*resting (low HP)*, *sneaking*, *looting*, *party asked to wait*…), a muted outline for the quick checks made while moving (*checking the dark*, *checking for an ambush*). An **errand trip** that pauses the run and walks somewhere else gets a cyan chip for as long as it lasts — *bank trip* (auto-deposit), *sell trip*, *training*, *going back for <member>* (@comeback) — since the line itself only names where the walk is headed. Many holds last a split second, so when one ends its chip fades out over two seconds instead of vanishing — long enough to read. The engine doesn't wait for the fade; only the display lingers.
 
 A route that's **queued but not moving** says so and names the hold (a common one is **auto-engines off (Auto-All)** — the kill switch is off, so nothing walks until you turn it back on).
 
@@ -259,7 +261,7 @@ Even with **no automation running** — you've stopped the engines and are walki
 
 It sends nothing to the game to do this — it's pure inference from what you're already doing — and if the walk stays genuinely ambiguous it just stays Lost rather than guess.
 
-The status line is also **colour-coded**: **amber** while movement is held for a reason (resting, held, confused, party wait, Auto-All off…) and **red** when a nav action fails or the tracker loses your position — so a problem is glaring rather than buried in grey.
+The status line is also **colour-coded**: **amber** while a queued route is held for a reason (Auto-All off…) or Auto-Lair is retrying an approach, and **red** when a nav action fails or the tracker loses your position — so a problem is glaring rather than buried in grey.
 
 A row of action chips — **Save**, **Go**, **Loop mode**, **Lair mode** — sits just above the map.
 
