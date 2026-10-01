@@ -4033,6 +4033,9 @@ public sealed class AppServices
                 if (!history[i].Equals(history[0])) return history[i];
             return null;
         };
+        Health.RoomExits = key => RoomGraph.GetRoom(key)?.Exits.ToDictionary(e => e.Key, e => e.Value.Target);
+        Health.RoomRisk = key => (IsBossRoomLive(key),
+            Game.Map.RoomTooltipBuilder.TryParseLairMax(RoomGraph.GetRoom(key)?.RawLairTag, out int lairMax) ? lairMax : 0);
 
         // Late-wire the classifier's flee probe now that Health exists (it's
         // built after RoomClassifier). While fleeing, a monster that pursues us
@@ -4716,6 +4719,7 @@ public sealed class AppServices
         Combat.SetBackstabFailureFlee(() => Health.RunFromBackstabFailure());
         Combat.SetHitAndRunHooks(Health.BackstabLanded, Health.RunInsteadOfFight);
         Combat.SetFleeInFlightProbe(() => Health.IsFleeInFlight);
+        Combat.SetKeepRunning(Health.KeepRunning);
         Combat.SetMoveInFlightProbe(() => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending);
         RoomTracker.MoveBlocked += () => Combat.NoteMoveRefused();
 
@@ -4731,6 +4735,8 @@ public sealed class AppServices
             isSolo:          () => !PartyState.IsInParty,
             onRecovered:     Combat.ResumeAfterShadowRest);
         Combat.SetShadowRestSuppression(() => Health.ShadowRestHolding);
+        CombatTracker.SetCombatHeldOnPurposeProbe(() => Health.ShadowRestHolding);
+        SneakGuard.SetShadowRestProbe(() => Health.ShadowRestHolding);
         Health.SetSneakKeptProbe(() => SneakGuard.Holds);
         Health.SetMeditateWhilePoisonedProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
         Health.SetSneakBeforeRestProbe(() => Stealth.SneakBeforeRest());

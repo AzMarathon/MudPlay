@@ -1,5 +1,14 @@
 # Version history
 
+## 3.134.15
+
+- A ShadowRest doesn't hold combat once a fight is on, so a monster attacking you is fought straight away
+- No room re-check every 6 s while ShadowResting beside a monster
+- While ShadowResting beside a monster, nothing that breaks stealth goes out until rest-max
+- Below the run trigger, a monster that follows you isn't attacked; the flee runs on
+- A flee never doubles back into the room it just fled; at the walk's start it runs opposite the walk, avoiding boss rooms and big lairs
+- bug reports addressed: paradigm-20260930-192645, paradigm-20260930-192727, paradigm-20260930-193005
+
 ## 3.134.12
 
 - A ShadowRest rest goes out as soon as its sneak lands, not seconds later at the next HP tick

@@ -677,8 +677,13 @@ public sealed class HealthManager : IDisposable
     // stealth, so sneaking before (or during) one is worth it.
     public bool UsesShadowRest => _readSettings().UtilizeShadowRest && _shadowRestClass?.Invoke() == true;
 
+    // Not mid-fight: an attack ends the sneak in game, but the client only drops its
+    // stealth state once the room clears, so a fight still reads as stealthed. Holding
+    // combat for a "ShadowRest" there let a monster swing at us unanswered until regen
+    // lifted HP past the rest trigger (report paradigm-20260930-192645).
     private bool ShadowRestActive() =>
         _readSettings().UtilizeShadowRest
+        && !_state.InCombat
         && _shadowRestClass?.Invoke() == true
         && _shadowRestStealthed?.Invoke() == true
         && _shadowRestSolo?.Invoke() == true;
@@ -752,6 +757,14 @@ public sealed class HealthManager : IDisposable
     // Backward flee's fallback when there's no trail to the engine's origin (we're
     // standing on it). Null in tests / when unknown.
     public Func<Map.RoomKey?>? PreviousRoom { get; set; }
+
+    // A room's exits by direction (RoomGraph). Lets a flee with no trail left pick a
+    // way out that isn't back into the room it just fled. Null in tests / unknown.
+    public Func<Map.RoomKey, IReadOnlyDictionary<Map.Direction, Map.RoomKey>?>? RoomExits { get; set; }
+
+    // Whether a room is a boss room and its lair's max spawn — what a flee picking its
+    // own way out steers around. Null in tests (every room reads safe).
+    public Func<Map.RoomKey, (bool Boss, int LairMax)>? RoomRisk { get; set; }
 
     // True while a move is sent but its landing isn't confirmed (RoomTracker Pending).
     // A flee started then is held until the room confirms (see TryFlee).
@@ -1934,7 +1947,10 @@ public sealed class HealthManager : IDisposable
         Models.Profile.CombatSettings combat = _readCombatSettings?.Invoke()
             ?? new Models.Profile.CombatSettings();
 
-        List<Map.Direction> steps = BuildFleeSteps(engine, combat);
+        // A run already under way that a hostile followed: its next leg mustn't walk
+        // straight back into the room the last leg fled (report paradigm-20260930-192727).
+        Map.RoomKey? lastLegFrom = _fleeEngine is not null ? _fleeFromRoom : null;
+        List<Map.Direction> steps = BuildFleeSteps(engine, combat, lastLegFrom);
         if (steps.Count == 0)
         {
             _log?.Warn(LogCategory,
@@ -1978,7 +1994,7 @@ public sealed class HealthManager : IDisposable
     // Forward mode walks the engine's own next RunDistance planned moves — it
     // keeps heading toward the destination instead of retreating.
     private List<Map.Direction> BuildFleeSteps(
-        Map.IRecoverableEngine engine, Models.Profile.CombatSettings combat)
+        Map.IRecoverableEngine engine, Models.Profile.CombatSettings combat, Map.RoomKey? lastLegFrom = null)
     {
         int distance = combat.RunDistance;
         if (distance < 1) distance = 1;
@@ -1991,10 +2007,19 @@ public sealed class HealthManager : IDisposable
                     && _lastKnownRoom is { } from
                     && engine.JourneyOrigin is { } origin
                     && !from.Equals(origin)
-                    && _findReversePath(from, origin) is { Count: > 0 } path)
+                    && _findReversePath(from, origin) is { Count: > 0 } path
+                    && !(lastLegFrom is { } fled && ExitLeadsTo(from, path[0], fled)))
                 {
                     for (int i = 0; i < path.Count && i < distance; i++)
                         steps.Add(path[i]);
+                }
+                else if (_lastKnownRoom is { } at && AwayFromThePlan(engine, at, lastLegFrom) is { } away)
+                {
+                    // No trail left (we're at the walk's start), or the trail runs back
+                    // into the room we just fled: run the opposite way to the plan out of
+                    // this room, else any way but back (user, 2026-09-30; report
+                    // paradigm-20260930-192727).
+                    steps.Add(away);
                 }
                 else if (_findReversePath is not null
                          && _lastKnownRoom is { } here
@@ -2015,6 +2040,15 @@ public sealed class HealthManager : IDisposable
                     // room we just left (known to exist) and stop there rather
                     // than blindly repeating one direction into a wall.
                     steps.Add(back);
+                }
+                // A run a hostile followed, with every way out leading back into the
+                // room the last leg fled: there's nowhere to run, so stand and fight.
+                if (lastLegFrom is { } fledRoom && _lastKnownRoom is { } now && steps.Count > 0
+                    && RoomExits?.Invoke(now) is { } exits
+                    && (!exits.TryGetValue(steps[0], out Map.RoomKey into) || into.Equals(fledRoom)))
+                {
+                    _log?.Combat(LogCategory, $"nowhere to run from {now} but back to {fledRoom} — standing to fight");
+                    steps.Clear();
                 }
                 break;
             case Models.Profile.RunDirection.Forward:
@@ -2043,6 +2077,45 @@ public sealed class HealthManager : IDisposable
             steps.RemoveRange(blocked, steps.Count - blocked);
         }
         return steps;
+    }
+
+    private bool ExitLeadsTo(Map.RoomKey from, Map.Direction direction, Map.RoomKey to) =>
+        RoomExits?.Invoke(from) is { } exits && exits.TryGetValue(direction, out Map.RoomKey target) && target.Equals(to);
+
+    // A way out of this room that is neither along the plan nor back into `avoid` (the
+    // room the last leg fled). Steers clear of boss rooms, then of bigger lairs, where
+    // another exit allows (user, 2026-09-30), and otherwise takes the opposite of the
+    // plan's way out.
+    private Map.Direction? AwayFromThePlan(Map.IRecoverableEngine engine, Map.RoomKey at, Map.RoomKey? avoid)
+    {
+        if (RoomExits?.Invoke(at) is not { } exits) return null;
+        Map.Direction? ahead = engine.PlannedDirectionFrom(at);
+        Map.Direction? opposite = Reverse(ahead);
+        return exits
+            .Where(e => e.Key.IsCardinal() && e.Key != ahead && !(avoid is { } a && e.Value.Equals(a)))
+            .Select(e => (Dir: e.Key, Risk: RoomRisk?.Invoke(e.Value) ?? (false, 0)))
+            .OrderBy(e => e.Risk.Boss)
+            .ThenBy(e => e.Risk.LairMax)
+            .ThenBy(e => e.Dir != opposite)
+            .Select(e => (Map.Direction?)e.Dir)
+            .FirstOrDefault();
+    }
+
+    // While a low-HP / MA run is on and a hostile is here: run again rather than turn
+    // and fight (user, 2026-09-30; report paradigm-20260930-192727). True when we're
+    // running (a leg underway or a new one started); false when there's nowhere to
+    // run, so combat fights back instead of standing there being hit.
+    public bool KeepRunning()
+    {
+        if (!IsGateFleeing) return false;
+        if (!_fleeLanded) return true;
+        HealthSettings s = _readSettings();
+        bool hpLow = s.RunIfBelowHp > 0 && _state.MaxHp > 0
+            && _state.Hp <= ResolveHpThreshold(s.HpThresholdMode, s.RunIfBelowHp);
+        bool maLow = s.RunIfBelowMa > 0 && _state.MaxMa > 0
+            && _state.Ma <= ResolveMaThreshold(s.MaThresholdMode, s.RunIfBelowMa);
+        if (!hpLow && !maLow) return false;
+        return TryFlee("a hostile is here and we're still below the run trigger", fromGates: true);
     }
 
     private static Map.Direction? Reverse(Map.Direction? d) => d switch

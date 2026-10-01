@@ -36,6 +36,31 @@ public sealed class SneakGuardTests
         Assert.Equal(SneakHold.None, w.Guard.Current);   // fighting now; nothing to keep
     }
 
+    // ShadowResting with a monster in the room — one combat would engage, Auto-Sneak
+    // on or off — holds anything that ends the sneak until the rest is done (user,
+    // 2026-09-30; report paradigm-20260930-193005).
+    [Fact]
+    public void ShadowRestBesideAMonster_HoldsUntilRested()
+    {
+        bool resting = true;
+        World w = new() { AutoSneak = false, Npc = true, Fighting = true };
+        w.Guard.SetShadowRestProbe(() => resting);
+        Assert.Equal(SneakHold.UntilRested, w.Guard.Current);
+        Assert.True(w.Guard.TakeIfHeld("invite bob"));
+
+        resting = false;                               // rest-max, or a monster attacked
+        w.Guard.Poll();
+        Assert.Equal(SneakHold.None, w.Guard.Current);
+    }
+
+    [Fact]
+    public void ShadowRestInAnEmptyRoom_HoldsNothing()
+    {
+        World w = new() { Npc = false };
+        w.Guard.SetShadowRestProbe(() => true);
+        Assert.Equal(SneakHold.None, w.Guard.Current);
+    }
+
     [Fact]
     public void SneakingPastNpcs_HoldsUntilARoomWithNone()
     {

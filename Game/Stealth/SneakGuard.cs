@@ -19,6 +19,9 @@ public enum SneakHold
     // can go out and we re-sneak straight after (a sneak won't take with any NPC in
     // the room).
     UntilClearRoom,
+    // ShadowResting stealthed with a monster in the room: anything that ends the sneak
+    // gives us away mid-rest, so hold until the rest reaches rest-max.
+    UntilRested,
 }
 
 // The one rule every sneak-breaking automation consults before it sends: gear
@@ -63,11 +66,20 @@ public sealed class SneakGuard
 
     public void SetWireSender(Action<string> send) => _send = send;
 
+    // True while a ShadowRest holds combat (HealthManager.ShadowRestHolding).
+    private Func<bool>? _shadowResting;
+
+    public void SetShadowRestProbe(Func<bool> shadowResting) => _shadowResting = shadowResting;
+
     public SneakHold Current
     {
         get
         {
             if (_backstabOwed()) return SneakHold.UntilBackstab;
+            // Not tied to Auto-Sneak: the user opted into ShadowRest itself (user,
+            // 2026-09-30; report paradigm-20260930-193005). A monster that attacks ends
+            // the ShadowRest, and this hold with it.
+            if (_shadowResting?.Invoke() == true && _npcHere()) return SneakHold.UntilRested;
             // In a fight the sneak is already gone (being attacked ends it), and a
             // heal held there would be held while we're hit.
             if (!_autoSneak() || _inCombat()) return SneakHold.None;
@@ -131,6 +143,7 @@ public sealed class SneakGuard
         SneakHold.UntilBackstab => "until the backstab fires",
         SneakHold.MoveInFlight => "while our sneaked move lands",
         SneakHold.UntilClearRoom => "sneaking past NPCs, until a room without any",
+        SneakHold.UntilRested => "ShadowResting beside a monster, until rested",
         _ => "nothing held",
     };
 }

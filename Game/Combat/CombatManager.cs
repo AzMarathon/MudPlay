@@ -341,6 +341,12 @@ public sealed partial class CombatManager : IDisposable
         _isFleeInFlight = isFleeInFlight;
     }
 
+    // HealthManager.KeepRunning — a low-HP / MA run is on and a hostile followed us:
+    // run on instead of opening a fight, unless there's nowhere to run (false), when
+    // we fight back rather than stand there being hit.
+    private Func<bool>? _keepRunning;
+    public void SetKeepRunning(Func<bool> keepRunning) => _keepRunning = keepRunning;
+
     // Our own move is in flight: sent, and the new room hasn't displayed yet
     // (RoomTracker Pending). Anything that "creeps into the room" in that gap arrived
     // in the room we're LEAVING — the server prints the new room only once we're in
@@ -1863,6 +1869,12 @@ public sealed partial class CombatManager : IDisposable
         if (_isFleeInFlight?.Invoke() == true)
         {
             _log?.Combat(LogCategory, "fleeing — not engaging on the way out");
+            _currentTarget = null;
+            return;
+        }
+        if (_keepRunning?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory, "still below the run trigger — running on, not turning to fight");
             _currentTarget = null;
             return;
         }

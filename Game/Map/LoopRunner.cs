@@ -380,6 +380,19 @@ public sealed class LoopRunner : IRecoverableEngine
         return _expandedSteps[_index] is MoveLoopStep move ? move.Direction : (Direction?)null;
     }
 
+    public Direction? PlannedDirectionFrom(RoomKey room)
+    {
+        if (_graph is null || _circleStartRoom is not { } here) return null;
+        foreach (LoopStep step in _expandedSteps)
+        {
+            if (step is not MoveLoopStep move) continue;
+            if (here.Equals(room)) return move.Direction;
+            if (_graph.GetRoom(here) is not { } r || !r.Exits.TryGetValue(move.Direction, out RoomExit exit)) return null;
+            here = exit.Target;
+        }
+        return null;
+    }
+
     public IReadOnlyList<Direction> PeekPlannedDirections(int count)
     {
         int n = _expandedSteps.Count;
