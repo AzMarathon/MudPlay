@@ -1038,6 +1038,25 @@ public sealed class RoomEntityClassifierTests
         Assert.Equal("giant rat", h.Classifier.Current.Value.Entities[0].ResolvedName);
     }
 
+    // Login with a stale saved room: the first display shows a monster, then the
+    // `rm` resync corrects the room. No move was sent, so the monster is still here.
+    [Fact]
+    public void PositionCorrection_NoMoveSentThisSession_KeepsRoster()
+    {
+        using TrackerHarness h = new();
+        h.AddMonster(1, "giant rat");
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Town Gates", new HashSet<Direction> { Direction.N }));
+        h.FeedAlsoHere("Also here: giant rat.");
+        Assert.Single(h.Observations);
+
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+
+        Assert.Equal(2, h.Observations.Count);
+        Assert.Equal("giant rat", h.Observations[^1].Entities.Single().ResolvedName);
+        Assert.Single(h.Classifier.Current!.Value.Entities);
+    }
+
     // ----- room-aware resolution (Pass 0) ----------------------------
 
     [Fact]

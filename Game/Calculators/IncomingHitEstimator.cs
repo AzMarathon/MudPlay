@@ -28,7 +28,9 @@ public readonly record struct PlayerDefenseProfile(
     // shows AC fractional (item AC is stored 10×, char AC rounded to 1 decimal). Ac
     // above is this floored, the whole number the to-hit formula consumes. See the
     // "Armour Class" note in GAME_MECHANICS.md.
-    double AcExact = 0);
+    double AcExact = 0,
+    // Resist percentages against a monster's spell damage, from the same sources.
+    ElementalResists Resists = default);
 
 // Shared source for "how likely is this monster to hit me right now" — the single
 // weighted incoming-hit figure Monster Intel's master list surfaces, extracted here
@@ -83,7 +85,10 @@ public static class IncomingHitEstimator
         bool shadow = totals.PlusShadowResist > 0 || buff.HasShadow;
         return new PlayerDefenseProfile(
             ac, dodge, protEvil, totals.PlusProtGood, shadow, totals.PlusVileWard, evil, armourType,
-            AcExact: acExact);
+            AcExact: acExact,
+            Resists: buff.Resists + new ElementalResists(
+                totals.PlusColdResist, totals.PlusFireResist, totals.PlusStoneResist,
+                totals.PlusLightningResist, totals.PlusWaterResist, totals.PlusPoisonResist));
     }
 
     // A monster's blended chance to land a hit on the player across ALL its physical

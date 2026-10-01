@@ -20203,7 +20203,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
+    "WitnessMessage": "A guardsman shouts out the time of day.\nA cheer of many voices can be heard in the distance.",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
@@ -20305,7 +20305,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
+    "WitnessMessage": "The large temple bell clangs loudly, echoing the time of day.\nThe smell of incense wafts faintly in the air.\nThe angelic sound of a choir floats down through the air.",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [

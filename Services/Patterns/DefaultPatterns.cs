@@ -430,8 +430,10 @@ public static class DefaultPatterns
         // a dark room never re-displays, so auto-combat never engaged it. "<name>
         // just arrived from …" is also a chat shape ("Bob just arrived from the
         // store."), so that branch requires a real direction word.
+        // Some monsters "enter" instead: "A giant black ooze enters from north.", "A
+        // giant war dog enters the room from the south.".
         yield return new RegexPattern(KnownPatterns.RoomEntryArrival,
-            @"^(?!You notice )(?<name>.+?) (?:\w+ in(?:to)?(?: the(?: room)?)? from (?:the )?"
+            @"^(?!You notice )(?<name>.+?) (?:(?:\w+ in(?:to)?(?: the(?: room)?)?|enters(?: the room)?) from (?:the )?"
           + @"|just arrived from (?:the )?(?=(?:northeast|northwest|southeast|southwest|north|south|east|west|upwards|downwards|up|down|above|below|nowhere)[.!]))"
           + @"(?<direction>[\w-]+)[.!]\s*$");
 
@@ -442,9 +444,26 @@ public static class DefaultPatterns
         // the room". Anchored to a leading article (how monster arrivals lead) + that
         // ending so it can't collide with the directional RoomEntryArrival above (which
         // ends in "from <dir>") or with chat / room-title lines. CombatManager keys a
-        // room-refresh off it; no name group because nothing consumes one.
+        // room-refresh off it; no name group because nothing consumes one. The other
+        // endings are the Stock monsters' own appear lines that carry neither "into the
+        // room" nor a direction ("A shade materializes in the room.", "A dragon flies
+        // down from above!", "A barrow wight steps out of the shadows!"), plus the
+        // shade's follow line. Exact phrases, so a spell's flavour can't match.
+        // A named monster — usually one on a regen timer — arrives without an article:
+        // "Commander Markus walks into the room.". Any capitalized lead is taken for
+        // that ending, bar our own "You …" and anything quoted or channel-prefixed.
+        // The greater hellion's arrival is worded as the Champion of Blood's death.
         yield return new RegexPattern(KnownPatterns.RoomSpawnArrival,
-            @"^(?:A|An|The) .+ into the room[.!]\s*$");
+            @"^(?:(?!You )[A-Z][^:""]* into the room"
+          + @"|As the Champion of Blood falls, a tower of fire whirls about his body"
+          + @"|(?:A|An|The) .+ (?:into the area"
+          + @"|materializes (?:in the room|from the shadows|with a metallic shriek|soundlessly beside you|out of the shadows next to you)"
+          + @"|appears (?:in a blinding flash|in flash of light|in a burst of flame|from the waters|right behind you)"
+          + @"|(?:flies|flaps) down from above|crashes through the wall|burrows in from the cavern wall"
+          + @"|crawls out of the .+ corpse|steps out of the shadows|slithers out of the dark pool"
+          + @"|arises from its place of rest|rises from its rest"
+          // A monster that followed us in: "A sand worm crawls after you!".
+          + @"|\w+ after you(?:[ ,].+)?))[.!]\s*$");
 
         // Reactive look-back — another player `look`ed at us. Wording is
         // user-confirmed (not in any imported game-data table); keyed on the
@@ -478,8 +497,14 @@ public static class DefaultPatterns
         // <dir>." / "just left upwards." / "just left downwards." (no "to the" on the
         // vertical pair). Missed, the engine kept swinging at a monster that had gone.
         // Same real-direction requirement — "I just left downtown." is chat.
+        // Many monsters leave another way: "<verb> out of the room to <dir>." (creeps,
+        // crawls, oozes, sneaks …), "<verb> off to the <dir>." (stomps, walks, flies,
+        // "drags itself off"), "leaves to", "exits to", "follows a web to the". The
+        // "off to" family reads like chat too ("Bob wanders off to the store."), so it
+        // needs a real direction as well.
         yield return new RegexPattern(KnownPatterns.RoomEntryDeparture,
-            @"^(?<name>.+?) (?:(?:(?:walks out of|exits) the room|\w+ out) to (?:the )?"
+            @"^(?<name>.+?) (?:(?:\w+ out of the room|exits the room|\w+ out) to (?:the )?"
+          + @"|(?:\w+ (?:itself )?off|leaves|exits|follows a web) to (?:the )?(?=(?:northeast|northwest|southeast|southwest|north|south|east|west|upwards|downwards|up|down|above|below)[.!])"
           + @"|just left (?:to (?:the )?)?(?=(?:northeast|northwest|southeast|southwest|north|south|east|west|upwards|downwards|up|down|above|below|nowhere)[.!]))"
           + @"(?<direction>[\w-]+)[.!]\s*$");
 

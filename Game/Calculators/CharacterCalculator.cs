@@ -745,6 +745,7 @@ public static class CharacterCalculator
             case 65: totals.PlusStoneResist += abilVal; statKey = "Stone Resist"; break;
             case 66: totals.PlusLightningResist += abilVal; statKey = "Lightning Resist"; break;
             case 147: totals.PlusWaterResist += abilVal; statKey = "Water Resist"; break;
+            case 21: totals.PlusPoisonResist += abilVal; break;
             case 9: totals.PlusShadowResist += abilVal; statKey = "Shadow Resist"; break;
 
             case 24: totals.PlusProtEvil += abilVal; statKey = "Prot Evil"; break;

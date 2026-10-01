@@ -7,8 +7,9 @@ namespace MudPlay.Game.Spells;
 //   ProtEvil    — summed Prot-Evil ward (abil 24) — conditional (vs evil only).
 //   HasShadow   — any buff grants the Shadow property (abil 9), a flat +10 AC.
 //   HasVileWard — any buff grants a vile ward (abil 1113), scaling with evil.
+//   Resists     — summed elemental / poison resist (abil 3, 5, 65, 66, 147, 21).
 public readonly record struct BuffDefense(
-    int Ac, double Dr, int ProtEvil, bool HasShadow, bool HasVileWard)
+    int Ac, double Dr, int ProtEvil, bool HasShadow, bool HasVileWard, ElementalResists Resists = default)
 {
-    public bool Any => Ac != 0 || Dr != 0 || ProtEvil != 0 || HasShadow || HasVileWard;
+    public bool Any => Ac != 0 || Dr != 0 || ProtEvil != 0 || HasShadow || HasVileWard || Resists != default;
 }

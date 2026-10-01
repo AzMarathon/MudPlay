@@ -3283,6 +3283,8 @@ public partial class MainWindowViewModel : ObservableObject
                 // and a resume gap longer than the longest buff clears them then; so a
                 // brief manual disconnect keeps the recast clock instead of restarting it.
                 AppServices.Current.CastDirector.PauseBuffTimers();
+                // The reconnect's splash and login menu ride the same line extractor.
+                AppServices.Current.MessageCandidateWatcher.NotifyLeftGame();
 
                 // A remote @relog forces the dial-back unconditionally —
                 // the sender explicitly asked to relog, so we bypass the

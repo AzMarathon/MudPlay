@@ -135,6 +135,33 @@ public static class SpellDamageCalculator
         return eligible ? System.Math.Min(98, System.Math.Max(1, magicResist) / 2) : 0;
     }
 
+    // How a player's own magic resist changes the damage of a monster's Damage(-MR)
+    // spell, in percent (negative = takes less): the same partial cut a monster gets.
+    public static double PlayerMagicResistDamagePercent(int magicResist, bool antimagic, RealmType realm)
+    {
+        const long probe = 10_000;
+        return (MagicResistCut(probe, System.Math.Max(1, magicResist), antimagic, realm) - probe) / 100.0;
+    }
+
+    // The resist percent a player brings against a monster's spell of the given
+    // damage type. Stock cuts every type, poison (by ImmuPoison) and vulnerabilities
+    // included; Paradigm cuts the five elements only, and only by a positive resist.
+    public static int PlayerElementalResist(ElementalResists resists, SpellDamageElement element, RealmType realm)
+    {
+        int value = resists.For(element);
+        if (realm != RealmType.ParaMud) return value;
+        return element == SpellDamageElement.Poison ? 0 : System.Math.Max(0, value);
+    }
+
+    // The partial cut before its cap (50%, or 75% for an AntiMagic character), so a
+    // readout can say when the cap is what's limiting it.
+    public static int UncappedMagicResistCut(int magicResist, bool antimagic) =>
+        antimagic ? magicResist / 2 : (magicResist - 50) / 2;
+
+    // The ceiling on a player's chance (M.R./2 percent) to resist a monster's spell
+    // outright: Stock stops a player at 97 (a monster at 98); Paradigm at 98.
+    public static int PlayerFullResistCap(RealmType realm) => realm == RealmType.ParaMud ? 98 : 97;
+
     private static long ElementalCut(long damage, int elementalResist, RealmType realm) =>
         realm == RealmType.ParaMud
             ? (long)System.Math.Round(damage - damage * (elementalResist / 100.0))

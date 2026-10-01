@@ -1964,7 +1964,23 @@ How one damage spell cast against a monster is worked out.
 - **Not modeled today:** a resisted 0 / heal cast produces no `no effect` line, so when game data
   doesn't show the resist, the runtime 0 / negative hit line isn't acted on — the engine can keep
   re-casting a spell that heals the monster.
+- **A player's own resists cut a monster's spell the same way** — the ability codes in the table
+  above, read off the character (gear, race, class, quests, active buffs).
+  - **Stock** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_monster_cast`, resist switch @ `0x4280c1`,
+    applied @ `0x428230`)*: `damage × (100 − resist) / 100`, truncated, straight after the roll and
+    before the magic-resist cut, on every damage code. `AttType` 6 reads ImmuPoison (21) — see *Poison
+    (`AttType 6`) — immunity and damage resist*. The value is signed, so a negative resist adds damage.
+    The switch runs only for a spell whose record Type (`+0xc4`; names `Auto-Combat`, `Poison`,
+    `Change me`, `General`) is below 3 — a `General` spell skips it. That field is not in the imported
+    Spells table.
+  - **Paradigm** *([OBSERVED] 2026-09-30, MMUD-Explorer `clsMonsterAttackSim`, no realm branch)*: the
+    cut comes after the magic-resist cut, applies only to the five elements (not Normal 4 or Poison 6),
+    and only when the resist is above 0.
 - **Client use:**
+  - Monster Intel's per-spell resist line (`MonsterIntelViewModel.SpellResistNote`) applies the
+    character's resist for the spell's `AttType` through `SpellDamageCalculator.PlayerElementalResist`
+    and `AfterTargetResists`; the totals come from `IncomingHitEstimator.BuildLiveDefense`
+    (`PlayerDefenseProfile.Resists`: gear, race, class, completed quests, configured buffs).
   - Elemental ≥100% resist is pre-empted via `MonsterResistIndex`; `CombatSpellChooser` explicitly
     resist-blocks *elemental* spells only (see also *Magic Resist (M.R.) and `TypeOfResists`*).
 
@@ -2008,7 +2024,22 @@ How one damage spell cast against a monster is worked out.
     ≥100% elemental resist is safely pre-emptable.
   - Among Normal spells, `magic missile` is `TypeOfResists 0` (never rolled-resisted) while `harm` is
     `TypeOfResists 2`.
+- **A player hit by a monster's spell gets the same two effects from their own Magic Res** *(Stock
+  [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_monster_cast`; Paradigm [OBSERVED] 2026-09-30,
+  MMUD-Explorer `clsMonsterAttackSim` `CalcResistedDamage` / `IsSpellResisted`, no realm branch)*.
+  - **Partial cut, Damage(-MR) (17) only** (Stock handler @ `0x4288f0`): an AntiMagic character
+    (ability 51) takes `MR/2`% less, 0–75; anyone else `(MR − 50)/2`% less, capped at 50; with no cut
+    and no AntiMagic the hit grows by `(50 − MR)%`. Applied after the elemental resist (@ `0x428230`).
+  - **Full resist** (Stock @ `0x427e92`): rolled only after a successful cast, when `TypeOfResists` is
+    2, or 1 and the player has AntiMagic. The chance is `MR/2`%, **capped at 97 for a player on Stock**
+    (`cmp edx,0x61`; a monster target caps at 98). MMUD-Explorer's sim caps it at 98 (MR 196), which
+    the client uses for Paradigm. Wire text: `You resisted %s's cast of %s.`
 - **Client use:**
+  - Character Info's Magic Res tooltip (`CharacterInfoSectionViewModel.ComputeMagicResTip`) and Monster
+    Intel's per-spell note on the Attacks rows (`MonsterIntelViewModel.SpellResistNote`) show the cut and
+    the full-resist chance for the character's current Magic Res, via
+    `SpellDamageCalculator.PlayerMagicResistDamagePercent` / `PlayerFullResistCap`; a monster spell
+    open to neither reads "ignores MR". AntiMagic is read from the class record only.
   - The Game Data spell view's interactive damage calculator (`SpellDamageCalculator`) implements the
     reduction in each realm's order — see *Spell damage — Stock vs Paradigm*. Below MR 50 the hit is
     amplified by `(50 − MR)%`. The probabilistic full-resist chance is shown separately, never folded
@@ -2837,7 +2868,20 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 - **Arrival, directionless:** `"<mob> just arrived from <dir|nowhere>."`.
 - **Departure:** `"<mob> just left to the <dir>."`, and for the vertical pair the direction is an adverb with no "to the": `"… just left upwards."` / `"… just left downwards."` (players leave with the same wording — `Fujin just left upwards.` is in our own captures).
 
+**A monster's own movement message is three lines: appear, leave, follow** *(Stock [OBSERVED] 2026-10-01, the 1.11p message table decoded from the game's DAT files — 282 such messages; Paradigm's own monsters are not in it)*
+
+- **Appear** is the arrival line. Beyond `<verb> in(to the room) from <dir>` the table carries:
+  - `enters from <dir>.` / `enters the room from <dir>.` (`A giant black ooze enters from %s.`, `A giant war dog enters the room from %s.`);
+  - direction-less spawns, each a fixed phrase: `materializes in the room.` (shade), `materializes from the shadows!`, `materializes with a metallic shriek!`, `materializes soundlessly beside you!`, `materializes out of the shadows next to you!`, `appears in a blinding flash!`, `appears in flash of light!`, `appears in a burst of flame!`, `appears from the waters.`, `flies down from above!` / `flaps down from above!`, `crashes through the wall!`, `burrows in from the cavern wall!`, `crawls out of the <monster>'s corpse!`, `steps out of the shadows!`, `slithers out of the dark pool.`, `arises from its place of rest.`, `rises from its rest.`, and `<verb> into the area` (`runs` / `stomps` / `shuffles`).
+  - a named monster arrives without an article: `Commander Markus walks into the room.` *([CONFIRMED] 2026-10-01, user: these usually belong to monsters on a regen timer)*;
+  - the greater hellion's appear line is worded as its predecessor's death: `As the Champion of Blood falls, a tower of fire whirls about his body!`.
+- **Not movement, though they sit in the same table slot** *(user, 2026-10-01: leave them out)*: `The %s swoops towards you!`, `The %s %smoves towards you!` (attack moves), and `The statue of the dark-elf animates, pulls out a key, and gives it to you.` (a quest hand-over).
+- **Leave** names the direction last. Beyond `<verb> out to <dir>`: `<verb> out of the room to <dir>.` (creeps, crawls, scuttles, oozes, sneaks, stomps), `<verb> off to (the) <dir>.` (the commonest: walks, stomps, flies, scurries, lopes, `drags itself off`), `leaves to (the) <dir>`, `exits to the <dir>!`, `follows a web to the <dir>.`.
+- **Follow** is printed when it comes after you into the next room: mostly `<verb> after you!` (often with a tail — `with a roar!`, `, hissing furiously!`), also `follows you!`, `follows you into the room!`, `<verb> you in from the <dir>!`, `<verb> into the room from the <dir>.`.
+- **The shade's set** *([CONFIRMED] 2026-10-01, user: the appear line is the Crypt shades' spawn message; export `unrecognized-lines-20260930-234907`)*: `A shade materializes in the room.` / `The shade vanishes from the room.` / `The shade appears right behind you!`.
+
 - **Client use:**
+  - `RoomEntryArrival`, `RoomSpawnArrival` and `RoomEntryDeparture` (`DefaultPatterns.cs`) carry these shapes; the spawn phrases are matched exactly, `into the room` is taken from any capitalized lead except `You`, and the `off to` / `leaves to` / `exits to` departures need a real direction word. **Client policy** (user, 2026-10-01): one-off appear lines like the Champion of Blood's are added as they are reported; a user can also cover one with a custom trigger. A follow line led by `The` already reads as the monster acting on us (`combat.mob-attacks-you`); one led by `A` / `An` rides `RoomSpawnArrival`. `The shade vanishes from the room.` has no direction and is not handled.
   - `RoomEntryWatcher.OnLineScan` recognizes the unstructured custom spawns the two regex patterns (`RoomEntryArrival` and `RoomSpawnArrival`, in `DefaultPatterns.cs`) miss — on a line no structured pattern claims, a run of fully-yellow-indexed words that resolves to a known monster (not already in the room) is appended as an arrival, tripping the combat gate a round before the spawn's first swing. Keys on the palette index (3/11), never the RGB.
   - `RoomEntryArrival` / `RoomEntryDeparture` match the generic lines; the "just arrived" / "just left" branches require a real direction word so chat of the same shape ("I just left downtown.") stays out.
   - Missing the compass arrival was permanent in a **dark** room, which never re-displays an `Also here:` to correct the roster, so auto-combat never engaged the monster.

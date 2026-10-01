@@ -571,6 +571,19 @@ public sealed class RoomEntityClassifier : IDisposable
             return;
         }
 
+        // No move has gone out this session, so this isn't a step into another room:
+        // the tracker corrected where it thinks we stand (the login `rm` resync
+        // replacing a stale saved room). Everything in Current was seen in the room
+        // we're in. Wiping it dropped the Combat gate mid-fight, and auto-sneak then
+        // sent `sn` at a monster that was attacking us (report
+        // paradigm-20260930-231958). Re-emit so room-keyed gates re-decide.
+        if (_roomTracker is { LastMoveSentAt: null } && Current is { Entities.Count: > 0 })
+        {
+            _log?.Debug(LogCategory, "kept roster across a position correction — no move sent this session");
+            ReemitCurrent();
+            return;
+        }
+
         // Wire order within a room display is name → "Also here:" →
         // "Obvious exits:", and RoomTracker only CONFIRMS the move on the
         // exits line. So by the time this confirmed transition fires, the

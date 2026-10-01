@@ -146,4 +146,38 @@ public sealed class SpellDamageCalculatorTests
         SpellFormulaInput buff = new() { Number = 10, Abilities = [new SpellAbility(2, 10)] };
         Assert.False(SpellDamageCalculator.IsDamageSpell(buff));
     }
+
+    // A player's own magic resist against a monster's Damage(-MR) spell: the cut is
+    // (MR-50)/2 capped at 50, MR/2 capped at 75 for an AntiMagic class, and a hit is
+    // amplified below MR 50.
+    [Theory]
+    [InlineData(55, false, -2)]
+    [InlineData(50, false, 0)]
+    [InlineData(30, false, 20)]
+    [InlineData(200, false, -50)]
+    [InlineData(100, true, -50)]
+    [InlineData(200, true, -75)]
+    public void PlayerMagicResistDamagePercent_BothRealms(int mr, bool antimagic, double expected)
+    {
+        Assert.Equal(expected, SpellDamageCalculator.PlayerMagicResistDamagePercent(mr, antimagic, RealmType.Stock));
+        Assert.Equal(expected, SpellDamageCalculator.PlayerMagicResistDamagePercent(mr, antimagic, RealmType.ParaMud));
+    }
+
+    // A player's elemental resist against a monster's spell: Stock cuts every damage
+    // type (poison by ImmuPoison, vulnerabilities included); Paradigm cuts only the
+    // five elements, and only by a positive resist.
+    [Fact]
+    public void PlayerElementalResist_FollowsTheRealm()
+    {
+        ElementalResists r = new(Cold: -20, Fire: 25, Stone: 0, Lightning: 0, Water: 0, Poison: 50);
+
+        Assert.Equal(25, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Fire, RealmType.Stock));
+        Assert.Equal(-20, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Cold, RealmType.Stock));
+        Assert.Equal(50, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Poison, RealmType.Stock));
+        Assert.Equal(0, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.None, RealmType.Stock));
+
+        Assert.Equal(25, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Fire, RealmType.ParaMud));
+        Assert.Equal(0, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Cold, RealmType.ParaMud));
+        Assert.Equal(0, SpellDamageCalculator.PlayerElementalResist(r, SpellDamageElement.Poison, RealmType.ParaMud));
+    }
 }

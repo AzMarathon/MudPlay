@@ -77,6 +77,10 @@ public sealed class MessageCandidateWatcher : IDisposable
     // which is told apart from a spell line only by its all-green colouring plus a
     // known-player check. Composed in AppServices from ActionEmoteClassifier.
     private readonly Func<LineExtractor.EmittedLine, bool>? _isRecognizedLine;
+    // True for a line that opens a listing only game data can identify — the bare item
+    // name that leads an item's `look` description. The fixed-wording headers are
+    // BenignChatterMatcher's.
+    private readonly Func<string, bool>? _isListingHeader;
     private readonly LogService? _log;
 
     // Built from MessageStore on every CollectionChanged — trimmed text of every
@@ -146,7 +150,8 @@ public sealed class MessageCandidateWatcher : IDisposable
         LogService? log = null, Func<string, bool>? isKnownRoomName = null,
         Func<string, bool>? isRecognizedByDirectParser = null,
         Func<string, bool>? isNonCasterPhysicalAction = null,
-        Func<LineExtractor.EmittedLine, bool>? isRecognizedLine = null)
+        Func<LineExtractor.EmittedLine, bool>? isRecognizedLine = null,
+        Func<string, bool>? isListingHeader = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(messages);
@@ -159,6 +164,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         _isRecognizedByDirectParser = isRecognizedByDirectParser;
         _isNonCasterPhysicalAction = isNonCasterPhysicalAction;
         _isRecognizedLine = isRecognizedLine;
+        _isListingHeader = isListingHeader;
         _log = log;
 
         _templates = new MessageTemplateIndex(messages.Messages);
@@ -186,6 +192,15 @@ public sealed class MessageCandidateWatcher : IDisposable
     // in AppServices). Gates capture on so the pre-game stream — splash, BBS login
     // menu / banner, connect status — never stages candidates.
     public void NotifyInGame() => _inGame = true;
+
+    // The link dropped. The same extractor carries the reconnect's splash and login
+    // menu, so capture holds again until the next in-game prompt.
+    public void NotifyLeftGame()
+    {
+        _inGame = false;
+        _pending = null;
+        EndBlocks();
+    }
 
     // Note a command the user just sent so its echo (the server bounces typed input
     // back) isn't staged as an unrecognized line. Called from SendUserInput next to
@@ -291,7 +306,8 @@ public sealed class MessageCandidateWatcher : IDisposable
     private void OnLine(LineExtractor.EmittedLine line)
     {
         if (!Enabled) return;
-        if (line.IsPromptLine) return;
+        // A prompt closes whatever listing was running.
+        if (line.IsPromptLine) { EndBlocks(); return; }
         // Before the game: splash animation, BBS login menu / banner, and the
         // client's connect / import status. Nothing there is a server message.
         if (!_inGame) return;
@@ -325,23 +341,21 @@ public sealed class MessageCandidateWatcher : IDisposable
         // be death flavour, so stage it.
         CommitPending();
 
+        // Listings and wrapped room rows: recognized by where they sit, not by text.
+        if (IsBlockLine(text, line.Timestamp)) return;
+        if (IsOwnActionReply(text, line.Timestamp)) return;
+
         // The `br` broadcast-channel status ("The following users are on channel N:"
         // then the members). Run first so the one-line member-list gate is maintained
         // for every line — the members are bare player names, suppressed ONLY right
         // after the header, and a non-member line clears the gate without being touched.
         if (IsChannelListLine(text)) return;
 
-        // Known from game data, so never a review candidate.
-        if (Light.LightModel.IsRoomLightPhrase(text)) return;
-        if (_knownLines.Contains(text)) return;
-        if (IsKnownRoomName(text)) return;
+        if (IsKnownText(line, text)) return;
         if (_isRecognizedByDirectParser?.Invoke(text) == true) return;
         // Colour-aware: a BBS action / emote reads like any other sentence in plain text,
         // so it's told apart by the wire's all-green colouring (plus a known-player check).
         if (_isRecognizedLine?.Invoke(line) == true) return;
-        if (MatchesAppliedEndsWith(text)) return;
-        if (_templates.Matches(text)) return;
-        if (_router.AnyPatternMatches(line)) return;
         // Last, because it's the only check that consults the live roster and game
         // data: an attack shape that only a class lookup can tell from a spell.
         if (_isNonCasterPhysicalAction?.Invoke(text) == true) return;
@@ -384,6 +398,114 @@ public sealed class MessageCandidateWatcher : IDisposable
             : (null, null);
         // Held rather than staged — see the death-flavour rule at the top of OnLine.
         _pending = new PendingCandidate(text, now, map, room);
+    }
+
+    // A server listing — shop stock, a top list, the `profile` readout, Paradigm's
+    // `abil` tables, a gang roster, an item's or a room's description — runs from
+    // its header to the next prompt. Its rows are free text no pattern could describe,
+    // and the burst cap only stops them after the first few, so the header opens a
+    // block that swallows the rest. A room display's block closes on its exits line.
+    private bool _inListing;
+
+    // An "Also here:" / "You notice" room row that wrapped: the continuation rows are
+    // bare monster or item names ("guardsman, large guardsman.") up to the one that
+    // ends the sentence.
+    private bool _inWrappedList;
+    private DateTimeOffset _lastBlockLine;
+
+    private void EndBlocks()
+    {
+        _inListing = false;
+        _inWrappedList = false;
+    }
+
+    private bool IsBlockLine(string text, DateTimeOffset now)
+    {
+        // A statline the client can't read never flags its prompt, so a pause ends
+        // the block as well.
+        if ((_inListing || _inWrappedList) && now - _lastBlockLine > BurstWindow) EndBlocks();
+
+        if (_inWrappedList)
+        {
+            _lastBlockLine = now;
+            if (text.EndsWith('.')) _inWrappedList = false;
+            return true;
+        }
+        if (BenignChatterMatcher.IsRoomListRow(text))
+        {
+            if (BenignChatterMatcher.RoomListRowWraps(text))
+            {
+                _inWrappedList = true;
+                _lastBlockLine = now;
+            }
+            return true;
+        }
+        if (_inListing)
+        {
+            _lastBlockLine = now;
+            if (text.StartsWith("Obvious exits:", StringComparison.Ordinal)) _inListing = false;
+            return true;
+        }
+        if (BenignChatterMatcher.IsListingHeader(text) || IsKnownRoomName(text)
+            || _isListingHeader?.Invoke(text) == true)
+        {
+            _inListing = true;
+            _lastBlockLine = now;
+            return true;
+        }
+        return false;
+    }
+
+    // "You pull the large iron lever." answers our own `pull lever`: a room command's
+    // reply leads with the verb just sent. The game data doesn't carry these texts, so
+    // the command is the only thing that identifies them. A cast never matches — its
+    // command is the spell's short code, not a verb the reply repeats.
+    private bool IsOwnActionReply(string text, DateTimeOffset now)
+    {
+        if (!text.StartsWith("You ", StringComparison.Ordinal)) return false;
+        int end = text.IndexOf(' ', 4);
+        if (end < 0) return false;
+        ReadOnlySpan<char> verb = text.AsSpan(4, end - 4);
+        foreach (KeyValuePair<string, DateTimeOffset> kv in _recentCommands)
+        {
+            if (now - kv.Value > EchoWindow) continue;
+            int space = kv.Key.IndexOf(' ');
+            if (space <= 0) continue;
+            if (verb.Equals(kv.Key.AsSpan(0, space), StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    // Recognized from the catalogues and fixed shapes alone — nothing that depends on
+    // the moment the line arrived (its colour, a parser mid-capture, the last command).
+    private bool IsKnownText(LineExtractor.EmittedLine line, string text) =>
+        Light.LightModel.IsRoomLightPhrase(text)
+        || _knownLines.Contains(text)
+        || IsKnownRoomName(text)
+        || BenignChatterMatcher.IsBenign(text)
+        || MatchesAppliedEndsWith(text)
+        || _templates.Matches(text)
+        || _router.AnyPatternMatches(line);
+
+    // Drop staged lines the catalogues have since learned — a new message record, a
+    // new pattern or noise shape — so the queue heals after an update instead of
+    // carrying them until someone dismisses each one. Dismissed rows stay: they are
+    // the user's verdict and keep the line from re-staging. Returns how many went.
+    public int PruneRecognized()
+    {
+        List<string> gone = new();
+        foreach (MessageCandidateRecord c in _candidates.Candidates)
+        {
+            if (c.Dismissed) continue;
+            string text = c.RawText.Trim();
+            var line = new LineExtractor.EmittedLine(
+                text, Array.Empty<CellAttributes>(), c.LastSeenAt, IsPromptLine: false);
+            if (IsKnownText(line, text)) gone.Add(c.Id);
+        }
+        foreach (string id in gone) _candidates.Remove(id);
+        if (gone.Count > 0)
+            _log?.Info(LogCategory, $"un-staged {gone.Count} line(s) the catalogues now recognize.");
+        return gone.Count;
     }
 
     // True while consuming the `br` broadcast-channel member list — set by the header,

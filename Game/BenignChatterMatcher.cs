@@ -15,7 +15,10 @@ public static partial class BenignChatterMatcher
 {
     // A line that's known benign non-spell chatter: a player departure, disconnect,
     // follow notice, toll payment, an empty self-say, an "Also here:" roster row, the
-    // suicide-password advisory block, or a regen / illumination status label.
+    // suicide-password advisory block, a regen / illumination status label, or one of
+    // the fixed-wording lines below that some parser reads without a router pattern
+    // (bank, level-up, death and corpse, `profile` and `abil` rows, channel and gang
+    // notices, the day cycle).
     public static bool IsBenign(string text)
     {
         if (string.IsNullOrEmpty(text)) return false;
@@ -26,7 +29,47 @@ public static partial class BenignChatterMatcher
             || EmptySayRx().IsMatch(text)
             || AlsoHereRx().IsMatch(text)
             || SuicideAdvisoryRx().IsMatch(text)
-            || StatusLabelRx().IsMatch(text);
+            || StatusLabelRx().IsMatch(text)
+            || !HasLetterOrDigit(text)
+            || BankRx().IsMatch(text)
+            || OwnStateRx().IsMatch(text)
+            || LevelUpRx().IsMatch(text)
+            || DeathAndCorpseRx().IsMatch(text)
+            || ProfileRowRx().IsMatch(text)
+            || StatAllRowRx().IsMatch(text)
+            || MonsterCastFailedRx().IsMatch(text)
+            || ChannelRx().IsMatch(text)
+            || GangRx().IsMatch(text)
+            || DayCycleRx().IsMatch(text)
+            || QuestFlagRowRx().IsMatch(text)
+            || MiscRx().IsMatch(text)
+            || ListingHeaderRx().IsMatch(text)
+            || ListingRowRx().IsMatch(text)
+            || UnreadPromptRx().IsMatch(text);
+    }
+
+    // The first line of a server listing whose rows are free text: the shop stock
+    // table, a top list, the `set` help, the `profile` readout, Paradigm's `abil` readout,
+    // a gang roster. The watcher skips from here to the next prompt.
+    public static bool IsListingHeader(string text) =>
+        !string.IsNullOrEmpty(text) && ListingHeaderRx().IsMatch(text);
+
+    // An "Also here:" or "You notice" room row. A long one wraps, and the rows after
+    // it are bare names the watcher skips until the sentence ends.
+    public static bool IsRoomListRow(string text) =>
+        text.StartsWith("Also here:", StringComparison.Ordinal)
+        || text.StartsWith("You notice ", StringComparison.Ordinal);
+
+    // Whether a room row stopped mid-list (no closing punctuation), so more follows.
+    public static bool RoomListRowWraps(string text) =>
+        text.Length > 0 && text[^1] is not ('.' or '!' or '?');
+
+    // Splash art and table rules ("------", "-=-=-=-") carry no words at all.
+    private static bool HasLetterOrDigit(string text)
+    {
+        foreach (char c in text)
+            if (char.IsLetterOrDigit(c)) return true;
+        return false;
     }
 
     // Another player changing gear ("X wears / removes <item>!"). Roster-gated: only a
@@ -80,6 +123,88 @@ public static partial class BenignChatterMatcher
 
     [GeneratedRegex(@"^(?:Regen Time|Room Illu):\s", RegexOptions.CultureInvariant)]
     private static partial Regex StatusLabelRx();
+
+    [GeneratedRegex(
+        @"^(?:Item\s{2,}Quantity\s{2,}Price$|Top .+ of the Realm\b|The SET command is used to change|Player ID:\s+\d+$|HP Regen:\s+\S+\s+AC vs Evil:|.+ members \(\d+\)$)",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex ListingHeaderRx();
+
+    // Rows of those listings that are recognizable on their own, for one that lands
+    // outside its block: an `abil` attack or spell row and their column heads, a
+    // top-list row, a shop stock row, a gang roster row, a `set` help row.
+    [GeneratedRegex(
+        @"^(?:(?:Attack|Bash|Smash|Backstab|Punch|Kick|Jumpkick)\s+[\d.]+\s+\d+\s+\d+\s+\d+\b.*"
+      + @"|Type\s+Swings\s+Accy\b.*|Short Name\s+Casts\s+Diff\b.*"
+      + @"|\w{2,5}\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+"
+      + @"|Rank\s+Name\s+Class\b.*|\d+\. \S.*\s{2,}\d+"
+      + @"|.+\s{2,}\d+\s{2,}\d+ [a-z]+ [a-z]+(?: \(.+\))?"
+      + @"|.+\s{2,}\d+ \w+ \w+\s+- (?:Online|Offline)\b.*"
+      + @"|Set \w+\s+- .+)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex ListingRowRx();
+
+    // The bank's balance readout and the deposit / withdraw acknowledgements.
+    [GeneratedRegex(
+        @"^(?:Your balance at .+ is:|On deposit: \d+ .+ \[.+\]|You (?:deposit|withdrew) \d+ .+\.)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex BankRx();
+
+    // Our own posture and gear acknowledgements, and the `set` command's "Done.".
+    [GeneratedRegex(
+        @"^(?:You are now resting\.|You are no longer sneaking\.|You are now holding .+\.|Done\.)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex OwnStateRx();
+
+    [GeneratedRegex(
+        @"^(?:Welcome to level \d+!|You gain \d+ additional lives\.|You gain \d+ CPs)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex LevelUpRx();
+
+    [GeneratedRegex(
+        @"^(?:But, due to a miracle, you have been saved\.|You have \d+ lives left\.|You begin to pick through the corpse of .+\.\.\.|You have recovered the corpse of .+\.)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex DeathAndCorpseRx();
+
+    // A row of the `profile` readout, for one that lands outside its block.
+    [GeneratedRegex(
+        @"^(?:Player ID|Life for this CHAR|Display Mode|Statusline|Broadcast Channel|Talking speed|Follow Mode|Receive Items|Warn on Evil|Block Entrance Msg):?\s{2,}\S",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex ProfileRowRx();
+
+    // A label row of Paradigm's `abil` readout, likewise.
+    [GeneratedRegex(
+        @"^(?:(?:HP Regen|MA Regen|Max HP|Encum|vs Good|Crits|Spell Damage):\s+\S|(?:Attacks|Spells):$)",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex StatAllRowRx();
+
+    // Paradigm's wording for a monster's spell that failed or was resisted. It names
+    // the spell, so it is never the spell's own message.
+    [GeneratedRegex(@"^.+ attempts to cast .+ on you, but (?:fails\.|you resist!)$", RegexOptions.CultureInvariant)]
+    private static partial Regex MonsterCastFailedRx();
+
+    [GeneratedRegex(@"^\w[\w '-]* just (?:joined|left) your channel \(\d+\)$", RegexOptions.CultureInvariant)]
+    private static partial Regex ChannelRx();
+
+    [GeneratedRegex(@"^(?:.+ has invited you to join .+\.|You have joined the gang .+\.)$", RegexOptions.CultureInvariant)]
+    private static partial Regex GangRx();
+
+    [GeneratedRegex(
+        @"^A new day (?:begins to approach\.|is fast approaching\.|is imminent\.|has come!)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex DayCycleRx();
+
+    // A quest-flag readout row: "TarlChain(210)             0".
+    [GeneratedRegex(@"^\w+\(\d+\)\s+-?\d+$", RegexOptions.CultureInvariant)]
+    private static partial Regex QuestFlagRowRx();
+
+    // One player sizing up another, and a `get` for coins that aren't there.
+    [GeneratedRegex(@"^(?:\w+ looks \w+ up and down\.|You don't see any [\w ]+)$", RegexOptions.CultureInvariant)]
+    private static partial Regex MiscRx();
+
+    // A default-shaped statline the active pattern didn't read (it differs by a
+    // space, say), with whatever was typed after it, and a typed `set statline`.
+    [GeneratedRegex(@"^(?:\[HP=\d+/\d+[^\]]*\]\s*:|set statline \S)", RegexOptions.CultureInvariant)]
+    private static partial Regex UnreadPromptRx();
 
     // The `br` broadcast-channel status: a header followed by the member list. The list
     // is bare player names, indistinguishable from other text on its own, so the watcher
