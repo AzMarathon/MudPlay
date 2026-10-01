@@ -13,7 +13,8 @@ public enum BossRespawnType { Timed, Cleanup }
 // kill detection. Rooms are "map/room" strings; a boss may be placed in several.
 // InStock/InParadigm gate visibility per active realm. Timer VALUES are NOT stored
 // here — resolved from game data so they stay correct across game versions.
-// StopBefore is a user flag: walk-to halts one room short of this boss's rooms.
+// StopBefore is a user flag: walk-to halts one room short of this boss's rooms. On
+// by default, so a seed boss or an entry stored without the flag stops short.
 // Removed is overlay-only: it hides a seed boss the user deleted.
 // RespawnHoursOverride is a user fallback for bosses game data can't resolve a
 // timer for — null means "use game data" (the normal case); a value forces that
@@ -27,7 +28,7 @@ public sealed class BossDef
     public bool InStock { get; set; }
     public bool InParadigm { get; set; }
     public BossRespawnType RespawnType { get; set; } = BossRespawnType.Timed;
-    public bool StopBefore { get; set; }
+    public bool StopBefore { get; set; } = true;
     // When set, the moment this boss dies the client blindly fires a `get <item>`
     // for every item in its game-data drop table — no room re-parse. Default off.
     public bool GrabAll { get; set; }

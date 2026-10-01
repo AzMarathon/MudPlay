@@ -172,6 +172,29 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
         Persist();
     }
 
+    // The toolbar's bulk toggles act on the rows the filter is showing. All ticked →
+    // untick them all; otherwise tick them all. One save for the lot.
+    [RelayCommand]
+    private void ToggleAllStopBefore() =>
+        ToggleAll(_ => true, r => r.StopBefore, (r, on) => r.StopBefore = on);
+
+    // Grab All only exists on a row whose boss resolves to a monster or an item.
+    [RelayCommand]
+    private void ToggleAllGrabAll() =>
+        ToggleAll(r => r.CanGrabAll, r => r.GrabAll, (r, on) => r.GrabAll = on);
+
+    private void ToggleAll(Func<BossRowViewModel, bool> applies,
+        Func<BossRowViewModel, bool> isOn, Action<BossRowViewModel, bool> set)
+    {
+        List<BossRowViewModel> rows = Rows.OfType<BossRowViewModel>().Where(applies).ToList();
+        if (rows.Count == 0) return;
+        bool turnOn = !rows.All(isOn);
+        _suppress = true;
+        foreach (BossRowViewModel row in rows) set(row, turnOn);
+        _suppress = false;
+        Persist();
+    }
+
     // Persist the visible rows over the full resolved list. This path only carries a
     // StopBefore toggle — add / edit / remove and the ShowInTable flag live in the
     // Manage dialog — so every boss NOT represented by a visible row (the other realm,

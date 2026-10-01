@@ -9,25 +9,30 @@
 
     <Grid Margin="22" RowDefinitions="Auto,*">
 
-        <!-- Toolbar: manage / import / export the list, filter, and the active-timer
-             summary. Editing the boss list lives in the Manage Bosses dialog; the
-             table itself is read-mostly (Stop before toggles inline; Mark / Reset /
-             Clear drive the timer). -->
+        <!-- Toolbar, left to right: filter, the active-timer summary, chest offload,
+             the two bulk toggles, timer sync, import / export, then Manage Bosses.
+             Editing the boss list lives in the Manage Bosses dialog; the table itself
+             is read-mostly (Stop before / Grab All toggle inline; Mark / Reset / Clear
+             drive the timer). -->
         <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Center">
-            <Button Content="Manage Bosses…" Margin="0,0,6,6" Command="{Binding ManageBossesCommand}"
-                    ToolTip.Tip="Add, edit, or remove bosses in this realm's list."/>
+            <TextBox Classes="clearable" Width="200" Margin="0,0,10,6" PlaceholderText="Filter by boss or room…"
+                     Text="{Binding FilterText, Mode=TwoWay}"/>
+            <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="0,0,18,6"
+                       Foreground="{StaticResource AccentAmberBrush}"/>
+            <Button Content="Chest Offload…" Margin="0,0,6,6" Command="{Binding OpenChestOffloadCommand}"
+                    ToolTip.Tip="Open the boss chests you're carrying and vendor the loot shop-by-shop."/>
+            <Button Content="Stop Before Toggle" Margin="0,0,6,6" Command="{Binding ToggleAllStopBeforeCommand}"
+                    ToolTip.Tip="Tick Stop before on every boss shown; if they're all ticked already, untick them all."/>
+            <Button Content="Grab All Toggle" Margin="0,0,6,6" Command="{Binding ToggleAllGrabAllCommand}"
+                    ToolTip.Tip="Tick Grab All on every boss shown that has the checkbox; if they're all ticked already, untick them all."/>
             <Button Content="Sync Timers…" Margin="0,0,6,6" Command="{Binding SyncTimersCommand}"
                     ToolTip.Tip="Request boss timers from other clients over chat (@timer sync) and merge chosen ones into your table."/>
             <Button Content="Import…" Margin="0,0,6,6" Command="{Binding ImportCommand}"
                     ToolTip.Tip="Load a shared boss table (JSON). Imported entries overlay yours; anything not in the file is kept."/>
             <Button Content="Export…" Margin="0,0,6,6" Command="{Binding ExportCommand}"
                     ToolTip.Tip="Save this realm's boss table to a JSON file to share."/>
-            <Button Content="Chest Offload…" Margin="0,0,18,6" Command="{Binding OpenChestOffloadCommand}"
-                    ToolTip.Tip="Open the boss chests you're carrying and vendor the loot shop-by-shop."/>
-            <TextBox Classes="clearable" Width="200" Margin="0,0,18,6" PlaceholderText="Filter by boss or room…"
-                     Text="{Binding FilterText, Mode=TwoWay}"/>
-            <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="0,0,0,6"
-                       Foreground="{StaticResource AccentAmberBrush}"/>
+            <Button Content="Manage Bosses…" Margin="0,0,6,6" Command="{Binding ManageBossesCommand}"
+                    ToolTip.Tip="Add, edit, or remove bosses in this realm's list."/>
         </WrapPanel>
 
         <!-- Boss grid. Sortable by boss, respawn, and each timer (numeric sort keys
@@ -49,8 +54,16 @@
                   HorizontalScrollBarVisibility="Auto"
                   VerticalScrollBarVisibility="Auto">
             <DataGrid.Columns>
-                <DataGridCheckBoxColumn Header="Stop before" Width="100" CanUserSort="False"
-                                        Binding="{ReflectionBinding StopBefore, Mode=TwoWay}"/>
+                <!-- A live checkbox, like Grab All: the grid's own checkbox column draws
+                     muted and needs one click to select the cell before a second toggles. -->
+                <DataGridTemplateColumn Header="Stop before" Width="100" CanUserSort="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:BossRowViewModel">
+                            <CheckBox IsChecked="{Binding StopBefore, Mode=TwoWay}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <!-- Grab All: on a monster boss's death, blindly `get` its whole drop
                      table; on an item boss (a box), `get` it on room entry. The
                      checkbox only shows when the name resolves to a specific monster or

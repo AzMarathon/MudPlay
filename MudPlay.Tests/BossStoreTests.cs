@@ -49,10 +49,11 @@ public sealed class BossStoreTests : IDisposable
         WriteSeed(Boss("cyclops", rooms: "7/730"));
         BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
         s.Save([new BossDef { Name = "cyclops", MonsterNumber = 1, Rooms = new() { "7/730" },
-            InStock = true, InParadigm = true, StopBefore = true }]);
+            InStock = true, InParadigm = true, StopBefore = false }]);
 
+        // The seed's Stop before is on by default; the user's explicit off wins.
         BossStore reloaded = new(seedPath: _seedPath); reloaded.OnActiveSetChanged(_scratchSet);
-        Assert.True(Assert.Single(reloaded.Resolve()).StopBefore);
+        Assert.False(Assert.Single(reloaded.Resolve()).StopBefore);
     }
 
     [Fact]
@@ -113,12 +114,22 @@ public sealed class BossStoreTests : IDisposable
         Assert.Null(s.ActiveSet);
     }
 
+    // A boss stops the walk one room short unless the user turns that off.
+    [Fact]
+    public void StopBefore_DefaultsOn()
+    {
+        Assert.True(new BossDef().StopBefore);
+        WriteSeed(Boss("cyclops", rooms: "7/730"));
+        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        Assert.True(Assert.Single(s.Resolve()).StopBefore);
+    }
+
     [Fact]
     public void MatchesSeed_DetectsRoomAndFlagEdits()
     {
         BossDef seed = Boss("x", rooms: "1/1");
         Assert.True(seed.Clone().MatchesSeed(seed));
-        BossDef edited = seed.Clone(); edited.StopBefore = true;
+        BossDef edited = seed.Clone(); edited.StopBefore = !seed.StopBefore;
         Assert.False(edited.MatchesSeed(seed));
         BossDef reroom = seed.Clone(); reroom.Rooms = new() { "1/2" };
         Assert.False(reroom.MatchesSeed(seed));
