@@ -126,6 +126,7 @@
                          are evil-only. The align picker is YOUR evil tier, scaling how
                          much raw Vile Ward becomes AC. -->
                     <Border BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+                        <StackPanel>
                         <WrapPanel>
                             <TextBlock Classes="FieldLabel" Text="Defense (what-if):" VerticalAlignment="Center" Margin="0,0,14,0"
                                        ToolTip.Tip="A defense simulator — tweak these to see how each monster's chance to hit you changes. It seeds to your current worn gear + configured buffs when the window opens, and re-seeds if you swap gear."/>
@@ -165,8 +166,11 @@
                                           MinWidth="170" VerticalAlignment="Center"
                                           ToolTip.Tip="YOUR alignment tier — it scales how much of your raw Vile Ward becomes AC: not evil = 0%, outlaw/criminal = 50%, villain/fiend = 100%."/>
                             </StackPanel>
-                            <!-- What-if resists: they change the "you take … dmg" line on the
-                                 selected monster's spell rows, not any hit chance. -->
+                        </WrapPanel>
+                        <!-- What-if resists, on their own row so they stay together: they
+                             change the "you take … dmg" line on the selected monster's
+                             spell rows, not any hit chance. -->
+                        <WrapPanel>
                             <TextBlock Classes="FieldLabel" Text="Resists (what-if):" VerticalAlignment="Center" Margin="0,6,14,0"
                                        ToolTip.Tip="Your resist to each kind of spell damage, in percent. Seeded from your worn gear and configured buffs; change one to see what a monster's spell would do to you in a resist set. Shown on each spell in the Attacks list."/>
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,6,16,0">
@@ -206,6 +210,7 @@
                                                ToolTip.Tip="Percent of a poison spell's damage you resist (your ImmuPoison value). Stock only; Paradigm doesn't cut poison damage."/>
                             </StackPanel>
                         </WrapPanel>
+                        </StackPanel>
                     </Border>
                 </StackPanel>
             </Border>
