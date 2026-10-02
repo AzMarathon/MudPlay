@@ -53,7 +53,11 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         RoomSearchService? search = null,
         IReadOnlyList<string>? bossNames = null,
         IReadOnlyList<string>? eventNames = null,
-        IReadOnlyList<(string Label, double Fraction)>? bossWindows = null)
+        IReadOnlyList<(string Label, double Fraction)>? bossWindows = null,
+        // The character's stash rooms and the active set's banks, labelled, for the
+        // stash-transfer action.
+        IReadOnlyList<(string Label, RoomRef Room)>? stashRooms = null,
+        IReadOnlyList<(string Label, RoomRef Room)>? banks = null)
     {
         ArgumentNullException.ThrowIfNull(existing);
         _isNew = isNew;
@@ -74,6 +78,9 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
 
         Name = existing.Name;
         DisabledFlag = existing.Disabled;
+
+        TransferStash = FillRoomPicker(_stashRooms, AvailableStashRooms, stashRooms, existing.TransferStash, "not a stash room now");
+        TransferBank = FillRoomPicker(_banks, AvailableBanks, banks, existing.TransferBank, "not a bank in this game data");
 
         SoundOptions = new[] { NoSoundLabel }
             .Concat(SoundTones.All.Select(static t => t.Label)).Append(SoundFileLabel).ToArray();
@@ -123,6 +130,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
             case EventActionType.Wait:     IsActionWait     = true; break;
             case EventActionType.RestUp:   IsActionRestUp   = true; break;
             case EventActionType.BankTrip: IsActionBankTrip = true; break;
+            case EventActionType.StashTransfer: IsActionStashTransfer = true; break;
             default:                       IsActionWalkTo   = true; break;
         }
         SelectedRoombaMode = existing.RoombaMode == EventRoombaMode.InventoryOnly
@@ -295,6 +303,37 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     [ObservableProperty] private bool _isActionRestUp;
     [ObservableProperty] private bool _isActionBankTrip;
 
+    // Stash transfer: one of the character's stash rooms, to one of the game data's
+    // banks. The pickers hold labels; the rooms behind them are looked up on Save.
+    [ObservableProperty] private bool _isActionStashTransfer;
+    [ObservableProperty] private string? _transferStash;
+    [ObservableProperty] private string? _transferBank;
+    public ObservableCollection<string> AvailableStashRooms { get; } = new();
+    public ObservableCollection<string> AvailableBanks { get; } = new();
+    private readonly Dictionary<string, RoomRef> _stashRooms = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, RoomRef> _banks = new(StringComparer.Ordinal);
+
+    // Fills one picker and returns the label of the saved room. A saved room that is
+    // no longer on the list (unmarked as a stash, or a different game-data set) keeps
+    // an entry of its own, so opening and saving the event doesn't drop it.
+    private static string? FillRoomPicker(
+        Dictionary<string, RoomRef> byLabel, ObservableCollection<string> labels,
+        IReadOnlyList<(string Label, RoomRef Room)>? options, RoomRef? saved, string goneNote)
+    {
+        string? selected = null;
+        foreach ((string label, RoomRef room) in options ?? Array.Empty<(string, RoomRef)>())
+        {
+            if (!byLabel.TryAdd(label, room)) continue;
+            labels.Add(label);
+            if (saved is not null && room.Map == saved.Map && room.Room == saved.Room) selected ??= label;
+        }
+        if (saved is null || selected is not null) return selected;
+        string gone = $"{saved.Map}/{saved.Room} ({goneNote})";
+        byLabel[gone] = saved;
+        labels.Add(gone);
+        return gone;
+    }
+
     // ----- STOP AFTER (loop / auto-lair) -------------------------------
 
     public bool ShowsStopAfter => IsActionLoop || IsActionAutoLair;
@@ -430,6 +469,10 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
             case EventActionType.Wait:
                 result.WaitSeconds = WaitSeconds;
                 break;
+            case EventActionType.StashTransfer:
+                result.TransferStash = TransferStash is { } stash ? _stashRooms.GetValueOrDefault(stash) : null;
+                result.TransferBank = TransferBank is { } bank ? _banks.GetValueOrDefault(bank) : null;
+                break;
         }
 
         if (ShowsStopAfter)
@@ -490,6 +533,12 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
             return "No auto-lair setup selected. Pick a saved setup from the dropdown.";
         if (IsActionWait && WaitSeconds <= 0)
             return "Wait needs a number of seconds.";
+        if (IsActionStashTransfer && (TransferStash is null || !_stashRooms.ContainsKey(TransferStash)))
+            return AvailableStashRooms.Count == 0
+                ? "You have no stash rooms. Mark one on the Navigation map (right-click → Toggle: Stash room)."
+                : "No stash room selected. Pick one from the dropdown.";
+        if (IsActionStashTransfer && (TransferBank is null || !_banks.ContainsKey(TransferBank)))
+            return "No bank selected. Pick one from the dropdown.";
         if (ShowsStopAfter && StopWhenBossOn && string.IsNullOrWhiteSpace(StopBossName))
             return "No boss selected for Stop after's boss timer.";
         if (IsThenLoop && string.IsNullOrWhiteSpace(ThenLoopName))
@@ -536,6 +585,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     partial void OnIsActionWaitChanged(bool value)     { if (value) SetAction(EventActionType.Wait);     Refresh(); }
     partial void OnIsActionRestUpChanged(bool value)   { if (value) SetAction(EventActionType.RestUp);   Refresh(); }
     partial void OnIsActionBankTripChanged(bool value) { if (value) SetAction(EventActionType.BankTrip); Refresh(); }
+    partial void OnIsActionStashTransferChanged(bool value) { if (value) SetAction(EventActionType.StashTransfer); Refresh(); }
 
     private void SetAction(EventActionType a)
     {
@@ -547,6 +597,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         IsActionWait     = a == EventActionType.Wait;
         IsActionRestUp   = a == EventActionType.RestUp;
         IsActionBankTrip = a == EventActionType.BankTrip;
+        IsActionStashTransfer = a == EventActionType.StashTransfer;
         if (!_thenChosen) SetThenDefault();
     }
 
@@ -628,6 +679,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         if (IsActionWait)     return EventActionType.Wait;
         if (IsActionRestUp)   return EventActionType.RestUp;
         if (IsActionBankTrip) return EventActionType.BankTrip;
+        if (IsActionStashTransfer) return EventActionType.StashTransfer;
         return EventActionType.WalkTo;
     }
 

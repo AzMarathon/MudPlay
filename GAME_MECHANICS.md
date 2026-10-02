@@ -4919,8 +4919,16 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 - The stash → bank transfer (`StashTransferRunner`, the map's *Transfer Stash to Bank*) relies on the
   same two rules: every trip searches again to surface and count the pile, takes what the coin weight
   limits allow, and trusts the untaken part to stay hidden while it walks to the bank and back
-  (**Client policy**, user 2026-10-02). It deposits exactly what the trip took (`dep <copper>`) and sets
-  the stash ledger to what the search showed less what was taken.
+  (**Client policy**, user 2026-10-02). Coin on the ground between the two rooms is picked up as usual
+  (report `paradigm-20261002-101410`: it was held off on the walk back), and each `dep <copper>` is
+  everything gained since the transfer started, so the purse ends where it began. The stash ledger is
+  set to what the search showed less what was taken.
+  - **Party share** (`CashSettings.StashTransferPartyShare`; **Client policy**, user 2026-10-02): a
+    leader telepaths each member `@do sea` and `@do get <N> <coin>` for an even share of each coin it
+    couldn't carry, then `@deposit-all` at the bank. The members' answers aren't read; a second `sea`
+    counts what is left. Whether another character's search surfaces coin we hid as reliably as our own
+    does is not recorded *([NEEDS CONFIRMATION]: does a party member's `sea` always reveal the leader's
+    hidden coin?)* — the recount covers a member who found nothing.
 - Auto-collect is suppressed in a stash room **only while an auto-search reveal is in flight** — coin
   shown on plain entry or a kill drop still collects, in the stash room and in the room after it.
   Implemented as `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.

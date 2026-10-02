@@ -193,6 +193,20 @@ public sealed class EventManager : IDisposable
     private Func<bool>? _startBankTrip;
     public void SetBankTripStarter(Func<bool> start) => _startBankTrip = start;
 
+    // A stash → bank transfer for EventActionType.StashTransfer: (stash, bank room)
+    // → null when it started, else why not. Bound by AppServices to
+    // StartStashTransfer; the runner reports the end through NoteStashTransferEnded.
+    // `stop` ends one that another event takes over from.
+    private Func<RoomKey, RoomKey, string?>? _startStashTransfer;
+    private Action? _stopStashTransfer;
+    public void SetStashTransferHooks(Func<RoomKey, RoomKey, string?> start, Action stop)
+    {
+        ArgumentNullException.ThrowIfNull(start);
+        ArgumentNullException.ThrowIfNull(stop);
+        _startStashTransfer = start;
+        _stopStashTransfer = stop;
+    }
+
     // Whether the character is resting (the health manager's rest gate is up or a
     // rest is in flight), and a nudge to re-check now — a RestUp run holds
     // RestUpRequested (which counts as a "rest up here" room) until resting stops.
@@ -305,6 +319,9 @@ public sealed class EventManager : IDisposable
         {
             _log?.Info("Events", $"Event '{Label(e)}' takes over from '{Label(prior.Event)}' (its Then is dropped).");
             EndRun();
+            // A transfer is between walks while it searches or deposits, so stopping
+            // the engines for the new action wouldn't always reach it.
+            if (prior.Event.ActionType == EventActionType.StashTransfer) _stopStashTransfer?.Invoke();
         }
         EventRun run = new(e, resume, depth, Now());
         _run = run;
@@ -396,6 +413,21 @@ public sealed class EventManager : IDisposable
                 if (_startBankTrip()) return ActionStart.Running;
                 _log?.Warn("Events", $"Event '{Label(e)}' bank / stash trip didn't start (see the AutoDeposit log line).");
                 return ActionStart.Failed;
+
+            case EventActionType.StashTransfer:
+                if (_startStashTransfer is null) return ActionStart.Failed;
+                if (e.TransferStash is not { } stash || e.TransferBank is not { } bank)
+                {
+                    _log?.Warn("Events", $"Event '{Label(e)}' has no stash room or bank to transfer between.");
+                    return ActionStart.Failed;
+                }
+                StopEngines("event stash transfer");
+                if (_startStashTransfer(new RoomKey(stash.Map, stash.Room), new RoomKey(bank.Map, bank.Room)) is { } refusal)
+                {
+                    _log?.Warn("Events", $"Event '{Label(e)}' stash transfer didn't start: {refusal}");
+                    return ActionStart.Failed;
+                }
+                return ActionStart.Running;
         }
         return ActionStart.Failed;
     }
@@ -610,6 +642,19 @@ public sealed class EventManager : IDisposable
             case Game.Cash.AutoDepositManager.EventTripOutcome.Done: Complete(run, finished: true); break;
             case Game.Cash.AutoDepositManager.EventTripOutcome.Failed: Complete(run, finished: false); break;
             default: Abort(run, "its trip was stopped"); break;
+        }
+    }
+
+    // A stash → bank transfer ended (StashTransferRunner.Ended). One started from the
+    // map menu ends here too; it only counts while a transfer event is running.
+    public void NoteStashTransferEnded(Game.Cash.StashTransferOutcome outcome)
+    {
+        if (_run is not { Event.ActionType: EventActionType.StashTransfer } run) return;
+        switch (outcome)
+        {
+            case Game.Cash.StashTransferOutcome.Done: Complete(run, finished: true); break;
+            case Game.Cash.StashTransferOutcome.Failed: Complete(run, finished: false); break;
+            default: Abort(run, "its transfer was stopped"); break;
         }
     }
 

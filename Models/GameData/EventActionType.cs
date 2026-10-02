@@ -21,6 +21,9 @@ namespace MudPlay.Models.GameData;
 //     flagged "rest up here" does.
 //   BankTrip — walk to the Settings → Cash bank or stash room and deposit /
 //     stash there (AutoDepositManager.StartEventTrip).
+//   StashTransfer — shuttle the coin in ScheduledEvent.TransferStash to the bank
+//     at ScheduledEvent.TransferBank until the stash is empty
+//     (StashTransferRunner). Stops any walk / loop / auto-lair first.
 public enum EventActionType
 {
     WalkTo = 0,
@@ -31,4 +34,5 @@ public enum EventActionType
     Wait = 5,
     RestUp = 6,
     BankTrip = 7,
+    StashTransfer = 8,
 }

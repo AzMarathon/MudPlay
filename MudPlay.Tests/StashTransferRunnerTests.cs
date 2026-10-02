@@ -35,6 +35,13 @@ public sealed class StashTransferRunnerTests
         public List<(RoomKey Room, long Copper)> Reconciled = new();
         public List<string> Notices = new();
 
+        // Party share: who the leader may send to the pile (empty = option off or
+        // not leading), and the coin the leader's own gets left, by noun.
+        public List<string> Party = new();
+        public List<(string Noun, long Count)> CoinsLeft = new();
+        // What the members manage to take when told to (copper value).
+        public long PartyTakes;
+
         private readonly List<Action> _timers = new();
         public void FireTimers()
         {
@@ -55,6 +62,12 @@ public sealed class StashTransferRunnerTests
                 {
                     Sent.Add(cmd);
                     if (cmd == "sea") Surveyed = StashHolds;
+                    else if (cmd.Contains("@do get", StringComparison.Ordinal))
+                    {
+                        long got = Math.Min(PartyTakes, StashHolds);
+                        StashHolds -= got;
+                        PartyTakes -= got;
+                    }
                     else if (cmd.StartsWith("dep ", StringComparison.Ordinal) && BankTakesDeposits)
                     {
                         long amount = long.Parse(cmd[4..]);
@@ -73,7 +86,9 @@ public sealed class StashTransferRunnerTests
                 },
                 forceAutoGetCash: AutoGetCashWrites.Add,
                 reconcileStash: (k, c) => Reconciled.Add((k, c)),
-                notice: Notices.Add);
+                notice: Notices.Add,
+                partyMembers: () => Party,
+                surveyedCoinsLeft: () => CoinsLeft);
         }
 
         public void Arrive()
@@ -201,17 +216,20 @@ public sealed class StashTransferRunnerTests
         Assert.Contains("carrying", h.Notices[^1]);
     }
 
-    // Pickup is held at zero from the walk to the stash until the pile is read, and
-    // the ceiling and the borrowed toggle are both released when the stop is over.
+    // Pickup is only held while the pile is read at the stash, and the ceiling and
+    // the borrowed toggle are both released when the stop is over. On the walks,
+    // coin on the ground is picked up as usual (report paradigm-20261002-101410:
+    // held off for the whole walk back, an emptied purse passed every drop).
     [Fact]
-    public void PickupIsHeldUntilThePileIsRead_ThenReleased()
+    public void PickupIsHeldOnlyAtTheStash_ThenReleased()
     {
         Harness h = new() { StashHolds = 4_000 };
         h.Runner.Start(StashRoom, BankRoom, "First Bank");
-        Assert.Equal(new long?[] { 0 }, h.Limits);
-        Assert.Empty(h.AutoGetCashWrites);                // not borrowed for the walk
+        Assert.Empty(h.Limits);                           // nothing held on the walk
+        Assert.Empty(h.AutoGetCashWrites);
 
         h.Arrive();
+        Assert.Equal(new long?[] { 0 }, h.Limits);
         Assert.Equal(new[] { true }, h.AutoGetCashWrites);
         h.SearchAndCollect();
 
@@ -253,8 +271,126 @@ public sealed class StashTransferRunnerTests
 
         Assert.NotNull(h.Runner.Start(StashRoom, BankRoom, "First Bank"));
         Assert.False(h.Runner.IsBusy);
-        Assert.Null(h.Limits[^1]);
+        Assert.Empty(h.Limits);
         Assert.Empty(h.Notices);
+    }
+
+    // Coin picked up between the two rooms is banked with the stash's, so the purse
+    // ends where it started.
+    [Fact]
+    public void CoinPickedUpOnTheWay_IsDepositedToo()
+    {
+        Harness h = new() { StashHolds = 10_000 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Purse += 250;                                   // loot on the walk to the stash
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Purse += 40;                                    // and on the walk to the bank
+        h.Arrive();
+
+        Assert.Equal("dep 10290", h.Sent[^1]);
+        h.FireTimers();
+        Assert.Equal(500, h.Purse);
+    }
+
+    // Party share (Settings → Cash, leading a party): once the leader has its load,
+    // each member is told to search and take an even share of what is left, the pile
+    // is counted again, and at the bank each is told to deposit.
+    [Fact]
+    public void PartyShare_MembersTakeAnEvenShareAndDeposit()
+    {
+        Harness h = new()
+        {
+            StashHolds = 100_000, CarryPerTrip = 40_000, PartyTakes = 60_000,
+            Party = { "Raijin", "Suijin" },
+            CoinsLeft = { ("platinum piece", 5), ("gold crown", 101) },
+        };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+
+        Assert.Equal(new[]
+        {
+            "/Raijin @do sea", "/Raijin @do get 2 platinum piece", "/Raijin @do get 50 gold crown",
+            "/Suijin @do sea", "/Suijin @do get 2 platinum piece", "/Suijin @do get 50 gold crown",
+        }, h.Sent.FindAll(c => c.StartsWith('/')));
+        Assert.Single(h.Walked);                          // still at the stash
+
+        h.FireTimers();                                   // the members have had their time
+        Assert.Equal("sea", h.Sent[^1]);                  // count what is really left
+        h.FireTimers();
+        Assert.Equal(0, h.Runner.LeftCopper);
+        Assert.Equal(BankRoom, h.Walked[^1]);
+
+        h.Arrive();
+        h.FireTimers();                                   // our deposit landed
+        Assert.Equal(new[] { "/Raijin @deposit-all", "/Suijin @deposit-all" }, h.Sent.GetRange(h.Sent.Count - 2, 2));
+        Assert.True(h.Runner.IsBusy);                     // waiting on theirs
+
+        h.FireTimers();
+        Assert.False(h.Runner.IsBusy);
+        Assert.Equal(40_000, h.BankHolds);
+    }
+
+    // The members' gets failed (too heavy, no permission): the recount shows the
+    // coin still there, and the leader keeps carrying it.
+    [Fact]
+    public void PartyShare_WhenMembersTakeNothing_TheLeaderGoesBackForIt()
+    {
+        Harness h = new()
+        {
+            StashHolds = 50_000, CarryPerTrip = 40_000, PartyTakes = 0,
+            Party = { "Raijin" }, CoinsLeft = { ("platinum piece", 1) },
+        };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+        h.FireTimers();
+        h.FireTimers();
+
+        Assert.Equal(10_000, h.Runner.LeftCopper);
+        h.Arrive();
+        h.FireTimers();
+        h.FireTimers();
+        Assert.Equal(StashRoom, h.Walked[^1]);
+    }
+
+    // Off, solo, or a follower: no one is told anything.
+    [Fact]
+    public void PartyShare_NoMembers_SendsNoTelepaths()
+    {
+        Harness h = new() { StashHolds = 50_000, CarryPerTrip = 40_000, CoinsLeft = { ("platinum piece", 1) } };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+
+        Assert.DoesNotContain(h.Sent, c => c.StartsWith('/'));
+        Assert.Equal(BankRoom, h.Walked[^1]);
+    }
+
+    [Fact]
+    public void EndReportsTheOutcome()
+    {
+        List<StashTransferOutcome> ended = new();
+
+        Harness done = new() { StashHolds = 0 };
+        done.Runner.Ended += ended.Add;
+        done.Runner.Start(StashRoom, BankRoom, "First Bank");
+        done.Arrive();
+        done.FireTimers();
+
+        Harness stopped = new() { StashHolds = 9 };
+        stopped.Runner.Ended += ended.Add;
+        stopped.Runner.Start(StashRoom, BankRoom, "First Bank");
+        stopped.Runner.Cancel("stopped by the user");
+
+        Harness failed = new() { StashHolds = 9, CarryPerTrip = 0 };
+        failed.Runner.Ended += ended.Add;
+        failed.Runner.Start(StashRoom, BankRoom, "First Bank");
+        failed.Arrive();
+        failed.SearchAndCollect();
+
+        Assert.Equal(new[] { StashTransferOutcome.Done, StashTransferOutcome.Stopped, StashTransferOutcome.Failed }, ended);
     }
 
     [Fact]

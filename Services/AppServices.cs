@@ -1250,6 +1250,33 @@ public sealed class AppServices
         return StashTransfer.Start(stash, bank.Key, bank.Name);
     }
 
+    // The members a stash transfer shares the carrying with: the rest of the party,
+    // when Settings → Cash has the option on and we lead it. Only a leader's moves
+    // bring the others along to the stash and the bank.
+    private IReadOnlyList<string> StashTransferPartyMembers()
+    {
+        if (!ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").StashTransferPartyShare
+            || !PartyState.IsInParty || !PartyState.SelfIsLeader)
+            return Array.Empty<string>();
+        List<string> givens = new();
+        foreach (Game.PartyMember m in PartyState.Members)
+        {
+            if (m.IsSelf || m.IsInvited || string.IsNullOrEmpty(m.Name)) continue;
+            (string given, _) = Models.GameData.PlayerObservation.SplitName(m.Name);
+            if (!string.IsNullOrEmpty(given)) givens.Add(given);
+        }
+        return givens;
+    }
+
+    // The same, for a saved bank room (an Event's stash transfer). The room has to
+    // still hold a bank in the active game data.
+    public string? StartStashTransfer(Game.Map.RoomKey stash, Game.Map.RoomKey bankRoom)
+    {
+        foreach (Game.GameData.BankShop bank in Game.GameData.BankCatalog.Enumerate(GameData))
+            if (bank.Key.Equals(bankRoom)) return StartStashTransfer(stash, bank);
+        return $"{bankRoom.Map}/{bankRoom.Room} is not a bank in the active game data";
+    }
+
     // The active set's banks, nearest to `from` first. Reach is counted the way the
     // transfer's own walks plan: through gates whose key or item can be acquired, and
     // across sailings (one step each). A walk-only count called a bank behind a
@@ -7311,7 +7338,9 @@ public sealed class AppServices
             reconcileStash: (room, copper) => StashBalances.Reconcile(room, copper),
             // Walker events and timers can land inside the message pump.
             notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
-            log: Log);
+            log: Log,
+            partyMembers: StashTransferPartyMembers,
+            surveyedCoinsLeft: () => Cash.SurveyedCoinsLeft());
         Walker.Event += e => StashTransfer.OnWalkEvent(e.Kind);
 
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
@@ -7878,6 +7907,8 @@ public sealed class AppServices
         // What the other event actions start, and the signals that say they're done.
         Events.SetBankTripStarter(AutoDeposit.StartEventTrip);
         AutoDeposit.EventTripEnded += Events.NoteBankTripEnded;
+        Events.SetStashTransferHooks(StartStashTransfer, () => StashTransfer.Cancel("another event took over"));
+        StashTransfer.Ended += Events.NoteStashTransferEnded;
         Events.SetRestHooks(() => Health.IsRecoveringRest || Health.RestInFlight, () => Health.Evaluate());
         Events.SetStatsReader(ReadEventReadings);
         GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();

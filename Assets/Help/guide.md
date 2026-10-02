@@ -1031,10 +1031,14 @@ Right-click a **stash room** on the Navigation map and open **Transfer Stash to 
 
 - It stops any loop or Auto-Lair that is running (it does not resume it afterwards), walks to the stash room and searches.
 - It reads the pile the search shows, then takes as much as your coin weight limits allow (**Settings → Cash**: *Don't collect if it makes you Light / Medium / Heavy*, *Don't collect past 90% encumbrance*, and *Drop smaller currency to make room for larger*). With no limit ticked that is everything you can physically carry. The per-coin Collect / Ignore / Discard choices don't decide what it takes — this is your own stash — but a coin set to **Discard** will still be dropped again, so set it to Ignore or Collect first if your stash holds any.
-- It walks to the bank and deposits exactly what that trip took, so the cash you were carrying before is left alone.
+- It walks to the bank and deposits everything you have gained since the transfer started — the stash's coin plus anything picked up off the ground on the way — so you end with the same cash you started with and your keep-on-hand float never goes into the bank.
 - It goes back for more and repeats until a search shows nothing left, and ends standing in the bank. A notice in the terminal says how much moved and in how many trips.
 
-To end it early, stop movement (the toolbar Stop, or **Stop Stash Transfer** on the map's right-click menu). It also ends on its own, and says why, if nothing can be picked up (you are already at your weight limit), if the bank takes no deposit, or if a walk fails. Whatever you are carrying from the stash at that point stays in your pocket. While it runs the Navigation window shows a **Stash Transfer** chip, coin on the ground along the way to the stash is left where it is, and Auto-Get Cash is borrowed for the stash stop only — your saved setting isn't changed.
+To end it early, stop movement (the toolbar Stop, or **Stop Stash Transfer** on the map's right-click menu). It also ends on its own, and says why, if nothing can be picked up (you are already at your weight limit), if the bank takes no deposit, or if a walk fails. Whatever you are carrying from the stash at that point stays in your pocket. While it runs the Navigation window shows a **Stash Transfer** chip. On the walks between the two rooms coin on the ground is picked up exactly as your cash settings say. Auto-Get Cash is borrowed for the stash stop only — your saved setting isn't changed.
+
+**With a party.** If you lead a party and tick **Settings → Cash → Stash transfers: party members carry a share too**, the members carry as well. Once you have taken your own load, MudPlay telepaths each member `@do sea` and then `@do get N <coin>` for an even share of each coin you couldn't carry, waits a few seconds, and searches again to count what is really left. At the bank, after your own deposit, it telepaths each of them `@deposit-all`, so they deposit into their own accounts at that bank. The members must be running MudPlay and have given you permission to run commands on them; a member who can't take their share (no permission, too heavy) simply leaves it, and you carry it on a later trip.
+
+**From an Event.** The **Stash transfer** event action runs the same transfer on a schedule or a condition — see *Event editor — action types*.
 
 The stash room stays marked as a stash, so a loop that passes through it later will stash there again.
 
@@ -3382,6 +3386,12 @@ Stashing isn't affected; it's governed by the coin-type filter below.
 **Default:** off
 **What it does:** When you're a **party follower** (in a party, not leading), lets you stash currency as the leader drags you through your marked stash rooms. Normally a follower's own movement is held by the leader's drag, so the usual "stash while looping through" trigger never fires for them; this opts their pass-through back in. Marking stash rooms and the coin-type filter above work the same as when you're solo.
 
+### Stash transfers: party members carry a share too
+
+**Default:** off
+**What it does:** When you run a stash → bank transfer (the map's **Transfer Stash to Bank**, or the Stash transfer event action) as the **party leader**, has the other members carry coin too. After you have taken your own load at the stash, each member is telepathed `@do sea` and `@do get N <coin>` for an even share of each coin that is left; at the bank each is telepathed `@deposit-all`.
+**Important notes:** Members must be running MudPlay and allow you to run commands on them (their Players entry for you). Their replies aren't read — MudPlay searches the stash again afterwards and counts what is left, so a share nobody took is carried on a later trip. `@deposit-all` banks each member down to *their own* keep-on-hand floor, into their own account. It does nothing when you are solo or a follower.
+
 ### No combat during an auto-sell detour / an auto-deposit trip
 
 **Default:** both Off
@@ -3891,6 +3901,7 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 - **Wait** — stand still for that many seconds.
 - **Rest up** — stand still and rest / meditate to your rest max (Settings → Health), as a loop room flagged *rest up here* does. Done once resting stops.
 - **Bank trip** — walk to your Settings → Cash bank or stash room and deposit / stash there, then stop (the Then step decides where to go next).
+- **Stash transfer** — carry one of your stash rooms' coin to a bank you pick, trip by trip, until the stash is empty: the same run as the map's **Transfer Stash to Bank** (see [Banking](#banking)). Pick the stash room and the bank from the two dropdowns. Done when the transfer ends, in the bank; if it gives up (no route, nothing could be picked up) the Then step still runs, and if you stop it yourself the Then step is dropped.
 
 Every action except a plain command stops whatever walk, loop or Auto-Lair was running first.
 
@@ -4318,6 +4329,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Keep wealth (copper) | `0` | 0–100,000,000 | `KeepOnHandWealth` | Models/Profile/CashSettings.cs |
 | Don't collect/get item → Light/Medium/Heavy (6 flags) | false (all) | bool | `SkipCollectIfMakesLight` etc. / `SkipGetItemIfMakesLight` etc. | Models/Profile/CashSettings.cs |
 | Collect after combat finished / Drop smaller for larger | false / false | bool | `CollectAfterCombatFinished` / `DropSmallerForLarger` | Models/Profile/CashSettings.cs |
+| Stash transfers: party members carry a share too | false | bool | `StashTransferPartyShare` | Models/Profile/CashSettings.cs |
 | Disallow all remote / @party / telepaths / gangpaths / local | false (all) | bool | `DisallowAllRemoteCommands` etc. | Models/Profile/TalkSettings.cs |
 | Warn on invalid remote command / Failure message | true / default text | bool / free text | `WarnOnInvalidRemoteCommand` / `RemoteCommandFailureMessage` | Models/Profile/TalkSettings.cs |
 | Greet / Look back / Look on arrival | false (all) | bool | `GreetPlayersWhenFirstMet`, `LookBackWhenLookedAt`, `LookAtPlayersOnArrival` | Models/Profile/TalkSettings.cs |

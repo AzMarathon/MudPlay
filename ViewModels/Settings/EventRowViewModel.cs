@@ -81,6 +81,9 @@ public sealed partial class EventRowViewModel : ObservableObject
         EventActionType.Wait     => $"Wait {Source.WaitSeconds ?? 0}s",
         EventActionType.RestUp   => "Rest up",
         EventActionType.BankTrip => "Bank / stash trip",
+        EventActionType.StashTransfer => Source.TransferStash is { } s && Source.TransferBank is { } b
+                                       ? $"Stash {s.Map}/{s.Room} to bank {b.Map}/{b.Room}"
+                                       : "Stash transfer —",
         _ => "—",
     };
 

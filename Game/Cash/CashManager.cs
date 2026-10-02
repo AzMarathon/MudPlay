@@ -178,6 +178,22 @@ public sealed class CashManager : IDisposable
     private long? _collectLimitCopper;
     public long? CollectLimitCopper => _collectLimitCopper;
     private readonly Dictionary<string, int> _surveyedUnderLimit = new(StringComparer.OrdinalIgnoreCase);
+    // The coin a `get` has been sent for since the ceiling was set, by coin.
+    private readonly Dictionary<string, long> _askedUnderLimit = new(StringComparer.OrdinalIgnoreCase);
+
+    // The surveyed coin no `get` has been sent for yet, dearest first, under the
+    // noun the game takes in a `get`. A stash transfer shares this out to the party.
+    public IReadOnlyList<(string Noun, long Count)> SurveyedCoinsLeft()
+    {
+        List<(string Noun, long Count)> left = new();
+        foreach ((string currency, int count) in _surveyedUnderLimit
+                     .OrderByDescending(e => CoinValue(SlotForCurrency(e.Key))))
+        {
+            long remaining = count - _askedUnderLimit.GetValueOrDefault(currency);
+            if (remaining > 0) left.Add((_naming.WireNoun(currency), remaining));
+        }
+        return left;
+    }
 
     public long SurveyedCopperUnderLimit
     {
@@ -194,6 +210,7 @@ public sealed class CashManager : IDisposable
     {
         _collectLimitCopper = copper is { } c ? Math.Max(0, c) : null;
         _surveyedUnderLimit.Clear();
+        _askedUnderLimit.Clear();
     }
 
     // Take up to this much copper value of the coin last surveyed, dearest coin
@@ -219,10 +236,11 @@ public sealed class CashManager : IDisposable
             _surveyedUnderLimit[currency] = count;
     }
 
-    private void SpendCollectLimit(int slot, long coins)
+    private void SpendCollectLimit(int slot, string currency, long coins)
     {
-        if (_collectLimitCopper is { } limit)
-            _collectLimitCopper = Math.Max(0, limit - CoinValue(slot) * coins);
+        if (_collectLimitCopper is not { } limit) return;
+        _collectLimitCopper = Math.Max(0, limit - CoinValue(slot) * coins);
+        _askedUnderLimit[currency] = _askedUnderLimit.GetValueOrDefault(currency) + coins;
     }
     private bool _disposed;
 
@@ -960,7 +978,7 @@ public sealed class CashManager : IDisposable
             _gate?.NoteGetSent();
             _log?.Info(LogCategory, $"collect currency={currency} get={count} (ungated)");
             Send($"get {count} {_naming.WireNoun(currency)}");
-            SpendCollectLimit(slot, count);
+            SpendCollectLimit(slot, currency, count);
             return;
         }
 
@@ -1053,7 +1071,7 @@ public sealed class CashManager : IDisposable
             ? $"collect currency={currency} get={totalPickup} (free={freePickup} + {swapDone} via drop-smaller-for-larger)"
             : $"collect currency={currency} get={totalPickup}");
         Send($"get {totalPickup} {_naming.WireNoun(currency)}");
-        SpendCollectLimit(slot, totalPickup);
+        SpendCollectLimit(slot, currency, totalPickup);
         _inFlightCoinDelta[slot] += totalPickup;
         _inFlightCoinDeltaSetAt[slot] = now;
     }

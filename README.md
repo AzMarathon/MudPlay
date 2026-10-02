@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.138.0**
-> - Right-click a stash room on the map → Transfer Stash to Bank: pick a bank (nearest first) and MudPlay shuttles the stash's coin to it until it's empty
-> - Each trip searches the stash, carries what your coin weight limits allow, and deposits exactly what it took
+> **Version 3.138.3**
+> - Events can run a stash → bank transfer: a new Stash transfer action with a stash room and a bank to pick
+> - Settings → Cash: stash transfers can have party members carry a share too (@do sea / @do get, then @deposit-all at the bank)
+> - Stash transfer picks up coin on the way back to the stash, and each deposit banks everything gained since it started
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
