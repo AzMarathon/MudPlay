@@ -3276,6 +3276,17 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - **Not held:** walk steps the route can't skip (doors, traps, room commands, winches, hidden-exit search) and their `.@party` / `.@trap` relays, plus `.@panic` (the leader's hang-up call; followers just hang up).
   - **Health-gate flee:** while fleeing on the run-if-below HP / MA gates (`HealthManager.IsGateFleeing`; not a hit-and-run or failed-backstab run), the emergency heal isn't held, and the re-sneak waits until it has gone out (`StealthManager.SetSneakHoldForHeal`).
   - **Marking the sneak broken:** any command on the "What ends a sneak" list sets the sneak broken (`StealthManager.NoteSneakBroken`), so the next move re-sneaks. That covers the client's own sends (the send gate, the walker's room-command hook) and lines the player types (`AppServices.NoteSentForSneak` from `SendUserInput`; report `paradigm-20260928-163051`: a typed `sea` left the client believing it still sneaked, so every buff stayed held). A hand-typed cast re-sneaks like an engine one (`StealthManager.ReSneakAfterCast`).
+  - **Re-sneaking in place when nothing drives the moves** (report `paradigm-20261002-004148`): an engine
+    re-takes a broken sneak at its pre-move hook; a player walking by hand has no such hook, and the
+    arrival re-sneak is refused in any room with an NPC, so in a tunnel with a monster in every room a
+    broken sneak never came back. With no walk, loop or auto-lair running, `StealthManager` re-sneaks
+    where the character stands: 700 ms after `NoteSneakBroken` (so a burst of commands finishes first),
+    at combat end (`NoteCombatEndedStealthReset`), and when Auto-Sneak is switched on. A hand-typed move
+    also sends `sn` ahead of itself (`NoteTypedMove`, off `OutboundMovementObserver.MoveSent`), since the
+    report shows `sea` typed about a second before the next step.
+  - **An `sn` answered after a later sneak-ending command** (same report): `sn` then `sea` leaves the
+    character not sneaking, but the `Attempting to sneak...` for that `sn` arrives after the `sea` was
+    noted. `StealthManager` ignores that answer instead of reading it as sneaking.
   - **Stopping to cast** (report `paradigm-20260928-165844`): a sneaked walk is always mid-step, so a held buff / heal / cure never finds a gap. When one is due (and affordable), the step in the next NPC-free room waits on `SneakCastGate` (`StealthManager.ReadyToMoveSneaking`, from `CastingDirector.HasSneakHeldCast`); the arrival `sn` waits too, the cast goes out, and the re-sneak after it sends us on. Capped at 7 s per room.
   - **After the backstab** (report `paradigm-20260928-165954`): when the backstab round settles with the target still up, a cast held for the opener goes out before the re-announce, and its `*Combat Off*` resume re-attacks (`CombatManager.SettleBackstab`).
   - **Ordering:** pre-move gear now goes out before the `sn`.

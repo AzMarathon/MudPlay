@@ -1,11 +1,12 @@
 # Version history
 
-## 3.137.3
+## 3.137.4
 
 - Auto-train funding reads a stash before taking from it: only what the train is short, in the largest coins, and nothing at all if stash plus bank still fall short
 - A buff that removes another only clears it on the same target, so smite on one party member and greater smite on another both stay up
 - The Witchunter quest is no longer announced as available to other classes
-- bug reports addressed: paradigm-20261001-222332, paradigm-20261002-012234, paradigm-20261001-235024
+- Auto-Sneak keeps you sneaking when you walk by hand: it re-sneaks ahead of a move you type, after a command that breaks it, and when a fight ends
+- bug reports addressed: paradigm-20261001-222332, paradigm-20261002-012234, paradigm-20261001-235024, paradigm-20261002-004148
 
 ## 3.137.0
 

@@ -361,6 +361,126 @@ public sealed class StealthManagerTests
         public void Dispose() => Stealth.Dispose();
     }
 
+    // ----- Re-sneak in place when nothing is driving the moves ---------------
+    // Report paradigm-20261002-004148: walking by hand through a tunnel with a monster
+    // in every room, a sneak broken by a typed `sea` or spent on a fight never came
+    // back, because the only re-sneak left was arriving in a room with no NPC.
+
+    private static AutoHarness ManualPlay(bool engineDriving = false)
+    {
+        AutoHarness h = new() { AutoSneakOn = true };
+        h.Stealth.SetEngineDrivingCheck(() => engineDriving);
+        return h;
+    }
+
+    [Fact]
+    public void ManualPlay_SneakBrokenByACommand_IsReTakenInPlace_ABeatLater()
+    {
+        using AutoHarness h = ManualPlay();
+        h.Stealth.NoteRoomChanged();              // arrives, sneaks
+        h.Sent.Clear();
+
+        h.Stealth.NoteSneakBroken("'sea'");
+        Assert.Empty(h.Sent);                     // not at once: a burst may still be going out
+
+        h.Stealth.ReSneakInPlaceForTests();       // the pause has passed
+        Assert.Equal("sn", h.LastSent());
+    }
+
+    [Fact]
+    public void ManualPlay_FightEndsWithNoSneakHeld_SneaksInTheClearedRoom()
+    {
+        // The report's case: entered seen (an NPC was there, so no sneak), fought, won.
+        using AutoHarness h = ManualPlay();
+
+        h.Stealth.NoteCombatEndedStealthReset();
+        h.Stealth.ReSneakInPlaceForTests();
+
+        Assert.Equal("sn", h.LastSent());
+    }
+
+    [Fact]
+    public void ManualPlay_NpcStillInTheRoom_DoesNotBurnASneak()
+    {
+        using AutoHarness h = ManualPlay();
+        h.Stealth.SetSneakBlockCheck(() => true);
+
+        h.Stealth.NoteCombatEndedStealthReset();
+        h.Stealth.ReSneakInPlaceForTests();
+
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void EngineDriving_LeavesTheReSneakToItsPreMoveHook()
+    {
+        using AutoHarness h = ManualPlay(engineDriving: true);
+        h.Stealth.NoteRoomChanged();
+        h.Sent.Clear();
+
+        h.Stealth.NoteSneakBroken("'sea'");
+        h.Stealth.ReSneakInPlaceForTests();
+
+        Assert.Empty(h.Sent);
+    }
+
+    // The scrollback shows `sea` typed about a second before the next `e`: too soon
+    // for the in-place re-sneak to be sure of landing first. A typed move sneaks ahead
+    // of itself, the way an engine's step does.
+    [Fact]
+    public void ManualPlay_TypedMove_SneaksAheadOfTheStep()
+    {
+        using AutoHarness h = ManualPlay();
+        h.Stealth.NoteTypedMove();
+        Assert.Equal("sn", h.LastSent());
+
+        h.Sent.Clear();
+        h.Stealth.NoteTypedMove();                // already attempting: no second sn
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void EngineDriving_TypedMoveHook_DoesNothing()
+    {
+        using AutoHarness h = ManualPlay(engineDriving: true);
+        h.Stealth.NoteTypedMove();
+        Assert.Empty(h.Sent);
+    }
+
+    // `sn` then `sea`: the game takes the sneak and then ends it, but the answer to
+    // the `sn` arrives after we noted the `sea`. It must not read as sneaking.
+    [Fact]
+    public void SneakAnswer_AfterALaterSneakEndingCommand_IsNotReadAsSneaking()
+    {
+        using AutoHarness h = ManualPlay();
+        h.Stealth.NoteRoomChanged();              // sn out, unanswered
+        h.Stealth.NoteSneakBroken("'sea'");       // sea sent after it
+
+        h.Feed("Attempting to sneak...");         // the answer to that first sn
+        Assert.False(h.State.IsSneaking);
+        Assert.False(h.Stealth.IsSneaking);
+
+        // The next sn's answer counts again.
+        h.Stealth.ReSneakInPlaceForTests();
+        h.Feed("Attempting to sneak...");
+        Assert.True(h.Stealth.IsSneaking);
+    }
+
+    [Fact]
+    public void ManualPlay_SwitchingAutoSneakOn_SneaksWhereWeStand()
+    {
+        using AutoHarness h = ManualPlay();
+        h.Stealth.NoteAutoSneakSwitchedOn();
+        h.Stealth.ReSneakInPlaceForTests();
+        Assert.Equal("sn", h.LastSent());
+
+        using AutoHarness off = ManualPlay();
+        off.AutoSneakOn = false;
+        off.Stealth.NoteCombatEndedStealthReset();
+        off.Stealth.ReSneakInPlaceForTests();
+        Assert.Empty(off.Sent);
+    }
+
     // Report paradigm-20260926-233357: "You may not sneak right now!" is a post-combat
     // cooldown. Hold the route and retry sn instead of walking on unsneaked.
     [Fact]

@@ -377,6 +377,7 @@ public sealed class StealthManager : IDisposable
         }
         _sneakConfirmedThisRoom = false;
         _awaitingArrivalConfirm = false;
+        _staleSneakAcks = 0;
 
         // Auto-sneak: fires after the silent-loss check so a just-lost
         // sneak immediately re-attempts. This is the reactive path —
@@ -412,6 +413,65 @@ public sealed class StealthManager : IDisposable
             _log?.Info(LogCategory, "combat spent hide — resetting stealth");
             NoteHideBroken();
         }
+        // Whatever we went into the fight with, the room is clear now: with nothing
+        // driving the moves, take the sneak back here.
+        ScheduleInPlaceReSneak();
+    }
+
+    // ----- Re-sneak in place (nothing driving the moves) ----------------
+    // A walk, loop or auto-lair re-takes a broken sneak at its pre-move hook, the
+    // right moment for it. With none running — the player walking by hand — there is
+    // no such moment: the only other trigger is arriving in a room with no NPC, and in
+    // a tunnel with a monster in every room that never comes, so a sneak broken by a
+    // typed `sea` or spent on a fight stayed broken and every later room was entered
+    // seen (report paradigm-20261002-004148). So with nothing driving, a broken sneak
+    // is re-taken where we stand, a beat later: a gear swap is a burst of commands,
+    // and an `sn` sent into the middle of one would be broken again by the next.
+    private static readonly TimeSpan InPlaceReSneakDelay = TimeSpan.FromMilliseconds(700);
+    private Func<bool>? _isEngineDriving;
+    private Avalonia.Threading.DispatcherTimer? _inPlaceTimer;
+
+    // True while a walk, loop or auto-lair is driving the moves. Unwired, nothing is
+    // ever re-taken in place.
+    public void SetEngineDrivingCheck(Func<bool> isEngineDriving)
+    {
+        ArgumentNullException.ThrowIfNull(isEngineDriving);
+        _isEngineDriving = isEngineDriving;
+    }
+
+    // Auto-Sneak was just switched on: sneak now rather than at the next clear room.
+    public void NoteAutoSneakSwitchedOn() => ScheduleInPlaceReSneak();
+
+    // The player typed a move. With nothing driving the moves, this is the pre-move
+    // moment an engine has: send the `sn` ahead of the step so the step itself is
+    // sneaked, however soon after a sneak-ending command it was typed.
+    public void NoteTypedMove()
+    {
+        if (_isEngineDriving?.Invoke() != false) return;
+        RequestPreMoveStealth();
+    }
+
+    private void ScheduleInPlaceReSneak()
+    {
+        if (_isEngineDriving?.Invoke() != false) return;
+        if (_isAutoSneakEnabled?.Invoke() != true) return;
+        _inPlaceTimer?.Stop();
+        _inPlaceTimer = new Avalonia.Threading.DispatcherTimer(InPlaceReSneakDelay,
+            Avalonia.Threading.DispatcherPriority.Background, (_, _) => ReSneakInPlace());
+        _inPlaceTimer.Start();
+    }
+
+    internal void ReSneakInPlaceForTests() => ReSneakInPlace();
+
+    private void ReSneakInPlace()
+    {
+        _inPlaceTimer?.Stop();
+        _inPlaceTimer = null;
+        // An engine started in the meantime owns it from here; a rest would end a
+        // fresh sneak, so the next move's re-sneak does the job instead.
+        if (_isEngineDriving?.Invoke() != false) return;
+        if (_skipReSneakForRest?.Invoke() == true) return;
+        TryBeginAutoSneak("in place — nothing is driving the moves");
     }
 
     // The client sent a command that ends a sneak (GAME_MECHANICS "What ends a sneak"):
@@ -423,10 +483,16 @@ public sealed class StealthManager : IDisposable
     {
         if (_stateValue is not (StealthState.Sneaking or StealthState.AttemptingSneak)) return;
         _log?.Info(LogCategory, $"{what} ended the sneak — re-sneaking before the next move");
+        // An `sn` still unanswered was sent BEFORE this command, so the game takes the
+        // sneak and then ends it. Its "Attempting to sneak..." is on its way and must
+        // not be read as sneaking (report paradigm-20261002-004148: an arrival `sn`
+        // followed by `sea` left the client believing it sneaked into the next room).
+        if (_stateValue == StealthState.AttemptingSneak) _staleSneakAcks++;
         Transition(StealthState.Idle);
         _state.IsSneaking = false;
         _sneakConfirmedThisRoom = false;
         _awaitingArrivalConfirm = false;
+        ScheduleInPlaceReSneak();
     }
 
     // Called after an automated out-of-combat cast fires (CastFired). A cast breaks
@@ -641,8 +707,20 @@ public sealed class StealthManager : IDisposable
 
     // ----- handlers ----------------------------------------------------
 
+    // Answers still owed to an `sn` that a later sneak-ending command has undone
+    // (NoteSneakBroken). A room change clears it: those lines aren't coming.
+    private int _staleSneakAcks;
+
     private void OnSneakInitiate(MatchResult _)
     {
+        if (_staleSneakAcks > 0)
+        {
+            _staleSneakAcks--;
+            _log?.Info(LogCategory, "sneak answer ignored — a later command already ended that sneak");
+            // The step was held for this answer; let the next ready check re-sneak.
+            ReleaseSettleHold("that sneak was ended by a later command");
+            return;
+        }
         // Clean `Attempting to sneak...` (no failure suffix — the
         // anchored UserSneakInitiate pattern guarantees that) is the
         // server ACK: the sneak took and we're armed to move.
@@ -716,6 +794,7 @@ public sealed class StealthManager : IDisposable
 
     private void OnSneakFailed(MatchResult _)
     {
+        if (_staleSneakAcks > 0) _staleSneakAcks--;
         // `Attempting to sneak...You don't think you're sneaking.` — the
         // attempt was rejected. Resend `sn` when auto-sneak owns the loop
         // (capped at MaxSneakRetries); otherwise settle on Failed and let
@@ -744,6 +823,7 @@ public sealed class StealthManager : IDisposable
 
     private void OnCantSneak(MatchResult _)
     {
+        if (_staleSneakAcks > 0) _staleSneakAcks--;
         ReleaseSettleHold("cooldown");   // the cooldown hold below takes over
         Transition(StealthState.Failed);
         if (_isAutoSneakEnabled?.Invoke() != true || _coordinator is null) return;
@@ -852,5 +932,6 @@ public sealed class StealthManager : IDisposable
         _hideFailedSub.Dispose();
         ReleaseCooldownHold("disposed");
         ReleaseSettleHold("disposed");
+        _inPlaceTimer?.Stop();
     }
 }
