@@ -44,8 +44,8 @@ namespace MudPlay.Game.Spells;
 // cast per round" naturally — if we evaluate mid-round the cooldown blocks; on the
 // next tick it clears and the highest-priority candidate gets through.
 //
-// Master enable flag is AutoActionDefaults.AutoHealRest — shared with HealthManager
-// so the user has one toggle covering both passive rest + active heal-spell. When
+// Master enable flag is AutoActionDefaults.AutoHeal — the active heal-spell side;
+// HealthManager's passive rest has its own switch (AutoRest). When
 // the spell pickers on the Spells tab are empty, the engine no-ops without further
 // checks.
 public sealed class CastingDirector : IDisposable
@@ -1454,16 +1454,16 @@ public sealed class CastingDirector : IDisposable
         // first in-game prompt clears the latch. Without this, buffs drain onto the
         // login prompts during re-entry (report paradigm-20260908-053448).
         if (_suspended) return null;
-        // Two independent masters share this loop: the heal / cure / rest
-        // categories run under AutoHealRest (_isEnabled), buffing runs under
+        // Two independent masters share this loop: the heal / cure / debuff
+        // categories run under AutoHeal (_isEnabled), buffing runs under
         // AutoBless (_autoBlessEnabled), and each is gated separately in the
         // category switch below. Bless is controlled by the Auto-Bless toggle and
-        // nothing else — so when AutoHealRest is off but AutoBless is on we must
+        // nothing else — so when AutoHeal is off but AutoBless is on we must
         // still fall through to the buffing category, not bail here. Only quit
         // when BOTH are off (nothing in the switch could fire).
-        bool healRestEnabled = _isEnabled();
+        bool healEnabled = _isEnabled();
         bool blessEnabled = _autoBlessEnabled?.Invoke() ?? true;
-        if (!healRestEnabled && !blessEnabled) return null;
+        if (!healEnabled && !blessEnabled) return null;
         // A full-screen menu owns the keyboard (train-stats box): any cast text
         // would corrupt its form, so suppress every category until it closes.
         if (_inputCaptured?.Invoke() == true) return null;
@@ -1504,7 +1504,7 @@ public sealed class CastingDirector : IDisposable
         // so the gate is no longer combat-only.
         if (SlotSpentThisRound) return null;
 
-        string? cast = RunDecisionPass(healRestEnabled, blessEnabled);
+        string? cast = RunDecisionPass(healEnabled, blessEnabled);
         // Mark the round's single between-round slot spent so a second Evaluate this
         // round doesn't send another (doomed) cast; freed at the round boundary / window.
         if (cast is not null) _betweenRoundSlotUsedAt = _now();
@@ -1549,7 +1549,7 @@ public sealed class CastingDirector : IDisposable
 
     // Walk the priority list and fire the first ready candidate. Returns the spell
     // that was cast (for diagnostics / tests), or null if nothing matched.
-    private string? RunDecisionPass(bool healRestEnabled, bool blessEnabled)
+    private string? RunDecisionPass(bool healEnabled, bool blessEnabled)
     {
         SpellsSettings spells = _readSpells();
         HealthSettings health = _readHealth();
@@ -1563,7 +1563,7 @@ public sealed class CastingDirector : IDisposable
         if (settling)
         {
             ScheduleSettledPass();
-            if (!healRestEnabled || PickEmergencySelfHeal(spells, health) is null)
+            if (!healEnabled || PickEmergencySelfHeal(spells, health) is null)
             {
                 if (!_settleHoldLogged)
                 {
@@ -1583,7 +1583,7 @@ public sealed class CastingDirector : IDisposable
         // firing the top one. Reached only when a cast can actually go out — Evaluate
         // gates on the cast cooldown upstream — so it lands ~once per between-round, not
         // every heartbeat poll.
-        LogDueQueue(spells, health, partySettings, healRestEnabled, blessEnabled);
+        LogDueQueue(spells, health, partySettings, healEnabled, blessEnabled);
 
         // Sneak keeping (Game.Stealth.SneakGuard): every in-between cast ends a sneak,
         // so while a backstab is still owed here, our sneaked move is landing, or we're
@@ -1603,18 +1603,18 @@ public sealed class CastingDirector : IDisposable
         {
             CastCandidate? pick = category switch
             {
-                // Heal / cure / debuff stay under AutoHealRest; buffing under
+                // Heal / cure / debuff stay under AutoHeal; buffing under
                 // AutoBless. When only one master is on, the other's categories
                 // are skipped rather than the whole loop bailing.
-                SpellCategory.EmergencyHeal   => healRestEnabled ? Wrap(PickEmergencySelfHeal(spells, health)) : null,
-                SpellCategory.DownedAllyHeal  => healRestEnabled ? PickDownedAllyHeal(partySettings, spells) : null,
-                SpellCategory.MinorPartyHeal  => healRestEnabled ? PickMinorPartyHeal(partySettings) : null,
-                SpellCategory.MajorPartyHeal  => healRestEnabled ? PickMajorPartyHeal(partySettings) : null,
-                SpellCategory.MinorSelfHeal   => healRestEnabled ? Wrap(PickMinorSelfHeal(spells, health)) : null,
-                SpellCategory.MajorSelfHeal   => healRestEnabled ? Wrap(PickMajorSelfHeal(spells, health)) : null,
-                SpellCategory.Curing          => healRestEnabled ? PickCure(spells) : null,
+                SpellCategory.EmergencyHeal   => healEnabled ? Wrap(PickEmergencySelfHeal(spells, health)) : null,
+                SpellCategory.DownedAllyHeal  => healEnabled ? PickDownedAllyHeal(partySettings, spells) : null,
+                SpellCategory.MinorPartyHeal  => healEnabled ? PickMinorPartyHeal(partySettings) : null,
+                SpellCategory.MajorPartyHeal  => healEnabled ? PickMajorPartyHeal(partySettings) : null,
+                SpellCategory.MinorSelfHeal   => healEnabled ? Wrap(PickMinorSelfHeal(spells, health)) : null,
+                SpellCategory.MajorSelfHeal   => healEnabled ? Wrap(PickMajorSelfHeal(spells, health)) : null,
+                SpellCategory.Curing          => healEnabled ? PickCure(spells) : null,
                 SpellCategory.Buffing         => blessEnabled ? PickBuff(spells, health, partySettings) : null,
-                SpellCategory.Debuffing       => healRestEnabled ? PickDebuff() : null,
+                SpellCategory.Debuffing       => healEnabled ? PickDebuff() : null,
                 _                              => null,
             };
 
@@ -1749,7 +1749,7 @@ public sealed class CastingDirector : IDisposable
     // queue re-logged ~once a second filled the log ring on its own, pushing a whole
     // walk's worth of navigation history out of the bug report's log tail.
     private void LogDueQueue(SpellsSettings spells, HealthSettings health, PartySettings? party,
-        bool healRestEnabled, bool blessEnabled)
+        bool healEnabled, bool blessEnabled)
     {
         if (_log is null) return;
         List<(int Prio, int Slot, string Text)> q = new();
@@ -1766,7 +1766,7 @@ public sealed class CastingDirector : IDisposable
             };
             q.Add((p, -1, $"{spell.Trim()}({prioLabel})"));
         }
-        if (healRestEnabled)
+        if (healEnabled)
         {
             // Order added here doesn't matter — the queue re-sorts by each
             // category's real priority number below.

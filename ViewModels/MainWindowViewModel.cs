@@ -328,7 +328,8 @@ public partial class MainWindowViewModel : ObservableObject
     // the profile and refresh the toolbar IsActive badge.
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoCombatActive;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoNukeActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoHealRestActive;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff), nameof(IsAutoHealRestActive))] private bool _isAutoHealActive;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff), nameof(IsAutoHealRestActive))] private bool _isAutoRestActive;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoBlessActive;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoLightActive;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoGetItemsActive;
@@ -445,7 +446,7 @@ public partial class MainWindowViewModel : ObservableObject
     // Game.AutoModeController.AllWiredOff but computed from the live
     // observables so the badge updates instantly.
     public bool IsAllAutoOff =>
-        !IsAutoCombatActive && !IsAutoNukeActive && !IsAutoHealRestActive
+        !IsAutoCombatActive && !IsAutoNukeActive && !IsAutoHealActive && !IsAutoRestActive
         && !IsAutoBlessActive && !IsAutoLightActive && !IsAutoGetItemsActive
         && !IsAutoGetCashActive && !IsAutoSneakActive && !IsAutoHideActive
         && !IsAutoSearchActive;
@@ -1796,6 +1797,8 @@ public partial class MainWindowViewModel : ObservableObject
          && e.PropertyName != nameof(IsAutoCombatActive)
          && e.PropertyName != nameof(IsAutoNukeActive)
          && e.PropertyName != nameof(IsAutoHealRestActive)
+         && e.PropertyName != nameof(IsAutoHealActive)
+         && e.PropertyName != nameof(IsAutoRestActive)
          && e.PropertyName != nameof(IsAutoBlessActive)
          && e.PropertyName != nameof(IsAutoLightActive)
          && e.PropertyName != nameof(IsAutoGetItemsActive)
@@ -1818,8 +1821,9 @@ public partial class MainWindowViewModel : ObservableObject
     {
         switch (row.ActionId)
         {
-            // Cycle button shows the active profile number ("P1") as its label.
+            // Both profile buttons show the active profile number ("P1") as their label.
             case "CycleCombatProfile":
+            case "CombatProfileMenu":
                 row.BadgeText = CombatProfileCycleLabel;
                 break;
             case "ToggleConnection":
@@ -1844,6 +1848,12 @@ public partial class MainWindowViewModel : ObservableObject
                 break;
             case "ToggleAutoHealRest":
                 row.IsActive = IsAutoHealRestActive;
+                break;
+            case "ToggleAutoHeal":
+                row.IsActive = IsAutoHealActive;
+                break;
+            case "ToggleAutoRest":
+                row.IsActive = IsAutoRestActive;
                 break;
             case "ToggleAutoBless":
                 row.IsActive = IsAutoBlessActive;
@@ -4695,8 +4705,9 @@ public partial class MainWindowViewModel : ObservableObject
     // loaded).
     [ObservableProperty] private bool _hasCombatProfiles;
 
-    // The toolbar cycle button's label — "P<active#>". ApplyToolbarRowState copies
-    // it onto the CycleCombatProfile row's badge; SyncToolbarStateFlags re-runs it.
+    // The label on the toolbar's two profile buttons (cycle and menu) —
+    // "P<active#>". ApplyToolbarRowState copies it onto their rows' badges;
+    // SyncToolbarStateFlags re-runs it.
     [ObservableProperty] private string _combatProfileCycleLabel = "P1";
 
     private void RebuildCombatProfilesMenu()
@@ -5609,7 +5620,7 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // ----- Auto-engine toggle commands --------------------------------
-    // ToolbarItemCatalogue routes its ToggleAutoCombat / ToggleAutoHealRest
+    // ToolbarItemCatalogue routes its ToggleAutoCombat / ToggleAutoHeal
     // entries here by command-name reflection. The Settings → General
     // checkboxes write directly to GeneralSettings.AutoMode; both paths
     // converge on the same profile field.
@@ -5625,9 +5636,29 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ToggleAutoNuke() => IsAutoNukeActive = !IsAutoNukeActive;
 
-    // Flip the live IsAutoHealRestActive bit.
+    // The combined control: both on turns both off, anything else turns both on.
     [RelayCommand]
     private void ToggleAutoHealRest() => IsAutoHealRestActive = !IsAutoHealRestActive;
+
+    // Flip the live IsAutoHealActive bit.
+    [RelayCommand]
+    private void ToggleAutoHeal() => IsAutoHealActive = !IsAutoHealActive;
+
+    // Flip the live IsAutoRestActive bit.
+    [RelayCommand]
+    private void ToggleAutoRest() => IsAutoRestActive = !IsAutoRestActive;
+
+    // The combined Auto Rest / Heal control over the two separate switches: lit
+    // only while both are on, and setting it sets both.
+    public bool IsAutoHealRestActive
+    {
+        get => IsAutoHealActive && IsAutoRestActive;
+        set
+        {
+            IsAutoHealActive = value;
+            IsAutoRestActive = value;
+        }
+    }
 
     // Flip the live IsAutoBlessActive bit.
     [RelayCommand]
@@ -5896,7 +5927,7 @@ public partial class MainWindowViewModel : ObservableObject
         Models.Profile.AutoActionDefaults am = dto.AutoMode;
         if (general.ReEnableAutoCombatOnReconnect)   am.AutoCombat   = true;
         if (general.ReEnableAutoNukeOnReconnect)     am.AutoNuke     = true;
-        if (general.ReEnableAutoHealRestOnReconnect) am.AutoHealRest = true;
+        if (general.ReEnableAutoHealRestOnReconnect) { am.AutoHeal = true; am.AutoRest = true; }
         if (general.ReEnableAutoBlessOnReconnect)    am.AutoBless    = true;
         if (general.ReEnableAutoLightOnReconnect)    am.AutoLight    = true;
         if (general.ReEnableAutoGetItemsOnReconnect) am.AutoGetItems = true;
@@ -6000,23 +6031,33 @@ public partial class MainWindowViewModel : ObservableObject
     partial void OnIsAutoNukeActiveChanged(bool value)
         => PersistAutoModeFlag("AutoNuke", value, d => d.AutoNuke = value);
 
-    partial void OnIsAutoHealRestActiveChanged(bool value)
+    partial void OnIsAutoRestActiveChanged(bool value)
     {
-        PersistAutoModeFlag("AutoHealRest", value, d => d.AutoHealRest = value);
+        PersistAutoModeFlag("AutoRest", value, d => d.AutoRest = value);
         // Mirror the AutoCombat path: a genuine flip must re-evaluate the
         // health engine at once. Toggling off releases a held HP/MA recovery
-        // gate immediately (Evaluate's disabled branch clears it) so the walker
-        // stops sitting idle mid-rest; toggling on re-asserts and rests now
-        // instead of waiting for the next HP-changed event. A profile reseed
-        // sets this without a real user toggle — skip then.
+        // gate immediately (Evaluate clears it) so the walker stops sitting idle
+        // mid-rest; toggling on re-asserts and rests now instead of waiting for
+        // the next HP-changed event. A profile reseed sets this without a real
+        // user toggle — skip then.
         if (_suppressAutoEngineWriteback > 0) return;
+        AppServices.Current.Health?.Evaluate();
+    }
+
+    partial void OnIsAutoHealActiveChanged(bool value)
+    {
+        PersistAutoModeFlag("AutoHeal", value, d => d.AutoHeal = value);
+        if (_suppressAutoEngineWriteback > 0) return;
+        // A heal that's due casts now rather than on the next HP change; and the
+        // health engine runs while either switch is on, so it re-decides too.
+        AppServices.Current.CastDirector?.Evaluate();
         AppServices.Current.Health?.Evaluate();
     }
 
     partial void OnIsAutoBlessActiveChanged(bool value)
     {
         PersistAutoModeFlag("AutoBless", value, d => d.AutoBless = value);
-        // Mirror OnIsAutoHealRestActiveChanged: a genuine flip must re-evaluate
+        // Mirror OnIsAutoHealActiveChanged: a genuine flip must re-evaluate
         // CastingDirector at once rather than waiting for the next unrelated HP/
         // mana/position/combat event to happen to trigger one — previously
         // enabling Auto Bless could sit doing nothing for an arbitrary stretch
@@ -6233,7 +6274,8 @@ public partial class MainWindowViewModel : ObservableObject
             IsSprintModeActive   = general.SprintMode;
             IsAutoCombatActive   = am.AutoCombat;
             IsAutoNukeActive     = am.AutoNuke;
-            IsAutoHealRestActive = am.AutoHealRest;
+            IsAutoHealActive     = am.AutoHeal;
+            IsAutoRestActive     = am.AutoRest;
             IsAutoBlessActive    = am.AutoBless;
             IsAutoLightActive    = am.AutoLight;
             IsAutoGetItemsActive = am.AutoGetItems;

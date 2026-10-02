@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MudPlay.Models.Profile;
 
 // Initial state for every Action-menu auto-toggle when the character
@@ -7,17 +9,21 @@ namespace MudPlay.Models.Profile;
 // their boot-up state.
 //
 // Field set mirrors the Action menu's auto-toggle group exactly
-// (Combat / Nuke / Heal-Rest / Bless / Light / Get-Items / Get-Cash /
+// (Combat / Nuke / Heal / Rest / Bless / Light / Get-Items / Get-Cash /
 // Sneak / Hide / Search).
 //
 // The on-by-default set mirrors the default toolbar's auto row: Combat / Nuke /
-// Heal-Rest / Bless / Get-Items / Get-Cash / Sneak boot engaged. Light / Hide /
+// Heal / Rest / Bless / Get-Items / Get-Cash / Sneak boot engaged. Light / Hide /
 // Search default off.
 public sealed class AutoActionDefaults
 {
     public bool AutoCombat   { get; set; } = true;
     public bool AutoNuke     { get; set; } = true;
-    public bool AutoHealRest { get; set; } = true;
+    // Healing (heal / cure casts, the downed-ally rescue, the party poll that feeds
+    // them) and resting (the rest / meditate engine) are separate switches. The
+    // combined Auto Rest / Heal control sets both.
+    public bool AutoHeal     { get; set; } = true;
+    public bool AutoRest     { get; set; } = true;
     public bool AutoBless    { get; set; } = true;
     public bool AutoLight    { get; set; }
     public bool AutoGetItems { get; set; } = true;
@@ -26,13 +32,28 @@ public sealed class AutoActionDefaults
     public bool AutoHide     { get; set; }
     public bool AutoSearch   { get; set; }
 
+    // Profiles saved before healing and resting were split carry one combined
+    // flag. Reading it sets both; it is never written back.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? AutoHealRest
+    {
+        get => null;
+        set
+        {
+            if (value is not { } both) return;
+            AutoHeal = both;
+            AutoRest = both;
+        }
+    }
+
     // Independent copy — the base-modes reconcile clones the base onto the live
     // AutoMode so the two never share a reference.
     public AutoActionDefaults Clone() => new()
     {
         AutoCombat   = AutoCombat,
         AutoNuke     = AutoNuke,
-        AutoHealRest = AutoHealRest,
+        AutoHeal     = AutoHeal,
+        AutoRest     = AutoRest,
         AutoBless    = AutoBless,
         AutoLight    = AutoLight,
         AutoGetItems = AutoGetItems,
@@ -48,7 +69,8 @@ public sealed class AutoActionDefaults
         o is not null
         && AutoCombat   == o.AutoCombat
         && AutoNuke     == o.AutoNuke
-        && AutoHealRest == o.AutoHealRest
+        && AutoHeal     == o.AutoHeal
+        && AutoRest     == o.AutoRest
         && AutoBless    == o.AutoBless
         && AutoLight    == o.AutoLight
         && AutoGetItems == o.AutoGetItems

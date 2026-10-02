@@ -35,7 +35,7 @@ public sealed class AutoModeControllerTests
 
     private static AutoActionDefaults AllOff() => new()
     {
-        AutoCombat = false, AutoNuke = false, AutoHealRest = false,
+        AutoCombat = false, AutoNuke = false, AutoHeal = false, AutoRest = false,
         AutoBless = false, AutoLight = false, AutoGetItems = false,
         AutoGetCash = false, AutoSneak = false, AutoHide = false,
     };

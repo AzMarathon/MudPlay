@@ -277,7 +277,7 @@ public sealed partial class AllyDroppedHandler : IDisposable
         // the reported case) still aids, holds movement, and — when leading —
         // re-invites; the name-heal top-up simply no-ops without a party-heal
         // spell (CastingDirector reads AidedDownedGivenNames). Master gate is
-        // AutoHealRest via _isEnabled; IsRecognisedAlly keeps it to our own.
+        // AutoHeal via _isEnabled; IsRecognisedAlly keeps it to our own.
 
         if (_downed.ContainsKey(given)) return; // already rescuing this ally
 

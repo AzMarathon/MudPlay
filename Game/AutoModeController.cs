@@ -30,7 +30,8 @@ public sealed class AutoModeController
     {
         (d => d.AutoCombat,   (d, v) => d.AutoCombat   = v),
         (d => d.AutoNuke,     (d, v) => d.AutoNuke     = v),
-        (d => d.AutoHealRest, (d, v) => d.AutoHealRest = v),
+        (d => d.AutoHeal,     (d, v) => d.AutoHeal     = v),
+        (d => d.AutoRest,     (d, v) => d.AutoRest     = v),
         (d => d.AutoBless,    (d, v) => d.AutoBless    = v),
         (d => d.AutoLight,    (d, v) => d.AutoLight    = v),
         (d => d.AutoGetItems, (d, v) => d.AutoGetItems = v),

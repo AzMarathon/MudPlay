@@ -867,7 +867,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 
 ### Change my settings
 
-- The auto-engine toggles — `@auto-combat`, `@auto-nuke`, `@auto-heal` (`@auto-rest` is the same flag), `@auto-bless`, `@auto-light`, `@auto-cash`, `@auto-get`, `@auto-sneak`, `@auto-hide`, `@auto-search` — each flips that engine (bare toggles it; add `on` or `off` to force it).
+- The auto-engine toggles — `@auto-combat`, `@auto-nuke`, `@auto-heal`, `@auto-rest`, `@auto-bless`, `@auto-light`, `@auto-cash`, `@auto-get`, `@auto-sneak`, `@auto-hide`, `@auto-search` — each flips that engine (bare toggles it; add `on` or `off` to force it).
 - `@auto-all` — the kill switch: `off` stops every engine, `on` restores what was running. `@settings` — reports every engine's on/off state.
 - `@atkprio` — Target Priority: bare reports it; `1` Default, `2` follow-leader, `3 <name>` attack-what-player.
 - `@atkorder` — Attack Order: bare reports it; `1` Default, `2` last-party, `3` last-room, `4 <name>` attack-after, `5` not-last.
@@ -943,7 +943,7 @@ The health and spellcasting engines keep you alive and buffed — resting, heali
 
 ## Health: rest, heal, flee
 
-Auto-Heal / Rest (its toolbar toggle, or Settings → General) watches your HP and mana. Below your rest thresholds it sits and rests (or meditates) back up. Poison stops a rest; on Paradigm you can still meditate while poisoned, so with mana to recover it meditates instead (on Stock, poison stops both); below your run thresholds it flees; below your hang-up threshold it can drop the connection as a last resort. Every threshold is set on Settings → Health, as a percentage or an absolute value.
+Healing and resting are two switches. **Auto-Heal** casts your heal and cure spells (on you and your party), your between-round debuffs, and aids a downed party member. **Auto-Rest** watches your HP and mana, and below your rest thresholds sits and rests (or meditates) back up. Each has its own toolbar button, Action-menu entry and Settings → General checkbox, and the combined **Auto Rest / Heal** button turns both on or both off together (it shows lit only while both are on). So you can keep healing by spell while walking on instead of stopping to rest, or rest without spending mana on heals. Fleeing and the emergency hang-up below work while either switch is on. Poison stops a rest; on Paradigm you can still meditate while poisoned, so with mana to recover it meditates instead (on Stock, poison stops both); below your run thresholds it flees; below your hang-up threshold it can drop the connection as a last resort. Every threshold is set on Settings → Health, as a percentage or an absolute value.
 
 **A hostile blocking your rest, even with Auto-Combat off.** A monster in the room keeps you *in combat*, and you can't rest while it's swinging at you. So when a rest is due (HP **or** mana below its *rest if below*) and an enemy is blocking it — but your HP is still **above** *run if below* — the engine will **fight it to clear the room even if Auto-Combat is off**, then rest once it's dead. If your HP then falls to *run if below* during that fight, it stops and **flees** instead (breaking combat first when *break before running* is set).
 
@@ -1367,7 +1367,7 @@ MudPlay's automation is a set of independent engines you switch on and off — c
 
 ## The auto-engines
 
-Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is an independent on/off switch. Your primary surface for them during play is the **Action menu** in the menu bar (the toolbar can also carry each as a button — add them in Settings → Toolbar + Shortcuts).
+Each engine — Auto-Combat, Auto-Nuke, Auto-Heal, Auto-Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is an independent on/off switch. Your primary surface for them during play is the **Action menu** in the menu bar (the toolbar can also carry each as a button — add them in Settings → Toolbar + Shortcuts).
 
 An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates the combat/spell tuning. But **Auto-Bless stands alone** — self and party buffing is controlled by the Auto-Bless toggle and nothing else, so turning off Auto-Combat or Auto-Rest/Heal never stops your blessing.
 
@@ -2255,8 +2255,8 @@ With a real font selected (JetBrains Mono or a system font, not MX437), the zoom
 
 ### Auto-Engines base modes (11 checkboxes)
 
-**Default:** On — Auto-Combat, Auto-Nuke, Auto-Heal / Rest, Auto-Bless, Auto-Get Items, Auto-Get Cash, Auto-Sneak. Off — Auto-Light, Auto-Hide, Auto-Search, Auto-Train.
-**What it does:** Each checkbox is the base on/off state for one automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal / Rest (healing and resting), Auto-Bless (buffing), Auto-Light (keeping a light lit), Auto-Get Items (picking up ground loot), Auto-Get Cash (picking up coin), Auto-Sneak and Auto-Hide (the two stealth engines), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
+**Default:** On — Auto-Combat, Auto-Nuke, Auto-Heal, Auto-Rest, Auto-Bless, Auto-Get Items, Auto-Get Cash, Auto-Sneak. Off — Auto-Light, Auto-Hide, Auto-Search, Auto-Train.
+**What it does:** Each checkbox is the base on/off state for one automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal (heal and cure casts, and aiding a downed party member), Auto-Rest (stopping to rest or meditate), Auto-Bless (buffing), Auto-Light (keeping a light lit), Auto-Get Items (picking up ground loot), Auto-Get Cash (picking up coin), Auto-Sneak and Auto-Hide (the two stealth engines), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
 **When you might change it:** Set the automation posture a character should return to — e.g. a scout that should never auto-fight, or a healer that should always rest.
 **Important notes:** These are your character's **base** engine states, not the live toolbar toggles. They're applied when the character loads, and the live toggles snap back to them at the start of a loop or Auto-Lair run — so you can flip an engine off to travel somewhere and have it return to your baseline when the circuit begins. See **Automation → Base modes** for the full picture.
 
@@ -2270,7 +2270,7 @@ With a real font selected (JetBrains Mono or a system font, not MX437), the zoom
 
 **Default:** Off (all)
 **What it does:** One checkbox per automation engine (the same 11 engines as above). When you reconnect after having been disconnected mid-session (not the very first connect of an app session), each checked engine gets automatically turned back on — useful if you manually paused something, got dropped, and want your automation state to reset to "on" on redial rather than staying off.
-**When you might change it:** Check the engines you always want running even through a flaky connection (e.g. Auto-Heal/Rest); leave off the ones you deliberately paused for a reason (e.g. Auto-Nuke while grinding a safe area).
+**When you might change it:** Check the engines you always want running even through a flaky connection (e.g. Auto-Heal and Auto-Rest, which share one re-enable box); leave off the ones you deliberately paused for a reason (e.g. Auto-Nuke while grinding a safe area).
 
 ---
 
@@ -2841,7 +2841,7 @@ This editor is **staged** — nothing is saved or used until you press **Apply**
 
 **Switching during play** (these act on your *saved* profiles right away, without opening Settings):
 - **Action menu → Combat Profiles** — a fly-out listing every profile; click one to switch.
-- **Toolbar buttons** (add them under Settings → Toolbar + Shortcuts) — a **Combat Profile (cycle)** button that shows the active number (`P1`, `P2`, …) and steps through them (left-click = next, right-click = previous), or a **Combat Profile (menu)** button that pops the same fly-out.
+- **Toolbar buttons** (add them under Settings → Toolbar + Shortcuts) — a **Combat Profile (cycle)** button that shows the active number (`P1`, `P2`, …) and steps through them (left-click = next, right-click = previous), or a **Combat Profile (menu)** button that shows the active number the same way and pops the same fly-out when clicked.
 - **`@profile`** — lets a trusted party member switch your profile remotely from chat (needs the **Alter my settings** permission). It accepts either:
   - the profile's **number** — the same chip number you see in Settings, so `@profile 2` selects the second profile; or
   - any part of the **name you gave it** in the name box — if you named a profile "Fire", then `@profile fire` (or even `@profile fi`) selects it. When the text could fit more than one name, it picks the closest match.

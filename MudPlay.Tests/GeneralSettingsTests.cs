@@ -133,13 +133,35 @@ public sealed class GeneralSettingsTests
 
         Assert.NotNull(dto);
         Assert.True(dto!.AutoMode.AutoCombat);
-        Assert.True(dto.AutoMode.AutoHealRest);
+        // The combined flag older profiles carry sets both of today's switches.
+        Assert.True(dto.AutoMode.AutoHeal);
+        Assert.True(dto.AutoMode.AutoRest);
         Assert.False(dto.AutoMode.AutoNuke);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CombinedHealRestFlag_FromAnOlderProfile_SetsBothSwitches_AndIsNotWrittenBack(bool saved)
+    {
+        string old = $$"""{ "AutoCombat": true, "AutoHealRest": {{(saved ? "true" : "false")}} }""";
+
+        AutoActionDefaults modes = JsonSerializer.Deserialize<AutoActionDefaults>(old)!;
+        Assert.Equal(saved, modes.AutoHeal);
+        Assert.Equal(saved, modes.AutoRest);
+
+        modes.AutoRest = !saved;   // the switches move apart
+        string written = JsonSerializer.Serialize(modes);
+        Assert.DoesNotContain("AutoHealRest", written);
+
+        AutoActionDefaults back = JsonSerializer.Deserialize<AutoActionDefaults>(written)!;
+        Assert.Equal(saved, back.AutoHeal);
+        Assert.Equal(!saved, back.AutoRest);
     }
 
     private static AutoActionDefaults AllToggles(bool value) => new()
     {
-        AutoCombat = value, AutoNuke = value, AutoHealRest = value,
+        AutoCombat = value, AutoNuke = value, AutoHeal = value, AutoRest = value,
         AutoBless = value, AutoLight = value, AutoGetItems = value,
         AutoGetCash = value, AutoSneak = value, AutoHide = value,
         AutoSearch = value,
@@ -148,11 +170,12 @@ public sealed class GeneralSettingsTests
     private static void AssertDefaultColumn(AutoActionDefaults d)
     {
         // The on-by-default set mirrors the default toolbar's auto row:
-        // Combat / Nuke / Heal-Rest / Bless / Get-Items / Get-Cash / Sneak.
+        // Combat / Nuke / Heal / Rest / Bless / Get-Items / Get-Cash / Sneak.
         // Light / Hide / Search default off.
         Assert.True(d.AutoCombat);
         Assert.True(d.AutoNuke);
-        Assert.True(d.AutoHealRest);
+        Assert.True(d.AutoHeal);
+        Assert.True(d.AutoRest);
         Assert.True(d.AutoBless);
         Assert.False(d.AutoLight);
         Assert.True(d.AutoGetItems);
@@ -166,7 +189,8 @@ public sealed class GeneralSettingsTests
     {
         Assert.Equal(a.AutoCombat,   b.AutoCombat);
         Assert.Equal(a.AutoNuke,     b.AutoNuke);
-        Assert.Equal(a.AutoHealRest, b.AutoHealRest);
+        Assert.Equal(a.AutoHeal,     b.AutoHeal);
+        Assert.Equal(a.AutoRest,     b.AutoRest);
         Assert.Equal(a.AutoBless,    b.AutoBless);
         Assert.Equal(a.AutoLight,    b.AutoLight);
         Assert.Equal(a.AutoGetItems, b.AutoGetItems);

@@ -54,6 +54,8 @@ public enum BuiltInAction
     ToggleAutoCombat,
     ToggleAutoNuke,
     ToggleAutoHealRest,
+    ToggleAutoHeal,
+    ToggleAutoRest,
     ToggleAutoBless,
     ToggleAutoLight,
     ToggleAutoGetItems,

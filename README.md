@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.135.0**
-> - Settings → Sounds: per-event sounds, each with its own tone or file and volume, plus a master volume
-> - Sounds for level up, boss kill and boss timers, loop / kill milestones, finished walks, auto-train and auto-sell trips, telepaths, party, danger and connection drops; all start off
-> - Trigger sound files now play, and each Event can name a sound of its own
-> - Sounds play in the background through the system player, so the terminal never waits on them
+> **Version 3.135.2**
+> - Auto Heal and Auto Rest are separate switches, each with its own toolbar button, Action-menu entry, base-mode checkbox and keybind; the combined Auto Rest / Heal button sets both
+> - `@auto-heal` and `@auto-rest` now switch healing and resting separately
+> - The Combat Profile (menu) toolbar button shows the active profile number
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

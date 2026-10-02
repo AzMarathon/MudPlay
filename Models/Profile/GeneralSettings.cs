@@ -102,7 +102,8 @@ public sealed class GeneralSettings
     // drive and each engine reads per-tick. Each flag gates whether the matching
     // engine fires: AutoActionDefaults.AutoCombat gates Game.Combat.CombatManager
     // + the Game.Combat.CombatStateTracker's Combat-gate assertion;
-    // AutoActionDefaults.AutoHealRest gates Game.Health.HealthManager; the others
+    // AutoActionDefaults.AutoRest gates Game.Health.HealthManager's resting and
+    // AutoHeal the heal / cure casts; the others
     // gate their own engines. The toolbar Toggle* commands write this directly.
     // It is transient across a session — reconciled back to AutoModeBase (below)
     // at profile load and at each loop / auto-lair circuit start.
@@ -183,7 +184,7 @@ public sealed class GeneralSettings
     // Re-enable Auto-Nuke on reconnect. Default off.
     public bool ReEnableAutoNukeOnReconnect     { get; set; }
 
-    // Re-enable Auto-Heal/Rest on reconnect. Default off.
+    // Re-enable Auto-Heal and Auto-Rest on reconnect. Default off.
     public bool ReEnableAutoHealRestOnReconnect { get; set; }
 
     // Re-enable Auto-Bless on reconnect. Default off.

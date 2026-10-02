@@ -13,7 +13,7 @@ public sealed class AutoActionDefaultsTests
     {
         AutoActionDefaults src = new()
         {
-            AutoCombat = false, AutoNuke = true, AutoHealRest = false,
+            AutoCombat = false, AutoNuke = true, AutoHeal = false, AutoRest = true,
             AutoBless = true, AutoLight = true, AutoGetItems = false,
             AutoGetCash = true, AutoSneak = false, AutoHide = true, AutoSearch = true,
         };

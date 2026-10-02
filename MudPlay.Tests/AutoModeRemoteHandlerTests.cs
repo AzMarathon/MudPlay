@@ -93,16 +93,19 @@ public sealed class AutoModeRemoteHandlerTests
     }
 
     [Fact]
-    public void AutoRest_AliasesAutoHealRest()
+    public void AutoRest_AndAutoHeal_AreSeparateSwitches()
     {
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
         s.Engine.DispatchForTests(Telepath("Tank", "@auto-rest off"));
-        Assert.False(ReadMode(s.Profile.Current!).AutoHealRest);
+        Assert.False(ReadMode(s.Profile.Current!).AutoRest);
+        Assert.True(ReadMode(s.Profile.Current!).AutoHeal);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@auto-heal on"));
-        Assert.True(ReadMode(s.Profile.Current!).AutoHealRest);
+        s.Engine.DispatchForTests(Telepath("Tank", "@auto-heal off"));
+        s.Engine.DispatchForTests(Telepath("Tank", "@auto-rest on"));
+        Assert.True(ReadMode(s.Profile.Current!).AutoRest);
+        Assert.False(ReadMode(s.Profile.Current!).AutoHeal);
     }
 
     [Fact]
@@ -134,7 +137,8 @@ public sealed class AutoModeRemoteHandlerTests
 
         AutoActionDefaults mode = ReadMode(s.Profile.Current!);
         Assert.False(mode.AutoCombat);
-        Assert.False(mode.AutoHealRest);
+        Assert.False(mode.AutoHeal);
+        Assert.False(mode.AutoRest);
         Assert.False(mode.AutoGetCash);
         Assert.False(mode.AutoSneak);
         Assert.False(mode.AutoHide);
@@ -150,7 +154,8 @@ public sealed class AutoModeRemoteHandlerTests
 
         AutoActionDefaults mode = ReadMode(s.Profile.Current!);
         Assert.True(mode.AutoCombat);
-        Assert.True(mode.AutoHealRest);
+        Assert.True(mode.AutoHeal);
+        Assert.True(mode.AutoRest);
         Assert.True(mode.AutoGetCash);
     }
 
@@ -187,9 +192,8 @@ public sealed class AutoModeRemoteHandlerTests
         string reply = Encoding.Latin1.GetString(s.Engine.LastSentForTests[^1]);
         Assert.Contains("Auto-Combat: On", reply);     // default on
         Assert.Contains("Auto-Light: Off", reply);      // default off
-        // @auto-rest aliases @auto-heal — must not double-report.
-        Assert.DoesNotContain("Auto-Rest", reply);
         Assert.Contains("Auto-Heal: On", reply);
+        Assert.Contains("Auto-Rest: On", reply);
     }
 
     [Fact]
