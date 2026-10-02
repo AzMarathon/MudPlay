@@ -43,6 +43,24 @@ public static class BankCatalog
         return banks;
     }
 
+    // Banks nearest first by a hop-count map (BfsMapper.ComputeDistancesFrom), then
+    // the ones the map doesn't reach, by name. Steps is null for those.
+    public static IReadOnlyList<(BankShop Bank, int? Steps)> ByDistance(
+        IReadOnlyList<BankShop> banks, IReadOnlyDictionary<RoomKey, int> distances)
+    {
+        ArgumentNullException.ThrowIfNull(banks);
+        ArgumentNullException.ThrowIfNull(distances);
+        var rows = new List<(BankShop Bank, int? Steps)>(banks.Count);
+        foreach (BankShop bank in banks)
+            rows.Add((bank, distances.TryGetValue(bank.Key, out int steps) ? steps : null));
+        rows.Sort((a, b) =>
+        {
+            int byReach = (a.Steps ?? int.MaxValue).CompareTo(b.Steps ?? int.MaxValue);
+            return byReach != 0 ? byReach : string.Compare(a.Bank.Name, b.Bank.Name, StringComparison.OrdinalIgnoreCase);
+        });
+        return rows;
+    }
+
     // True when key hosts a bank (ShopType == 7) in the active set. Skips the
     // Rooms name index the display path builds — only the (map, room) match
     // matters here.

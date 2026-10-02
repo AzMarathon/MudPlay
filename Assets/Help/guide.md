@@ -484,7 +484,7 @@ few seconds.
 
 ## The map and obstacles
 
-**Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target), then **Walk here**, **I am here** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list), **Use Teleport**, **Center on Player**, **Center on Destination** (only while a walk is under way — jumps the view to where the walk ends: the walk-to target, or the loop's start room / the next lair when a loop or Auto-Lair is walking there first), **Center on…**, and toggles to mark a room **Avoid** or **Stash**. Like a manual pan, a re-centre holds the view for a while before it follows you again — 15 seconds by default, set in **Settings → Other → Navigation map: hold a browsed view for N seconds**.
+**Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target), then **Walk here**, **Transfer Stash to Bank** (on a stash room only — see [Banking](#banking)), **I am here** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list), **Use Teleport**, **Center on Player**, **Center on Destination** (only while a walk is under way — jumps the view to where the walk ends: the walk-to target, or the loop's start room / the next lair when a loop or Auto-Lair is walking there first), **Center on…**, and toggles to mark a room **Avoid** or **Stash**. Like a manual pan, a re-centre holds the view for a while before it follows you again — 15 seconds by default, set in **Settings → Other → Navigation map: hold a browsed view for N seconds**.
 
 **Shift+right-click** skips the menu when a room's only jump is unambiguous — a room with just an up exit, just a down exit, or a single teleport destination immediately follows it (recentres the map there) instead of opening the menu.
 
@@ -1024,6 +1024,19 @@ You don't have to wait for the engines, either: the **Action menu** (and the mat
 When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand, then **walks back and resumes the loop / Auto-Lair** it interrupted — a loop at whichever of its rooms is nearest (the same as a sell detour), an Auto-Lair where it left off. The trip home uses the **full pathfinder** — the same one that handles your GOTOs — so if the grind area is walled behind a key-door, a hidden exit, a summon-drop key, or a lever/ask-NPC gate, it plans and crosses back *in* rather than stranding at the bank (getting *out* of such an area is easy; getting back *in* needs the gate-aware routing).
 
 Set the bank and thresholds on Settings → Cash. To bank right now regardless of the threshold, use **Action → Deposit All** (or its toolbar button / the `@deposit-all` remote command), which banks down to your keep-on-hand floor.
+
+### Moving a stash into a bank
+
+Right-click a **stash room** on the Navigation map and open **Transfer Stash to Bank**. The fly-out lists every bank in the game data, nearest to where you are standing first, each with its map/room and the walking steps to it. Pick one and MudPlay shuttles the stash's coin to it:
+
+- It stops any loop or Auto-Lair that is running (it does not resume it afterwards), walks to the stash room and searches.
+- It reads the pile the search shows, then takes as much as your coin weight limits allow (**Settings → Cash**: *Don't collect if it makes you Light / Medium / Heavy*, *Don't collect past 90% encumbrance*, and *Drop smaller currency to make room for larger*). With no limit ticked that is everything you can physically carry. The per-coin Collect / Ignore / Discard choices don't decide what it takes — this is your own stash — but a coin set to **Discard** will still be dropped again, so set it to Ignore or Collect first if your stash holds any.
+- It walks to the bank and deposits exactly what that trip took, so the cash you were carrying before is left alone.
+- It goes back for more and repeats until a search shows nothing left, and ends standing in the bank. A notice in the terminal says how much moved and in how many trips.
+
+To end it early, stop movement (the toolbar Stop, or **Stop Stash Transfer** on the map's right-click menu). It also ends on its own, and says why, if nothing can be picked up (you are already at your weight limit), if the bank takes no deposit, or if a walk fails. Whatever you are carrying from the stash at that point stays in your pocket. While it runs the Navigation window shows a **Stash Transfer** chip, coin on the ground along the way to the stash is left where it is, and Auto-Get Cash is borrowed for the stash stop only — your saved setting isn't changed.
+
+The stash room stays marked as a stash, so a loop that passes through it later will stash there again.
 
 ## Equipment sets
 

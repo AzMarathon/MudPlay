@@ -88,6 +88,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.AutoDeposit.ReroutingChanged += OnTripChanged;
         _services.SellDetour.DetouringChanged += OnTripChanged;
         _services.TrainerWalk.StateChanged += OnTripChanged;
+        _services.StashTransfer.StateChanged += OnStashTransferChanged;
         _services.PartyComeback.RecoveringChanged += OnTripChanged;
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved += RefreshDeathRooms;
@@ -254,6 +255,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.AutoDeposit.ReroutingChanged -= OnTripChanged;
         _services.SellDetour.DetouringChanged -= OnTripChanged;
         _services.TrainerWalk.StateChanged -= OnTripChanged;
+        _services.StashTransfer.StateChanged -= OnStashTransferChanged;
         _services.PartyComeback.RecoveringChanged -= OnTripChanged;
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved -= RefreshDeathRooms;
@@ -2369,6 +2371,54 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public bool ContextIsStash   => ContextRoomKey is { } k && _services.Movement.IsStash(k);
     public bool ContextIsFavorite => ContextRoomKey is { } k && _services.Favorites.IsFavorite(k);
 
+    // "Transfer Stash to Bank" on a stash room's menu: every bank in the game data,
+    // nearest to the player first; picking one starts the stash → bank trips. While a
+    // transfer runs the entry is "Stop Stash Transfer" instead, on any room.
+    public ObservableCollection<MudPlay.ViewModels.FavoriteMenuItem> ContextTransferBanks { get; } = new();
+    public bool ContextCanTransferStash =>
+        ContextIsStash && !_services.StashTransfer.IsBusy && ContextTransferBanks.Count > 0;
+    public bool ContextStashTransferRunning => _services.StashTransfer.IsBusy;
+
+    // Called on every right-click, not only when the room changes: the order depends
+    // on where the player stands, and re-clicking the same room keeps the same key.
+    public void RefreshContextTransferBanks()
+    {
+        ContextTransferBanks.Clear();
+        if (ContextRoomKey is { } stash && _services.Movement.IsStash(stash))
+        {
+            RoomKey from = _services.RoomTracker.State.CurrentRoom?.Key ?? stash;
+            int number = 0;
+            foreach ((Game.GameData.BankShop bank, int? steps) in _services.BanksNearestFirst(from))
+            {
+                Game.GameData.BankShop target = bank;
+                string reach = steps is { } n ? $"{n} step{(n == 1 ? "" : "s")}" : "no walking route found";
+                ContextTransferBanks.Add(new MudPlay.ViewModels.FavoriteMenuItem(
+                    $"{++number})", $"{bank.Name} {bank.Map}/{bank.Room} — {reach}", GotoWalkBrush,
+                    new RelayCommand(() => StartStashTransfer(stash, target))));
+            }
+        }
+        OnPropertyChanged(nameof(ContextCanTransferStash));
+        OnPropertyChanged(nameof(ContextStashTransferRunning));
+    }
+
+    private void StartStashTransfer(RoomKey stash, Game.GameData.BankShop bank)
+    {
+        if (_services.StartStashTransfer(stash, bank) is { } refused)
+            _services.WriteTerminalNotice($"Stash transfer not started: {refused}.");
+    }
+
+    [RelayCommand]
+    private void StopStashTransfer() => _services.StashTransfer.Cancel("stopped from the map menu");
+
+    // The runner reports from walker events and timers; the chips and menu state
+    // are read on the UI thread.
+    private void OnStashTransferChanged() => Dispatcher.UIThread.Post(() =>
+    {
+        RefreshActivityStatus();
+        OnPropertyChanged(nameof(ContextCanTransferStash));
+        OnPropertyChanged(nameof(ContextStashTransferRunning));
+    });
+
     // Right-click → single "Toggle: Roomba Room". If the room is already a Roomba
     // room, remove it; otherwise open the rule picker to add it. One menu entry does
     // both — there's no separate "clear" item. The map robot marker refreshes off
@@ -2656,6 +2706,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Log?.Info("Navigation",
             $"stash toggled key={k} {(wasStash ? "unmarked" : "marked")} profile-loaded={_services.Profile.Current is not null}");
         OnPropertyChanged(nameof(ContextIsStash));
+        RefreshContextTransferBanks();
     }
 
     // Window listens and forwards to MapControl.RecenterOnPlayer(). The VM
@@ -3474,6 +3525,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             trips.Add((_services.AutoDeposit.IsReturning ? Back(_services.AutoDeposit.ResumePlan.Kind) : "Bank Trip", NavChipTone.Trip));
         if (_services.SellDetour.IsDetouring)
             trips.Add((_services.SellDetour.IsReturning ? Back(_services.SellDetour.ResumePlan.Kind) : "Auto-Selling", NavChipTone.Trip));
+        if (_services.StashTransfer.IsBusy) trips.Add(("Stash Transfer", NavChipTone.Trip));
         if (_services.TrainerWalk.IsBusy) trips.Add(("Auto-Training", NavChipTone.Trip));
         else if (_services.LoopRunner.ReturningFromDetour) trips.Add(("Back to Loop", NavChipTone.Trip));
         if (_services.PartyComeback.RecoveringMember is not null) trips.Add(("@Comeback", NavChipTone.Trip));
