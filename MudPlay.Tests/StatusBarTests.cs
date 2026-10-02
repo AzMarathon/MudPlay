@@ -21,7 +21,7 @@ public sealed class StatusBarTests
     public void DefaultLayout_IsTheOriginalBar()
     {
         StatusBarRow row = Assert.Single(new StatusBarSettings().Rows);
-        Assert.Equal(new[] { "engine", "location" }, row.Left.Select(e => e.Item));
+        Assert.Equal(new[] { "engine", "location", "exprate", "tnl" }, row.Left.Select(e => e.Item));
         Assert.Equal(new[] { "target" }, row.Center.Select(e => e.Item));
         Assert.Equal(new[] { "statline", "tick", "hptick", "matick", "connection" }, row.Right.Select(e => e.Item));
         Assert.False(row.Marquee);
@@ -92,6 +92,15 @@ public sealed class StatusBarTests
             e => Assert.NotNull(StatusBarItemCatalogue.Find(e.Item)));
     }
 
+    [Fact]
+    public void Catalogue_Groups_KeepEveryItem_InListOrder()
+    {
+        Assert.Equal(StatusBarItemCatalogue.All, StatusBarItemCatalogue.Groups.SelectMany(g => g));
+        Assert.Equal("Standard bar", StatusBarItemCatalogue.Groups[0].Key);
+        Assert.Contains("{combatprofilename}", StatusBarItemCatalogue.TokenNames);
+        Assert.DoesNotContain("{text}", StatusBarItemCatalogue.TokenNames);
+    }
+
     [Theory]
     [InlineData("Lap {lap} of {loop}", "Lap <lap> of <loop>")]
     [InlineData("{HP} now", "<hp> now")]                      // names match in any case
@@ -147,29 +156,50 @@ public sealed class StatusBarTests
     public void Editor_AddMoveRemove_ReshapesAZone()
     {
         StatusBarEditorViewModel editor = Editor(out List<int> changes);
-        StatusBarZoneEditor left = editor.Rows[0].Left;
+        StatusBarZoneEditor centre = editor.Rows[0].Center;
 
-        left.Choice = StatusBarItemCatalogue.Find("profile");
-        left.AddCommand.Execute(null);
-        Assert.Equal(new[] { "engine", "location", "profile" }, left.Entries.Select(e => e.Def.Id));
+        centre.Add(StatusBarItemCatalogue.Find("profile")!);
+        centre.Add(StatusBarItemCatalogue.Find("hp")!);
+        Assert.Equal(new[] { "target", "profile", "hp" }, centre.Entries.Select(e => e.Def.Id));
 
-        left.Entries[2].MoveEarlierCommand.Execute(null);
-        left.Entries[0].MoveEarlierCommand.Execute(null);   // already first: no move, no change
-        Assert.Equal(new[] { "engine", "profile", "location" }, left.Entries.Select(e => e.Def.Id));
+        centre.Move(centre.Entries[2], -1);
+        Assert.False(centre.CanMove(centre.Entries[0], -1));
+        centre.Move(centre.Entries[0], -1);   // already first: no move, no change
+        Assert.Equal(new[] { "target", "hp", "profile" }, centre.Entries.Select(e => e.Def.Id));
 
-        left.Entries[0].RemoveCommand.Execute(null);
-        Assert.Equal(new[] { "profile", "location" }, editor.ToSettings().Rows[0].Left.Select(e => e.Item));
-        Assert.Equal(3, changes.Count);
+        centre.Remove(centre.Entries[0]);
+        Assert.Equal(new[] { "hp", "profile" }, editor.ToSettings().Rows[0].Center.Select(e => e.Item));
+        Assert.Equal(4, changes.Count);
+    }
+
+    [Fact]
+    public void Editor_MoveTo_CarriesAnItemToAnotherSideOrRow_AsOneChange()
+    {
+        StatusBarEditorViewModel editor = Editor(out List<int> changes);
+        editor.AddRowCommand.Execute(null);
+        StatusBarRowEditor first = editor.Rows[0], second = editor.Rows[1];
+        first.Center.Add(StatusBarItemCatalogue.Find(StatusBarItemCatalogue.CustomTextId)!, "Lap {lap}");
+        int before = changes.Count;
+
+        StatusBarEntryEditor text = first.Center.Entries[^1];
+        second.Right.MoveHere(text);
+
+        Assert.DoesNotContain(text, first.Center.Entries);
+        StatusBarEntry moved = Assert.Single(editor.ToSettings().Rows[1].Right);
+        Assert.Equal(("text", "Lap {lap}"), (moved.Item, moved.Text));
+        Assert.Equal(before + 1, changes.Count);
+
+        second.Right.MoveHere(second.Right.Entries[0]);   // onto its own side: nothing happens
+        Assert.Equal(before + 1, changes.Count);
     }
 
     [Fact]
     public void Editor_CustomText_IsSavedWithItsText()
     {
         StatusBarEditorViewModel editor = Editor(out List<int> changes);
-        StatusBarZoneEditor center = editor.Rows[0].Center;
-        center.Choice = StatusBarItemCatalogue.Find(StatusBarItemCatalogue.CustomTextId);
-        center.AddCommand.Execute(null);
-        center.Entries[^1].Text = "Lap {lap}";
+        StatusBarZoneEditor centre = editor.Rows[0].Center;
+        centre.Add(StatusBarItemCatalogue.Find(StatusBarItemCatalogue.CustomTextId)!);
+        centre.Entries[^1].Text = "Lap {lap}";
 
         StatusBarEntry saved = editor.ToSettings().Rows[0].Center[^1];
         Assert.Equal(("text", "Lap {lap}"), (saved.Item, saved.Text));
@@ -211,6 +241,6 @@ public sealed class StatusBarTests
         saved.Rows[0].Left.Insert(1, new StatusBarEntry("from-a-newer-build"));
         StatusBarEditorViewModel editor = new(() => null);
         editor.Load(saved);
-        Assert.Equal(new[] { "engine", "location" }, editor.Rows[0].Left.Entries.Select(e => e.Def.Id));
+        Assert.Equal(new[] { "engine", "location", "exprate", "tnl" }, editor.Rows[0].Left.Entries.Select(e => e.Def.Id));
     }
 }

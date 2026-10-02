@@ -3,6 +3,7 @@ using MudPlay.Game;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 
 namespace MudPlay.ViewModels.StatusBar;
@@ -19,6 +20,8 @@ public static class StatusBarValues
     {
         "engine" => nameof(MainWindowViewModel.EngineActionBadge),
         "location" => nameof(MainWindowViewModel.LocationText),
+        "exprate" => nameof(MainWindowViewModel.ExpRateText),
+        "tnl" => nameof(MainWindowViewModel.TimeToLevelText),
         "target" => nameof(MainWindowViewModel.TargetHpText),
         "statline" => nameof(MainWindowViewModel.IsStatlineMismatchVisible),
         "tick" => nameof(MainWindowViewModel.CombatTickText),
@@ -37,6 +40,8 @@ public static class StatusBarValues
         {
             "engine" => main.EngineActionBadge,
             "location" => main.LocationText,
+            "exprate" => main.ExpRateText,
+            "tnl" => main.TimeToLevelText,
             "target" => main.TargetHpText,
             "statline" => main.IsStatlineMismatchVisible ? "STATLINE MISMATCH" : string.Empty,
             "tick" => main.CombatTickText,
@@ -53,7 +58,11 @@ public static class StatusBarValues
             "lives" => stats.Level > 0 ? $"Lives {stats.Lives}" : string.Empty,
             "bbs" => main.ActiveBbsName ?? string.Empty,
             "gamedata" => svc.GameData.ActiveSet ?? string.Empty,
-            "combatprofile" => CombatProfile(svc),
+            "combatprofile" => CombatProfile(svc, number: true, name: true),
+            "combatprofilenumber" => CombatProfile(svc, number: true, name: false),
+            "combatprofilename" => CombatProfile(svc, number: false, name: true),
+
+            "gearset" => GearSet(svc),
 
             "hp" => state.HasPromptData ? $"HP {state.Hp}/{state.MaxHp}" : string.Empty,
             "hppct" => state.HasPromptData && state.MaxHp > 0 ? $"HP {Percent(state.Hp, state.MaxHp)}%" : string.Empty,
@@ -61,7 +70,7 @@ public static class StatusBarValues
             "manapct" => state.HasPromptData && state.MaxMa > 0 ? $"MA {Percent(state.Ma, state.MaxMa)}%" : string.Empty,
             "position" => state.Position == PlayerPosition.Standing ? string.Empty : state.Position.ToString(),
             "stealth" => state.IsHidden ? "Hidden" : state.IsSneaking ? "Sneaking" : string.Empty,
-            "encumbrance" => state.Encumbrance == EncumbranceLevel.Unknown ? string.Empty : state.Encumbrance.ToString(),
+            "encumbrance" => Encumbrance(state, svc.Inventory.Snapshot.Encumbrance),
 
             "roomkey" => svc.RoomTracker.State.CurrentRoom?.Key.ToString() ?? string.Empty,
             "room" => svc.RoomTracker.State.CurrentRoom?.Name ?? string.Empty,
@@ -70,14 +79,30 @@ public static class StatusBarValues
             "destination" => svc.Walker.State != WalkState.Idle && svc.Walker.Destination is { } to ? $"To {to}" : string.Empty,
 
             "fighting" => state.InCombat ? svc.Combat.CurrentTarget ?? string.Empty : string.Empty,
-            "exprate" => $"{RateText.Compact(svc.SessionActivity.Snapshot().ExperiencePerHour)}/hr",
-            "exptnl" => stats.Level > 0 ? $"TNL {RateText.Compact(Math.Max(0, stats.ExpToNext))}" : string.Empty,
-            "sessionexp" => $"Exp {RateText.Compact(svc.SessionActivity.Snapshot().ExperienceEarned)}",
-            "kills" => $"Kills {svc.SessionActivity.Snapshot().MonstersKilled}",
-            "sessiontime" => Duration(svc.SessionActivity.Snapshot().TimeOnline),
+            "expneeded" => stats.Level > 0 ? $"Needs {RateText.Compact(Math.Max(0, stats.ExpToNext))}" : string.Empty,
             "party" => Party(svc),
+            "hitpct" => Combat(svc) is { TotalSwings: > 0 } c ? $"Hit {c.HitPercent:0}%" : string.Empty,
+            "critpct" => Combat(svc) is { LandedSwings: > 0 } c ? $"Crit {c.CritPercent:0}%" : string.Empty,
+            "backstabpct" => Combat(svc) is { BackstabAttempts: > 0 } c ? $"BS {c.BackstabPercent:0}%" : string.Empty,
+            "avghit" => Combat(svc) is { LandedSwings: > 0 } c ? $"Avg hit {c.PhysicalAvgDamage:0}" : string.Empty,
+            "avground" => Combat(svc) is { RoundsWithDamage: > 0 } c ? $"Round {c.RoundAvgDamage:0}" : string.Empty,
+            "dodgepct" => Combat(svc) is { IncomingAttacks: > 0 } c ? $"Dodge {c.DodgePercent:0}%" : string.Empty,
+            "hittakenpct" => Combat(svc) is { IncomingAttacks: > 0 } c ? $"Hit by {c.HitTakenPercent:0}%" : string.Empty,
+
+            "sessiontime" => Duration(Session(svc).TimeOnline),
+            "sessionexp" => $"Exp {RateText.Compact(Session(svc).ExperienceEarned)}",
+            "kills" => $"Kills {Session(svc).MonstersKilled}",
+            "killrate" => $"{Session(svc).KillsPerHour:0} kills/hr",
+            "sessioncash" => Session(svc).CurrencyCollected > 0 ? $"Got {Worth(Session(svc).CurrencyCollected)}" : string.Empty,
+            "cashrate" => Session(svc).CurrencyPerHour > 0 ? $"{Worth(Session(svc).CurrencyPerHour)}/hr" : string.Empty,
+            "itemsgot" => $"Items {Session(svc).ItemsCollected}",
+            "itemssold" => $"Sold {Session(svc).ItemsSold}",
+            "steps" => $"Steps {Session(svc).Steps}",
+            "steptime" => Session(svc).AverageStep is { } step ? $"Step {step.TotalSeconds:0.00}s" : string.Empty,
+            "sneakpct" => Session(svc).SneakPercent is { } sneak ? $"Sneak {sneak:0}%" : string.Empty,
 
             "auto" => AutoEngines(main),
+            "nextevent" => NextEvent(svc),
             "cash" => Cash(svc.Inventory.Snapshot.Currency),
             "clock" => DateTime.Now.ToString("HH:mm", CultureInfo.InvariantCulture),
             _ => string.Empty,
@@ -86,16 +111,96 @@ public static class StatusBarValues
 
     private static int Percent(int value, int max) => (int)Math.Round(100.0 * value / max);
 
+    // The two session tallies, taken at most once per poll however many items read
+    // them.
+    private static readonly TimeSpan SnapshotAge = TimeSpan.FromMilliseconds(250);
+    private static long _sessionAt = long.MinValue, _combatAt = long.MinValue;
+    private static SessionActivityStats _session;
+    private static CombatSessionStats _combat;
+
+    private static SessionActivityStats Session(AppServices svc)
+    {
+        long now = Environment.TickCount64;
+        if (now - _sessionAt < SnapshotAge.TotalMilliseconds) return _session;
+        _sessionAt = now;
+        return _session = svc.SessionActivity.Snapshot();
+    }
+
+    private static CombatSessionStats Combat(AppServices svc)
+    {
+        long now = Environment.TickCount64;
+        if (now - _combatAt < SnapshotAge.TotalMilliseconds) return _combat;
+        _combatAt = now;
+        return _combat = svc.CombatSession.Snapshot();
+    }
+
+    // "8.7 platinum" — a copper value in the highest coin it reaches.
+    private static string Worth(double copper)
+    {
+        foreach (CoinDenomination coin in new[]
+                 {
+                     CoinDenomination.Runic, CoinDenomination.Platinum, CoinDenomination.Gold, CoinDenomination.Silver,
+                 })
+        {
+            long unit = CurrencyHoldings.CopperUnit(coin);
+            if (copper >= unit) return $"{(copper / unit).ToString("0.#", CultureInfo.InvariantCulture)} {coin.ToString().ToLowerInvariant()}";
+        }
+        return $"{copper:0} copper";
+    }
+
+    // "Medium 1420/2400 (59%)" — the word, then the weight carried, the limit and
+    // the percentage once an inventory read has supplied them.
+    private static string Encumbrance(PlayerState state, EncumbranceReading read)
+    {
+        EncumbranceLevel level = read.Category != EncumbranceLevel.Unknown ? read.Category : state.Encumbrance;
+        if (level == EncumbranceLevel.Unknown) return string.Empty;
+        return read.MaxWeight > 0
+            ? $"{level} {read.CurrentWeight}/{read.MaxWeight} ({read.Percentage}%)"
+            : level.ToString();
+    }
+
     private static Loop? RunningLoop(AppServices svc) =>
         svc.LoopRunner.State == LoopState.Idle ? null : svc.LoopRunner.CurrentLoop;
 
-    private static string CombatProfile(AppServices svc)
+    private static string CombatProfile(AppServices svc, bool number, bool name)
     {
         int active = svc.CombatProfiles.ActiveIndex;
         var profiles = svc.CombatProfiles.Profiles;
         if (active < 0 || active >= profiles.Count) return string.Empty;
-        return $"P{active + 1} {profiles[active].Name}".TrimEnd();
+        string label = number ? $"P{active + 1}" : string.Empty;
+        return name ? $"{label} {profiles[active].Name}".Trim() : label;
     }
+
+    private static string GearSet(AppServices svc)
+    {
+        if (svc.Equipment.CurrentSetId is not { Length: > 0 } id) return string.Empty;
+        string? name = svc.Profile.Current?.Equipment?.Sets.FirstOrDefault(s => s.Id == id)?.Name;
+        return string.IsNullOrWhiteSpace(name) ? string.Empty : $"Gear: {name}";
+    }
+
+    // "Next: Bank run in 12m" — the Event with the nearest countdown. Lifecycle
+    // events (logon, logoff, re-log) have none and never show here.
+    private static string NextEvent(AppServices svc)
+    {
+        if (svc.Profile.Current?.EventsGloballyDisabled == true) return string.Empty;
+        Models.GameData.ScheduledEvent? soonest = null;
+        DateTime due = DateTime.MaxValue;
+        foreach (Models.GameData.ScheduledEvent e in svc.Events.Events)
+        {
+            if (svc.EventScheduler.GetNextFire(e) is not { } at || at >= due) continue;
+            soonest = e;
+            due = at;
+        }
+        if (soonest is null) return string.Empty;
+        string name = string.IsNullOrWhiteSpace(soonest.Name) ? "event" : soonest.Name;
+        return $"Next: {name} in {Countdown(due - DateTime.Now)}";
+    }
+
+    private static string Countdown(TimeSpan left) =>
+        left <= TimeSpan.Zero ? "0s"
+        : left.TotalHours >= 1 ? $"{(int)left.TotalHours}h {left.Minutes}m"
+        : left.TotalMinutes >= 1 ? $"{left.Minutes}m {left.Seconds:00}s"
+        : $"{left.Seconds}s";
 
     private static string Party(AppServices svc)
     {

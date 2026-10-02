@@ -442,7 +442,7 @@
              default is a single row: engine chip and location on the left, the
              looked-at target in the middle, ticks and the connection light on the
              right. -->
-        <views:StatusBarView DockPanel.Dock="Bottom" DataContext="{Binding StatusBar}"/>
+        <views:StatusBarView x:Name="StatusBarHost" DockPanel.Dock="Bottom" DataContext="{Binding StatusBar}"/>
 
         <!-- Bottom (horizontal). Docked after the status bar so the status
              bar keeps the very-bottom edge and this toolbar sits directly

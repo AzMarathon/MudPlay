@@ -60,12 +60,12 @@ public sealed class StatusBarRow
     // than fits the window.
     public bool Marquee { get; set; }
 
-    // The bar as it has always been: engine chip and location on the left, the
-    // looked-at target in the middle, the statline warning, ticks and connection
-    // light on the right.
+    // The bar as it has always been: engine chip, location, exp rate and time to
+    // level on the left, the looked-at target in the middle, the statline warning,
+    // ticks and connection light on the right.
     public static StatusBarRow Default() => new()
     {
-        Left = { new("engine"), new("location") },
+        Left = { new("engine"), new("location"), new("exprate"), new("tnl") },
         Center = { new("target") },
         Right = { new("statline"), new("tick"), new("hptick"), new("matick"), new("connection") },
     };

@@ -9,6 +9,9 @@ public sealed partial class StatusBarRowEditor : ObservableObject
 {
     private readonly StatusBarEditorViewModel _owner;
 
+    // Every row of the editor, this one included — the item menu's "Move to" list.
+    public IReadOnlyList<StatusBarRowEditor> AllRows => _owner.Rows;
+
     public StatusBarZoneEditor Left { get; }
     public StatusBarZoneEditor Center { get; }
     public StatusBarZoneEditor Right { get; }
@@ -25,9 +28,9 @@ public sealed partial class StatusBarRowEditor : ObservableObject
     public StatusBarRowEditor(StatusBarEditorViewModel owner, StatusBarRow row)
     {
         _owner = owner;
-        Left = new StatusBarZoneEditor("Left", row.Left, owner.NotifyChanged);
-        Center = new StatusBarZoneEditor("Centre", row.Center, owner.NotifyChanged);
-        Right = new StatusBarZoneEditor("Right", row.Right, owner.NotifyChanged);
+        Left = new StatusBarZoneEditor(this, "Left", row.Left, owner.NotifyChanged);
+        Center = new StatusBarZoneEditor(this, "Centre", row.Center, owner.NotifyChanged);
+        Right = new StatusBarZoneEditor(this, "Right", row.Right, owner.NotifyChanged);
         Zones = new[] { Left, Center, Right };
         _marquee = row.Marquee;
     }

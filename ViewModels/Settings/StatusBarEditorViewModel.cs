@@ -24,12 +24,6 @@ public sealed partial class StatusBarEditorViewModel : ObservableObject, IDispos
     // Raised on any edit, so the section can mark itself unsaved.
     public event Action? Changed;
 
-    // The names a custom text can put in braces.
-    public string TokenHelp { get; } = "Names for a custom text: " + string.Join("  ",
-        StatusBarItemCatalogue.All
-            .Where(d => d.Kind != StatusBarItemKind.CustomText)
-            .Select(d => "{" + d.Id + "}"));
-
     public StatusBarEditorViewModel(Func<StatusBarViewModel?> createPreview)
     {
         ArgumentNullException.ThrowIfNull(createPreview);

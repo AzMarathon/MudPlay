@@ -4,7 +4,8 @@
 > **Version 3.136.0**
 > - Settings → BBS + Display → Status bar: choose what the bar under the terminal shows, on its left, centre and right
 > - Up to four status bar rows, any of which can crawl as a marquee
-> - New status bar items: profile, combat profile, HP and mana, room, loop and lap, exp rate, party, auto engines, cash, clock and more, plus your own text with live values
+> - New status bar items: profile, combat profile, gear set, HP and mana, encumbrance, room, loop and lap, party, Session Stats tallies, next event, auto engines, cash, clock and more, plus your own text with live values
+> - Location, exp rate and time to next level are separate status bar items
 > - A preview in Settings shows the bar before you accept it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

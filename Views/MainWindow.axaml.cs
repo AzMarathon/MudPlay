@@ -113,6 +113,20 @@ public partial class MainWindow : Window
         TerminalScroll.GetObservable(Visual.BoundsProperty)
             .Subscribe(new AnonymousObserver<Rect>(b => Terminal.ViewportSize = b.Size));
 
+        // A status-bar row added or removed changes the window's height by that
+        // much, so the terminal keeps its size rather than being squeezed. The
+        // first layout only records the height: the saved window size already
+        // allows for the rows it was saved with.
+        double statusBarHeight = 0;
+        StatusBarHost.GetObservable(Visual.BoundsProperty)
+            .Subscribe(new AnonymousObserver<Rect>(b =>
+            {
+                double was = statusBarHeight;
+                statusBarHeight = b.Height;
+                if (was <= 0 || b.Height <= 0 || was == b.Height || WindowState != WindowState.Normal) return;
+                Height = (double.IsNaN(Height) ? ClientSize.Height : Height) + (b.Height - was);
+            }));
+
         // Subscribe to VM PropertyChanged so we can react to IsConnected.
         // Hooking via DataContextChanged covers the case where the VM is
         // swapped at runtime — even though today it's set once in App.
