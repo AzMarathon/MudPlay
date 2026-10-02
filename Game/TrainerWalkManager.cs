@@ -528,9 +528,11 @@ public sealed class TrainerWalkManager : IDisposable
         }
     }
 
-    // Ask the funding errand whether this run can be paid for. Returns true when it
-    // has taken over — either an errand is collecting (we resume on its Finished) or
-    // the run has already been settled as unaffordable.
+    // Ask the funding errand whether this run can be paid for. Returns true when the
+    // caller has nothing left to do — either an errand is collecting (we resume on
+    // its Finished) or a run that hadn't set out yet has been ended as unaffordable.
+    // False leaves the run with the caller: funded, or short part-way through a run,
+    // which the caller's own give-up path settles.
     //
     // The bill is the WHOLE itinerary, not the first trainer's fee: trainers serve a
     // contiguous level band, so a banked run can span several, each charging its own
@@ -594,13 +596,32 @@ public sealed class TrainerWalkManager : IDisposable
         if (scrolls <= 0) spells = null;
 
         var trainerRoom = new RoomKey(first.Map, first.Room);
-        switch (_funding.Begin(cost + scrolls, trainerRoom, TripTolls(itinerary, from, spells)))
+        // Read before Begin: a Short answer mid-run must not end the run here.
+        bool midRun = _phase == Phase.Training;
+        Game.Train.TrainFundingHandoff handoff = Game.Train.TrainFundingHandoffRule.For(
+            _funding.Begin(cost + scrolls, trainerRoom, TripTolls(itinerary, from, spells)), midRun);
+
+        // The scrolls come off the bill before either short answer is taken as final.
+        if (_fundingWithSpells
+            && handoff is Game.Train.TrainFundingHandoff.StopShort or Game.Train.TrainFundingHandoff.Abandon)
+            return FundTrainingAlone(from, first);
+
+        switch (handoff)
         {
-            case Game.Train.TrainFundingStart.Funded:
+            case Game.Train.TrainFundingHandoff.Proceed:
                 _fundingRetryAt = DateTimeOffset.MinValue;
                 return false;                       // purse covers it — carry on
 
-            case Game.Train.TrainFundingStart.Collecting:
+            case Game.Train.TrainFundingHandoff.StopShort:
+                // The trainer refused and nothing reachable covers it either. Not
+                // ours to end: the caller stops the train loop, so levels trained
+                // before the refusal still get their stat refresh and report.
+                _log?.Info("AutoTrain",
+                    DescribeShortfall?.Invoke(_lastFundingShortfall)
+                    ?? $"Can't afford training — short {_lastFundingShortfall:N0} copper.");
+                return false;
+
+            case Game.Train.TrainFundingHandoff.AwaitErrand:
                 _phase = Phase.Funding;
                 _log?.Info("AutoTrain",
                     $"Training {levels} level(s) across {itinerary.Count} trainer(s) costs {cost:N0} copper"
@@ -612,8 +633,6 @@ public sealed class TrainerWalkManager : IDisposable
                 return true;
 
             default:
-                if (_fundingWithSpells) return FundTrainingAlone(from, first);
-
                 // Nothing reachable covers it. Stay armed and say when that changes,
                 // rather than walking somewhere pointless or disarming. The router
                 // reports the exact gap on its Finished event, which has already
@@ -950,12 +969,11 @@ public sealed class TrainerWalkManager : IDisposable
             _log?.Info("AutoTrain",
                 "Trainer refused for money the purse said we had — re-reading the "
                 + "purse and looking for funds.");
-            if (BeginFunding(here.Key, t))
-            {
-                _phase = Phase.Funding;
-                StateChanged?.Invoke();
-                return;
-            }
+            // True only when an errand is collecting, and BeginFunding has already
+            // put the run in its funding phase. Never set that phase here: a short
+            // answer leaves the router idle, and a run parked waiting on it stays
+            // busy with nothing coming to release it.
+            if (BeginFunding(here.Key, t)) return;
         }
 
         HoldFundingRetry(_lastFundingShortfall);

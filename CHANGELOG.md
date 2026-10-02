@@ -1,5 +1,9 @@
 # Version history
 
+## 3.140.1
+
+- Auto-train no longer locks up when a trainer refuses for money and no funds can be found: the run ends, and levels already trained still get their stat refresh and report
+
 ## 3.140.0
 
 - Auto-train can go on to buy and learn the spell scrolls your new level unlocks (Settings → Auto-Trainer → Spells from shops)
