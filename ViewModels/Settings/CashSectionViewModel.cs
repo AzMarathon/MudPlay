@@ -86,6 +86,9 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     // Stash while dragged through a marked stash room as a party follower.
     [ObservableProperty] private bool _stashAsFollower;
 
+    // Stash → bank transfers as party leader: the members carry a share too.
+    [ObservableProperty] private bool _stashTransferPartyShare;
+
     // No combat until an auto-sell detour / auto-deposit trip is back on the loop.
     [ObservableProperty] private bool _noCombatOnSellDetour;
     [ObservableProperty] private bool _noCombatOnDepositTrip;
@@ -172,6 +175,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
 
             StashCoinCutoff = StashCoinCutoff,
             StashAsFollower = StashAsFollower,
+            StashTransferPartyShare = StashTransferPartyShare,
             NoCombatOnSellDetour = NoCombatOnSellDetour,
             NoCombatOnDepositTrip = NoCombatOnDepositTrip,
 
@@ -245,6 +249,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
 
         StashCoinCutoff = dto.StashCoinCutoff;
         StashAsFollower = dto.StashAsFollower;
+        StashTransferPartyShare = dto.StashTransferPartyShare;
         NoCombatOnSellDetour = dto.NoCombatOnSellDetour;
         NoCombatOnDepositTrip = dto.NoCombatOnDepositTrip;
 
@@ -306,6 +311,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     partial void OnKeepOnHandDenominationChanged(CoinDenomination value) => MarkDirty();
     partial void OnStashCoinCutoffChanged(StashCoinCutoff value)      => MarkDirty();
     partial void OnStashAsFollowerChanged(bool value)                => MarkDirty();
+    partial void OnStashTransferPartyShareChanged(bool value)        => MarkDirty();
     partial void OnNoCombatOnSellDetourChanged(bool value)           => MarkDirty();
     partial void OnNoCombatOnDepositTripChanged(bool value)          => MarkDirty();
     // ----- Encumbrance-gate cascade ---------------------------------

@@ -1,5 +1,12 @@
 # Version history
 
+## 3.138.4
+
+- Events can run a stash → bank transfer: a new Stash transfer action with a stash room and a bank to pick
+- Settings → Cash: stash transfers can have party members carry a load too, with a new @get-stash command (search, then take coin up to your weight limits) and @deposit-all at the bank
+- Stash transfer picks up coin on the way back to the stash, and each deposit banks everything gained since it started
+- bug reports addressed: paradigm-20261002-101410
+
 ## 3.138.0
 
 - Right-click a stash room on the map → Transfer Stash to Bank: pick a bank (nearest first) and MudPlay shuttles the stash's coin to it until it's empty

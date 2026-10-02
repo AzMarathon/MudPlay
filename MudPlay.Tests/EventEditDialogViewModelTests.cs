@@ -53,6 +53,74 @@ public sealed class EventEditDialogViewModelTests
         Assert.Equal("New Event", vm.DialogTitle);
     }
 
+    // ----- Stash transfer action ---------------------------------------
+
+    private static readonly (string, RoomRef)[] Stashes = { ("9/413 Crumbling Tunnel, Dead End", new RoomRef(9, 413)) };
+    private static readonly (string, RoomRef)[] Banks =
+    {
+        ("Bank of Godfrey 1/297", new RoomRef(1, 297)),
+        ("Rhudaur Bank 2/2568", new RoomRef(2, 2568)),
+    };
+
+    [Fact]
+    public void StashTransfer_SavesThePickedStashAndBank_AndReopensOnThem()
+    {
+        EventEditDialogViewModel vm = new(new ScheduledEvent(), isNew: true, stashRooms: Stashes, banks: Banks)
+        {
+            IsActionStashTransfer = true,
+            TransferStash = "9/413 Crumbling Tunnel, Dead End",
+            TransferBank = "Rhudaur Bank 2/2568",
+        };
+        ScheduledEvent? saved = null;
+        vm.CloseRequested += r => saved = r;
+        Assert.Null(vm.TryGetMissingTargetMessage());
+        vm.SaveCommand.Execute(null);
+
+        Assert.NotNull(saved);
+        Assert.Equal(EventActionType.StashTransfer, saved!.ActionType);
+        Assert.Equal((9, 413), (saved.TransferStash!.Map, saved.TransferStash.Room));
+        Assert.Equal((2, 2568), (saved.TransferBank!.Map, saved.TransferBank.Room));
+
+        EventEditDialogViewModel reopened = new(saved, isNew: false, stashRooms: Stashes, banks: Banks);
+        Assert.True(reopened.IsActionStashTransfer);
+        Assert.False(reopened.IsActionWalkTo);
+        Assert.Equal("9/413 Crumbling Tunnel, Dead End", reopened.TransferStash);
+        Assert.Equal("Rhudaur Bank 2/2568", reopened.TransferBank);
+    }
+
+    [Fact]
+    public void StashTransfer_NeedsBothRooms()
+    {
+        EventEditDialogViewModel vm = new(new ScheduledEvent(), isNew: true, stashRooms: Stashes, banks: Banks)
+        {
+            IsActionStashTransfer = true,
+        };
+        Assert.Contains("stash room", vm.TryGetMissingTargetMessage());
+
+        vm.TransferStash = "9/413 Crumbling Tunnel, Dead End";
+        Assert.Contains("bank", vm.TryGetMissingTargetMessage());
+    }
+
+    // A stash room unmarked since the event was saved still round-trips.
+    [Fact]
+    public void StashTransfer_ASavedRoomNoLongerListed_IsKept()
+    {
+        ScheduledEvent existing = new()
+        {
+            ActionType = EventActionType.StashTransfer,
+            TransferStash = new RoomRef(4, 44),
+            TransferBank = new RoomRef(1, 297),
+        };
+        EventEditDialogViewModel vm = new(existing, isNew: false, stashRooms: Stashes, banks: Banks);
+        ScheduledEvent? saved = null;
+        vm.CloseRequested += r => saved = r;
+
+        Assert.StartsWith("4/44", vm.TransferStash);
+        vm.SaveCommand.Execute(null);
+
+        Assert.Equal((4, 44), (saved!.TransferStash!.Map, saved.TransferStash.Room));
+    }
+
     [Fact]
     public void Constructor_WalkToCoordHydratesAsText()
     {

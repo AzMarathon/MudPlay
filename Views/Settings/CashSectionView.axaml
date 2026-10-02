@@ -145,6 +145,11 @@
                           IsChecked="{Binding StashAsFollower, Mode=TwoWay}"
                           ToolTip.Tip="When you're a party follower (in a party, not leading), stash currency as the leader drags you through your marked stash rooms. Off by default; your own loop is held by the leader-drag gate, so this opts the pass-through back in."/>
 
+                <!-- Stash → bank transfer: party members carry too -->
+                <CheckBox Content="Stash transfers: party members carry a share too" Margin="0,6,0,0"
+                          IsChecked="{Binding StashTransferPartyShare, Mode=TwoWay}"
+                          ToolTip.Tip="When you run a stash → bank transfer as the party leader, each member is telepathed @get-stash at the stash (they search and take coin up to their own weight limits), then @deposit-all at the bank, so they deposit at the same bank into their own accounts. Members must run MudPlay and allow you to run commands on them. Off by default."/>
+
                 <!-- ============ Detours ============ -->
                 <TextBlock Classes="SectionHeader" Text="Detours"/>
                 <CheckBox Content="No combat during an auto-sell detour"

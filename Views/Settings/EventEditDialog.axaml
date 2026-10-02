@@ -178,7 +178,7 @@
                     <!-- DO: the action. Targets are validated on Save (popup). -->
                     <Border Grid.Row="0" Grid.Column="2" Classes="Section">
                         <Grid ColumnDefinitions="110,*" RowSpacing="4"
-                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                             <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="SectionHeader" Text="DO"/>
 
                             <RadioButton Grid.Row="1" GroupName="What" Content="Walk to"
@@ -240,6 +240,23 @@
                                          IsChecked="{Binding IsActionBankTrip, Mode=TwoWay}"/>
                             <TextBlock Grid.Row="8" Grid.Column="1" Classes="Hint" TextWrapping="Wrap"
                                        Text="walk to your Settings → Cash bank or stash room and deposit / stash there"/>
+
+                            <RadioButton Grid.Row="9" GroupName="What" Content="Stash transfer"
+                                         VerticalAlignment="Top" Margin="0,4,0,0"
+                                         IsChecked="{Binding IsActionStashTransfer, Mode=TwoWay}"
+                                         ToolTip.Tip="Carries a stash room's coin to a bank: search the stash, take what your coin weight limits allow, deposit it, and go back until the stash is empty. Done when it ends in the bank. The same run as the map's right-click Transfer Stash to Bank."/>
+                            <StackPanel Grid.Row="9" Grid.Column="1" Spacing="4">
+                                <ComboBox HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding AvailableStashRooms}"
+                                          SelectedItem="{Binding TransferStash, Mode=TwoWay}"
+                                          IsEnabled="{Binding IsActionStashTransfer}"
+                                          PlaceholderText="(select one of your stash rooms)"/>
+                                <ComboBox HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding AvailableBanks}"
+                                          SelectedItem="{Binding TransferBank, Mode=TwoWay}"
+                                          IsEnabled="{Binding IsActionStashTransfer}"
+                                          PlaceholderText="(select the bank to deposit in)"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
 

@@ -165,7 +165,16 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
                 .Select(b => b.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(),
             eventNames: _events.Events.Select(e => e.Name).Where(n => !string.IsNullOrWhiteSpace(n))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-            bossWindows: BossWindowColumns(AppServices.Current.GameData.ActiveRealm));
+            bossWindows: BossWindowColumns(AppServices.Current.GameData.ActiveRealm),
+            stashRooms: AppServices.Current.Movement.Stash
+                .OrderBy(k => k.Map).ThenBy(k => k.Room)
+                .Select(k => ($"{k.Map}/{k.Room} {AppServices.Current.RoomGraph.GetRoom(k)?.Name}".TrimEnd(),
+                    new Models.Profile.RoomRef(k.Map, k.Room)))
+                .ToList(),
+            banks: Game.GameData.BankCatalog.Enumerate(AppServices.Current.GameData)
+                .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ThenBy(b => b.Map).ThenBy(b => b.Room)
+                .Select(b => ($"{b.Name} {b.Map}/{b.Room}", new Models.Profile.RoomRef(b.Map, b.Room)))
+                .ToList());
 
     // The Bosses tab's early-window columns for the realm, in the tab's order.
     private static IReadOnlyList<(string, double)> BossWindowColumns(Game.RealmType realm)

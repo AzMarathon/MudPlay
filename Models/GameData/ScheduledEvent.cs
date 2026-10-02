@@ -92,6 +92,11 @@ public sealed class ScheduledEvent
     // How long EventActionType.Wait stands still.
     public int? WaitSeconds { get; set; }
 
+    // The stash room and the bank room for EventActionType.StashTransfer. Coords,
+    // like WalkToTarget. Null for other action types.
+    public RoomRef? TransferStash { get; set; }
+    public RoomRef? TransferBank { get; set; }
+
     // ----- Stop after (Loop / AutoLair) ------------------------------
 
     // A loop or auto-lair never ends by itself; these end it so the Then step

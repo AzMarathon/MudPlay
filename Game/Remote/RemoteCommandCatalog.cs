@@ -110,6 +110,7 @@ public static class RemoteCommandCatalog
             // everything in the pack we can drop; @deposit-all: bank it all).
             // Distinct from @equip <set>, which is a per-slot loadout swap.
             ["@get-all"]      = PlayerRemoteControls.ExecuteCommands,
+            ["@get-stash"]    = PlayerRemoteControls.ExecuteCommands,
             ["@drop-all"]     = PlayerRemoteControls.ExecuteCommands,
             ["@hide-all"]     = PlayerRemoteControls.ExecuteCommands,
             ["@deposit-all"]  = PlayerRemoteControls.ExecuteCommands,
@@ -258,6 +259,7 @@ public static class RemoteCommandCatalog
             ["@invite"]       = new("@invite", "asks you to invite the sender into your party"),
             ["@join"]         = new("@join", "asks you to join the sender's party"),
             ["@get-all"]      = new("@get-all", "pick up everything on the ground you can"),
+            ["@get-stash"]    = new("@get-stash", "search the room and take the coin it shows, up to your coin weight limits"),
             ["@drop-all"]     = new("@drop-all [full|coins|keys]", "drop everything unworn in your pack; 'full' everything held (worn gear, light, keys, coins); 'coins' / 'keys' just those"),
             ["@hide-all"]     = new("@hide-all [full|coins|keys]", "the @drop-all sweeps, but hidden in the room instead of dropped"),
             ["@deposit-all"]  = new("@deposit-all", "bank all excess coin"),

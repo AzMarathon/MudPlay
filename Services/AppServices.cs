@@ -1235,6 +1235,9 @@ public sealed class AppServices
     // question, which the display-oriented TransactionHistory above can't answer.
     public Game.Cash.StashLedger StashBalances { get; } = new();
 
+    // The member's side of a leader's stash transfer: @get-stash.
+    public Game.Remote.GetStashHandler GetStash { get; private set; } = null!;
+
     // Carries a stash room's coin to a bank, trip by trip (the map's right-click
     // "Transfer Stash to Bank").
     public Game.Cash.StashTransferRunner StashTransfer { get; private set; } = null!;
@@ -1248,6 +1251,33 @@ public sealed class AppServices
         if (AutoLair.IsActive) AutoLair.Stop("stash transfer started");
         if (LoopRunner.State != Game.Map.LoopState.Idle) LoopRunner.Stop("stash transfer started");
         return StashTransfer.Start(stash, bank.Key, bank.Name);
+    }
+
+    // The members a stash transfer shares the carrying with: the rest of the party,
+    // when Settings → Cash has the option on and we lead it. Only a leader's moves
+    // bring the others along to the stash and the bank.
+    private IReadOnlyList<string> StashTransferPartyMembers()
+    {
+        if (!ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").StashTransferPartyShare
+            || !PartyState.IsInParty || !PartyState.SelfIsLeader)
+            return Array.Empty<string>();
+        List<string> givens = new();
+        foreach (Game.PartyMember m in PartyState.Members)
+        {
+            if (m.IsSelf || m.IsInvited || string.IsNullOrEmpty(m.Name)) continue;
+            (string given, _) = Models.GameData.PlayerObservation.SplitName(m.Name);
+            if (!string.IsNullOrEmpty(given)) givens.Add(given);
+        }
+        return givens;
+    }
+
+    // The same, for a saved bank room (an Event's stash transfer). The room has to
+    // still hold a bank in the active game data.
+    public string? StartStashTransfer(Game.Map.RoomKey stash, Game.Map.RoomKey bankRoom)
+    {
+        foreach (Game.GameData.BankShop bank in Game.GameData.BankCatalog.Enumerate(GameData))
+            if (bank.Key.Equals(bankRoom)) return StartStashTransfer(stash, bank);
+        return $"{bankRoom.Map}/{bankRoom.Room} is not a bank in the active game data";
     }
 
     // The active set's banks, nearest to `from` first. Reach is counted the way the
@@ -5390,6 +5420,22 @@ public sealed class AppServices
             naming: Currency,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud);
 
+        // @get-stash: a leader's stash transfer has us search and carry a load too.
+        // Cash is built further down; these only run when a command arrives.
+        GetStash = new Game.Remote.GetStashHandler(
+            RemoteCommands,
+            onHandCopper: () => Inventory.Snapshot.Currency.TotalCopperValue,
+            send: cmd => SendGameCommand(cmd),
+            armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
+                .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+                    System.Threading.Tasks.TaskScheduler.Default),
+            limitCollection: copper => Cash.SetCollectLimit(copper),
+            surveyedCopper: () => Cash.SurveyedCopperUnderLimit,
+            collectSurveyed: copper => Cash.CollectSurveyed(copper),
+            forceAutoGetCash: on => _autoGetCashOverride = on ? true : null,
+            collectionInUse: () => Cash.CollectLimitCopper is not null || _autoGetCashOverride == true,
+            log: Log);
+
         // Receive side of @heal — a configured party-healer polls `par` on
         // request so CastingDirector re-evaluates its party-heal thresholds
         // against fresh member HP. Emit side is the follower flee-substitute
@@ -7311,8 +7357,16 @@ public sealed class AppServices
             reconcileStash: (room, copper) => StashBalances.Reconcile(room, copper),
             // Walker events and timers can land inside the message pump.
             notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
-            log: Log);
+            log: Log,
+            partyMembers: StashTransferPartyMembers);
         Walker.Event += e => StashTransfer.OnWalkEvent(e.Kind);
+        // A member's {reply} to @get-stash / @deposit-all says that member is done.
+        Chat.EntryClassified += e =>
+        {
+            if (e.Channel == Game.ChatChannel.TelepathIncoming && e.Speaker is { } speaker
+                && e.Message.TrimStart().StartsWith('{'))
+                StashTransfer.NoteMemberReply(speaker, e.Message);
+        };
 
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
             RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log);
@@ -7878,6 +7932,8 @@ public sealed class AppServices
         // What the other event actions start, and the signals that say they're done.
         Events.SetBankTripStarter(AutoDeposit.StartEventTrip);
         AutoDeposit.EventTripEnded += Events.NoteBankTripEnded;
+        Events.SetStashTransferHooks(StartStashTransfer, () => StashTransfer.Cancel("another event took over"));
+        StashTransfer.Ended += Events.NoteStashTransferEnded;
         Events.SetRestHooks(() => Health.IsRecoveringRest || Health.RestInFlight, () => Health.Evaluate());
         Events.SetStatsReader(ReadEventReadings);
         GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
@@ -11134,6 +11190,7 @@ public sealed class AppServices
         TrainerWalk.Cancel(reason);
         TrainFunding.Cancel(reason);
         StashTransfer.Cancel(reason);
+        GetStash.Cancel();
         TrainerMenu.ForceExit(reason);
         Events.CancelRun();
         PartyComeback.Cancel(reason);
