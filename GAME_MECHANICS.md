@@ -4742,7 +4742,7 @@ There is no room to drop amethyst pendant here.
 - **Whatever slot was empty simply isn't restored** (nothing to put back).
 - **Client use:**
   - `ItemCastSequencer` equips, uses and restores a readied cast item; its list (`SpellbookState.GetCastItems`) holds only items with a wear slot or weapons.
-  - The Spell Book also lists a cast item with no wear slot when the data marks it kept after use (`ClassCastItem.Carried`, `SpellbookState.GetSpellBookCastItems`; report `paradigm-20261002-114043`: the Paradigm deck of cards was missing). It labels it *carried, not worn* and nothing tries to equip or use it automatically. See *Deck of cards (Gypsy)*.
+  - The Spell Book also lists a cast item with no wear slot when the data marks it kept after use (`ClassCastItem.Carried`, `SpellbookState.GetSpellBookCastItems`; report `paradigm-20261002-114043`: the Paradigm deck of cards was missing). It labels it *carried, not worn*. A carried item reaches the cast engines only when it is a draw item (the deck), and then it is used without being equipped. See *Deck of cards (Gypsy)*.
 
 ### Deck of cards (Gypsy)
 *Status: OBSERVED 2026-10-02 (imported game data; `wccmmud.dll` 1.11p message and textblock tables; report `paradigm-20261002-120516`); use confirmed by the user 2026-10-02 · Realm: differs*
@@ -4756,6 +4756,8 @@ There is no room to drop amethyst pendant here.
   - `The gaze of luck is upon you.`
   - the card as ANSI art naming it (`The` / `Priest`), then a quoted line about the card.
   - `look deck of cards` read `Uses remaining: 9999` before and `9998` after: a use takes a charge although the item is kept.
+- **A use takes the between-round cast slot, the same as a buff spell, and it can be used cycle after cycle** *([CONFIRMED] 2026-10-02, user)*.
+- **A new draw replaces the card already up (Paradigm)** *([OBSERVED] imported game data)*: the use-spell's textblock 9821 casts `card shuffle` (5145) before the draw, and that spell removes each of the eight card spells (`RemovesSpell`, ability 122, once per card). Stock's textblock 9365 has no shuffle step.
 - **Every card shares the same applied and wear-off lines** *([OBSERVED] Stock message 2763; applied line confirmed on Paradigm by the user 2026-10-02)*: `The gaze of luck is upon you.` and `The gaze of luck is no longer upon you!`. Only the art and the quote say which card was drawn.
 - **The draw line has a room form** *([OBSERVED] Stock message 2780)*: `You grab your deck of cards and draw...` to the user, `%s grabs their deck of cards and draws...` to the room. What the room sees for the Paradigm shuffle line is not recorded.
 - **What can be drawn** *([OBSERVED] textblocks)*:
@@ -4768,7 +4770,8 @@ There is no room to drop amethyst pendant here.
   - death `A deathly curse be upon you! The shadow of death hovers at your door`; fool `Fools often wander the land in ignorant bliss`; swamp `The Swamp swallows life and slows travel`; demon `as a Demon hovers about you`; void `Unending darkness is the hallmark of the Void`.
 - **Client use:**
   - The message seeds key each card record on its own quote, and the shared `The gaze of luck is upon you` line sits on the deck's own record (`card deck draw` / `card-draw`). With all thirteen records on the shared line, one draw latched every card and the void's Confused flag held navigation (report `paradigm-20261002-120516`).
-  - The Spell Book lists the Paradigm deck as a cast-on-use item marked *carried, not worn*; nothing uses it automatically.
+  - The Spell Book lists the Paradigm deck as a cast-on-use item marked *carried, not worn*.
+  - **Buff Watchdog draw slot** (**Client policy**, user 2026-10-02): the deck can be slotted as a buff with one tick box per card (`BuffSlot.RejectedOutcomes`). `CastingDirector` sends `use deck of cards` in the between-round slot (`ItemCastSequencer`, no equip), reads the card off its applied line, keeps a ticked card for that card's duration, and draws again on the next cycle for an unticked one. The cards come from the data (`KnownSpellCatalog.RandomOutcomes`: the use-spell's textblock → its `random` table → the spells that table casts), so each realm's deck lists its own.
 
 ### Chests and chest loot tables
 *Status: CONFIRMED (chest behaviour); CONFIRMED — verified against the 1.11p / Paradigm / Euphoria data, 2026-07-10 (loot-table chain)*

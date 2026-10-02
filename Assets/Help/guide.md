@@ -1004,7 +1004,7 @@ The **Success %** column is your **chance to land the cast** (as opposed to fizz
 
 A spell shows **—** when no chance can be stated — you're not a caster class, or your stats haven't been read yet (type `stat` in the game to populate them). Reopen the book after a `stat` to refresh it.
 
-If your class has gear that casts a spell when you `use` it, a **Cast-on-use items** section at the bottom lists what each one casts, its mana, and its charges. It covers items you wear or wield (a wand, a staff, a charged ring) and class items that are carried rather than worn and aren't used up, marked *carried, not worn* (Paradigm's Gypsy deck of cards). One-shot consumables such as potions and scrolls aren't listed.
+If your class has gear that casts a spell when you `use` it, a **Cast-on-use items** section at the bottom lists what each one casts, its mana, and its charges. It covers items you wear or wield (a wand, a staff, a charged ring) and class items that are carried rather than worn and aren't used up, marked *carried, not worn* (Paradigm's Gypsy deck of cards, which the Buff Watchdog can keep up for you — see *Buff Watchdog*). One-shot consumables such as potions and scrolls aren't listed.
 
 ---
 
@@ -1966,7 +1966,10 @@ Click **＋ Add buff** to open the Add-buff dialog:
   - **Only when HP is full** / **Only when MA is full** — hold the cast until you've rested up to your **rest-max** target (not literal 100%); a "topped-off, ready for the next fight" buff. A triggered recovery rest suspends it until you're back at max.
   - **Only when the room is dark** — shown for a **light** spell. Ticked, it keeps the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); unticked, the light is maintained like any ordinary buff.
   - **Cast before resting for mana** — shown for a **mana-regen roll** spell (nature tap / mana flux / prfl). Ticked, the buff is only kept up **while you're resting for mana**: it's (re)cast when your mana drops below its rest threshold and recast on expiry through the whole rest — including if a fight interrupts the rest — and stops once your mana tops back up. Unticked, it's kept up all the time like a normal buff. (It also carries the reroll knobs, below.)
+  - **Keep these when drawn** — shown for a **draw item**, one whose use deals one of several buffs at random. On Paradigm that is the Gypsy's **deck of cards**. There is one tick box per buff it can deal, each with its chance; hover a box to see what that buff applies and how long it lasts. A ticked buff is kept when it is drawn. An unticked one makes MudPlay use the item again on the next between-round cast, and the next, until a ticked one lands. At least one box has to stay ticked.
 - **OK** adds it as a slot.
+
+**How a deck slot runs.** Using the deck takes the between-round cast slot, like any buff spell, so a re-draw comes one combat round after the last. Each new draw replaces the card you had. Once a ticked card lands, the slot holds for that card's own duration (less the recast timer) and then draws again; if the card wears off early it draws again at once. The deck is used straight from your pack — nothing is equipped or swapped — and each use takes one of its 9,999 charges, re-draws included. It is not added by **Add all blesses**; add it yourself so you choose the cards.
 
 A mana-regen roll spell (nature tap, mana flux, profane link, and kin) rolls a random regen contribution each cast, so the "Cast before resting" condition also carries **reroll knobs** to chase a good roll:
 

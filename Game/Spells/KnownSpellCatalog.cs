@@ -420,7 +420,8 @@ public sealed class KnownSpellCatalog
                 MinLevel: minLevel,
                 SpellEffect: spellEffect,
                 WearSlot: carried ? string.Empty : WearSlotFor(row),
-                Carried: carried));
+                Carried: carried,
+                Outcomes: RandomOutcomes(spellNumber, minLevel, ref tbIndex)));
         }
 
         results.Sort(static (a, b) =>
@@ -574,6 +575,68 @@ public sealed class KnownSpellCatalog
                 ? list : System.Array.Empty<KnownSpell>(),
             resolveMonsterName: n => _cache.FindNameByNumber("Monsters", n));
         return rendered == "—" ? string.Empty : rendered;
+    }
+
+    // The spells a use-spell deals at random. Such a spell carries no effect of its
+    // own: its textblock (ability 148) runs a `random <table>` step, and the spells
+    // that table casts are the outcomes — the deck of cards' cards. Empty for an
+    // ordinary cast spell. Each outcome's chance comes from its own "Casted By" entry
+    // for the table ("Textblock #9822(12%)").
+    private IReadOnlyList<CastOutcome> RandomOutcomes(
+        int spellNumber, int castLevel, ref IReadOnlyDictionary<int, IReadOnlyList<KnownSpell>>? tbIndex)
+    {
+        if (_cache.FindRowByNumber("Spells", spellNumber) is not { } spell) return System.Array.Empty<CastOutcome>();
+        int textblock = 0;
+        for (int i = 0; i < SpellAbilSlots && textblock == 0; i++)
+            if (ReadInt(spell, $"Abil-{i}") == TextblockAbilityCode) textblock = ReadInt(spell, $"AbilVal-{i}");
+        if (textblock <= 0 || TextblockAction(textblock) is not { } action) return System.Array.Empty<CastOutcome>();
+
+        List<CastOutcome> outcomes = new();
+        foreach (Match table in RandomTableStep.Matches(action))
+        {
+            if (!int.TryParse(table.Groups[1].Value, out int tableNumber)) continue;
+            tbIndex ??= BuildCastByTextblockIndex();
+            if (!tbIndex.TryGetValue(tableNumber, out IReadOnlyList<KnownSpell>? dealt)) continue;
+            foreach (KnownSpell s in dealt)
+                outcomes.Add(new CastOutcome(
+                    s.Number, s.Name, ChanceFrom(s.Number, tableNumber),
+                    RenderCastEffect(s.Number, castLevel, ref tbIndex),
+                    SpellCalculator.Duration(s.Formula, castLevel)));
+        }
+        return outcomes;
+    }
+
+    private const int TextblockAbilityCode = 148;
+    private const int SpellAbilSlots = 10;
+
+    // `random 9822` in a textblock's action: run that table.
+    private static readonly Regex RandomTableStep = new(@"\brandom\s+(\d+)", RegexOptions.IgnoreCase);
+
+    // The action script of one TBInfo textblock. Number is text in some exports and a
+    // number in others.
+    private string? TextblockAction(int number)
+    {
+        JsonDocument? doc = _cache.GetRawTable("TBInfo");
+        if (doc is null) return null;
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            if (!row.TryGetProperty("Number", out JsonElement n)) continue;
+            bool match = n.ValueKind == JsonValueKind.Number
+                ? n.TryGetInt32(out int asInt) && asInt == number
+                : int.TryParse(n.GetString(), out int asText) && asText == number;
+            if (match) return ReadString(row, "Action");
+        }
+        return null;
+    }
+
+    // The percentage after one textblock in a spell's "Casted By" list, 0 when none.
+    private int ChanceFrom(int spellNumber, int textblock)
+    {
+        if (_cache.FindRowByNumber("Spells", spellNumber) is not { } spell) return 0;
+        string? castedBy = ReadString(spell, "Casted By");
+        if (castedBy is null) return 0;
+        Match m = Regex.Match(castedBy, $@"Textblock\s*#{textblock}\((-?\d+)%\)", RegexOptions.IgnoreCase);
+        return m.Success && int.TryParse(m.Groups[1].Value, out int pct) ? pct : 0;
     }
 
     // Item class-usability: an item with no non-zero ClassRest-N slot is

@@ -445,4 +445,31 @@ public sealed class ItemCastSequencerTests
         Assert.False(seq.Execute("#emerald tipped crozier"));
         Assert.Empty(seq.LastSentForTests);
     }
+
+    // A carried item (a deck of cards) has no equip slot: one `use`, nothing readied
+    // or put back, and its charge count doesn't hold it back.
+    [Fact]
+    public void CarriedItem_IsUsedFromThePack_WithNoEquipOrRestore()
+    {
+        ClassCastItem deck = new(1441, "deck of cards", 5144, "card deck draw", 0, 9999, Carried: true);
+        InventorySnapshot inv = InvWith(new EquippedItem("silver rapier", "Weapon Hand"))
+            with { CarriedItems = new[] { "deck of cards" } };
+        ItemCastSequencer seq = new(() => new[] { deck }, () => inv);
+        seq.SetWireSender(_ => { });
+
+        Assert.True(seq.Execute("#deck of cards"));
+        Assert.Equal(new[] { "use deck of cards" }, Decode(seq.LastSentForTests));
+    }
+
+    [Fact]
+    public void CarriedItem_NotInThePack_IsNotUsed()
+    {
+        ClassCastItem deck = new(1441, "deck of cards", 5144, "card deck draw", 0, 9999, Carried: true);
+        InventorySnapshot inv = InvWith(new EquippedItem("silver rapier", "Weapon Hand"));
+        ItemCastSequencer seq = new(() => new[] { deck }, () => inv);
+        seq.SetWireSender(_ => { });
+
+        Assert.False(seq.Execute("#deck of cards"));
+        Assert.Empty(seq.LastSentForTests);
+    }
 }

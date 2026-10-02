@@ -128,6 +128,25 @@ public sealed class ItemCastSequencer
             _log?.Debug(LogCategory, $"unresolved item-cast token: {token}");
             return false;
         }
+        string name = item.ItemName.Trim();
+
+        // A carried item has no equip slot: it is used straight from the pack, with
+        // nothing to ready or put back (GAME_MECHANICS "Deck of cards (Gypsy)"). It is
+        // kept after use, so its charge count is not a reason to hold it back.
+        if (item.Carried)
+        {
+            // Not in the pack (dropped, or another character's setup): each use would
+            // only print "You don't have …", cycle after cycle.
+            if (_wornLoadoutKnown?.Invoke() != false && _inventory().LastUpdated != default && !_inventory().Has(name))
+            {
+                _log?.Debug(LogCategory, $"item-cast (carried) skipped: not carrying \"{name}\"");
+                return false;
+            }
+            _log?.Info(LogCategory, $"item-cast (carried): use item=\"{name}\"");
+            _wire.Send($"use {name}");
+            return true;
+        }
+
         if (!item.Unlimited)
         {
             // Limited-charge items aren't safe to recast on a buff loop.
@@ -135,7 +154,6 @@ public sealed class ItemCastSequencer
             return false;
         }
 
-        string name = item.ItemName.Trim();
         InventorySnapshot inv = _inventory();
 
         // The equip/restore plan below reads the worn loadout — which weapon is

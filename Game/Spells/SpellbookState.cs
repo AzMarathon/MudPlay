@@ -38,7 +38,7 @@ public sealed class SpellbookState
     // class-change / set-swap lifecycle as _available (see RebuildAvailable) instead
     // of re-scanning every pass.
     private IReadOnlyList<ClassCastItem> _castItems = Array.Empty<ClassCastItem>();
-    // The same scan including the carried (no equip slot) items, for the Spell Book.
+    // The same scan including every carried (no equip slot) item, for the Spell Book.
     private IReadOnlyList<ClassCastItem> _spellBookCastItems = Array.Empty<ClassCastItem>();
 
     public SpellbookState(KnownSpellCatalog catalog)
@@ -111,9 +111,19 @@ public sealed class SpellbookState
     // alongside learnable spells. Empty when no class is set yet.
     public IReadOnlyList<ClassCastItem> GetCastItems() => _castItems;
 
-    // Every cast-on-use item for the Spell Book's reference list: the readied ones
-    // above plus the carried ones with no equip slot (ClassCastItem.Carried).
+    // Every cast-on-use item for the Spell Book's reference list: the ones above
+    // plus the carried ones with no equip slot (ClassCastItem.Carried).
     public IReadOnlyList<ClassCastItem> GetSpellBookCastItems() => _spellBookCastItems;
+
+    // Draw items: a use deals one of several buffs at random (a deck of cards). The
+    // Buff Watchdog offers them with a tick box per outcome.
+    public IReadOnlyList<ClassCastItem> GetDrawCastItems()
+    {
+        List<ClassCastItem> result = new();
+        foreach (ClassCastItem item in _castItems)
+            if (item.IsDraw) result.Add(item);
+        return result;
+    }
 
     // Cast-on-use items whose spell is a WHOLE-PARTY buff (Targets 10 / 13) and which
     // are unlimited-use. `use <item>` takes no target, so a single-target (Targets 2)
@@ -261,7 +271,9 @@ public sealed class SpellbookState
         // on the same class-change / set-swap trigger, so per-pass GetCastItems reads
         // are free. GetClassCastItems keys only on class, so this is its full input.
         _spellBookCastItems = _catalog.GetClassCastItems(ClassNumber);
-        _castItems = _spellBookCastItems.Where(static item => !item.Carried).ToList();
+        // The cast engines take readied gear, and a carried item only when it is a
+        // draw item (a deck of cards) — that one has a use the Buff Watchdog drives.
+        _castItems = _spellBookCastItems.Where(static item => !item.Carried || item.IsDraw).ToList();
         ResolveObtainedFromNames();
         RebuildAvailablePicks();
     }

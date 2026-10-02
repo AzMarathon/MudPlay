@@ -1,7 +1,8 @@
 # Version history
 
-## 3.138.12
+## 3.139.0
 
+- Buff Watchdog can keep the Gypsy's deck of cards up: tick the cards you want, and it re-draws each round until one of them lands
 - Stash transfer deposits all your cash above the keep-on-hand amount each trip, including what you were already carrying
 - Spell Book lists class cast-on-use items that are carried rather than worn, such as the Gypsy's deck of cards
 - Stash transfer started with a full purse goes to the bank first instead of back to the stash
