@@ -528,9 +528,11 @@ public sealed class TrainerWalkManager : IDisposable
         }
     }
 
-    // Ask the funding errand whether this run can be paid for. Returns true when it
-    // has taken over — either an errand is collecting (we resume on its Finished) or
-    // the run has already been settled as unaffordable.
+    // Ask the funding errand whether this run can be paid for. Returns true when the
+    // caller has nothing left to do — either an errand is collecting (we resume on
+    // its Finished) or a run that hadn't set out yet has been ended as unaffordable.
+    // False leaves the run with the caller: funded, or short part-way through a run,
+    // which the caller's own give-up path settles.
     //
     // The bill is the WHOLE itinerary, not the first trainer's fee: trainers serve a
     // contiguous level band, so a banked run can span several, each charging its own
@@ -570,22 +572,28 @@ public sealed class TrainerWalkManager : IDisposable
             });
     }
 
+    private bool BeginFunding(RoomKey from, TrainerShop first) =>
+        PriceRun(from, first, withSpells: true)
+            is Game.Train.TrainFundingHandoff.AwaitErrand or Game.Train.TrainFundingHandoff.Abandon;
+
+    // BeginFunding's answer in full, for the caller that has to tell a funded run
+    // from one that is short part-way through.
     //
     // withSpells adds the scrolls the shop leg would buy (and the tolls out to those
     // shops) to the bill. That is the first ask only: when it can't be met the run is
     // priced again for the training alone, so a scroll never holds a level back.
-    private bool BeginFunding(RoomKey from, TrainerShop first, bool withSpells = true)
+    private Game.Train.TrainFundingHandoff PriceRun(RoomKey from, TrainerShop first, bool withSpells)
     {
-        if (_funding is null || _cpOnlyRun) return false;
+        if (_funding is null || _cpOnlyRun) return Game.Train.TrainFundingHandoff.Proceed;
 
         int levels = LevelsThisRun();
-        if (levels <= 0) return false;
+        if (levels <= 0) return Game.Train.TrainFundingHandoff.Proceed;
 
         IReadOnlyList<Game.Train.TrainSegment> itinerary = Game.Train.TrainItineraryPlanner.Build(
             TrainerCatalog.Enumerate(_gameData), RunLevel, levels, ResolveClassNumber(),
             ReadDisabledTrainers(), from, (a, b) => _bfs.DistanceBetween(a, b));
         long cost = Game.Train.TrainItineraryPlanner.TotalCost(itinerary);
-        if (cost <= 0) return false;
+        if (cost <= 0) return Game.Train.TrainFundingHandoff.Proceed;
         ReserveForTraining?.Invoke(cost);
 
         Game.Train.ShopSpellPlan? spells = withSpells ? ShopSpellsFor(itinerary, levels) : null;
@@ -594,13 +602,31 @@ public sealed class TrainerWalkManager : IDisposable
         if (scrolls <= 0) spells = null;
 
         var trainerRoom = new RoomKey(first.Map, first.Room);
-        switch (_funding.Begin(cost + scrolls, trainerRoom, TripTolls(itinerary, from, spells)))
-        {
-            case Game.Train.TrainFundingStart.Funded:
-                _fundingRetryAt = DateTimeOffset.MinValue;
-                return false;                       // purse covers it — carry on
+        Game.Train.TrainFundingHandoff handoff = Game.Train.TrainFundingHandoffRule.For(
+            _funding.Begin(cost + scrolls, trainerRoom, TripTolls(itinerary, from, spells)),
+            _refusal.RecoveryClaimed);
 
-            case Game.Train.TrainFundingStart.Collecting:
+        // The scrolls come off the bill before either short answer is taken as final.
+        if (_fundingWithSpells
+            && handoff is Game.Train.TrainFundingHandoff.StopShort or Game.Train.TrainFundingHandoff.Abandon)
+            return FundTrainingAlone(from, first);
+
+        switch (handoff)
+        {
+            case Game.Train.TrainFundingHandoff.Proceed:
+                _fundingRetryAt = DateTimeOffset.MinValue;
+                return handoff;                     // purse covers it — carry on
+
+            case Game.Train.TrainFundingHandoff.StopShort:
+                // The trainer refused and nothing reachable covers it either. Not
+                // ours to end: the caller stops the train loop, so levels trained
+                // before the refusal still get their stat refresh and report.
+                _log?.Info("AutoTrain",
+                    DescribeShortfall?.Invoke(_lastFundingShortfall)
+                    ?? $"Can't afford training — short {_lastFundingShortfall:N0} copper.");
+                return handoff;
+
+            case Game.Train.TrainFundingHandoff.AwaitErrand:
                 _phase = Phase.Funding;
                 _log?.Info("AutoTrain",
                     $"Training {levels} level(s) across {itinerary.Count} trainer(s) costs {cost:N0} copper"
@@ -609,11 +635,9 @@ public sealed class TrainerWalkManager : IDisposable
                         ? "checking the purse and bank before deciding."
                         : "collecting the difference first."));
                 StateChanged?.Invoke();
-                return true;
+                return handoff;
 
             default:
-                if (_fundingWithSpells) return FundTrainingAlone(from, first);
-
                 // Nothing reachable covers it. Stay armed and say when that changes,
                 // rather than walking somewhere pointless or disarming. The router
                 // reports the exact gap on its Finished event, which has already
@@ -623,7 +647,7 @@ public sealed class TrainerWalkManager : IDisposable
                     DescribeShortfall?.Invoke(_lastFundingShortfall)
                     ?? $"Can't afford training — short {_lastFundingShortfall:N0} copper.");
                 Finish("Not enough money to train — staying armed.");
-                return true;
+                return Game.Train.TrainFundingHandoff.Abandon;
         }
     }
 
@@ -639,11 +663,11 @@ public sealed class TrainerWalkManager : IDisposable
 
     // The scrolls couldn't be paid for on top of the training: price the run again
     // without them. The shop leg still goes, and buys what the purse then stretches to.
-    private bool FundTrainingAlone(RoomKey from, TrainerShop first)
+    private Game.Train.TrainFundingHandoff FundTrainingAlone(RoomKey from, TrainerShop first)
     {
         _fundingWithSpells = false;
         _log?.Info("AutoTrain", "Can't cover the spell scrolls as well — funding the training alone.");
-        return BeginFunding(from, first, withSpells: false);
+        return PriceRun(from, first, withSpells: false);
     }
 
     // Recorded on every result, acted on only while we're waiting. Begin's Short
@@ -662,10 +686,23 @@ public sealed class TrainerWalkManager : IDisposable
             // Idle first: pricing again can settle as short on the spot, and that
             // answer comes back through this handler before BeginFunding returns.
             _phase = Phase.Idle;
-            if (!FundTrainingAlone(at.Key, unfunded))
+            switch (FundTrainingAlone(at.Key, unfunded))
             {
-                _target = SelectNearest(at.Key) ?? unfunded;
-                WalkToTrainer(_target.Value, at.Key);
+                case Game.Train.TrainFundingHandoff.Proceed:
+                    _target = SelectNearest(at.Key) ?? unfunded;
+                    WalkToTrainer(_target.Value, at.Key);
+                    break;
+
+                // Short even without the scrolls, on a run the trainer has already
+                // refused: settle the levels it trained rather than walking back to
+                // a trainer it can't pay.
+                case Game.Train.TrainFundingHandoff.StopShort:
+                    HoldFundingRetry(_lastFundingShortfall);
+                    StopAfterShortRecovery(result.Detail);
+                    break;
+
+                // AwaitErrand: the training-only errand is collecting.
+                // Abandon: the run has been ended.
             }
             return;
         }
@@ -676,6 +713,11 @@ public sealed class TrainerWalkManager : IDisposable
             _log?.Info("AutoTrain",
                 DescribeShortfall?.Invoke(result.ShortfallCopper)
                 ?? $"Funding errand ended short — {result.Detail}.");
+            if (_refusal.RecoveryClaimed)
+            {
+                StopAfterShortRecovery(result.Detail);
+                return;
+            }
             Finish($"Couldn't fund the train ({result.Detail}) — staying armed.");
             return;
         }
@@ -691,6 +733,27 @@ public sealed class TrainerWalkManager : IDisposable
         // nearer a different branch of the same trainer.
         _target = SelectNearest(cur.Key) ?? t;
         WalkToTrainer(_target.Value, cur.Key);
+    }
+
+    // The errand that came up short began at the trainer, after a refusal. The run
+    // may already have trained levels, so it ends the way a refusal does — through
+    // the stat refresh and report — rather than being dropped where it stands.
+    private void StopAfterShortRecovery(string detail)
+    {
+        _log?.Info("AutoTrain", $"Couldn't fund the rest of the train ({detail}) — staying armed.");
+
+        // The errand may have walked off to a bank or stash before giving up, and
+        // the CP plan can only be applied at a trainer.
+        bool atTrainer = _target is { } t && _tracker.State.CurrentRoom is { } here
+                         && here.Key == new RoomKey(t.Map, t.Room);
+        if (_applyCp && !atTrainer)
+        {
+            _applyCp = false;
+            _log?.Info("AutoTrain", "Away from the trainer — CP plan left for the next visit.");
+        }
+
+        _phase = Phase.Training;
+        StopLoop(StopReason.NoMoney);
     }
 
     // Banked levels this run will actually train, after the reserve and the ceiling.
@@ -950,12 +1013,11 @@ public sealed class TrainerWalkManager : IDisposable
             _log?.Info("AutoTrain",
                 "Trainer refused for money the purse said we had — re-reading the "
                 + "purse and looking for funds.");
-            if (BeginFunding(here.Key, t))
-            {
-                _phase = Phase.Funding;
-                StateChanged?.Invoke();
-                return;
-            }
+            // True only when an errand is collecting, and BeginFunding has already
+            // put the run in its funding phase. Never set that phase here: a short
+            // answer leaves the router idle, and a run parked waiting on it stays
+            // busy with nothing coming to release it.
+            if (BeginFunding(here.Key, t)) return;
         }
 
         HoldFundingRetry(_lastFundingShortfall);

@@ -12,6 +12,11 @@ public sealed class TrainRefusalGate
 {
     private bool _used;
 
+    // True once this run's refusal has sent it looking for funds: any funding answer
+    // from here on belongs to a run that has already been at the trainer and may
+    // have trained levels, not one still pricing its trip.
+    public bool RecoveryClaimed => _used;
+
     // A new run gets its recovery back.
     public void Reset() => _used = false;
 

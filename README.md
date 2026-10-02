@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.140.0**
-> - Auto-train can go on to buy and learn the spell scrolls your new level unlocks (Settings → Auto-Trainer → Spells from shops)
-> - Per-spell Get? list picks which shop-sold spells a trip goes after
-> - Train funding fetches the scroll money with the training fee, and trains anyway when it can't cover both
-> - Deck of cards: drawing the same card twice in a row is recognised and restarts its timer
+> **Version 3.140.2**
+> - Auto-train no longer locks up when a trainer refuses for money and no funds can be found: the run ends, and levels already trained still get their stat refresh and report
+> - A money trip that starts after a trainer's refusal and comes back short also ends with the stat refresh and report for the levels already trained
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
