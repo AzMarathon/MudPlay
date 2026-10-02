@@ -7,6 +7,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using MudPlay.Terminal;
 
 namespace MudPlay.Controls;
@@ -33,10 +34,11 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     private const int TimestampChars = 8;
     private const double GutterGap = 12;
 
-    private static readonly IBrush GutterBrush = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80));
+    private const uint GutterArgb = 0xFF808080;
+    private static readonly IBrush GutterBrush = new ImmutableSolidColorBrush(GutterArgb);
     // Translucent overlay drawn over the selected columns — tints without
     // hiding the per-cell ANSI colours underneath.
-    private static readonly IBrush SelectionBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x33, 0x66, 0xCC));
+    private static readonly IBrush SelectionBrush = new ImmutableSolidColorBrush(Color.FromArgb(0x66, 0x33, 0x66, 0xCC));
 
     public static readonly StyledProperty<FontFamily> FontFamilyProperty =
         AvaloniaProperty.Register<BackscrollView, FontFamily>(nameof(FontFamily), new FontFamily("monospace"));
@@ -79,6 +81,10 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     private double RenderFontSize => FontSize * PointToPixel;
 
     private IReadOnlyList<ScrollbackBuffer.Row> _rows = [];
+    // Each row's "HH:mm:ss", made the first time the row is drawn. The snapshot is
+    // frozen, so it never goes stale; formatting it on every wheel tick was waste.
+    private char[]?[] _stamps = [];
+    private readonly CellRunText _text = new();
     private Typeface _typeface;
     private double _cellW = 8;
     private double _cellH = 16;
@@ -128,6 +134,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     public void SetRows(IReadOnlyList<ScrollbackBuffer.Row> rows)
     {
         _rows = rows ?? [];
+        _stamps = new char[]?[_rows.Count];
         _anchor = null;
         _caret = null;
         _offset = default;
@@ -180,6 +187,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
             _typeface, RenderFontSize, Brushes.White);
         _cellW = Math.Max(1, Math.Round(probe.WidthIncludingTrailingWhitespace));
         _cellH = Math.Max(1, Math.Round(probe.Height));
+        _text.Reset(_typeface, RenderFontSize, _cellW);
         _gutterWidth = TimestampChars * _cellW + GutterGap;
         UpdateExtent();
         InvalidateMeasure();
@@ -237,8 +245,10 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         context.FillRectangle(Brushes.Black, new Rect(Bounds.Size));
         if (_rows.Count == 0 || _cellH <= 0) return;
 
-        double offY = _offset.Y;
-        double offX = _offset.X;
+        // Whole pixels: a scrollbar drag gives fractional offsets, and a glyph drawn
+        // at a fractional y blurs or loses a row of pixels.
+        double offY = Math.Round(_offset.Y);
+        double offX = Math.Round(_offset.X);
         int first = Math.Max(0, (int)Math.Floor(offY / _cellH));
         int last = Math.Min(_rows.Count, (int)Math.Ceiling((offY + _viewport.Height) / _cellH));
         (TextPos Start, TextPos End)? sel = NormalizedSelection();
@@ -254,10 +264,8 @@ public sealed class BackscrollView : Control, ILogicalScrollable
             // with no write time (a blank row of a saved death log) leaves it empty.
             if (row.Timestamp != default)
             {
-                string ts = row.Timestamp.ToLocalTime().ToString("HH:mm:ss");
-                context.DrawText(
-                    new FormattedText(ts, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, RenderFontSize, GutterBrush),
-                    new Point(0, y));
+                char[] stamp = _stamps[i] ??= row.Timestamp.ToLocalTime().ToString("HH:mm:ss").ToCharArray();
+                _text.Draw(context, stamp, stamp.Length, 0, y, GutterBrush, GutterArgb);
             }
 
             // Transcript region clipped so a long row / horizontal scroll can't
@@ -309,18 +317,18 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         if ((attr.Flags & CellFlags.Concealed) != 0) return;
 
         IBrush fg = BrushFor(fgArgb);
-        // Regular weight only — SGR "bold" is BRIGHT (already applied to fgArgb via
-        // ResolveForeground), not a heavy face; a bold typeface faux-bolds room names
-        // and hostile names past the reference client. Mirrors TerminalControl.
-        Typeface typeface = _typeface;
-        for (int i = x0; i < x1; i++)
+        // One glyph run per colour run, regular weight (SGR "bold" is BRIGHT, already
+        // in fgArgb). Mirrors TerminalControl; see CellRunText.
+        int count = x1 - x0;
+        char[] chars = new char[count];
+        bool anyText = false;
+        for (int i = 0; i < count; i++)
         {
-            char ch = cells[i].Char;
-            if (ch == ' ') continue;
-            context.DrawText(
-                new FormattedText(ch.ToString(), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, RenderFontSize, fg),
-                new Point(originX + i * _cellW, y));
+            char ch = cells[x0 + i].Char;
+            chars[i] = ch;
+            anyText |= ch != ' ';
         }
+        if (anyText) _text.Draw(context, chars, count, left, y, fg, fgArgb);
 
         if ((attr.Flags & CellFlags.Underline) != 0)
             context.FillRectangle(fg, new Rect(left, y + _cellH - 1, width, 1));
@@ -471,7 +479,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     {
         if (_brushCache.TryGetValue(argb, out IBrush? brush)) return brush;
         (byte r, byte g, byte b) = AnsiPalette.ToRgb(argb);
-        brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush = new ImmutableSolidColorBrush(Color.FromRgb(r, g, b));
         _brushCache[argb] = brush;
         return brush;
     }

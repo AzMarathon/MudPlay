@@ -1,5 +1,11 @@
 # Version history
 
+## 3.141.10
+
+- Terminal draws each colour run as one glyph run instead of one call per character: about ten times less drawing work per frame, pixel-identical
+- Scrolling the history window no longer re-lays out every character and timestamp on each wheel tick
+- Zoomed CP437 font: the enlarged screen is only re-rendered when something on it changed
+
 ## 3.141.9
 
 - After a connection drop, a move the server never answered no longer leaves the map stuck waiting on it: the first room display after reconnect settles where you are, so Go and the loop restart work straight away
