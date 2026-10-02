@@ -1042,6 +1042,12 @@ public sealed class AppServices
     public Game.Events.EventStateWatcher EventStateWatcher { get; private set; } = null!;
     public Game.Events.EventBossWatcher EventBoss { get; private set; } = null!;
 
+    // Sound cues (Settings → Sounds). SoundPlayer hands a sound to the operating
+    // system's own player on a pool thread; Sounds decides which cues play and how
+    // loud. Both are built in WireSounds.
+    public SoundPlayer SoundPlayer { get; private set; } = null!;
+    public Game.Sounds.SoundCueEngine Sounds { get; private set; } = null!;
+
     // The watcher is UI-thread-confined like the rest of the events stack; stat and
     // inventory changes can be raised off it.
     private void EvaluateEventStates()
@@ -7796,6 +7802,8 @@ public sealed class AppServices
         Events.SetBossStopCheck(EventBoss.StopReached);
         BossTimers.BossKilled += EventBoss.OnBossKilled;
 
+        WireSounds();
+
         // DefaultTaskRunner. Starts the character's configured "Default task"
         // (loop / Auto-Lair) on the first in-game prompt with a known room,
         // holding for the party-reform window on a party-session reconnect.
@@ -8006,6 +8014,88 @@ public sealed class AppServices
         // state machine reflects scheduling. If the walker is idle
         // the AutoLair has nothing to flee from either.
         return null;
+    }
+
+    // Sound cues: every hook is a listener on a signal the client already raises, and
+    // SoundCueEngine.Fire returns at once (the player works on a pool thread), so no
+    // handler here adds work to the path that raised it. Called once every service
+    // below exists.
+    private void WireSounds()
+    {
+        SoundPlayer = new SoundPlayer(AppPaths.SoundsDir, Log);
+        Sounds = new Game.Sounds.SoundCueEngine(
+            () => ReadSection<Models.Profile.SoundSettings>(Profile.Current, ViewModels.Settings.SoundsSectionViewModel.TabKey),
+            SoundPlayer.Play, log: Log);
+        Triggers.PlaySound = Sounds.FireFile;
+
+        // Progress.
+        Router.Subscribe(Patterns.KnownPatterns.TrainAttainLevel, _ => Sounds.Fire(Game.Sounds.SoundCues.LevelUp));
+        Router.Subscribe(Patterns.KnownPatterns.TrainAttainNextLevel, _ => Sounds.Fire(Game.Sounds.SoundCues.LevelUp));
+        MonsterDeath.MonsterDied += _ => Sounds.NoteKill();
+        LoopRunner.Event += e =>
+        {
+            if (e.Kind == Game.Map.LoopEventKind.RepeatStarted) Sounds.NoteLap(LoopRunner.CompletedLaps);
+            else if (e.Kind == Game.Map.LoopEventKind.Failed) Sounds.Fire(Game.Sounds.SoundCues.NavigationStopped);
+        };
+        Walker.Event += e =>
+        {
+            // A walk-to the player asked for, not a loop's approach or a detour's leg.
+            if (e.Kind == Game.Map.WalkEventKind.Finished)
+            {
+                if (LoopRunner.State == Game.Map.LoopState.Idle && !AutoDeposit.IsRerouting
+                    && !SellDetour.IsDetouring && !TrainerWalk.IsBusy)
+                    Sounds.Fire(Game.Sounds.SoundCues.WalkFinished);
+            }
+            else if (e.Kind == Game.Map.WalkEventKind.Failed) Sounds.Fire(Game.Sounds.SoundCues.NavigationStopped);
+        };
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewConfidence == Game.Map.RoomConfidence.Lost && t.PreviousConfidence != Game.Map.RoomConfidence.Lost)
+                Sounds.Fire(Game.Sounds.SoundCues.NavigationStopped);
+        };
+        Profile.ProfileLoaded += _ => Sounds.ResetCounts();
+        Profile.ProfileClosed += Sounds.Invalidate;
+
+        // Automation.
+        bool training = false;
+        TrainerWalk.StateChanged += () =>
+        {
+            bool busy = TrainerWalk.IsBusy;
+            if (busy && !training) Sounds.Fire(Game.Sounds.SoundCues.AutoTrain);
+            training = busy;
+        };
+        SellDetour.DetouringChanged += () =>
+        {
+            if (SellDetour.IsDetouring) Sounds.Fire(Game.Sounds.SoundCues.AutoSell);
+        };
+        Events.Fired += _ => Sounds.Fire(Game.Sounds.SoundCues.EventFired);
+
+        // Bosses.
+        BossTimers.BossKilled += _ => Sounds.Fire(Game.Sounds.SoundCues.BossKilled);
+        Game.Sounds.SoundBossWatcher bossSounds = new(Sounds, Bosses, BossTimers, GameData, () => EventScheduler.IsInGame);
+        EventScheduler.ClockTick += bossSounds.Evaluate;
+
+        // Chat and party. An "@" telepath is a remote command, not someone talking.
+        Chat.EntryClassified += entry =>
+        {
+            if (entry.Channel == Game.ChatChannel.TelepathIncoming
+                && !entry.Message.TrimStart().StartsWith('@'))
+                Sounds.Fire(Game.Sounds.SoundCues.Telepath);
+        };
+        Router.Subscribe(Patterns.KnownPatterns.PartyInviteReceived, _ => Sounds.Fire(Game.Sounds.SoundCues.PartyInvite));
+        AllyDropped.AllyDown += _ => Sounds.Fire(Game.Sounds.SoundCues.PartyMemberDown);
+
+        // Danger.
+        DeathWatcher.PlayerDied += _ => Sounds.Fire(Game.Sounds.SoundCues.Death);
+        bool down = false;
+        PlayerState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(Game.PlayerState.Hp)) return;
+            bool now = PlayerState.IsMortallyWounded;
+            if (now && !down) Sounds.Fire(Game.Sounds.SoundCues.MortallyWounded);
+            down = now;
+        };
+        Health.FleeStarted += () => Sounds.Fire(Game.Sounds.SoundCues.Flee);
     }
 
     private static T ReadSection<T>(Models.Profile.CharacterProfile? profile, string key)

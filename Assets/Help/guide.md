@@ -1444,7 +1444,7 @@ Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove*
     To send **several commands**, put each on its own line in the box (the Response box accepts Enter) — every line is sent as a separate command, each with its own Enter. `^M` and `;` do the same thing on a single line, so `north;get all;south` is three commands too.
 
     Leave the box blank to send a bare Enter.
-  - **Sound** (optional) — a file picker is here, but sound playback isn't wired up yet, so it does nothing today.
+  - **Sound** (optional) — a sound file to play when the trigger matches. WAV plays on every system; MP3, OGG and FLAC depend on your system's player. **Settings → Sounds → Trigger sounds** turns trigger sounds on or off and sets how loud they play.
 
 ### Writing an alias
 
@@ -2088,7 +2088,7 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 
 **Before you start changing things — a few things worth knowing:**
 - Nearly every setting documented here takes effect **live**, with no restart or reconnect required — this guide calls out the exceptions explicitly (e.g. terminal scrollback size, a handful of BBS-connection fields that only apply on the *next* connect).
-- A handful of controls exist in the UI but currently **do nothing** — they're either genuine stubs (the whole Sounds tab) or fields that were built but never wired into the automation engines (Combat's *Polite mode*). This guide flags every one of them explicitly rather than describing invented behavior.
+- A handful of controls exist in the UI but currently **do nothing** — fields that were built but never wired into the automation engines (Combat's *Polite mode*). This guide flags every one of them explicitly rather than describing invented behavior.
 - Many settings only matter once a corresponding **master switch** is on. For example, the entire Auto-Light tab only matters once the Auto-Light engine itself is enabled (Settings → General, or its toolbar toggle); Combat/Spells/Health settings only matter while Auto-Combat is on.
 
 ## Local control API
@@ -3839,13 +3839,70 @@ A walk or trip that can't be finished (no path, a leg fails) still runs its Then
 
 ---
 
-## Sounds (stub — not functional)
+## Sounds
 
-**⚠️ This entire tab is a placeholder and does nothing.** Every control on it is permanently disabled, there's no underlying setting behind any of them, and no audio system exists anywhere in MudPlay yet — there is currently no way to assign or play a sound at all. The tab exists to preview what a future audio-cues feature might look like. Documented here only so you know not to expect any effect from interacting with it:
+**What it does:** Plays a sound when something you care about happens — a level-up, a boss kill, a walk finishing — so you can look away from the client and still know. Each moment (a *cue*) has its own on/off tick, its own sound and its own volume, so one can be quiet and another loud. Everything on this tab saves to the loaded character.
 
-- **Sounds enabled** — intended as a global mute switch.
-- **Master volume** — intended to scale all cue volumes (0–100).
-- **Event cue fields** — six placeholder text fields intended to hold sound-file paths for: incoming telepath, level-up, character death, party invite, a default Trigger-fire cue, and a default Events-tab cue.
+**It never slows the client.** A cue hands its sound to your operating system's own player and returns straight away; the playing happens in the background. No more than four sounds play at once (a fifth is dropped rather than queued), and the same cue never plays more than once a second, so a room of monsters dying together is one sound, not ten.
+
+### Master
+
+- **Sounds enabled** — off silences every cue below and the sounds on Triggers. Default on.
+- **Master volume** (0–100, default 80) — every sound's own volume is scaled by this. A cue at 50 with the master at 80 plays at 40.
+
+### Each cue's row
+
+- **The tick** — whether this cue plays. Hover the name for exactly when it fires.
+- **Sound** — one of the built-in tones (Ding, Chime, Fanfare, Coin, Alert, Alarm, Low tone, Click) or **Custom file…**, which shows a path box and a **Browse…** button for your own file. WAV plays on every system; MP3, OGG and FLAC depend on your system's player.
+- **Volume** (0–100, default 100) — this cue's own level, before the master volume. 0 is silent.
+- **▶** — plays the row as it is set right now, unsaved edits included, even if the cue or the master switch is off.
+- **every** (the two milestone cues only) — how many laps or kills between sounds.
+
+### The cues
+
+**Progress**
+
+- **Level up** *(on)* — you train a level.
+- **Loop milestone** *(off, every 100)* — every so many laps of the running loop. The count is the loop's own lap count: it carries on across a sell, train or bank detour and starts again when you start a loop.
+- **Kill milestone** *(off, every 300)* — every so many kills since this character was loaded.
+- **Walk finished** *(off)* — a walk-to reaches its destination. A loop lap, and the legs of a sell / train / bank detour, don't count.
+
+**Automation**
+
+- **Auto-training** *(off)* — an auto-train trip sets off.
+- **Auto-selling** *(off)* — an auto-sell trip sets off.
+- **Event runs** *(off)* — one of your Events (Settings → Events) fires.
+
+**Bosses**
+
+- **Boss killed** *(on)* — a boss on the Bosses table dies.
+- **Boss spawn window opens** *(on)* — a boss timer reaches its first early spawn window (Paradigm 80% of the timer, Stock 87.5%).
+- **Boss timer done** *(on)* — a boss timer reaches its guaranteed respawn; for a cleanup boss, the nightly cleanup that brings it back.
+
+The two timer cues are checked every 30 seconds while you're in the game, and each plays once per kill. A timer that ran out more than ten minutes ago — while the client was closed or disconnected — stays quiet, so logging in doesn't ring for everything that respawned overnight.
+
+**Chat and party**
+
+- **Telepath received** *(off)* — someone telepaths you. An `@` remote command doesn't count.
+- **Party invite** *(off)* — someone invites you to follow them.
+- **Party member down** *(off)* — a party member drops to the ground.
+
+**Danger**
+
+- **You died** *(on)*.
+- **Mortally wounded** *(on)* — you drop to the ground.
+- **Fleeing** *(off)* — a low-HP flee starts.
+- **Navigation stopped** *(off)* — a walk or loop fails, or the client loses track of the room.
+
+**Connection and triggers**
+
+- **Disconnected** *(on)* — the connection drops on its own. Hanging up yourself is silent.
+- **Reconnected** *(off)* — the connection comes back after such a drop.
+- **Trigger sounds** *(on)* — whether Triggers with a sound file play it, and how loud. Each trigger plays its own file, so this row has no sound to pick.
+
+### What plays the sounds
+
+MudPlay uses the player your system already has, so there's nothing to install on Windows or macOS. On Linux it uses `pw-play` (PipeWire), else `paplay` (PulseAudio), else `aplay` (ALSA); `aplay` plays WAV only and ignores the volume settings. If a sound can't be played — no player found, or a custom file that's missing or in a format the player can't read — the program log gets a `Sounds` warning saying why. The built-in tones are written to the `Sounds` folder inside the app folder the first time each is used.
 
 ---
 
@@ -4186,7 +4243,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Log conversations / transactions / line limit | true/true/2000 | bool / bool / 100–100,000 | `LogConversations`, `LogTransactions`, `LogMaxLines` | Models/Profile/TalkSettings.cs |
 | Conversation font / size / channel colors | defaults | bundled + installed text fonts / 8-32pt / hex per channel | `ConvoFont`, `ConvoFontSize`, `ChannelColors` | Models/Profile/TalkSettings.cs |
 
-### Auto-Light / Auto-Lair / Auto-Trainer / Other / Events
+### Auto-Light / Auto-Lair / Auto-Trainer / Other / Events / Sounds
 
 | Setting | Default | Allowed Values | Config Key | Location |
 |---|---|---|---|---|
@@ -4216,6 +4273,8 @@ This section is a compact, technical lookup table for every setting documented a
 | Cleanup Player DB after N days | `90` | 0–3650 (Global) | `GlobalSettings.PlayerCleanupDays` | Models/Settings/GlobalSettings.cs |
 | Disable all events | `false` | bool | `CharacterProfile.EventsGloballyDisabled` | Models/Profile/CharacterProfile.cs |
 | Event (Name/Disabled/Trigger/Action fields) | see above | see above | `ScheduledEvent.*` | Models/GameData/ScheduledEvent.cs |
+| Sounds enabled / Master volume | true / 80 | bool / 0–100 | `SoundSettings.Enabled` / `MasterVolume` | Models/Profile/SoundSettings.cs |
+| Sound cue (on / sound / volume / every) | per cue, see **Sounds** | bool / built-in tone or file path / 0–100 / ≥1 | `SoundSettings.Cues[<cue>].Enabled` / `Sound` / `Volume` / `Every` | Models/Profile/SoundSettings.cs |
 
 ### Diagnostics / Log Pane / Equipment
 
@@ -4233,7 +4292,7 @@ The following were traced and confirmed to have **no** exposed setting — liste
 
 ---
 
-*This guide reflects the MudPlay source as of the `main` branch. One setting in the Combat tab (Polite mode) and the entire Sounds tab are present in the UI but not currently wired to any runtime behavior — see their entries above for details. If a setting here stops matching what you see in the app, the code is the source of truth; please report the discrepancy.*
+*This guide reflects the MudPlay source as of the `main` branch. One setting in the Combat tab (Polite mode) is present in the UI but not currently wired to any runtime behavior — see its entry above for details. If a setting here stops matching what you see in the app, the code is the source of truth; please report the discrepancy.*
 
 ---
 

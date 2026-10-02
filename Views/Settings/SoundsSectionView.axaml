@@ -1,0 +1,113 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="860" d:DesignHeight="620"
+             x:Class="MudPlay.Views.Settings.SoundsSectionView"
+             x:DataType="vm:SoundsSectionViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.SectionHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,14,0,4"/>
+        </Style>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.Readout">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+        <Grid>
+            <Border IsVisible="{Binding !HasProfile}" Padding="22" VerticalAlignment="Top">
+                <TextBlock Text="Load or create a character profile to set up sounds."
+                           Foreground="{StaticResource ChromeFgSecBrush}"
+                           FontSize="{StaticResource FontSizeMd}" TextWrapping="Wrap"/>
+            </Border>
+
+            <StackPanel IsVisible="{Binding HasProfile}" Margin="22" Spacing="4" HorizontalAlignment="Left">
+                <TextBlock Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+                <TextBlock Classes="SettingsSectionSub"
+                           Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
+                <Border Classes="SettingsSectionRule"/>
+
+                <TextBlock Classes="SectionHeader" Text="Master"/>
+                <StackPanel Orientation="Horizontal" Spacing="18">
+                    <CheckBox Content="Sounds enabled" IsChecked="{Binding SoundsEnabled, Mode=TwoWay}"
+                              VerticalAlignment="Center"
+                              ToolTip.Tip="Off silences every sound below, and the sounds on Triggers."/>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Classes="FieldLabel" Text="Master volume"/>
+                        <Slider Minimum="0" Maximum="100" Width="220" VerticalAlignment="Center"
+                                TickFrequency="1" IsSnapToTickEnabled="True"
+                                Value="{Binding MasterVolume, Mode=TwoWay}"
+                                ToolTip.Tip="Every sound's own volume is scaled by this."/>
+                        <TextBlock Classes="FieldLabel" Width="34" Text="{Binding MasterVolume}"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock Classes="Readout" MaxWidth="760" HorizontalAlignment="Left"
+                           Text="Tick the moments you want to hear. Each has its own sound and volume, and ▶ plays it as set. A sound can be one of the built-in tones or your own file (WAV works everywhere; MP3 on most systems)."/>
+
+                <ItemsControl ItemsSource="{Binding Groups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SoundCueGroup">
+                            <StackPanel>
+                                <TextBlock Classes="SectionHeader" Text="{Binding Title}"/>
+                                <ItemsControl ItemsSource="{Binding Rows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SoundCueRowViewModel">
+                                            <StackPanel Margin="0,2,0,2">
+                                                <Grid ColumnDefinitions="220,150,170,36,Auto,Auto" ColumnSpacing="10">
+                                                    <CheckBox Grid.Column="0" Content="{Binding Label}"
+                                                              IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                              VerticalAlignment="Center"
+                                                              ToolTip.Tip="{Binding Description}"/>
+                                                    <ComboBox Grid.Column="1" ItemsSource="{Binding SoundOptions}"
+                                                              SelectedItem="{Binding SelectedSound, Mode=TwoWay}"
+                                                              IsVisible="{Binding HasSound}"
+                                                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                                              ToolTip.Tip="A built-in tone, or your own sound file."/>
+                                                    <Slider Grid.Column="2" Minimum="0" Maximum="100"
+                                                            TickFrequency="1" IsSnapToTickEnabled="True"
+                                                            Value="{Binding Volume, Mode=TwoWay}"
+                                                            VerticalAlignment="Center"
+                                                            ToolTip.Tip="This sound's own volume, before the master volume."/>
+                                                    <TextBlock Grid.Column="3" Classes="FieldLabel" Text="{Binding Volume}"/>
+                                                    <Button Grid.Column="4" Content="▶" Command="{Binding TestCommand}"
+                                                            IsVisible="{Binding HasSound}" VerticalAlignment="Center"
+                                                            ToolTip.Tip="Play this sound as it is set now."/>
+                                                    <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6"
+                                                                IsVisible="{Binding HasEvery}" VerticalAlignment="Center">
+                                                        <TextBlock Classes="FieldLabel" Text="every"/>
+                                                        <NumericUpDown Value="{Binding Every, Mode=TwoWay}" Minimum="1" Maximum="1000000"
+                                                                       Increment="1" FormatString="0" Width="130"
+                                                                       ToolTip.Tip="Play once each time the count reaches a multiple of this."/>
+                                                    </StackPanel>
+                                                </Grid>
+                                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="230,4,0,2"
+                                                            IsVisible="{Binding IsCustomFile}">
+                                                    <TextBox Text="{Binding CustomFile, Mode=TwoWay}" Width="420"
+                                                             PlaceholderText="Path to a sound file"/>
+                                                    <Button Content="Browse…" Click="OnBrowse"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

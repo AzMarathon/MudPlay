@@ -746,6 +746,9 @@ public sealed class HealthManager : IDisposable
     // which stays true for the rest of the combat even after the retreat ends.
     public bool IsFleeing => _fleeEngine is not null;
 
+    // A flee just began (the retreat is planned and the engine paused for it).
+    public event Action? FleeStarted;
+
     // A flee the run-if-below HP / MA gates started — not a hit-and-run or a failed
     // backstab's run. Only this one lets the emergency heal cut ahead of the
     // re-sneak (user, 2026-09-28).
@@ -1966,6 +1969,7 @@ public sealed class HealthManager : IDisposable
 
         _fleeEngine = engine;
         _fleeFromGates = fromGates;
+        FleeStarted?.Invoke();
         _fleeQueue.Clear();
         foreach (Map.Direction d in steps) _fleeQueue.Enqueue(d);
 
