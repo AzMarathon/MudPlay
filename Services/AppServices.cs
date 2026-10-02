@@ -1235,6 +1235,33 @@ public sealed class AppServices
     // question, which the display-oriented TransactionHistory above can't answer.
     public Game.Cash.StashLedger StashBalances { get; } = new();
 
+    // Carries a stash room's coin to a bank, trip by trip (the map's right-click
+    // "Transfer Stash to Bank").
+    public Game.Cash.StashTransferRunner StashTransfer { get; private set; } = null!;
+
+    // Stops whatever loop or Auto-Lair is running and starts the transfer. Null when
+    // it is under way; otherwise why not.
+    public string? StartStashTransfer(Game.Map.RoomKey stash, Game.GameData.BankShop bank)
+    {
+        if (StashTransfer.IsBusy) return "a stash transfer is already running";
+        if (ErrandHasTheWalker) return "another trip is using the walker — stop it first";
+        if (AutoLair.IsActive) AutoLair.Stop("stash transfer started");
+        if (LoopRunner.State != Game.Map.LoopState.Idle) LoopRunner.Stop("stash transfer started");
+        return StashTransfer.Start(stash, bank.Key, bank.Name);
+    }
+
+    // The active set's banks, nearest to `from` first. Reach is counted the way the
+    // transfer's own walks plan: through gates whose key or item can be acquired, and
+    // across sailings (one step each). A walk-only count called a bank behind a
+    // key-door or a boat unreachable.
+    public IReadOnlyList<(Game.GameData.BankShop Bank, int? Steps)> BanksNearestFirst(Game.Map.RoomKey from)
+    {
+        IReadOnlyDictionary<Game.Map.RoomKey, int> distances;
+        using (Movement.SuspendAcquirableGates())
+            distances = Bfs.ComputeDistancesFrom(from, Movement, viaBoats: true);
+        return Game.GameData.BankCatalog.ByDistance(Game.GameData.BankCatalog.Enumerate(GameData), distances);
+    }
+
     // In-memory force of cash COLLECTION while an auto-train funding errand runs.
     // Deliberately not a write to the saved AutoGetCash setting: that would move the
     // user's persisted preference twice per train and could race a profile save,
@@ -1255,7 +1282,7 @@ public sealed class AppServices
     // walks aren't the user's, so their ends aren't the user's walk ending.
     public bool ErrandHasTheWalker =>
         AutoDeposit.IsRerouting || SellDetour.IsDetouring
-        || TrainerWalk.IsBusy || TrainFunding.IsBusy
+        || TrainerWalk.IsBusy || TrainFunding.IsBusy || StashTransfer.IsBusy
         || TokenRoute.Active || PartyComeback.RecoveringMember is not null
         || PathItemShopRouter.DetourActive || PathItemGiveRouter.DetourActive
         || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive
@@ -7266,6 +7293,27 @@ public sealed class AppServices
         // other time, since the router only listens while it is holding for one.
         Inventory.FullInventoryParsed += () => TrainFunding.NoteInventoryRefreshed();
 
+        // Stash → bank transfer. Shares the funding errand's hooks into the collect
+        // engine; StartStashTransfer refuses while another errand has the walker, so
+        // the two never hold the pickup ceiling or the borrowed toggle together.
+        StashTransfer = new Game.Cash.StashTransferRunner(
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
+            onHandCopper: () => Inventory.Snapshot.Currency.TotalCopperValue,
+            walkTo: key => Walker.WalkTo(key, planThroughAcquirableGates: true),
+            send: cmd => SendGameCommand(cmd),
+            armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
+                .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+                    System.Threading.Tasks.TaskScheduler.Default),
+            limitCollection: copper => Cash.SetCollectLimit(copper),
+            surveyedCopper: () => Cash.SurveyedCopperUnderLimit,
+            collectSurveyed: copper => Cash.CollectSurveyed(copper),
+            forceAutoGetCash: on => _autoGetCashOverride = on ? true : null,
+            reconcileStash: (room, copper) => StashBalances.Reconcile(room, copper),
+            // Walker events and timers can land inside the message pump.
+            notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
+            log: Log);
+        Walker.Event += e => StashTransfer.OnWalkEvent(e.Kind);
+
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
             RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log);
         TrainerWalk.SetFundingRouter(TrainFunding);
@@ -7451,7 +7499,7 @@ public sealed class AppServices
         AutoParty.SetRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);
         AutoParty.SetNavigationProbe(() =>
             MovementControl.IsActive || AutoDeposit.IsRerouting || SellDetour.IsDetouring
-            || TrainerWalk.IsBusy || TrainFunding.IsBusy);
+            || TrainerWalk.IsBusy || TrainFunding.IsBusy || StashTransfer.IsBusy);
         // Sell detours: walk / loop / lair → the chosen shop → Auto-sell → carry on.
         // Blocked while anything else owns movement or holds it (combat, rest, a user
         // pause, following a leader, the other errand engines).
@@ -7466,6 +7514,7 @@ public sealed class AppServices
                 || MovementCoordinator.AssertedGates.Any(g => g != Game.Map.MovementCoordinator.SellDetourGate)
                 || AutoSell.IsSelling
                 || AutoDeposit.IsRerouting || TrainerWalk.IsBusy || TrainFunding.IsBusy
+                || StashTransfer.IsBusy
                 || TokenRoute.Active || PartyComeback.RecoveringMember is not null
                 || PathItemShopRouter.DetourActive || PathItemGiveRouter.DetourActive
                 || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive
@@ -7713,6 +7762,9 @@ public sealed class AppServices
             log: Log);
         Tokens.TokenUsed += TokenRoute.OnTokenUsed;
         MovementControl.Stopping += TokenRoute.Cancel;
+        // A stash transfer is between walks while it searches, collects or deposits,
+        // so the walker's own Stopped wouldn't reach it there.
+        MovementControl.Stopping += () => StashTransfer.Cancel("stopped by the user");
         // After the coordinator has seen it: a token the route didn't send (the user
         // used one by hand) ends all movement where we land — nothing walks on from
         // there — and either way the followers it drops aren't left-behind members.
@@ -8080,7 +8132,7 @@ public sealed class AppServices
             if (e.Kind == Game.Map.WalkEventKind.Finished)
             {
                 if (LoopRunner.State == Game.Map.LoopState.Idle && !AutoDeposit.IsRerouting
-                    && !SellDetour.IsDetouring && !TrainerWalk.IsBusy)
+                    && !SellDetour.IsDetouring && !TrainerWalk.IsBusy && !StashTransfer.IsBusy)
                     Sounds.Fire(Game.Sounds.SoundCues.WalkFinished);
             }
             else if (e.Kind == Game.Map.WalkEventKind.Failed) Sounds.Fire(Game.Sounds.SoundCues.NavigationStopped);
@@ -11081,6 +11133,7 @@ public sealed class AppServices
         AutoSell.Cancel();
         TrainerWalk.Cancel(reason);
         TrainFunding.Cancel(reason);
+        StashTransfer.Cancel(reason);
         TrainerMenu.ForceExit(reason);
         Events.CancelRun();
         PartyComeback.Cancel(reason);

@@ -1,5 +1,10 @@
 # Version history
 
+## 3.138.0
+
+- Right-click a stash room on the map → Transfer Stash to Bank: pick a bank (nearest first) and MudPlay shuttles the stash's coin to it until it's empty
+- Each trip searches the stash, carries what your coin weight limits allow, and deposits exactly what it took
+
 ## 3.137.5
 
 - Windows: an update keeps the permissions set on the MudPlay program file, so a shortcut to it still opens afterwards

@@ -843,6 +843,15 @@
                         <Separator IsVisible="{Binding HasContextWalkLists}"/>
                         <MenuItem Header="Walk here"
                                   Command="{Binding WalkToContextRoomCommand}"/>
+                        <!-- Stash rooms only: every bank, nearest the player first.
+                             Picking one shuttles the stash's coin to it. -->
+                        <MenuItem Header="Transfer Stash to Bank"
+                                  IsVisible="{Binding ContextCanTransferStash}"
+                                  ItemsSource="{Binding ContextTransferBanks}"
+                                  ItemContainerTheme="{StaticResource RoomWalkItemTheme}"/>
+                        <MenuItem Header="Stop Stash Transfer"
+                                  Command="{Binding StopStashTransferCommand}"
+                                  IsVisible="{Binding ContextStashTransferRunning}"/>
                         <MenuItem Header="I am here (set located)"
                                   Command="{Binding SetContextRoomLocatedCommand}"/>
                         <MenuItem Header="Save as Go To"

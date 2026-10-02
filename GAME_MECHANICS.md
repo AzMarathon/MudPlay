@@ -4916,6 +4916,11 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   pile is drawn on only if a `bank` check shows stash plus bank cover the run, and is otherwise left
   hidden (**Client policy**, user 2026-10-02). The stash ledger keeps what the search showed less what
   was taken (report `paradigm-20261001-222332`: it took the whole pile and reached 100% encumbrance).
+- The stash → bank transfer (`StashTransferRunner`, the map's *Transfer Stash to Bank*) relies on the
+  same two rules: every trip searches again to surface and count the pile, takes what the coin weight
+  limits allow, and trusts the untaken part to stay hidden while it walks to the bank and back
+  (**Client policy**, user 2026-10-02). It deposits exactly what the trip took (`dep <copper>`) and sets
+  the stash ledger to what the search showed less what was taken.
 - Auto-collect is suppressed in a stash room **only while an auto-search reveal is in flight** — coin
   shown on plain entry or a kill drop still collects, in the stash room and in the room after it.
   Implemented as `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.
