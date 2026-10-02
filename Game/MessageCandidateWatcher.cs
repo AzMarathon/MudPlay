@@ -352,6 +352,7 @@ public sealed class MessageCandidateWatcher : IDisposable
 
         // Listings and wrapped room rows: recognized by where they sit, not by text.
         if (IsBlockLine(text, line.Timestamp)) return;
+        if (IsQuoteContinuation(text)) return;
         if (IsOwnActionReply(text, line.Timestamp)) return;
 
         // The `br` broadcast-channel status ("The following users are on channel N:"
@@ -422,10 +423,33 @@ public sealed class MessageCandidateWatcher : IDisposable
     private bool _inWrappedList;
     private DateTimeOffset _lastBlockLine;
 
+    // Rows still owed to a quoted passage that opened on an earlier line and hasn't
+    // closed. Speech runs over several rows — a fortune card's reading, an NPC's
+    // answer — and only the row that opens it can be told from anything else; the rest
+    // are sentence fragments ("perseverance shall be yours.\"") that would each stage
+    // a candidate. The opening row is judged as usual; the rows up to the closing
+    // quote go with it. Bounded, and ended by a prompt, so a stray lone quote mark
+    // can't swallow more than a few lines.
+    private int _quoteRowsLeft;
+    private const int MaxQuoteRows = 8;
+
     private void EndBlocks()
     {
         _inListing = false;
         _inWrappedList = false;
+        _quoteRowsLeft = 0;
+    }
+
+    private bool IsQuoteContinuation(string text)
+    {
+        bool unbalanced = text.Count(static c => c == '"') % 2 == 1;
+        if (_quoteRowsLeft > 0)
+        {
+            _quoteRowsLeft = unbalanced ? 0 : _quoteRowsLeft - 1;
+            return true;
+        }
+        if (unbalanced) _quoteRowsLeft = MaxQuoteRows;
+        return false;
     }
 
     private bool IsBlockLine(string text, DateTimeOffset now)

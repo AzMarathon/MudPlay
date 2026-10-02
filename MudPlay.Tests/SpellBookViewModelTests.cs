@@ -429,6 +429,64 @@ public sealed class SpellBookViewModelTests : IDisposable
         Assert.Equal(new[] { "Healing Wand" }, vm.CastItems.Select(r => r.ItemName));
     }
 
+    // Report paradigm-20261002-114043: a Gypsy's deck of cards casts on use but has
+    // no equip slot, so the equippable-only list left it out. A carried item kept
+    // after use is listed; the cast engines' list stays readied-only.
+    [Fact]
+    public void CastItems_IncludeACarriedItemKeptAfterUse_ButTheEnginesDoNotSeeIt()
+    {
+        Dictionary<string, object> deck = NonEquippableCastItemRow(301, "Deck Of Cards", castSpell: 100, itemType: 10, 12);
+        deck["Retain After Uses"] = 1;
+        deck["UseCount"] = 9999;
+        object[] items =
+        [
+            ItemRow(300, "Healing Wand", castSpell: 100, useCount: 0, 12),
+            deck,
+            NonEquippableCastItemRow(302, "Healing Potion", castSpell: 100, itemType: 5, 12), // consumed
+        ];
+        SpellbookState book = NewBook(classNumber: 12, level: 5, items: items);
+        using SpellBookViewModel vm = new(book);
+
+        Assert.Equal(new[] { "Deck Of Cards", "Healing Wand" }, vm.CastItems.Select(r => r.ItemName).OrderBy(n => n));
+        Assert.Contains("carried, not worn", vm.CastItems.Single(r => r.ItemName == "Deck Of Cards").CastsText);
+        Assert.Equal(new[] { "Healing Wand" }, book.GetCastItems().Select(i => i.ItemName));
+    }
+
+    // A draw item's use-spell has no effect of its own: its textblock runs a
+    // `random <table>` step and the spells that table casts are what a use can deal.
+    // The deck of cards' cards are read that way, with each one's chance and effect.
+    [Fact]
+    public void DrawItem_ListsTheSpellsItsRandomTableDeals()
+    {
+        Dictionary<string, object> draw = SpellRow(700, "card deck draw", "", magery: 0, mageryLvl: 0, reqLevel: 0);
+        draw["Abil-0"] = 148;
+        draw["AbilVal-0"] = 9000;
+        Dictionary<string, object> wizard = SpellRow(701, "card-wizard", "", magery: 0, mageryLvl: 0, reqLevel: 0);
+        wizard["Dur"] = 240;
+        wizard["Casted By"] = "Textblock #9001(12%)";
+        Dictionary<string, object> wheel = SpellRow(702, "card-wheel of fortune", "", magery: 0, mageryLvl: 0, reqLevel: 0);
+        wheel["Dur"] = 240;
+        wheel["Casted By"] = "Textblock #9001(16%)";
+        object[] tbInfo =
+        [
+            new Dictionary<string, object> { ["Number"] = "9000", ["Action"] = "message 8815:cast 5145:random 9001\n" },
+        ];
+        Dictionary<string, object> deck = NonEquippableCastItemRow(301, "Deck Of Cards", castSpell: 700, itemType: 10, 12);
+        deck["Retain After Uses"] = 1;
+        deck["UseCount"] = 9999;
+
+        SpellbookState book = NewBook(classNumber: 12, level: 20, items: [deck],
+            spells: [draw, wizard, wheel], tbInfo: tbInfo);
+
+        ClassCastItem item = Assert.Single(book.GetDrawCastItems());
+        Assert.True(item.Carried);
+        Assert.Equal(new[] { ("card-wizard", 12), ("card-wheel of fortune", 16) },
+            item.Outcomes!.Select(o => (o.Name, o.ChancePercent)));
+        Assert.All(item.Outcomes!, o => Assert.Equal(240, o.DurationRounds));
+        // The Buff Watchdog and the cast engines can resolve its token.
+        Assert.Contains(book.GetCastItems(), i => i.ItemName == "Deck Of Cards");
+    }
+
     [Fact]
     public void CastItems_ExcludeAutomaticProcs_KeepOnlyCommandCasts()
     {

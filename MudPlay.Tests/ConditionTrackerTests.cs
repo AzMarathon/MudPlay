@@ -613,4 +613,44 @@ public sealed class ConditionTrackerTests
         h.Feed("You feel VERY lucky!");                    // still latched → still deduped
         Assert.Single(h.Applied);
     }
+    // Report paradigm-20261002-120516: `use deck` drew the Priest, but every card
+    // record shared the draw's "The gaze of luck is upon you." line, so all thirteen
+    // latched and card-void's Confused flag held navigation. In the shipped seeds each
+    // card is known by its own text; the shared line belongs to the deck's record.
+    [Theory]
+    [InlineData("paradigm")]
+    [InlineData("stock")]
+    public void ShippedSeed_ADeckDraw_LatchesTheCardDrawn_NotEveryCard(string realm)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-seed-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            List<MessageRecord> seed = JsonStore.Load<List<MessageRecord>>(
+                Path.Combine(dir, $"Messages.{realm}.seed.json"))!;
+            using Harness h = new();
+            h.Messages.Messages.ReplaceAll(seed);
+
+            h.Feed("You grab your deck of cards and draw...");
+            h.Feed("The gaze of luck is upon you.");
+            Assert.False(h.Tracker.IsConfused);
+            Assert.DoesNotContain(h.Applied, r => r.Name.StartsWith("card-", StringComparison.Ordinal) && r.Name != "card-draw");
+
+            h.Feed(" \"When the Priest is played, wisdom and insight are paramount. Faith and");
+            h.Feed("  perseverance shall be yours.\"");
+            Assert.Contains(h.Applied, r => r.Name == "card-priest");
+            Assert.DoesNotContain(h.Applied, r => r.Name == "card-void");
+            Assert.False(h.Tracker.IsConfused);
+
+            // The Void (a Stock draw) does confuse, and the deck's wear-off clears it.
+            h.Feed(" \"Unending darkness is the hallmark of the Void. You will be wrapped in a");
+            Assert.True(h.Tracker.IsConfused);
+            h.Feed("The gaze of luck is no longer upon you!");
+            Assert.False(h.Tracker.IsConfused);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
 }

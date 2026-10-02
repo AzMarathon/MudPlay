@@ -21,7 +21,9 @@ public sealed record AddBuffResult(
     bool CastBeforeRestingForMana,
     int RerollCount,
     int? RerollThreshold,
-    bool RerollInfinite = false);
+    bool RerollInfinite = false,
+    // Draw items: the outcomes (spell numbers) the user unticked.
+    IReadOnlyList<int>? RejectedOutcomes = null);
 
 // One entry in the Add-buff dropdown: the cast Code the game accepts, a Display
 // showing the buff's name + the level it's learned at ("bless (Lvl 2)"), and
@@ -47,6 +49,44 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     private readonly bool _isStockRealm;
     private readonly Func<string?, string?>? _tickSteps;
     private readonly Func<string?, (int Min, int Max)?>? _rollRange;
+    private readonly Func<string?, IReadOnlyList<CastOutcome>>? _outcomesOf;
+    private readonly HashSet<int> _initiallyRejected = new();
+
+    // A draw item (a deck of cards) deals one of several buffs at random. One tick
+    // box per buff: a ticked one is kept when drawn, an unticked one is drawn again.
+    public System.Collections.ObjectModel.ObservableCollection<BuffOutcomeToggle> Outcomes { get; } = new();
+    public bool HasOutcomes => Outcomes.Count > 0;
+    public bool NoOutcomeTicked => HasOutcomes && !Outcomes.Any(static o => o.IsChecked);
+
+    private void RebuildOutcomes()
+    {
+        Outcomes.Clear();
+        foreach (CastOutcome o in _outcomesOf?.Invoke(Spell) ?? Array.Empty<CastOutcome>())
+            Outcomes.Add(new BuffOutcomeToggle(
+                o.SpellNumber,
+                o.ChancePercent > 0 ? $"{o.Name} ({o.ChancePercent}%)" : o.Name,
+                OutcomeTip(o),
+                !_initiallyRejected.Contains(o.SpellNumber),
+                OnOutcomeToggled));
+        OnPropertyChanged(nameof(HasOutcomes));
+        OnOutcomeToggled();
+    }
+
+    private static string OutcomeTip(CastOutcome o)
+    {
+        string effect = string.IsNullOrWhiteSpace(o.Effect) ? "No effect figures in the game data." : o.Effect;
+        if (o.DurationRounds <= 0) return effect;
+        double minutes = o.DurationRounds * SpellCalculator.SpellRoundSecondsWallClock / 60.0;
+        return $"{effect}\nLasts about {minutes:0.#} min.";
+    }
+
+    private void OnOutcomeToggled()
+    {
+        OnPropertyChanged(nameof(NoOutcomeTicked));
+        OnPropertyChanged(nameof(CanAdd));
+    }
+
+    partial void OnSpellChanged(string? value) => RebuildOutcomes();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanAdd))]
@@ -115,7 +155,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
 
     // Enabled once a selectable (not already-slotted) buff is picked, so you can't
     // add an empty slot or one that would duplicate an existing buff.
-    public bool CanAdd => SelectedPick is { Enabled: true };
+    public bool CanAdd => SelectedPick is { Enabled: true } && !NoOutcomeTicked;
 
     // Whether this dialog is editing an existing slot (vs adding a new one) —
     // drives the title + OK-button label.
@@ -127,8 +167,11 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         IReadOnlyList<BuffPickOption> pickOptions,
         Func<string?, bool> isLightSpell, Func<string?, bool> isRollSpell,
         bool isStockRealm = false, Func<string?, string?>? tickSteps = null,
-        AddBuffResult? initial = null, Func<string?, (int Min, int Max)?>? rollRange = null)
+        AddBuffResult? initial = null, Func<string?, (int Min, int Max)?>? rollRange = null,
+        Func<string?, IReadOnlyList<CastOutcome>>? outcomesOf = null)
     {
+        _outcomesOf = outcomesOf;
+        foreach (int rejected in initial?.RejectedOutcomes ?? Array.Empty<int>()) _initiallyRejected.Add(rejected);
         ArgumentNullException.ThrowIfNull(pickOptions);
         PickOptions = pickOptions;
         _isLightSpell = isLightSpell;
@@ -150,6 +193,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             _rerollCount = i.RerollCount;
             _rerollThreshold = i.RerollThreshold;
             _rerollInfinite = i.RerollInfinite;
+            RebuildOutcomes();
         }
     }
 
@@ -168,7 +212,8 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             IsRollSpell && CastBeforeRestingForMana,
             IsRollSpell ? Math.Clamp(RerollCount, 0, 20) : 0,
             IsRollSpell ? RerollThreshold : null,
-            IsRollSpell && RerollInfinite));
+            IsRollSpell && RerollInfinite,
+            Outcomes.Where(static o => !o.IsChecked).Select(static o => o.SpellNumber).ToList()));
     }
 
     [RelayCommand]

@@ -25,6 +25,10 @@ public sealed class EngineReplyLinesTests
     [InlineData("--- Telepath Not Sent ---")]
     [InlineData("Someone yells from the north \"help\"")]
     [InlineData("You would get 40 gold crowns for your silver rapier.")]
+    // A name that fits more than one thing in the room: the header, then one row each.
+    [InlineData("Please be more specific.  You could have meant any of these:")]
+    [InlineData("-- old gypsy woman")]
+    [InlineData("-- old gypsy man")]
     public void EngineReplies_Match(string line) => Assert.True(EngineReplyLines.Matches(line));
 
     [Theory]
@@ -34,6 +38,7 @@ public sealed class EngineReplyLinesTests
     [InlineData("A shimmering rune flickers and fades.")]
     [InlineData("The is locked.")]                      // a value is never empty
     [InlineData("You must close the door")]
+    [InlineData("-- ")]                                 // a row with nothing named
     [InlineData("")]
     public void OtherLines_DoNot(string line) => Assert.False(EngineReplyLines.Matches(line));
 

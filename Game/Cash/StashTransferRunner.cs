@@ -13,9 +13,16 @@ namespace MudPlay.Game.Cash;
 // search showed less what was taken (GAME_MECHANICS "Hiding coin in a room
 // (stashing)": the untaken part of a searched pile stays hidden).
 //
-// Each deposit is everything gained since the transfer started — the stash's coin
-// and whatever was picked up off the ground between the two rooms — so the purse
-// ends where it started and the keep-on-hand float is never drawn into the bank.
+// Each deposit is everything carried above the Settings → Cash keep-on-hand
+// amount, the same rule every other deposit follows: the stash's coin, whatever
+// was picked up off the ground between the two rooms, and what was already in the
+// purse (report paradigm-20261002-111650: keeping the purse as it stood at the
+// start left earlier pickups unbanked trip after trip).
+//
+// A purse that is already loaded goes to the bank first: started with more coin
+// than there is room left for (a transfer cut off on its way to the bank and
+// started again, report paradigm-20261002-114620), or found unable to take
+// anything at the stash while it still holds coin to bank.
 //
 // A party leader can have the members carry too (Settings → Cash): once the
 // leader has taken its own load, each member is telepathed `@get-stash` — search
@@ -68,14 +75,17 @@ public sealed class StashTransferRunner
     private readonly Action<RoomKey, long> _reconcileStash;
     private readonly Action<string> _notice;
     private readonly Func<IReadOnlyList<string>>? _partyMembers;
+    private readonly Func<long>? _keepOnHandCopper;
+    private readonly Func<(long Held, long Room)?>? _coinLoad;
     private readonly LogService? _log;
 
     private Phase _phase = Phase.Idle;
     private int _session;
-    private long _purseAtStart;
     private long _purseBefore;
     private long _shown;
     private bool _forcedAutoGetCash;
+    // The stash has been searched at least once this transfer, so LeftCopper is real.
+    private bool _pileRead;
 
     // The members sent to the pile on this trip; the same ones are told to deposit.
     private IReadOnlyList<string> _partyOnTrip = Array.Empty<string>();
@@ -125,7 +135,13 @@ public sealed class StashTransferRunner
         LogService? log = null,
         // The party members to share the carrying with (given names): empty unless
         // the option is on and we lead a party.
-        Func<IReadOnlyList<string>>? partyMembers = null)
+        Func<IReadOnlyList<string>>? partyMembers = null,
+        // The keep-on-hand floor in copper (Settings → Cash); a deposit leaves this
+        // much in the purse. Unwired, everything is deposited.
+        Func<long>? keepOnHandCopper = null,
+        // Coins carried and the room the weight limits leave for more
+        // (CashManager.CoinLoad); null when the capacity isn't known.
+        Func<(long Held, long Room)?>? coinLoad = null)
     {
         _currentRoom = currentRoom ?? throw new ArgumentNullException(nameof(currentRoom));
         _onHandCopper = onHandCopper ?? throw new ArgumentNullException(nameof(onHandCopper));
@@ -140,6 +156,8 @@ public sealed class StashTransferRunner
         _notice = notice ?? throw new ArgumentNullException(nameof(notice));
         _log = log;
         _partyMembers = partyMembers;
+        _keepOnHandCopper = keepOnHandCopper;
+        _coinLoad = coinLoad;
     }
 
     // Starts the transfer. Null when it is under way; otherwise why it isn't.
@@ -154,12 +172,12 @@ public sealed class StashTransferRunner
         Trips = 0;
         MovedCopper = 0;
         LeftCopper = 0;
+        _pileRead = false;
         _partyOnTrip = Array.Empty<string>();
-        _purseAtStart = _onHandCopper();
         _session++;
 
         _log?.Info(LogCategory, $"transfer started: stash {stash} → {bankName} ({bank})");
-        string? refused = GoToStash();
+        string? refused = LoadedAlready() ? BankWhatWeCarryFirst() : GoToStash();
         if (refused is not null)
         {
             _log?.Info(LogCategory, $"transfer not started — {refused}");
@@ -198,6 +216,28 @@ public sealed class StashTransferRunner
                 else BeginDeposit();
                 break;
         }
+    }
+
+    // More coin carried than there is room left for, and some of it above the
+    // keep-on-hand amount: walking to the stash would bring back little or nothing.
+    private bool LoadedAlready() =>
+        _onHandCopper() - KeepOnHand() > 0
+        && _coinLoad?.Invoke() is { } load && load.Held > load.Room;
+
+    // Null when the walk to the bank is under way (or the deposit, when we stand in
+    // it). Counts as a trip: it ends in a deposit like any other.
+    private string? BankWhatWeCarryFirst()
+    {
+        _log?.Info(LogCategory, "the purse is already loaded — banking it before going to the stash");
+        Trips++;
+        if (_currentRoom() is { } here && here.Equals(Bank))
+        {
+            BeginDeposit();
+            return null;
+        }
+        if (!Walk(Bank)) return $"no route to {BankName}";
+        _phase = Phase.WalkingToBank;
+        return null;
     }
 
     // Null when the leg is under way (or the survey, when we already stand there).
@@ -246,6 +286,7 @@ public sealed class StashTransferRunner
         if (session != _session || _phase != Phase.Surveying) return;
 
         _shown = Math.Max(0, _surveyedCopper());
+        _pileRead = true;
         if (_shown <= 0)
         {
             _reconcileStash(Stash, 0);
@@ -272,6 +313,15 @@ public sealed class StashTransferRunner
 
         if (taken <= 0)
         {
+            if (_onHandCopper() - KeepOnHand() > 0)
+            {
+                // No room, but coin to bank: empty the purse and come back. A second
+                // empty-handed stop, with nothing left to bank, ends the transfer.
+                _log?.Info(LogCategory, "nothing could be picked up with coin still carried — banking it first");
+                Trips++;
+                GoToBank();
+                return;
+            }
             End("nothing could be picked up - check the coin weight limits in Settings, Cash");
             return;
         }
@@ -381,17 +431,18 @@ public sealed class StashTransferRunner
     private void BeginDeposit()
     {
         _purseBefore = _onHandCopper();
-        long gained = _purseBefore - _purseAtStart;
+        long spare = _purseBefore - KeepOnHand();
         _phase = Phase.Depositing;
         int session = _session;
-        if (gained <= 0)
+        if (spare <= 0)
         {
-            // Tolls or a purchase on the way ate this trip's coin; nothing to bank.
-            _log?.Info(LogCategory, $"trip {Trips}: nothing above the starting purse to deposit");
+            // The purse was under the keep-on-hand amount and this trip's coin only
+            // topped it up; nothing to bank.
+            _log?.Info(LogCategory, $"trip {Trips}: nothing above the keep-on-hand amount to deposit");
             AfterOwnDeposit();
             return;
         }
-        _send($"dep {gained}");
+        _send($"dep {spare}");
         _armTimer(DepositWindow, () => OnDeposited(session));
     }
 
@@ -424,7 +475,8 @@ public sealed class StashTransferRunner
 
     private void NextTripOrDone()
     {
-        if (LeftCopper <= 0)
+        // A deposit made before the pile was ever read says nothing about the stash.
+        if (_pileRead && LeftCopper <= 0)
         {
             End(null);
             return;
@@ -444,8 +496,8 @@ public sealed class StashTransferRunner
         _awaitingReply.Clear();
         ReleaseCollection();
 
-        long carrying = Math.Max(0, _onHandCopper() - _purseAtStart);
-        string moved = Trips == 0 || MovedCopper <= 0
+        long carrying = Math.Max(0, _onHandCopper() - KeepOnHand());
+        string moved = MovedCopper <= 0
             ? "nothing moved"
             : $"{CurrencyFormat.Full(MovedCopper)} moved to {BankName} in {Trips} trip{(Trips == 1 ? "" : "s")}";
         string text = why is null
@@ -459,6 +511,8 @@ public sealed class StashTransferRunner
         StateChanged?.Invoke();
         Ended?.Invoke(outcome);
     }
+
+    private long KeepOnHand() => Math.Max(0, _keepOnHandCopper?.Invoke() ?? 0);
 
     private void ForceAutoGetCash()
     {
@@ -480,7 +534,7 @@ public sealed class StashTransferRunner
     // One line for the bug report.
     public string Describe() => IsBusy
         ? $"{_phase} — stash {Stash} → {BankName} ({Bank}), trip {Trips}, moved {MovedCopper:N0} copper, "
-          + $"{LeftCopper:N0} believed left, purse at start {_purseAtStart:N0}"
+          + $"{LeftCopper:N0} believed left, keeping {KeepOnHand():N0} on hand"
           + (_partyOnTrip.Count > 0 ? $", party on this trip: {string.Join(", ", _partyOnTrip)}" : "")
           + (_awaitingReply.Count > 0 ? $", awaiting a reply from: {string.Join(", ", _awaitingReply)}" : "")
         : "idle";

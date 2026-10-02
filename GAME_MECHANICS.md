@@ -332,6 +332,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
   - **Doors, seen and done:** `The %s to the %s just opened.`, `The door is now locked.`, `You see %s pick the lock on the %s to the %s.`, `You successfully unlocked the %s.`.
   - **Bank, shop and gang:** `The bank cannot accept your deposit at this time.`, `You would get %s %s for your %s.`, `Gang member %s has been notified of their promotion.`, `Your gang leader has demoted you.`.
   - **Channels and talk:** `--- Telepath Not Sent ---`, `You just joined channel %d.`, `Someone yells from the %s "%s"`, `You are using too much profanity - your message is not sent.`.
+  - **An ambiguous name** (`look`, `ask`, any command naming something in the room, when the name fits more than one): `Please be more specific.  You could have meant any of these:` (two spaces after the full stop), then one `-- %s` row per match, e.g. `-- old gypsy woman` / `-- old gypsy man`. Seen on Paradigm with the same wording *([OBSERVED] 2026-10-02, user screenshot)*.
 - **Some engine-printed lines share their wording with a spell's message and are NOT in this family:** `You eat the %s.` and `You drink the %s.` are also the catalogued text of item spells (red fungus, the potions).
 - **`You are not of a high enough level to cast that spell.` is in the DLL but has never been seen in play** *([CONFIRMED] 2026-10-01, user)*.
 - **Client use:**
@@ -4717,6 +4718,12 @@ There is no room to drop amethyst pendant here.
 *Status: CONFIRMED 2026-08-06 (user); 2H-weapon + off-hand-buff exception CONFIRMED 2026-08-26 (user)*
 
 - **To command-cast from an equippable item you must have it equipped.** Consumables — potions, waterskins — are `use`d straight from inventory and never need equipping *([CONFIRMED] 2026-09-26, user)*. So the buff engine equips the cast item, `use`s it, then puts back whatever it displaced.
+- **What `use <item>` checks on Stock** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_use`; Realm: Stock — Paradigm not recorded)*, in order:
+  - the item must be in the inventory (`You don't have %s.`) and pass `_user_can_use` (`You may not use that item!`);
+  - an item with a wear slot (`Worn` ≥ 1) must be worn: `You must be wearing that item to use it!`;
+  - a weapon (`ItemType` 1) with no wear slot must be the readied weapon: `You must have that item readied to use it!`;
+  - any other item with no wear slot is used straight from the inventory;
+  - a spent item answers `There are no more uses in %s.`.
 - **A buff item can live in ANY equip slot, not just weapon / off-hand.** A warhorn is off-hand, a charged amulet is neck, etc.
 - **Restore is slot-specific.** `eq <item>` puts the item into **its own** slot and displaces only what was there.
 - **1H weapon buff:** displaces the **weapon hand**, so restore the weapon.
@@ -4733,6 +4740,38 @@ There is no room to drop amethyst pendant here.
 - **2H weapon buff while holding a 1H weapon + off-hand:** the buff needs **both** hands.
   - Order: `rem <off-hand>` → `eq <2H buff>` → `use` → `eq <1H weapon>` (this displaces the two-hander back to the pack and frees the off-hand) → `eq <off-hand>`.
 - **Whatever slot was empty simply isn't restored** (nothing to put back).
+- **Client use:**
+  - `ItemCastSequencer` equips, uses and restores a readied cast item; its list (`SpellbookState.GetCastItems`) holds only items with a wear slot or weapons.
+  - The Spell Book also lists a cast item with no wear slot when the data marks it kept after use (`ClassCastItem.Carried`, `SpellbookState.GetSpellBookCastItems`; report `paradigm-20261002-114043`: the Paradigm deck of cards was missing). It labels it *carried, not worn*. A carried item reaches the cast engines only when it is a draw item (the deck), and then it is used without being equipped. See *Deck of cards (Gypsy)*.
+
+### Deck of cards (Gypsy)
+*Status: OBSERVED 2026-10-02 (imported game data; `wccmmud.dll` 1.11p message and textblock tables; report `paradigm-20261002-120516`); use confirmed by the user 2026-10-02 · Realm: differs*
+
+- **The item (1441, Gypsy only) differs by realm** *([OBSERVED] imported game data)*.
+  - Stock: wearable (`Worn` 12), 100 uses, kept after use, level 35, casts spell 1139 `card-draw`.
+  - Paradigm: `ItemType` 10 with **no wear slot**, `UseCount` 9999, kept after use, not droppable, level 15, casts spell 5144 `card deck draw`.
+- **On Paradigm it is used straight from the inventory: `use deck`** *([CONFIRMED] 2026-10-02, user; report `paradigm-20261002-120516`)*. It draws one card at random and applies that card's buff. The capture, in order:
+  - `You shuffle your deck of cards.`
+  - `You grab your deck of cards and draw...`
+  - `The gaze of luck is upon you.`
+  - the card as ANSI art naming it (`The` / `Priest`), then a quoted line about the card.
+  - `look deck of cards` read `Uses remaining: 9999` before and `9998` after: a use takes a charge although the item is kept.
+- **A use takes the between-round cast slot, the same as a buff spell, and it can be used cycle after cycle** *([CONFIRMED] 2026-10-02, user)*.
+- **A new draw replaces the card already up (Paradigm)** *([OBSERVED] imported game data)*: the use-spell's textblock 9821 casts `card shuffle` (5145) before the draw, and that spell removes each of the eight card spells (`RemovesSpell`, ability 122, once per card). Stock's textblock 9365 has no shuffle step.
+- **Every card shares the same applied and wear-off lines** *([OBSERVED] Stock message 2763; applied line confirmed on Paradigm by the user 2026-10-02)*: `The gaze of luck is upon you.` and `The gaze of luck is no longer upon you!`. Only the art and the quote say which card was drawn.
+- **The draw line has a room form** *([OBSERVED] Stock message 2780)*: `You grab your deck of cards and draw...` to the user, `%s grabs their deck of cards and draws...` to the room. What the room sees for the Paradigm shuffle line is not recorded.
+- **What can be drawn** *([OBSERVED] textblocks)*:
+  - Paradigm (textblock 9822, after `cast 5145` `card shuffle`): eight cards, spells 965–972, each lasting `Dur` 240 — wizard, priest, knight, chariot, grail, sun and angel at 12% each, wheel of fortune at 16%.
+  - Stock (textblock 9264): those eight plus death (973), fool (974), swamp (975), demon (983) and void (976). The void card confuses.
+  - The fortune teller's reading (textblock 935, spells 490–502) deals the same thirteen cards with the same texts.
+- **Each card's quote opens with** *([OBSERVED] Stock textblocks 9366–9378; the Priest's matches the Paradigm capture word for word)*:
+  - wizard `The Wizard symbolizes mystical power`; priest `When the Priest is played`; knight `The Knight is both protector and aggressor`; chariot `The Chariot symbolizes mastery over movement`;
+  - grail `The Grail! A most fortuitous card, the Grail symbolizes life itself.`; sun `The Sun is a boon to all those who search`; wheel of fortune `The Wheel of Fortune, when played in this instance`; angel `The Angel indicates that you are being watched over`;
+  - death `A deathly curse be upon you! The shadow of death hovers at your door`; fool `Fools often wander the land in ignorant bliss`; swamp `The Swamp swallows life and slows travel`; demon `as a Demon hovers about you`; void `Unending darkness is the hallmark of the Void`.
+- **Client use:**
+  - The message seeds key each card record on its own quote, and the shared `The gaze of luck is upon you` line sits on the deck's own record (`card deck draw` / `card-draw`). With all thirteen records on the shared line, one draw latched every card and the void's Confused flag held navigation (report `paradigm-20261002-120516`).
+  - The Spell Book lists the Paradigm deck as a cast-on-use item marked *carried, not worn*.
+  - **Buff Watchdog draw slot** (**Client policy**, user 2026-10-02): the deck can be slotted as a buff with one tick box per card (`BuffSlot.RejectedOutcomes`). `CastingDirector` sends `use deck of cards` in the between-round slot (`ItemCastSequencer`, no equip), reads the card off its applied line, keeps a ticked card for that card's duration, and draws again on the next cycle for an unticked one. The cards come from the data (`KnownSpellCatalog.RandomOutcomes`: the use-spell's textblock → its `random` table → the spells that table casts), so each realm's deck lists its own.
 
 ### Chests and chest loot tables
 *Status: CONFIRMED (chest behaviour); CONFIRMED — verified against the 1.11p / Paradigm / Euphoria data, 2026-07-10 (loot-table chain)*
@@ -4924,7 +4963,11 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   limits allow, and trusts the untaken part to stay hidden while it walks to the bank and back
   (**Client policy**, user 2026-10-02). Coin on the ground between the two rooms is picked up as usual
   (report `paradigm-20261002-101410`: it was held off on the walk back), and each `dep <copper>` is
-  everything gained since the transfer started, so the purse ends where it began. The stash ledger is
+  everything carried above the Settings → Cash keep-on-hand amount, as every other deposit is (report
+  `paradigm-20261002-111650`: holding back the purse as it stood at the start left earlier pickups
+  unbanked). A purse already holding more coin than it has room left for (`CashManager.CoinLoad`) is
+  banked before the first walk to the stash (report `paradigm-20261002-114620`: restarted with a full
+  purse, it walked to the stash for coin it couldn't carry). The stash ledger is
   set to what the search showed less what was taken.
   - **Party share** (`CashSettings.StashTransferPartyShare`; **Client policy**, user 2026-10-02): a
     search shows the pile only to the searcher, so a leader telepaths each member one command,

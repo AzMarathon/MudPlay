@@ -116,6 +116,11 @@ public sealed class BuffSlot
     // inputs are known.
     public bool RerollThresholdIsRoll { get; set; }
 
+    // Draw items (a deck of cards): the spell numbers of the outcomes the user does
+    // NOT want. Drawing one of these re-uses the item on the next cycle until a wanted
+    // one lands. Empty = every outcome is accepted.
+    public System.Collections.Generic.List<int> RejectedOutcomes { get; set; } = new();
+
     // Roll spells: reroll without a cap — keep re-casting until the roll clears the
     // threshold (or the mana floor suspends the cycle, resuming as mana recovers).
     // Spares the user from setting an obscene RerollCount to approximate "unlimited";

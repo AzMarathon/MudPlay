@@ -620,6 +620,86 @@ public sealed class CastingDirector : IDisposable
         _executeItemCast = execute;
     }
 
+    // ----- Draw items (a deck of cards) ---------------------------------
+    // A draw item's use deals one of several buffs at random, so a slot holding one
+    // has no single duration and may not want every buff it can deal. One use goes out
+    // in the between-round slot like any other buff; the card that lands is read off
+    // its applied line. A wanted card arms the slot's timer for that card's duration;
+    // an unwanted one (BuffSlot.RejectedOutcomes) leaves the slot due, so the next
+    // cycle draws again. A use can be repeated every cycle (user, 2026-10-02).
+    private Func<string, IReadOnlyList<(int SpellNumber, string Name, long DurationSec)>?>? _drawOutcomes;
+
+    // How long a sent draw is given to show its card before the slot counts as due
+    // again (the use didn't happen, or the card's line wasn't recognised).
+    private const int DrawSettleSec = 6;
+
+    // Draws sent and still waiting for their card, by token → when the wait ends. Kept
+    // apart from _activeUntil: a recast margin longer than the wait would read a
+    // waiting draw as already due.
+    private readonly Dictionary<string, DateTime> _drawPendingUntil = new(StringComparer.OrdinalIgnoreCase);
+
+    public void SetItemDrawSource(Func<string, IReadOnlyList<(int SpellNumber, string Name, long DurationSec)>?> outcomesOf)
+    {
+        ArgumentNullException.ThrowIfNull(outcomesOf);
+        _drawOutcomes = outcomesOf;
+    }
+
+    private bool TryFireDraw(string token)
+    {
+        if (_executeItemCast is null || !_executeItemCast(token)) return false;
+        _cast.NotifyExternalCastSent();
+        // The slot's timer is set when the card lands (NoteDrawOutcome).
+        _activeUntil.Remove(("", token));
+        _drawPendingUntil[token] = _now().AddSeconds(DrawSettleSec);
+        _log?.Info(LogCategory, $"draw item used token={token} — waiting for the card.");
+        CastFired?.Invoke();
+        return true;
+    }
+
+    // The record that just applied or ended, when it is one of a slotted draw item's
+    // outcomes. Matched on the linked spell, or on the name: the two realms' card
+    // records share an Id, so the one that fires may link the other realm's spell.
+    private (Models.Profile.BuffSlot Slot, (int SpellNumber, string Name, long DurationSec) Outcome)? DrawOutcomeOf(MessageRecord r)
+    {
+        if (_drawOutcomes is null || _readPartyBuffs?.Invoke() is not { } buffs) return null;
+        foreach (Models.Profile.BuffSlot slot in buffs.Slots)
+        {
+            if (!ItemCastToken.IsToken(slot.Spell) || _drawOutcomes(slot.Spell!) is not { Count: > 0 } outcomes) continue;
+            foreach ((int SpellNumber, string Name, long DurationSec) o in outcomes)
+            {
+                bool linked = r.Links is { } links && links.Any(l =>
+                    l.Number == o.SpellNumber && string.Equals(l.Table, "Spells", StringComparison.OrdinalIgnoreCase));
+                if (linked || string.Equals(r.Name, o.Name, StringComparison.OrdinalIgnoreCase))
+                    return (slot, o);
+            }
+        }
+        return null;
+    }
+
+    internal void NoteDrawOutcome(MessageRecord r)
+    {
+        if (DrawOutcomeOf(r) is not { } drawn) return;
+        string token = drawn.Slot.Spell!;
+        _drawPendingUntil.Remove(token);
+        if (drawn.Slot.RejectedOutcomes.Contains(drawn.Outcome.SpellNumber))
+        {
+            _activeUntil.Remove(("", token));
+            _log?.Info(LogCategory, $"draw item {token}: drew {drawn.Outcome.Name}, which isn't ticked — drawing again.");
+            return;
+        }
+        long seconds = Math.Max(1, drawn.Outcome.DurationSec);
+        _activeUntil[("", token)] = (_now().AddSeconds(seconds), drawn.Slot.RecastMarginSec, (int)seconds);
+        _log?.Info(LogCategory, $"draw item {token}: drew {drawn.Outcome.Name} — keeping it for {seconds}s.");
+    }
+
+    // The card's wear-off: the slot is due again.
+    internal void NoteDrawEnded(MessageRecord r)
+    {
+        if (DrawOutcomeOf(r) is not { } ended) return;
+        if (_activeUntil.Remove(("", ended.Slot.Spell!)))
+            _log?.Info(LogCategory, $"draw item {ended.Slot.Spell}: {ended.Outcome.Name} wore off.");
+    }
+
     // Wire the item-cast mana-cost resolver. Maps a Bless-slot ItemCastToken to the
     // cast spell's Spells.ManaCost — the mana using the item draws. A free item-cast
     // (most charge wands / proc gear, cost 0) bypasses the buff mana-floor and
@@ -967,6 +1047,11 @@ public sealed class CastingDirector : IDisposable
     // actually expired).
     private bool IsRecastDue(string targetKey, string spellShort)
     {
+        if (targetKey.Length == 0 && _drawPendingUntil.TryGetValue(spellShort, out DateTime waitEnds))
+        {
+            if (_now() < waitEnds) return false;
+            _drawPendingUntil.Remove(spellShort);
+        }
         if (!_activeUntil.TryGetValue((targetKey, spellShort), out (DateTime Until, int MarginSec, int TotalSec) t))
             return true;
         return (t.Until - _now()).TotalSeconds <= EffectiveMargin(targetKey, spellShort, t.MarginSec);
@@ -1134,6 +1219,8 @@ public sealed class CastingDirector : IDisposable
 
     private void OnConditionApplied(MessageRecord r)
     {
+        NoteDrawOutcome(r);
+
         // A between-round cast can be swallowed by a stun/petrify/bind that applies a
         // line LATER in the same round's burst than the send: the tick-driven pass
         // that fires the cast runs straight off a server combat line (OnCombatTick,
@@ -1290,6 +1377,7 @@ public sealed class CastingDirector : IDisposable
 
     private void OnConditionEnded(MessageRecord r)
     {
+        NoteDrawEnded(r);
         string? resolved = _shortFromAppliedRecord?.Invoke(r);
 
         // A wear-off that lands right after a SUCCESSFUL clobbering cast is the shared,
@@ -1859,6 +1947,7 @@ public sealed class CastingDirector : IDisposable
     // code, not the token.
     private bool TryFireItemCast(string token, int marginSec)
     {
+        if (_drawOutcomes?.Invoke(token) is { Count: > 0 }) return TryFireDraw(token);
         if (_itemCastDuration is null || _executeItemCast is null) return false;
         if (_itemCastDuration(token) is not { } durationSec || durationSec <= 0) return false;
         if (!_executeItemCast(token)) return false;

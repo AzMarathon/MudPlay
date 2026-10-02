@@ -900,6 +900,36 @@ public sealed class CashManager : IDisposable
     // construction). The in-flight projection threads multi-currency batches and
     // quick re-displays so the budget reflects pickups already dispatched but not
     // yet confirmed.
+    // The coins carried now and how many more the weight limits would let a pickup
+    // add. Null when the carry capacity isn't known. A stash transfer reads it to
+    // tell a purse that should be banked before it goes for more.
+    public (long Held, long Room)? CoinLoad()
+    {
+        InventorySnapshot snap = _getSnapshot();
+        EncumbranceReading enc = snap.Encumbrance;
+        if (enc.MaxWeight <= 0) return null;
+        long held = snap.Currency.TotalCoinCount;
+        long nonCoinWeight = Math.Max(0, enc.CurrentWeight - held / 3);
+        return (held, RoomForCoins(CapWeight(_readSettings(), enc), nonCoinWeight, held));
+    }
+
+    // The weight a coin pickup may bring us up to: the carry maximum, tightened by
+    // the SkipCollect* boxes.
+    private static long CapWeight(CashSettings settings, EncumbranceReading enc) =>
+        EncumbranceGate.ComputeCapWeight(
+            settings.SkipCollectIfMakesLight,
+            settings.SkipCollectIfMakesMedium,
+            settings.SkipCollectIfMakesHeavy,
+            enc,
+            settings.SkipCollectPast90Percent);
+
+    // Three coins to the weight unit.
+    private static long RoomForCoins(long capWeight, long nonCoinWeight, long heldCoins)
+    {
+        long headroom = capWeight - (nonCoinWeight + heldCoins / 3);
+        return headroom > 0 ? headroom * 3 : 0;
+    }
+
     private void CollectCoins(int count, string currency)
     {
         // Stash-room guard at the shared funnel so EVERY collect path is covered —
@@ -966,12 +996,7 @@ public sealed class CashManager : IDisposable
 
         SweepStaleInFlight();
 
-        long capWeight = EncumbranceGate.ComputeCapWeight(
-            settings.SkipCollectIfMakesLight,
-            settings.SkipCollectIfMakesMedium,
-            settings.SkipCollectIfMakesHeavy,
-            enc,
-            settings.SkipCollectPast90Percent);
+        long capWeight = CapWeight(settings, enc);
         CurrencyHoldings c = snap.Currency;
         long[] rawHeld = { c.Copper, c.Silver, c.Gold, c.Platinum, c.Runic };
         long rawTotal = 0;
@@ -990,9 +1015,7 @@ public sealed class CashManager : IDisposable
         {
             long t = 0;
             for (int k = 0; k < 5; k++) t += held[k];
-            long currentWeight = nonCoinWeight + t / 3;
-            long headroom = capWeight - currentWeight;
-            return headroom > 0 ? headroom * 3 : 0;
+            return RoomForCoins(capWeight, nonCoinWeight, t);
         }
 
         bool cascade = settings.DropSmallerForLarger;

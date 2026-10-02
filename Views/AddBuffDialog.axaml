@@ -67,6 +67,23 @@
                           IsChecked="{Binding OnlyWhenDark, Mode=TwoWay}"
                           ToolTip.Tip="Cast this light spell only on entering a dark room (the auto-light system handles it). Unchecked = keep it up like an ordinary buff."/>
 
+                <!-- Draw item (a deck of cards): which of its buffs to keep. -->
+                <StackPanel Spacing="2" IsVisible="{Binding HasOutcomes}" Margin="0,4,0,0">
+                    <TextBlock Text="Keep these when drawn (an unticked one is drawn again)" FontSize="10"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                    <ItemsControl ItemsSource="{Binding Outcomes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BuffOutcomeToggle">
+                                <CheckBox Content="{Binding Label}"
+                                          IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                          ToolTip.Tip="{Binding Tip}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="Tick at least one." FontSize="10" IsVisible="{Binding NoOutcomeTicked}"
+                               Foreground="{StaticResource AccentRedBrush}"/>
+                </StackPanel>
+
                 <!-- Mana-regen roll spell: reroll config + pre-rest option. -->
                 <StackPanel Spacing="4" IsVisible="{Binding IsRollSpell}" Margin="0,4,0,0">
                     <CheckBox Content="Cast before resting for mana"

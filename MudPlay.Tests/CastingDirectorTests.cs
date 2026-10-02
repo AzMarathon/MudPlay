@@ -2517,6 +2517,112 @@ public sealed class CastingDirectorTests
         Assert.Empty(h.CastsSent);
     }
 
+    // ----- Draw items (a deck of cards) -------------------------------
+    // One use deals one of several buffs at random. A ticked one is held for its own
+    // duration; an unticked one is drawn again on the next cycle.
+
+    private static MessageRecord CardRecord(string name, int spell) => new(
+        Id: MessageRecord.ComputeId(name, "", "", "", name, ""),
+        Name: name, Flags: MessageFlags.None, RawFlagsHex: 0,
+        CasterMessage: string.Empty, TargetMessage: string.Empty, WitnessMessage: string.Empty,
+        AppliedMessage: name, AppliedEndsWith: string.Empty,
+        Links: new[] { new GameDataLink("Spells", spell) });
+
+    private const string Deck = "#deck of cards";
+
+    // One combat round later: the between-round slot is free again.
+    private static void NextRound(PartyBlessHarness h)
+    {
+        h.Now = h.Now.AddSeconds(5);
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+    }
+
+    private static PartyBlessHarness DeckHarness(out Func<int> uses, params int[] rejected)
+    {
+        PartyBlessHarness h = new();
+        BuffSlot slot = new() { Spell = Deck, CastOnSelf = true, RecastMarginSec = 15 };
+        slot.RejectedOutcomes.AddRange(rejected);
+        h.PartyBuffs.Slots.Add(slot);
+        int count = 0;
+        h.Director.SetItemCastSource(durationOf: _ => null, execute: _ => { count++; return true; });
+        h.Director.SetItemDrawSource(token => token == Deck
+            ? new[] { (965, "card-wizard", 720L), (966, "card-priest", 720L) }
+            : null);
+        uses = () => count;
+        return h;
+    }
+
+    [Fact]
+    public void DrawItem_RedrawsUntilATickedCardLands_ThenHoldsItForItsDuration()
+    {
+        using PartyBlessHarness h = DeckHarness(out Func<int> uses, rejected: 965);
+
+        h.Director.Evaluate();
+        Assert.Equal(1, uses());
+        Assert.Empty(h.CastsSent);                        // a use, not a cast
+
+        // The wizard isn't ticked: the next round's slot draws again.
+        h.Director.NoteDrawOutcome(CardRecord("card-wizard", 965));
+        NextRound(h);
+        Assert.Equal(2, uses());
+
+        // The priest is: it is kept.
+        h.Director.NoteDrawOutcome(CardRecord("card-priest", 966));
+        NextRound(h);
+        Assert.Equal(2, uses());
+
+        // Its own duration (720 s) less the slot's recast margin (15 s).
+        h.Now = h.Now.AddSeconds(685);
+        NextRound(h);
+        Assert.Equal(2, uses());
+        h.Now = h.Now.AddSeconds(15);
+        NextRound(h);
+        Assert.Equal(3, uses());
+    }
+
+    // The other realm's card record shares the Id, so the one that fires may link a
+    // different spell number: the card is still known by its name.
+    [Fact]
+    public void DrawItem_ACardIsKnownByNameWhenItsRecordLinksTheOtherRealmsSpell()
+    {
+        using PartyBlessHarness h = DeckHarness(out Func<int> uses);
+        h.Director.Evaluate();
+
+        h.Director.NoteDrawOutcome(CardRecord("card-priest", 491));
+        NextRound(h);
+        NextRound(h);
+        Assert.Equal(1, uses());                          // held
+    }
+
+    [Fact]
+    public void DrawItem_NoCardSeen_DrawsAgainOnceTheSettleWindowIsOver()
+    {
+        using PartyBlessHarness h = DeckHarness(out Func<int> uses);
+        h.Director.Evaluate();
+
+        NextRound(h);
+        Assert.Equal(1, uses());                          // still waiting for the card
+
+        NextRound(h);
+        Assert.Equal(2, uses());
+    }
+
+    [Fact]
+    public void DrawItem_TheCardWearingOff_MakesTheSlotDue()
+    {
+        using PartyBlessHarness h = DeckHarness(out Func<int> uses);
+        h.Director.Evaluate();
+        h.Director.NoteDrawOutcome(CardRecord("card-priest", 966));
+
+        NextRound(h);
+        Assert.Equal(1, uses());
+
+        h.Director.NoteDrawEnded(CardRecord("card-priest", 966));
+        NextRound(h);
+        Assert.Equal(2, uses());
+    }
+
     // ----- Item-cast buffs (PR 10.18 #token Bless slot) --------------
 
     [Fact]

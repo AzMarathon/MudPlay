@@ -13258,7 +13258,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Wizard symbolizes mystical power",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13275,7 +13275,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "When the Priest is played",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13292,7 +13292,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Knight is both protector and aggressor",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13309,7 +13309,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Chariot symbolizes mastery over movement",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13326,7 +13326,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "the Grail symbolizes life itself",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13343,7 +13343,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Sun is a boon to all those who search",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13360,7 +13360,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Wheel of Fortune, when played in this instance",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13377,7 +13377,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Angel indicates that you are being watched over",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13394,7 +13394,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The shadow of death hovers at your door",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13411,7 +13411,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "Fools often wander the land in ignorant bliss",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13428,7 +13428,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Swamp swallows life and slows travel",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13445,7 +13445,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "Unending darkness is the hallmark of the Void",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -13463,7 +13463,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "as a Demon hovers about you",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15147,7 +15147,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Wizard symbolizes mystical power",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15164,7 +15164,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "When the Priest is played",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15181,7 +15181,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Knight is both protector and aggressor",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15198,7 +15198,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Chariot symbolizes mastery over movement",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15215,7 +15215,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "the Grail symbolizes life itself",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15232,7 +15232,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Sun is a boon to all those who search",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15249,7 +15249,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Wheel of Fortune, when played in this instance",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15266,7 +15266,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Angel indicates that you are being watched over",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15283,7 +15283,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The shadow of death hovers at your door",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15300,7 +15300,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "Fools often wander the land in ignorant bliss",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15317,7 +15317,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "The Swamp swallows life and slows travel",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15334,7 +15334,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "as a Demon hovers about you",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -15351,7 +15351,7 @@
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
-    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedMessage": "Unending darkness is the hallmark of the Void",
     "AppliedEndsWith": "The gaze of luck is no longer upon you",
     "Links": [
       {
@@ -22664,5 +22664,24 @@
         "Number": 1398
       }
     ]
+  },
+  {
+    "Id": "3ed5324aa72ecd22",
+    "Name": "card-draw",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You grab your deck of cards and draw...",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{source} grabs their deck of cards and draws...",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1139
+      }
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   }
 ]

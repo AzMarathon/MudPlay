@@ -47,4 +47,70 @@ public sealed class AddBuffDialogViewModelTests
         Assert.Equal(-999m, d.RerollNumericMinimum);
         Assert.Equal(999m, d.RerollNumericMaximum);
     }
+
+    // A draw item (a deck of cards): one tick box per buff it can deal, each saying
+    // what the buff does; the unticked ones are what the slot stores.
+    private static readonly MudPlay.Game.Spells.CastOutcome[] Cards =
+    {
+        new(965, "card-wizard", 12, "Int +5", 240),
+        new(966, "card-priest", 12, "Wis +5", 240),
+    };
+
+    private static AddBuffDialogViewModel DeckDialog(AddBuffResult? initial = null)
+    {
+        AddBuffDialogViewModel d = new(
+            new[] { new BuffPickOption("#deck of cards", "deck of cards (Lvl 15)", true) },
+            isLightSpell: _ => false, isRollSpell: _ => false, initial: initial,
+            outcomesOf: code => code == "#deck of cards" ? Cards : System.Array.Empty<MudPlay.Game.Spells.CastOutcome>());
+        if (initial is null) d.SelectedPick = d.PickOptions[0];
+        return d;
+    }
+
+    [Fact]
+    public void DrawItem_ListsEachOutcome_Ticked_WithWhatItApplies()
+    {
+        AddBuffDialogViewModel d = DeckDialog();
+
+        Assert.True(d.HasOutcomes);
+        Assert.Equal(new[] { "card-wizard (12%)", "card-priest (12%)" }, d.Outcomes.Select(o => o.Label));
+        Assert.All(d.Outcomes, o => Assert.True(o.IsChecked));
+        Assert.StartsWith("Wis +5", d.Outcomes[1].Tip);
+        Assert.Contains("Lasts about", d.Outcomes[1].Tip);
+    }
+
+    [Fact]
+    public void DrawItem_ReturnsTheUntickedOutcomes_AndNeedsOneTicked()
+    {
+        AddBuffDialogViewModel d = DeckDialog();
+        AddBuffResult? result = null;
+        d.CloseRequested += r => result = r;
+
+        d.Outcomes[0].IsChecked = false;
+        Assert.True(d.CanAdd);
+        d.OkCommand.Execute(null);
+        Assert.Equal(new[] { 965 }, result!.RejectedOutcomes);
+
+        d.Outcomes[1].IsChecked = false;
+        Assert.True(d.NoOutcomeTicked);
+        Assert.False(d.CanAdd);
+    }
+
+    [Fact]
+    public void DrawItem_EditingShowsTheSavedChoices()
+    {
+        AddBuffDialogViewModel d = DeckDialog(new AddBuffResult(
+            "#deck of cards", 15, false, false, false, false, 0, null, RejectedOutcomes: new[] { 966 }));
+
+        Assert.True(d.Outcomes[0].IsChecked);
+        Assert.False(d.Outcomes[1].IsChecked);
+    }
+
+    [Fact]
+    public void AnOrdinaryBuff_HasNoOutcomes()
+    {
+        AddBuffDialogViewModel d = Dialog(stock: false);
+
+        Assert.False(d.HasOutcomes);
+        Assert.False(d.NoOutcomeTicked);
+    }
 }

@@ -19,7 +19,11 @@ public sealed class StashTransferRunnerTests
     private sealed class Harness
     {
         public RoomKey Room = Start;
-        public long Purse = 500;
+        public long Purse;
+        // Settings → Cash keep-on-hand, in copper.
+        public long Keep;
+        // Coins carried and the room left for more; null = capacity unknown.
+        public (long Held, long Room)? Load;
         public long StashHolds;
         // The most one trip can carry (the weight limits, in copper for the test).
         public long CarryPerTrip = long.MaxValue;
@@ -85,7 +89,9 @@ public sealed class StashTransferRunnerTests
                 forceAutoGetCash: AutoGetCashWrites.Add,
                 reconcileStash: (k, c) => Reconciled.Add((k, c)),
                 notice: Notices.Add,
-                partyMembers: () => Party);
+                partyMembers: () => Party,
+                keepOnHandCopper: () => Keep,
+                coinLoad: () => Load);
         }
 
         public void Arrive()
@@ -123,7 +129,7 @@ public sealed class StashTransferRunnerTests
         Assert.False(h.Runner.IsBusy);
         Assert.Equal(BankRoom, h.Room);
         Assert.Equal(30_000, h.BankHolds);
-        Assert.Equal(500, h.Purse);                       // the float is untouched
+        Assert.Equal(0, h.Purse);
         Assert.Equal((StashRoom, 0L), h.Reconciled[^1]);
         Assert.Equal("[Stash Transfer Started: 1/20 -> First Bank]", h.Notices[0]);
         Assert.Equal("[Stash Transfer Done: 3 platinum moved to First Bank in 1 trip]", h.Notices[^1]);
@@ -272,8 +278,7 @@ public sealed class StashTransferRunnerTests
         Assert.Empty(h.Notices);
     }
 
-    // Coin picked up between the two rooms is banked with the stash's, so the purse
-    // ends where it started.
+    // Coin picked up between the two rooms is banked with the stash's.
     [Fact]
     public void CoinPickedUpOnTheWay_IsDepositedToo()
     {
@@ -287,7 +292,120 @@ public sealed class StashTransferRunnerTests
 
         Assert.Equal("dep 10290", h.Sent[^1]);
         h.FireTimers();
-        Assert.Equal(500, h.Purse);
+        Assert.Equal(0, h.Purse);
+    }
+
+    // Report paradigm-20261002-111650: the purse as it stood when the transfer
+    // started (1,100 copper of earlier pickups) was kept back on every deposit. A
+    // deposit banks everything above the keep-on-hand amount, like any other.
+    [Fact]
+    public void CashAlreadyCarried_IsDepositedToo()
+    {
+        Harness h = new() { Purse = 1_100, StashHolds = 69_560 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Arrive();
+
+        Assert.Equal("dep 70660", h.Sent[^1]);
+        h.FireTimers();
+        Assert.Equal(0, h.Purse);
+    }
+
+    [Fact]
+    public void TheKeepOnHandAmount_StaysInThePurse()
+    {
+        Harness h = new() { Purse = 1_100, Keep = 1_000, StashHolds = 20_000 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Arrive();
+
+        Assert.Equal("dep 20100", h.Sent[^1]);
+        h.FireTimers();
+        Assert.Equal(1_000, h.Purse);
+    }
+
+    // Report paradigm-20261002-114620: a transfer cut off on its way to the bank was
+    // started again with the purse still full, and walked back to the stash for coin
+    // it had no room for. A loaded purse is banked first, then the stash is read.
+    [Fact]
+    public void StartedWithALoadedPurse_BanksItFirst_ThenGoesToTheStash()
+    {
+        Harness h = new() { Purse = 71_750, Load = (6_977, 0), StashHolds = 20_000 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+
+        Assert.Equal(BankRoom, Assert.Single(h.Walked));
+        h.Arrive();
+        Assert.Equal("dep 71750", h.Sent[^1]);
+        h.FireTimers();
+
+        Assert.True(h.Runner.IsBusy);                     // the stash hasn't been read yet
+        Assert.Equal(StashRoom, h.Walked[^1]);
+
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Arrive();
+        h.FireTimers();
+        Assert.False(h.Runner.IsBusy);
+        Assert.Equal(91_750, h.BankHolds);
+        Assert.Equal("[Stash Transfer Done: 9 platinum 17 gold 5 silver moved to First Bank in 2 trips]", h.Notices[^1]);
+    }
+
+    // Pocket change with plenty of room left isn't worth a bank trip of its own.
+    [Fact]
+    public void StartedWithRoomToSpare_GoesToTheStashFirst()
+    {
+        Harness h = new() { Purse = 1_100, Load = (11, 9_000), StashHolds = 20_000 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+
+        Assert.Equal(StashRoom, Assert.Single(h.Walked));
+    }
+
+    // The weight estimate said there was room, but nothing could be taken: with coin
+    // in the purse it is banked and the stash tried again, instead of giving up.
+    [Fact]
+    public void NothingTakenWithCoinStillCarried_BanksItAndComesBack()
+    {
+        Harness h = new() { Purse = 5_000, StashHolds = 8_000, CarryPerTrip = 0 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+
+        Assert.True(h.Runner.IsBusy);
+        Assert.Equal(BankRoom, h.Walked[^1]);
+        h.Arrive();
+        Assert.Equal("dep 5000", h.Sent[^1]);
+        h.FireTimers();
+        Assert.Equal(StashRoom, h.Walked[^1]);
+
+        h.Arrive();
+        h.SearchAndCollect();                             // still nothing, and nothing left to bank
+        Assert.False(h.Runner.IsBusy);
+        Assert.Contains("nothing could be picked up", h.Notices[^1]);
+    }
+
+    // A purse under the keep-on-hand amount is topped up from the stash first; a trip
+    // that leaves nothing above it sends no deposit and still goes back for the rest.
+    [Fact]
+    public void PurseUnderTheKeepOnHandAmount_IsToppedUpBeforeAnythingIsBanked()
+    {
+        Harness h = new() { Purse = 0, Keep = 5_000, StashHolds = 8_000, CarryPerTrip = 4_000 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Arrive();                                       // 4,000 carried, under the 5,000 kept
+
+        Assert.DoesNotContain(h.Sent, c => c.StartsWith("dep", StringComparison.Ordinal));
+        Assert.Equal(StashRoom, h.Walked[^1]);
+
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Arrive();
+        Assert.Equal("dep 3000", h.Sent[^1]);
+        h.FireTimers();
+        Assert.False(h.Runner.IsBusy);
+        Assert.Equal(5_000, h.Purse);
     }
 
     // Party share (Settings → Cash, leading a party): once the leader has its load,

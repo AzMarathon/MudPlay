@@ -5479,6 +5479,7 @@ public sealed class AppServices
             wornLoadoutKnown: () => Inventory.IsLoaded);
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
+        CastDirector.SetItemDrawSource(ItemDrawOutcomesOf);
 
         // Auto-train. Drives the `train stats` screen to apply the CP
         // plan (Workshop CP Allocation tab) when armed + a level-up enables it.
@@ -7361,7 +7362,16 @@ public sealed class AppServices
             // Walker events and timers can land inside the message pump.
             notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
             log: Log,
-            partyMembers: StashTransferPartyMembers);
+            partyMembers: StashTransferPartyMembers,
+            // The same floor Deposit All and the auto-deposit leave in the purse.
+            keepOnHandCopper: () =>
+            {
+                Models.Profile.CashSettings cash =
+                    ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+                return (long)cash.KeepOnHandWealth
+                       * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
+            },
+            coinLoad: () => Cash.CoinLoad());
         Walker.Event += e => StashTransfer.OnWalkEvent(e.Kind);
         // A member's {reply} to @get-stash / @deposit-all says that member is done.
         Chat.EntryClassified += e =>
@@ -8668,6 +8678,19 @@ public sealed class AppServices
         return rounds > 0
             ? (long)System.Math.Round(rounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock)
             : null;
+    }
+
+    // The buffs a draw item (a deck of cards) can deal, each with its length in
+    // seconds at the item's use level; null for any other token.
+    private IReadOnlyList<(int SpellNumber, string Name, long DurationSec)>? ItemDrawOutcomesOf(string token)
+    {
+        if (!Game.Spells.ItemCastToken.TryResolve(token, Spellbook.GetCastItems(),
+                out Game.Spells.ClassCastItem item) || item.Outcomes is not { Count: > 0 } outcomes)
+            return null;
+        return outcomes
+            .Select(o => (o.SpellNumber, o.Name,
+                (long)System.Math.Round(o.DurationRounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock)))
+            .ToList();
     }
 
     // Mana the item-cast buff named by token draws on use —

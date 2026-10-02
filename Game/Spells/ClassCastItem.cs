@@ -31,11 +31,18 @@ namespace MudPlay.Game.Spells;
 // held item like a warhorn, or a worn slot ("Neck", …). The cast sequencer restores
 // whatever that slot displaced — so an off-hand cast item puts the off-hand back, not
 // the weapon. Empty when unknown (the sequencer then falls back to the weapon hand).
+// Carried marks an item with no equip slot that is kept after use (Paradigm's
+// Gypsy deck of cards): it is used straight from the pack, with nothing to equip or
+// put back. Outcomes lists the spells a draw item deals at random (the deck's cards);
+// null or empty for an item that always casts SpellNumber.
 public readonly record struct ClassCastItem(
     int ItemNumber, string ItemName, int SpellNumber, string SpellName, int ManaCost, int UseCount,
     bool IsTwoHanded = false, bool ClassRestricted = false, int MinLevel = 0, string SpellEffect = "",
-    string WearSlot = "")
+    string WearSlot = "", bool Carried = false, IReadOnlyList<CastOutcome>? Outcomes = null)
 {
+    // True for an item whose use deals one of several spells at random.
+    public bool IsDraw => Outcomes is { Count: > 0 };
+
     // True when the item has unlimited uses. A genuine charge count is always
     // positive, so any value <= 0 (MajorMUD's -1 sentinel, occasionally 0) means
     // unlimited — matching MMUD Explorer's own "If uses <= 0 Then uses = -1"

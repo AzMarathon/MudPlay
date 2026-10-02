@@ -44,7 +44,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         // figures are what they actually cast for. Null in tests (no bonus).
         _spellDamageBonusProvider = spellDamageBonusProvider;
         _book.Changed += OnBookChanged;
-        _allCastItems = _book.GetCastItems();
+        _allCastItems = _book.GetSpellBookCastItems();
         Rebuild();
     }
 
@@ -155,7 +155,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     {
         // The class can change (reroll) — re-pull the cast-item set, which only
         // depends on class, not the per-keystroke search filter.
-        _allCastItems = _book.GetCastItems();
+        _allCastItems = _book.GetSpellBookCastItems();
         Rebuild();
         OnPropertyChanged(nameof(HeaderText));
         OnPropertyChanged(nameof(SuccessFormulaText));
