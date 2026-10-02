@@ -18,10 +18,12 @@ namespace MudPlay.Game.Cash;
 // ends where it started and the keep-on-hand float is never drawn into the bank.
 //
 // A party leader can have the members carry too (Settings → Cash): once the
-// leader has taken its own load, each member is telepathed `@do sea` and
-// `@do get N <coin>` for an even share of what is left, and `@deposit-all` at the
-// bank. Their answers aren't read; a second search afterwards counts what is
-// really left.
+// leader has taken its own load, each member is telepathed `@get-stash` — search
+// and take coin up to your own weight limits (GetStashHandler) — and
+// `@deposit-all` at the bank. A search shows hidden coin only to the searcher, so
+// the members can't be handed what the leader saw. Each member's reply says it is
+// done, and once all have answered (or the wait runs out) the run moves on; what
+// they took isn't read from the reply — a second search counts what is left.
 //
 // Walker, wire and collect engine are reached through delegates, like
 // TrainFundingRouter, so the trips can be unit-tested without a map.
@@ -38,9 +40,10 @@ public sealed class StashTransferRunner
     // How long a `dep` gets to echo.
     public TimeSpan DepositWindow { get; set; } = TimeSpan.FromSeconds(4);
 
-    // How long the members get to act on their telepathed orders: the telepaths are
-    // paced, and each member's client then sends its own commands.
-    public TimeSpan PartyWindow { get; set; } = TimeSpan.FromSeconds(6);
+    // The longest the members get to answer a telepathed order. Normally every reply
+    // arrives well inside it and the run moves on at the last one; a member who never
+    // answers (an older client, failure replies switched off) costs the full wait.
+    public TimeSpan PartyWindow { get; set; } = TimeSpan.FromSeconds(12);
 
     private enum Phase
     {
@@ -65,7 +68,6 @@ public sealed class StashTransferRunner
     private readonly Action<RoomKey, long> _reconcileStash;
     private readonly Action<string> _notice;
     private readonly Func<IReadOnlyList<string>>? _partyMembers;
-    private readonly Func<IReadOnlyList<(string Noun, long Count)>>? _surveyedCoinsLeft;
     private readonly LogService? _log;
 
     private Phase _phase = Phase.Idle;
@@ -77,6 +79,10 @@ public sealed class StashTransferRunner
 
     // The members sent to the pile on this trip; the same ones are told to deposit.
     private IReadOnlyList<string> _partyOnTrip = Array.Empty<string>();
+    // The members whose reply to the current order is still owed, and the wait they
+    // belong to (a wait ended early leaves its timer behind).
+    private readonly HashSet<string> _awaitingReply = new(StringComparer.OrdinalIgnoreCase);
+    private int _partyWait;
 
     // Set while this runner is itself starting a walk: WalkTo raises Stopped when it
     // supersedes one in flight, and that is ours, not a user stop.
@@ -118,10 +124,8 @@ public sealed class StashTransferRunner
         Action<string> notice,
         LogService? log = null,
         // The party members to share the carrying with (given names): empty unless
-        // the option is on and we lead a party. With it, the surveyed coin the
-        // leader hasn't asked for, by wire noun.
-        Func<IReadOnlyList<string>>? partyMembers = null,
-        Func<IReadOnlyList<(string Noun, long Count)>>? surveyedCoinsLeft = null)
+        // the option is on and we lead a party.
+        Func<IReadOnlyList<string>>? partyMembers = null)
     {
         _currentRoom = currentRoom ?? throw new ArgumentNullException(nameof(currentRoom));
         _onHandCopper = onHandCopper ?? throw new ArgumentNullException(nameof(onHandCopper));
@@ -136,7 +140,6 @@ public sealed class StashTransferRunner
         _notice = notice ?? throw new ArgumentNullException(nameof(notice));
         _log = log;
         _partyMembers = partyMembers;
-        _surveyedCoinsLeft = surveyedCoinsLeft;
     }
 
     // Starts the transfer. Null when it is under way; otherwise why it isn't.
@@ -279,42 +282,74 @@ public sealed class StashTransferRunner
         _partyOnTrip = Array.Empty<string>();
         if (LeftCopper > 0 && SendPartyToThePile())
         {
-            _phase = Phase.PartyTaking;
-            _armTimer(PartyWindow, () => OnPartyTook(session));
+            AwaitParty(Phase.PartyTaking);
             return;
         }
         GoToBank();
     }
 
-    // Tells each member to search and take an even share of each coin the leader
-    // left. False when there is no one to tell or no whole coin to share.
+    // Tells each member to search and load up. False when there is no one to tell.
     private bool SendPartyToThePile()
     {
         IReadOnlyList<string> members = _partyMembers?.Invoke() ?? Array.Empty<string>();
-        if (members.Count == 0 || _surveyedCoinsLeft is null) return false;
+        if (members.Count == 0) return false;
 
-        List<(string Noun, long Share)> shares = new();
-        foreach ((string noun, long count) in _surveyedCoinsLeft())
-            if (count / members.Count >= 1) shares.Add((noun, count / members.Count));
-        if (shares.Count == 0) return false;
-
-        foreach (string member in members)
-        {
-            _send($"/{member} @do sea");
-            foreach ((string noun, long share) in shares) _send($"/{member} @do get {share} {noun}");
-        }
+        foreach (string member in members) _send($"/{member} @get-stash");
         _partyOnTrip = members;
-        _log?.Info(LogCategory, $"trip {Trips}: asked {string.Join(", ", members)} to take "
-            + string.Join(", ", shares.Select(s => $"{s.Share} {s.Noun}")) + " each");
+        _log?.Info(LogCategory, $"trip {Trips}: sent @get-stash to {string.Join(", ", members)}");
         return true;
     }
 
-    // The members have had their time. What they managed isn't reported back, so the
-    // pile is searched again and counted.
-    private void OnPartyTook(int session)
+    // Holds in a party phase until every member told has replied, or PartyWindow.
+    private void AwaitParty(Phase phase)
     {
-        if (session != _session || _phase != Phase.PartyTaking) return;
-        Search(Phase.Recounting, OnRecounted);
+        _phase = phase;
+        _awaitingReply.Clear();
+        foreach (string member in _partyOnTrip) _awaitingReply.Add(member);
+        int wait = ++_partyWait;
+        int session = _session;
+        _armTimer(PartyWindow, () =>
+        {
+            if (session != _session || wait != _partyWait) return;
+            if (_awaitingReply.Count > 0)
+                _log?.Info(LogCategory, $"no reply from {string.Join(", ", _awaitingReply)} — moving on");
+            PartyAnswered();
+        });
+    }
+
+    // The answers GetStashHandler and InventoryActionHandler.DepositAll give. Other
+    // replies from the same member (a @health probe's, say) don't end the wait.
+    private static readonly string[] TakingReplies = { "ok", "busy" };
+    private static readonly string[] DepositReplies =
+        { "depositing", "withdrawing", "already at keep-on-hand", "wealth unknown" };
+
+    // A {reply} came in by telepath. From a member we are waiting on, the answer to
+    // the order means that member has finished it (taken its load, or sent its
+    // deposit).
+    public void NoteMemberReply(string sender, string reply)
+    {
+        string[] answers;
+        if (_phase == Phase.PartyTaking) answers = TakingReplies;
+        else if (_phase == Phase.PartyDepositing) answers = DepositReplies;
+        else return;
+
+        string text = reply.Trim().TrimStart('{').TrimStart();
+        if (!answers.Any(a => text.StartsWith(a, StringComparison.OrdinalIgnoreCase))) return;
+
+        string trimmed = sender.Trim();
+        int space = trimmed.IndexOf(' ');
+        if (!_awaitingReply.Remove(space >= 0 ? trimmed[..space] : trimmed)) return;
+        if (_awaitingReply.Count == 0) PartyAnswered();
+    }
+
+    private void PartyAnswered()
+    {
+        _partyWait++;
+        _awaitingReply.Clear();
+        // What the members managed isn't taken from their replies: the pile is
+        // searched again and counted.
+        if (_phase == Phase.PartyTaking) Search(Phase.Recounting, OnRecounted);
+        else if (_phase == Phase.PartyDepositing) NextTripOrDone();
     }
 
     private void OnRecounted(int session)
@@ -353,7 +388,7 @@ public sealed class StashTransferRunner
         {
             // Tolls or a purchase on the way ate this trip's coin; nothing to bank.
             _log?.Info(LogCategory, $"trip {Trips}: nothing above the starting purse to deposit");
-            AfterOwnDeposit(session);
+            AfterOwnDeposit();
             return;
         }
         _send($"dep {gained}");
@@ -373,10 +408,10 @@ public sealed class StashTransferRunner
         }
         MovedCopper += deposited;
         _log?.Info(LogCategory, $"trip {Trips}: deposited {deposited:N0} copper at {BankName}");
-        AfterOwnDeposit(session);
+        AfterOwnDeposit();
     }
 
-    private void AfterOwnDeposit(int session)
+    private void AfterOwnDeposit()
     {
         if (_partyOnTrip.Count == 0)
         {
@@ -384,12 +419,7 @@ public sealed class StashTransferRunner
             return;
         }
         foreach (string member in _partyOnTrip) _send($"/{member} @deposit-all");
-        _phase = Phase.PartyDepositing;
-        _armTimer(PartyWindow, () =>
-        {
-            if (session != _session || _phase != Phase.PartyDepositing) return;
-            NextTripOrDone();
-        });
+        AwaitParty(Phase.PartyDepositing);
     }
 
     private void NextTripOrDone()
@@ -411,6 +441,7 @@ public sealed class StashTransferRunner
         if (why is null) outcome = StashTransferOutcome.Done;
         _phase = Phase.Idle;
         _session++;
+        _awaitingReply.Clear();
         ReleaseCollection();
 
         long carrying = Math.Max(0, _onHandCopper() - _purseAtStart);
@@ -451,5 +482,6 @@ public sealed class StashTransferRunner
         ? $"{_phase} — stash {Stash} → {BankName} ({Bank}), trip {Trips}, moved {MovedCopper:N0} copper, "
           + $"{LeftCopper:N0} believed left, purse at start {_purseAtStart:N0}"
           + (_partyOnTrip.Count > 0 ? $", party on this trip: {string.Join(", ", _partyOnTrip)}" : "")
+          + (_awaitingReply.Count > 0 ? $", awaiting a reply from: {string.Join(", ", _awaitingReply)}" : "")
         : "idle";
 }

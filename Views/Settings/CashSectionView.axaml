@@ -148,7 +148,7 @@
                 <!-- Stash → bank transfer: party members carry too -->
                 <CheckBox Content="Stash transfers: party members carry a share too" Margin="0,6,0,0"
                           IsChecked="{Binding StashTransferPartyShare, Mode=TwoWay}"
-                          ToolTip.Tip="When you run a stash → bank transfer as the party leader, each member is telepathed @do sea and @do get N &lt;coin&gt; for an even share of what you couldn't carry, then @deposit-all at the bank, so they deposit at the same bank into their own accounts. Members must run MudPlay and allow you to run commands on them. Off by default."/>
+                          ToolTip.Tip="When you run a stash → bank transfer as the party leader, each member is telepathed @get-stash at the stash (they search and take coin up to their own weight limits), then @deposit-all at the bank, so they deposit at the same bank into their own accounts. Members must run MudPlay and allow you to run commands on them. Off by default."/>
 
                 <!-- ============ Detours ============ -->
                 <TextBlock Classes="SectionHeader" Text="Detours"/>

@@ -831,25 +831,6 @@ public sealed class CashManagerTests
         Assert.StartsWith("get 50 silver", Assert.Single(Gets(h)));
     }
 
-    // A stash transfer shares out what the leader couldn't carry: the surveyed coin
-    // no `get` has gone out for, dearest first.
-    [Fact]
-    public void SurveyedCoinsLeft_IsTheSurveyLessTheGetsSent()
-    {
-        using Harness h = new();
-        h.Cash.SetCollectLimit(0);
-        h.Feed("You notice 5 platinum pieces, 154 gold crowns here.");
-        // The full coin noun, as every currency command names it.
-        Assert.Equal(new[] { ("platinum piece", 5L), ("gold crown", 154L) }, h.Cash.SurveyedCoinsLeft());
-
-        h.Cash.CollectSurveyed(55_000);                   // all 5 platinum, 50 gold
-
-        Assert.Equal(new[] { ("gold crown", 104L) }, h.Cash.SurveyedCoinsLeft());
-
-        h.Cash.SetCollectLimit(null);
-        Assert.Empty(h.Cash.SurveyedCoinsLeft());
-    }
-
     [Fact]
     public void CollectLimit_Lifted_CollectsEverythingAgain()
     {

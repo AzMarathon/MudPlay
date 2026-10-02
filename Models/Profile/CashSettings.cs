@@ -65,9 +65,9 @@ public sealed class CashSettings
     public bool StashAsFollower { get; set; }
 
     // A stash → bank transfer run as a party leader has the members carry too: each
-    // is telepathed `@do sea` and `@do get N <coin>` for an even share of what the
-    // leader left at the stash, and `@deposit-all` at the bank. Default off; the
-    // members' clients must let the leader run commands on them.
+    // is telepathed `@get-stash` at the stash (search, and take coin up to its own
+    // weight limits) and `@deposit-all` at the bank. Default off; the members'
+    // clients must let the leader run commands on them.
     public bool StashTransferPartyShare { get; set; }
 
     // Turn Auto-Combat off during a detour — an auto-sell detour, or an auto-deposit

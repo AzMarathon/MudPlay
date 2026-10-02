@@ -4907,6 +4907,9 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 - **A search of a stash does two jobs** *([CONFIRMED] 2026-10-02, user)*: it surfaces the hidden coin,
   which always shows on the first search, and it verifies the amount — the pile isn't held by us or by
   a bank, so any player can have come by and taken some.
+- **A search reveals hidden coin only to the one who searched** *([CONFIRMED] 2026-10-02, user)*. When
+  we `sea`, the party members standing with us don't see what it showed us; each has to search for
+  itself. A party member's own `sea` reveals the coin the same way ours does, for that member.
 
 **Client use:**
 - In a stash room the client `hide`s excess coin.
@@ -4924,11 +4927,11 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   everything gained since the transfer started, so the purse ends where it began. The stash ledger is
   set to what the search showed less what was taken.
   - **Party share** (`CashSettings.StashTransferPartyShare`; **Client policy**, user 2026-10-02): a
-    leader telepaths each member `@do sea` and `@do get <N> <coin>` for an even share of each coin it
-    couldn't carry, then `@deposit-all` at the bank. The members' answers aren't read; a second `sea`
-    counts what is left. Whether another character's search surfaces coin we hid as reliably as our own
-    does is not recorded *([NEEDS CONFIRMATION]: does a party member's `sea` always reveal the leader's
-    hidden coin?)* — the recount covers a member who found nothing.
+    search shows the pile only to the searcher, so a leader telepaths each member one command,
+    `@get-stash` (`GetStashHandler`): the member searches, reads the pile with its pickup held, takes
+    coin up to its own weight limits, and replies `{ok - …}` once its gets have landed. When every
+    member has replied (12 s at most) the leader searches again to count what is left, and at the bank
+    sends each `@deposit-all` and waits for those replies the same way.
 - Auto-collect is suppressed in a stash room **only while an auto-search reveal is in flight** — coin
   shown on plain entry or a kill drop still collects, in the stash room and in the room after it.
   Implemented as `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.

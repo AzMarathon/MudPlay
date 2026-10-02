@@ -1235,6 +1235,9 @@ public sealed class AppServices
     // question, which the display-oriented TransactionHistory above can't answer.
     public Game.Cash.StashLedger StashBalances { get; } = new();
 
+    // The member's side of a leader's stash transfer: @get-stash.
+    public Game.Remote.GetStashHandler GetStash { get; private set; } = null!;
+
     // Carries a stash room's coin to a bank, trip by trip (the map's right-click
     // "Transfer Stash to Bank").
     public Game.Cash.StashTransferRunner StashTransfer { get; private set; } = null!;
@@ -5417,6 +5420,22 @@ public sealed class AppServices
             naming: Currency,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud);
 
+        // @get-stash: a leader's stash transfer has us search and carry a load too.
+        // Cash is built further down; these only run when a command arrives.
+        GetStash = new Game.Remote.GetStashHandler(
+            RemoteCommands,
+            onHandCopper: () => Inventory.Snapshot.Currency.TotalCopperValue,
+            send: cmd => SendGameCommand(cmd),
+            armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
+                .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+                    System.Threading.Tasks.TaskScheduler.Default),
+            limitCollection: copper => Cash.SetCollectLimit(copper),
+            surveyedCopper: () => Cash.SurveyedCopperUnderLimit,
+            collectSurveyed: copper => Cash.CollectSurveyed(copper),
+            forceAutoGetCash: on => _autoGetCashOverride = on ? true : null,
+            collectionInUse: () => Cash.CollectLimitCopper is not null || _autoGetCashOverride == true,
+            log: Log);
+
         // Receive side of @heal — a configured party-healer polls `par` on
         // request so CastingDirector re-evaluates its party-heal thresholds
         // against fresh member HP. Emit side is the follower flee-substitute
@@ -7339,9 +7358,15 @@ public sealed class AppServices
             // Walker events and timers can land inside the message pump.
             notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
             log: Log,
-            partyMembers: StashTransferPartyMembers,
-            surveyedCoinsLeft: () => Cash.SurveyedCoinsLeft());
+            partyMembers: StashTransferPartyMembers);
         Walker.Event += e => StashTransfer.OnWalkEvent(e.Kind);
+        // A member's {reply} to @get-stash / @deposit-all says that member is done.
+        Chat.EntryClassified += e =>
+        {
+            if (e.Channel == Game.ChatChannel.TelepathIncoming && e.Speaker is { } speaker
+                && e.Message.TrimStart().StartsWith('{'))
+                StashTransfer.NoteMemberReply(speaker, e.Message);
+        };
 
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
             RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log);
@@ -11165,6 +11190,7 @@ public sealed class AppServices
         TrainerWalk.Cancel(reason);
         TrainFunding.Cancel(reason);
         StashTransfer.Cancel(reason);
+        GetStash.Cancel();
         TrainerMenu.ForceExit(reason);
         Events.CancelRun();
         PartyComeback.Cancel(reason);

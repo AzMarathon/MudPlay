@@ -37,6 +37,7 @@ public sealed class RemoteCommandCatalogTests
 
     [Theory]
     [InlineData("@get-all")]
+    [InlineData("@get-stash")]
     [InlineData("@drop-all")]
     [InlineData("@deposit-all")]
     [InlineData("@do")]

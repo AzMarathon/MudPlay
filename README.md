@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.138.3**
+> **Version 3.138.4**
 > - Events can run a stash → bank transfer: a new Stash transfer action with a stash room and a bank to pick
-> - Settings → Cash: stash transfers can have party members carry a share too (@do sea / @do get, then @deposit-all at the bank)
+> - Settings → Cash: stash transfers can have party members carry a load too, with a new @get-stash command (search, then take coin up to your weight limits) and @deposit-all at the bank
 > - Stash transfer picks up coin on the way back to the stash, and each deposit banks everything gained since it started
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
