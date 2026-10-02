@@ -2008,9 +2008,13 @@ public partial class MainWindowViewModel : ObservableObject
             TargetHpText = read is { } r ? $"TGT HP: {_lookedBand} [~{r.BestGuess}]" : $"TGT HP: {_lookedBand}";
             // Also drop a yellow line into the terminal scrollback so the estimate
             // is logged, not only shown in the status bar's target item (which the
-            // user may have taken off the bar): max HP, the wound
+            // user may have taken off the bar), unless Settings → Other has the
+            // line switched off: max HP, the wound
             // band's shorthand and range, and the best guess from the damage seen and
             // regen — "[large orc: 100 HP, Crit: 20-29, ~24]".
+            if (!AppServices.Current.Resolver
+                    .Resolve<Models.Profile.OtherSettings>("Other").PrintMonsterHpOnLook)
+                return;
             string wound = $"{Game.MonsterLookParser.WoundShorthand(obs.Wound)}: {_lookedBand}";
             string line = read is { } l
                 ? $"{obs.Name}: {l.MaxHp} HP, {wound}, ~{l.BestGuess}"

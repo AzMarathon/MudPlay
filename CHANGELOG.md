@@ -2,7 +2,7 @@
 
 ## 3.136.1
 
-- Settings → Other: the "Show monster HP lookup" checkbox is gone; the target HP readout is a status bar item you can remove, and the terminal line always prints
+- Settings → Other: "Show monster HP lookup" is now "Print monster HP in the terminal when I look"; the status bar readout is a bar item you add or remove
 
 ## 3.136.0
 

@@ -171,6 +171,13 @@
                       Margin="0,8,0,0"
                       ToolTip.Tip="When checked: stopping a walk-to, loop or Auto-Lair you started with Sprint (Go in Sprint Mode) before it began ends Sprint Mode at once, turning back on the autos it turned off. When unchecked (default), Sprint Mode stays on until your next walk arrives. (A Sprint that isn't stopped ends by itself once it reaches its destination, loop or first lair.) Applies only for this character."/>
 
+            <!-- The yellow monster-HP line a look prints in the terminal. The status
+                 bar's target readout is its own item on the bar. Char-tier setting. -->
+            <CheckBox Content="Print monster HP in the terminal when I look"
+                      IsChecked="{Binding PrintMonsterHpOnLook, Mode=TwoWay}"
+                      Margin="0,8,0,0"
+                      ToolTip.Tip="When checked (default): looking at a monster prints a yellow line in the terminal with its estimated remaining hit points (e.g. [large orc: 100 HP, Sev: 30-49, ~41]). The status bar's target HP readout isn't affected: add or remove it under BBS + Display → Status bar. Applies only for this character."/>
+
             <!-- Note: Monster Intel's "Est. Rounds to Kill" cap moved out of
                  here and lives entirely in that window now (a NumericUpDown
                  next to the Hits-You-% checkboxes) — editing it doesn't mean

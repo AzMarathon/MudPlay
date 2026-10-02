@@ -152,6 +152,9 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _runStopRestoresCombat;
     [ObservableProperty] private bool _sprintStopEndsSprint;
 
+    // Print the yellow monster-HP line in the terminal on a monster look. Default on.
+    [ObservableProperty] private bool _printMonsterHpOnLook = true;
+
     // Per-category Verbose toggles + WriteCombatRoundTrace live in a
     // session-only umbrella switch in the Log pane menu — see
     // LogDiagnosticState + LogPaneViewModel.CombatFilter. Verbose tracing
@@ -285,6 +288,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             AutoInviteOnlyWhileNavigating = AutoInviteOnlyWhileNavigating,
             RunStopRestoresCombat = RunStopRestoresCombat,
             SprintStopEndsSprint = SprintStopEndsSprint,
+            PrintMonsterHpOnLook  = PrintMonsterHpOnLook,
             // Not edited on this tab (Monster Intel owns them directly) —
             // carry the current Character-tier values through so Apply here
             // doesn't reset them to the compile-time defaults.
@@ -367,6 +371,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         AutoInviteOnlyWhileNavigating = dto.AutoInviteOnlyWhileNavigating;
         RunStopRestoresCombat = dto.RunStopRestoresCombat;
         SprintStopEndsSprint = dto.SprintStopEndsSprint;
+        PrintMonsterHpOnLook = dto.PrintMonsterHpOnLook;
         PlayerCleanupDays = _globalSettings?.Current.PlayerCleanupDays ?? 90;
         PyramidSolverEnabled = _globalSettings?.Current.PyramidSolverEnabled ?? true;
         AsylumSolverEnabled = _globalSettings?.Current.AsylumSolverEnabled ?? true;
@@ -434,6 +439,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnAutoInviteOnlyWhileNavigatingChanged(bool value) => MarkDirty();
     partial void OnRunStopRestoresCombatChanged(bool value) => MarkDirty();
     partial void OnSprintStopEndsSprintChanged(bool value) => MarkDirty();
+    partial void OnPrintMonsterHpOnLookChanged(bool value) => MarkDirty();
     partial void OnPyramidSolverEnabledChanged(bool value) => MarkDirty();
     partial void OnAsylumSolverEnabledChanged(bool value) => MarkDirty();
     partial void OnEnableTokenRoutesChanged(bool value) => MarkDirty();
