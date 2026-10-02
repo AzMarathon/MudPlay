@@ -58,7 +58,7 @@ public sealed class TooHeavyWaitSignal : IDisposable
         }
         // Resend: the leader may already be waiting on us for another reason, and
         // this one is worth naming.
-        _restSync.RequestWait(WaitReason.TooHeavy, resend: true, note: "(too heavy to move)");
+        _restSync.RequestWait(WaitReason.TooHeavy, resend: true);
         _awaitingFreshRead = true;
         Recheck();
         StartTimer();

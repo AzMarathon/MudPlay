@@ -1922,6 +1922,35 @@ public sealed class HealthManagerTests
         Assert.Equal(1, waits);           // and @wait never re-fired mid-recovery
     }
 
+    // Health is one wait reason for both pools, so HealthManager says which pool
+    // tripped; HP is named when both are short.
+    [Fact]
+    public void Follower_PartyWaitNote_NamesThePoolThatTripped()
+    {
+        using Harness h = new();          // percentage mode: trigger 30 %, rest-max 95 %
+        List<string?> notes = new();
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => notes.Add(h.Health.PartyWaitNote),
+            requestPartyOk: () => { });
+
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);   // rested
+        Assert.Empty(notes);
+        Assert.Null(h.Health.PartyWaitNote);
+
+        h.State.Ma = 20;                                          // mana alone
+        Assert.Equal(new string?[] { PartyRestSync.ManaNote }, notes);
+
+        h.State.Ma = 95;
+        h.SettleOk();
+
+        h.State.Hp = 20;                                          // HP alone
+        Assert.Equal(new string?[] { PartyRestSync.ManaNote, PartyRestSync.HpNote }, notes);
+
+        h.State.Ma = 20;                                          // both: HP is named
+        Assert.Equal(PartyRestSync.HpNote, h.Health.PartyWaitNote);
+    }
+
     // Report paradigm-20260929-233636: HP bounced 199→203→199 in one burst with the
     // floor at 201 and rest-max at 203. The blip at rest-max must not send @ok between
     // two @waits; the @ok goes out only once the pools hold at rest-max.

@@ -2639,7 +2639,7 @@ public sealed class AppServices
         // Emit side of @wait/@ok. Observes our own
         // position transitions and telepaths the leader when we enter
         // / leave a rest state. Wire-sender hookup in MainWindowVM.
-        PartyRest = new Game.PartyRestSync(PartyState);
+        PartyRest = new Game.PartyRestSync(PartyState, Log);
         // One-to-many @-command sender. Auto-Exp-Reset
         // is the first consumer (LoopManager calls BroadcastExpReset on
         // loop start); the broadcaster's also the canonical spot for the
@@ -4185,7 +4185,10 @@ public sealed class AppServices
             isPartyFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
             // HealthManager decides when to (re-)ask; resend so a wait the leader has
             // timed out on is re-sent rather than deduped as already held.
-            requestPartyWait: () => PartyRest.RequestWait(Game.WaitReason.Health, resend: true),
+            // The note names the pool when it's HP; read as the wait is sent, inside
+            // HealthManager's own evaluate, so its gate flags are current.
+            requestPartyWait: () => PartyRest.RequestWait(
+                Game.WaitReason.Health, resend: true, note: Health.PartyWaitNote),
             requestPartyOk: () => PartyRest.RequestOk(Game.WaitReason.Health),
             isLeaderResting: () => PartyLeaderRest.LeaderIsResting,
             requestPartyHeal: () => PartyRest.RequestHeal(),

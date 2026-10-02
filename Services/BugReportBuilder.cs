@@ -290,6 +290,9 @@ public static class BugReportBuilder
         // re-collect, and the reach cap that gates it. A "leader never came back
         // for me" report needs both.
         Kv(sb, "Too heavy to move (waiting on weight)", svc.TooHeavyWait.IsTooHeavy.ToString());
+        Kv(sb, "Our @wait reasons held (no @ok until all clear)", svc.PartyRest.HeldReasons.Count == 0
+            ? "(none)"
+            : string.Join(", ", svc.PartyRest.HeldReasons));
         Kv(sb, "Party @wait holding for", svc.PartyEssentials.WaitingMembers.Count == 0
             ? "(nobody)"
             : string.Join(", ", svc.PartyEssentials.WaitingMembers.Select(m =>

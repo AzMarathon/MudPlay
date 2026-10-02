@@ -1,5 +1,10 @@
 # Version history
 
+## 3.138.6
+
+- `@wait` to your leader names the reason: `(HP's too low)`, `(mana's too low)`, `(blinded)`, `(confused)`, `(can't move)`, `(waiting on message condition)`
+- A wait reason that keeps your `@ok` from going out is logged, and the bug report lists the reasons held
+
 ## 3.138.4
 
 - Events can run a stash → bank transfer: a new Stash transfer action with a stash room and a bank to pick

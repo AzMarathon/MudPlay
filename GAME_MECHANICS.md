@@ -5326,6 +5326,12 @@ This covers how a client learns which ailments afflict itself and its party memb
 - **An afflicted follower telepaths `@wait` to the leader and `@ok` when it clears (follower → leader, TELEPATH).**
   - A follower afflicted by poison / blind / confused / diseased / **held** telepaths **`@wait`** to the leader, unless that ailment's `Ignore<X>` is set.
   - It telepaths **`@ok`** when its last non-ignored ailment clears.
+- **MegaMUD's `@wait` names its reason in parentheses after the token**, e.g. `@wait (HP's too low)`. The receiver acts on the token alone; the note is for the person reading it.
+  - Wording seen from a MegaMUD client *([OBSERVED] a contributor's capture of a MegaMUD follower telepathing a MudPlay leader, 2026-09-11; no report on file)*: `(HP's too low)`, `(blinded)`, `(confused)`, `(waiting on message condition)`.
+  - `(can't move)` for a hold *([OBSERVED] report cited in Chapter 13 → A follower who can't move is left behind)*.
+  - **MegaMUD sends `(waiting on message condition)` for a poison wait and for a disease wait** *([CONFIRMED] 2026-10-02, user)*. The user believes MegaMUD also uses it for other conditions that have no wording of their own; which ones is not recorded.
+  - **MegaMUD sends nothing for a mana wait** *([CONFIRMED] 2026-10-02, user)*.
+- **A follower's `@ok` goes out only when its last wait reason clears.** A reason that never clears suppresses every later `@ok`, and the leader then stays paused until its own wait timer expires, each time.
 - **`@wait` / `@ok` is a leader-directed pause flag, not a momentary signal.** The leader stays paused until **either** the same member telepaths `@ok`, **or** the leader's own wait timer expires.
   - The timer is the "If leading, wait only (s)" cap (`PartySettings.IfLeadingWaitTotalSec`).
   - On expiry the leader gives up and resumes, so a dropped / AFK member can't strand the party forever.
@@ -5334,6 +5340,13 @@ This covers how a client learns which ailments afflict itself and its party memb
 - **Held follows the same `@wait` / `@ok` flow and cannot be suppressed.** A held member can't move, so the party waits for them. Held has no `Ignore` gate, so it is never suppressible.
   - **Both signals pause the leader.** A held member telepaths `@wait`/`@ok` *in addition to* announcing its `.@held` on say: the say lights the member's chip, and the `@wait` pauses the leader. The inbound `@held` say also routes through the same pause (`PartyEssentialHandlers.NotePause`), and that member's `@ok` on cure releases it.
 - **All of this is party-only.** Solo (no party / no leader / you ARE the leader), nothing is telepathed. Self recognition and clearing run entirely off the apply/wear-off spell messages.
+- **Client use:**
+  - **Every `@wait` MudPlay sends names its reason** (**Client policy**, user 2026-10-02): MegaMUD's wording where MegaMUD has one, MudPlay's own where it doesn't. `PartyRestSync.RequestWait` sends:
+    - MegaMUD's: `HpNote` `(HP's too low)`, `BlindNote`, `ConfusedNote`, `HeldNote` `(can't move)`, and `ConditionNote` `(waiting on message condition)` for a poison or a disease wait;
+    - MudPlay's own: `ManaNote` `(mana's too low)` (MegaMUD sends nothing for a mana wait) and `TooHeavyNote` `(too heavy to move)` (`TooHeavyWaitSignal`).
+    - `HealthManager.PartyWaitNote` picks the pool for a Health wait from its gates, HP first when both are short. A test fails if a wait reason is added without a note.
+  - Only the wait that starts the hold telepaths, so the note is the first reason's; a second reason is held without a new `@wait` (Health and TooHeavy re-send, with their own note).
+  - `PartyRestSync.HeldReasons` is the set an `@ok` waits on. A release that leaves others held is logged with what still holds (`Party` category), and the bug report's Party section lists it. Nothing auto-releases a long-held reason: a timeout would send the leader on while the follower still can't move (**Client policy**).
 
 ### `@panic` leader warning
 *Status: CONFIRMED 2026-09-12 (user)*

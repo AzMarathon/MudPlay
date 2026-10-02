@@ -109,7 +109,7 @@ public sealed class AilmentSyncEngineTests
         // Poison is NOT announced verbosely — an observer reads it from the par
         // `P` flag. It still telepaths its @wait to the leader.
         Assert.Empty(h.Say);
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+        Assert.Equal($"/Leader @wait {PartyRestSync.ConditionNote}\r", Assert.Single(h.Telepath));
     }
 
     [Theory]
@@ -151,7 +151,7 @@ public sealed class AilmentSyncEngineTests
         h.Feed("The poison wears off.");
 
         // @wait then @ok on the telepath channel.
-        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.ConditionNote}\r", "/Leader @ok\r" }, h.Telepath);
         // Poison is not announced on say (observers read the par `P` flag) — so
         // nothing lands on the say wire on apply or clear.
         Assert.Empty(h.Say);
@@ -171,7 +171,7 @@ public sealed class AilmentSyncEngineTests
         h.Feed("Your vision returns.");
 
         Assert.Equal(new[] { ".@blind\r" }, h.Say);   // apply only, no off
-        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.BlindNote}\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -189,7 +189,7 @@ public sealed class AilmentSyncEngineTests
         Assert.Single(h.Telepath);   // blind still holds
 
         h.Feed("Your vision returns.");
-        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.ConditionNote}\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -201,13 +201,13 @@ public sealed class AilmentSyncEngineTests
 
         h.Feed("You have been poisoned!");  // ignored → no @wait reason placed
         h.Feed("You have been blinded!");    // not ignored → @wait
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+        Assert.Equal($"/Leader @wait {PartyRestSync.BlindNote}\r", Assert.Single(h.Telepath));
 
         h.Feed("The poison wears off.");      // ignored poison clears → must NOT emit @ok
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+        Assert.Equal($"/Leader @wait {PartyRestSync.BlindNote}\r", Assert.Single(h.Telepath));
 
         h.Feed("Your vision returns.");       // last NON-ignored clears → @ok now
-        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.BlindNote}\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -222,7 +222,7 @@ public sealed class AilmentSyncEngineTests
         // suffix) AND telepaths @wait to the leader, like the curable four: the say
         // lights the member's chip on the receiver, the @wait pauses the leader.
         Assert.Equal(".@held\r", Assert.Single(h.Say));
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+        Assert.Equal($"/Leader @wait {PartyRestSync.HeldNote}\r", Assert.Single(h.Telepath));
     }
 
     [Fact]
@@ -240,7 +240,7 @@ public sealed class AilmentSyncEngineTests
         // (reports paradigm-20260820-122200 / -153540). On the leader channel the
         // @wait (apply) is balanced by the @ok (clear).
         Assert.Equal(new[] { ".@held\r" }, h.Say);
-        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.HeldNote}\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -250,16 +250,16 @@ public sealed class AilmentSyncEngineTests
         SeedAll(h);
 
         h.Feed("You cannot move!");       // held: .@held say + @wait (0→1 transition)
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+        Assert.Equal($"/Leader @wait {PartyRestSync.HeldNote}\r", Assert.Single(h.Telepath));
 
         h.Feed("You have been poisoned!"); // poison: no say (par-driven); @wait already held (1→2, no new telepath)
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+        Assert.Equal($"/Leader @wait {PartyRestSync.HeldNote}\r", Assert.Single(h.Telepath));
 
         h.Feed("You can move again.");      // Held clears; poison still holds → no @ok yet
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+        Assert.Equal($"/Leader @wait {PartyRestSync.HeldNote}\r", Assert.Single(h.Telepath));
 
         h.Feed("The poison wears off.");    // last reason clears → @ok
-        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.HeldNote}\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public sealed class AilmentSyncEngineTests
         // We can clear it ourselves, so no broadcast — but the @wait still
         // pauses the leader while we cast (the cure gate is say-only).
         Assert.Empty(h.Say);
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+        Assert.Equal($"/Leader @wait {PartyRestSync.ConditionNote}\r", Assert.Single(h.Telepath));
     }
 
     [Fact]
@@ -306,7 +306,7 @@ public sealed class AilmentSyncEngineTests
         // the @wait still pauses the leader while we cast — same as the curable four —
         // balanced by the @ok on clear.
         Assert.Empty(h.Say);
-        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.HeldNote}\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -353,14 +353,14 @@ public sealed class AilmentSyncEngineTests
         SeedAll(h);
 
         h.Feed("You have been poisoned!");
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+        Assert.Equal($"/Leader @wait {PartyRestSync.ConditionNote}\r", Assert.Single(h.Telepath));
 
         // Flip IgnorePoison ON while still poisoned. Without the reconcile the
         // already-telepathed @wait stands and the leader is stuck.
         h.Spells.IgnorePoison = true;
         h.Engine.ReevaluateWaits();
 
-        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.ConditionNote}\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -377,7 +377,7 @@ public sealed class AilmentSyncEngineTests
         h.Spells.IgnorePoison = false;
         h.Engine.ReevaluateWaits();
 
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+        Assert.Equal($"/Leader @wait {PartyRestSync.ConditionNote}\r", Assert.Single(h.Telepath));
     }
 
     [Fact]

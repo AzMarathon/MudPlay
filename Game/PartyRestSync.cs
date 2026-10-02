@@ -1,4 +1,5 @@
 using System.Text;
+using MudPlay.Services;
 
 namespace MudPlay.Game;
 
@@ -21,16 +22,25 @@ namespace MudPlay.Game;
 // should. Engines call into this service when their own conditions fire.
 public sealed class PartyRestSync : IDisposable
 {
+    private const string LogCategory = "Party";
+
     private readonly PartyState _party;
     private readonly HashSet<WaitReason> _waitReasons = new();
+    private readonly LogService? _log;
     private Action<byte[]>? _wireSender;
     private bool _disposed;
 
-    public PartyRestSync(PartyState party)
+    public PartyRestSync(PartyState party, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(party);
         _party  = party;
+        _log    = log;
     }
+
+    // The reasons holding the wait. An @ok goes out only when this empties, so one
+    // listed here long after it should have cleared is what keeps a party stopped;
+    // the bug report shows it.
+    public IReadOnlyCollection<WaitReason> HeldReasons => _waitReasons;
 
     // Bind the wire-sender. Without it, RequestWait / RequestOk calls are silent
     // no-ops (no telepath). MainWindowViewModel supplies SendUserInput alongside
@@ -40,6 +50,35 @@ public sealed class PartyRestSync : IDisposable
         ArgumentNullException.ThrowIfNull(sender);
         _wireSender = sender;
     }
+
+    // Every @wait names its reason after the token, so a leader sees why the party
+    // stopped ("@wait (HP's too low)"): MegaMUD's wording where it has one, our own
+    // where it doesn't (GAME_MECHANICS "`@wait` / `@ok` party pause"). A receiver
+    // keys on the token alone (PartyEssentialHandlers.OnWait), so the note changes
+    // nothing it does. ConditionNote is what MegaMUD sends for poison and disease.
+    public const string HpNote        = "(HP's too low)";
+    public const string ConditionNote = "(waiting on message condition)";
+    public const string BlindNote     = "(blinded)";
+    public const string ConfusedNote  = "(confused)";
+    public const string HeldNote      = "(can't move)";
+    public const string TooHeavyNote  = "(too heavy to move)";
+
+    // Our own wording, in the same shape: MegaMUD sends nothing for a mana wait.
+    // (TooHeavyNote is ours too.)
+    public const string ManaNote      = "(mana's too low)";
+
+    // The note a reason carries unless the caller passes one. Health has none here:
+    // it covers both pools, and only HealthManager knows which one tripped.
+    internal static string? DefaultNote(WaitReason reason) => reason switch
+    {
+        WaitReason.Poison    => ConditionNote,
+        WaitReason.Disease   => ConditionNote,
+        WaitReason.Blindness => BlindNote,
+        WaitReason.Confusion => ConfusedNote,
+        WaitReason.Held      => HeldNote,
+        WaitReason.TooHeavy  => TooHeavyNote,
+        _                    => null,
+    };
 
     // Engine-callable entry point — register a wait reason and telepath @wait to
     // the party leader on the 0→non-empty transition. If another reason already
@@ -57,28 +96,41 @@ public sealed class PartyRestSync : IDisposable
     // while still recovering) re-asks. A duplicate @wait is harmless — the leader
     // dedupes waiting members.
     //
-    // note: an optional reason shown after the token ("@wait (too heavy to move)"),
-    // the same shape MegaMUD uses for "@wait (can't move)"; the leader keys only on
-    // the token.
+    // note: the reason shown after the token, overriding the reason's DefaultNote.
     public void RequestWait(WaitReason reason, bool resend = false, string? note = null)
     {
         bool wasEmpty = _waitReasons.Count == 0;
         bool added = _waitReasons.Add(reason);
         if (!resend && (!added || !wasEmpty)) return;
         if (!CanSignal()) return;
-        Telepath(_party.LeaderName!, note is null ? "@wait" : $"@wait {note}");
+        string? why = note ?? DefaultNote(reason);
+        Telepath(_party.LeaderName!, why is null ? "@wait" : $"@wait {why}");
+        _log?.Info(LogCategory, $"sent @wait for {reason}" + (why is null ? "" : $" {why}"));
     }
 
     // Engine-callable entry point — clear a wait reason and telepath @ok to the
     // party leader only on the non-empty→0 transition (the LAST reason
     // clearing). While other reasons still hold the wait, this records the
     // release and sends nothing. Same wire gates as RequestWait.
+    //
+    // A released reason that leaves others held is logged with what still holds: a
+    // reason that never clears suppresses every later @ok, and without that line a
+    // stopped party shows only an @wait and then nothing. Nothing auto-releases a
+    // long-held reason — a timeout would send the leader on while a follower still
+    // can't move. A release of a reason that wasn't held is routine (the ailment
+    // engine releases unconditionally) and isn't logged.
     public void RequestOk(WaitReason reason)
     {
         if (!_waitReasons.Remove(reason)) return;
-        if (_waitReasons.Count > 0) return;
+        if (_waitReasons.Count > 0)
+        {
+            _log?.Info(LogCategory,
+                $"{reason} released, no @ok sent — still held by {string.Join(", ", _waitReasons)}");
+            return;
+        }
         if (!CanSignal()) return;
         Telepath(_party.LeaderName!, "@ok");
+        _log?.Info(LogCategory, $"last wait reason ({reason}) cleared — sent @ok");
     }
 
     // True while any wait reason (a rest, a hold, a blinding…) still stands.
