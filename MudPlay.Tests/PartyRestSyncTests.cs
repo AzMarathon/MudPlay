@@ -192,7 +192,8 @@ public sealed class PartyRestSyncTests
         Assert.Equal($"/Leader @wait {note}\r", LastWire(wire));
     }
 
-    // No MegaMUD wording is known for these, and Health covers two pools.
+    // MegaMUD's wording for poison and disease isn't recorded, and Health covers two
+    // pools (its HP note comes from HealthManager; a mana wait has none).
     [Theory]
     [InlineData(WaitReason.Poison)]
     [InlineData(WaitReason.Disease)]

@@ -118,8 +118,8 @@ public sealed class HealthManager : IDisposable
     private Action? _requestPartyWait;          // ping leader to halt (PartyRestSync)
 
     // The note for our @wait: HP and mana share one wait reason, and only the gates
-    // here say which pool is short. Null when it isn't HP — MegaMUD's wording for a
-    // mana wait isn't known, so that one goes out bare (PartyRestSync).
+    // here say which pool is short. Null when it isn't HP — MegaMUD sends nothing
+    // for a mana wait, so there is no wording to copy and ours goes out bare.
     public string? PartyWaitNote => _hpGateAsserted ? PartyRestSync.HpNote : null;
     private Action? _requestPartyOk;            // release leader
     private Func<bool>? _isLeaderResting;       // follower + leader is resting/meditating

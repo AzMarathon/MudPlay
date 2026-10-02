@@ -1923,8 +1923,8 @@ public sealed class HealthManagerTests
     }
 
     // Health is one wait reason for both pools, so HealthManager says which: an HP
-    // wait is named in MegaMUD's words; a mana wait, whose MegaMUD wording isn't
-    // known, carries no note.
+    // wait is named in MegaMUD's words; a mana wait carries no note, since MegaMUD
+    // sends nothing for one.
     [Fact]
     public void Follower_PartyWaitNote_NamesHp_AndLeavesAManaWaitBare()
     {

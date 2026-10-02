@@ -55,8 +55,8 @@ public sealed class PartyRestSync : IDisposable
     // sees why the party stopped ("@wait (HP's too low)"). A receiver keys on the
     // token alone (PartyEssentialHandlers.OnWait), so the note changes nothing it
     // does. Only strings MegaMUD has been seen to send are used (GAME_MECHANICS
-    // "`@wait` / `@ok` party pause"); a reason with no known wording — low mana,
-    // poison, disease — goes out as a bare @wait.
+    // "`@wait` / `@ok` party pause"). The rest go out as a bare @wait: MegaMUD sends
+    // nothing for a mana wait, and its wording for poison and disease isn't recorded.
     public const string HpNote       = "(HP's too low)";
     public const string BlindNote    = "(blinded)";
     public const string ConfusedNote = "(confused)";
