@@ -27,7 +27,7 @@ public enum TrainFundingHandoff
 public static class TrainFundingHandoffRule
 {
     // midRun: the trainer has already refused for money and the run is re-pricing
-    // from the trainer's room, rather than pricing the trip before it sets out.
+    // after that refusal, rather than pricing the trip before it sets out.
     public static TrainFundingHandoff For(TrainFundingStart start, bool midRun) => start switch
     {
         TrainFundingStart.Funded => TrainFundingHandoff.Proceed,

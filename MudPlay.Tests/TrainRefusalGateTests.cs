@@ -38,6 +38,24 @@ public sealed class TrainRefusalGateTests
     }
 
     [Fact]
+    public void RecoveryClaimed_MarksARunThatHasBeenRefused_UntilTheNextRun()
+    {
+        // A funding answer that comes up short is settled differently once the run
+        // has been at the trainer: it may have levels to refresh and report.
+        var gate = new TrainRefusalGate();
+        Assert.False(gate.RecoveryClaimed);
+
+        gate.TryClaimRecovery(canRecover: false);
+        Assert.False(gate.RecoveryClaimed);
+
+        gate.TryClaimRecovery(canRecover: true);
+        Assert.True(gate.RecoveryClaimed);
+
+        gate.Reset();
+        Assert.False(gate.RecoveryClaimed);
+    }
+
+    [Fact]
     public void NothingToRecoverWith_GivesUpWithoutSpendingTheRecovery()
     {
         // No funding router, trainer or known position: back off now. That refusal
