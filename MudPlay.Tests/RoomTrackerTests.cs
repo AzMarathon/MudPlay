@@ -364,6 +364,78 @@ public sealed class RoomTrackerTests : IDisposable
         Assert.Equal(1, tracker.State.SuspectStrikes);
     }
 
+    // A carrier loss usually shows as a move that is never answered. That move stayed
+    // queued across the reconnect: the login display of the same room read as a
+    // passive re-look, the tracker sat in Pending for good, and a walk started from
+    // there waited on a move the server had never seen.
+    [Fact]
+    public void Reconnect_TheMoveInFlightNeverLanded_ConfirmsWhereWeStand()
+    {
+        RoomTracker tracker = NewTracker();
+        tracker.SetLocated(new RoomKey(1, 1));
+        tracker.NoteMoveSent(Direction.N);
+
+        tracker.NoteConnectionLost();
+        tracker.NoteRoomObserved(Obs("Town Gates", Direction.N, Direction.E));   // the login display
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+        Assert.False(tracker.HasQueuedMoves);
+
+        // The next move is judged on its own, not against the dead one.
+        tracker.NoteMoveSent(Direction.N);
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S));
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 3), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void Reconnect_TheMoveInFlightHadLanded_ConfirmsAtItsTarget()
+    {
+        RoomTracker tracker = NewTracker();
+        tracker.SetLocated(new RoomKey(1, 1));
+        tracker.NoteMoveSent(Direction.N);
+
+        tracker.NoteConnectionLost();
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 3), tracker.State.CurrentRoom!.Key);
+        Assert.False(tracker.HasQueuedMoves);
+    }
+
+    // An identically-named corridor: the display can't say whether the move landed,
+    // so the position is marked unsure rather than assumed.
+    [Fact]
+    public void Reconnect_SourceAndTargetReadTheSame_GoesSuspect_WithNothingQueued()
+    {
+        RoomTracker tracker = NewTracker();
+        tracker.SetLocated(new RoomKey(4, 1));
+        tracker.NoteMoveSent(Direction.N);
+
+        tracker.NoteConnectionLost();
+        tracker.NoteRoomObserved(Obs("Cleared Fields", Direction.N, Direction.S));
+
+        Assert.Equal(RoomConfidence.Suspect, tracker.State.Confidence);
+        Assert.False(tracker.HasQueuedMoves);
+    }
+
+    // Nothing in flight at the drop: the login display is an ordinary re-look.
+    [Fact]
+    public void Reconnect_WithNothingInFlight_ChangesNothing()
+    {
+        RoomTracker tracker = NewTracker();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        tracker.NoteConnectionLost();
+        tracker.NoteRoomObserved(Obs("Town Gates", Direction.N, Direction.E));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    // Without the drop, a same-room display while a move is pending is still only a
+    // passive re-look.
     [Fact]
     public void Pending_PassiveSourceRedisplay_StaysPending_ThenRealMoveConfirms()
     {
