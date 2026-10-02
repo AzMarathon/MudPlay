@@ -166,6 +166,45 @@ public sealed class MessageCandidateWatcherTests
         Assert.Null(c.Room);
     }
 
+    // Report paradigm-20261002-120516: a fortune card's reading runs over two rows,
+    // and the second ('perseverance shall be yours."') staged a candidate on every
+    // draw. The row that opens a quote is judged as usual; the rows up to the closing
+    // quote go with it.
+    [Fact]
+    public void RowsInsideAnOpenQuote_AreNotStaged()
+    {
+        Harness h = new();
+        h.Feed("\"When the Priest is played, wisdom and insight are paramount. Faith and");
+        h.Feed("perseverance shall be yours.\"");
+        h.Feed("A line that follows the closed quote.");
+
+        Assert.Equal(
+            new[] { "\"When the Priest is played, wisdom and insight are paramount. Faith and", "A line that follows the closed quote." },
+            h.Candidates.Candidates.Select(c => c.RawText));
+    }
+
+    [Fact]
+    public void AnOpenQuote_EndsAtThePrompt()
+    {
+        Harness h = new();
+        h.Feed("The old man mutters \"never mind");
+        h.FeedLine(new LineExtractor.EmittedLine("[HP=10/MA=5]:", Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: true));
+        h.Feed("Something unrelated happens here.");
+
+        Assert.Contains(h.Candidates.Candidates, c => c.RawText == "Something unrelated happens here.");
+    }
+
+    // A quote that opens and closes on one row leaves the next row alone.
+    [Fact]
+    public void ABalancedQuote_DoesNotSwallowTheNextRow()
+    {
+        Harness h = new();
+        h.Feed("The gypsy says \"Take this with you.\"");
+        h.Feed("Another unknown line arrives.");
+
+        Assert.Equal(2, h.Candidates.Candidates.Count);
+    }
+
     [Fact]
     public void RepeatedLine_BumpsOccurrences_WarnsOnlyOnce()
     {
