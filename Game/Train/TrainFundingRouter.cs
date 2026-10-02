@@ -60,7 +60,19 @@ public sealed class TrainFundingRouter
     // comes back in one burst; on timeout we price with whatever arrived.
     public TimeSpan BankWindow { get; set; } = TimeSpan.FromSeconds(5);
 
-    private enum Phase { Idle, AwaitingBank, AwaitingInventory, WalkingToLeg, Collecting, Withdrawing }
+    // How long to let a stash `sea` answer before reading what it showed. The reply
+    // is one quick burst; nothing is collected inside this window.
+    public TimeSpan SurveyWindow { get; set; } = TimeSpan.FromSeconds(1.5);
+
+    private enum Phase
+    {
+        Idle, AwaitingBank, AwaitingInventory, WalkingToLeg,
+        // At a stash: the search is out and the pile is being read (nothing taken
+        // yet); then, the pile being short, the `bank` listing is awaited to decide
+        // whether to draw on it at all.
+        Surveying, AwaitingStashBank,
+        Collecting, Withdrawing,
+    }
 
     private readonly Func<RoomKey?> _currentRoom;
     private readonly Func<long> _onHandCopper;
@@ -78,6 +90,7 @@ public sealed class TrainFundingRouter
     private readonly Action<bool> _setAutoGetCash;
     private readonly Action<long?>? _limitCollection;
     private readonly Func<long>? _surveyedCopper;
+    private readonly Action<long>? _collectSurveyed;
     private readonly LogService? _log;
 
     private Phase _phase = Phase.Idle;
@@ -146,12 +159,13 @@ public sealed class TrainFundingRouter
         // can't pay would read as short even with money on deposit.
         Func<bool>? bankBalancesKnown = null,
         Action? requestBankBalances = null,
-        // Caps what the collect engines may take to a copper value (null lifts the
-        // cap), and reads back the value of the coin the room surveys have shown
-        // since it was set. Wired, a stash leg takes only what the run is short and
-        // leaves the rest hidden; unwired, the collect engines take all they would.
+        // The stash stop's three hooks into the collect engine: cap what it may take
+        // to a copper value (null lifts the cap, zero holds it off entirely), read
+        // back the value of the coin the room surveys have shown since the cap was
+        // set, and take up to a copper value of that surveyed coin.
         Action<long?>? limitCollection = null,
-        Func<long>? surveyedCopper = null)
+        Func<long>? surveyedCopper = null,
+        Action<long>? collectSurveyed = null)
     {
         _autoGetCash = autoGetCash ?? throw new ArgumentNullException(nameof(autoGetCash));
         _setAutoGetCash = setAutoGetCash ?? throw new ArgumentNullException(nameof(setAutoGetCash));
@@ -170,6 +184,7 @@ public sealed class TrainFundingRouter
         _requestBankBalances = requestBankBalances;
         _limitCollection = limitCollection;
         _surveyedCopper = surveyedCopper;
+        _collectSurveyed = collectSurveyed;
     }
 
     // Price the bill against everything reachable and act on the answer.
@@ -213,11 +228,12 @@ public sealed class TrainFundingRouter
         return TrainFundingStart.Collecting;
     }
 
-    // The `bank` listing landed. Only interesting while Begin is holding for one.
+    // The `bank` listing landed. Only interesting while Begin, or a stash stop that
+    // found its pile short, is holding for one.
     public void NoteBankRefreshed()
     {
-        if (_phase != Phase.AwaitingBank) return;
-        ContinueAfterBank();
+        if (_phase == Phase.AwaitingStashBank) DecideShortStash(_session);
+        else if (_phase == Phase.AwaitingBank) ContinueAfterBank();
     }
 
     // With the deposits now visible: verify the purse and go if a plan covers the
@@ -417,15 +433,14 @@ public sealed class TrainFundingRouter
 
         if (_leg.Kind == TrainFundingSourceKind.Stash)
         {
-            // Search reliably surfaces coin we hid — no skill check — and the
-            // collect engines take it from the reveal survey exactly as they would
-            // ordinary floor loot, up to what the run is still short from here. The
-            // rest of the pile stays hidden where it is.
-            long spendable = Spendable(_purseAtLegStart);
-            _limitCollection?.Invoke(Math.Max(0, Needed(_currentRoom(), spendable) - spendable));
-            _phase = Phase.Collecting;
+            // Search reliably surfaces coin we hid — no skill check — and it is also
+            // the only way to learn what the pile holds NOW, since anyone can have
+            // drawn on it. So nothing is taken on the reveal: the collect engines are
+            // held off, the pile is read, and the errand decides (OnStashSurveyed).
+            _limitCollection?.Invoke(0);
+            _phase = Phase.Surveying;
             _send("sea");
-            _armTimer(CollectWindow, () => CompleteLeg(session));
+            _armTimer(SurveyWindow, () => OnStashSurveyed(session));
             return;
         }
 
@@ -442,11 +457,87 @@ public sealed class TrainFundingRouter
         _armTimer(WithdrawWindow, () => CompleteLeg(session));
     }
 
+    // The stash has answered the search. Enough there: take what the run is short
+    // and leave the rest hidden. Short: don't touch it until we know the bank can
+    // make up the difference — a pile that can't get us trained is better left where
+    // it is than carried round the loop (user, 2026-10-02).
+    private void OnStashSurveyed(int session)
+    {
+        if (session != _session || _phase != Phase.Surveying) return;
+
+        long shown = _surveyedCopper?.Invoke() ?? 0;
+        long shortfall = Shortfall();
+        if (shown <= 0 || shortfall <= 0)
+        {
+            // Nothing there (or nothing needed any more): settle the leg as it stands.
+            _phase = Phase.Collecting;
+            CompleteLeg(session);
+            return;
+        }
+        if (shown >= shortfall)
+        {
+            TakeFromStash(shortfall, session);
+            return;
+        }
+
+        _log?.Info(LogCategory, $"{_leg.Name} holds {shown:N0} copper of the {shortfall:N0} needed — "
+            + "checking the bank before taking any of it.");
+        _phase = Phase.AwaitingStashBank;
+        if (_requestBankBalances is null)
+        {
+            DecideShortStash(session);
+            return;
+        }
+        _requestBankBalances();
+        _armTimer(BankWindow, () => DecideShortStash(session));
+    }
+
+    // The pile is short and the bank balances are as fresh as we can get them: draw on
+    // the stash only if what is left to fetch elsewhere then covers the run.
+    private void DecideShortStash(int session)
+    {
+        if (session != _session || _phase != Phase.AwaitingStashBank) return;
+
+        long shown = _surveyedCopper?.Invoke() ?? 0;
+        long spendable = Spendable(_onHandCopper());
+        long need = Needed(_currentRoom(), spendable);
+        List<TrainFundingSource> fresh = new();
+        foreach (TrainFundingSource s in _sources())
+            if (!_visited.Contains(s.Room)) fresh.Add(s);
+
+        if (_currentRoom() is { } here && PlanFrom(here, spendable + shown, fresh, need).Affordable)
+        {
+            TakeFromStash(shown, session);
+            return;
+        }
+
+        _reconcileStash(_leg.Room, shown);
+        _log?.Info(LogCategory, $"{_leg.Name}'s {shown:N0} copper and what the bank holds don't cover the "
+            + "run — leaving the stash hidden.");
+        _legsRun++;
+        Fail($"short {Math.Max(0, need - spendable - shown):N0} copper even with {_leg.Name} — left it untouched");
+    }
+
+    private void TakeFromStash(long copper, int session)
+    {
+        _phase = Phase.Collecting;
+        _purseAtLegStart = _onHandCopper();
+        _collectSurveyed?.Invoke(copper);
+        _armTimer(CollectWindow, () => CompleteLeg(session));
+    }
+
+    // What the run still has to find from here, over what it can spend.
+    private long Shortfall()
+    {
+        long spendable = Spendable(_onHandCopper());
+        return Math.Max(0, Needed(_currentRoom(), spendable) - spendable);
+    }
+
     private void CompleteLeg(int session)
     {
         // A stale timer from a cancelled or superseded run must not disturb a newer
         // one — same session-tagging the train managers use.
-        if (session != _session || _phase is Phase.Idle or Phase.WalkingToLeg) return;
+        if (session != _session || _phase is not (Phase.Collecting or Phase.Withdrawing)) return;
 
         long recovered = Math.Max(0, _onHandCopper() - _purseAtLegStart);
 
@@ -455,8 +546,8 @@ public sealed class TrainFundingRouter
             // Whatever the search turned up IS the room's balance now — correcting
             // the belief here is what stops a looted stash being planned against on
             // every future run. What the search showed, less what we took, is still
-            // hidden there; with no cap wired the collect engines took all they could.
-            long shown = _limitCollection is null ? 0 : _surveyedCopper?.Invoke() ?? 0;
+            // hidden there.
+            long shown = _surveyedCopper?.Invoke() ?? 0;
             long left = Math.Max(0, shown - recovered);
             _reconcileStash(_leg.Room, left);
             _log?.Info(LogCategory, recovered > 0

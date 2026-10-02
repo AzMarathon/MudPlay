@@ -4888,10 +4888,12 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 
 **Client use:**
 - In a stash room the client `hide`s excess coin.
-- The auto-train funding errand (`TrainFundingRouter`, with `CashManager.SetCollectLimit`) takes only the
-  copper value the run is short from a stash, dearest coin first, and leaves the rest of the pile where
-  it is; the stash ledger keeps what the search showed less what was taken (report
-  `paradigm-20261001-222332`: it took the whole pile and reached 100% encumbrance).
+- The auto-train funding errand (`TrainFundingRouter`, with `CashManager.SetCollectLimit` /
+  `CollectSurveyed`) holds the pickup while it searches a stash, reads what the search showed, and only
+  then decides: a pile that covers the shortfall gives up just that much, dearest coin first; a short
+  pile is drawn on only if a `bank` check shows stash plus bank cover the run, and is otherwise left
+  hidden (**Client policy**, user 2026-10-02). The stash ledger keeps what the search showed less what
+  was taken (report `paradigm-20261001-222332`: it took the whole pile and reached 100% encumbrance).
 - Auto-collect is suppressed in a stash room **only while an auto-search reveal is in flight** — coin
   shown on plain entry or a kill drop still collects, in the stash room and in the room after it.
   Implemented as `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.

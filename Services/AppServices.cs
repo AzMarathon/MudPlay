@@ -7225,6 +7225,7 @@ public sealed class AppServices
             reconcileStash: (room, copper) => StashBalances.Reconcile(room, copper),
             limitCollection: copper => Cash.SetCollectLimit(copper),
             surveyedCopper: () => Cash.SurveyedCopperUnderLimit,
+            collectSurveyed: copper => Cash.CollectSurveyed(copper),
             autoGetCash: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
             setAutoGetCash: on => _autoGetCashOverride = on ? true : null,
             log: Log,

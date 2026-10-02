@@ -168,18 +168,46 @@ public sealed class CashManager : IDisposable
 
     // A ceiling on the coin VALUE the collect funnel may still take, in copper, for an
     // errand that wants a set sum rather than everything on the floor (auto-train
-    // funding at a stash). Null = no ceiling: collect as the settings say. Each get
-    // sent takes its value off the ceiling. Surveyed is the value of the coin the room
-    // surveys have shown since the ceiling was set, taken or not — what the errand
-    // reads to know how much it left behind.
+    // funding). Null = no ceiling: collect as the settings say. Each get sent takes
+    // its value off the ceiling; at zero nothing is taken.
+    //
+    // While a ceiling is set the coin each room survey shows is remembered, by coin
+    // (a re-shown pile replaces its earlier count rather than adding to it). That is
+    // how the errand reads a stash it searched under a zero ceiling before deciding
+    // what, if anything, to take from it (CollectSurveyed).
     private long? _collectLimitCopper;
     public long? CollectLimitCopper => _collectLimitCopper;
-    public long SurveyedCopperUnderLimit { get; private set; }
+    private readonly Dictionary<string, int> _surveyedUnderLimit = new(StringComparer.OrdinalIgnoreCase);
+
+    public long SurveyedCopperUnderLimit
+    {
+        get
+        {
+            long total = 0;
+            foreach ((string currency, int count) in _surveyedUnderLimit)
+                total += CoinValue(SlotForCurrency(currency)) * count;
+            return total;
+        }
+    }
 
     public void SetCollectLimit(long? copper)
     {
         _collectLimitCopper = copper is { } c ? Math.Max(0, c) : null;
-        SurveyedCopperUnderLimit = 0;
+        _surveyedUnderLimit.Clear();
+    }
+
+    // Take up to this much copper value of the coin last surveyed, dearest coin
+    // first. The errand calls it once it has seen the pile and decided to draw on it.
+    // The per-coin Collect / Discard / Ignore rules don't apply: this is our own stash
+    // being drawn on for a known bill, not floor loot. The weight limits still do.
+    public void CollectSurveyed(long copper)
+    {
+        _collectLimitCopper = Math.Max(0, copper);
+        foreach ((string currency, int count) in _surveyedUnderLimit
+                     .OrderByDescending(e => CoinValue(SlotForCurrency(e.Key)))
+                     .Select(e => (e.Key, e.Value))
+                     .ToList())
+            CollectCoins(count, currency);
     }
 
     private static long CoinValue(int slot) =>
@@ -187,8 +215,8 @@ public sealed class CashManager : IDisposable
 
     private void NoteSurveyed(string currency, int count)
     {
-        if (_collectLimitCopper is not null)
-            SurveyedCopperUnderLimit += CoinValue(SlotForCurrency(currency)) * count;
+        if (_collectLimitCopper is not null && SlotForCurrency(currency) >= 0)
+            _surveyedUnderLimit[currency] = count;
     }
 
     private void SpendCollectLimit(int slot, long coins)
@@ -902,7 +930,7 @@ public sealed class CashManager : IDisposable
             if (allowed <= 0)
             {
                 _log?.Info(LogCategory,
-                    $"collect skipped currency={currency} want={count} — the errand's sum is covered; leaving the rest");
+                    $"collect skipped currency={currency} want={count} — an errand's ceiling leaves nothing more to take");
                 return;
             }
             if (allowed < count)
